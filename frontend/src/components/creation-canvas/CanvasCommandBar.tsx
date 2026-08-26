@@ -8,8 +8,11 @@ import { canvasChromeShows } from '@/lib/canvasChrome';
 import { CANVAS_QUICK_ADD } from '@/lib/canvasQuickAdd';
 import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import type { CanvasSessionActionId } from '@/lib/canvasSessionActions';
+import { mergeRefs } from '@/lib/mergeRefs';
 import type { CreationObjectGroup } from './creationObjectRegistry';
 import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasSessionActions';
+import { PanelDragHandle } from './PanelDragHandle';
+import { usePanelDragOffset } from './usePanelDragOffset';
 import styles from './CreationCanvas.module.css';
 
 /**
@@ -129,17 +132,24 @@ export function CanvasCommandBar({
   // Asked of the registry rather than listed here, for the same reason the session actions
   // ask it: a surface added later answers correctly without this file changing.
   const showsQuickAdd = showsActions && surface === 'graph';
+  // Own drag offset: this bar is one of the floating cards someone might want to pull
+  // clear of the board, and it already owns the node `hostRef` measures, so the two
+  // refs merge onto the same element rather than one hook borrowing the other's node.
+  const drag = usePanelDragOffset('commandBar');
 
   return (
     <div
-      ref={hostRef}
+      ref={mergeRefs(hostRef, drag.elementRef)}
       className={`${styles.floatCard} ${styles.commandBar}`}
       data-collapsed={collapsed ? 'true' : 'false'}
       data-surface={surface}
       data-testid="canvas-command-bar"
       role="toolbar"
       aria-label={t('commandBar')}
+      style={drag.style}
     >
+      <PanelDragHandle isMoved={drag.isMoved} {...drag.handleProps} />
+
       {/* Run, when the surface does not run itself. Green rather than brand blue: it is
           the only control on this bar that STARTS something, and the board's accent is
           already spent on "which surface am I on".

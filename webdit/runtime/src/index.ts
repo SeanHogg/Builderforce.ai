@@ -1,7 +1,14 @@
 export { withVideo } from "./engine";
 export type { WithVideo, WebDiTEngineOptions, VideoNamespace } from "./engine";
-export { loadBundle, loadBundleFromDir, loadHfTokenizer, loadTokenizer } from "./bundle";
+export {
+  loadBundle,
+  loadBundleFromDir,
+  loadBundleFromBuffers,
+  loadHfTokenizer,
+  loadTokenizer,
+} from "./bundle";
 export type { LoadedBundle, HfTokenizer } from "./bundle";
+export { runDenoiseLoop } from "./ort-runner";
 export type { DitRunner, TextEncoderRunner, VaeRunner } from "./runners";
 export {
   applyClassifierFreeGuidance,

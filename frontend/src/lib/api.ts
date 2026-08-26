@@ -76,7 +76,7 @@ export async function createProject(data: {
   name: string;
   description?: string;
   template?: string;
-  /** IDE project type — 'designer' | 'mobile' | 'video' | 'evermind' | 'finetune' | 'voice'. Defaults server-side to 'designer'. */
+  /** IDE project type — 'designer' | 'mobile' | 'evermind' | 'finetune' | 'voice'. Defaults server-side to 'designer'. */
   modality?: string;
   /** Where the project was born — 'ide' tags it for the Designer badge. */
   origin?: string;
@@ -140,7 +140,7 @@ export async function listIdeContainers(): Promise<IdeContainerOption[]> {
 
 export async function createIdeProject(data: {
   name: string;
-  /** 'designer' | 'mobile' | 'video' | 'evermind' | 'finetune' | 'voice'. Defaults server-side to 'designer'. */
+  /** 'designer' | 'mobile' | 'evermind' | 'finetune' | 'voice'. Defaults server-side to 'designer'. */
   modality?: string;
   /** Optional parent Project to group this build under. */
   containerProjectId?: number | null;

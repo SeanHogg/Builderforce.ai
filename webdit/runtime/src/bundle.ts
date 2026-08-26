@@ -137,6 +137,118 @@ async function readAllShards(env: BundleLoadEnv): Promise<{
 }
 
 /**
+ * Loads a bundle from an in-memory map of already-fetched buffers instead of
+ * doing its own I/O. Used by studio (`studio/src/engine/webdit-engine.ts`),
+ * which routes every bundle file through its own IndexedDB-backed read-through
+ * weight cache (`getOrFetchWeight`) rather than letting webdit fetch raw URLs
+ * itself — multi-hundred-MB DiT/VAE shards belong in the same canonical cache
+ * as every other studio weight. Dispatches on `manifest.backend` exactly like
+ * `loadBundle`/`loadBundleFromDir`; only the I/O source differs: every file
+ * the manifest names is looked up in `files` by its bundle-relative path
+ * (the same relative paths `manifest.files.*` declares) instead of being
+ * fetched over HTTP or read from disk.
+ *
+ * `files` must contain every path `manifest.files` references (`ditGraph`,
+ * each `ditWeightShards` entry, `textEncoderGraph`, `textEncoderWeights`,
+ * `vaeGraph`, `vaeWeights`) plus, for the "ort" backend, the two well-known
+ * tokenizer files inside the `manifest.files.tokenizer` directory
+ * (`tokenizer.json` + `tokenizer_config.json` — see the file header comment).
+ * The "mini"/"torch" backends don't read tokenizer files at all (they use the
+ * built-in deterministic `loadMiniTokenizer`), so callers building a
+ * mini-test/real-mini bundle for tests don't need to supply them.
+ */
+export async function loadBundleFromBuffers(
+  manifest: WebDiTManifest,
+  files: Record<string, ArrayBuffer>,
+): Promise<LoadedBundle> {
+  const readShard = async (rel: string): Promise<Uint8Array> => {
+    const buf = files[rel];
+    if (!buf) {
+      throw new Error(`loadBundleFromBuffers: missing file '${rel}' in supplied buffers`);
+    }
+    return new Uint8Array(buf);
+  };
+
+  if (manifest.backend === "mini") {
+    return buildMiniBundle({ manifest, readShard, readTokenizer: () => loadMiniTokenizer() });
+  }
+  if (manifest.backend === "torch") {
+    return buildTorchBundle({ manifest, readShard, readTokenizer: () => loadMiniTokenizer() });
+  }
+  return buildOrtBundleFromBuffers(manifest, files, readShard);
+}
+
+async function buildOrtBundleFromBuffers(
+  manifest: WebDiTManifest,
+  files: Record<string, ArrayBuffer>,
+  readShard: (rel: string) => Promise<Uint8Array>,
+): Promise<LoadedBundle> {
+  const ort = await import("onnxruntime-web/webgpu");
+  const { OrtDitRunner, OrtTextEncoderRunner, OrtVaeRunner } = await import("./runners-ort");
+  const sessionOpts: import("onnxruntime-web/webgpu").InferenceSession.SessionOptions = {
+    executionProviders: ["webgpu"],
+    graphOptimizationLevel: "all",
+  };
+  const m = manifest;
+  const [ditSession, teSession, vaeSession, tokenizer] = await Promise.all([
+    ort.InferenceSession.create(await readShard(m.files.ditGraph), sessionOpts),
+    ort.InferenceSession.create(await readShard(m.files.textEncoderGraph), sessionOpts),
+    ort.InferenceSession.create(await readShard(m.files.vaeGraph), sessionOpts),
+    loadHfTokenizerFromBuffers(m.files.tokenizer, files),
+  ]);
+  const dit = new OrtDitRunner(ditSession);
+  const textEncoder = new OrtTextEncoderRunner(teSession);
+  const vae = new OrtVaeRunner(vaeSession);
+  return {
+    manifest: m,
+    dit,
+    textEncoder,
+    vae,
+    tokenizer,
+    async unload() {
+      await Promise.all([dit.release!(), textEncoder.release!(), vae.release!()]);
+    },
+  };
+}
+
+/**
+ * Build an `HfTokenizer` directly from already-fetched tokenizer.json /
+ * tokenizer_config.json buffers, bypassing `AutoTokenizer.from_pretrained`'s
+ * own fetch (which needs a real fetchable directory URL — not available when
+ * the caller only has in-memory buffers). `PreTrainedTokenizer`'s constructor
+ * accepts the parsed JSON directly; `AutoTokenizer.from_pretrained` is just a
+ * fetch + this same construction, so this is the fetch-free equivalent.
+ */
+async function loadHfTokenizerFromBuffers(
+  tokenizerDir: string,
+  files: Record<string, ArrayBuffer>,
+): Promise<HfTokenizer> {
+  const dir = tokenizerDir.endsWith("/") ? tokenizerDir : `${tokenizerDir}/`;
+  const decoder = new TextDecoder();
+  const readJson = (name: string): unknown => {
+    const buf = files[`${dir}${name}`];
+    if (!buf) {
+      throw new Error(`loadBundleFromBuffers: missing tokenizer file '${dir}${name}'`);
+    }
+    return JSON.parse(decoder.decode(buf));
+  };
+  const { PreTrainedTokenizer } = await import("@huggingface/transformers");
+  const tokenizerJSON = readJson("tokenizer.json");
+  const tokenizerConfig = readJson("tokenizer_config.json");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tok = new (PreTrainedTokenizer as any)(tokenizerJSON, tokenizerConfig);
+  return {
+    encode(text: string) {
+      const out = tok(text) as Record<string, unknown>;
+      return {
+        inputIds: extractTokenIds(out.input_ids, "input_ids"),
+        attentionMask: extractTokenIds(out.attention_mask, "attention_mask"),
+      };
+    },
+  };
+}
+
+/**
  * Node-side bundle loader for integration tests. Reads files from a
  * directory instead of fetching over HTTP.
  */

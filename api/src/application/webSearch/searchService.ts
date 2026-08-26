@@ -31,7 +31,12 @@ export class InternetSearchService {
     }).sort((a, b) => b.score - a.score).slice(offset, offset + limit);
     return {
       query, limit, offset, coverage: lexical.stats.documentCount ? 'owned_index' : 'empty_index', retrieval: this.semantic ? 'hybrid' : 'lexical',
-      results: merged.map((result) => ({ title: result.title, url: result.canonicalUrl, domain: result.domain, snippet: makeSnippet(result.text, query), published_at: result.publishedAt?.toISOString() ?? null, crawled_at: result.crawledAt.toISOString(), language: result.language, score: result.score, scoring: result.scoring, source: { https: result.canonicalUrl.startsWith('https://'), type: 'crawled_web', firstParty: false } })),
+      // `title: result.title ?? undefined` — the DB column is nullable, but the shared
+      // `WebSearchResult` result-row contract (every non-owned-index vendor's shape too)
+      // uses `undefined` for "no title", not `null`; normalizing here is what lets a
+      // caller typed against that shared contract (the cloud agent's `web_search` tool)
+      // accept an owned-index hit without narrowing away every other field.
+      results: merged.map((result) => ({ title: result.title ?? undefined, url: result.canonicalUrl, domain: result.domain, snippet: makeSnippet(result.text, query), published_at: result.publishedAt?.toISOString() ?? null, crawled_at: result.crawledAt.toISOString(), language: result.language, score: result.score, scoring: result.scoring, source: { https: result.canonicalUrl.startsWith('https://'), type: 'crawled_web', firstParty: false } })),
     };
   }
   async open(tenantId: number, rawUrl: string) {

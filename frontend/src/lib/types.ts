@@ -54,7 +54,7 @@ export interface Project {
   name: string;
   description?: string | null;
   template?: string | null;
-  /** Active IDE modality: 'designer' | 'mobile' | 'video' | 'evermind' | 'finetune' | 'voice'. Defaults to 'designer'. */
+  /** Active IDE modality: 'designer' | 'mobile' | 'evermind' | 'finetune' | 'voice'. Defaults to 'designer'. */
   modality?: string | null;
   /** Where the project was born — 'ide' | 'imported' | 'external'. Drives the origin badge. */
   origin?: string | null;
@@ -120,7 +120,7 @@ export interface IdeProject {
   id: number;
   publicId: string;
   name: string;
-  /** 'designer' | 'mobile' | 'video' | 'evermind' | 'finetune' | 'voice'. */
+  /** 'designer' | 'mobile' | 'evermind' | 'finetune' | 'voice'. */
   modality: string;
   status: string;
   /** The parent Project this build is grouped under, or null when ungrouped. */

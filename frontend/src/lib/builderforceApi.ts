@@ -6941,7 +6941,8 @@ export type IntegrationProvider =
   | 'servicenow' | 'linear' | 'sentry' | 'pagerduty' | 'monday' | 'asana' | 'clickup'
   // BYO web-search vendor keys — widen `web_search` from the keyless encyclopedic
   // floor to a full open-web index. Optional: search works without any of them.
-  | 'tavily' | 'exa' | 'linkup'
+  // `ollama` is the BACKUP tried right after `tavily`.
+  | 'tavily' | 'ollama' | 'exa' | 'linkup'
   // Google connectors (OAuth offline credentials): Gmail powers the email
   // workflow node; Google Drive can back a project's file storage.
   | 'gmail' | 'google_drive';
@@ -9208,6 +9209,60 @@ export interface AttributedOutcomes {
   unpublished: boolean;
 }
 
+/**
+ * The proof-lifecycle journey for one session — mirror of
+ * `api/src/application/outcomes/proofJourney.ts`.
+ *
+ * The two outcome shapes above measure PROCESS and IMPACT in aggregate. This
+ * answers a different question: for THIS idea, which proof form did the
+ * recommender advise, which one got chosen, and where is it stuck right now.
+ * It is what the "Copy proof journey diagnostics" button pastes.
+ */
+export type ProofJourneyAction = 'idea.read' | 'proof.choose' | 'proof.build' | 'proof.grade';
+
+export interface ProofJourneyEvent {
+  correlationId: string;
+  action: ProofJourneyAction;
+  phase: 'started' | 'succeeded' | 'failed' | 'validated' | 'reused';
+  metricKey: string | null;
+  metricValue: number | null;
+  unit: string | null;
+  artifactId: string | null;
+  durationMs: number | null;
+  metadata: Record<string, unknown>;
+  occurredAt: string;
+}
+
+export interface ProofJourneyRecommendation { key: string; score: number; recommended: boolean }
+
+export interface ProofJourneyAttempt {
+  realizationId: string;
+  targetKey: string | null;
+  chosenAt: string | null;
+  topRecommendation: ProofJourneyRecommendation | null;
+  chosenWasTopRecommended: boolean | null;
+  build: { startedAt: string | null; succeededAt: string | null; failedAt: string | null; reachable: boolean | null };
+  grade: { startedAt: string | null; result: 'met' | 'missed' | 'abandoned' | null; resultAt: string | null };
+}
+
+export type ProofJourneyStall = 'not_chosen' | 'building' | 'build_failed' | 'not_reachable' | 'awaiting_grade' | 'abandoned';
+
+export interface ProofJourneyVerdict {
+  firstReadAt: string | null;
+  readCount: number;
+  latestRecommendations: ProofJourneyRecommendation[];
+  attemptCount: number;
+  reachedGradedProof: boolean;
+  stalledAt: ProofJourneyStall | null;
+}
+
+export interface ProofJourney {
+  sessionId: string;
+  events: ProofJourneyEvent[];
+  attempts: ProofJourneyAttempt[];
+  verdict: ProofJourneyVerdict;
+}
+
 export interface CreationCommandResult {
   accepted: Array<{ index: number; type: string; id?: string; clientId?: string }>;
   rejected: Array<{ index: number; error: string }>;
@@ -9244,6 +9299,7 @@ export const creationSessionsApi = {
   get: (id: string): Promise<CreationSessionDetail> => request(`/api/creation-sessions/${encodeURIComponent(id)}`),
   outcomeMetrics: (id: string): Promise<CreationOutcomeMetrics> => request(`/api/creation-sessions/${encodeURIComponent(id)}/outcome-metrics`),
   attributedOutcomes: (id: string): Promise<AttributedOutcomes> => request(`/api/creation-sessions/${encodeURIComponent(id)}/attributed-outcomes`),
+  proofJourney: (id: string): Promise<ProofJourney> => request(`/api/creation-sessions/${encodeURIComponent(id)}/proof-journey`),
   recordOutcome: (id: string, body: { correlationId: string; action: string; phase: 'started' | 'succeeded' | 'failed' | 'validated' | 'reused'; actorType?: 'user' | 'agent' | 'brain' | 'system'; actorRef?: string; projectId?: number; metricKey?: string; metricValue?: number; unit?: string; artifactId?: string; durationMs?: number; costUsdMillicents?: number; metadata?: unknown }) =>
     request<{ recorded: boolean; duplicate: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/outcomes`, { method: 'POST', body: JSON.stringify(body) }),
   update: (id: string, body: { title?: string; description?: string | null; folderId?: string | null; status?: 'active' | 'archived'; preview?: unknown; mode?: string }) =>

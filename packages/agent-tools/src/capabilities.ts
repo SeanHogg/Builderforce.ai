@@ -370,12 +370,24 @@ export interface WebSearchResult {
    *  results (e.g. the keyless encyclopedic index is CC-BY-SA). */
   attribution?: string;
   /**
-   * How WIDE the index behind these results is. `web` is a general search engine;
-   * `encyclopedic` is the keyless floor — real, citable, but narrower. The model is
-   * told which it got so it can say "this is what an encyclopedic index has" rather
-   * than implying it swept the open web.
+   * How WIDE the index behind these results is. `owned_index` is the tenant's own
+   * crawled corpus — the widest and most trustworthy, since every document in it was
+   * actually fetched and indexed rather than merely returned by a third party. `web` is
+   * a general vendor search engine, used to discover new pages when the owned index has
+   * nothing yet; `encyclopedic` is the keyless floor — real, citable, but narrower. The
+   * model is told which it got so it can say "this is what an encyclopedic index has"
+   * rather than implying it swept the open web.
    */
-  coverage?: 'web' | 'encyclopedic';
+  coverage?: 'web' | 'encyclopedic' | 'owned_index';
+  /**
+   * Present only for a TENANT-scoped search that MISSED the owned index: discovery ran
+   * against a vendor and the found pages were queued to crawl and index in the
+   * background, so a later identical query reads the owned corpus instead. `null` on an
+   * owned-index hit; absent for a tenant-less vendor-only call (the logged-out guest
+   * canvas), which has no index to capture into. See
+   * `application/webSearch/demandSearch.ts` (`searchOwnedThenDiscover`).
+   */
+  research_request?: { id: string; status: 'crawling' | 'failed'; queued_urls: number } | null;
 }
 export interface StaticCheckResult {
   ok: boolean;

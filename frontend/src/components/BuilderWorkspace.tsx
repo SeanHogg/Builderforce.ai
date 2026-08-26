@@ -35,7 +35,6 @@ import { DevicePreview } from './builder/DevicePreview';
 import { MobileDevicePanel } from './builder/MobileDevicePanel';
 import { useWebContainer } from '@/hooks/useWebContainer';
 import { useCollaboration } from '@/hooks/useCollaboration';
-import { useVideoVersions } from '@/hooks/useVideoVersions';
 import type { Project, FileEntry, TrainingJob } from '@/lib/types';
 import { saveFile, fetchFileContent, deleteFile, fetchFiles, updateProject, importCanvasDataset } from '@/lib/api';
 import { validateFileContentForPath, coerceFileContent } from '@builderforce/ide-file-contract';
@@ -55,14 +54,9 @@ import { useRegisterBrainActions, useBrainContext, savePrd, saveTasks, type Brai
 import { PrdReviewModal, TasksReviewModal } from './ArtifactReviewModals';
 import { getModality, type ProjectModality, type RightTab } from '@/lib/modality';
 import { useModalityCopy, useRightTabLabels } from '@/lib/useModalityCopy';
-import { getStoredTenantToken } from '@/lib/auth';
-import { getApiBaseUrl } from '@/lib/apiClient';
 import { useVoiceStudio } from '@/lib/voiceStudio';
 import { VoiceOutput } from './builder/VoiceOutput';
 import { VoiceConfigPanel } from './builder/VoiceConfigPanel';
-import { ProjectEvermindPanel } from './builder/ProjectEvermindPanel';
-import { StudioPanel } from '@seanhogg/builderforce-studio-embedded';
-import '@seanhogg/builderforce-studio-embedded/styles.css';
 
 interface IDEProps {
   project: Project;
@@ -110,7 +104,6 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   // Layout comes from the modality registry, not from `modality === '…'` checks
   // scattered through this file — see the CenterPanel/dockBrain notes there.
   const hasDockedBrain = modalityDef.dockBrain;
-  const [videoPrompt, setVideoPrompt] = useState('');
   const [files, setFiles] = useState<FileEntry[]>(initialFiles);
   const [openFiles, setOpenFiles] = useState<string[]>([]);
   const [activeFile, setActiveFile] = useState<string | undefined>();
@@ -194,9 +187,6 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
 
   const { state: wcState, mountFiles, runCommand, runCommandAndWait, readDirRecursive, writeFileToContainer, startShell, startDevServer, getOrBootWebContainer } = useWebContainer();
   const { doc: ydoc, connected: collabConnected } = useCollaboration(project.id, 'user-local');
-  // Video versions: hook owns the IDB-blob + project-file-sidecar persistence
-  // triad, so this component just hands the three values straight to <StudioPanel>.
-  const videoVersions = useVideoVersions(project.id, files);
   const projectIdNum = typeof project.id === 'number' ? project.id : Number(project.id);
   // Voice studio state (clones, selected voice, lines, generation). Always called
   // for hook stability but only does work for Voice projects; the green Run button
@@ -935,20 +925,6 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       },
     },
     {
-      name: 'use_video_prompt',
-      description: 'Load a refined prompt into the video generator (video modality only).',
-      parameters: {
-        type: 'object',
-        properties: { prompt: { type: 'string', description: 'The video prompt to load into the generator' } },
-        required: ['prompt'],
-      },
-      run: async ({ prompt }: { prompt: string }) => {
-        if (liveRef.current.modality !== 'video') return { error: 'The project is not in Video modality.' };
-        setVideoPrompt(prompt ?? '');
-        return { loaded: true };
-      },
-    },
-    {
       name: 'set_narration_text',
       description: 'Load the lines to synthesize into the voice studio (voice modality only). The user presses Generate to render them.',
       parameters: {
@@ -1483,31 +1459,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
               {t('askAi')}
             </button>
           )}
-          {modalityDef.center === 'video' ? (
-            <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-              <StudioPanel
-                authToken={getStoredTenantToken() ?? ''}
-                baseUrl={getApiBaseUrl()}
-                hideHeader
-                promptValue={videoPrompt}
-                onPromptChange={setVideoPrompt}
-                versions={videoVersions.versions}
-                onSaveVersion={videoVersions.onSaveVersion}
-                onLoadVersion={videoVersions.onLoadVersion}
-              />
-              {/* The project's self-learning Evermind — parity with the other
-                  studios (self-gating, localized, theme-aware). */}
-              {/* `Number(project.id)` is NaN for a non-numeric id, and
-                  `NaN != null` is true — so guard on finiteness, matching the
-                  other project-id checks in this file, or a malformed id would
-                  mount the panel and request `/api/projects/NaN/...`. */}
-              {Number.isFinite(projectIdNum) && (
-                <div style={{ padding: '0 16px 16px' }}>
-                  <ProjectEvermindPanel projectId={projectIdNum} />
-                </div>
-              )}
-            </div>
-          ) : modalityDef.center === 'voice' ? (
+          {modalityDef.center === 'voice' ? (
             <VoiceOutput
               result={voice.result}
               audioUrl={voice.audioUrl}

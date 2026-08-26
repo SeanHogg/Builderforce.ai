@@ -1283,11 +1283,6 @@
         "tagline": "Generate and build a website or web app with Preview, Code, and a live dev server.",
         "runLabel": "Run"
       },
-      "video": {
-        "label": "Video",
-        "tagline": "Generate short videos client-side on your own GPU via diffusion.",
-        "runLabel": "Run"
-      },
       "evermind": {
         "label": "Evermind",
         "tagline": "Grow a living Evermind model that learns from every project — teach it and watch its Knowledge Map fill in.",
@@ -15264,7 +15259,7 @@
       },
       "webSearch": {
         "label": "Web Search",
-        "blurb": "Search the open web and return results with page content — resolves your connected Tavily/Exa/Linkup key, then an operator SearXNG instance, then a keyless encyclopedic fallback, so it always returns something."
+        "blurb": "Search the open web and return results with page content — resolves your connected Tavily/Ollama/Exa/Linkup key, then an operator SearXNG instance, then a keyless encyclopedic fallback, so it always returns something."
       },
       "switch": {
         "label": "Switch",
@@ -18894,6 +18889,8 @@
     "askBrain": "Ask Brain about this canvas",
     "sendBrain": "Send to Brain",
     "resizePrompt": "Resize prompt area",
+    "dragHandle": "Drag to move this panel",
+    "dragHandleMoved": "Drag to move this panel (double-click to reset position)",
     "entireCanvas": "Entire canvas",
     "loading": "Loading your canvas…",
     "requestAccess": "Request access",
@@ -18998,6 +18995,7 @@
       "cad": "CAD",
       "model3d": "3D model",
       "world": "3D space",
+      "scene": "AI scene",
       "resume": "Resume",
       "template": "Template",
       "document": "Document",
@@ -19471,6 +19469,7 @@
     "typicalValue": "Typical: {value}",
     "correlationCoverage": "Correlation coverage keeps every action accountable.",
     "aggregatesScoped": "Aggregates are content-free and tenant scoped.",
+    "copyProofJourneyDiagnostics": "Copy proof journey diagnostics",
     "sessionConversation": "Session conversation",
     "sessionConversationHint": "Persists even when Chat Objects are removed",
     "closeConversation": "Close conversation",
@@ -22240,7 +22239,8 @@
       "scene3d": {
         "label": "3D space",
         "enter": "View this canvas in 3D",
-        "active": "Exit 3D"
+        "active": "Exit 3D",
+        "open": "Open the AI scene"
       },
       "app": {
         "label": "App",
@@ -22419,6 +22419,14 @@
         "open": "Open the calendar"
       }
     },
+    "scene": {
+      "promptLabel": "Prompt",
+      "promptPlaceholder": "e.g. a fox running through autumn forest at golden hour, cinematic",
+      "framesLabel": "Frames",
+      "fpsLabel": "FPS",
+      "generate": "Generate",
+      "initializing": "Initialising…"
+    },
     "miro": {
       "title": "Miro boards",
       "close": "Close",
@@ -22576,6 +22584,7 @@
       "cad": "A studio for generating CAD models for parts and mechanical designs.",
       "model3d": "A studio for generating 3D models you can view and export.",
       "world": "A 3D space you build by hand — place props, move the camera, and walk it with real collisions.",
+      "scene": "An AI-generated video/3D clip — write a prompt, pick a model, and generate a clip in the 3D surface.",
       "resume": "A resume document for a candidate, ready to edit and export.",
       "template": "A reusable creative template you can duplicate to start new work.",
       "document": "A rich-text document you can write, format, and edit with AI.",
@@ -22742,8 +22751,6 @@
     "sharedCallLabel": "Shared session",
     "startCall": "Start call",
     "startCallTitle": "Start a call about this canvas",
-    "gateProveTitle": "Create an account to make this real",
-    "gateProveBody": "Choosing a proof form names this session, so Read, Prove, Build and Measure can be recorded against it and its outcome numbers can be computed. Your objects, conversation and layout come with you.",
     "northStar": "North star",
     "proveThisIdea": "Make it real",
     "proveThisIdeaTitle": "Hand this board's idea to the proof picker and start measuring it",
@@ -24126,7 +24133,8 @@
     "signInToKeep": "Sign in to keep your work",
     "manage": "Manage sessions & folders",
     "manageAria": "Manage sessions",
-    "tiedToProject": "In this project"
+    "tiedToProject": "In this project",
+    "resizeAria": "Resize sessions panel"
   },
   "sessionManagePanel": {
     "title": "Sessions & folders",

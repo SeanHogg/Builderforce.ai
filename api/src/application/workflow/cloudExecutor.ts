@@ -32,10 +32,13 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *     agentHost agent/tool/SSM runtime that has no cloud equivalent here, so the
  *     task fails with a clear, recorded message (see Gap Register). Run those
  *     workflows on a self-hosted agentHost.
- *   - web-search → executed natively (AI Agents). Resolves the same web-search
- *     vendor backing the cloud agent's own `web_search` tool uses (tenant
- *     Tavily/Exa/Linkup key → operator SearXNG → keyless Wikipedia), so it
- *     never refuses for lack of a connected integration.
+ *   - web-search → executed natively (AI Agents). With a tenant in scope, goes
+ *     through the SAME owned-index-first `searchOwnedThenDiscover` the cloud
+ *     agent's own `web_search` tool uses (tenant Tavily/Ollama/Exa/Linkup key →
+ *     operator key → SearXNG → keyless Wikipedia, only as a discovery fallback),
+ *     so a workflow's research also builds the tenant's index. A tenant-less
+ *     preview run falls back to a vendor-only call, so it never refuses for
+ *     lack of a connected integration either way.
  *   - web-fetch → executed natively (Tools). Reuses the Brain's own
  *     SSRF-guarded, cached `fetchWebDocumentCached` — no credential needed.
  *     Replaces the old "Fetch" palette entry, which was `kind: 'trigger'`
@@ -93,9 +96,9 @@ import { executeMcpNode, type McpNodeConfig } from './mcpNode';
 import { executeConnectorNode, type ConnectorNodeConfig } from './connectorNode';
 import { getWorkflowVariable, setWorkflowVariable, incrementWorkflowVariable } from './workflowVariables';
 import { assertSafeUrl, resolveAndAssertPublic, BlockedUrlError } from '../../infrastructure/net/ssrfGuard';
-import { resolveWebSearchBacking, platformWebSearchBacking } from '../runtime/webSearchCredential';
+import { platformWebSearchBacking } from '../runtime/webSearchCredential';
 import { searchWeb } from '../runtime/cloudWeb';
-import type { CloudWebSearchBacking } from '../runtime/cloudWeb';
+import { searchOwnedThenDiscover } from '../webSearch/demandSearch';
 import { fetchWebDocumentCached } from '../web/webFetch';
 import type { ProxyEnv } from '../llm/LlmProxyService';
 import type { Db } from '../../infrastructure/database/connection';
@@ -290,31 +293,27 @@ export async function executeCloudNode(
 
     case 'web-search': {
       if (outbound?.webSearch) return { output: await outbound.webSearch(node.config, inputText) };
-      // Reuses the SAME vendor port + precedence the cloud agent's `web_search`
-      // tool already resolves through — tenant key (Tavily/Exa/Linkup) →
-      // operator SearXNG → keyless Wikipedia — so this node runs even for a
-      // tenant with nothing connected, and `searchWeb` gives it the same
-      // read-through cache + outbound-fetch metering every other search
-      // surface shares (see application/runtime/webSearchCredential.ts and
-      // cloudWeb.ts). Never null, so no "connect an integration" refusal.
       const query = renderTemplate(
         typeof node.config.query === 'string' && node.config.query ? node.config.query : '{{input}}',
         inputText,
       ).trim();
       if (!query) throw new Error('Web Search needs a query');
-      const resolved = usageCtx
-        ? await resolveWebSearchBacking(env as unknown as Env, usageCtx.db, usageCtx.tenantId)
-        : platformWebSearchBacking(env as unknown as Env);
-      const backing: CloudWebSearchBacking = {
-        vendor: resolved.vendor,
-        auth: resolved.auth,
-        ...(usageCtx ? { meter: { db: usageCtx.db, tenantId: usageCtx.tenantId } } : {}),
-      };
-      const result = await searchWeb(env as unknown as Env, backing, query);
+      // With a tenant in scope, this checks the tenant's OWNED crawled index first and
+      // only falls back to a vendor (tenant Tavily/Ollama/Exa/Linkup key → operator key
+      // → SearXNG → keyless Wikipedia) to discover pages worth crawling — the SAME
+      // `searchOwnedThenDiscover` primitive the cloud agent's `web_search` tool and the
+      // Brain's `web.search` MCP tool use, so a workflow's research also builds the
+      // tenant's index instead of discarding every result. A tenant-LESS run (a preview
+      // with no usageCtx) has no index to own, so it falls back to a vendor-only call
+      // against the platform backing — never null, so no "connect an integration"
+      // refusal either way.
+      const result = usageCtx
+        ? await searchOwnedThenDiscover({ db: usageCtx.db, env: env as unknown as Env, tenantId: usageCtx.tenantId, request: { query } })
+        : await searchWeb(env as unknown as Env, platformWebSearchBacking(env as unknown as Env), query);
       if (!result.ok) throw new Error(result.error ?? 'Web search failed');
       return {
         output: JSON.stringify({
-          query, results: result.results ?? [], source: resolved.source, attribution: result.attribution,
+          query, results: result.results ?? [], coverage: result.coverage, attribution: result.attribution,
         }),
       };
     }

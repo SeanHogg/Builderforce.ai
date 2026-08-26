@@ -142,6 +142,11 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
         metricKey: 'proofs_ranked',
         metricValue: recommendations.length,
         unit: 'count',
+        // The recommender's own opinion, kept small (the catalog is 8 targets) so a
+        // later `proof.choose` can be read back against what was actually advised —
+        // otherwise "chose X" and "Y was the top pick" can never be compared after
+        // the fact, because the ranked list itself was never written down anywhere.
+        metadata: { recommendations: recommendations.map((r) => ({ key: r.key, score: r.score, recommended: r.recommended })) },
       });
       return c.json({ spec, recommendations, targets: targetCatalog() });
     } catch (error) {

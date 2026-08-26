@@ -70,6 +70,8 @@ export const PROVIDER_META: Record<IntegrationProvider, ProviderMeta> = {
   // ("Add {provider} key", "Edit {provider} key"), so an English parenthetical here
   // both breaks those sentences and ships untranslatable copy through the catalog.
   tavily: { label: 'Tavily', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key', placeholder: 'tvly-…' }] },
+  // The BACKUP tried right after Tavily — see webSearchVendors.ts.
+  ollama: { label: 'Ollama', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key' }] },
   exa: { label: 'Exa', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key', placeholder: 'exa_…' }] },
   linkup: { label: 'Linkup', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key', placeholder: 'lp_…' }] },
   // Google connectors — OAuth offline credentials (client id/secret + a refresh

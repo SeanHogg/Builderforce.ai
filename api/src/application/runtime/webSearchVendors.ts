@@ -8,9 +8,9 @@
  * Vendors come in THREE kinds, and the ladder between them is the whole reason research
  * works on a workspace with nothing configured:
  *
- *  • **Credentialed** ({@link CREDENTIALED_WEB_SEARCH_VENDOR_IDS}) — Tavily, Exa, Linkup.
- *    A general web index with page CONTENT in the response, metered per query, key
- *    stored per tenant in `integration_credentials` (see `webSearchCredential.ts`).
+ *  • **Credentialed** ({@link CREDENTIALED_WEB_SEARCH_VENDOR_IDS}) — Tavily, Ollama, Exa,
+ *    Linkup. A general web index with page CONTENT in the response, metered per query,
+ *    key stored per tenant in `integration_credentials` (see `webSearchCredential.ts`).
  *    Widest coverage; each has a standing free tier a tenant can self-serve.
  *  • **Self-hosted** ({@link searxngSearchVendor}) — a SearXNG instance the OPERATOR
  *    runs. Real open-web coverage with no vendor account and no per-query meter, which
@@ -43,12 +43,14 @@ import { classifyWebEgress, fetchVendorJson, htmlToText, type JsonFetchResult } 
 import { MEDIAWIKI_API_ENDPOINT, mediaWikiQuery } from '../web/mediaWiki';
 
 /** Vendor ids that need a KEY. Each MUST also exist as an `integration_provider` enum
- *  value, because that is where the tenant's key is stored (migration 0413).
+ *  value, because that is where the tenant's key is stored (migration 0413, 1121).
  *
  *  Order is PRECEDENCE, not preference: when a tenant has connected more than one, the
- *  first wired here wins. Tavily leads because its free tier is the most generous of the
- *  three and its response carries page content directly. */
-export const CREDENTIALED_WEB_SEARCH_VENDOR_IDS = ['tavily', 'exa', 'linkup'] as const;
+ *  first wired here wins. Tavily leads because its free tier is the most generous and its
+ *  response carries page content directly; Ollama sits right behind it as the BACKUP —
+ *  same "one call, content included" shape, backed by Ollama's own web index rather than
+ *  a resold one, for a tenant who would rather stay inside one vendor relationship. */
+export const CREDENTIALED_WEB_SEARCH_VENDOR_IDS = ['tavily', 'ollama', 'exa', 'linkup'] as const;
 
 /** Vendor ids that need NO account at all. Never looked up in `integration_credentials`
  *  — there is nothing to store — so these ids are deliberately NOT integration
@@ -245,6 +247,27 @@ export const tavilySearchVendor = keyedWebVendor({
 });
 
 /**
+ * Ollama — the BACKUP keyed vendor, tried right after Tavily.
+ *
+ * `POST /api/web_search` with a Bearer token returns `{ results: [{ title, url,
+ * content }] }` — the identical row shape Tavily's search endpoint returns, so this
+ * adapter reuses {@link parseTavilyResults} rather than a look-alike parser that would
+ * only drift from it. Worth a second credentialed tier rather than folding into Tavily's
+ * slot: it is a distinct index behind a distinct key, so a tenant with a Tavily outage —
+ * or who simply already has an Ollama account for the models they run — has a real
+ * fallback rather than falling all the way to Exa or the keyless floor.
+ */
+export const ollamaSearchVendor = keyedWebVendor({
+  id: 'ollama',
+  label: 'Ollama',
+  endpoint: 'https://ollama.com/api/web_search',
+  attribution: 'Results from Ollama',
+  authHeader: (apiKey) => ({ Authorization: `Bearer ${apiKey}` }),
+  body: (query) => ({ query, max_results: MAX_SEARCH_RESULTS }),
+  parse: parseTavilyResults,
+});
+
+/**
  * Exa — neural/semantic search.
  *
  * Worth having alongside a keyword engine because it answers a different KIND of
@@ -372,6 +395,7 @@ export const wikipediaSearchVendor: WebSearchVendor = {
 
 const VENDORS: Record<WebSearchVendorId, WebSearchVendor> = {
   tavily: tavilySearchVendor,
+  ollama: ollamaSearchVendor,
   exa: exaSearchVendor,
   linkup: linkupSearchVendor,
   searxng: searxngSearchVendor,

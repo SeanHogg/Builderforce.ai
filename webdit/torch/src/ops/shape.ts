@@ -1,4 +1,3 @@
-import { iterIndices, offsetOf } from "../iter";
 import { contiguousStrides, normalizeAxis, productOf, type Shape } from "../shape";
 import { Tensor, materialize } from "../tensor";
 

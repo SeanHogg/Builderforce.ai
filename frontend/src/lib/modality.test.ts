@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { MODALITIES, DEFAULT_MODALITY, getModality } from './modality';
 
 describe('project modalities', () => {
-  it('exposes designer, mobile, webmobile, video, evermind, finetune, and voice', () => {
+  it('exposes designer, mobile, webmobile, evermind, finetune, and voice', () => {
     const ids = MODALITIES.map((m) => m.id).sort();
-    expect(ids).toEqual(['designer', 'evermind', 'finetune', 'mobile', 'video', 'voice', 'webmobile']);
+    expect(ids).toEqual(['designer', 'evermind', 'finetune', 'mobile', 'voice', 'webmobile']);
   });
 
   // Regression: the combined `llm` modality was split into `evermind` (living model)

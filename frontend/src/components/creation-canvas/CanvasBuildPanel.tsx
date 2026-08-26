@@ -13,8 +13,11 @@ import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
  *
  * Every build capability lives in `<BuilderWorkspace>` — file explorer, code editor,
  * WebContainer dev server + live preview, quality checks, terminal, site/agent
- * publish, training, agent state, and the per-modality studios (video, Evermind,
- * fine-tune, voice). Rather than reimplementing any of that on the canvas, a
+ * publish, training, agent state, and the per-modality studios (Evermind, fine-tune,
+ * voice). AI video/3D generation is NOT one of these any more — it retired as a
+ * modality and lives on the canvas natively as the `scene` object kind, opening into
+ * the `scene3d` surface (`CanvasSceneGeneratorPanel.tsx`). Rather than reimplementing
+ * the remaining studios on the canvas, a
  * Builder object opens THIS panel against its bound storage project, so there is
  * no second surface to drift. It is lazy so the editor + WebGPU bundles do not
  * ship until a Builder object is opened.

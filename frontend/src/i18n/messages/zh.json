@@ -1283,11 +1283,6 @@
         "tagline": "通过预览、代码和实时开发服务器生成并构建网站或网页应用。",
         "runLabel": "运行"
       },
-      "video": {
-        "label": "视频",
-        "tagline": "通过扩散模型在你自己的 GPU 上于客户端生成短视频。",
-        "runLabel": "运行"
-      },
       "evermind": {
         "label": "Evermind",
         "tagline": "培育一个会从每个项目中学习的鲜活 Evermind 模型——教导它，并看着它的知识图谱逐渐充实。",
@@ -15264,7 +15259,7 @@
       },
       "webSearch": {
         "label": "网页搜索",
-        "blurb": "搜索开放网络并返回带有页面内容的结果——依次尝试你已连接的 Tavily/Exa/Linkup 密钥、运营方的 SearXNG 实例，最后回退到无需密钥的百科来源，确保始终有结果返回。"
+        "blurb": "搜索开放网络并返回带有页面内容的结果——依次尝试你已连接的 Tavily/Ollama/Exa/Linkup 密钥、运营方的 SearXNG 实例，最后回退到无需密钥的百科来源，确保始终有结果返回。"
       },
       "switch": {
         "label": "切换",
@@ -18894,6 +18889,8 @@
     "askBrain": "就此画布询问 Brain",
     "sendBrain": "发送给 Brain",
     "resizePrompt": "调整提示词区域大小",
+    "dragHandle": "拖动以移动此面板",
+    "dragHandleMoved": "拖动以移动此面板(双击可重置位置)",
     "entireCanvas": "整个画布",
     "loading": "正在加载画布…",
     "requestAccess": "申请访问权限",
@@ -18998,6 +18995,7 @@
       "cad": "CAD",
       "model3d": "3D 模型",
       "world": "3D 空间",
+      "scene": "AI 场景",
       "resume": "简历",
       "template": "模板",
       "document": "文档",
@@ -19471,6 +19469,7 @@
     "typicalValue": "典型值：{value}",
     "correlationCoverage": "关联覆盖让每个动作都可被追责。",
     "aggregatesScoped": "汇总数据不含内容，且限定在租户范围内。",
+    "copyProofJourneyDiagnostics": "复制验证过程诊断",
     "sessionConversation": "会话对话",
     "sessionConversationHint": "即使移除聊天对象也会保留",
     "closeConversation": "关闭对话",
@@ -22240,7 +22239,8 @@
       "scene3d": {
         "label": "3D 空间",
         "enter": "以 3D 方式查看此画布",
-        "active": "退出 3D"
+        "active": "退出 3D",
+        "open": "打开 AI 场景"
       },
       "app": {
         "label": "应用",
@@ -22419,6 +22419,14 @@
         "open": "打开日历"
       }
     },
+    "scene": {
+      "promptLabel": "提示词",
+      "promptPlaceholder": "例如：一只狐狸在秋日金色时刻穿过森林，电影感",
+      "framesLabel": "帧数",
+      "fpsLabel": "帧率",
+      "generate": "生成",
+      "initializing": "正在初始化…"
+    },
     "miro": {
       "title": "Miro 白板",
       "close": "关闭",
@@ -22576,6 +22584,7 @@
       "cad": "用于生成零件和机械设计CAD模型的工作室。",
       "model3d": "用于生成3D模型的工作室，可查看并导出。",
       "world": "手动搭建的3D空间——放置道具、移动摄像机，并以真实碰撞行走其中。",
+      "scene": "AI 生成的视频/3D 片段——输入提示词、选择模型，即可在 3D 界面中生成一段片段。",
       "resume": "候选人的简历文档，可直接编辑并导出。",
       "template": "可复用的创意模板，复制后即可开始新工作。",
       "document": "富文本文档，可与 AI 协作撰写、排版和编辑。",
@@ -22742,8 +22751,6 @@
     "sharedCallLabel": "共享会话",
     "startCall": "发起通话",
     "startCallTitle": "就此画布发起通话",
-    "gateProveTitle": "创建账户，把它变为现实",
-    "gateProveBody": "选择验证形式会为该会话命名，从而把读取、验证、构建与度量记录在其名下，并据此计算成果指标。你的对象、对话与布局都会一并保留。",
     "northStar": "北极星指标",
     "proveThisIdea": "变为现实",
     "proveThisIdeaTitle": "把这块画布上的想法交给验证形式选择器，并开始度量它",
@@ -24126,7 +24133,8 @@
     "signInToKeep": "登录以保存你的工作",
     "manage": "管理会话和文件夹",
     "manageAria": "管理会话",
-    "tiedToProject": "在此项目中"
+    "tiedToProject": "在此项目中",
+    "resizeAria": "调整会话面板大小"
   },
   "sessionManagePanel": {
     "title": "会话与文件夹",

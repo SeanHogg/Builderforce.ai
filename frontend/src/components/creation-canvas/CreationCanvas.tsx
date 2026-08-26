@@ -270,6 +270,9 @@ import { canvasInteractionProps, type CanvasGesture } from './canvasPointerMode'
 import { canvasStrokes, drawingPatch, DRAWING_TOOLS, eraseStrokes, strokesSvg, type CanvasDrawingTool, type CanvasStroke } from '@/lib/canvasDrawing';
 import { DEFAULT_DRAWING_PREFERENCES, readDrawingPreferences, writeDrawingPreferences, type DrawingPreferences } from './drawingPreferences';
 import { useChromeSpace } from './useChromeSpace';
+import { usePanelDragOffset } from './usePanelDragOffset';
+import { PanelDragHandle } from './PanelDragHandle';
+import { mergeRefs } from '@/lib/mergeRefs';
 import {
   fileToDataUrl, importCanvasFile, type AttachmentBytesStrategy, type ImportTranslator,
 } from '@/domains/canvas/application/ImportCanvasFile';
@@ -314,6 +317,7 @@ import { useVoiceStudio } from '@/lib/voiceStudio';
 import { CopyButton } from '@/components/CopyButton';
 import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
 import { buildCreationCanvasDiagnosticsReport } from '@/lib/creationCanvasDiagnostics';
+import { buildProofJourneyDiagnosticsReport } from '@/lib/proofJourneyDiagnostics';
 import { alignCanvasNodesLeft, arrangeCanvasNodes, canvasArrangementTargets, canvasNodeDimensions, canvasPlacementUnlocked, nextCanvasObjectPosition, type CanvasArrangement } from './creationCanvasLayout';
 import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
 import { useConfirm } from '@/components/ConfirmProvider';
@@ -417,6 +421,14 @@ const Canvas3DView = dynamic(
 // and it must not sit in the main chunk for people who never open a `world`.
 const CanvasWorldView = dynamic(
   () => import('./CanvasWorldView').then((module) => module.CanvasWorldView),
+  { ssr: false },
+);
+// The `scene3d` surface's OTHER half — a `scene` object's generation panel, rather
+// than the board projection above. Dynamic for the same reason: it lazily reaches for
+// the studio engine (WebGPU diffusion) only once a `scene` object is actually opened,
+// never in the main chunk for a visitor who only ever presses the rail's "3D" tab.
+const CanvasSceneGeneratorPanel = dynamic(
+  () => import('./CanvasSceneGeneratorPanel').then((module) => module.CanvasSceneGeneratorPanel),
   { ssr: false },
 );
 const VoiceConfigPanel = dynamic(
@@ -1077,8 +1089,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const comparisonModelIds = useMemo(() => normalizeModelComparisonIds(initialModelComparisonIds), [initialModelComparisonIds]);
   const [surface, setSurfaceState] = useState<CanvasSurfaceId>(comparisonModelIds.length >= 2 ? 'scene3d' : 'graph');
   /**
-   * The object an object-scoped surface is about. Null for every board surface, and the
-   * reason a surface can be `page` at all: a page is a page OF something.
+   * The object an object-scoped surface is about. Null for every board surface but one,
+   * and the reason a surface can be `page` at all: a page is a page OF something.
+   *
+   * `scene3d` is the one board-scoped exception: it is a PROJECTION of the board when
+   * nothing is bound (entered from the rail, target null) but forks to the scene
+   * generation panel when opened from a `scene` object's own "open at full size" button
+   * (`CanvasObjectSurfaceButton`, via `setSurface('scene3d', nodeId)`). See `setSurface`.
    */
   const [surfaceTarget, setSurfaceTarget] = useState<string | null>(null);
   const surfaceDef = canvasSurfaceDefinition(surface);
@@ -1121,7 +1138,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, []);
   const setSurface = useCallback((next: CanvasSurfaceId, targetId: string | null = null) => {
     setSurfaceState(next);
-    setSurfaceTarget(canvasSurfaceDefinition(next).scope === 'object' ? targetId : null);
+    // `scene3d` keeps a target alongside every `scope: 'object'` surface — the one
+    // board-scoped surface that can ALSO be entered bound to an object (a `scene`'s own
+    // "open at full size" button). The rail's switcher never passes a targetId, so
+    // pressing "3D" always lands on the unbound projection regardless of this rule.
+    setSurfaceTarget(canvasSurfaceDefinition(next).scope === 'object' || next === 'scene3d' ? targetId : null);
     // The registry decides what is worth remembering — a PLACE the user chose, never a
     // projection of the board they were already on, and never a surface that cannot be
     // restored without the object it was about.
@@ -1801,6 +1822,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // band every bottom-anchored panel and the phone command rail sit above. It
   // was a hardcoded 112px, which the execution chip alone overran.
   const composerDockRef = useChromeSpace(flowWrapRef, '--composer-space');
+  // The composer is one of the floating cards a reader can pull clear of the board with
+  // its own handle; see `usePanelDragOffset`. Only meaningful while it floats — docked
+  // into the Brain panel it is a row in that column, not a positioned card of its own.
+  const composerDrag = usePanelDragOffset('composer');
   // The command bar's real height, published to the SHELL as `--canvas-command-bar-space`
   // — the band the floating prompt sits above. Measured for the same reason and by the
   // same hook: the bar grows by whatever the SURFACE contributes to it (the App surface's
@@ -3595,7 +3620,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     };
     node.style = { width: 460, height: 560 };
     return { ok: true, node, read };
-  }, [nodes, tSocial]);
+  }, [nodes, stage, tSocial]);
 
   /** The panel's "put it on the board" — a committed add, not a proposal. */
   const addSocialFeedToBoard = useCallback(async (filter: SocialFeedFilter) => {
@@ -4537,7 +4562,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const source = tabularFromObject(node.data as Record<string, unknown>);
     if (!source.columns.length) return { error: `${node.data.title} has no columns yet.` } as const;
     return { node, source } as const;
-  }, [nodes]);
+  }, [nodes, stage]);
 
   /**
    * The BUILD vocabulary — creating and editing the code behind a Builder object.
@@ -4562,7 +4587,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const binding = canvasBuildBinding(node.data);
       return binding ? [{ objectId: node.id, title: String(node.data.title ?? 'Build'), binding }] : [];
     });
-  }, [nodes]);
+  }, [nodes, stage]);
 
   /**
    * Provision a workspace for the model and put its Builder object on the board.
@@ -4583,7 +4608,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const binding = canvasBuildBinding(node.data);
     if (!binding) throw new Error('The workspace was created but could not be bound to the board.');
     return { objectId: node.id, title: input.title, binding };
-  }, [nodes, setNodes]);
+  }, [nodes, setNodes, stage]);
 
   const canvasBuildActionList = useMemo<BrainAction[]>(() => canvasBuildActions({
     builds: () => boundBuildsRef.current,
@@ -4626,7 +4651,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const kind = nodesRef.current.find((node) => node.id === objectId)?.data.kind;
       stage.updateObject(label, objectId, sanitizeCreationObjectPatch((kind ?? 'account') as CreationObjectKind, patch));
     },
-  }), [canEdit, persistence, sessionId]);
+  }), [canEdit, persistence, sessionId, stage]);
 
   const canvasFounderOpsActionList = useMemo<BrainAction[]>(() => canvasFounderOpsActions(canvasOpsContext), [canvasOpsContext]);
   /** Ownership — fold the cap table, record a grant or a convertible, append a ledger
@@ -8930,7 +8955,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       };
     },
   }, ...canvasBuildActionList, ...canvasFounderOpsActionList, ...canvasEquityActionList, ...canvasHiringPostingActionList, ...canvasDataRoomActionList, ...canvasDocumentTemplateActionList, ...canvasLegalDocumentActionList, ...canvasLegalRecordActionList, ...canvasSignatureActionList, ...canvasSellMotionActionList].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
-  [canEdit, canvasBuildActionList, canvasDataRoomActionList, canvasDocumentTemplateActionList, canvasEquityActionList, canvasFounderOpsActionList, canvasHiringPostingActionList, canvasLegalDocumentActionList, canvasLegalRecordActionList, canvasSellMotionActionList, canvasSignatureActionList, convertObjectToDiagram, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, tSocial]);
+  [buildSocialFeedNode, canEdit, canvasBuildActionList, canvasDataRoomActionList, canvasDocumentTemplateActionList, canvasEquityActionList, canvasFounderOpsActionList, canvasHiringPostingActionList, canvasLegalDocumentActionList, canvasLegalRecordActionList, canvasSellMotionActionList, canvasSignatureActionList, convertObjectToDiagram, edges, effectiveSelectedIds, fmt, localizedTourDefaults, measurementGate, nodes, openAccountGate, persistence, prompt, recentJournalEvidence, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, stage, stageImageAsset, t, tSocial]);
 
   const addAgentKnowledge = useCallback((agentId: string, content: string) => {
     const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');
@@ -9326,7 +9351,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       clearComposer();
       setNotice(t('noticeEvaluationAdded'));
     }, 850);
-  }, [appendTimeline, canvasActions, confirm, currentUserId, describeTurnError, disableBrainModel, effectiveSelectedIds, edges, evermindProjectId, members, memoryEnabled, modelSelection, nodes, openNodeInspector, persistence, prompt, recordBrainCompletion, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, t, thinking, timeline, title]);
+  }, [appendTimeline, canvasActions, canvasNotices, confirm, currentUserId, describeTurnError, disableBrainModel, effectiveSelectedIds, edges, evermindProjectId, lastTurnProvenance, members, memoryEnabled, modelSelection, nodes, openNodeInspector, persistence, prompt, recordBrainCompletion, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, setNotice, stage, t, thinking, timeline, title]);
 
   useEffect(() => {
     if (!hydrated.current || modelComparisonStarted.current || comparisonModelIds.length < 2) return;
@@ -9523,7 +9548,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     stage.reset();
     setAutoApplyPending(false);
     setNotice(t('noticeChangesRejected'));
-  }, []);
+  }, [setNotice, stage, t]);
 
   /** Resolve which workflow node an action applies to: the one named, else the
    *  selection, else the only one on the board. Shared by build and run. */
@@ -11109,6 +11134,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, await captureDiagnosticsContext()), [allMembers.length, brainRunStartedAt, brainTrace, canvasActions, edges.length, effectiveSelectedIds, memoryEnabled, modelSelection, nodes, pendingInvitations.length, persistence, proposedChanges.length, realtimeState, resolvedScopeMode, scopedNodeIds, scopedNodes.length, sessionId, sessionMode, sessionRole, thinking, timeline, title]);
 
   /**
+   * Unlike `buildDiagnostics` above (all in-memory canvas state), this reads
+   * the server's ledger for the session — fetched fresh on click, per
+   * `CopyButton`'s `getText` contract, since a paste should reflect the latest
+   * proof outcomes rather than whatever was true when the panel opened.
+   */
+  const buildProofJourneyDiagnostics = useCallback(async () => {
+    const [journey, context] = await Promise.all([
+      creationSessionsApi.proofJourney(sessionId),
+      captureDiagnosticsContext(),
+    ]);
+    return buildProofJourneyDiagnosticsReport(journey, context);
+  }, [sessionId]);
+
+  /**
    * The diagnostics control does the whole job in one click: the report is on the
    * clipboard (ready to paste into a bug report) before the panel finishes opening,
    * so nobody has to find a second "Copy" button to report what they are looking at.
@@ -11349,11 +11388,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // zero — publishing the panel-relative height instead would push every low-anchored
     // panel up by most of the window. `useChromeSpace` publishes `0px` the moment
     // this ref stops being handed the node.
-    ref={promptInBrainPanel ? undefined : composerDockRef}
+    ref={promptInBrainPanel ? undefined : mergeRefs(composerDockRef, composerDrag.elementRef)}
     data-testid="canvas-composer"
     className={styles.composerDock}
     data-placement={effectivePromptPlacement}
     data-tour="creation-brain-dock"
+    style={promptInBrainPanel ? undefined : composerDrag.style}
   >
     {/* The prompt's own header, and the only place the dock decision is made. Closing is
         offered from here and from the command bar; DOCKING is deliberate enough to belong
@@ -11361,6 +11401,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         Inside the Brain panel the whole row stands down: that panel has a header of its
         own naming this conversation, and the way back out is a control in it. */}
     {!promptInBrainPanel && <div className={styles.promptChrome}>
+      <PanelDragHandle isMoved={composerDrag.isMoved} {...composerDrag.handleProps} />
       <span className={styles.promptChromeName}>{t('promptName')}</span>
       {!surfaceDef.brainIsSurface && <>
         <button
@@ -11518,17 +11559,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       publish: act(() => openReleasesPanel(), releaseFocus !== null),
       // PROVE. Hands this board's own idea to the proof picker and names the
       // session, which is what lets the loop — Read, Prove, Build, Measure — be
-      // recorded against it. A local-only board has no server session to name,
-      // so it is offered the same account gate the scorecard uses rather than
-      // silently starting a proof nothing could ever measure.
-      prove: act(() => {
-        if (persistence === 'local') {
-          requireAccount('prove', t('gateProveTitle'), t('gateProveBody'));
-          return;
-        }
-        const seed = timeline.find((message) => message.messageRole === 'user')?.body?.trim() || title;
-        router.push(`/realize?session=${encodeURIComponent(sessionId)}&idea=${encodeURIComponent(seed.slice(0, 2_000))}`);
-      }),
+      // recorded against it. A local-only board withdraws instead of gating: the
+      // header's own CTA already becomes "Keep your work" the moment this browser
+      // holds one (`MarketingHeader`), and a second button opening its own sign-up
+      // gate for the same board was the same offer twice at the top of the screen.
+      prove: {
+        ...act(() => {
+          const seed = timeline.find((message) => message.messageRole === 'user')?.body?.trim() || title;
+          router.push(`/realize?session=${encodeURIComponent(sessionId)}&idea=${encodeURIComponent(seed.slice(0, 2_000))}`);
+        }),
+        available: persistence !== 'local',
+      },
     };
   })();
 
@@ -12113,7 +12154,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         <CanvasSurfaceRouter
           surface={surface}
           surfaces={{
-            scene3d: <Canvas3DView
+            // Additive fork, not a growing conditional inside `Canvas3DView` itself
+            // (SRP: that component stays "project the board"; the generator panel owns
+            // "generate a clip"). No object bound (entered from the rail) → the
+            // unchanged board projection. A bound `scene` object → the generation panel.
+            // A stale target whose object is no longer `scene`-kind (or is gone) also
+            // falls back to the projection, same as every other object-scoped surface's
+            // `surfaceNode`-going-null rule.
+            scene3d: surfaceNode && surfaceNode.data.kind === 'scene' ? <CanvasSceneGeneratorPanel
+              objectId={surfaceNode.id}
+              data={surfaceNode.data}
+              onExit={() => setSurface('graph')}
+              {...(cardsEditable ? { onEdit: (patch: Partial<CreationNodeData>) => updateNodeData(surfaceNode.id, patch) } : {})}
+            /> : <Canvas3DView
               nodes={threeDNodes}
               edges={edges}
               describe={describeThreeD}
@@ -12412,7 +12465,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           </div>
         </aside>}
         {outcomeMetricsOpen && <aside className={`${styles.historyPanel} ${styles.outcomeMetricsPanel}`} aria-label={t('sessionOutcomeMetrics')}>
-          <header><div><strong>{t('ideaToDelivery')}</strong><small>{outcomeMetrics ? t('sessionVsTenant', { count: outcomeMetrics.sampleSize }) : t('valueGenerated')}</small></div><button onClick={() => setOutcomeMetricsOpen(false)} aria-label={t('closeOutcomeMetrics')}>×</button></header>
+          <header><div><strong>{t('ideaToDelivery')}</strong><small>{outcomeMetrics ? t('sessionVsTenant', { count: outcomeMetrics.sampleSize }) : t('valueGenerated')}</small></div><span className={styles.panelHeaderActions}>{persistence === 'server' && <CopyButton compact label={t('copyDiagnostics')} ariaLabel={t('copyProofJourneyDiagnostics')} getText={buildProofJourneyDiagnostics} />}<button onClick={() => setOutcomeMetricsOpen(false)} aria-label={t('closeOutcomeMetrics')}>×</button></span></header>
           {persistence === 'local' ? <div className={styles.outcomeEmpty}><span aria-hidden><Icon source="↗" size="1em" /></span><strong>{t('saveForBaseline')}</strong><p>{t('saveForBaselineHint')}</p><button className={styles.primaryButton} onClick={() => requireAccount('metrics', t('gateMetricsTitle'), t('gateMetricsBody'))}>{t('saveAndMeasure')}</button></div> : outcomeMetricsLoading ? <p role="status">{t('calculatingValue')}</p> : outcomeMetricsError ? <div className={styles.outcomeEmpty}><strong>{t('metricsUnavailable')}</strong><p>{outcomeMetricsError}</p><button className={styles.secondaryButton} onClick={openOutcomeMetrics}>{t('retry')}</button></div> : outcomeMetrics ? <div className={styles.outcomeMetricList}>
             {(() => {
               // The north star leads, then the acts of the method in order. A flat

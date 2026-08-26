@@ -51,10 +51,20 @@ var import_jsx_runtime = require("react/jsx-runtime");
 var MODEL_LABELS = {
   "lcm-tiny-sd": "LCM Tiny SD \u2014 4-step, lightest (~2 GB, fp16)",
   "sd-turbo": "SD-Turbo \u2014 1-step, fastest (~4 GB)",
-  "lcm-dreamshaper-v7": "LCM Dreamshaper v7 \u2014 4-step, best quality (~6 GB)"
+  "lcm-dreamshaper-v7": "LCM Dreamshaper v7 \u2014 4-step, best quality (~6 GB)",
+  // The 4 WebDiT (whole-clip) models — wired end-to-end but `available: false` until a
+  // pretrained bundle is exported + uploaded to R2 (see the ROADMAP entry), so these
+  // never actually appear in the list above until then; the labels exist so this
+  // `Record` stays total the moment `DiffusionModelId` widens to include them.
+  "cogvideox-2b": "CogVideoX 2B \u2014 50-step, smallest WebDiT model (~8 GB)",
+  "wan2.5": "Wan 2.5 (distilled) \u2014 20-step (~10 GB)",
+  "mochi-1": "Mochi 1 \u2014 64-step, highest quality WebDiT model (~12 GB)",
+  "ltx2-distilled": "LTX-2 (distilled) \u2014 8-step, fastest WebDiT model (~6 GB)"
 };
 function ModelPicker({ value, onChange, disabled }) {
-  const entries = Object.keys(import_builderforce_studio.MODEL_REGISTRY);
+  const entries = Object.keys(import_builderforce_studio.MODEL_REGISTRY).filter(
+    (id) => import_builderforce_studio.MODEL_REGISTRY[id].available !== false
+  );
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "bfs-field", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", { className: "bfs-label", children: "Diffusion model" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(

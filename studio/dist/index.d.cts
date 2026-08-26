@@ -1,6 +1,7 @@
-import { A as ActiveDevice, V as VideoEngineOptions, G as GenerateOptions, a as GenerateResult, S as StoryboardGenerateOptions, b as StoryboardGenerateResult, M as MambaStateSnapshot, D as DiffusionModelId, c as ModelDescriptor, C as CameraMove, P as PlannedShot, d as CharacterBible, e as ScenePlanOptions, f as Storyboard, g as ValidateFrameOptions, F as FrameValidation } from './device-router-jRtOBcjY.cjs';
-export { h as CoherenceMode, i as DeviceTarget, j as FrameIssueKind, k as FrameValidationIssue, I as InterpolationBackend, O as OnnxFile, l as OrtInputSpec, m as OrtTensorDtype, n as ProbedDevice, Q as QualityMode, o as ShotValidation, W as WeightSource, p as hasWebGPUSupport, q as probeDevice } from './device-router-jRtOBcjY.cjs';
+import { A as ActiveDevice, V as VideoEngineOptions, G as GenerateOptions, a as GenerateResult, S as StoryboardGenerateOptions, b as StoryboardGenerateResult, M as MambaStateSnapshot, D as DiffusionModelId, c as ModelDescriptor, C as CameraMove, P as PlannedShot, d as CharacterBible, e as ScenePlanOptions, f as Storyboard, g as ValidateFrameOptions, F as FrameValidation } from './device-router-Ct4N7PTF.cjs';
+export { h as CoherenceMode, i as DeviceTarget, j as FrameIssueKind, k as FrameValidationIssue, I as InterpolationBackend, L as LcmModelDescriptor, l as LcmModelId, O as OnnxFile, m as OrtInputSpec, n as OrtTensorDtype, o as ProbedDevice, Q as QualityMode, p as ShotValidation, W as WebDitModelDescriptor, q as WebDitModelId, r as WeightSource, s as hasWebGPUSupport, t as probeDevice } from './device-router-Ct4N7PTF.cjs';
 import { BuilderforceClient } from '@seanhogg/builderforce-sdk';
+import '@webdit/shared';
 
 /**
  * VideoEngine — public orchestrator for end-to-end client-side video generation.
@@ -28,9 +29,16 @@ declare class VideoEngine {
     private diffusion;
     private mambaState;
     readonly activeDevice: ActiveDevice;
+    /** Which generation family this instance was constructed for — set once
+     *  here so `generate()`/`generateStoryboard()` dispatch without
+     *  re-deriving it from `MODEL_REGISTRY` on every call. */
+    private readonly engineKind;
+    private readonly webditBundle;
     /** Track the probed device so we can lazy-create a refinement-pass engine
      *  later with the same hardware target — needed for the two-pass quality
-     *  chain (draft model → dispose → refinement model). */
+     *  chain (draft model → dispose → refinement model). Only meaningful on
+     *  the lcm-diffusion path (refinement across engine families is rejected
+     *  in `create()` before either engine is constructed). */
     private readonly probed;
     private constructor();
     /**
@@ -39,6 +47,17 @@ declare class VideoEngine {
      * unsupported state rather than try to recover.
      */
     static create(options: VideoEngineOptions): Promise<VideoEngine | null>;
+    /**
+     * webdit-dit construction path. webdit's ORT execution is WebGPU-only (no
+     * CPU/WebNN fallback exists in `@webdit/runtime`), so this probes WebGPU
+     * specifically rather than `options.device ?? 'auto'`. Returns `null` (the
+     * same "consumer never computes its own can-run check" contract as the
+     * lcm-diffusion path) both when WebGPU is unavailable AND when the model
+     * has no bundle to load yet (`available: false` / `bundleUrl: null` — the
+     * expected state for all 4 webdit models until an operator uploads a real
+     * bundle; see the ROADMAP entry).
+     */
+    private static createWebDit;
     /**
      * Generate one video clip. Per-keyframe work is sequential (keyframes depend
      * on the previous keyframe's Mamba state). With `interpolationFactor > 1`,
@@ -57,6 +76,22 @@ declare class VideoEngine {
      * frame validator (advisory — never blocks generation).
      */
     generateStoryboard(args: StoryboardGenerateOptions): Promise<StoryboardGenerateResult>;
+    /**
+     * webdit-dit storyboard rendering. Each shot is generated independently via
+     * `runWebDitDenoise` (no cross-shot Mamba carry — webdit's DiT models are
+     * video-native and already model temporal coherence WITHIN a shot; the
+     * lcm-diffusion path's cross-shot continuity mechanism, threading Mamba
+     * state through `cameraMotion`/img2img recursion, is specific to that
+     * per-frame pipeline and has no webdit equivalent), then every shot's
+     * frames are concatenated in shot order and muxed ONCE at the end — the
+     * same overall "loop shots, concat, mux once" shape as the lcm-diffusion
+     * path above, just without the two-pass refinement or per-shot VLM
+     * validation retry loop (out of scope here: `refinementModel` across
+     * engine families is rejected in `create()`, and validation is an
+     * lcm-diffusion-specific advisory feature — `validations` is always empty
+     * on this path).
+     */
+    private generateWebDitStoryboard;
     /**
      * Render one storyboard shot, with self-healing validation retries. Generates
      * the clip, validates its first + last keyframe, and — if validation fails and
@@ -111,9 +146,19 @@ declare class VideoEngine {
     getMambaState(): MambaStateSnapshot;
     /** Replace the Mamba state — used when resuming a session from R2 / IDB. */
     setMambaState(state: MambaStateSnapshot): void;
-    /** Release ORT sessions + GPUDevice. Idempotent. After dispose the engine
-     *  cannot be reused — create a new one with VideoEngine.create. */
+    /** Release ORT sessions + GPUDevice (lcm-diffusion) or unload the webdit
+     *  bundle (webdit-dit) — whichever this instance holds. Idempotent. After
+     *  dispose the engine cannot be reused — create a new one with
+     *  VideoEngine.create. */
     dispose(): Promise<void>;
+    /**
+     * Non-null accessor for the lcm-diffusion engine. Every internal caller of
+     * this getter (produceClip, refinementPass, renderShot, the lcm branches of
+     * generate()/generateStoryboard()) is itself only reachable via the
+     * lcm-diffusion branch of create()/generate() — a throw here means an
+     * internal dispatch bug, not a reachable user state.
+     */
+    private get lcmDiffusion();
 }
 
 /**

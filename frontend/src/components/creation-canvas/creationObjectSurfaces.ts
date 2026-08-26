@@ -35,6 +35,12 @@ const AUTHORING_SURFACE: Partial<Record<CreationObjectKind, CanvasSurfaceId>> = 
   // A place: camera, props, colliders. No card can preview a space you walk through,
   // any more than one previews a running build — same reason `game` opens in `play`.
   world: 'world',
+  // AI VIDEO/3D GENERATION. Deliberately `scene3d` and not `timeline`: the product
+  // decision is that generation lives under the 3D surface, which forks on whether a
+  // `scene` object is bound (`CreationCanvas.tsx`'s `surfaces` map) rather than
+  // growing a conditional inside `Canvas3DView` itself. `video`/`voice` above are
+  // untouched — this is purely additive.
+  scene: 'scene3d',
   // A room. A poll's own axis is the people answering it: the join address goes on the
   // wall, the count moves while they answer, and the two facilitation controls are
   // pressed in front of them. A card can preview the question; it cannot be the thing a

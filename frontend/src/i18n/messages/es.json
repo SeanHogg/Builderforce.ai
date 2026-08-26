@@ -1283,11 +1283,6 @@
         "tagline": "Genera y crea un sitio web o una app web con Vista previa, Código y un servidor de desarrollo en vivo.",
         "runLabel": "Ejecutar"
       },
-      "video": {
-        "label": "Vídeo",
-        "tagline": "Genera vídeos cortos en el cliente en tu propia GPU mediante difusión.",
-        "runLabel": "Ejecutar"
-      },
       "evermind": {
         "label": "Evermind",
         "tagline": "Haz crecer un modelo Evermind vivo que aprende de cada proyecto: enséñalo y observa cómo se completa su Mapa de Conocimiento.",
@@ -15264,7 +15259,7 @@
       },
       "webSearch": {
         "label": "Búsqueda web",
-        "blurb": "Busca en la web abierta y devuelve resultados con el contenido de la página — usa tu clave conectada de Tavily/Exa/Linkup, luego una instancia SearXNG del operador y por último una fuente enciclopédica sin clave, para que siempre devuelva algo."
+        "blurb": "Busca en la web abierta y devuelve resultados con el contenido de la página — usa tu clave conectada de Tavily/Ollama/Exa/Linkup, luego una instancia SearXNG del operador y por último una fuente enciclopédica sin clave, para que siempre devuelva algo."
       },
       "switch": {
         "label": "Switch",
@@ -18894,6 +18889,8 @@
     "askBrain": "Pregunta a Brain sobre este lienzo",
     "sendBrain": "Enviar a Brain",
     "resizePrompt": "Cambiar el tamaño del área de indicaciones",
+    "dragHandle": "Arrastrar para mover este panel",
+    "dragHandleMoved": "Arrastrar para mover este panel (doble clic para restablecer la posición)",
     "entireCanvas": "Todo el Lienzo",
     "loading": "Cargando tu Lienzo…",
     "requestAccess": "Solicitar acceso",
@@ -18998,6 +18995,7 @@
       "cad": "CAD",
       "model3d": "Modelo 3D",
       "world": "Espacio 3D",
+      "scene": "Escena IA",
       "resume": "Currículum",
       "template": "Plantilla",
       "document": "Documento",
@@ -19471,6 +19469,7 @@
     "typicalValue": "Típico: {value}",
     "correlationCoverage": "La cobertura de correlación hace que cada acción rinda cuentas.",
     "aggregatesScoped": "Los agregados no contienen contenido y están limitados al tenant.",
+    "copyProofJourneyDiagnostics": "Copiar diagnóstico del recorrido de la prueba",
     "sessionConversation": "Conversación de la sesión",
     "sessionConversationHint": "Persiste incluso si se eliminan los objetos de chat",
     "closeConversation": "Cerrar la conversación",
@@ -22240,7 +22239,8 @@
       "scene3d": {
         "label": "Espacio 3D",
         "enter": "Ver este lienzo en 3D",
-        "active": "Salir de 3D"
+        "active": "Salir de 3D",
+        "open": "Abrir la escena IA"
       },
       "app": {
         "label": "App",
@@ -22419,6 +22419,14 @@
         "open": "Abrir el calendario"
       }
     },
+    "scene": {
+      "promptLabel": "Prompt",
+      "promptPlaceholder": "p. ej. un zorro corriendo por un bosque otoñal a la hora dorada, cinematográfico",
+      "framesLabel": "Fotogramas",
+      "fpsLabel": "FPS",
+      "generate": "Generar",
+      "initializing": "Inicializando…"
+    },
     "miro": {
       "title": "Tableros de Miro",
       "close": "Cerrar",
@@ -22576,6 +22584,7 @@
       "cad": "Un estudio para generar modelos CAD de piezas y diseños mecánicos.",
       "model3d": "Un estudio para generar modelos 3D que puedes ver y exportar.",
       "world": "Un espacio 3D que construyes a mano: coloca objetos, mueve la cámara y camina por él con colisiones reales.",
+      "scene": "Un clip de vídeo/3D generado por IA: escribe un prompt, elige un modelo y genera un clip en la superficie 3D.",
       "resume": "Un documento de currículum para un candidato, listo para editar y exportar.",
       "template": "Una plantilla creativa reutilizable que puedes duplicar para iniciar un nuevo trabajo.",
       "document": "Un documento de texto enriquecido que puedes escribir, dar formato y editar con IA.",
@@ -22742,8 +22751,6 @@
     "sharedCallLabel": "Sesión compartida",
     "startCall": "Iniciar llamada",
     "startCallTitle": "Iniciar una llamada sobre este lienzo",
-    "gateProveTitle": "Crea una cuenta para hacerlo real",
-    "gateProveBody": "Elegir una forma de prueba da nombre a esta sesión, para que Leer, Probar, Construir y Medir queden registrados en ella y sus cifras de resultado puedan calcularse. Tus objetos, conversación y disposición te acompañan.",
     "northStar": "Estrella polar",
     "proveThisIdea": "Hazlo real",
     "proveThisIdeaTitle": "Entrega la idea de este tablero al selector de pruebas y empieza a medirla",
@@ -24126,7 +24133,8 @@
     "signInToKeep": "Inicia sesión para conservar tu trabajo",
     "manage": "Gestionar sesiones y carpetas",
     "manageAria": "Gestionar sesiones",
-    "tiedToProject": "En este proyecto"
+    "tiedToProject": "En este proyecto",
+    "resizeAria": "Redimensionar el panel de sesiones"
   },
   "sessionManagePanel": {
     "title": "Sesiones y carpetas",

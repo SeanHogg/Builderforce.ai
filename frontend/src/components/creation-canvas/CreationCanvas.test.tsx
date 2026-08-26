@@ -1146,16 +1146,13 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     // actions that genuinely need a saved session.
     expect(screen.queryByRole('button', { name: 'Save & collaborate' })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Make it real' }));
-    expect(screen.getByRole('dialog', { name: 'Create an account to make this real' })).toBeInTheDocument();
-    // The gate's two ways in are the SHARED <GuestSignupCta> links — the same pair
-    // the Brain surface offers a guest who has spent their free turns — and each
-    // carries this canvas through auth so the board is still there afterwards.
-    expect(screen.getByRole('link', { name: 'Create a free account' })).toHaveAttribute('href', '/register?next=%2Fcreate%2Faccount-gate-test');
-    expect(screen.getByRole('link', { name: 'Sign In' })).toHaveAttribute('href', '/login?next=%2Fcreate%2Faccount-gate-test');
-    fireEvent.click(screen.getByRole('button', { name: 'Not now — keep creating locally' }));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Ask Brain about this canvas')).toBeEnabled();
+    // MAKE IT REAL WITHDRAWS TOO, for the identical reason. It used to open its own
+    // copy of the same "create an account" gate the header CTA already offers the
+    // moment this browser holds a local board ("Keep your work") — the same offer
+    // twice at the top of the screen. It comes back once the session has a server
+    // to name (`persistence !== 'local'`), where it opens the proof picker instead
+    // of a gate.
+    expect(screen.queryByRole('button', { name: 'Make it real' })).toBeNull();
 
     // Sharing is deliberately NOT gated: a guest invites by link into a shared
     // free session, and signing up is offered as the way to KEEP that board, not

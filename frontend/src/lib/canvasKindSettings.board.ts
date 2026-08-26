@@ -6,9 +6,10 @@
  * nothing to configure — the field list is empty (not the kind omitted) so the
  * completeness guard can tell "considered, nothing to edit" from "never declared".
  *
- * `table`, `spreadsheet`, `world`, `roadmap`, `featureSummary`, `comment`, `selection`,
- * `diagnostics` and `terminal` are that empty case: a table/spreadsheet's own grid is its
- * editor, a world's own 3D view is its editor, a roadmap/feature-summary's content is
+ * `table`, `spreadsheet`, `world`, `scene`, `roadmap`, `featureSummary`, `comment`,
+ * `selection`, `diagnostics` and `terminal` are that empty case: a table/spreadsheet's
+ * own grid is its editor, a world's own 3D view is its editor, a scene's own `scene3d`
+ * generation panel is its editor, a roadmap/feature-summary's content is
  * AI-synthesized, a comment thread is edited inline, and `selection`/`diagnostics`/
  * `terminal` are read-only captures from the IDE with nothing a person authors.
  */
@@ -21,6 +22,9 @@ import { STENCIL_SHAPES } from './canvasStencils';
 registerKindSettings({ kinds: ['table'], marketplace: { sellable: () => true }, fields: [], actions: [] });
 registerKindSettings({ kinds: ['spreadsheet'], marketplace: { sellable: () => true }, fields: [], actions: [] });
 registerKindSettings({ kinds: ['world'], marketplace: { sellable: () => true }, fields: [], actions: [] });
+// A `scene`'s own editor is the `scene3d` surface (prompt, model, Generate) — same
+// "nothing to configure in the inspector" shape `world`'s own 3D view already has.
+registerKindSettings({ kinds: ['scene'], marketplace: { sellable: () => true }, fields: [], actions: [] });
 registerKindSettings({ kinds: ['roadmap'], marketplace: { sellable: () => true }, fields: [], actions: [] });
 registerKindSettings({ kinds: ['featureSummary'], marketplace: { sellable: () => true }, fields: [], actions: [] });
 // Board furniture / IDE captures — nothing here is sellable, same reasoning `frame` uses.

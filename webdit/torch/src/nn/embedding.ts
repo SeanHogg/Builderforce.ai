@@ -1,5 +1,4 @@
 import { iterIndices, offsetOf } from "../iter";
-import { contiguousStrides } from "../shape";
 import { Tensor } from "../tensor";
 
 /**

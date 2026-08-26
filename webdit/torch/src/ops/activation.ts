@@ -1,5 +1,5 @@
 import { iterIndices, offsetOf } from "../iter";
-import { contiguousStrides, normalizeAxis, productOf } from "../shape";
+import { contiguousStrides, normalizeAxis } from "../shape";
 import { Tensor } from "../tensor";
 import { unaryF32 } from "./elementwise";
 

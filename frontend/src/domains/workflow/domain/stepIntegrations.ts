@@ -153,7 +153,7 @@ export const INTEGRATIONS: Integration[] = [
   { id: 'time', label: 'Time', category: 'official', kind: 'mcp', auth: 'none', icon: '⏰', description: 'Current time lookup and timezone conversion.', operations: [{ id: 'get-current-time', label: 'Get current time' }, { id: 'convert-time', label: 'Convert timezone' }] },
   { id: 'github', label: 'GitHub', category: 'official', kind: 'mcp', auth: 'api-key', icon: '🐙', description: 'Repos, files, issues, and pull requests via the GitHub API.', operations: [{ id: 'create-issue', label: 'Create issue' }, { id: 'create-pull-request', label: 'Create pull request' }, { id: 'search-repositories', label: 'Search repositories' }, { id: 'create-or-update-file', label: 'Create or update file' }] },
   { id: 'gitlab', label: 'GitLab', category: 'official', kind: 'mcp', auth: 'api-key', icon: '🦊', description: 'Projects, files, and merge requests via the GitLab API.', operations: [{ id: 'create-issue', label: 'Create issue' }, { id: 'create-merge-request', label: 'Create merge request' }, { id: 'search-projects', label: 'Search projects' }, { id: 'create-or-update-file', label: 'Create or update file' }] },
-  // Tavily/Exa/Linkup web search lives at the `web-search` node kind (Flow
+  // Tavily/Ollama/Exa/Linkup web search lives at the `web-search` node kind (Flow
   // Control/Tools sidebar, "AI Agents" group) — a real executor with a
   // tenant-key → operator-SearXNG → keyless fallback, not a preset here. A
   // `trigger`-kind catalog entry can only be a workflow's own entry point

@@ -8,18 +8,21 @@
  * — while `geo.geocode`, the step AFTER it, worked keylessly for everyone. So this is
  * now a PRECEDENCE, and it always resolves:
  *
- *   1. the tenant's own key for a keyed vendor — Tavily, then Exa, then Linkup — from
- *      `integration_credentials`, the SAME per-tenant vault every other non-LLM vendor
- *      uses (per-tenant PBKDF2 derivation, `is_enabled` health flag, one CRUD surface at
- *      /api/integrations),
+ *   1. the tenant's own key for a keyed vendor — Tavily, then Ollama, then Exa, then
+ *      Linkup — from `integration_credentials`, the SAME per-tenant vault every other
+ *      non-LLM vendor uses (per-tenant PBKDF2 derivation, `is_enabled` health flag, one
+ *      CRUD surface at /api/integrations),
  *   2. the OPERATOR's own funded Tavily key (`TAVILY_API_KEY`, unset by default) — a
  *      deliberate, real per-query cost the operator is choosing to absorb for every
  *      tenant with no key of their own, rather than the platform funding nothing,
- *   3. the OPERATOR's own SearXNG instance (`SEARXNG_URL`, unset by default). Open-web
+ *   3. the OPERATOR's own funded Ollama key (`OLLAMA_API_KEY`, unset by default) — the
+ *      same deliberate absorbed cost as (2), tried when the operator funds Ollama but not
+ *      Tavily, or Tavily's key is unset,
+ *   4. the OPERATOR's own SearXNG instance (`SEARXNG_URL`, unset by default). Open-web
  *      coverage with no vendor account, no per-query meter, and no third party learning
  *      what a tenant researches — unmetered, which is why it sits beneath the funded
- *      key above it and above the keyless floor below,
- *   4. the KEYLESS vendor — no account, no meter, no infrastructure, attribution-only
+ *      keys above it and above the keyless floor below,
+ *   5. the KEYLESS vendor — no account, no meter, no infrastructure, attribution-only
  *      licence. Narrower coverage, stated as such in the result, but real citable
  *      sources.
  *
@@ -39,8 +42,8 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { decryptCredentials } from '../integrations/credentialCrypto';
 import {
-  CREDENTIALED_WEB_SEARCH_VENDOR_IDS, searxngSearchVendor, tavilySearchVendor, webSearchVendor, wikipediaSearchVendor,
-  type WebSearchAuth, type WebSearchVendor,
+  CREDENTIALED_WEB_SEARCH_VENDOR_IDS, ollamaSearchVendor, searxngSearchVendor, tavilySearchVendor, webSearchVendor,
+  wikipediaSearchVendor, type WebSearchAuth, type WebSearchVendor,
 } from './webSearchVendors';
 
 export interface ResolvedWebSearchBacking {
@@ -78,6 +81,8 @@ function pickApiKey(creds: Record<string, unknown>): string | null {
 export function platformWebSearchBacking(env: Env | undefined): ResolvedWebSearchBacking {
   const tavilyKey = env?.TAVILY_API_KEY?.trim();
   if (tavilyKey) return { vendor: tavilySearchVendor, auth: { apiKey: tavilyKey }, source: 'operator' };
+  const ollamaKey = env?.OLLAMA_API_KEY?.trim();
+  if (ollamaKey) return { vendor: ollamaSearchVendor, auth: { apiKey: ollamaKey }, source: 'operator' };
   const searxngUrl = env?.SEARXNG_URL?.trim();
   if (searxngUrl) return { vendor: searxngSearchVendor, auth: { apiKey: null, baseUrl: searxngUrl }, source: 'operator' };
   return { vendor: wikipediaSearchVendor, auth: { apiKey: null }, source: 'keyless' };

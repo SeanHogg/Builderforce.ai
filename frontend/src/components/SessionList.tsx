@@ -23,7 +23,7 @@
  * organizing sessions into folders and tying them to a Project.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -36,6 +36,17 @@ import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 import { SplitButton } from '@/components/ui';
 import { menuItemStyle } from '@/components/workspace/MenuSurface';
 import { SessionManagePanel } from '@/components/session-management/SessionManagePanel';
+import { usePointerResize } from '@/lib/usePointerResize';
+import {
+  SESSION_LIST_MAX_HEIGHT,
+  SESSION_LIST_MIN_HEIGHT,
+  clampSessionListHeight,
+  readSessionListHeight,
+  writeSessionListHeight,
+} from '@/lib/sessionListPreferences';
+
+/** How far one arrow-key press resizes the panel. */
+const RESIZE_STEP = 24;
 
 /** How many sessions the panel lists before deferring to the canvas library. */
 const RECENT_LIMIT = 8;
@@ -68,6 +79,29 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
   const [drafts, setDrafts] = useState<LocalCreationEntry[]>([]);
   const [creating, setCreating] = useState(false);
   const [managePanelOpen, setManagePanelOpen] = useState(false);
+  // Null keeps the default 42%-of-rail height (globals.css) until a drag sets
+  // an explicit px value. Seeded from a stored preference, or — the first
+  // time this browser sees the panel — from its own rendered height, so the
+  // very first drag starts from where the panel already visually is rather
+  // than snapping to an arbitrary constant.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const stored = readSessionListHeight();
+    if (stored != null) { setHeight(stored); return; }
+    const measured = scrollRef.current?.getBoundingClientRect().height;
+    if (measured) setHeight(clampSessionListHeight(measured));
+  }, []);
+  const resize = usePointerResize({
+    axis: 'y',
+    value: height ?? SESSION_LIST_MIN_HEIGHT,
+    step: RESIZE_STEP,
+    clamp: clampSessionListHeight,
+    onChange: (next, settled) => {
+      setHeight(next);
+      if (settled) writeSessionListHeight(next);
+    },
+  });
 
   const currentId = activeCanvasId(pathname);
 
@@ -117,7 +151,7 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
     ? ('title' in active ? active.title : undefined) ?? t('untitled')
     : null;
 
-  const rest: RecentEntry[] = [
+  const allEntries: RecentEntry[] = [
     ...drafts
       .filter((draft) => draft.sessionId !== currentId)
       .map((draft) => ({ id: draft.sessionId, title: draft.title || t('untitled'), draft: true, tied: false })),
@@ -130,11 +164,17 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
         tied: currentProjectId != null
           && ((session.projectIds ?? []).includes(currentProjectId) || session.folderProjectId === currentProjectId),
       })),
-  ].slice(0, RECENT_LIMIT);
+  ];
 
   const scoped = currentProjectId != null;
-  const tied = scoped ? rest.filter((entry) => entry.tied) : [];
-  const unfiled = scoped ? rest.filter((entry) => !entry.tied) : rest;
+  // Each bucket gets its own RECENT_LIMIT budget rather than splitting one
+  // shared slice of the combined list — a project with more than RECENT_LIMIT
+  // unfiled sessions used to be able to crowd every tied one out of the slice
+  // before "tied" was ever checked.
+  const tiedAll = scoped ? allEntries.filter((entry) => entry.tied) : [];
+  const unfiledAll = scoped ? allEntries.filter((entry) => !entry.tied) : allEntries;
+  const tied = tiedAll.slice(0, RECENT_LIMIT);
+  const unfiled = unfiledAll.slice(0, RECENT_LIMIT);
 
   const renderEntry = (entry: RecentEntry) => (
     <Link
@@ -154,60 +194,88 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <div className="nav-sessions">
-      <SplitButton
-        size="sm"
-        block
-        loading={creating}
-        primaryLabel={t('newCanvas')}
-        onPrimary={newCanvas}
-        menuAriaLabel={t('manageAria')}
-        renderMenu={(close) => (
-          <div className="ui-button-group__menu" role="menu" aria-label={t('manageAria')}>
-            <button
-              type="button"
-              role="menuitem"
-              style={menuItemStyle(false)}
-              onClick={() => { close(); setManagePanelOpen(true); }}
-            >
-              {t('manage')}
-            </button>
+      <div
+        ref={scrollRef}
+        className="nav-sessions__scroll"
+        style={height != null ? ({ '--nav-sessions-height': `${height}px` } as CSSProperties) : undefined}
+      >
+        <SplitButton
+          size="sm"
+          block
+          loading={creating}
+          primaryLabel={t('newCanvas')}
+          onPrimary={newCanvas}
+          menuAriaLabel={t('manageAria')}
+          renderMenu={(close) => (
+            <div className="ui-button-group__menu" role="menu" aria-label={t('manageAria')}>
+              <button
+                type="button"
+                role="menuitem"
+                style={menuItemStyle(false)}
+                onClick={() => { close(); setManagePanelOpen(true); }}
+              >
+                {t('manage')}
+              </button>
+            </div>
+          )}
+        />
+
+        {activeTitle != null && (
+          <>
+            <div className="ui-eyebrow nav-sessions__label">
+              <span className="nav-sessions__live" aria-hidden="true" />
+              {t('active')}
+              <span className="nav-sessions__count">(1)</span>
+            </div>
+            <span className="nav-item active nav-sessions__item" aria-current="page">
+              <span className="nav-item-label">{activeTitle}</span>
+            </span>
+          </>
+        )}
+
+        {scoped ? (
+          <>
+            {tied.length > 0 && (
+              <div className="nav-sessions__recents">
+                <div className="ui-eyebrow nav-sessions__label">
+                  {t('tiedToProject')}
+                  <span className="nav-sessions__count">({tiedAll.length})</span>
+                </div>
+                <div className="nav-sessions__recent-list">{tied.map(renderEntry)}</div>
+              </div>
+            )}
+            {unfiled.length > 0 && (
+              <div className="nav-sessions__recents">
+                <div className="ui-eyebrow nav-sessions__label">
+                  {tc('unfiled')}
+                  <span className="nav-sessions__count">({unfiledAll.length})</span>
+                </div>
+                <div className="nav-sessions__recent-list">{unfiled.map(renderEntry)}</div>
+              </div>
+            )}
+          </>
+        ) : unfiled.length > 0 && (
+          <div className="nav-sessions__recents">
+            <div className="ui-eyebrow nav-sessions__label">
+              {t('recents')}
+              <span className="nav-sessions__count">({unfiledAll.length})</span>
+            </div>
+            <div className="nav-sessions__recent-list">{unfiled.map(renderEntry)}</div>
           </div>
         )}
+      </div>
+
+      <div
+        className="nav-sessions__resizer"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label={t('resizeAria')}
+        aria-valuenow={height ?? undefined}
+        aria-valuemin={SESSION_LIST_MIN_HEIGHT}
+        aria-valuemax={SESSION_LIST_MAX_HEIGHT}
+        tabIndex={0}
+        {...resize}
       />
-
-      {activeTitle != null && (
-        <>
-          <div className="ui-eyebrow nav-sessions__label">
-            <span className="nav-sessions__live" aria-hidden="true" />
-            {t('active')}
-          </div>
-          <span className="nav-item active nav-sessions__item" aria-current="page">
-            <span className="nav-item-label">{activeTitle}</span>
-          </span>
-        </>
-      )}
-
-      {scoped ? (
-        <>
-          {tied.length > 0 && (
-            <div className="nav-sessions__recents">
-              <div className="ui-eyebrow nav-sessions__label">{t('tiedToProject')}</div>
-              <div className="nav-sessions__recent-list">{tied.map(renderEntry)}</div>
-            </div>
-          )}
-          {unfiled.length > 0 && (
-            <div className="nav-sessions__recents">
-              <div className="ui-eyebrow nav-sessions__label">{tc('unfiled')}</div>
-              <div className="nav-sessions__recent-list">{unfiled.map(renderEntry)}</div>
-            </div>
-          )}
-        </>
-      ) : rest.length > 0 && (
-        <div className="nav-sessions__recents">
-          <div className="ui-eyebrow nav-sessions__label">{t('recents')}</div>
-          <div className="nav-sessions__recent-list">{rest.map(renderEntry)}</div>
-        </div>
-      )}
 
       <SessionManagePanel open={managePanelOpen} onClose={() => { setManagePanelOpen(false); invalidateRecentCanvases(); void fetchRecentCanvases(currentProjectId).then(setRecent); }} />
     </div>

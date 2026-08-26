@@ -1283,11 +1283,6 @@
         "tagline": "Erstelle eine Website oder Web-App mit Vorschau, Code und einem Live-Dev-Server.",
         "runLabel": "Ausführen"
       },
-      "video": {
-        "label": "Video",
-        "tagline": "Erzeuge kurze Videos clientseitig auf deiner eigenen GPU per Diffusion.",
-        "runLabel": "Ausführen"
-      },
       "evermind": {
         "label": "Evermind",
         "tagline": "Lass ein lebendiges Evermind-Modell wachsen, das aus jedem Projekt lernt — bring ihm etwas bei und sieh zu, wie sich seine Wissenskarte füllt.",
@@ -15264,7 +15259,7 @@
       },
       "webSearch": {
         "label": "Websuche",
-        "blurb": "Durchsucht das offene Web und liefert Ergebnisse mit Seiteninhalt — nutzt zuerst deinen verbundenen Tavily-/Exa-/Linkup-Schlüssel, dann eine SearXNG-Instanz des Betreibers und zuletzt eine schlüssellose Enzyklopädie-Quelle, damit immer ein Ergebnis zurückkommt."
+        "blurb": "Durchsucht das offene Web und liefert Ergebnisse mit Seiteninhalt — nutzt zuerst deinen verbundenen Tavily-/Ollama-/Exa-/Linkup-Schlüssel, dann eine SearXNG-Instanz des Betreibers und zuletzt eine schlüssellose Enzyklopädie-Quelle, damit immer ein Ergebnis zurückkommt."
       },
       "switch": {
         "label": "Switch",
@@ -18894,6 +18889,8 @@
     "askBrain": "Brain zu diesem Canvas fragen",
     "sendBrain": "An Brain senden",
     "resizePrompt": "Größe des Prompt-Bereichs ändern",
+    "dragHandle": "Ziehen, um dieses Panel zu verschieben",
+    "dragHandleMoved": "Ziehen, um dieses Panel zu verschieben (Doppelklick setzt die Position zurück)",
     "entireCanvas": "Gesamter Canvas",
     "loading": "Canvas wird geladen…",
     "requestAccess": "Zugriff anfordern",
@@ -18999,6 +18996,7 @@
       "cad": "CAD",
       "model3d": "3D-Modell",
       "world": "3D-Raum",
+      "scene": "KI-Szene",
       "resume": "Lebenslauf",
       "template": "Vorlage",
       "document": "Dokument",
@@ -19471,6 +19469,7 @@
     "typicalValue": "Typisch: {value}",
     "correlationCoverage": "Korrelationsabdeckung macht jede Aktion nachvollziehbar.",
     "aggregatesScoped": "Aggregate sind inhaltsfrei und auf den Tenant beschränkt.",
+    "copyProofJourneyDiagnostics": "Beweisverlauf-Diagnose kopieren",
     "sessionConversation": "Sitzungskonversation",
     "sessionConversationHint": "Bleibt bestehen, auch wenn Chat-Objekte entfernt werden",
     "closeConversation": "Konversation schließen",
@@ -22240,7 +22239,8 @@
       "scene3d": {
         "label": "3D-Raum",
         "enter": "Diese Leinwand in 3D ansehen",
-        "active": "3D verlassen"
+        "active": "3D verlassen",
+        "open": "KI-Szene öffnen"
       },
       "app": {
         "label": "App",
@@ -22419,6 +22419,14 @@
         "open": "Kalender öffnen"
       }
     },
+    "scene": {
+      "promptLabel": "Prompt",
+      "promptPlaceholder": "z. B. ein Fuchs läuft im goldenen Licht durch einen Herbstwald, filmisch",
+      "framesLabel": "Frames",
+      "fpsLabel": "FPS",
+      "generate": "Generieren",
+      "initializing": "Wird initialisiert…"
+    },
     "miro": {
       "title": "Miro-Boards",
       "close": "Schließen",
@@ -22576,6 +22584,7 @@
       "cad": "Ein Studio zum Erzeugen von CAD-Modellen für Bauteile und mechanische Konstruktionen.",
       "model3d": "Ein Studio zum Erzeugen von 3D-Modellen, die Sie ansehen und exportieren können.",
       "world": "Ein von Hand gebauter 3D-Raum — platzieren Sie Objekte, bewegen Sie die Kamera und laufen Sie mit echten Kollisionen hindurch.",
+      "scene": "Ein KI-generierter Video-/3D-Clip — Prompt schreiben, Modell wählen und in der 3D-Oberfläche einen Clip erzeugen.",
       "resume": "Ein Lebenslaufdokument für eine Kandidatin oder einen Kandidaten, bearbeit- und exportierbar.",
       "template": "Eine wiederverwendbare Kreativvorlage, die Sie duplizieren können, um neue Arbeit zu starten.",
       "document": "Ein Rich-Text-Dokument, das du mit KI schreiben, formatieren und bearbeiten kannst.",
@@ -22742,8 +22751,6 @@
     "sharedCallLabel": "Geteilte Sitzung",
     "startCall": "Anruf starten",
     "startCallTitle": "Einen Anruf zu dieser Canvas starten",
-    "gateProveTitle": "Konto erstellen, um dies real zu machen",
-    "gateProveBody": "Die Wahl einer Beweisform benennt diese Sitzung, sodass Lesen, Beweisen, Bauen und Messen darauf verbucht und ihre Ergebniszahlen berechnet werden können. Ihre Objekte, das Gespräch und das Layout kommen mit.",
     "northStar": "Nordstern",
     "proveThisIdea": "Real machen",
     "proveThisIdeaTitle": "Die Idee dieses Boards an die Beweisauswahl übergeben und mit dem Messen beginnen",
@@ -24126,7 +24133,8 @@
     "signInToKeep": "Melde dich an, um deine Arbeit zu behalten",
     "manage": "Sitzungen & Ordner verwalten",
     "manageAria": "Sitzungen verwalten",
-    "tiedToProject": "In diesem Projekt"
+    "tiedToProject": "In diesem Projekt",
+    "resizeAria": "Sitzungsbereich in der Größe ändern"
   },
   "sessionManagePanel": {
     "title": "Sitzungen & Ordner",

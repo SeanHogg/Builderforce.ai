@@ -21,7 +21,7 @@ export const HUES = {
   make: 'var(--stage-make)',
   run: 'var(--stage-run)',
   measure: 'var(--stage-measure)',
-  market: 'var(--stage-market)',
+  growth: 'var(--stage-growth)',
   expand: 'var(--stage-expand)',
   read: 'var(--stage-read)',
   prove: 'var(--stage-prove)',

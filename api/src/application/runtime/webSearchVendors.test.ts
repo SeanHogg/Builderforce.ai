@@ -5,7 +5,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  exaSearchVendor, linkupSearchVendor, parseExaResults, parseLinkupResults,
+  exaSearchVendor, linkupSearchVendor, ollamaSearchVendor, parseExaResults, parseLinkupResults,
   parseSearxngResults, parseTavilyResults, parseWikipediaResults, searxngSearchVendor,
   snippetToText, tavilySearchVendor, toSearchRow, webSearchVendor, wikipediaArticleUrl,
   wikipediaSearchVendor, MAX_SEARCH_RESULTS, type WebSearchVendor,
@@ -97,9 +97,10 @@ describe('vendor payload parsers', () => {
   });
 });
 
-describe('keyed vendors (Tavily / Exa / Linkup)', () => {
+describe('keyed vendors (Tavily / Ollama / Exa / Linkup)', () => {
   const KEYED: Array<[WebSearchVendor, string, (init: RequestInit) => string | undefined]> = [
     [tavilySearchVendor, 'api.tavily.com', (init) => (init.headers as Record<string, string>).Authorization],
+    [ollamaSearchVendor, 'ollama.com', (init) => (init.headers as Record<string, string>).Authorization],
     [exaSearchVendor, 'api.exa.ai', (init) => (init.headers as Record<string, string>)['x-api-key']],
     [linkupSearchVendor, 'api.linkup.so', (init) => (init.headers as Record<string, string>).Authorization],
   ];
@@ -242,6 +243,7 @@ describe('wikipediaSearchVendor (the keyless floor)', () => {
 describe('webSearchVendor registry', () => {
   it('resolves every wired id and refuses an unknown one', () => {
     expect(webSearchVendor('tavily')).toBe(tavilySearchVendor);
+    expect(webSearchVendor('ollama')).toBe(ollamaSearchVendor);
     expect(webSearchVendor('exa')).toBe(exaSearchVendor);
     expect(webSearchVendor('linkup')).toBe(linkupSearchVendor);
     expect(webSearchVendor('searxng')).toBe(searxngSearchVendor);
@@ -259,6 +261,7 @@ describe('webSearchVendor registry', () => {
     expect(wikipediaSearchVendor.keyless).toBe(true);
     expect(searxngSearchVendor.keyless).toBe(true);
     expect(tavilySearchVendor.keyless).toBe(false);
+    expect(ollamaSearchVendor.keyless).toBe(false);
     expect(exaSearchVendor.keyless).toBe(false);
     expect(linkupSearchVendor.keyless).toBe(false);
   });

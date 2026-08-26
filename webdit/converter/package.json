@@ -27,7 +27,7 @@
     "typecheck:native": "tsgo --noEmit"
   },
   "dependencies": {
-    "@webdit/shared": "*"
+    "@webdit/shared": "file:../shared"
   },
   "devDependencies": {
     "@types/node": "^20.12.0",

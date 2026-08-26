@@ -61,7 +61,12 @@ export interface Env {
   /** Cerebras API key — enables sub-200ms TTFT models in the vendor cascade.
    *  Set via `wrangler secret put CEREBRAS_API_KEY`. */
   CEREBRAS_API_KEY?: string;
-  /** Ollama Cloud API key — enables paid managed open-weight models.
+  /** Ollama Cloud API key — enables paid managed open-weight models in the LLM
+   *  cascade, AND doubles as the THIRD tier of the search-backing precedence in
+   *  `webSearchCredential.ts` (tried after TAVILY_API_KEY, before SEARXNG_URL) — the
+   *  same ollama.com account key authenticates both `/api/chat` and `/api/web_search`,
+   *  so a deployment that already funds one gets the other for free rather than
+   *  pasting the identical secret under a second name.
    *  Set via `wrangler secret put OLLAMA_API_KEY`. */
   OLLAMA_API_KEY?: string;
   /** NVIDIA NIM API key (build.nvidia.com) — adds free NVIDIA-hosted models to the cascade.
@@ -227,18 +232,18 @@ export interface Env {
 
   /** OPTIONAL operator-funded Tavily key — a SECOND tier in the search-backing
    *  precedence in `webSearchCredential.ts`, used only when the tenant has no BYO
-   *  search key of their own (Tavily/Exa/Linkup, in `integration_credentials`, which
-   *  always wins). Unlike SEARXNG_URL below, this is a real per-query cost the
+   *  search key of their own (Tavily/Ollama/Exa/Linkup, in `integration_credentials`,
+   *  which always wins). Unlike SEARXNG_URL below, this is a real per-query cost the
    *  operator is choosing to absorb on every uncredentialed tenant's behalf — set it
    *  only if that shared quota is an accepted tradeoff for this deployment.
    *  Set via `wrangler secret put TAVILY_API_KEY` (or api/.env + `npm run secrets:from-env`). */
   TAVILY_API_KEY?: string;
 
   /** OPTIONAL origin of a SearXNG instance YOU run, e.g. `https://search.internal` or
-   *  `http://searxng:8080` — the THIRD tier of the search-backing precedence in
-   *  `webSearchCredential.ts` (beneath a tenant's own BYO key and TAVILY_API_KEY
-   *  above). Unmetered and free to run, which is why it sits below the funded
-   *  operator key rather than above it; beneath it sits the keyless encyclopedic
+   *  `http://searxng:8080` — the FOURTH tier of the search-backing precedence in
+   *  `webSearchCredential.ts` (beneath a tenant's own BYO key and the funded operator
+   *  keys above). Unmetered and free to run, which is why it sits below the funded
+   *  operator keys rather than above them; beneath it sits the keyless encyclopedic
    *  vendor that needs nothing at all.
    *
    *  This is the recommended way to give every tenant and every logged-out visitor real

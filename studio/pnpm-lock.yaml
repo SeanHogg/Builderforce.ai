@@ -11,6 +11,12 @@ importers:
 
   .:
     dependencies:
+      '@webdit/runtime':
+        specifier: file:../webdit/runtime
+        version: file:../webdit/runtime(@mlc-ai/web-llm@0.2.84)(@types/node@24.13.2)
+      '@webdit/shared':
+        specifier: file:../webdit/shared
+        version: file:../webdit/shared
       mp4-muxer:
         specifier: ^5.2.2
         version: 5.2.2
@@ -27,6 +33,9 @@ importers:
       '@typescript/native-preview':
         specifier: 7.0.0-dev.20260627.2
         version: 7.0.0-dev.20260627.2
+      '@webdit/convert':
+        specifier: file:../webdit/converter
+        version: file:../webdit/converter
       '@webgpu/types':
         specifier: ^0.1.50
         version: 0.1.71
@@ -395,6 +404,9 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@mlc-ai/web-llm@0.2.84':
+    resolution: {integrity: sha512-hrOWzK4/nGNmgoRKT8pgVmZZ2oEPpbblIWQOwpqNyvK2dysHw3KVB1gNJOuRcQfKOPhucEhX1NJzXzgMDnwSCQ==}
 
   '@napi-rs/wasm-runtime@1.1.6':
     resolution: {integrity: sha512-ZLv/JdUfkvOy9eCnnBaGfiO+XimbjebAeO+MRQqD/B+FR1tnRN0tpKSJHRbE8sFfS6aqsXZ67TQjfwfsxULVbg==}
@@ -772,6 +784,21 @@ packages:
   '@vitest/utils@4.1.9':
     resolution: {integrity: sha512-A51o8ymO5PpqlWNnBP9ZHPXDIpuMtTLlGSjN7la4US+LJzoUMyhwjA5QXlm39JexgwHKW4Xjs8Z2d3dLCXOeuA==}
 
+  '@webdit/convert@file:../webdit/converter':
+    resolution: {directory: ../webdit/converter, type: directory}
+    hasBin: true
+
+  '@webdit/runtime@file:../webdit/runtime':
+    resolution: {directory: ../webdit/runtime, type: directory}
+    peerDependencies:
+      '@mlc-ai/web-llm': ^0.2.0
+
+  '@webdit/shared@file:../webdit/shared':
+    resolution: {directory: ../webdit/shared, type: directory}
+
+  '@webdit/torch@file:../webdit/torch':
+    resolution: {directory: ../webdit/torch, type: directory}
+
   '@webgpu/types@0.1.71':
     resolution: {integrity: sha512-mMy8/ODcKhab808co15eW+yN+HgXoQxRQHTiBV9Mrvl1r0ufnid7YOcI+gi4eUWSWl9ezD6TW2KXccrL8HCh2A==}
 
@@ -1010,6 +1037,10 @@ packages:
   load-tsconfig@0.2.5:
     resolution: {integrity: sha512-IXO6OCs9yg8tMKzfPZ1YmheJbZCiEsnBdcB03l0OcfK9prKnJb96siuHCr5Fl37/yo9DnKU+TLpxzTUspw9shg==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
+
+  loglevel@1.9.2:
+    resolution: {integrity: sha512-HgMmCqIJSAKqo68l0rS2AanEWfkxaZ5wNiEFb5ggm08lDs9Xl2KxBlX3PTcaD2chBM1gXAYf491/M2Rv8Jwayg==}
+    engines: {node: '>= 0.6.0'}
 
   long@5.3.2:
     resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==}
@@ -1594,6 +1625,10 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
+  '@mlc-ai/web-llm@0.2.84':
+    dependencies:
+      loglevel: 1.9.2
+
   '@napi-rs/wasm-runtime@1.1.6(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)':
     dependencies:
       '@emnapi/core': 1.11.1
@@ -1847,6 +1882,24 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
 
+  '@webdit/convert@file:../webdit/converter':
+    dependencies:
+      '@webdit/shared': file:../webdit/shared
+
+  '@webdit/runtime@file:../webdit/runtime(@mlc-ai/web-llm@0.2.84)(@types/node@24.13.2)':
+    dependencies:
+      '@huggingface/transformers': 3.8.1(@types/node@24.13.2)
+      '@mlc-ai/web-llm': 0.2.84
+      '@webdit/shared': file:../webdit/shared
+      '@webdit/torch': file:../webdit/torch
+      onnxruntime-web: 1.27.0
+    transitivePeerDependencies:
+      - '@types/node'
+
+  '@webdit/shared@file:../webdit/shared': {}
+
+  '@webdit/torch@file:../webdit/torch': {}
+
   '@webgpu/types@0.1.71': {}
 
   acorn@8.17.0: {}
@@ -2040,6 +2093,8 @@ snapshots:
   lines-and-columns@1.2.4: {}
 
   load-tsconfig@0.2.5: {}
+
+  loglevel@1.9.2: {}
 
   long@5.3.2: {}
 

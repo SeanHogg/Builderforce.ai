@@ -14,7 +14,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { encryptCredentials } from '../integrations/credentialCrypto';
 import { platformWebSearchBacking, resolveWebSearchBacking } from './webSearchCredential';
-import { exaSearchVendor, searxngSearchVendor, tavilySearchVendor, wikipediaSearchVendor } from './webSearchVendors';
+import { exaSearchVendor, ollamaSearchVendor, searxngSearchVendor, tavilySearchVendor, wikipediaSearchVendor } from './webSearchVendors';
 
 const SECRET = 'integration-secret';
 const TENANT = 42;
@@ -28,6 +28,9 @@ const SEARXNG = { vendor: searxngSearchVendor, auth: { apiKey: null, baseUrl: 'h
 
 /** An operator funding a shared Tavily key. */
 const OPERATOR_TAVILY = { vendor: tavilySearchVendor, auth: { apiKey: 'operator-tavily-key' }, source: 'operator' };
+
+/** An operator funding a shared Ollama key — the BACKUP operator tier. */
+const OPERATOR_OLLAMA = { vendor: ollamaSearchVendor, auth: { apiKey: 'operator-ollama-key' }, source: 'operator' };
 
 /** Minimal drizzle-shaped stub: `.select().from().where()` resolves to `rows`. The
  *  resolver issues exactly one such query, so this is the whole surface it touches. */
@@ -70,6 +73,21 @@ describe('platformWebSearchBacking', () => {
   it('prefers the funded Tavily key over SearXNG when both are configured', () => {
     const both = { ...env, TAVILY_API_KEY: 'operator-tavily-key', SEARXNG_URL: 'http://searxng:8080' } as unknown as Env;
     expect(platformWebSearchBacking(both)).toEqual(OPERATOR_TAVILY);
+  });
+
+  it('uses the operator’s funded Ollama key when Tavily is not configured', () => {
+    const withOllama = { ...env, OLLAMA_API_KEY: ' operator-ollama-key ' } as unknown as Env;
+    expect(platformWebSearchBacking(withOllama)).toEqual(OPERATOR_OLLAMA);
+  });
+
+  it('prefers the funded Tavily key over the funded Ollama key', () => {
+    const both = { ...env, TAVILY_API_KEY: 'operator-tavily-key', OLLAMA_API_KEY: 'operator-ollama-key' } as unknown as Env;
+    expect(platformWebSearchBacking(both)).toEqual(OPERATOR_TAVILY);
+  });
+
+  it('prefers the funded Ollama key over SearXNG', () => {
+    const both = { ...env, OLLAMA_API_KEY: 'operator-ollama-key', SEARXNG_URL: 'http://searxng:8080' } as unknown as Env;
+    expect(platformWebSearchBacking(both)).toEqual(OPERATOR_OLLAMA);
   });
 });
 
@@ -122,6 +140,12 @@ describe('resolveWebSearchBacking', () => {
       .toEqual({ vendor: exaSearchVendor, auth: { apiKey: 'exa-key' }, source: 'tenant' });
   });
 
+  it('picks a tenant’s Ollama key as the BACKUP — behind Tavily, ahead of Exa/Linkup', async () => {
+    const rows = [await row({ apiKey: 'exa-key' }, 'exa'), await row({ apiKey: 'ollama-key' }, 'ollama')];
+    expect(await resolveWebSearchBacking(env, stubDb(rows), TENANT))
+      .toEqual({ vendor: ollamaSearchVendor, auth: { apiKey: 'ollama-key' }, source: 'tenant' });
+  });
+
   it('skips an unusable row and keeps looking', async () => {
     const rows = [await row({ apiKey: '' }, 'tavily'), await row({ apiKey: 'good' }, 'exa')];
     expect((await resolveWebSearchBacking(env, stubDb(rows), TENANT)).auth.apiKey).toBe('good');
@@ -156,5 +180,15 @@ describe('resolveWebSearchBacking', () => {
     const withTavily = { ...env, TAVILY_API_KEY: 'operator-tavily-key' } as unknown as Env;
     const got = await resolveWebSearchBacking(withTavily, stubDb([await row({ apiKey: 'tenant-key' })]), TENANT);
     expect(got).toMatchObject({ auth: { apiKey: 'tenant-key' }, source: 'tenant' });
+  });
+
+  it('falls back to the operator’s funded Ollama key when the tenant has no key and Tavily is unset', async () => {
+    const withOllama = { ...env, OLLAMA_API_KEY: 'operator-ollama-key' } as unknown as Env;
+    expect(await resolveWebSearchBacking(withOllama, stubDb([]), TENANT)).toEqual(OPERATOR_OLLAMA);
+  });
+
+  it('prefers the operator’s funded Tavily key over the operator’s funded Ollama key', async () => {
+    const both = { ...env, TAVILY_API_KEY: 'operator-tavily-key', OLLAMA_API_KEY: 'operator-ollama-key' } as unknown as Env;
+    expect(await resolveWebSearchBacking(both, stubDb([]), TENANT)).toEqual(OPERATOR_TAVILY);
   });
 });

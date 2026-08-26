@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
+import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
+import { usePointerResize } from '@/lib/usePointerResize';
 import { Avatar, BrainTimeline } from '@seanhogg/builderforce-brain-ui';
 import { useChatActivityLabels } from '@/i18n/useChatActivityLabels';
 import '@seanhogg/builderforce-brain-ui/styles.css';
@@ -318,31 +319,14 @@ export function BrainDock({
   // Dragging the inner edge. The delta is inverted for a right-hand surface, where
   // pulling left makes it wider. Only the settled width is persisted, so a drag
   // does not write localStorage (or a preference signal) on every pointer move.
-  const drag = useRef<{ pointerX: number; width: number } | null>(null);
-  const startResize = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    drag.current = { pointerX: event.clientX, width };
-  }, [width]);
-  const moveResize = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    const active = drag.current;
-    if (!active) return;
-    const delta = event.clientX - active.pointerX;
-    onWidthChange(clampBrainDockWidth(active.width + (side === 'left' ? delta : -delta)), false);
-  }, [onWidthChange, side]);
-  const endResize = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (!drag.current) return;
-    drag.current = null;
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
-    onWidthChange(width, true);
-  }, [onWidthChange, width]);
-  const keyResize = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
-    const towardsBoard = event.key === (side === 'left' ? 'ArrowLeft' : 'ArrowRight');
-    const awayFromBoard = event.key === (side === 'left' ? 'ArrowRight' : 'ArrowLeft');
-    if (!towardsBoard && !awayFromBoard) return;
-    event.preventDefault();
-    onWidthChange(clampBrainDockWidth(width + (awayFromBoard ? RESIZE_STEP : -RESIZE_STEP)), true);
-  }, [onWidthChange, side, width]);
+  const resize = usePointerResize({
+    axis: 'x',
+    value: width,
+    step: RESIZE_STEP,
+    invert: side === 'right',
+    clamp: clampBrainDockWidth,
+    onChange: onWidthChange,
+  });
 
   return (
     <aside
@@ -379,11 +363,7 @@ export function BrainDock({
         aria-valuemin={BRAIN_DOCK_MIN_WIDTH}
         aria-valuemax={BRAIN_DOCK_MAX_WIDTH}
         tabIndex={0}
-        onPointerDown={startResize}
-        onPointerMove={moveResize}
-        onPointerUp={endResize}
-        onPointerCancel={endResize}
-        onKeyDown={keyResize}
+        {...resize}
       />
       <BrainSurfaceBody
         showExecutionDetail={showExecutionDetail}

@@ -1,5 +1,5 @@
 import type { CreationNodeData, CreationObjectKind } from './types';
-import { BRAND_BINDING_FIELD, CREATION_CONNECTION_KINDS, defaultConfidentialityForKind, isBrandBoundKind, emptyCanvasVideoTimeline, emptyCanvasWorldScene, FOUNDER_OBJECT_KINDS, type AcademicObjectKind, type CareerObjectKind, type CreationConnectionKind, type DataScienceObjectKind, type FounderObjectKind, type HiringObjectKind, type LegalObjectKind, type MarketingObjectKind, type OperationsObjectKind, type PeopleObjectKind, type SellMotionObjectKind, type SharedObjectKind } from '@builderforce/creation-canvas-contract';
+import { BRAND_BINDING_FIELD, CREATION_CONNECTION_KINDS, defaultConfidentialityForKind, isBrandBoundKind, emptyCanvasVideoTimeline, emptyCanvasWorldScene, emptyCanvasSceneSpec, FOUNDER_OBJECT_KINDS, type AcademicObjectKind, type CareerObjectKind, type CreationConnectionKind, type DataScienceObjectKind, type FounderObjectKind, type HiringObjectKind, type LegalObjectKind, type MarketingObjectKind, type OperationsObjectKind, type PeopleObjectKind, type SellMotionObjectKind, type SharedObjectKind } from '@builderforce/creation-canvas-contract';
 import { FOUNDER_BOOKKEEPING_FIELDS, FOUNDER_FIELD_NAMES, FOUNDER_OBJECT_SPECS, founderMutableFields } from '@/lib/founderObjects';
 // Importing the vocabulary registers it (see `specObjects.ts`), which is what makes the
 // academic kinds resolvable everywhere else without a second list of them here.
@@ -248,6 +248,17 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   // way `website`/`document` are authored rather than composed. Opens directly into
   // the `world` surface (see `creationObjectSurfaces.ts`) where props are placed.
   { kind: 'world', label: '3D space', icon: '⬢', group: 'Build', createData: () => ({ kind: 'world', title: 'Untitled 3D space', status: 'Draft', world: emptyCanvasWorldScene() }) },
+  // AI video/3D generation — opens directly into the `scene3d` surface bound to
+  // itself (see `creationObjectSurfaces.ts`), where a prompt and a model produce a
+  // clip via the studio engine. Distinct from `world` (hand-placed props) and from
+  // `video` (a real multi-track timeline edit of imported/screen/camera clips).
+  {
+    kind: 'scene', label: 'AI scene', icon: '✧', group: 'Build',
+    // `modelId` starts on the lightest always-available model (mirrors
+    // `StudioPanel`'s own `defaultModel` default) rather than empty, so the model
+    // picker never has to reconcile with a blank selection the moment the panel opens.
+    createData: () => ({ kind: 'scene', title: 'Untitled AI scene', status: 'Draft', scene: { ...emptyCanvasSceneSpec(), modelId: 'lcm-tiny-sd' } }),
+  },
   { kind: 'resume', label: 'Resume', icon: '▤', group: 'Knowledge', createData: () => ({ kind: 'resume', title: 'Resume builder', status: 'Draft', mediaKind: 'document', capabilityId: 'creative.resume', provider: 'native', templateId: 'resume', mcpServer: 'builtin', mcpTool: 'builtin_creative_compose' }) },
   { kind: 'template', label: 'Template', icon: '✦', group: 'Knowledge', createData: () => ({ kind: 'template', title: 'Creative template', status: 'Choose a template', mediaKind: 'template', capabilityId: 'creative.template', provider: 'native', mcpServer: 'builtin', mcpTool: 'builtin_creative_capabilities' }) },
   { kind: 'document', label: 'Document', icon: '▤', group: 'Knowledge', createData: () => ({ kind: 'document', title: 'Untitled document', status: 'Draft' }) },
@@ -342,6 +353,7 @@ const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   ...Object.fromEntries(DATA_ARCHITECTURE_SPECS.map((spec) => [spec.kind, spec.actions])),
   project: ['expand', 'compare'], task: ['assign', 'deliver'], agent: ['inspect', 'configure', 'assign'],
   evermind: ['teach', 'train', 'evaluate', 'publish'], voice: ['record', 'play'], video: ['generate', 'capture', 'edit', 'preview', 'export'], mcp: ['authenticate', 'execute'],
+  scene: ['generate', 'preview'],
   image: ['generate', 'preview', 'export', 'convert-to-diagram'], animation: ['generate', 'preview', 'export'], podcast: ['generate', 'preview', 'export'],
   comic: ['generate', 'preview', 'export'], game: ['generate', 'preview', 'export'], cad: ['generate', 'preview', 'export', 'convert-to-diagram'], model3d: ['generate', 'preview', 'export'],
   // `tailor` takes a `job` and produces a VARIANT — a second `resume` carrying
@@ -569,6 +581,10 @@ const BASE_MUTABLE_FIELDS = {
   // Hand-authored (see the registry entry): no `mediaKind`/`capabilityId`/`mcpTool`
   // siblings — `world` is the whole authored state, same as `website`/`document`.
   world: ['content', 'world'],
+  // AI generation, not authoring: the whole `CanvasSceneSpec` (model, prompt, params,
+  // Mamba state, produced clip) lives under the one `scene` field — same single-field
+  // shape `world` uses, for the same reason.
+  scene: ['content', 'scene'],
   // `tailoredFor` names the `job` this variant was cut for, by that card's title. It is
   // the only thing that distinguishes nine résumés from nine unlabelled files, and it is
   // a REFERENCE rather than a copy of the posting for the reason `jobApplication.jobRef`

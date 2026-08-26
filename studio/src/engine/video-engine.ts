@@ -19,6 +19,7 @@
  * "can this device run?" check (DRY).
  */
 
+import type { LoadedBundle } from '@webdit/runtime';
 import type {
   ActiveDevice,
   CharacterBible,
@@ -33,6 +34,7 @@ import type {
   StoryboardGenerateOptions,
   StoryboardGenerateResult,
   VideoEngineOptions,
+  WebDitModelDescriptor,
   WeightSource,
 } from '../types';
 import { probeDevice } from './device-router';
@@ -58,6 +60,7 @@ import { cameraMoveToMotion, composeShotPrompt } from './scene-planner';
 import { validateFrame } from './frame-validator';
 import { expandPrompt } from './llm-bridge';
 import { muxFramesToMp4, pixelsToRgba, type MuxFrame } from './webcodecs-muxer';
+import { generateWebDitClip, loadWebDitBundle, runWebDitDenoise } from './webdit-engine';
 
 const DEFAULT_WIDTH = 512;
 const DEFAULT_HEIGHT = 512;
@@ -79,15 +82,22 @@ const DEFAULT_REFINEMENT_STRENGTH = 0.4;
 export class VideoEngine {
   /** Track the probed device so we can lazy-create a refinement-pass engine
    *  later with the same hardware target — needed for the two-pass quality
-   *  chain (draft model → dispose → refinement model). */
+   *  chain (draft model → dispose → refinement model). Only meaningful on
+   *  the lcm-diffusion path (refinement across engine families is rejected
+   *  in `create()` before either engine is constructed). */
   private readonly probed: import('./device-router').ProbedDevice;
 
   private constructor(
     private readonly opts: Required<Pick<VideoEngineOptions, 'apiKey' | 'model'>> & VideoEngineOptions,
-    private diffusion: DiffusionEngine,
+    private diffusion: DiffusionEngine | null,
     private mambaState: MambaStateSnapshot,
     public readonly activeDevice: ActiveDevice,
     probed: import('./device-router').ProbedDevice,
+    /** Which generation family this instance was constructed for — set once
+     *  here so `generate()`/`generateStoryboard()` dispatch without
+     *  re-deriving it from `MODEL_REGISTRY` on every call. */
+    private readonly engineKind: 'lcm-diffusion' | 'webdit-dit',
+    private readonly webditBundle: LoadedBundle | null,
   ) {
     this.probed = probed;
   }
@@ -98,6 +108,32 @@ export class VideoEngine {
    * unsupported state rather than try to recover.
    */
   static async create(options: VideoEngineOptions): Promise<VideoEngine | null> {
+    const descriptor = MODEL_REGISTRY[options.model];
+
+    // lcm-diffusion and webdit-dit are two independent generation families
+    // (see the file header + webdit-engine.ts) with incompatible latent
+    // shapes/conditioning — a refinement pass across families would re-noise
+    // a webdit whole-clip latent through an LCM per-frame UNet (or vice
+    // versa), which is simply the wrong tensor shape, not just lower
+    // quality. Reject the combination clearly here rather than let it fail
+    // deep inside produceClip/refinementPass with an opaque shape-mismatch
+    // error. (Layer 2's model picker prevents selecting this combination in
+    // the UI; this guard covers every other caller.)
+    if (options.refinementModel) {
+      const refinementDescriptor = MODEL_REGISTRY[options.refinementModel];
+      if (refinementDescriptor.engine !== descriptor.engine) {
+        throw new Error(
+          `refinementModel '${options.refinementModel}' (engine: ${refinementDescriptor.engine}) cannot refine ` +
+            `model '${options.model}' (engine: ${descriptor.engine}) — refinement requires both models to belong ` +
+            `to the same generation engine.`,
+        );
+      }
+    }
+
+    if (descriptor.engine === 'webdit-dit') {
+      return VideoEngine.createWebDit(options, descriptor);
+    }
+
     reportProgress(`Probing hardware (target: ${options.device ?? 'auto'})…`, options.onProgress);
     const probed = await probeDevice(options.device ?? 'auto');
     if (!probed) return null;
@@ -129,6 +165,57 @@ export class VideoEngine {
       state,
       probed.kind,
       probed,
+      'lcm-diffusion',
+      null,
+    );
+  }
+
+  /**
+   * webdit-dit construction path. webdit's ORT execution is WebGPU-only (no
+   * CPU/WebNN fallback exists in `@webdit/runtime`), so this probes WebGPU
+   * specifically rather than `options.device ?? 'auto'`. Returns `null` (the
+   * same "consumer never computes its own can-run check" contract as the
+   * lcm-diffusion path) both when WebGPU is unavailable AND when the model
+   * has no bundle to load yet (`available: false` / `bundleUrl: null` — the
+   * expected state for all 4 webdit models until an operator uploads a real
+   * bundle; see the ROADMAP entry).
+   */
+  private static async createWebDit(
+    options: VideoEngineOptions,
+    descriptor: WebDitModelDescriptor,
+  ): Promise<VideoEngine | null> {
+    reportProgress('Probing hardware (WebDiT requires WebGPU — no CPU/WebNN fallback)…', options.onProgress);
+    const probed = await probeDevice('webgpu');
+    if (!probed) return null;
+
+    if (!descriptor.available || !descriptor.bundleUrl) {
+      reportProgress(
+        `Model '${descriptor.id}' has no bundle uploaded yet (available: false) — cannot load.`,
+        options.onProgress,
+      );
+      return null;
+    }
+
+    const width = options.width ?? DEFAULT_WIDTH;
+    const height = options.height ?? DEFAULT_HEIGHT;
+    const weightSources = options.weightSources ?? DEFAULT_WEIGHT_SOURCES;
+
+    const bundle = await loadWebDitBundle(descriptor, {
+      apiKey: options.apiKey,
+      weightSources,
+      onProgress: options.onProgress,
+    });
+
+    const state = options.mambaState ?? emptyState({ dim: 64, order: 4, channels: 16 });
+
+    return new VideoEngine(
+      { ...options, weightSources, width, height },
+      null,
+      state,
+      probed.kind,
+      probed,
+      'webdit-dit',
+      bundle,
     );
   }
 
@@ -144,14 +231,14 @@ export class VideoEngine {
     const descriptor = MODEL_REGISTRY[this.opts.model];
     const steps = args.steps ?? descriptor.defaultSteps;
     const guidance = args.guidance ?? descriptor.defaultGuidance;
-    const coherenceMode = args.coherence ?? DEFAULT_COHERENCE;
-    const coherenceStrength = args.coherenceStrength ?? DEFAULT_COHERENCE_STRENGTH;
     const seed = args.seed ?? Date.now();
     const width = this.opts.width ?? DEFAULT_WIDTH;
     const height = this.opts.height ?? DEFAULT_HEIGHT;
 
     const onProgress = args.onProgress;
 
+    // Prompt expansion is shared by both generation families — the LLM
+    // gateway rewrite happens before either diffusion path sees the prompt.
     if (!args.skipPromptExpansion) {
       reportProgress('Expanding prompt via Builderforce LLM gateway…', onProgress);
     }
@@ -167,10 +254,43 @@ export class VideoEngine {
 
     args.onPromptExpanded?.(resolvedPrompt);
 
+    // webdit-dit: whole-clip DiT generation. No per-frame CLIP embed / Mamba
+    // coherence / anchor-walk / img2img recursion — webdit's DiT models are
+    // video-native and already model temporal coherence themselves, so
+    // runWebDitDenoise+mux (via generateWebDitClip) does the entire clip in
+    // one call. See webdit-engine.ts's file header for why this is a
+    // separate coarse-grained path rather than forced through produceClip.
+    if (this.engineKind === 'webdit-dit') {
+      reportProgress('Generating via WebDiT diffusion-transformer engine…', onProgress);
+      const result = await generateWebDitClip(this.webditBundle!, {
+        prompt: resolvedPrompt,
+        negativePrompt: args.negativePrompt,
+        frames: args.frames,
+        fps: args.fps,
+        steps,
+        guidance,
+        seed,
+        width,
+        height,
+        mambaState: this.mambaState,
+        onProgress,
+        onFrame: args.onFrame,
+        signal: args.signal,
+      });
+      return { ...result, elapsedMs: performance.now() - start };
+    }
+    if (descriptor.engine !== 'lcm-diffusion') {
+      throw new Error(`VideoEngine.generate: unexpected engine '${descriptor.engine}' for model '${this.opts.model}'.`);
+    }
+    // `descriptor` is narrowed to LcmModelDescriptor from here on.
+
+    const coherenceMode = args.coherence ?? DEFAULT_COHERENCE;
+    const coherenceStrength = args.coherenceStrength ?? DEFAULT_COHERENCE_STRENGTH;
+
     reportProgress('Encoding prompt with CLIP text encoder…', onProgress);
-    const promptEmbedding = await this.diffusion.embedPrompt(resolvedPrompt);
+    const promptEmbedding = await this.lcmDiffusion.embedPrompt(resolvedPrompt);
     const negativeEmbedding = args.negativePrompt
-      ? await this.diffusion.embedPrompt(args.negativePrompt)
+      ? await this.lcmDiffusion.embedPrompt(args.negativePrompt)
       : null;
 
     const clip = await this.produceClip({
@@ -253,14 +373,32 @@ export class VideoEngine {
   async generateStoryboard(args: StoryboardGenerateOptions): Promise<StoryboardGenerateResult> {
     const start = performance.now();
     const descriptor = MODEL_REGISTRY[this.opts.model];
+    const width = this.opts.width ?? DEFAULT_WIDTH;
+    const height = this.opts.height ?? DEFAULT_HEIGHT;
+    const onProgress = args.onProgress;
+
+    // webdit-dit: each shot is an independent runWebDitDenoise call — see
+    // generateWebDitStoryboard for why (no cross-shot Mamba carry).
+    if (this.engineKind === 'webdit-dit') {
+      if (descriptor.engine !== 'webdit-dit') {
+        throw new Error(
+          `VideoEngine.generateStoryboard: engineKind/descriptor mismatch for '${this.opts.model}'.`,
+        );
+      }
+      return this.generateWebDitStoryboard(args, descriptor, width, height, onProgress, start);
+    }
+    if (descriptor.engine !== 'lcm-diffusion') {
+      throw new Error(
+        `VideoEngine.generateStoryboard: unexpected engine '${descriptor.engine}' for model '${this.opts.model}'.`,
+      );
+    }
+    // `descriptor` is narrowed to LcmModelDescriptor from here on.
+
     const steps = args.steps ?? descriptor.defaultSteps;
     const guidance = args.guidance ?? descriptor.defaultGuidance;
     const coherenceMode = args.coherence ?? DEFAULT_COHERENCE;
     const coherenceStrength = args.coherenceStrength ?? DEFAULT_COHERENCE_STRENGTH;
     const seedBase = args.seed ?? Date.now();
-    const width = this.opts.width ?? DEFAULT_WIDTH;
-    const height = this.opts.height ?? DEFAULT_HEIGHT;
-    const onProgress = args.onProgress;
     const interpolationFactor = normaliseFactor(args.interpolationFactor);
     const timesteps = trimTimesteps(descriptor.defaultTimesteps, steps);
 
@@ -280,7 +418,7 @@ export class VideoEngine {
         `Shot ${s + 1}/${storyboard.shots.length} (${shot.camera}, ${shot.durationFrames}f): ${shotPrompt}`,
         onProgress,
       );
-      const shotEmbedding = await this.diffusion.embedPrompt(shotPrompt);
+      const shotEmbedding = await this.lcmDiffusion.embedPrompt(shotPrompt);
 
       const { clip, validation } = await this.renderShot({
         shot,
@@ -361,6 +499,88 @@ export class VideoEngine {
       activeDevice: this.activeDevice,
       storyboard,
       validations,
+      elapsedMs: performance.now() - start,
+    };
+  }
+
+  /**
+   * webdit-dit storyboard rendering. Each shot is generated independently via
+   * `runWebDitDenoise` (no cross-shot Mamba carry — webdit's DiT models are
+   * video-native and already model temporal coherence WITHIN a shot; the
+   * lcm-diffusion path's cross-shot continuity mechanism, threading Mamba
+   * state through `cameraMotion`/img2img recursion, is specific to that
+   * per-frame pipeline and has no webdit equivalent), then every shot's
+   * frames are concatenated in shot order and muxed ONCE at the end — the
+   * same overall "loop shots, concat, mux once" shape as the lcm-diffusion
+   * path above, just without the two-pass refinement or per-shot VLM
+   * validation retry loop (out of scope here: `refinementModel` across
+   * engine families is rejected in `create()`, and validation is an
+   * lcm-diffusion-specific advisory feature — `validations` is always empty
+   * on this path).
+   */
+  private async generateWebDitStoryboard(
+    args: StoryboardGenerateOptions,
+    descriptor: WebDitModelDescriptor,
+    width: number,
+    height: number,
+    onProgress: ((label: string) => void) | undefined,
+    start: number,
+  ): Promise<StoryboardGenerateResult> {
+    const steps = args.steps ?? descriptor.defaultSteps;
+    const guidance = args.guidance ?? descriptor.defaultGuidance;
+    const seedBase = args.seed ?? Date.now();
+    const { storyboard } = args;
+
+    const allFrames: ImageBitmap[] = [];
+    const allMuxFrames: MuxFrame[] = [];
+    let globalIdx = 0;
+
+    for (let s = 0; s < storyboard.shots.length; s++) {
+      if (args.signal?.aborted) throw new DOMException('Generation aborted', 'AbortError');
+      const shot = storyboard.shots[s];
+      const shotPrompt = composeShotPrompt(shot, storyboard.characters);
+      reportProgress(
+        `Shot ${s + 1}/${storyboard.shots.length} (${shot.durationFrames}f): ${shotPrompt}`,
+        onProgress,
+      );
+
+      const shotResult = await runWebDitDenoise(this.webditBundle!, {
+        prompt: shotPrompt,
+        frames: shot.durationFrames,
+        steps,
+        guidance,
+        seed: seedBase + s * 100003,
+        width,
+        height,
+        mambaState: this.mambaState,
+        frameOffset: globalIdx,
+        onProgress,
+        onFrame: args.onFrame,
+        signal: args.signal,
+      });
+
+      allFrames.push(...shotResult.frames);
+      allMuxFrames.push(...shotResult.muxFrames);
+      globalIdx += shotResult.frames.length;
+      args.onShot?.(s, shot, null);
+    }
+
+    reportProgress(`Encoding ${allFrames.length} frames to MP4…`, onProgress);
+    const blob = await muxFramesToMp4(allMuxFrames, {
+      width,
+      height,
+      fps: args.fps,
+      signal: args.signal,
+    });
+    reportProgress('MP4 ready.', onProgress);
+
+    return {
+      blob,
+      mambaState: this.mambaState,
+      frames: allFrames,
+      activeDevice: this.activeDevice,
+      storyboard,
+      validations: [],
       elapsedMs: performance.now() - start,
     };
   }
@@ -511,6 +731,13 @@ export class VideoEngine {
       signal,
     } = spec;
     const descriptor = MODEL_REGISTRY[this.opts.model];
+    if (descriptor.engine !== 'lcm-diffusion') {
+      // produceClip is the lcm-diffusion frame-by-frame primitive orchestrator
+      // — every caller (generate()/renderShot()) only reaches it via the
+      // lcm-diffusion branch, so this is an internal-dispatch invariant, not
+      // a reachable user state.
+      throw new Error(`produceClip: unexpected engine '${descriptor.engine}' for model '${this.opts.model}'.`);
+    }
     const latentH = height / 8;
     const latentW = width / 8;
 
@@ -522,9 +749,9 @@ export class VideoEngine {
     // because each frame drifted in a random direction. anchorWalkLatent() makes
     // the drift monotonic so the sequence reads as incremental motion, not
     // flicker. motionAmount scales how far each step pulls from the anchor.
-    const anchorLatent = this.diffusion.sampleInitialLatent(seed);
-    const walkStart = this.diffusion.sampleInitialLatent(seed + 1);
-    const walkEnd = this.diffusion.sampleInitialLatent(seed + 2);
+    const anchorLatent = this.lcmDiffusion.sampleInitialLatent(seed);
+    const walkStart = this.lcmDiffusion.sampleInitialLatent(seed + 1);
+    const walkEnd = this.lcmDiffusion.sampleInitialLatent(seed + 2);
 
     const keyframeIndices = planKeyframeIndices(frameCount, interpolationFactor);
     let prevLatent: Float32Array | null = null;
@@ -583,7 +810,7 @@ export class VideoEngine {
         const skipCount = Math.floor(timesteps.length * (1 - imgToImgStrength));
         const truncated = timesteps.slice(skipCount);
         frameTimesteps = truncated.length > 0 ? truncated : [timesteps[timesteps.length - 1]];
-        latent = this.diffusion.addNoiseToLatent(shifted, frameTimesteps[0], seed + frameIdx);
+        latent = this.lcmDiffusion.addNoiseToLatent(shifted, frameTimesteps[0], seed + frameIdx);
       } else {
         latent = anchorWalkLatent(anchorLatent, walkStart, walkEnd, frameIdx, frameCount, motionAmount);
         frameTimesteps = timesteps;
@@ -596,7 +823,7 @@ export class VideoEngine {
       const biasNoiseScale = latentResidualBiasScale(
         coherenceMode,
         useImg2Img,
-        useImg2Img ? this.diffusion.noiseScaleForTimestep(frameTimesteps[0]) : 1,
+        useImg2Img ? this.lcmDiffusion.noiseScaleForTimestep(frameTimesteps[0]) : 1,
       );
       if (biasNoiseScale > 0) {
         latent = applyToLatent({
@@ -610,7 +837,7 @@ export class VideoEngine {
         `${label} ${frameIdx + 1}/${frameCount} (keyframe ${k + 1}/${keyframeIndices.length}): ${useImg2Img ? `img2img (${frameTimesteps.length}/${timesteps.length} steps)` : 'denoising'}…`,
         onProgress,
       );
-      const { pixels, latent: finalLatent } = await this.diffusion.denoise({
+      const { pixels, latent: finalLatent } = await this.lcmDiffusion.denoise({
         latent,
         condEmbedding: conditionedPrompt,
         uncondEmbedding: negativeEmbedding,
@@ -694,7 +921,7 @@ export class VideoEngine {
         latents[slot.outputIndex] = null;
       } else {
         reportProgress(`${label} ${slot.outputIndex + 1}/${frameCount}: interpolating…`, onProgress);
-        pixels = await this.diffusion.decodeLatent(slot.latent!);
+        pixels = await this.lcmDiffusion.decodeLatent(slot.latent!);
         latents[slot.outputIndex] = slot.latent!;
       }
       const rgba = pixelsToRgba(pixels, width, height);
@@ -741,7 +968,7 @@ export class VideoEngine {
       `Refinement pass: swapping ${this.opts.model} → ${this.opts.refinementModel} (sequential, no VRAM cost)…`,
       onProgress,
     );
-    await this.diffusion.dispose();
+    await this.lcmDiffusion.dispose();
     this.diffusion = new DiffusionEngine({
       model: this.opts.refinementModel!,
       probed: this.probed,
@@ -752,11 +979,19 @@ export class VideoEngine {
       height: opts.height,
       onProgress,
     });
-    await this.diffusion.init();
+    await this.lcmDiffusion.init();
     // Re-embed under the refinement model's text encoder (LCM family shares
     // dims, but encoder weights differ).
-    const refinedCondEmbedding = await this.diffusion.embedPrompt(opts.resolvedPrompt);
+    const refinedCondEmbedding = await this.lcmDiffusion.embedPrompt(opts.resolvedPrompt);
     const refinedDescriptor = MODEL_REGISTRY[this.opts.refinementModel!];
+    if (refinedDescriptor.engine !== 'lcm-diffusion') {
+      // create()'s refinementModel guard already rejects a cross-family pair,
+      // so reaching this method with a non-lcm-diffusion refinementModel
+      // would be an internal-dispatch bug, not a reachable user state.
+      throw new Error(
+        `refinementPass: unexpected engine '${refinedDescriptor.engine}' for refinementModel '${this.opts.refinementModel}'.`,
+      );
+    }
     const refinedTimesteps = trimTimesteps(refinedDescriptor.defaultTimesteps, refinedDescriptor.defaultSteps);
     const skipCount = Math.floor(refinedTimesteps.length * (1 - opts.refinementStrength));
     const partialTimesteps =
@@ -779,8 +1014,8 @@ export class VideoEngine {
         continue;
       }
       reportProgress(`Refinement pass: frame ${i + 1}/${latents.length}…`, onProgress);
-      const noised = this.diffusion.addNoiseToLatent(latent, partialTimesteps[0], opts.seed + i);
-      const { pixels, latent: refinedLatent } = await this.diffusion.denoise({
+      const noised = this.lcmDiffusion.addNoiseToLatent(latent, partialTimesteps[0], opts.seed + i);
+      const { pixels, latent: refinedLatent } = await this.lcmDiffusion.denoise({
         latent: noised,
         condEmbedding: refinedCondEmbedding,
         uncondEmbedding: null,
@@ -896,10 +1131,27 @@ export class VideoEngine {
     this.mambaState = state;
   }
 
-  /** Release ORT sessions + GPUDevice. Idempotent. After dispose the engine
-   *  cannot be reused — create a new one with VideoEngine.create. */
+  /** Release ORT sessions + GPUDevice (lcm-diffusion) or unload the webdit
+   *  bundle (webdit-dit) — whichever this instance holds. Idempotent. After
+   *  dispose the engine cannot be reused — create a new one with
+   *  VideoEngine.create. */
   async dispose(): Promise<void> {
-    await this.diffusion.dispose();
+    await this.diffusion?.dispose();
+    await this.webditBundle?.unload();
+  }
+
+  /**
+   * Non-null accessor for the lcm-diffusion engine. Every internal caller of
+   * this getter (produceClip, refinementPass, renderShot, the lcm branches of
+   * generate()/generateStoryboard()) is itself only reachable via the
+   * lcm-diffusion branch of create()/generate() — a throw here means an
+   * internal dispatch bug, not a reachable user state.
+   */
+  private get lcmDiffusion(): DiffusionEngine {
+    if (!this.diffusion) {
+      throw new Error('VideoEngine: lcm-diffusion engine accessed on a non-lcm-diffusion instance.');
+    }
+    return this.diffusion;
   }
 }
 

@@ -37,7 +37,7 @@ For a long time that scaffolding was arranged as **bands**: full-width strips st
     { "label": "The board", "note": "Edge to edge, running behind the chrome rather than beginning below it", "x": 2, "y": 3, "w": 96, "h": 94, "hue": "make" },
     { "label": "What this canvas IS", "x": 5, "y": 7, "w": 30, "h": 10, "hue": "idea" },
     { "label": "How it is READ", "x": 38, "y": 7, "w": 26, "h": 10, "hue": "accent" },
-    { "label": "How work LEAVES it", "x": 67, "y": 7, "w": 28, "h": 10, "hue": "market" },
+    { "label": "How work LEAVES it", "x": 67, "y": 7, "w": 28, "h": 10, "hue": "growth" },
     { "label": "What you DO to it", "x": 20, "y": 84, "w": 60, "h": 10, "hue": "accent" }
   ],
   "caption": "Which card a control lands in is DATA, not a judgement call in a component: one table declares the four slots, and a control cannot be added to one without the test noticing it is missing from the other."

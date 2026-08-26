@@ -5,7 +5,7 @@ export type IconName =
   | 'attachment' | 'billing' | 'brain' | 'briefcase' | 'calendar' | 'camera' | 'canvas'
   | 'check' | 'chevron-down' | 'chevron-left' | 'chevron-right' | 'clock' | 'close' | 'code' | 'copy' | 'document' | 'edit' | 'external-link'
   | 'expand-horizontal' | 'collapse-horizontal'
-  | 'download' | 'flag' | 'folder' | 'growth' | 'heart' | 'home' | 'image' | 'info' | 'insights' | 'key' | 'knowledge'
+  | 'download' | 'drag-handle' | 'flag' | 'folder' | 'growth' | 'heart' | 'home' | 'image' | 'info' | 'insights' | 'key' | 'knowledge'
   | 'link' | 'lock' | 'mail' | 'megaphone' | 'menu' | 'message' | 'mic' | 'mobile'
   | 'monitor' | 'more-horizontal' | 'pause' | 'people' | 'person' | 'pin' | 'play' | 'plus' | 'project' | 'quality' | 'search'
   | 'settings' | 'shield' | 'sparkles' | 'target' | 'template' | 'tools' | 'trash' | 'archive'
@@ -93,6 +93,9 @@ const PATHS: Record<IconName, ReactNode> = {
   copy: <><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></>,
   document: <><path d="M6 2h8l4 4v16H6V2Z"/><path d="M14 2v5h5M9 12h6M9 16h6"/></>,
   download: <><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 20h16"/></>,
+  /* Two columns of three dots — the grip a floating card exposes so it can be dragged
+     off its computed position, the same pictogram every drag-and-drop UI already uses. */
+  'drag-handle': <><circle cx="9" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.3" fill="currentColor" stroke="none"/></>,
   edit: <><path d="m14.5 5.5 4 4L8 20H4v-4L14.5 5.5ZM12.5 7.5l4 4"/></>,
   'external-link': <><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 13v6H5V6h6"/></>,
   /* Widen / narrow a panel in place. Two arrows pushing a pair of walls apart, and the

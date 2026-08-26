@@ -1,3 +1,5 @@
+import { WebDiTArchitecture } from '@webdit/shared';
+
 /**
  * Public types for @seanhogg/builderforce-studio.
  *
@@ -6,6 +8,7 @@
  * the published agent packages stored in R2. Keep this shape stable — agent
  * packages already in the wild depend on it.
  */
+
 /** Compact snapshot of a Mamba SSM state vector, serialisable to IndexedDB / R2 / JSON. */
 interface MambaStateSnapshot {
     /** Packed Float32 values encoded as a plain number array for JSON portability. */
@@ -23,8 +26,20 @@ interface MambaStateSnapshot {
 type DeviceTarget = 'auto' | 'webnn' | 'webgpu' | 'cpu';
 /** Active hardware path the engine ended up on, reported back to the consumer. */
 type ActiveDevice = 'webnn' | 'webgpu' | 'cpu';
-/** Diffusion backbone. Ordered roughly smallest → largest VRAM footprint. */
-type DiffusionModelId = 'lcm-tiny-sd' | 'sd-turbo' | 'lcm-dreamshaper-v7';
+/** LCM / SD-Turbo backbones — the frame-by-frame `DiffusionEngine` family. */
+type LcmModelId = 'lcm-tiny-sd' | 'sd-turbo' | 'lcm-dreamshaper-v7';
+/**
+ * WebDiT diffusion-transformer backbones — the whole-clip `webdit-engine.ts`
+ * family (see `WebDitModelDescriptor`). These model ids are wired end-to-end
+ * (registry entry, `VideoEngine` dispatch, `webdit-engine.ts`) but registered
+ * `available: false` until a pretrained bundle is exported + uploaded to R2
+ * (see the ROADMAP entry — no code change flips this, only a bundle upload).
+ */
+type WebDitModelId = 'cogvideox-2b' | 'wan2.5' | 'mochi-1' | 'ltx2-distilled';
+/** Diffusion backbone. Ordered roughly smallest → largest VRAM footprint.
+ *  A purely additive union: `LcmModelId` (the original 3) plus `WebDitModelId`
+ *  (the 4 webdit architectures) — existing consumers keep compiling unchanged. */
+type DiffusionModelId = LcmModelId | WebDitModelId;
 /**
  * Quality preset — the simple-mode user picks this instead of a specific model
  * and a stack of sliders. Maps onto a draft model + (optional) a refinement
@@ -54,14 +69,31 @@ interface OnnxFile {
     /** Optional external-data sidecar, e.g. 'unet/model.onnx_data'. */
     externalData?: string;
 }
-interface ModelDescriptor {
+/**
+ * Both generation families' descriptors share this shape so registry-wide
+ * code (the OOM-hint `lighterModelHint`, `<ModelPicker>` in studio-embedded)
+ * can read `id` / `engine` / `defaultSteps` / `defaultGuidance` / `minVramMb`
+ * without a type-narrowing branch. Family-specific fields (ONNX file paths,
+ * webdit's bundle URL) live only on the matching branch of the union below.
+ */
+interface BaseModelDescriptor {
     id: DiffusionModelId;
-    /** Number of denoising steps. LCM = 4, SD-Turbo = 1. */
+    /** Number of denoising steps. LCM = 4, SD-Turbo = 1, webdit per-architecture. */
     defaultSteps: number;
     /** Default classifier-free-guidance scale. */
     defaultGuidance: number;
-    /** Minimum advertised VRAM in MB. The engine warns below this. */
+    /** Minimum advertised VRAM in MB. The engine warns below this (LCM path) /
+     *  is advisory only (webdit path — no pre-flight memory check exists yet). */
     minVramMb: number;
+}
+/**
+ * LCM / SD-Turbo descriptor — the original `ModelDescriptor` shape, unchanged
+ * apart from the added `engine` discriminant. Consumed by `DiffusionEngine`'s
+ * frame-by-frame primitives (embed/denoise/decode).
+ */
+interface LcmModelDescriptor extends BaseModelDescriptor {
+    engine: 'lcm-diffusion';
+    id: LcmModelId;
     /** Hugging Face repo id for the raw-ORT text-encoder/UNet/VAE weight fetch
      *  through weight-cache.ts. */
     hfRepo: string;
@@ -109,6 +141,52 @@ interface ModelDescriptor {
      *  defaults to `DEFAULT_LCM_GUIDANCE_SCALE` when omitted. */
     lcmGuidanceScale?: number;
 }
+/**
+ * WebDiT diffusion-transformer descriptor — the whole-clip `webdit-engine.ts`
+ * family. Unlike `LcmModelDescriptor`, this carries NO per-frame ONNX I/O
+ * contract (no `unetInputs`/`files`/`hfRepo`): the whole DiT graph, VAE, and
+ * text encoder live inside one webdit bundle (`manifest.json` + shards),
+ * loaded via `loadWebDitBundle` (webdit-engine.ts) → `@webdit/runtime`'s
+ * `loadBundleFromBuffers`. `defaultSteps`/`defaultGuidance` mirror the
+ * matching architecture's `SamplingDefaults` in `webdit/converter`;
+ * `defaultFrames`/`defaultFps`/`defaultWidth`/`defaultHeight` are advisory
+ * UI defaults (every `GenerateOptions` call still requires its own
+ * `frames`/`fps` — the registry doesn't inject them).
+ */
+interface WebDitModelDescriptor extends BaseModelDescriptor {
+    engine: 'webdit-dit';
+    id: WebDitModelId;
+    /** Which webdit architecture (bundle manifest `architecture` field) this
+     *  model id maps to — imported from `@webdit/shared` so the two packages
+     *  cannot drift on the architecture id spelling. */
+    architecture: WebDiTArchitecture;
+    /** Root URL of the uploaded bundle (where its `manifest.json` lives), e.g.
+     *  `https://api.builderforce.ai/api/studio/weights/webdit/cogvideox-2b`.
+     *  `null` until an operator has exported + uploaded a real bundle for this
+     *  architecture — see the ROADMAP entry. */
+    bundleUrl: string | null;
+    /** Whether this model can actually be loaded right now. `false` for all 4
+     *  webdit entries until a bundle exists — `VideoEngine.create()` returns
+     *  `null` early for an unavailable model rather than attempting a load
+     *  that can only 404. */
+    available: boolean;
+    /** Per-architecture default frame count (from `webdit/converter`'s
+     *  `SamplingDefaults.frames`). Advisory — `GenerateOptions.frames` is
+     *  always required and always wins. */
+    defaultFrames: number;
+    /** Advisory default output framerate — webdit bundles don't declare an fps
+     *  (frame COUNT and TEMPORAL COMPRESSION are bundle properties; playback
+     *  rate is a muxing choice), so this is a per-architecture UI suggestion. */
+    defaultFps: number;
+    /** Per-architecture default output width/height (from `SamplingDefaults`). */
+    defaultWidth: number;
+    defaultHeight: number;
+}
+/** Discriminated union: `engine` selects which generation family a model
+ *  belongs to. `MODEL_REGISTRY` stays a uniform `Record<DiffusionModelId,
+ *  ModelDescriptor>` — callers that need family-specific fields narrow on
+ *  `descriptor.engine` first (see `VideoEngine.create`). */
+type ModelDescriptor = LcmModelDescriptor | WebDitModelDescriptor;
 /** Supported ONNX tensor dtypes the engine knows how to build feeds for. */
 type OrtTensorDtype = 'float32' | 'int32' | 'int64';
 /** A single ORT session input — name (as declared in the model graph) + the
@@ -491,4 +569,4 @@ declare function probeDevice(target?: DeviceTarget, opts?: ProbeOptions): Promis
  */
 declare function watchDeviceLoss(device: GPUDevice, onLost: (info: GPUDeviceLostInfo) => void): void;
 
-export { type ActiveDevice as A, type CameraMove as C, type DiffusionModelId as D, type FrameValidation as F, type GenerateOptions as G, type InterpolationBackend as I, type MambaStateSnapshot as M, type OnnxFile as O, type PlannedShot as P, type QualityMode as Q, type StoryboardGenerateOptions as S, type VideoEngineOptions as V, type WeightSource as W, type GenerateResult as a, type StoryboardGenerateResult as b, type ModelDescriptor as c, type CharacterBible as d, type ScenePlanOptions as e, type Storyboard as f, type ValidateFrameOptions as g, type CoherenceMode as h, type DeviceTarget as i, type FrameIssueKind as j, type FrameValidationIssue as k, type OrtInputSpec as l, type OrtTensorDtype as m, type ProbedDevice as n, type ShotValidation as o, hasWebGPUSupport as p, probeDevice as q, type ProbeOptions as r, watchDeviceLoss as w };
+export { type ActiveDevice as A, type CameraMove as C, type DiffusionModelId as D, type FrameValidation as F, type GenerateOptions as G, type InterpolationBackend as I, type LcmModelDescriptor as L, type MambaStateSnapshot as M, type OnnxFile as O, type PlannedShot as P, type QualityMode as Q, type StoryboardGenerateOptions as S, type VideoEngineOptions as V, type WebDitModelDescriptor as W, type GenerateResult as a, type StoryboardGenerateResult as b, type ModelDescriptor as c, type CharacterBible as d, type ScenePlanOptions as e, type Storyboard as f, type ValidateFrameOptions as g, type CoherenceMode as h, type DeviceTarget as i, type FrameIssueKind as j, type FrameValidationIssue as k, type LcmModelId as l, type OrtInputSpec as m, type OrtTensorDtype as n, type ProbedDevice as o, type ShotValidation as p, type WebDitModelId as q, type WeightSource as r, hasWebGPUSupport as s, probeDevice as t, type ProbeOptions as u, watchDeviceLoss as w };

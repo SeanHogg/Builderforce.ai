@@ -51,12 +51,13 @@ describe('the arc — every destination sits in exactly one stage', () => {
     expect(placed).toHaveLength(NAV_GROUPS.length);
   });
 
-  /** The arc, in order. `expand` joined it between Market and Admin: MARKET puts
+  /** The arc, in order. `expand` joined it between Growth and Admin: GROWTH puts
    *  the product in front of people, EXPAND grows the business off the back of it
    *  (the referral/associate programme), and ADMIN is not a step in the arc at
-   *  all — it is where you go to change settings. */
-  it('renders Idea → Make → Run before Measure, Market, Expand and Admin', () => {
-    expect(STAGES).toEqual(['idea', 'make', 'run', 'measure', 'market', 'expand', 'admin']);
+   *  all — it is where you go to change settings. (Growth was renamed from
+   *  `market`, which collided with the unrelated Marketplace commerce surface.) */
+  it('renders Idea → Make → Run before Measure, Growth, Expand and Admin', () => {
+    expect(STAGES).toEqual(['idea', 'make', 'run', 'measure', 'growth', 'expand', 'admin']);
   });
 
   it('gives the RUN group one row per business seat, each owned by a teammate', () => {

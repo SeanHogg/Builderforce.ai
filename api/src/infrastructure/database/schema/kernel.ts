@@ -1551,6 +1551,8 @@ export const integrationProviderEnum = pgEnum('integration_provider', [
   // `ALTER TYPE ... DROP VALUE` — see migration 0413.
   'brave_search',
   'tavily', 'exa', 'linkup',
+  // 1121 — Ollama web search, the BACKUP keyed vendor tried right after Tavily.
+  'ollama',
   // 0355 — Google connectors (OAuth offline credentials). Gmail backs the email
   // workflow node; Google Drive can back a project's file storage.
   'gmail', 'google_drive',

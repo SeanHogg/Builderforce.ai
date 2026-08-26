@@ -25,16 +25,20 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * invalidated immediately after (a transient 502 must not be pinned for the TTL).
  *
  * `search` is the second half, and it is ALWAYS present — but its BACKING varies. A
- * tenant BYO key (Tavily/Exa/Linkup) buys a general web index, an operator's own SearXNG
- * instance gives one to everybody with no vendor account at all, and beneath both sits a
- * keyless encyclopedic vendor so a fresh workspace (or a logged-out visitor) can still
- * research something. Precedence lives in one place
+ * tenant BYO key (Tavily/Ollama/Exa/Linkup) buys a general web index, an operator's own
+ * SearXNG instance gives one to everybody with no vendor account at all, and beneath both
+ * sits a keyless encyclopedic vendor so a fresh workspace (or a logged-out visitor) can
+ * still research something. Precedence lives in one place
  * (`webSearchCredential.resolveWebSearchBacking`); the vendor itself is behind a port
- * (`webSearchVendors.ts`); and {@link searchWeb} is the ONE cached, metered execution
- * path every surface — cloud agent, Brain MCP tool, guest canvas — calls.
+ * (`webSearchVendors.ts`); and {@link searchWeb} is the ONE cached, metered VENDOR
+ * execution path, called directly by the tenant-less surfaces (the logged-out guest
+ * canvas, a workflow preview with no tenant) and indirectly, as the discovery step, by
+ * every tenant-scoped surface's `searchOwnedThenDiscover` (cloud agent, workflow node,
+ * Brain MCP tool) — see that module for why those three capture into an owned index
+ * instead of calling this directly.
  */
 
-import type { WebCapability, WebFetchResult, WebSearchResult } from '@builderforce/agent-tools';
+import type { WebFetchResult, WebSearchResult } from '@builderforce/agent-tools';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
@@ -387,14 +391,23 @@ export function normalizeSearchQuery(raw: string): string {
 }
 
 /**
- * Run ONE web search against a resolved backing — cached, metered, never throwing.
+ * Run ONE vendor web search against a resolved backing — cached, metered, never throwing.
  *
- * This is the single execution path for search across every surface: the cloud agent's
- * `web_search` tool, the Brain's `web.search` MCP tool, and the logged-out guest canvas.
- * They differ only in which backing they hand in and whether a tenant meter is in scope;
- * keeping the cache key, the TTL discipline and the ledger write here is what stops
- * three copies of that policy drifting apart (the MCP tool previously had none of it,
- * so an authed Brain research turn re-paid for every repeated query).
+ * This is the single VENDOR execution path — the read-through cache, the TTL discipline
+ * and the outbound-fetch ledger write live here exactly once, so no caller re-implements
+ * (or drifts from) that policy. Two shapes of caller sit on top of it:
+ *
+ *  • the logged-out guest canvas, and a tenant-less workflow preview run, call it
+ *    DIRECTLY — there is no tenant to own an index against, so a vendor's own web index
+ *    (or the keyless encyclopedic floor) is the only research a request with no tenant
+ *    in scope can ever get;
+ *  • every TENANT-scoped surface — the cloud agent's `web_search` tool (durable +
+ *    container), the workflow `web-search` node, and the Brain's `web.search` MCP tool —
+ *    goes through {@link searchOwnedThenDiscover} in `application/webSearch/demandSearch.ts`
+ *    instead, which checks the tenant's OWNED crawled index first and calls this function
+ *    only to discover seed URLs on a miss, then crawls and indexes what it finds. That is
+ *    what makes autonomous agent research build the owned index instead of discarding
+ *    every result it ever fetches.
  */
 export async function searchWeb(env: Env, backing: CloudWebSearchBacking, rawQuery: string): Promise<WebSearchResult> {
   const { vendor, auth, meter } = backing;
@@ -437,21 +450,13 @@ export async function searchWeb(env: Env, backing: CloudWebSearchBacking, rawQue
   return result;
 }
 
-/**
- * Build the cloud surface's `web` capability. Both halves are always present: `fetch`
- * because every surface has an HTTP client, `search` because {@link resolveWebSearchBacking}
- * always resolves a vendor — a BYO key, an operator key, or the keyless floor.
- */
-export function buildCloudWebCapability(args: { env: Env; search: CloudWebSearchBacking }): WebCapability {
-  const { env, search } = args;
-  return {
-    fetch: (rawUrl: string) => fetchCached(env, rawUrl),
-    search: (rawQuery: string) => searchWeb(env, search, rawQuery),
-  };
-}
-
-/** The cached `fetch` half, shared by both shapes of the capability above. */
-async function fetchCached(env: Env, rawUrl: string): Promise<WebFetchResult> {
+/** The cached `fetch` half of every surface's `web` capability. Exported standalone
+ *  (rather than bundled with `search` behind one `buildCloudWebCapability`, which this
+ *  replaced) because the two halves now have genuinely different callers: `search` goes
+ *  through the tenant-scoped, owned-index-first {@link searchOwnedThenDiscover} in
+ *  `application/webSearch/demandSearch.ts`, which has no use for a fetch fetcher, while
+ *  `fetch` stays this simple SSRF-guarded cache for every surface, tenant-scoped or not. */
+export async function fetchCached(env: Env, rawUrl: string): Promise<WebFetchResult> {
   const url = (rawUrl ?? '').trim();
   const blocked = classifyWebEgress(url);
   if (blocked) return { ok: false, url, error: blocked };

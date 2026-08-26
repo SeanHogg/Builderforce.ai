@@ -149,6 +149,15 @@
   border-color: var(--bfs-accent);
 }
 
+/* A native <option> ignores its <select>'s color/background in several browsers and
+ * renders with the OS default (opaque white on light-text), which is unreadable
+ * against this panel's dark palette. Give each option its own opaque colors rather
+ * than relying on inheritance. */
+.bfs-select option {
+  background: var(--bfs-bg);
+  color: var(--bfs-fg);
+}
+
 .bfs-readout {
   background: var(--bfs-bg);
   color: var(--bfs-fg-muted);

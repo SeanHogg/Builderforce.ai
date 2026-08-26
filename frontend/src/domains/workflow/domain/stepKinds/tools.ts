@@ -47,7 +47,7 @@ export const TOOL_STEP_KINDS: NodeKindMeta[] = [
     icon: '🔎',
     group: 'AI Agents',
     accent: 'var(--teal-bright)',
-    blurb: 'Search the open web and return results with page content — resolves your connected Tavily/Exa/Linkup key, then an operator SearXNG instance, then a keyless encyclopedic fallback, so it always returns something.',
+    blurb: 'Search the open web and return results with page content — resolves your connected Tavily/Ollama/Exa/Linkup key, then an operator SearXNG instance, then a keyless encyclopedic fallback, so it always returns something.',
     defaultConfig: { query: '' },
     fields: [
       { key: 'query', label: 'Query', type: 'text', placeholder: '{{input}} — defaults to the upstream output' },

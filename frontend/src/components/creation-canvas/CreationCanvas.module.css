@@ -306,6 +306,19 @@
 .commandBarCollapse:hover, .commandBarCollapse:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
 .commandBarCollapse > svg { display:block; width:15px; height:15px; }
 
+/* The grip a floating chrome card (the command bar, the prompt) exposes so it can be
+   dragged off the position its own CSS computes — see `usePanelDragOffset`.
+   `touch-action:none` stops a press-and-drag on a touchscreen turning into a page
+   scroll before the pointer handlers ever see it move. */
+.dragHandle {
+  flex:none; display:grid; place-items:center; width:24px; height:24px; padding:0;
+  border:0; border-radius:var(--radius-sm); background:transparent; color:var(--canvas-muted);
+  cursor:grab; touch-action:none;
+}
+.dragHandle:hover, .dragHandle:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+.dragHandle:active { cursor:grabbing; }
+.dragHandle > svg { display:block; width:14px; height:14px; }
+
 /* Folded, the bar reports and does not act: who is here, and what the runtime is doing.
    It gets SHORTER and NARROWER rather than merely emptier — a full-width bar holding
    three small status marks reads as a bar that has lost its buttons, which is the exact
@@ -2679,6 +2692,22 @@
 .timelineMeta strong { color:var(--canvas-ink); font:700 13px var(--font-mono,var(--font-sans)); font-variant-numeric:tabular-nums; }
 .timelineMeta small { color:var(--canvas-muted); font-size:10px; }
 
+/* The `scene3d` surface's OTHER half — a prompt/model column beside a preview column,
+   same two-pane shape `studio-embedded`'s own `.bfs-grid` uses, rebuilt here in canvas
+   tokens so it sits beside `.timelineStage`/`.worldStage` as one more object surface
+   rather than a visually foreign panel. */
+.sceneGeneratorStage { min-height:0; flex:1; display:flex; gap:20px; width:min(100%,1200px); margin:0 auto; padding:14px 16px 20px; overflow:auto; }
+.sceneGeneratorControls,.sceneGeneratorPreview { display:flex; flex-direction:column; gap:12px; flex:1; min-width:0; }
+.sceneGeneratorField { display:flex; flex-direction:column; gap:6px; color:var(--canvas-ink); font-size:12px; }
+.sceneGeneratorField > span { color:var(--canvas-muted); font:650 10px var(--font-sans); letter-spacing:.04em; text-transform:uppercase; }
+.sceneGeneratorPrompt,.sceneGeneratorNumber {
+  background:var(--canvas-panel); color:var(--canvas-ink); border:1px solid var(--canvas-line);
+  border-radius:var(--radius-sm); padding:8px 10px; font:400 13px var(--font-sans); resize:vertical;
+}
+.sceneGeneratorPrompt:focus,.sceneGeneratorNumber:focus { border-color:var(--canvas-brain-accent); outline:none; }
+.sceneGeneratorRow { display:flex; gap:12px; }
+.sceneGeneratorRow .sceneGeneratorField { flex:1; }
+
 /* A 3D space is three columns when there is something to author (a palette to drag
    from, a viewport, a properties rail) and one when there is not (a read-only walk).
    The viewport is `position:relative` because R3F's `<Canvas>` fills it at 100%/100%
@@ -3064,7 +3093,10 @@
   .pageSheet[data-runtime='document'] { --page-sheet-width:100%; padding:8px 6px 16px; }
   .objectSurfaceHeader { gap:8px; padding:8px 10px; }
   .objectSurfaceTitle strong { font-size:12px; }
-  .playStage,.timelineStage { padding:10px 8px 14px; }
+  .playStage,.timelineStage,.sceneGeneratorStage { padding:10px 8px 14px; }
+  /* Two side-by-side columns don't fit a phone either — stack controls above preview,
+     same call `.worldStage` makes for its own three columns just below. */
+  .sceneGeneratorStage { flex-direction:column; }
   /* Three side-by-side columns don't fit a phone. The viewport keeps the room; the
      palette and the properties rail become short horizontal-scroll strips above and
      below it instead of disappearing — a phone can still place and edit a prop. */

@@ -16,7 +16,8 @@ import { isMemoryScope } from '../../domain/memory/memoryScope';
 import { buildCoordinationCapability, claimWriteLease, guardRepoWrite } from '../coordination/coordinationCapability';
 import { releaseAllForExecution, type LeaseHolder } from '../coordination/leaseService';
 import { coordinationScopeKey } from '../../domain/coordination/resourceKey';
-import { buildCloudWebCapability, searchWeb } from './cloudWeb';
+import { fetchCached } from './cloudWeb';
+import { searchOwnedThenDiscover } from '../webSearch/demandSearch';
 import { isValidatorReviewPayload } from '../validation/validatorReviewMarker';
 import { recordActivity, SYSTEM_ACTOR } from '../activity/activityLog';
 import { isIncidentTriagePayload, incidentIdFromPayload } from '../incident/incidentTriageMarker';
@@ -67,7 +68,6 @@ import {
 import { renderRunContext, summarizeBlocks, type RunContextBlock } from '@builderforce/run-context';
 import { RUN_CONTEXT_ORDER } from './runContextSource';
 import { buildRunContext } from './runContextService';
-import { resolveWebSearchBacking, type ResolvedWebSearchBacking } from './webSearchCredential';
 import { parseRemediation, parseFollowUp, parseRoleInstruction, parseCloudAgentRef, parseModel, parseOriginatingChatId } from './cloudDispatch';
 import { classifyTaskAction } from '../llm/classifyTask';
 import { deriveAllocationCategory } from '../llm/allocationCategories';
@@ -1339,19 +1339,18 @@ export async function handleContainerOp(
    *
    * Relayed rather than called in-process for the same reason `memory` and
    * `platform_tool` are: the container holds no credentials. Routing it through the
-   * Worker also means both surfaces share ONE resolver, ONE read-through cache and
-   * ONE meter — a container run and a durable run asking the same question hit the
-   * same cache entry, and a keyed vendor is charged once.
+   * Worker also means both surfaces share ONE resolver, ONE read-through cache, ONE
+   * meter, and — via {@link searchOwnedThenDiscover} — ONE owned index: a container run
+   * and a durable run asking the same question hit the same cache entry and the same
+   * tenant corpus, a keyed vendor is charged once, and whatever either surface
+   * discovers gets crawled into the tenant's own index for next time instead of being
+   * thrown away the moment this tool call returns.
    */
   if (op === 'search') {
     const query = typeof args.query === 'string' ? args.query : '';
     if (!query.trim()) return { status: 200, body: { ok: false, error: 'query is required' } };
     const tStart = Date.now();
-    // Resolved per call rather than cached on the run context: the context is cached
-    // for 10 minutes and a credential connected mid-run should take effect on the
-    // next search, not the next run. The resolver is itself cheap and cached.
-    const backing = await resolveWebSearchBacking(env, db, tenantId);
-    const result = await searchWeb(env, { ...backing, meter: { db, tenantId } }, query);
+    const result = await searchOwnedThenDiscover({ db, env, tenantId, request: { query } });
     // The same context-contribution record the durable loop writes, so a fact the
     // container found is auditable exactly like one the Worker found.
     if (result.ok) {
@@ -1967,9 +1966,6 @@ function buildCloudProvider(args: {
    *  unlocked (today: `web.search`). Must be the same set the advertised tool schemas
    *  were derived from. */
   capabilities: ReadonlySet<Capability>;
-  /** Resolved web-search backing for this tenant — a BYO key, the operator key, or the
-   *  keyless floor. Always present, which is why `web.search` is a surface capability. */
-  webSearch: ResolvedWebSearchBacking;
   /** Replay: pin repo reads to this ref rather than computing base→branch. */
   frozenReadRef?: string;
   principalId?: string;
@@ -2196,29 +2192,26 @@ function buildCloudProvider(args: {
     coordination: buildCoordinationCapability({ env, db, holder: leaseHolder }),
     // Read a public URL (docs / an API spec / a linked issue) so the agent isn't
     // limited to what the repo already contains — and discover that URL in the first
-    // place. The search backing always resolves (tenant BYO key → the operator's own
-    // SearXNG → keyless encyclopedic floor), so both halves are always wired; what a key
-    // or an instance buys is WIDER coverage, which the result states. SSRF egress policy
-    // + byte cap + timeout + the read-through cache + per-query metering all live in
-    // cloudWeb.
-    web: (() => {
-      const capability = buildCloudWebCapability({
-      env,
-      search: { vendor: args.webSearch.vendor, auth: args.webSearch.auth, meter: { db, tenantId } },
-      });
-      return {
-        async fetch(url: string) {
-          const result = await capability.fetch(url);
-          if (result.ok) await recordContextContribution(db, { tenantId, executionId, sourceKind: 'web_fetch', sourceRef: result.url ?? url, trustTier: 'external', content: result.content ?? '' });
-          return result;
-        },
-        async search(query: string) {
-          const result = await capability.search!(query);
-          if (result.ok) await recordContextContribution(db, { tenantId, executionId, sourceKind: 'web_search', sourceRef: query, trustTier: 'external', content: JSON.stringify(result) });
-          return result;
-        },
-      };
-    })(),
+    // place. `search` checks the tenant's OWNED crawled index first and only falls back
+    // to a vendor (tenant BYO key → the operator's own key → SearXNG → keyless
+    // encyclopedic floor) to discover pages worth crawling, via the SAME
+    // `searchOwnedThenDiscover` primitive the Brain's `web.search` MCP tool and the
+    // workflow `web-search` node use — so an autonomous run's research builds the
+    // tenant's index instead of being thrown away when the tool call returns. SSRF
+    // egress policy + byte cap + timeout + the read-through cache + per-query metering
+    // all live in cloudWeb.
+    web: {
+      async fetch(url: string) {
+        const result = await fetchCached(env, url);
+        if (result.ok) await recordContextContribution(db, { tenantId, executionId, sourceKind: 'web_fetch', sourceRef: result.url ?? url, trustTier: 'external', content: result.content ?? '' });
+        return result;
+      },
+      async search(query: string) {
+        const result = await searchOwnedThenDiscover({ db, env, tenantId, request: { query } });
+        if (result.ok) await recordContextContribution(db, { tenantId, executionId, sourceKind: 'web_search', sourceRef: query, trustTier: 'external', content: JSON.stringify(result) });
+        return result;
+      },
+    },
   };
 }
 
@@ -2283,12 +2276,12 @@ export async function runCloudToolLoop(
   // alongside the repo/file tools and dispatched in-process below. The prompt
   // guidance that makes the agent USE them lives in prepareCloudRun so every
   // surface (Worker/DO durable + the container) gets it once (DRY).
-  // Web-search backing, resolved ONCE per run (not per step): a tenant BYO key, the
-  // operator-wide key, or the keyless encyclopedic floor. It ALWAYS resolves, so
-  // `web.search` is part of CLOUD_SURFACE_CAPS rather than a per-run addition — the
+  // `web.search` resolves a backing (tenant BYO key, operator key, or the keyless
+  // encyclopedic floor) PER CALL inside `searchOwnedThenDiscover` — cheap and cached on
+  // its own, so there is no run-level pre-resolution here — and it ALWAYS resolves,
+  // which is why it is part of CLOUD_SURFACE_CAPS rather than a per-run addition: the
   // advertised schemas and the wired backing come from the same constant and cannot
-  // drift. What the key buys is coverage, and the tool result says which it got.
-  const webSearchCred = await resolveWebSearchBacking(env, db, tenantId);
+  // drift.
   const surfaceCaps = CLOUD_SURFACE_CAPS;
   const runIdentity = await ensureAgentRunIdentity(db, {
     tenantId, executionId, agentRef: cloudAgentRef, issuedBy: `execution:${executionId}`,
@@ -2485,7 +2478,7 @@ export async function runCloudToolLoop(
   // bookkeeping and the base→branch read switch stay correct as the run progresses.
   const builtProvider = buildCloudProvider({
     env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths,
-    capabilities: surfaceCaps, webSearch: webSearchCred,
+    capabilities: surfaceCaps,
     principalId: runIdentity.principalId,
     ...(repositoryDelegationId ? { repositoryDelegationId } : {}),
     ...(opts?.frozenReadRef ? { frozenReadRef: opts.frozenReadRef } : {}),

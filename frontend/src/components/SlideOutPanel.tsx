@@ -203,12 +203,15 @@ export function SlideOutPanel({
                 )}
               </div>
             )}
+            {/* Before the width control: an action (e.g. the project switcher)
+                is something to use, the resize control is chrome around the
+                panel itself — chrome sits outermost, nearest the edge. */}
+            {headerActions}
             {/* The reader's escape hatch — the thing a full-screen page used to
                 be. Widening never navigates and never remounts the stage. */}
             {showWidthControl && (
               <PanelWidthControl value={effectiveWidth as PanelWidth} onChange={chooseWidth} />
             )}
-            {headerActions}
           </div>
         )}
         {tabs != null && tabs.length > 0 && (

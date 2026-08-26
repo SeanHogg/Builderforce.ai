@@ -19,7 +19,7 @@
  */
 
 import { githubStatusMessage } from './githubTestError';
-import { exaSearchVendor, linkupSearchVendor, tavilySearchVendor, type WebSearchVendor } from '../runtime/webSearchVendors';
+import { exaSearchVendor, linkupSearchVendor, ollamaSearchVendor, tavilySearchVendor, type WebSearchVendor } from '../runtime/webSearchVendors';
 import { testGmail, testGoogleDrive } from './googleOAuth';
 import {
   CATALOG_PROVIDER_IDS,
@@ -238,6 +238,7 @@ const LEGACY_TESTS: Record<string, ProviderTest> = {
   asana: testAsana,
   clickup: testClickUp,
   tavily: testWebSearchVendor(tavilySearchVendor),
+  ollama: testWebSearchVendor(ollamaSearchVendor),
   exa: testWebSearchVendor(exaSearchVendor),
   linkup: testWebSearchVendor(linkupSearchVendor),
   gmail: (creds) => testGmail(creds),

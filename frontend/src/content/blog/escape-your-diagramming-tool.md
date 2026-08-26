@@ -152,7 +152,7 @@ The three read-only formats — Visio, ArchiMate and SVG — are never offered a
     { "label": "Export natively", "note": "Take .vsdx / .excalidraw / .drawio wherever the tool offers it; SVG where it does not", "hue": "read" },
     { "label": "Drop them on a board", "note": "Each becomes an editable diagram object, with its shapes and connections intact", "hue": "prove" },
     { "label": "Convert what will be maintained", "note": "Anything that changes with the code becomes Mermaid — text, in the repo, reviewable in a pull request", "hue": "build" },
-    { "label": "Leave the rest as draw.io", "note": "Diagrams that are sent rather than maintained keep their exact layout, in a format everyone can open", "hue": "market" },
+    { "label": "Leave the rest as draw.io", "note": "Diagrams that are sent rather than maintained keep their exact layout, in a format everyone can open", "hue": "growth" },
     { "label": "Cancel the seat", "note": "Nothing left on the board needs the original tool to open it", "hue": "expand" }
   ]
 }

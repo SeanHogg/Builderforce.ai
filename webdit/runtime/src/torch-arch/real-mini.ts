@@ -101,7 +101,6 @@ export class RealMiniDit {
     const T = latent.shape[2]!;
     const H = latent.shape[3]!;
     const W = latent.shape[4]!;
-    const D = this.config.hiddenDim;
     const seq = T * H * W;
 
     // [B, C, T, H, W] -> [B, C, T*H*W] -> [B, T*H*W, C]

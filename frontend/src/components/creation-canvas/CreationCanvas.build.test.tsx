@@ -77,7 +77,7 @@ describe('Builder objects on the Canvas', () => {
     const chooser = screen.getByLabelText('What are you building') as HTMLSelectElement;
     expect(chooser).not.toBeDisabled();
     expect([...chooser.options].map((option) => option.value)).toEqual(
-      ['designer', 'mobile', 'webmobile', 'video', 'evermind', 'finetune', 'voice'],
+      ['designer', 'mobile', 'webmobile', 'evermind', 'finetune', 'voice'],
     );
     expect(chooser.value).toBe('designer');
     expect(screen.getByRole('button', { name: 'Create the workspace' })).toBeInTheDocument();

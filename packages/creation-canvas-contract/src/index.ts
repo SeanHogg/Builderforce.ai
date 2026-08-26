@@ -2,6 +2,9 @@
 export * from './video';
 export * from './talktrack';
 export * from './world';
+// The AI video/3D generation request a `scene` object carries, and the clip it
+// produces — see the module header for why it is not folded into `video.ts`.
+export * from './scene';
 export * from './robloxWorld';
 export * from './canvasTools';
 export * from './marketplaceListings';
@@ -556,6 +559,14 @@ export const CREATION_OBJECT_KINDS = [
   // `scene3d` SURFACE (a temporary reading of the flat board) — `world` is authored
   // object state of its own, opened full-size the same way `game`/`website` are.
   'world',
+  // AI VIDEO/3D GENERATION, as a canvas object. Opens into the `scene3d` SURFACE
+  // (`creationObjectSurfaces.ts`) bound to itself — the product decision that AI
+  // video/3D generation lives under the 3D surface rather than under `timeline`
+  // (which stays the real multi-track editor for imported/screen/camera clips,
+  // untouched by this kind) or under a bolted-on legacy project modality (retired).
+  // Distinct from `world`: a `world` is hand-authored prop-by-prop; a `scene` is one
+  // prompt handed to the studio engine. See `scene.ts`.
+  'scene',
   'document', 'slides', 'diagram', 'knowledge', 'file', 'url', 'note', 'drawing', 'frame', 'comment', 'timer',
   /**
    * COUNTING UP, which a countdown cannot do.

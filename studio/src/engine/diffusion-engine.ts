@@ -20,6 +20,7 @@ import { AutoTokenizer, type PreTrainedTokenizer } from '@huggingface/transforme
 import type {
   ActiveDevice,
   DiffusionModelId,
+  LcmModelDescriptor,
   ModelDescriptor,
   OnnxFile,
   OrtInputSpec,
@@ -43,6 +44,7 @@ configureOnnxRuntime();
 export const MODEL_REGISTRY: Record<DiffusionModelId, ModelDescriptor> = {
   'lcm-tiny-sd': {
     id: 'lcm-tiny-sd',
+    engine: 'lcm-diffusion',
     defaultSteps: 4,
     defaultGuidance: 1.0,
     minVramMb: 2 * 1024, // BK-SDM Tiny UNet (~0.3 GB fp16) + text-encoder + VAE
@@ -73,6 +75,7 @@ export const MODEL_REGISTRY: Record<DiffusionModelId, ModelDescriptor> = {
   },
   'lcm-dreamshaper-v7': {
     id: 'lcm-dreamshaper-v7',
+    engine: 'lcm-diffusion',
     defaultSteps: 4,
     defaultGuidance: 1.0, // LCM works best with CFG ~1
     minVramMb: 6 * 1024,
@@ -101,6 +104,7 @@ export const MODEL_REGISTRY: Record<DiffusionModelId, ModelDescriptor> = {
   },
   'sd-turbo': {
     id: 'sd-turbo',
+    engine: 'lcm-diffusion',
     defaultSteps: 1,
     defaultGuidance: 0.0, // SD-Turbo is unconditional
     minVramMb: 4 * 1024,
@@ -123,6 +127,84 @@ export const MODEL_REGISTRY: Record<DiffusionModelId, ModelDescriptor> = {
     ],
     textEncoderInputs: [{ name: 'input_ids', dtype: 'int32' }],
   },
+
+  // ---------------------------------------------------------------------
+  // WebDiT diffusion-transformer entries — the whole-clip `webdit-engine.ts`
+  // generation path (see WebDitModelDescriptor in types.ts). All 4 register
+  // `available: false, bundleUrl: null`: the models are wired end-to-end
+  // (this registry entry, VideoEngine dispatch, webdit-engine.ts) but no
+  // pretrained bundle has been exported + uploaded to R2 yet — see the
+  // ROADMAP gap-register entry. `defaultSteps`/`defaultGuidance`/
+  // `defaultFrames`/`defaultWidth`/`defaultHeight` are copied from each
+  // architecture's `SamplingDefaults` in webdit/converter/src/architectures/
+  // (read from those files directly, not assumed). `minVramMb` are rough
+  // estimates (no real bundle exists yet to measure) noted per entry.
+  // ---------------------------------------------------------------------
+  'cogvideox-2b': {
+    id: 'cogvideox-2b',
+    engine: 'webdit-dit',
+    architecture: 'cogvideox-2b',
+    bundleUrl: null,
+    available: false,
+    // ~2B DiT (Tsinghua/Zhipu) + CLIP-L text encoder + VAE, fp16 — the
+    // smallest of the 4 DiT families (webdit/converter/src/architectures/cogvideox.ts).
+    minVramMb: 8 * 1024,
+    defaultSteps: 50,
+    defaultGuidance: 6.0,
+    defaultFrames: 49,
+    defaultFps: 8,
+    defaultWidth: 720,
+    defaultHeight: 480,
+  },
+  'wan2.5': {
+    id: 'wan2.5',
+    engine: 'webdit-dit',
+    architecture: 'wan2.5',
+    bundleUrl: null,
+    available: false,
+    // Full Wan2.5 is ~14B — only usable in-browser via a distilled/pruned
+    // export (webdit/converter/src/architectures/wan.ts); estimate assumes
+    // that distilled variant, not the full checkpoint.
+    minVramMb: 10 * 1024,
+    defaultSteps: 20,
+    defaultGuidance: 5.0,
+    defaultFrames: 81,
+    defaultFps: 16,
+    defaultWidth: 832,
+    defaultHeight: 480,
+  },
+  'mochi-1': {
+    id: 'mochi-1',
+    engine: 'webdit-dit',
+    architecture: 'mochi-1',
+    bundleUrl: null,
+    available: false,
+    // 10B AsymmDiT (Genmo), distilled/quantized for browser use
+    // (webdit/converter/src/architectures/mochi.ts) — the heaviest of the 4.
+    minVramMb: 12 * 1024,
+    defaultSteps: 64,
+    defaultGuidance: 4.5,
+    defaultFrames: 163,
+    defaultFps: 24,
+    defaultWidth: 848,
+    defaultHeight: 480,
+  },
+  'ltx2-distilled': {
+    id: 'ltx2-distilled',
+    engine: 'webdit-dit',
+    architecture: 'ltx2-distilled',
+    bundleUrl: null,
+    available: false,
+    // ~2B DiT, rectified-flow, distilled to 8 steps — the fastest of the 4
+    // (webdit/converter/src/architectures/ltx.ts).
+    minVramMb: 6 * 1024,
+    defaultSteps: 8,
+    defaultGuidance: 1.0,
+    defaultFrames: 121,
+    defaultFps: 24,
+    defaultWidth: 768,
+    defaultHeight: 512,
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -133,7 +215,11 @@ export const MODEL_REGISTRY: Record<DiffusionModelId, ModelDescriptor> = {
 // ---------------------------------------------------------------------------
 
 interface UnetInputContext {
-  descriptor: ModelDescriptor;
+  // UNet feed-building is an lcm-diffusion-only concern (webdit's DiT graph
+  // has its own, entirely different I/O contract — see BUNDLE_IO in
+  // @webdit/shared) — narrowed rather than the full ModelDescriptor union so
+  // lcmGuidanceCondEmbedding below can read LCM-only fields without a guard.
+  descriptor: LcmModelDescriptor;
   sample: Float32Array;
   condEmbedding: Float32Array;
   timestep: number;
@@ -226,7 +312,7 @@ export const DEFAULT_LCM_GUIDANCE_SCALE = 8.5;
  * 0 for LCM's CFG≈1, yielding an all-[0…,1…] vector that under-conditions the
  * UNet — the root cause of the washed / distorted two-pass refinement output.
  */
-export function lcmGuidanceCondEmbedding(descriptor: ModelDescriptor): Float32Array {
+export function lcmGuidanceCondEmbedding(descriptor: LcmModelDescriptor): Float32Array {
   const dim = descriptor.lcmGuidanceEmbedDim ?? 256;
   const w = (descriptor.lcmGuidanceScale ?? DEFAULT_LCM_GUIDANCE_SCALE) - 1;
   return guidanceScaleEmbedding(w, dim);
@@ -453,8 +539,23 @@ export class DiffusionEngine {
     }
   }
 
-  get descriptor(): ModelDescriptor {
-    return MODEL_REGISTRY[this.opts.model];
+  /**
+   * `DiffusionEngine` only ever implements the lcm-diffusion frame-by-frame
+   * primitives (embed/denoise/decode) — a webdit-dit model is never handed
+   * to this class (VideoEngine.create dispatches those to webdit-engine.ts
+   * instead). Narrowing here, once, means every other method on this class
+   * can read LCM-only fields (`hfRepo`, `unetInputs`, `files`, …) without
+   * repeating the guard.
+   */
+  get descriptor(): LcmModelDescriptor {
+    const d = MODEL_REGISTRY[this.opts.model];
+    if (d.engine !== 'lcm-diffusion') {
+      throw new Error(
+        `DiffusionEngine only supports lcm-diffusion models; got '${d.id}' (engine: ${d.engine}). ` +
+          `webdit-dit models are handled by webdit-engine.ts / VideoEngine's webdit dispatch.`,
+      );
+    }
+    return d;
   }
 
   get activeDevice(): ActiveDevice {
@@ -893,9 +994,16 @@ export function checkMemoryForModel(
  *   it) — when null we filter on "lighter than failing" alone.
  */
 function lighterModelHint(failingModelId: string, availableMb: number | null): string {
-  const failingMin = MODEL_REGISTRY[failingModelId as DiffusionModelId]?.minVramMb ?? Infinity;
+  const failing = MODEL_REGISTRY[failingModelId as DiffusionModelId];
+  const failingMin = failing?.minVramMb ?? Infinity;
   const alternatives = Object.values(MODEL_REGISTRY)
     .filter((m) => m.id !== failingModelId)
+    // Stay within the same generation family: lcm-diffusion and webdit-dit
+    // are incompatible pipelines (different weights, different call sites —
+    // see VideoEngine.create's refinementModel guard), so recommending one
+    // as a "lighter alternative" to the other would be actionable-sounding
+    // but wrong advice.
+    .filter((m) => failing === undefined || m.engine === failing.engine)
     .filter((m) => m.minVramMb < failingMin)
     .filter((m) => availableMb === null || m.minVramMb <= availableMb)
     .sort((a, b) => a.minVramMb - b.minVramMb)

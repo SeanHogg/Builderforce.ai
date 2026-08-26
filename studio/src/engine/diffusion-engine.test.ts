@@ -28,6 +28,7 @@ vi.mock('./weight-cache', () => ({
   getOrFetchWeight: vi.fn(async () => new ArrayBuffer(16)),
 }));
 
+import type { LcmModelDescriptor } from '../types';
 import {
   MODEL_REGISTRY,
   KNOWN_UNET_INPUTS,
@@ -41,8 +42,30 @@ import {
   DiffusionEngine,
 } from './diffusion-engine';
 
+/**
+ * MODEL_REGISTRY now also carries 4 webdit-dit entries (see
+ * WebDitModelDescriptor in types.ts) — a totally different shape with no
+ * unetInputs/textEncoderInputs/lcmGuidanceEmbedDim. Every UNet-input-contract
+ * assertion below is inherently lcm-diffusion-only, so they iterate this
+ * filtered view instead of the raw registry.
+ */
+function lcmEntries(): [string, LcmModelDescriptor][] {
+  return Object.entries(MODEL_REGISTRY).filter(
+    (e): e is [string, LcmModelDescriptor] => e[1].engine === 'lcm-diffusion',
+  );
+}
+
+/** Look up a known-lcm-diffusion registry entry by id, narrowed. */
+function lcm(id: 'lcm-tiny-sd' | 'sd-turbo' | 'lcm-dreamshaper-v7'): LcmModelDescriptor {
+  const d = MODEL_REGISTRY[id];
+  if (d.engine !== 'lcm-diffusion') {
+    throw new Error(`test setup: '${id}' is not an lcm-diffusion model`);
+  }
+  return d;
+}
+
 describe('MODEL_REGISTRY × UNet input contract', () => {
-  for (const [id, descriptor] of Object.entries(MODEL_REGISTRY)) {
+  for (const [id, descriptor] of lcmEntries()) {
     it(`${id}: every declared UNet input has a registered builder`, () => {
       for (const spec of descriptor.unetInputs) {
         expect(
@@ -66,7 +89,7 @@ describe('MODEL_REGISTRY × UNet input contract', () => {
   // MUST also declare timestep_cond in unetInputs, and vice versa. One assertion
   // covers every current and future LCM model — no per-model maintenance.
   it("LCM/non-LCM consistency: lcmGuidanceEmbedDim ⇔ timestep_cond in unetInputs", () => {
-    for (const [id, descriptor] of Object.entries(MODEL_REGISTRY)) {
+    for (const [id, descriptor] of lcmEntries()) {
       const isLcm = descriptor.lcmGuidanceEmbedDim !== undefined;
       const hasTimestepCond = descriptor.unetInputs.some((s) => s.name === 'timestep_cond');
       expect(
@@ -85,7 +108,7 @@ describe('MODEL_REGISTRY × UNet input contract', () => {
   // lcmGuidanceEmbedDim would skip it and let the original
   // "Unexpected input data type (int64 vs float)" bug ship again.
   it("LCM-family timestep is float32 (regression: 'Unexpected input data type')", () => {
-    for (const [id, descriptor] of Object.entries(MODEL_REGISTRY)) {
+    for (const [id, descriptor] of lcmEntries()) {
       if (!id.startsWith('lcm-')) continue;
       const ts = descriptor.unetInputs.find((s) => s.name === 'timestep');
       expect(ts?.dtype, `LCM model '${id}' must declare timestep as float32`).toBe('float32');
@@ -93,7 +116,7 @@ describe('MODEL_REGISTRY × UNet input contract', () => {
   });
 
   it('sd-turbo timestep is int64 (standard SD UNet export — flipping it would break SD-Turbo)', () => {
-    const ts = MODEL_REGISTRY['sd-turbo'].unetInputs.find((s) => s.name === 'timestep');
+    const ts = lcm('sd-turbo').unetInputs.find((s) => s.name === 'timestep');
     expect(ts?.dtype).toBe('int64');
   });
 
@@ -104,7 +127,7 @@ describe('MODEL_REGISTRY × UNet input contract', () => {
   // produced the washed / distorted two-pass refinement output. This locks the
   // embedding non-degenerate for every model carrying a timestep_cond input.
   it("LCM timestep_cond embeds the distillation scale (non-degenerate, w≠0)", () => {
-    for (const [id, descriptor] of Object.entries(MODEL_REGISTRY)) {
+    for (const [id, descriptor] of lcmEntries()) {
       if (descriptor.lcmGuidanceEmbedDim === undefined) continue;
       const emb = lcmGuidanceCondEmbedding(descriptor);
       const dim = descriptor.lcmGuidanceEmbedDim;
@@ -118,17 +141,46 @@ describe('MODEL_REGISTRY × UNet input contract', () => {
   });
 
   it("lcm-dreamshaper-v7 declares a distillation guidance scale (defaults otherwise)", () => {
-    const d = MODEL_REGISTRY['lcm-dreamshaper-v7'];
+    const d = lcm('lcm-dreamshaper-v7');
     // Either an explicit scale or the shared default — both are >1 so w>0.
     expect((d.lcmGuidanceScale ?? DEFAULT_LCM_GUIDANCE_SCALE)).toBeGreaterThan(1);
   });
 
-  it('every model declares the three base inputs sample / timestep / encoder_hidden_states', () => {
-    for (const [id, descriptor] of Object.entries(MODEL_REGISTRY)) {
+  it('every lcm-diffusion model declares the three base inputs sample / timestep / encoder_hidden_states', () => {
+    for (const [id, descriptor] of lcmEntries()) {
       const names = descriptor.unetInputs.map((s) => s.name);
       for (const required of ['sample', 'timestep', 'encoder_hidden_states']) {
         expect(names, `${id} missing required UNet input '${required}'`).toContain(required);
       }
+    }
+  });
+});
+
+describe('MODEL_REGISTRY × webdit-dit entries', () => {
+  const WEBDIT_IDS = ['cogvideox-2b', 'wan2.5', 'mochi-1', 'ltx2-distilled'] as const;
+
+  it('registers all 4 architectures as webdit-dit, unavailable, with no bundle URL', () => {
+    for (const id of WEBDIT_IDS) {
+      const d = MODEL_REGISTRY[id];
+      expect(d.engine, `${id} engine`).toBe('webdit-dit');
+      if (d.engine !== 'webdit-dit') continue; // narrows for TS below
+      expect(d.available, `${id} must not be available until a bundle is uploaded`).toBe(false);
+      expect(d.bundleUrl, `${id} must have no bundleUrl until a bundle is uploaded`).toBeNull();
+      expect(d.architecture).toBe(id);
+      expect(d.defaultSteps).toBeGreaterThan(0);
+      expect(d.defaultFrames).toBeGreaterThan(0);
+      expect(d.defaultWidth).toBeGreaterThan(0);
+      expect(d.defaultHeight).toBeGreaterThan(0);
+    }
+  });
+
+  it('does not appear as a "lighter model" recommendation for a failing lcm-diffusion model', () => {
+    // lighterModelHint restricts alternatives to the SAME engine family — a
+    // webdit model is never a valid substitute for an OOMing LCM model (and
+    // vice versa): different weights, different call sites entirely.
+    const msg = checkMemoryForModel(1, MODEL_REGISTRY['lcm-dreamshaper-v7'].minVramMb, 'lcm-dreamshaper-v7') ?? '';
+    for (const id of WEBDIT_IDS) {
+      expect(msg, `webdit model '${id}' must never be recommended in place of an LCM model`).not.toContain(id);
     }
   });
 });

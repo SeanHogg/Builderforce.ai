@@ -1,3 +1,84 @@
+## ✅ RESOLVED 2026-08-25 — Layer 1: `studio`'s engine gains webdit as a second generation path
+
+The gap-register entry tracking `webdit/` as a standalone prototype never wired into `studio/`'s
+real video-generation pipeline is resolved for the engine side: `studio`'s `VideoEngine` now
+dispatches between TWO generation families by model descriptor — the original `lcm-diffusion`
+frame-by-frame path (`DiffusionEngine`, unchanged) and a new `webdit-dit` whole-clip path
+(`webdit-engine.ts`) for CogVideoX-2b, Wan2.5, Mochi-1, and LTX2-distilled.
+
+**Why two coarse-grained paths, not one shared interface.** webdit's `runDenoiseLoop` generates a
+whole clip from a native `[B,C,T,H,W]` latent — the DiT models are video-native and already model
+temporal coherence themselves — while `DiffusionEngine`'s primitives (embed/denoise/decode/
+addNoise) are fine-grained per-frame steps `produceClip()` composes into Mamba coherence,
+anchor-walk drift, img2img recursion, and two-pass refinement. Forcing a video-native DiT through
+that per-frame machinery would be redundant and shape-wrong, so `types.ts`'s `ModelDescriptor`
+became a discriminated union (`LcmModelDescriptor` / `WebDitModelDescriptor`) on a new `engine`
+field, and `VideoEngine.create()`/`generate()`/`generateStoryboard()` branch on it once rather than
+forcing a shared fine-grained contract.
+
+**What's wired.** `DiffusionModelId` widened additively (`LcmModelId | WebDitModelId`);
+`MODEL_REGISTRY` carries all 4 webdit architectures with real per-architecture defaults read from
+`webdit/converter/src/architectures/{cogvideox,wan,mochi,ltx}.ts` (steps/guidance/frames/
+width/height), registered `available: false, bundleUrl: null` — the expected state until an
+operator exports+uploads a real bundle (tracked in ROADMAP.md, replacing this entry with a
+precisely-scoped one). `webdit-engine.ts` loads a bundle by routing every manifest-referenced file
+through studio's own `getOrFetchWeight` IndexedDB cache instead of letting webdit fetch raw URLs
+itself, via a new third loader — `@webdit/runtime`'s `loadBundleFromBuffers(manifest, files)` —
+alongside the existing `loadBundle`(URL)/`loadBundleFromDir`(Node). `VideoEngine.create()` probes
+WebGPU specifically for the webdit path (no CPU/WebNN fallback exists in `@webdit/runtime`) and
+returns `null` early — same "consumer never computes its own can-run check" contract as the
+lcm-diffusion path. A `refinementModel` paired across engine families now throws a clear error at
+`create()` time instead of failing deep inside `produceClip` with an opaque shape mismatch.
+
+**Dependency hygiene.** `studio` depends on `@webdit/shared`/`@webdit/runtime` via `file:`; webdit's
+own `runtime`/`convert` packages had their `@webdit/shared`/`@webdit/torch` deps pinned to the
+unresolvable `"*"` (worked only from inside webdit's own npm workspace) — both fixed to `file:`
+siblings so pnpm can resolve them from `studio`, installing from OUTSIDE that workspace.
+`webdit/runtime`'s own `main`/`types` pointed at a `dist/` that was never built (only `@webdit/shared`
+and `@webdit/torch` used the source-only `main: ./src/index.ts` convention); fixed to match, since
+consuming a private, unpublished monorepo package by pointing at prebuilt output that's never
+produced is a load-bearing inconsistency, not a style choice. `onnxruntime-web` bumped
+`^1.18.0`→`^1.21.0` in `webdit/runtime` to match `studio`'s pin (one ORT/WASM instance, not two
+fighting over global state). `@webdit/torch` is lazily `import()`ed everywhere in `bundle.ts` — it
+was already code-split before this change; verified, not modified.
+
+**Verification.** `cd studio && pnpm install && pnpm run type-check` clean. `cd webdit/runtime &&
+npm test` — 43/43 (40 existing + 3 new for `loadBundleFromBuffers`, built the same synthetic
+mini-test fixture `test/integration.test.ts` uses but feeding buffers instead of a temp dir).
+`cd studio && pnpm test` — 158/158 (154 existing + 4 new for `generateWebDitClip`'s frame→mux
+conversion, against the same mini-test fixture, with minimal structural fakes for the WebCodecs
+globals vitest's node environment doesn't provide). Three pre-existing `noUnusedLocals` violations
+in `@webdit/torch`/`@webdit/runtime` source surfaced once `studio`'s stricter tsconfig started
+type-checking them directly (consuming source, not prebuilt `.d.ts`) — fixed at the source
+(dead imports/variables only, zero behavior change).
+
+Layer 2 (canvas `scene3d` authoring UI for this engine) is separate, tracked in the same plan,
+and is not part of this entry.
+
+## ✅ RESOLVED 2026-08-25 — `check:react-hooks` ratchet regression in `CreationCanvas.tsx` fixed at the source
+
+Adding a drag-to-move handle to the canvas's floating composer/command-bar chrome touched
+`CreationCanvas.tsx`, and `npm run check:react-hooks` flagged the file as having gained warnings
+(93 → 96 against `.react-hooks-baseline.txt`) — confirmed, by round-tripping the file back to a
+pure `git show HEAD:…` copy, to be pre-existing drift already present on `HEAD` and unrelated to
+the drag-handle edit or to a concurrent session's in-flight changes to the same file.
+
+Root cause, found by diffing the file's ESLint warning set against the commit that last recorded
+the baseline (`5df6de2d0`): `stage` (`const stage = stageRef.current` at
+[CreationCanvas.tsx:2741](./frontend/src/components/creation-canvas/CreationCanvas.tsx#L2741)) is
+referenced inside 8 `useCallback`/`useMemo` call sites whose dependency arrays never listed it —
+real, `exhaustive-deps`-flagged omissions, not baseline noise. `stageRef.current` is constructed
+once via `??=` and, per its own header comment, "constructed once and never replaced" for the
+component's lifetime, so `stage` is identity-stable across renders: adding it to each dependency
+array is a zero-risk, purely-correct fix (it can never force extra recreation) rather than a
+baseline-suppression. Fixed all 8 sites (`buildSocialFeedNode`, `resolveTabularTarget`, the
+`boundBuildsRef` memo, `createBuildForTool`, `canvasOpsContext`, `evaluateCanvas`,
+`rejectProposedChanges`, and one more) by adding the exact missing identifiers `stage` reported —
+verified against each callback's body that it genuinely calls `stage.createObject`/`.reset`/
+`.drain`/`.nodes()` before adding it. `check:react-hooks --file` on the file now passes with no
+output (count at or below the 93 baseline); `check:react-hooks --changed` no longer lists
+`CreationCanvas.tsx`. `tsgo --noEmit` clean throughout.
+
 ## ✅ RESOLVED 2026-08-25 — `marketing_sessions` is a `keep`, not a `metric_fact`, and the headline number absorbed it
 
 The roadmap carried this as **blocked on an operator decision** because correcting the row moves the

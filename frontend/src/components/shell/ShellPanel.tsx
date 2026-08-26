@@ -27,6 +27,7 @@ import { useCallback } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { TenantProjectSwitcher } from '@/components/TenantProjectSwitcher';
 import { panelWidth } from '@/lib/workbenchPolicy';
 import { destTitleKey, publicDestinationFor } from '@/lib/publicDestinations';
 import { seatHueVar } from '@/lib/seats';
@@ -187,6 +188,12 @@ export function ShellPanel({ children }: { children: React.ReactNode }) {
       widthStorageKey={group?.id ?? reference?.id ?? pathname}
       accentVar={reference ? seatHueVar(reference.seat) : undefined}
       crumb={reference ? tRef('crumb', { seat: reference.seat }) : tPanel('crumb')}
+      // The panel is a fixed full-height overlay above the TopBar (z-index),
+      // so opening ANY panel hides the TopBar's project switcher underneath
+      // it — leaving no way to choose what new items (a creation session, a
+      // task, a quality collector) get created under while the panel is open.
+      // Same switcher, carried into the one other place chrome can hide it.
+      headerActions={<TenantProjectSwitcher />}
       title={
         published?.title ? published.title
         : reference ? tRoot(destTitleKey(reference))

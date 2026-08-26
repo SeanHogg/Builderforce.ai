@@ -4,9 +4,18 @@
  * One project, many modalities. A project named "BuilderForce Agents" is built across:
  *   - designer : the default app/agent builder (Preview + Code + WebContainer)
  *   - mobile   : the same builder, framed for phones (device simulator + scan-to-phone)
- *   - video    : client-side AI video generation (WebGPU/WebNN diffusion)
  *   - evermind : grow a living, self-teaching Evermind model (teach + Knowledge Map)
  *   - finetune : design datasets and train a classic LoRA model, then ship it
+ *
+ * AI video/3D generation used to be a modality here (`video`, mounting the studio
+ * engine's `<StudioPanel>`). It is retired: client-side AI video/3D generation is now a
+ * canvas-native capability — a `scene` canvas object opening into the `scene3d` surface
+ * (`CanvasSceneGeneratorPanel.tsx`) — rather than a bolted-on project type with its own
+ * IDE panel. No seed/fixture/migration data in this repo sets `modality: 'video'` on a
+ * project row, so this retirement carries no known code-visible migration; whether any
+ * REAL tenant already has a live `modality: 'video'` project (this WAS a working,
+ * shipped generator, unlike the concurrent webdit work) could not be confirmed from the
+ * codebase alone — see the Consolidated Gap Register entry this retirement adds.
  *
  * `evermind` and `finetune` were once a single combined `llm` modality; they are
  * now two distinct project types so the Studio no longer mixes "teach a living
@@ -18,7 +27,7 @@
  * branching scattered across components.
  */
 
-export type ProjectModality = 'designer' | 'mobile' | 'webmobile' | 'video' | 'evermind' | 'finetune' | 'voice';
+export type ProjectModality = 'designer' | 'mobile' | 'webmobile' | 'evermind' | 'finetune' | 'voice';
 
 /** Legacy modality id (the combined LLM Studio) → its replacement. */
 const LEGACY_MODALITY_ALIASES: Record<string, ProjectModality> = { llm: 'evermind' };
@@ -33,7 +42,7 @@ export type RightTab = 'voice' | 'files' | 'agent' | 'train' | 'publish' | 'stat
  * whole run/build pipeline and differs only by rendering `device` instead of
  * `code-preview`.
  */
-export type CenterPanel = 'code-preview' | 'device' | 'video' | 'voice' | 'evermind' | 'finetune';
+export type CenterPanel = 'code-preview' | 'device' | 'voice' | 'evermind' | 'finetune';
 
 /** Which Publish panel the right rail shows: a hosted site, or a trained agent. */
 export type PublishPanel = 'site' | 'agent';
@@ -55,8 +64,8 @@ export interface ModalityDef {
   /** Right-panel tabs relevant to this modality, in display order. */
   rightTabs: RightTab[];
   /** Whether the green run button applies. Designer runs the WebContainer dev
-   *  server; Voice generates speech. Video/LLM drive generation from their own
-   *  panels, so they hide it. */
+   *  server; Voice generates speech. Evermind/fine-tune drive generation from their
+   *  own panels, so they hide it. */
   showRunButton: boolean;
   /** Label for the green run button (e.g. "Run" for Designer, "Generate" for Voice). */
   runLabel: string;
@@ -167,25 +176,6 @@ const BASE_MODALITIES: ModalityDef[] = [
     dockBrain: true,
     publishPanel: 'site',
     enableMobilePreview: true,
-  },
-  {
-    id: 'video',
-    label: 'Video',
-    icon: '🎬',
-    tagline: 'Generate short videos client-side on your own GPU via diffusion.',
-    brainSystemPrompt: [
-      "You are an expert video director and prompt engineer inside Builderforce.ai's AI Video Studio.",
-      'The user generates short videos entirely client-side via diffusion (LCM / SD-Turbo) running on their own GPU, with Mamba SSM state carrying frame-to-frame coherence.',
-      'Help them craft vivid, shot-level visual prompts covering: subject, action, environment, lighting, colour palette, camera angle, and a visual style descriptor (cinematic, anime, photoreal, etc.).',
-      'When the user asks for a video, reply with a single refined prompt paragraph they can paste straight into the generator — no preamble, under 220 characters.',
-    ].join('\n'),
-    rightTabs: ['files', 'state'],
-    showRunButton: false,
-    runLabel: 'Run',
-    showChecks: false,
-    center: 'video',
-    dockBrain: false,
-    publishPanel: 'agent',
   },
   {
     id: 'evermind',

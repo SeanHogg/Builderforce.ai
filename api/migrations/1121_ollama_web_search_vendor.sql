@@ -1,0 +1,21 @@
+-- Migration: Ollama web search — a fourth BYO keyed vendor, the BACKUP tried right
+-- after Tavily in the precedence in application/runtime/webSearchVendors.ts.
+--
+-- Ollama's `POST /api/web_search` returns the identical `{ results: [{ title, url,
+-- content }] }` shape Tavily's endpoint does, so the adapter reuses Tavily's parser.
+-- It earns its own credentialed tier (rather than folding into Tavily's slot) because
+-- it is a distinct index behind a distinct key: a tenant with a Tavily outage, or one
+-- who already has an Ollama account for the models they run, gets a real fallback
+-- before falling all the way to Exa/Linkup or the keyless floor.
+--
+-- The key lives in `integration_credentials` — same vault as tavily/exa/linkup — whose
+-- `provider` column is the `integration_provider` enum, so this is exactly the one
+-- enum value plus one adapter migration 0413 documented for the original three.
+--
+-- Purely ADDITIVE and idempotent: an enum value cannot break existing rows.
+--
+-- NOTE: ALTER TYPE ... ADD VALUE cannot run inside a transaction block on older
+-- PostgreSQL, and a new value is not usable in the same transaction that adds it.
+-- This migration therefore does nothing else.
+
+ALTER TYPE integration_provider ADD VALUE IF NOT EXISTS 'ollama';

@@ -1283,11 +1283,6 @@
         "tagline": "Générez et créez un site web ou une application web avec Aperçu, Code et un serveur de développement en direct.",
         "runLabel": "Lancer"
       },
-      "video": {
-        "label": "Vidéo",
-        "tagline": "Générez de courtes vidéos côté client sur votre propre GPU par diffusion.",
-        "runLabel": "Lancer"
-      },
       "evermind": {
         "label": "Evermind",
         "tagline": "Cultivez un modèle Evermind vivant qui apprend de chaque projet — enseignez-le et voyez sa Carte des connaissances se remplir.",
@@ -15264,7 +15259,7 @@
       },
       "webSearch": {
         "label": "Recherche web",
-        "blurb": "Recherche sur le web ouvert et renvoie des résultats avec le contenu des pages — utilise votre clé Tavily/Exa/Linkup connectée, puis une instance SearXNG de l’opérateur, puis une source encyclopédique sans clé en dernier recours, afin de toujours renvoyer un résultat."
+        "blurb": "Recherche sur le web ouvert et renvoie des résultats avec le contenu des pages — utilise votre clé Tavily/Ollama/Exa/Linkup connectée, puis une instance SearXNG de l’opérateur, puis une source encyclopédique sans clé en dernier recours, afin de toujours renvoyer un résultat."
       },
       "switch": {
         "label": "Switch",
@@ -18894,6 +18889,8 @@
     "askBrain": "Interroger Brain sur ce canevas",
     "sendBrain": "Envoyer à Brain",
     "resizePrompt": "Redimensionner la zone de saisie",
+    "dragHandle": "Faire glisser pour déplacer ce panneau",
+    "dragHandleMoved": "Faire glisser pour déplacer ce panneau (double-cliquer pour réinitialiser la position)",
     "entireCanvas": "Canevas entier",
     "loading": "Chargement du Canevas…",
     "requestAccess": "Demander l’accès",
@@ -18998,6 +18995,7 @@
       "cad": "CAO",
       "model3d": "Modèle 3D",
       "world": "Espace 3D",
+      "scene": "Scène IA",
       "resume": "CV",
       "template": "Modèle",
       "document": "Document",
@@ -19471,6 +19469,7 @@
     "typicalValue": "Habituel : {value}",
     "correlationCoverage": "La couverture de corrélation rend chaque action responsable.",
     "aggregatesScoped": "Les agrégats sont sans contenu et limités au tenant.",
+    "copyProofJourneyDiagnostics": "Copier le diagnostic du parcours de preuve",
     "sessionConversation": "Conversation de la session",
     "sessionConversationHint": "Persiste même si les objets de chat sont supprimés",
     "closeConversation": "Fermer la conversation",
@@ -22240,7 +22239,8 @@
       "scene3d": {
         "label": "Espace 3D",
         "enter": "Voir ce canevas en 3D",
-        "active": "Quitter la 3D"
+        "active": "Quitter la 3D",
+        "open": "Ouvrir la scène IA"
       },
       "app": {
         "label": "App",
@@ -22419,6 +22419,14 @@
         "open": "Ouvrir le calendrier"
       }
     },
+    "scene": {
+      "promptLabel": "Prompt",
+      "promptPlaceholder": "p. ex. un renard courant dans une forêt d'automne à l'heure dorée, cinématographique",
+      "framesLabel": "Images",
+      "fpsLabel": "IPS",
+      "generate": "Générer",
+      "initializing": "Initialisation…"
+    },
     "miro": {
       "title": "Tableaux Miro",
       "close": "Fermer",
@@ -22576,6 +22584,7 @@
       "cad": "Un studio pour générer des modèles CAO de pièces et conceptions mécaniques.",
       "model3d": "Un studio pour générer des modèles 3D que vous pouvez visualiser et exporter.",
       "world": "Un espace 3D que vous construisez à la main : placez des objets, déplacez la caméra et parcourez-le avec de vraies collisions.",
+      "scene": "Un clip vidéo/3D généré par IA : rédigez un prompt, choisissez un modèle et générez un clip dans la surface 3D.",
       "resume": "Un document de CV pour un candidat, prêt à modifier et exporter.",
       "template": "Un modèle créatif réutilisable que vous pouvez dupliquer pour démarrer un nouveau travail.",
       "document": "Un document de texte enrichi à rédiger, mettre en forme et éditer avec l'IA.",
@@ -22742,8 +22751,6 @@
     "sharedCallLabel": "Session partagée",
     "startCall": "Démarrer un appel",
     "startCallTitle": "Démarrer un appel à propos de ce canevas",
-    "gateProveTitle": "Créez un compte pour le rendre réel",
-    "gateProveBody": "Choisir une forme de preuve nomme cette session : Lire, Prouver, Construire et Mesurer peuvent alors y être enregistrés et ses résultats calculés. Vos objets, votre conversation et votre disposition vous suivent.",
     "northStar": "Étoile polaire",
     "proveThisIdea": "Rendre réel",
     "proveThisIdeaTitle": "Confier l'idée de ce tableau au sélecteur de preuves et commencer à la mesurer",
@@ -24126,7 +24133,8 @@
     "signInToKeep": "Connectez-vous pour conserver votre travail",
     "manage": "Gérer les sessions et les dossiers",
     "manageAria": "Gérer les sessions",
-    "tiedToProject": "Dans ce projet"
+    "tiedToProject": "Dans ce projet",
+    "resizeAria": "Redimensionner le panneau des sessions"
   },
   "sessionManagePanel": {
     "title": "Sessions et dossiers",

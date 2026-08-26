@@ -72,6 +72,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { bumpPublicCanvasVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { isOutcomePhase, normalizeOutcomeAction, recordOutcomeEvent } from '../outcomes/outcomeLedger';
 import { buildAttributedOutcomes } from '../outcomes/attributedOutcomes';
+import { buildProofJourney } from '../outcomes/proofJourney';
 import {
   NORTH_STAR_METRIC_KEY,
   OUTCOME_BASELINE_COHORT,
@@ -1273,6 +1274,32 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       c.env as Env,
       `creation:attributed-outcomes:${access.session.tenantId}:${access.session.id}`,
       () => buildAttributedOutcomes(db, { tenantId: access.session.tenantId, sessionId: access.session.id }),
+      { kvTtlSeconds: 60 },
+    );
+    return c.json(payload);
+  });
+
+  /**
+   * The proof-lifecycle events themselves, folded into one journey — which
+   * idea was read, which proof form was chosen against what the recommender
+   * actually advised, and where the most recent attempt is stuck.
+   *
+   * The metrics route above can say `gradedProofRate` moved; it cannot say
+   * WHICH idea in this session never got graded or why. This is the read that
+   * makes that answerable, and is also what the "Copy proof journey
+   * diagnostics" button pastes — the same shape serves a human sharing it and,
+   * later, anything that recalibrates the recommender from real outcomes.
+   *
+   * Cached on the same short TTL as its siblings: a session's own proof
+   * history does not move inside a minute either.
+   */
+  router.get('/:id/proof-journey', async (c) => {
+    const access = await requireSession(c, 'viewer');
+    if (!access) return c.json({ error: 'Session not found' }, 404);
+    const payload = await getOrSetCached(
+      c.env as Env,
+      `creation:proof-journey:${access.session.tenantId}:${access.session.id}`,
+      () => buildProofJourney(db, { tenantId: access.session.tenantId, sessionId: access.session.id }),
       { kvTtlSeconds: 60 },
     );
     return c.json(payload);
