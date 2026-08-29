@@ -18959,10 +18959,6 @@
     "edge": "Conexión",
     "conversation": "Conversación",
     "tutorial": "Tutorial",
-    "live": "Sincronizado",
-    "offlineRetry": "Sin conexión · se reintentarán los cambios",
-    "reconnecting": "Reconectando…",
-    "connecting": "Conectando…",
     "largeSession": "Sesión grande · {count} Objetos",
     "dashboardTitle": "Sesiones de Create",
     "pinSession": "Fijar",
@@ -24171,7 +24167,11 @@
     "manage": "Gestionar sesiones y carpetas",
     "manageAria": "Gestionar sesiones",
     "tiedToProject": "En este proyecto",
-    "resizeAria": "Redimensionar el panel de sesiones"
+    "resizeAria": "Redimensionar el panel de sesiones",
+    "synced": "Sincronizado",
+    "offlineRetry": "Sin conexión · se reintentarán los cambios",
+    "reconnecting": "Reconectando…",
+    "connecting": "Conectando…"
   },
   "sessionManagePanel": {
     "title": "Sesiones y carpetas",

@@ -18959,10 +18959,6 @@
     "edge": "Connection",
     "conversation": "Conversation",
     "tutorial": "Tutorial",
-    "live": "Synced",
-    "offlineRetry": "Offline · edits will retry",
-    "reconnecting": "Reconnecting…",
-    "connecting": "Connecting…",
     "largeSession": "Large Session · {count} Objects",
     "dashboardTitle": "Creations",
     "pinSession": "Pin",
@@ -24171,7 +24167,11 @@
     "manage": "Manage sessions & folders",
     "manageAria": "Manage sessions",
     "tiedToProject": "In this project",
-    "resizeAria": "Resize sessions panel"
+    "resizeAria": "Resize sessions panel",
+    "synced": "Synced",
+    "offlineRetry": "Offline · edits will retry",
+    "reconnecting": "Reconnecting…",
+    "connecting": "Connecting…"
   },
   "sessionManagePanel": {
     "title": "Sessions & folders",

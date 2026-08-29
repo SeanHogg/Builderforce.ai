@@ -18959,10 +18959,6 @@
     "edge": "连接",
     "conversation": "对话",
     "tutorial": "教程",
-    "live": "已同步",
-    "offlineRetry": "离线 · 将重试编辑",
-    "reconnecting": "正在重新连接…",
-    "connecting": "正在连接…",
     "largeSession": "大型会话 · {count} 个对象",
     "dashboardTitle": "Create 会话",
     "pinSession": "置顶",
@@ -24171,7 +24167,11 @@
     "manage": "管理会话和文件夹",
     "manageAria": "管理会话",
     "tiedToProject": "在此项目中",
-    "resizeAria": "调整会话面板大小"
+    "resizeAria": "调整会话面板大小",
+    "synced": "已同步",
+    "offlineRetry": "离线 · 将重试编辑",
+    "reconnecting": "正在重新连接…",
+    "connecting": "正在连接…"
   },
   "sessionManagePanel": {
     "title": "会话与文件夹",

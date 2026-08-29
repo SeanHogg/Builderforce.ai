@@ -1966,6 +1966,35 @@ html[data-theme='light'] .nebula {
   color: var(--warning);
 }
 
+/* The active session's own connection light — moved here from a floating card over the
+   board, since that card could not know the session's name and this row already does.
+   A dot rather than the pill's border-and-background treatment: this row already reads
+   as "the current session", so the status only needs to add one fact to it, not a second
+   chrome. */
+.nav-sessions__sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.nav-sessions__sync::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--warning);
+}
+.nav-sessions__sync[data-state='online']::before {
+  background: var(--success);
+}
+.nav-sessions__sync[data-state='offline']::before {
+  background: var(--error);
+}
+
 .nav-section-label {
   font-size: 10px;
   font-weight: 600;

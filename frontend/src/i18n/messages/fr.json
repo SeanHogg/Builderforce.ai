@@ -18959,10 +18959,6 @@
     "edge": "Connexion",
     "conversation": "Conversation",
     "tutorial": "Tutoriel",
-    "live": "Synchronisé",
-    "offlineRetry": "Hors ligne · les modifications seront réessayées",
-    "reconnecting": "Reconnexion…",
-    "connecting": "Connexion…",
     "largeSession": "Grande Session · {count} Objets",
     "dashboardTitle": "Sessions Create",
     "pinSession": "Épingler",
@@ -24171,7 +24167,11 @@
     "manage": "Gérer les sessions et les dossiers",
     "manageAria": "Gérer les sessions",
     "tiedToProject": "Dans ce projet",
-    "resizeAria": "Redimensionner le panneau des sessions"
+    "resizeAria": "Redimensionner le panneau des sessions",
+    "synced": "Synchronisé",
+    "offlineRetry": "Hors ligne · les modifications seront réessayées",
+    "reconnecting": "Reconnexion…",
+    "connecting": "Connexion…"
   },
   "sessionManagePanel": {
     "title": "Sessions et dossiers",

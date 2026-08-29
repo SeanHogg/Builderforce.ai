@@ -163,14 +163,14 @@ export function SlideOutPanel({
           overflow: 'hidden',
         }}
       >
-        {(title != null || headerCenter != null || headerActions != null) && (
+        {(title != null || headerActions != null) && (
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: 12,
               padding: '16px 20px',
-              borderBottom: '1px solid var(--border-subtle)',
+              borderBottom: headerCenter != null ? 'none' : '1px solid var(--border-subtle)',
               // The owning seat's hue as a rule along the top of the header —
               // the one place a panel can say WHOSE page this is without
               // spending a line of copy on it.
@@ -202,7 +202,7 @@ export function SlideOutPanel({
               </svg>
             </button>
             {(title != null || crumb != null) && (
-              <div style={{ flex: headerCenter != null ? '0 1 auto' : 1, minWidth: 0 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 {crumb != null && (
                   <div className="ui-eyebrow" style={{ color: accentVar ? `var(${accentVar})` : 'var(--text-muted)' }}>{crumb}</div>
                 )}
@@ -210,12 +210,6 @@ export function SlideOutPanel({
                   <div style={{ fontWeight: 700, fontSize: 'var(--font-size-card-title)', color: 'var(--text-primary)' }}>{title}</div>
                 )}
               </div>
-            )}
-            {/* Takes the header's remaining width — the founder's-journey
-                stage switcher is the one thing that wants room here rather
-                than sitting flush against the title. */}
-            {headerCenter != null && (
-              <div style={{ flex: 1, minWidth: 0 }}>{headerCenter}</div>
             )}
             {/* Before the width control: an action (e.g. the project switcher)
                 is something to use, the resize control is chrome around the
@@ -226,6 +220,24 @@ export function SlideOutPanel({
             {showWidthControl && (
               <PanelWidthControl value={effectiveWidth as PanelWidth} onChange={chooseWidth} />
             )}
+          </div>
+        )}
+        {/* The founder's-journey stage switcher gets the row BELOW the title
+            instead of squeezing into it (§ mobile pass) — sharing the title
+            row meant it fought the close button, the title and the project
+            switcher for space in the same `flexWrap` line, and on a narrow
+            drawer that reads as clutter rather than a control. Its own
+            full-width row gives it the room its horizontal pill rail wants
+            at every width, not just the ones wide enough to spare it. */}
+        {headerCenter != null && (
+          <div
+            style={{
+              padding: '0 20px 12px',
+              borderBottom: '1px solid var(--border-subtle)',
+              flexShrink: 0,
+            }}
+          >
+            {headerCenter}
           </div>
         )}
         {tabs != null && tabs.length > 0 && (

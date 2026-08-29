@@ -318,6 +318,7 @@ import { useVoiceStudio } from '@/lib/voiceStudio';
 import { CopyButton } from '@/components/CopyButton';
 import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
 import { buildCreationCanvasDiagnosticsReport } from '@/lib/creationCanvasDiagnostics';
+import { clearActiveCanvasSync, setActiveCanvasSync } from '@/lib/activeCanvasSyncStatus';
 import { buildProofJourneyDiagnosticsReport } from '@/lib/proofJourneyDiagnostics';
 import { alignCanvasNodesLeft, arrangeCanvasNodes, canvasArrangementTargets, canvasNodeDimensions, canvasPlacementUnlocked, nextCanvasObjectPosition, type CanvasArrangement } from './creationCanvasLayout';
 import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
@@ -1555,6 +1556,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const persistSnapshot = sharedRoom.persist;
   const [loadingSession, setLoadingSession] = useState(persistence === 'server');
   const [realtimeState, setRealtimeState] = useState<'local' | 'connecting' | 'online' | 'reconnecting' | 'offline'>(persistence === 'local' ? 'local' : 'connecting');
+  // Published for the session rail, which lives outside this component's tree
+  // (a sibling in the app shell, not a child) and so cannot read this state as
+  // a prop. A local-only board has no connection to report, so it publishes
+  // nothing rather than a fifth state the rail would have to invent a label for.
+  useEffect(() => {
+    setActiveCanvasSync(sessionId, realtimeState === 'local' ? undefined : realtimeState);
+  }, [sessionId, realtimeState]);
+  useEffect(() => () => clearActiveCanvasSync(sessionId), [sessionId]);
   const [members, setMembers] = useState<CreationSessionDetail['members']>([]);
   /**
    * Where everyone's pointer is RIGHT NOW, off the peer relay — as opposed to
@@ -11854,13 +11863,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           switcher, seven buttons, a roster and a save button — mostly empty space
           between things with nothing to do with each other, drawn ABOVE a hard line
           that made the board start below the chrome rather than run behind it. */}
-      <CanvasSessionPill
-        notice={notice}
-        // A board that lives only on this device has no connection to report, and
-        //  is that absence rather than a fifth connection state — so it is
-        // narrowed away here rather than given a label the pill would have to invent.
-        realtimeState={realtimeState === 'local' ? undefined : realtimeState}
-      />
+      <CanvasSessionPill notice={notice} />
       {/* Which surface this canvas is read through, ON the canvas rather than in a bar
           across it. The phone's copy of this decision lives in the board's control
           column; the stylesheet keeps exactly one on screen. */}

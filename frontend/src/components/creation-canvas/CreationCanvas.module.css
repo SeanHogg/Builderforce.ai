@@ -631,10 +631,6 @@
 .flowWrap :global(.react-flow__edge-text) { fill:var(--canvas-muted); font-size:10px; }
 .flowWrap :global(.react-flow__edge-textbg) { fill:#f7faff; }
 .flowWrap :global(.react-flow__controls), .flowWrap :global(.react-flow__minimap) { border:1px solid var(--canvas-line); box-shadow:0 7px 20px rgba(60,48,36,.1); border-radius:var(--radius-md); overflow:hidden; }
-.realtimeStatus { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--canvas-line); border-radius:var(--radius-full); padding:3px 7px; color:var(--canvas-muted); background:#fff; font-size:10px; white-space:nowrap; }
-.realtimeStatus::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--warning); }
-.realtimeStatus[data-state='online']::before { background:#10b981; }
-.realtimeStatus[data-state='offline']::before { background:#ef4444; }
 /* The loading state is the board with its objects not yet drawn, so it is painted
    from the board and card tokens — pinned to light greys it flashed a white sheet
    over a dark canvas on every load. */
@@ -3205,7 +3201,6 @@
    dark mode does not alter what the user is designing. */
 .selectionToolbar,
 .presentBar,
-.realtimeStatus,
 .historyPanel,
 .historyPanel header,
 .changeSetPanel,
@@ -3453,7 +3448,6 @@
   color:#a991ff;
 }
 :global(html:not([data-theme='light'])) .selectionToolbar,
-:global(html:not([data-theme='light'])) .realtimeStatus,
 :global(html:not([data-theme='light'])) .historyPanel,
 :global(html:not([data-theme='light'])) .historyPanel header {
   background:rgba(17,29,47,.97);
