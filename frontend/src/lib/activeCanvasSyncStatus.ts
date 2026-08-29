@@ -22,13 +22,7 @@ let current: ActiveCanvasSync | null = null;
 const listeners = new Set<Listener>();
 
 function notify(): void {
-  for (const listener of listeners) {
-    try {
-      listener();
-    } catch {
-      /* a bad subscriber must never break the canvas that reported its state */
-    }
-  }
+  for (const listener of listeners) listener();
 }
 
 /** The canvas on screen reports its connection. `undefined` when it has none to report (a local-only board). */
