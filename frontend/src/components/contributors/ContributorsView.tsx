@@ -12,6 +12,7 @@ import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { TenantActivityPanel } from './TenantActivityPanel';
 import { useFormat } from "@/i18n/useFormat";
+import { faultMessage } from '@/lib/apiClient';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -152,7 +153,7 @@ export function ContributorsView() {
     setError(null);
     analyticsApi.activityCalendar()
       .then(setData)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   };
 

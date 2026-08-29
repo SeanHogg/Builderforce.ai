@@ -21,6 +21,7 @@
     "check:edge-runtime": "node scripts/check-edge-runtime.mjs",
     "check:i18n-keys": "node scripts/check-i18n-keys.mjs",
     "check:route-exports": "node scripts/check-route-exports.mjs",
+    "check:root-routes": "node scripts/check-root-routes.mjs",
     "check:declared-deps": "node scripts/check-declared-deps.mjs",
     "check": "node ../scripts/run-checks.mjs scripts/checks.manifest.mjs",
     "test": "npm run check && node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs run",

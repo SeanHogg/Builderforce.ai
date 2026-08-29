@@ -6,6 +6,7 @@ import { Select } from '@/components/Select';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { useRole, hasMinRole } from '@/lib/rbac';
 import { factsApi, type Fact, type FactInput } from '@/lib/builderforceApi';
+import { faultMessage } from '@/lib/apiClient';
 import {
   tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle,
 } from '@/components/dataTableStyles';
@@ -58,7 +59,7 @@ export default function FactsPageClient() {
         setSubjects(schema.subjects);
         setPredicates(schema.predicates);
       })
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, [q, subject, predicate]);
 

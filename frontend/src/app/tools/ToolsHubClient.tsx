@@ -11,6 +11,7 @@ import {
 import { getStoredTenantToken } from '@/lib/auth';
 import type { ToolSummary, ToolCategory, TenantDiagnosticsRollup } from '@/lib/tools';
 import { Icon } from '@/components/ui/Icon';
+import { faultMessage } from '@/lib/apiClient';
 
 // `career` sits last: the four before it diagnose a WORKSPACE and are what a
 // signed-in operator came for, while the career analyzers are personal and
@@ -43,7 +44,7 @@ export default function ToolsHubClient() {
   useEffect(() => {
     toolsApi.list()
       .then(setTools)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoaded(true));
     // Workspace rating (project diagnostics rolled up) — best-effort, manager+ only.
     if (getStoredTenantToken()) {

@@ -25,6 +25,7 @@ import type { PromptAnalysis } from '@/lib/builderforceApi';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 import { useFormat } from "@/i18n/useFormat";
+import { faultMessage } from '@/lib/apiClient';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -61,7 +62,7 @@ export default function PromptsPage() {
     setError(null);
     promptLibraryApi.browsePublic({ q: search, sort })
       .then(setPrompts)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   };
 
@@ -70,7 +71,7 @@ export default function PromptsPage() {
     setError(null);
     promptLibraryApi.list()
       .then((rows: PromptEntry[]) => setPrompts(rows))
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   };
 

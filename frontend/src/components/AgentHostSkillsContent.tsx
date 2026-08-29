@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { faultMessage } from '@/lib/apiClient';
 import {
   agentHostSkillsApi,
   listMarketplaceSkills,
@@ -36,7 +37,7 @@ export function AgentHostSkillsContent({ agentHostId, tenantId }: AgentHostSkill
     agentHostSkillsApi
       .list(agentHostId)
       .then(setAssignments)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   };
 

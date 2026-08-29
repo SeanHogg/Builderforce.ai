@@ -12,6 +12,7 @@ import { getFreelancer, type FreelancerProfile } from '@/lib/freelance/talentPro
 import { MessagesButton } from '@/components/freelance/MessagesButton';
 import { ShortlistToggle } from '@/components/talent/ShortlistToggle';
 import { Icon } from '@/components/ui/Icon';
+import { faultMessage } from '@/lib/apiClient';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20,
@@ -30,7 +31,7 @@ export default function TalentDetailClient() {
 
   useEffect(() => {
     if (!id) return;
-    getFreelancer(id).then(setProfile).catch((e: Error) => setError(e.message)).finally(() => setLoading(false));
+    getFreelancer(id).then(setProfile).catch((e: unknown) => setError(faultMessage(e))).finally(() => setLoading(false));
   }, [id]);
 
   const doHire = async (status: 'active' | 'interviewing') => {

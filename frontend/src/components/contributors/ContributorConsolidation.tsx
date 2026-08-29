@@ -10,6 +10,7 @@ import {
   type ContributorRow, type DuplicateGroup, type MergePreview, type MergeRecord,
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
+import { faultMessage } from '@/lib/apiClient';
 
 /**
  * Contributor consolidation — merge duplicate human profiles that activity
@@ -60,7 +61,7 @@ export function ContributorConsolidation() {
         setMerges(m.merges);
         setUsers(u);
       })
-      .catch((e: Error) => setError(e.message));
+      .catch((e: unknown) => setError(faultMessage(e)));
   };
   useEffect(() => { load(); }, []);
 

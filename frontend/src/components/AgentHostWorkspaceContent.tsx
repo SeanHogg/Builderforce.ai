@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { workspaceApi, type AgentHostDirectory, type AgentHostDirectoryFile } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
+import { faultMessage } from '@/lib/apiClient';
 
 interface AgentHostWorkspaceContentProps {
   agentHostId: number;
@@ -61,7 +62,7 @@ export function AgentHostWorkspaceContent({ agentHostId }: AgentHostWorkspaceCon
     workspaceApi
       .listDirectories(agentHostId)
       .then(setDirectories)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, [agentHostId]);
 

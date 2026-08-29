@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { timeApi, pmoApi, type MemberDailyHours, type MemberKind, type SpineNode } from '@/lib/builderforceApi';
+import { faultMessage } from '@/lib/apiClient';
 
 /**
  * A member's activity chart — daily LOGGED hours (real time entries, migration
@@ -35,7 +36,7 @@ export function MemberTimeChart({ kind, refId, days = 30 }: { kind: MemberKind; 
   const [reload, setReload] = useState(0);
 
   useEffect(() => {
-    timeApi.member(kind, refId, days).then(setData).catch((e: Error) => setError(e.message));
+    timeApi.member(kind, refId, days).then(setData).catch((e: unknown) => setError(faultMessage(e)));
   }, [kind, refId, days, reload]);
 
   useEffect(() => {

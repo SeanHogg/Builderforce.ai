@@ -5,6 +5,8 @@ import React from 'react';
 import { useTranslations } from 'next-intl';
 import { usePermission, type Capability } from '@/lib/rbac';
 import { GateHint } from '@/components/ui/GateHint';
+import { useSampleWorkspace } from '@/domains/guest/presentation/useSampleWorkspace';
+import { GuestGateNotice } from '@/components/guest/GuestGateNotice';
 
 /**
  * Gate an action or section on a workspace capability.
@@ -25,6 +27,15 @@ import { GateHint } from '@/components/ui/GateHint';
  *
  * variant="block" dims a whole panel/section with a centered hint instead of
  * wrapping a single inline control.
+ *
+ * SESSION PRE-EMPTS ROLE. `useRole()` reads `undefined` for a signed-out
+ * visitor, so every capability check fails for them regardless of which one it
+ * is — and "Requires Manager role" is a lie about the fix: no role upgrade in an
+ * account they don't have will ever satisfy it. A role hint is meaningless
+ * before there is an account to hold a role, so a guest sees the SAME
+ * "create an account" notice {@link SessionGate} already shows everywhere else
+ * (via the shared {@link GuestGateNotice}), never the role text. Signed-in
+ * people below the required role still get the honest role hint.
  */
 export interface RoleGateProps {
   capability: Capability;
@@ -40,7 +51,19 @@ export interface RoleGateProps {
 export function RoleGate({ capability, children, variant = 'inline', silent = false, className, style }: RoleGateProps) {
   const { allowed, required } = usePermission(capability);
   const t = useTranslations('common');
+  const tGuest = useTranslations('guest');
+  const { ready, signedIn } = useSampleWorkspace();
   if (allowed) return <>{children}</>;
+
+  // A guest has no role to be missing — the fix is an account, not a promotion.
+  // Checked before the role hint below so the two never contradict each other.
+  if (ready && !signedIn) {
+    return (
+      <GuestGateNotice reason={tGuest('gate.reason.account')} variant={variant} silent={silent} className={className} style={style}>
+        {children}
+      </GuestGateNotice>
+    );
+  }
 
   // Localized via an ICU select on the role key rather than interpolating the
   // English ROLE_LABEL — "Requires {label} role" is not a sentence shape that

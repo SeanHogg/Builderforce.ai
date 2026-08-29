@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { llmApi, dashboardApi, type LlmUsageStats, type LlmModelStatus, type LlmHealthResponse, type DashboardUsage, type UsageByKind } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
+import { faultMessage } from '@/lib/apiClient';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -47,7 +48,7 @@ export function LlmUsageContent() {
     llmApi
       .usage()
       .then(setUsage)
-      .catch((e: Error) => setErrorUsage(e.message))
+      .catch((e: unknown) => setErrorUsage(faultMessage(e)))
       .finally(() => setLoadingUsage(false));
 
     // Cloud-vs-on-prem-vs-web breakdown with estimated cost (manager surface).
@@ -56,7 +57,7 @@ export function LlmUsageContent() {
     llmApi
       .health()
       .then(setHealth)
-      .catch((e: Error) => setErrorHealth(e.message))
+      .catch((e: unknown) => setErrorHealth(faultMessage(e)))
       .finally(() => setLoadingHealth(false));
 
     llmApi

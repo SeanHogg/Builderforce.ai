@@ -11,6 +11,7 @@ import { assigneeSelectValue } from '@/lib/taskAssignee';
 import { EngagementSection } from './EngagementSection';
 import { fmtHrs, fmtScore, scoreColor, MEMBER_KIND_LABEL } from './workforceFormat';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
+import { faultMessage } from '@/lib/apiClient';
 
 const DISCIPLINE_OPTIONS = ['engineering', 'product', 'design', 'qa', 'devops', 'data', 'other'] as const;
 
@@ -78,7 +79,7 @@ export function WorkforceMetricsContent() {
   useEffect(() => {
     membersApi.metrics(days, discipline || undefined, currentProjectId)
       .then((r) => { setMembers(r.members); setByDiscipline(r.byDiscipline); })
-      .catch((e: Error) => setError(e.message));
+      .catch((e: unknown) => setError(faultMessage(e)));
     membersApi.dora(Math.max(days, 30), currentProjectId).then(setDora).catch(() => { /* optional */ });
   }, [days, discipline, reloadKey, currentProjectId]);
 

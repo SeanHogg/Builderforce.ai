@@ -35,6 +35,7 @@ import {
   statusColorStyle,
 } from '../knowledgeStyles';
 import { useFormat } from "@/i18n/useFormat";
+import { faultMessage } from '@/lib/apiClient';
 
 const DOC_TYPES: DocType[] = ['sop', 'process', 'doc', 'postmortem', 'known_error'];
 
@@ -105,7 +106,7 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
         setTags(d.tags);
         setMode(d.canEdit ? 'edit' : 'preview');
       })
-      .catch((e: Error) => setError(e.message));
+      .catch((e: unknown) => setError(faultMessage(e)));
   }, [docId]);
 
   useEffect(() => {

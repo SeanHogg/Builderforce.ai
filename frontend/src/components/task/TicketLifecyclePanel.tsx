@@ -18,6 +18,7 @@ import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
 import { formatDuration } from '@/lib/duration';
 import { dominantLane, laneOccupancy } from '@/lib/laneOccupancy';
 import { LifecycleSwimlane } from '@/components/charts/LifecycleSwimlane';
+import { faultMessage } from '@/lib/apiClient';
 
 /**
  * TicketLifecyclePanel — the per-ticket AUTONOMY PROOF.
@@ -142,7 +143,7 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
     setError(null);
     tasksApi.lifecycle(taskId)
       .then((r) => setData(r))
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, [taskId]);
 

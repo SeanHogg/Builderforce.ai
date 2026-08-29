@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { usageApi, type UsageSnapshot } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
+import { faultMessage } from '@/lib/apiClient';
 
 interface AgentHostUsageContentProps {
   agentHostId: number;
@@ -50,7 +51,7 @@ export function AgentHostUsageContent({ agentHostId }: AgentHostUsageContentProp
     usageApi
       .list(agentHostId)
       .then(setSnapshots)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, [agentHostId]);
 

@@ -19,6 +19,7 @@ import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import { WhyChainChart } from '@/components/charts/WhyChainChart';
 import { incidentsApi, type PostmortemWhy } from '@/lib/builderforceApi';
+import { faultMessage } from '@/lib/apiClient';
 
 type T = ReturnType<typeof useTranslations>;
 
@@ -61,7 +62,7 @@ export function WhyLadderSection({
   const load = useCallback(() => {
     incidentsApi.whys(incidentId)
       .then((rows) => { setSaved(rows); setDraft(null); })
-      .catch((e: Error) => setError(e.message));
+      .catch((e: unknown) => setError(faultMessage(e)));
   }, [incidentId]);
   useEffect(() => { load(); }, [load]);
 

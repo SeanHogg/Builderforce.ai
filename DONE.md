@@ -1,3 +1,33 @@
+## ✅ RESOLVED 2026-08-29 — Anonymous-401 leaked raw error text instead of the honest empty state, on 30 surfaces
+
+A signed-out visitor on `/knowledge` saw `Missing or malformed Authorization header` rendered as
+if it were a document row, above "No documents yet." — the exact failure mode `apiClient.ts` and
+`guestFixtureRegistry.ts` were written to prevent (a read with no fixture 401s anonymously and
+should fall through to the surface's own empty state via `faultMessage`/`isSignedOutFailure`), but
+`KnowledgeClient.tsx`'s `Library` component never adopted the primitive — it stored `e.message`
+straight into `error` state and rendered it unconditionally.
+
+**Scope.** Grepped the exact anti-pattern (`.catch((e: Error) => setXxx(e.message))`) across the
+whole frontend: 45 files, 56 occurrences. 15 were under `/settings`, `/security`, `/billing` or
+`CreationCanvas` — operator-only or explicitly out of scope, and unreachable by a guest at all
+(`isOperatorOnlyRoute` keeps their client components from ever mounting for a signed-out visitor,
+so the anonymous-401 branch is dead code there). The other 30 files (38 occurrences) are all on
+guest-reachable app routes — Knowledge, Prompts, Tools, Facts, Talent, Incidents, RFPs, Workflows,
+Chats, Contributors, Workforce, Agent Host, marketplace publish-gig, LLM usage — and all got the
+same fix: `.catch((e: unknown) => setError(faultMessage(e)))`, importing `faultMessage` from
+`@/lib/apiClient`. `faultMessage` returns `null` for a signed-out rejection, which every one of
+these call sites' existing `{error && <div>...}` already renders as nothing — so the fix is a
+mechanical swap, not a UI rewrite, and it makes their existing (already-correct) empty states
+reachable instead of shadowed by the error banner.
+
+**Verification.** `npm run type-check` (tsc + tsgo via the frontend guard manifest) — 2/2 clean.
+Grepped for the anti-pattern and for duplicate imports afterward — zero remaining, zero dupes.
+
+**Left open, logged separately below:** `RoleGate` shows a signed-out visitor "Requires Developer
+role" on Knowledge's "+ New document" (and every other RoleGate-protected action reachable by a
+guest) rather than routing them to `SessionGate`'s create-account CTA — a real but pre-existing gap
+distinct from the one this pass closed, needing a product decision on how the two gates compose.
+
 ## ✅ RESOLVED 2026-08-26 — Guest fixture for the dashboard's Ideas tab (founder's journey)
 
 The gap left by the founder's-journey pass (same day) is closed: a signed-out visitor now sees a

@@ -4,6 +4,7 @@ import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState } from 'react';
 import { membersApi, type MemberEngagement, type EngagementLevel } from '@/lib/builderforceApi';
 import { ENGAGEMENT_LEVEL_COLOR } from './workforceFormat';
+import { faultMessage } from '@/lib/apiClient';
 
 /**
  * Unified engagement — one score per human member that folds EVERY signal we
@@ -44,7 +45,7 @@ export function EngagementSection({ days }: { days: number }) {
   useEffect(() => {
     setMembers(null);
     setError(null);
-    membersApi.engagement(Math.max(days, 30)).then((r) => setMembers(r.members)).catch((e: Error) => setError(e.message));
+    membersApi.engagement(Math.max(days, 30)).then((r) => setMembers(r.members)).catch((e: unknown) => setError(faultMessage(e)));
   }, [days]);
 
   return (

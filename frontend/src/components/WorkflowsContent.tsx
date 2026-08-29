@@ -19,6 +19,7 @@ import { ViewToggle, type ViewMode } from './ViewToggle';
 import { tableWrapStyle, tableStyle } from './dataTableStyles';
 import { cardStyle, subtleBtn, StatusPill } from './workflowRunUi';
 import { useFormat } from "@/i18n/useFormat";
+import { faultMessage } from '@/lib/apiClient';
 
 interface WorkflowsContentProps {
   projectId?: number | null;
@@ -183,7 +184,7 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
     workflowDefinitions
       .list()
       .then(setDefs)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, []);
 

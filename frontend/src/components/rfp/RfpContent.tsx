@@ -12,6 +12,7 @@ import { BrandPaletteEditor } from './BrandPaletteEditor';
 import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
 import { useFormat } from "@/i18n/useFormat";
+import { faultMessage } from '@/lib/apiClient';
 
 /**
  * RfpContent — the RFP/RFQ Response surface, rendered as a tab UNDER Projects
@@ -88,7 +89,7 @@ export default function RfpContent() {
     setError(null);
     rfpApi.list()
       .then((r) => setRows(r.requests))
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, []);
 

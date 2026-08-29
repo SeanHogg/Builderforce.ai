@@ -27450,7 +27450,8 @@
         "publish": "Inicia sesión para publicar esto.",
         "invite": "Inicia sesión para invitar a alguien.",
         "pay": "Inicia sesión para completar un pago.",
-        "save": "Inicia sesión para guardar este trabajo."
+        "save": "Inicia sesión para guardar este trabajo.",
+        "account": "Crea una cuenta para desbloquear esto."
       }
     }
   },

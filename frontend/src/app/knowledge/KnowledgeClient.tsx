@@ -10,6 +10,7 @@ import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { GaugeChart } from '@/components/charts/GaugeChart';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { colorAt } from '@/components/charts/chartColors';
+import { faultMessage } from '@/lib/apiClient';
 import {
   knowledgeApi,
   type KnowledgeDoc,
@@ -205,7 +206,7 @@ function Library({ projectId, t }: { projectId: number | null; t: ReturnType<typ
     knowledgeApi
       .list({ type: typeFilter || undefined, project: projectId, tag: tagFilter || undefined, q: search || undefined })
       .then(setDocs)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoaded(true));
   }, [typeFilter, projectId, tagFilter, search]);
 

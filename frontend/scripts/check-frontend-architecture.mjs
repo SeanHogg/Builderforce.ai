@@ -30,6 +30,15 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   929 → 930 (`useClientFiles`, 2026-08-29) — `components/guest/GuestGateNotice.tsx`,
+ *   extracted from `SessionGate.tsx` so `RoleGate` can show the SAME
+ *   "create an account" CTA a signed-out guest missing a capability used to get
+ *   a misleading "Requires <Role> role" hint instead of. Genuinely client-only —
+ *   reads `usePathname()` and renders interactive CTA links — and both
+ *   `SessionGate` and `RoleGate` now delegate their signed-out rendering to it
+ *   rather than each keeping its own copy, which is why the count rises by
+ *   exactly one component for two call sites gaining the correct behavior.
+ *
  *   922 → 929 (`useClientFiles`, 2026-08-26) — the dashboard's founder's-journey
  *   IA rework: `JourneyStrip.tsx`/`ActRail.tsx` (the Idea/Make/Run/Measure strip
  *   and the Read/Prove/Build loop, `/dashboard`), three new tab bodies

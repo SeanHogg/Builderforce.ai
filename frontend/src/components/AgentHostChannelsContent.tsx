@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { channelsApi, type AgentHostChannel, type ChannelPlatform } from '@/lib/builderforceApi';
+import { faultMessage } from '@/lib/apiClient';
 
 /**
  * Where an agent host speaks — the panel over `agent_host_channels`.
@@ -78,7 +79,7 @@ export function AgentHostChannelsContent({ agentHostId }: AgentHostChannelsConte
     channelsApi
       .list(agentHostId)
       .then(setChannels)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, [agentHostId]);
 

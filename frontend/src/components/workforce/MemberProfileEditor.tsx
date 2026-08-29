@@ -9,6 +9,7 @@ import { MemberTimeChart } from './MemberTimeChart';
 import { taskStatusBadgeClass } from '@/lib/taskStatus';
 import { useTaskStatusLabel } from '@/lib/taskStatusLabel';
 import { useFormat } from "@/i18n/useFormat";
+import { faultMessage } from '@/lib/apiClient';
 
 export interface MemberProfileTask {
   id: number;
@@ -76,7 +77,7 @@ export function MemberProfileEditor({ kind, refId, name, tasks, onClose, onSaved
           setTaskTypesText(tagsToText(r.profile.preferredTaskTypes));
         }
       })
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, [kind, refId]);
 

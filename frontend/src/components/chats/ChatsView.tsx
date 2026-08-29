@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { chatSessionsApi, type ChatSession, type ChatMessage } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
+import { faultMessage } from '@/lib/apiClient';
 
 type SessionWithName = ChatSession & { agentHostName?: string };
 
@@ -32,7 +33,7 @@ export function ChatsView() {
     setError(null);
     chatSessionsApi.listAll(100)
       .then(setSessions)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   };
 

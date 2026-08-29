@@ -5,6 +5,7 @@ import { Select } from '@/components/Select';
 import { useState, useEffect } from 'react';
 import { chatSessionsApi, agentHosts, dispatchApi, type ChatSession, type ChatMessage, type AgentHost } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
+import { faultMessage } from '@/lib/apiClient';
 
 interface AgentHostSessionsContentProps {
   agentHostId: number;
@@ -41,7 +42,7 @@ export function AgentHostSessionsContent({ agentHostId }: AgentHostSessionsConte
     chatSessionsApi
       .list(agentHostId)
       .then(setSessions)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, [agentHostId]);
 

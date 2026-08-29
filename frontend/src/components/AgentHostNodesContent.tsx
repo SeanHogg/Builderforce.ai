@@ -5,6 +5,7 @@ import { agentHostNodesApi, type AgentHostNode } from '@/lib/builderforceApi';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useFormat } from "@/i18n/useFormat";
+import { faultMessage } from '@/lib/apiClient';
 
 interface AgentHostNodesContentProps {
   agentHostId: number;
@@ -33,7 +34,7 @@ export function AgentHostNodesContent({ agentHostId }: AgentHostNodesContentProp
     agentHostNodesApi
       .list(agentHostId)
       .then(setNodes)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   };
 

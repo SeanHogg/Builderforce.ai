@@ -7,6 +7,7 @@ import type { TenantMember } from '@/lib/auth';
 import { contributorsApi, type ContributorRow } from '@/lib/builderforceApi';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { ContributorConsolidation } from './ContributorConsolidation';
+import { faultMessage } from '@/lib/apiClient';
 
 /**
  * Consolidate the people selected (by checkbox) in the Workforce directory list.
@@ -54,7 +55,7 @@ export function MemberConsolidationPanel({
     setError(null);
     contributorsApi.list()
       .then((r) => setContributors(r.contributors.filter((c) => c.kind === 'human')))
-      .catch((e: Error) => setError(e.message));
+      .catch((e: unknown) => setError(faultMessage(e)));
   }, []);
 
   useEffect(() => { if (open) { load(); setResult(null); } }, [open, load, reloadKey]);

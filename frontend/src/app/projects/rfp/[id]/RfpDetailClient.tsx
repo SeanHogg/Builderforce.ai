@@ -11,6 +11,7 @@ import {
   type RfpRegisterEntry, type RfpRegisterRollup, type RfpDeepFreshness,
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
+import { faultMessage } from '@/lib/apiClient';
 
 /**
  * RfpDetailClient — the response workspace for one RFP request. Generates a proposal
@@ -65,7 +66,7 @@ export default function RfpDetailClient() {
     setError(null);
     rfpApi.getRequest(id)
       .then((r) => { setRequest(r.request); setResponses(r.responses); })
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, [id]);
 

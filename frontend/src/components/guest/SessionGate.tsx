@@ -29,12 +29,8 @@
 
 import React from 'react';
 import { useTranslations } from 'next-intl';
-import { usePathname } from 'next/navigation';
-import { Icon } from '@/components/ui/Icon';
-import { ButtonLink } from '@/components/ui';
-import { GateHint } from '@/components/ui/GateHint';
-import { signInHref } from '@/lib/auth';
 import { useSampleWorkspace } from '@/domains/guest/presentation/useSampleWorkspace';
+import { GuestGateNotice } from '@/components/guest/GuestGateNotice';
 
 /**
  * What the visitor was trying to do. A closed union rather than free text: the
@@ -75,7 +71,6 @@ export interface SessionGateProps {
 export function SessionGate({ action, children, variant = 'inline', className, style }: SessionGateProps) {
   const { ready, signedIn } = useSampleWorkspace();
   const t = useTranslations('guest');
-  const pathname = usePathname() || '/';
 
   // `signedIn`, NOT `isSample`. The two are different questions and only one of
   // them is this component's: a guest on a local-first canvas is looking at
@@ -89,45 +84,9 @@ export function SessionGate({ action, children, variant = 'inline', className, s
   // button, and every one of these actions is refused server-side regardless.
   if (!ready || signedIn) return <>{children}</>;
 
-  const reason = t(`gate.reason.${action}`);
-
-  if (variant === 'block') {
-    return (
-      <div className={className} style={{ position: 'relative', ...style }} aria-disabled title={reason}>
-        <div style={{ opacity: 0.45, pointerEvents: 'none', filter: 'grayscale(0.4)', userSelect: 'none' }}>
-          {children}
-        </div>
-        <div style={{
-          position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', gap: 10, padding: 16, textAlign: 'center',
-        }}>
-          <GateHint>{reason}</GateHint>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <ButtonLink href={`/register?next=${encodeURIComponent(pathname)}`} variant="primary" size="sm">
-              {t('gate.create')}
-            </ButtonLink>
-            <ButtonLink href={signInHref(pathname)} variant="secondary" size="sm">
-              {t('gate.signIn')}
-            </ButtonLink>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <span
-      className={className}
-      title={reason}
-      aria-disabled
-      onClickCapture={(e) => { e.preventDefault(); e.stopPropagation(); }}
-      style={{
-        position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 4,
-        cursor: 'not-allowed', opacity: 0.55, ...style,
-      }}
-    >
+    <GuestGateNotice reason={t(`gate.reason.${action}`)} variant={variant} className={className} style={style}>
       {children}
-      <Icon source="lock" size={12} aria-hidden />
-    </span>
+    </GuestGateNotice>
   );
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { analyticsApi, type TenantActivityRollup } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
+import { faultMessage } from '@/lib/apiClient';
 
 /**
  * Owner-facing cross-project activity rollup — the whole tenant's activity from
@@ -49,7 +50,7 @@ export function TenantActivityPanel() {
   useEffect(() => {
     setData(null);
     setError(null);
-    analyticsApi.tenantRollup(days).then(setData).catch((e: Error) => setError(e.message));
+    analyticsApi.tenantRollup(days).then(setData).catch((e: unknown) => setError(faultMessage(e)));
   }, [days]);
 
   return (

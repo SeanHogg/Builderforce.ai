@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { agentHostProjectsApi, type AgentHostProject } from '@/lib/builderforceApi';
 import { fetchProjects } from '@/lib/api';
 import Link from 'next/link';
+import { faultMessage } from '@/lib/apiClient';
 
 interface AgentHostProjectsContentProps {
   agentHostId: number;
@@ -40,7 +41,7 @@ export function AgentHostProjectsContent({ agentHostId }: AgentHostProjectsConte
     agentHostProjectsApi
       .list(agentHostId)
       .then(setAssociations)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, [agentHostId]);
 

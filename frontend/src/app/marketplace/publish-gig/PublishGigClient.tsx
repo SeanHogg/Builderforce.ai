@@ -51,6 +51,7 @@ import {
   experienceKey, projectLengthKey, specialtyKey,
 } from '@/components/talent/jobVocabulary';
 import { ScreeningQuestionsEditor, type ScreeningQuestionDraft } from '@/components/talent/ScreeningQuestionsEditor';
+import { faultMessage } from '@/lib/apiClient';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -172,7 +173,7 @@ export default function PublishGigClient() {
         setProjects(list);
         setProjectId((current) => current ?? (list[0] ? Number(list[0].id) : null));
       })
-      .catch((e: Error) => setError(e.message));
+      .catch((e: unknown) => setError(faultMessage(e)));
   }, []);
 
   const loadTasks = useCallback(async () => {

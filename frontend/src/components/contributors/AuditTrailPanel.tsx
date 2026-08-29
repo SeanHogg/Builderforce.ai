@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { activityApi, type ActivityActorType, type ActivityLogEvent } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
+import { faultMessage } from '@/lib/apiClient';
 
 /**
  * Unified activity / audit trail — the tenant-wide, append-only stream of "who did
@@ -128,7 +129,7 @@ export function AuditTrailPanel() {
         setEvents((prev) => (reset ? page.events : [...prev, ...page.events]));
         setCursor(page.nextCursor);
       })
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => { setLoading(false); setLoadingMore(false); });
   }, [actorType, cursor]);
 
@@ -137,7 +138,7 @@ export function AuditTrailPanel() {
     setLoading(true); setError(null);
     activityApi.log({ actorType: actorType === 'all' ? undefined : actorType, limit: 40 })
       .then((page) => { setEvents(page.events); setCursor(page.nextCursor); })
-      .catch((e: Error) => setError(e.message))
+      .catch((e: unknown) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, [actorType]);
 
