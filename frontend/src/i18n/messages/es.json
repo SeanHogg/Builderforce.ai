@@ -743,7 +743,12 @@
       "investorList": "Inversores",
       "dataRoom": "Sala de datos",
       "diligence": "Diligencia",
-      "pack": "Dosier"
+      "pack": "Dosier",
+      "mailboxes": "Buzones",
+      "audiences": "Audiencias",
+      "senders": "Direcciones de envío",
+      "brand": "Activos de marca",
+      "campaigns": "Campañas"
     },
     "primaryAria": "Principal",
     "destination": {

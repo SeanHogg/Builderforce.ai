@@ -743,7 +743,12 @@
       "investorList": "投资人",
       "dataRoom": "数据室",
       "diligence": "尽职调查",
-      "pack": "融资材料"
+      "pack": "融资材料",
+      "mailboxes": "邮箱",
+      "audiences": "受众",
+      "senders": "发件地址",
+      "brand": "品牌素材",
+      "campaigns": "营销活动"
     },
     "primaryAria": "主导航",
     "destination": {

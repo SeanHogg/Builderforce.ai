@@ -241,6 +241,15 @@ export const NAV_GROUPS: NavGroup[] = [
     id: 'growth', labelKey: 'group.growth', icon: '📣', href: '/growth',
     seat: 'CMO', stage: 'run',
     match: ['/growth'],
+    tabKind: 'query', basePath: '/growth',
+    tabs: [
+      { id: '', labelKey: 'tab.mailboxes', icon: '📥' },
+      { id: 'audiences', labelKey: 'tab.audiences', icon: '👥' },
+      { id: 'senders', labelKey: 'tab.senders', icon: '📤' },
+      { id: 'brand', labelKey: 'tab.brand', icon: '🎨' },
+      { id: 'templates', labelKey: 'tab.templates', icon: '🗂' },
+      { id: 'campaigns', labelKey: 'tab.campaigns', icon: '📣' },
+    ],
   },
   {
     // Messaging, whichever wire it arrives on. Mail is the default tab; Phone is

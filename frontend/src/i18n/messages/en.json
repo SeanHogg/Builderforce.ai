@@ -743,7 +743,12 @@
       "investorList": "Investors",
       "dataRoom": "Data room",
       "diligence": "Diligence",
-      "pack": "Pack"
+      "pack": "Pack",
+      "mailboxes": "Mailboxes",
+      "audiences": "Audiences",
+      "senders": "From addresses",
+      "brand": "Brand assets",
+      "campaigns": "Campaigns"
     },
     "primaryAria": "Primary",
     "destination": {
