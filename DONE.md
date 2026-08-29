@@ -25943,3 +25943,48 @@ underspecified step becomes an agent step with an empty task, which `compileBoar
 unrelated `@/components/learning/LearningView` error from another session's in-flight work).
 `vitest run src/domains/workflow src/components/creation-canvas/creationObjectRegistry.test.ts` and
 `api`'s `src/application/workflow src/domain` pass. `npm run check` guards pass.
+
+## ✅ RESOLVED 2026-08-29 — Frontend architecture ratchet `useClientFiles`: the "needs git blame" claim was wrong, and the real fix needed none
+
+**Was (a bad Gap Register entry):** `check-frontend-architecture.mjs`'s `'use client'` file-count
+ratchet was red — live **937** vs. baseline **930** — and `printDelta` (which diffs the live tree
+against `.frontend-architecture-tally.json`) showed 175+ files newly carrying the directive and 47+
+that no longer did. That noisy, roughly-cancelling diff was read as evidence of unexplained directive
+drift across unrelated files, blocked on `git log`/`blame` per file (unavailable — this checkout is
+not a git repository), needing someone to tell a legitimate new client boundary apart from a redundant
+directive that should be removed per the "no `'use client'` on a leaf already under a client boundary"
+convention `components/investor/CompaniesView.tsx`'s own header states.
+
+**Why that was wrong:** the premise — that the diff needed fresh investigation — was false. The sidecar
+tally the diff was computed against was stale from a run recorded near **799** files, which predates
+roughly twenty already-written entries in `check-frontend-architecture.mjs`'s own changelog (798 → 930).
+Diffing today's tree against a two-week-stale snapshot doesn't surface new drift; it replays that
+entire changelog as one undifferentiated add/remove list. Nearly every file named in the "added" list
+(`app/career/CareerAiClient.tsx`, `app/references/ReferencesClient.tsx`,
+`app/lti/launch/LtiLaunchClient.tsx`, `app/workforce/WorkforceTabs.tsx`,
+`app/insights/finance/FinanceInsightsInner.tsx`, …) is already individually argued for by name in an
+existing dated entry there. This checkout having no git history was never the blocker the entry claimed
+— the guard's own changelog already has this exact scenario twice ("913 → 918", "912 → 913") and
+resolves it as a plain RECONCILIATION: update the baseline to what the live grep reads, write one prose
+entry, done. The file's own words: "re-deriving N individual justifications for files this pass did not
+touch would be inventing reasons nobody here argued for."
+
+**Fix:** confirmed this was that exact shape, not a regression. Spot-checked the still-unaccounted-for
+files by PATTERN (the ones not individually named anywhere in the changelog, since many legitimate
+files carry their reason in their own header per this codebase's stated convention rather than in the
+central script — `points/*`, `growth/*`, `creation-canvas/ads/*`, `board/config/*` batches, and `lib/`/
+`hooks/` files named `use*`) rather than by git-blaming each one — none showed the "directive marks
+nothing because the sole importer is already a client boundary" shape the guard's real tightening
+entries (e.g. "802 → 801") warn about; every one checked reads a hook, a browser API, or is built to
+mount standalone. Raised `scripts/.frontend-architecture-baseline.json`'s `useClientFiles` to **937**
+with a dated changelog entry recording the reconciliation and its reasoning (a concurrent session landed
+in the same window with the specific Growth/Campaign Studio surface entry — `GrowthClient.tsx` + six
+section tabs + `CampaignComposer.tsx` — accounting for part of the same delta by name, which both
+corroborates the reconciliation and is the more specific of the two entries for that slice). Re-ran the
+guard: green at 937, and the pass rewrote `.frontend-architecture-tally.json` to the current 937-file
+set, which is what fixes `printDelta`'s noise for the NEXT run — the actual root cause was a tally that
+never got refreshed, not a set of files nobody could explain.
+
+Unblocks: `check:architecture` gating real regressions again, and removes a Gap Register entry that
+was pointing the next reader at a dead end (git archaeology in a checkout with no git history) instead
+of the pattern this exact file already documents for exactly this situation.

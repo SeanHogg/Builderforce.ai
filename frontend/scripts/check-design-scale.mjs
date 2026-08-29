@@ -173,8 +173,15 @@ const BASELINE = {
    * `--font-size-small`, the sub-12px captions and uppercase status pills
    * (11.5 / 11 / 10.5) onto `--font-size-eyebrow`, and the two panel headings
    * (15 / 14) onto `--font-size-card-title`.
+   *
+   * 3,603 → 3,598 (2026-08-29): the Growth/Campaign Studio surface — nine
+   * literals across its six section tabs and `growthStyles.tsx` (a mix of new
+   * work and this same pass converting one, `ProjectsContent.tsx`'s new
+   * archive-toggle label, straight to `--font-size-small` instead of adding a
+   * tenth) — against fourteen the surface's own `GrowthClient.tsx` shell never
+   * had, a net SHRINK. The floor follows it down rather than sitting slack.
    */
-  offScaleFontSizes: 3603,
+  offScaleFontSizes: 3598,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

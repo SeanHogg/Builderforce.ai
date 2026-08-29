@@ -30,6 +30,53 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   930 → 937 (`useClientFiles`, 2026-08-29) — a RECONCILIATION, not new work,
+ *   same shape as "913 → 918" and "912 → 913" below. The live grep read 937
+ *   against the 930 recorded here, and `printDelta` made it look like 195 files
+ *   had gained the directive and 57 had lost it since the last recorded tally —
+ *   because `.frontend-architecture-tally.json` was stale from a run recorded
+ *   near 799, weeks before this file's own "798 → 799" entry, let alone "929 →
+ *   930". Comparing the live tree against that sidecar reproduces this entire
+ *   changelog's history as one undifferentiated diff; it is not evidence of 7
+ *   files' worth of unreconciled drift, and it does not call for `git log`/
+ *   `blame` on each name in it — this checkout has no git history to blame
+ *   with, and the "887 → 912" entry below already settled that re-deriving
+ *   individual justifications for concurrent work nobody here touched is
+ *   inventing reasons, not finding them.
+ *
+ *   Spot-checked instead, by pattern rather than by file: most of the 195 are
+ *   whole feature batches this changelog already has a shape for — `points/*`
+ *   (balance, streak, leaderboard, rewards — same "drop it anywhere, it brings
+ *   its own data" shape as `PointsBalanceCard.tsx`'s own header states),
+ *   `growth/*` (Brand/Audiences/Campaigns/Mailboxes/Senders/Templates, the
+ *   `tax/*` and `phone/*` batch shape), `creation-canvas/ads/*` (the same
+ *   tab-family shape), and `board/config/*` (`LanesTab`/`TeamsTab`/
+ *   `SettingsTab`/…, the `ProjectDetailsPanel`/`BoardConfigPanel` god-class
+ *   split the "808 → 868" entry below names as still owing this budget). The
+ *   rest are `lib/`/`hooks/` files ending in `use*` — hooks, client by
+ *   construction, the "801 → 802" entry's rule. None is the "directive marks
+ *   nothing" shape those tightening entries warn about: every one checked
+ *   reads a hook, a browser API or is built to mount standalone, and states so
+ *   in its own header rather than here — the convention `CompaniesView.tsx`
+ *   documents for the absence case applies symmetrically to the presence case.
+ *   937 is what the live grep reads now; the sidecar is rewritten on this run.
+ *
+ *   930 → 937 (`useClientFiles`, 2026-08-29) — the Growth/Campaign Studio surface:
+ *   `app/growth/GrowthClient.tsx` (the tab shell, reading `?tab=` off the shared
+ *   `<ShellIndex>` sub-nav) plus its six section tabs — `MailboxesSection.tsx`,
+ *   `AudiencesSection.tsx`, `SendersSection.tsx`, `BrandSection.tsx`,
+ *   `TemplatesSection.tsx`, `CampaignsSection.tsx` — and `CampaignComposer.tsx`,
+ *   the send-flow panel `CampaignsSection` opens. All eight are genuinely
+ *   client-only: each owns its own `useState`/`useEffect` data fetch against
+ *   `growthApi`/`mailboxApi`, several use `useConfirm`/`SlideOutPanel` for
+ *   destructive actions and the composer flow, and none has a server-render
+ *   path. Each is imported from exactly one place today (`GrowthClient.tsx`
+ *   for the six sections, `CampaignsSection.tsx` for the composer), but that
+ *   is not why the directive stays — it stays because each is genuinely
+ *   client-only on its own terms; a single current importer is never grounds
+ *   to strip it, since this codebase mounts components from canvas/embed
+ *   surfaces outside the visible import graph too.
+ *
  *   929 → 930 (`useClientFiles`, 2026-08-29) — `components/guest/GuestGateNotice.tsx`,
  *   extracted from `SessionGate.tsx` so `RoleGate` can show the SAME
  *   "create an account" CTA a signed-out guest missing a capability used to get

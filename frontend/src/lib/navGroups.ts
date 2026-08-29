@@ -247,7 +247,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'audiences', labelKey: 'tab.audiences', icon: '👥' },
       { id: 'senders', labelKey: 'tab.senders', icon: '📤' },
       { id: 'brand', labelKey: 'tab.brand', icon: '🎨' },
-      { id: 'templates', labelKey: 'tab.templates', icon: '🗂' },
+      { id: 'templates', labelKey: 'tab.growthTemplates', icon: '🗂' },
       { id: 'campaigns', labelKey: 'tab.campaigns', icon: '📣' },
     ],
   },

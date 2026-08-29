@@ -371,7 +371,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
           this row only holds the controls, right-aligned. */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
             <input
               type="checkbox"
               checked={showArchived}
