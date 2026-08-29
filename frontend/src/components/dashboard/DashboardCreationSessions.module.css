@@ -30,10 +30,9 @@
 }
 
 .creationPaths {
-  display: grid;
-  grid-template-columns: minmax(0, 2.15fr) minmax(300px, .85fr);
+  display: flex;
+  flex-direction: column;
   gap: 16px;
-  align-items: stretch;
 }
 
 .creationPath {
@@ -42,6 +41,15 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
   background: color-mix(in srgb, var(--surface-raised) 82%, transparent);
+}
+
+/* "Create by type" (#1) is a fixed-size panel — its options scroll internally
+   instead of growing the page, since it now sits above "Use a guided template"
+   (#2) in a single narrow column rather than beside it. */
+.typePath {
+  display: flex;
+  flex-direction: column;
+  height: 360px;
 }
 
 .templatePath {
@@ -85,9 +93,12 @@
 }
 
 .typeGrid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 9px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 8px;
+  overflow-y: auto;
 }
 
 .typeCard,
@@ -98,11 +109,13 @@
 
 .typeCard {
   display: flex;
+  width: 100%;
   min-width: 0;
-  min-height: 142px;
-  padding: 13px;
-  flex-direction: column;
-  align-items: flex-start;
+  flex: 0 0 auto;
+  padding: 10px 12px;
+  flex-direction: row;
+  align-items: center;
+  gap: 11px;
   text-align: left;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
@@ -110,6 +123,21 @@
   color: var(--text-primary);
   cursor: pointer;
   transition: border-color 140ms ease, background 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+}
+
+.typeCard .cardCopy strong {
+  margin-top: 0;
+}
+
+.typeCard .cardCopy > span {
+  -webkit-line-clamp: 1;
+}
+
+.typeCard .cardAction {
+  width: auto;
+  margin-top: 0;
+  padding-top: 0;
+  flex-shrink: 0;
 }
 
 .typeIcon,
@@ -260,19 +288,7 @@
   cursor: not-allowed;
 }
 
-@media (max-width: 1100px) {
-  .creationPaths { grid-template-columns: 1fr; }
-  .templateGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-
 @media (max-width: 760px) {
   .launcherHeader h2 { font-size: 19px; }
   .creationPath { padding: 14px; }
-  .typeGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .templateGrid { grid-template-columns: 1fr; }
-}
-
-@media (max-width: 430px) {
-  .typeGrid { grid-template-columns: 1fr; }
-  .typeCard { min-height: 126px; }
 }

@@ -18894,7 +18894,6 @@
       "writeAction": "Pedir a Brain que escriba el curso",
       "rewriteAction": "Pedir a Brain que reescriba el curso"
     },
-    "sessionTitle": "Título de la sesión",
     "saved": "Sesión guardada",
     "activeCollaborators": "Colaboradores activos",
     "newSession": "Nueva sesión",
@@ -19399,7 +19398,6 @@
     "connectionKind": "Tipo de conexión",
     "viewOutcomeMetrics": "Ver métricas de resultados",
     "outcomeMetricsTitle": "Métricas de idea a entrega",
-    "titleSaveFailed": "No se pudo guardar el título",
     "closeInvitationPanel": "Cerrar el panel de invitaciones",
     "emailPlaceholder": "name@company.com",
     "invitationRole": "Rol de la invitación",
@@ -20910,6 +20908,8 @@
     "noticeStrokesErased": "Se borraron {count} trazo(s).",
     "gateQaTitle": "Crea una cuenta para ejecutar estas pruebas",
     "gateQaBody": "La biblioteca de QA, sus personas de acceso y sus ejecuciones programadas son recursos del espacio de trabajo. Cada caso de este lienzo ya incluye código Playwright ejecutable que puedes descargar y ejecutar en local ahora mismo.",
+    "gateRealizeTitle": "Crea una cuenta para ponerlo en marcha de verdad",
+    "gateRealizeBody": "Construirlo de verdad implica crear un proyecto, publicarlo y conectar los conectores de los que depende: son recursos del espacio de trabajo. El plan que ya está en este lienzo —su guía de configuración, los conectores y secretos necesarios— es real y tuyo de todos modos.",
     "noGeneratedSpec": "Este objeto aún no tiene código de prueba generado.",
     "people": {
       "empty": "Todavía no hay nada escrito en este {label}.",
@@ -24076,7 +24076,6 @@
     "deleteConfirmMessageLocal": "¿Eliminar «{title}»? Este borrador del navegador no se puede recuperar."
   },
   "canvasLibrary": {
-    "title": "Tus lienzos",
     "subtitle": "Todo lo que has creado y las formas de empezar algo nuevo.",
     "pendingTitle": "Pendientes de guardar",
     "renameSession": "Renombrar sesión",
@@ -24163,6 +24162,7 @@
   "sessions": {
     "newCanvas": "+ Nuevo lienzo",
     "active": "Activo",
+    "renameAria": "Cambiar el nombre de este lienzo",
     "recents": "Recientes",
     "untitled": "Lienzo sin título",
     "draft": "Borrador",

@@ -18894,7 +18894,6 @@
       "writeAction": "让 Brain 编写这门课程",
       "rewriteAction": "让 Brain 重写这门课程"
     },
-    "sessionTitle": "会话标题",
     "saved": "会话已保存",
     "activeCollaborators": "在线协作者",
     "newSession": "新建会话",
@@ -19399,7 +19398,6 @@
     "connectionKind": "连接类型",
     "viewOutcomeMetrics": "查看成果指标",
     "outcomeMetricsTitle": "从想法到交付的成果指标",
-    "titleSaveFailed": "标题保存失败",
     "closeInvitationPanel": "关闭邀请面板",
     "emailPlaceholder": "name@company.com",
     "invitationRole": "邀请角色",
@@ -20910,6 +20908,8 @@
     "noticeStrokesErased": "已擦除 {count} 笔。",
     "gateQaTitle": "创建账户即可运行这些测试",
     "gateQaBody": "QA 库、登录身份与定时运行均属于工作区资源。此画布上的每个用例都已包含可直接下载并在本地运行的 Playwright 源码。",
+    "gateRealizeTitle": "创建账户即可让它正式上线",
+    "gateRealizeBody": "真正构建它需要创建一个项目、发布它并连接它所依赖的连接器——这些都是工作区资源。此画布上已有的方案——其搭建指南、所需连接器与密钥——无论如何都是真实且属于你的。",
     "noGeneratedSpec": "该对象尚未生成测试源码。",
     "people": {
       "empty": "此{label}尚未填写任何内容。",
@@ -24076,7 +24076,6 @@
     "deleteConfirmMessageLocal": "删除“{title}”吗？此仅存于浏览器的草稿无法恢复。"
   },
   "canvasLibrary": {
-    "title": "您的画布",
     "subtitle": "您创建的全部内容，以及开始新作品的方式。",
     "pendingTitle": "等待保存",
     "renameSession": "重命名会话",
@@ -24163,6 +24162,7 @@
   "sessions": {
     "newCanvas": "+ 新建画布",
     "active": "进行中",
+    "renameAria": "重命名此画布",
     "recents": "最近",
     "untitled": "未命名画布",
     "draft": "草稿",

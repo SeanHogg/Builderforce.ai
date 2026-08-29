@@ -34,16 +34,14 @@ describe('the canvas chrome rule', () => {
   it('keeps every status slot and drops every control when folded', () => {
     // Expanded, everything is on screen — a collapse that changes nothing when off
     // would make the whole table unfalsifiable.
-    for (const slot of ['title', 'saveState', 'roster', 'surfaces', 'actions', 'handoff', 'surfaceControls', 'surfaceStatus', 'journeyChip'] as const) {
+    for (const slot of ['saveState', 'roster', 'surfaces', 'actions', 'handoff', 'surfaceControls', 'surfaceStatus'] as const) {
       expect(canvasChromeShows(slot, false)).toBe(true);
     }
 
     // What the canvas IS — kept.
-    expect(canvasChromeShows('title', true)).toBe(true);
     expect(canvasChromeShows('saveState', true)).toBe(true);
     expect(canvasChromeShows('roster', true)).toBe(true);
     expect(canvasChromeShows('surfaceStatus', true)).toBe(true);
-    expect(canvasChromeShows('journeyChip', true)).toBe(true);
 
     // What you DO to it — gone.
     expect(canvasChromeShows('surfaces', true)).toBe(false);
@@ -63,7 +61,7 @@ describe('the canvas chrome rule', () => {
    *  the bar — and so this list cannot drift from what `canvasChromeShows` returns. */
   it('lists exactly the slots that survive', () => {
     const survivors = canvasChromeStatusSlots();
-    expect([...survivors].sort()).toEqual(['journeyChip', 'roster', 'saveState', 'surfaceStatus', 'title']);
+    expect([...survivors].sort()).toEqual(['roster', 'saveState', 'surfaceStatus']);
     for (const slot of survivors) expect(canvasChromeShows(slot, true)).toBe(true);
   });
   /**
@@ -76,7 +74,7 @@ describe('the canvas chrome rule', () => {
   it('gives every slot exactly one floating region', () => {
     const placed = (['pill', 'chips', 'topRight', 'bar'] as const).flatMap((place) => canvasChromeSlotsIn(place));
     expect([...placed].sort()).toEqual(
-      ['actions', 'handoff', 'journeyChip', 'roster', 'saveState', 'surfaceControls', 'surfaceStatus', 'surfaces', 'title'].sort(),
+      ['actions', 'handoff', 'roster', 'saveState', 'surfaceControls', 'surfaceStatus', 'surfaces'].sort(),
     );
     // No slot in two regions.
     expect(new Set(placed).size).toBe(placed.length);
@@ -168,8 +166,8 @@ describe('the collapsed session bar', () => {
 
   /**
    * THE ONE THIS FILE EXISTS FOR. Folding the bar takes the surface switcher, Share and
-   * every session action, and leaves the title and the roster — the two things that say
-   * which canvas this is and who else is in it.
+   * every session action, and leaves the save state and the roster — the two things that
+   * say whether this canvas is safe and who else is in it.
    */
   it('gives up the controls and keeps who is here', () => {
     render(<CreationCanvas sessionId="chrome-collapse-test" persistence="local" />);
@@ -184,7 +182,7 @@ describe('the collapsed session bar', () => {
     expect(screen.queryByRole('button', { name: 'Invite' })).toBeNull();
 
     // …and the status survives. The roster is the reason the rule exists.
-    expect(screen.getByTestId('canvas-session-title')).toBeInTheDocument();
+    expect(screen.getByTestId('canvas-session-pill')).toBeInTheDocument();
     const roster = screen.getByLabelText('Active collaborators');
     expect(within(roster).getAllByRole('button').length).toBeGreaterThan(0);
     // The roster survives INSIDE the command bar — the element the collapse acts on —
@@ -218,7 +216,7 @@ describe('the collapsed session bar', () => {
     // asserted here because "I extracted the right subtree" is otherwise invisible until
     // someone opens the app and finds the top of the canvas empty.
     expect(screen.getByRole('group', { name: 'Canvas view' })).toBeInTheDocument();
-    expect(screen.getByTestId('canvas-session-title')).toBeInTheDocument();
+    expect(screen.getByTestId('canvas-session-pill')).toBeInTheDocument();
     // Drawn ONCE. A portal that left a copy behind would be the two bars again.
     expect(screen.getAllByTestId('canvas-handoff')).toHaveLength(1);
 

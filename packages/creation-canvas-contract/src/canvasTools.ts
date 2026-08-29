@@ -117,6 +117,11 @@ export const GUEST_SAFE_CANVAS_TOOLS = [
   // scored object on the board instead of an apology.
   'canvas_list_diagnostics',
   'canvas_add_diagnostic',
+  // The 8-target "Idea → Real" catalog (`GET /api/realizations/targets`) — static
+  // copy, no tenant. Guest-safe for the same reason `canvas_list_diagnostics` is:
+  // a visitor can browse what a phone line, a pilot or a smoke test actually
+  // build before `canvas_realize` ever asks for an account.
+  'canvas_list_realization_targets',
   // Returns a STATIC executive use-case contract; its tenant-evidence branch already
   // degrades to `saved_session_required` without a session, so it is safe unauthenticated.
   'canvas_prepare_executive_use_case',
@@ -242,6 +247,23 @@ export const GUEST_GATED_CANVAS_TOOLS = [
   // tools. Its description names only `canvas_set_data_use`, which is guest-safe — rule 2
   // holds.
   'canvas_promote_dataset_to_corpus',
+  // Turns an idea into one of the 8 tested "Idea → Real" proofs — a phone line, a
+  // pilot, a smoke test, a live system — through the exact pipeline `/realize`
+  // uses (`planRealization` + `realize()`), never an improvisation. Gated rather
+  // than absent for the reason this whole set exists, and on direct evidence:
+  // measured 2026-08-29, a signed-in board asked to "stand up a phone line" with
+  // no bridge into this pipeline got a legacy `workflow` object with zero
+  // authored steps (unrunnable) and a hand-typed Twilio guide with the wrong
+  // webhook URLs and no WEBHOOK_SHARED_SECRET — worse than absent, because it
+  // looked done. A guest asking the same thing must hear the true reason a LIVE
+  // proof needs an account, not be left to the same improvisation.
+  //
+  // What is real either way is the generated PLAN — the actual routes, runbook
+  // and required connectors/secrets `target.build()` produces — which carries no
+  // tenant credential and is guest-safe to author onto the board with
+  // `canvas_add_object`; only PERSISTING it as a live, running project
+  // (`POST /api/realizations` writes a tenant row) needs the account.
+  'canvas_realize',
   // ── Connected social accounts (`/api/social/*`) ──────────────────────────────
   // Gated rather than absent, for the reason this whole set exists, and on the
   // strongest evidence yet that the reason is real.
@@ -713,6 +735,17 @@ export const CANVAS_SOCIAL_ACCOUNT_GATE = `Connected social accounts need a free
  * row and the training run, and the board keeps every bit of preparation either way.
  */
 export const CANVAS_CORPUS_ACCOUNT_GATE = `Filing a training corpus needs a free Builderforce account: a corpus is a row under a project and a fine-tune runs on workspace compute, and this board has no workspace behind it. The account prompt is now open and the canvas is unchanged. Do BOTH of these in your reply: say in ONE sentence that saving the corpus and running the fine-tune needs a free account, and then point out what the user ALREADY has on this board — the dataset, its column classifications and its data-use policy are all authored and travel with the canvas, so promoting it is one click after signing up. Do NOT say that the product cannot train, fine-tune, or build adapters on their data, and do NOT describe this as a technical limitation: fine-tuning is a built-in capability and the only thing behind the account is where the corpus lives.`;
+
+/**
+ * Returned to the MODEL when `canvas_realize` is called on a canvas with no account.
+ *
+ * Written to the same rule as the QA and corpus gates: name the ONE real reason, say
+ * what the board still has, forbid the invented limitation. What is real here even for
+ * a guest is the generated PLAN itself — the same routes, runbook and required
+ * connectors/secrets an account holder gets — so the model is told to author THAT with
+ * `canvas_add_object` rather than a design-document approximation.
+ */
+export const CANVAS_REALIZE_ACCOUNT_GATE = `canvas_realize needs a free Builderforce account: turning an idea into a real, live proof means persisting a project, publishing it, and wiring the connectors and secrets it depends on, and this board has no workspace behind it. The account prompt is now open and the canvas is unchanged. Do BOTH of these in your reply: say in ONE sentence that going live needs a free account, and then author the complete plan right now with canvas_add_object — a document carrying the real setup guide, the required connectors and secrets, and the build tasks for the proof the user asked for — so signing up leaves nothing left to figure out. Do NOT say that the product cannot build a phone line, a pilot, a smoke test or a live system, and do NOT describe this as a technical limitation: the plan is real and tested, and the only thing behind the account is making it live.`;
 
 /**
  * The ONE tool that puts pixels of a LIVE, EXISTING page on the canvas.

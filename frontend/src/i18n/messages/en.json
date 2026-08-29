@@ -18894,7 +18894,6 @@
       "writeAction": "Ask Brain to write this course",
       "rewriteAction": "Ask Brain to rewrite this course"
     },
-    "sessionTitle": "Session title",
     "saved": "Session saved",
     "activeCollaborators": "Active collaborators",
     "newSession": "New session",
@@ -19399,7 +19398,6 @@
     "connectionKind": "Connection kind",
     "viewOutcomeMetrics": "View outcome metrics",
     "outcomeMetricsTitle": "Idea-to-delivery outcome metrics",
-    "titleSaveFailed": "Title save failed",
     "closeInvitationPanel": "Close invitation panel",
     "emailPlaceholder": "name@company.com",
     "invitationRole": "Invitation role",
@@ -20910,6 +20908,8 @@
     "noticeStrokesErased": "Erased {count} stroke(s).",
     "gateQaTitle": "Create an account to run these tests",
     "gateQaBody": "The QA library, its login personas and its scheduled runs are workspace resources. Every case on this board already carries runnable Playwright source you can download and run locally right now.",
+    "gateRealizeTitle": "Create an account to make this go live",
+    "gateRealizeBody": "Building it for real means creating a project, publishing it and wiring the connectors it depends on — workspace resources. The plan already on this board — its setup guide, required connectors and secrets — is real and yours either way.",
     "noGeneratedSpec": "This object has no generated test source yet.",
     "people": {
       "empty": "Nothing authored on this {label} yet.",
@@ -24076,7 +24076,6 @@
     "deleteConfirmMessageLocal": "Delete “{title}”? This browser-only draft cannot be recovered."
   },
   "canvasLibrary": {
-    "title": "Your canvases",
     "subtitle": "Everything you have created, and the ways to start something new.",
     "pendingTitle": "Waiting to be saved",
     "renameSession": "Rename session",
@@ -24163,6 +24162,7 @@
   "sessions": {
     "newCanvas": "+ New canvas",
     "active": "Active",
+    "renameAria": "Rename this canvas",
     "recents": "Recents",
     "untitled": "Untitled canvas",
     "draft": "Draft",

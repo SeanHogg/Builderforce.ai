@@ -29,7 +29,6 @@ describe('the floating command bar', () => {
     // The pieces the band used to hold are still here — sorted by what they SAY, into
     // the regions `canvasChrome.ts` gives them, rather than deleted with it.
     expect(screen.getByTestId('canvas-session-pill')).toBeInTheDocument();
-    expect(screen.getByTestId('canvas-session-title')).toBeInTheDocument();
     expect(within(screen.getByTestId('canvas-handoff')).getByRole('button', { name: 'Invite' })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Canvas view' })).toBeInTheDocument();
   });

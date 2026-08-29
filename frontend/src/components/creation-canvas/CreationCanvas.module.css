@@ -174,7 +174,7 @@
    There is no chrome band. The canvas takes the whole shell and every control floats
    over it in one of four regions, declared in `lib/canvasChrome.ts`:
 
-     .sessionPill    top left      what this canvas IS
+     .sessionPill    top left      is the work somewhere safe
      .surfaceChips   top centre    how it is being READ
      .topRightCard   top right     how work LEAVES it
      .commandBar     bottom centre what you DO to it
@@ -216,17 +216,8 @@
 .sessionPill, .surfaceChips, .topRightCard { min-height:var(--canvas-top-card-h); }
 
 .sessionPill { top:14px; left:calc(14px + var(--brain-dock-left, 0px)); gap:7px; padding:6px 10px 6px 8px; min-width:0; }
-/* The title and the state read as one phrase, so they stack rather than sitting side by
-   side — at 13px the connection light beside a 250px input pushed the pill past a third
-   of the window and started colliding with the surface chips. */
 .pillStatus { display:flex; align-items:center; gap:7px; min-width:0; }
 .pillStatus:empty { display:none; }
-.sessionPill input {
-  min-width:0; width:min(240px, 26vw); border:1px solid transparent; border-radius:var(--radius-md);
-  padding:4px 7px; background:transparent; color:var(--canvas-ink);
-  font-family:inherit; font-size:13px; font-weight:650;
-}
-.sessionPill input:hover, .sessionPill input:focus { border-color:var(--canvas-line); background:var(--canvas-panel); outline:none; }
 
 /* On the canvas, framing nothing. This is the piece the redesign is most often judged
    by: the old switcher sat inside a band that drew a hard line across the window under
@@ -236,16 +227,6 @@
    and the prompt dock already make, from the same two variables. */
 .surfaceChips {
   top:14px; padding:4px; gap:4px;
-  left:calc(50% + (var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)) / 2);
-  transform:translateX(-50%);
-}
-
-/* Its own row, directly beneath the surface switcher's — a STATUS chip has to
-   keep its own position rather than share `.surfaceChips`'s box, which is a
-   CONTROL row that folds away on collapse (see CreationCanvas.tsx's comment
-   at the journeyChip render site). */
-.journeyChipCard {
-  top:calc(14px + var(--canvas-top-card-h) + 8px); padding:4px; gap:4px;
   left:calc(50% + (var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)) / 2);
   transform:translateX(-50%);
 }
@@ -2995,7 +2976,6 @@
      editing this" is hardest to work out from the board itself. The bar scrolls
      sideways instead, which loses placement and never loses a control. */
   .sessionPill { left:8px; top:8px; right:auto; max-width:calc(100% - 16px); gap:4px; padding:4px 7px 4px 6px; }
-  .sessionPill input { width:min(150px, 40vw); font-size:12px; }
   .sessionPill .spark { display:none; }
   .topRightCard { top:8px; right:8px; gap:3px; padding:4px; }
   /* Same row, same rule: the phone keeps its 34px handoff buttons, so the row keeps the

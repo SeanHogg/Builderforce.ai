@@ -18894,7 +18894,6 @@
       "writeAction": "Demander à Brain d’écrire ce cours",
       "rewriteAction": "Demander à Brain de réécrire ce cours"
     },
-    "sessionTitle": "Titre de la Session",
     "saved": "Session enregistrée",
     "activeCollaborators": "Collaborateurs actifs",
     "newSession": "Nouvelle Session",
@@ -19399,7 +19398,6 @@
     "connectionKind": "Type de connexion",
     "viewOutcomeMetrics": "Voir les indicateurs de résultats",
     "outcomeMetricsTitle": "Indicateurs idée-à-livraison",
-    "titleSaveFailed": "Échec de l’enregistrement du titre",
     "closeInvitationPanel": "Fermer le panneau d’invitation",
     "emailPlaceholder": "name@company.com",
     "invitationRole": "Rôle de l’invitation",
@@ -20910,6 +20908,8 @@
     "noticeStrokesErased": "{count} trait(s) effacé(s).",
     "gateQaTitle": "Créez un compte pour exécuter ces tests",
     "gateQaBody": "La bibliothèque QA, ses profils de connexion et ses exécutions planifiées sont des ressources de l’espace de travail. Chaque cas de ce canevas contient déjà du code Playwright exécutable que vous pouvez télécharger et lancer en local dès maintenant.",
+    "gateRealizeTitle": "Créez un compte pour le mettre réellement en service",
+    "gateRealizeBody": "Le construire pour de vrai implique de créer un projet, de le publier et de connecter les intégrations dont il dépend — des ressources de l’espace de travail. Le plan déjà présent sur ce canevas — son guide de mise en service, les connecteurs et secrets requis — est réel et vous appartient de toute façon.",
     "noGeneratedSpec": "Cet objet n’a pas encore de code de test généré.",
     "people": {
       "empty": "Rien n’a encore été renseigné sur ce {label}.",
@@ -24076,7 +24076,6 @@
     "deleteConfirmMessageLocal": "Supprimer « {title} » ? Ce brouillon enregistré uniquement dans le navigateur ne peut pas être récupéré."
   },
   "canvasLibrary": {
-    "title": "Vos canevas",
     "subtitle": "Tout ce que vous avez créé, et les façons de commencer autre chose.",
     "pendingTitle": "En attente d’enregistrement",
     "renameSession": "Renommer la session",
@@ -24163,6 +24162,7 @@
   "sessions": {
     "newCanvas": "+ Nouveau tableau",
     "active": "En cours",
+    "renameAria": "Renommer ce tableau",
     "recents": "Récents",
     "untitled": "Tableau sans titre",
     "draft": "Brouillon",

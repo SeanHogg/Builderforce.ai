@@ -1,3 +1,42 @@
+## ✅ RESOLVED 2026-08-29 — Canvas Brain had no bridge to the "Idea → Real" realization pipeline, so "stand up a phone line" produced an unrunnable card
+
+Two diagnostics traced the same defect from opposite ends. A guest session showed a visitor
+clicking the landing page's "Phone line" example prompt (its text is a verbatim copy of
+`phoneLineTarget.summary`) and bouncing before the canvas mounted — that half was working as
+designed (`GuestPromptService.ts`'s fire-and-forget capture). But a second diagnostic, from a real
+signed-in owner asking Canvas chat the same thing, showed the actual bug: Brain built a legacy
+`workflow` canvas card (`authoredSteps: 0`, `runnable: no` — `creationCanvasDiagnostics.ts`'s own
+doc-comment says it was written to catch exactly this) and a hand-typed Twilio setup guide with the
+wrong webhook URL pattern and no `WEBHOOK_SHARED_SECRET`.
+
+**Root cause.** The platform already has a fully-built, tested implementation of this exact request
+— `phoneLineTarget` (`api/src/application/realization/targets/phoneLine.ts`), one of 8 "Idea → Real"
+proof forms, reachable via the dedicated `/api/realizations` pipeline (`planRealization` + `realize()`)
+that the `/realize` wizard uses. The Canvas Brain's tool catalog had no bridge into it at all — grepped
+the full `builtin_*` and `canvas_*` tool registries for `realiz*`: zero matches — so a chat request
+matching one of the 8 targets left Brain improvising with generic kinds instead.
+
+**Fix.** Added two client-side canvas tools (`frontend/src/components/creation-canvas/
+CreationCanvas.tsx`, backed by the new pure `frontend/src/lib/canvasRealize.ts`):
+- `canvas_list_realization_targets` — lists the 8 target catalog (`GET /api/realizations/targets`).
+  Guest-safe: static copy, no tenant.
+- `canvas_realize` — plans an idea against the real pipeline (`POST /api/realizations`, auto-ranking
+  via `POST /api/realizations/plan` when no `targetKey` is given) and writes the target's actual
+  generated charter/runbook onto the board as a `document` object — the real routes and setup steps,
+  not an approximation. Deliberately plans only; it never calls `.../build` — that step provisions a
+  real project and a board of tickets, and the API's own contract is that a human reviews the plan
+  first. Classified `GUEST_GATED` (not absent, not silently allowed): a guest gets the same real plan
+  content authored via `canvas_add_object` per `CANVAS_REALIZE_ACCOUNT_GATE`'s redirect, with going
+  live gated on a free account — same experience, account needed only for the full (live) feature.
+
+No backend changes — reused `realizationRoutes.ts` and `planRealization.ts` exactly as they already
+existed. Registered both tools in `packages/creation-canvas-contract/src/canvasTools.ts`'s guest
+classification lists, added `gateRealizeTitle`/`gateRealizeBody` to all five i18n catalogs.
+
+**Verification.** `check-canvas-tool-contract.mjs` (114→116 tools, classification-consistent), full
+frontend `tsc --noEmit` (0 errors), `check-i18n-keys.mjs` (clean), new `canvasRealize.test.ts` (3/3),
+and the existing `guestCanvasTools.test.ts` + `realization.test.ts` suites (85/85, unaffected).
+
 ## ✅ RESOLVED 2026-08-29 — Anonymous-401 leaked raw error text instead of the honest empty state, on 30 surfaces
 
 A signed-out visitor on `/knowledge` saw `Missing or malformed Authorization header` rendered as

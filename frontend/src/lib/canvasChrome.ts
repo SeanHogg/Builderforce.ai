@@ -33,8 +33,6 @@
  * here", whichever of the three roster shapes the session happens to be in.
  */
 export type CanvasChromeSlot =
-  /** The session name. Also the only thing that says WHICH canvas this is. */
-  | 'title'
   /** Saved / saving / "saved on this device", plus the realtime connection state. */
   | 'saveState'
   /** Who is in this session right now, and who is typing. */
@@ -55,12 +53,7 @@ export type CanvasChromeSlot =
   /** A runtime's own controls — an app surface's Run/Stop and its readings. */
   | 'surfaceControls'
   /** A runtime's own report — where it is running, and whether it is. */
-  | 'surfaceStatus'
-  /** Where this session sits on the founder's journey (Idea/Make/Run/Measure),
-   *  and the Read/Prove/Build act while still in Idea. A report, not a control —
-   *  it names a fact the same way `surfaceStatus` does, it just names a fact
-   *  about the FOUNDER rather than about a runtime. */
-  | 'journeyChip';
+  | 'surfaceStatus';
 
 export type CanvasChromeKind = 'status' | 'control';
 
@@ -81,7 +74,7 @@ export type CanvasChromeKind = 'status' | 'control';
  * same reason the collapse rule is here: one table answers both "is this on screen" and
  * "where", and a slot added later cannot be given a home by accident.
  *
- *   `pill`     — top left. What this canvas IS: its name, its state, who is on it.
+ *   `pill`     — top left. Is the work somewhere safe: saved, and its connection state.
  *   `chips`    — top centre. How it is being READ. Non-blocking, on the canvas.
  *   `topRight` — top right. How work LEAVES it: Share, Publish, and the overflow.
  *   `bar`      — bottom centre. What you DO to it, including whatever the surface
@@ -100,11 +93,9 @@ export type CanvasChromePlace = 'pill' | 'chips' | 'topRight' | 'bar';
  * the board lives, because that is a fact and not a control.
  */
 const SLOT_KIND: Readonly<Record<CanvasChromeSlot, CanvasChromeKind>> = {
-  title: 'status',
   saveState: 'status',
   roster: 'status',
   surfaceStatus: 'status',
-  journeyChip: 'status',
   surfaces: 'control',
   actions: 'control',
   handoff: 'control',
@@ -121,7 +112,6 @@ const SLOT_KIND: Readonly<Record<CanvasChromeSlot, CanvasChromeKind>> = {
  * collapse rule a statement about an element that never folds.
  */
 const SLOT_PLACE: Readonly<Record<CanvasChromeSlot, CanvasChromePlace>> = {
-  title: 'pill',
   saveState: 'pill',
   roster: 'bar',
   surfaces: 'chips',
@@ -129,7 +119,6 @@ const SLOT_PLACE: Readonly<Record<CanvasChromeSlot, CanvasChromePlace>> = {
   handoff: 'topRight',
   surfaceControls: 'bar',
   surfaceStatus: 'bar',
-  journeyChip: 'chips',
 };
 
 export function canvasChromeKind(slot: CanvasChromeSlot): CanvasChromeKind {

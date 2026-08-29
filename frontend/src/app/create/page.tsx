@@ -8,6 +8,7 @@ import { DashboardCreationLauncher, DashboardCreationSessions } from '@/componen
 import { PendingDraftsNotice } from '@/components/workspace/PendingDraftsNotice';
 import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 import { Button } from '@/components/ui';
+import styles from './CreateLibrary.module.css';
 
 export const runtime = 'edge';
 
@@ -46,9 +47,6 @@ export default function CanvasLibraryPage() {
   return (
     <main style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: 'clamp(16px, 3vw, 28px)', maxWidth: 1400, margin: '0 auto', width: '100%' }}>
       <header style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <h1 style={{ margin: 0, fontSize: 'clamp(1.4rem, 3vw, 1.9rem)', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-          {t('title')}
-        </h1>
         <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.95rem', maxWidth: '62ch' }}>
           {isAuthenticated ? t('subtitle') : t('signedOutSubtitle')}
         </p>
@@ -59,10 +57,14 @@ export default function CanvasLibraryPage() {
       <PendingDraftsNotice />
 
       {isAuthenticated ? (
-        <>
-          <DashboardCreationLauncher />
-          <DashboardCreationSessions />
-        </>
+        <div className={styles.layout}>
+          <div className={styles.creationsColumn}>
+            <DashboardCreationSessions />
+          </div>
+          <aside className={styles.launcherColumn}>
+            <DashboardCreationLauncher />
+          </aside>
+        </div>
       ) : (
         <div style={{ display: 'flex' }}>
           <Button variant="primary" loading={creating} onClick={newLocalCanvas}>

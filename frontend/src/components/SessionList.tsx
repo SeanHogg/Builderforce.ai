@@ -31,7 +31,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { creationSessionsApi, type CreationSessionSummary } from '@/lib/builderforceApi';
 import { fetchRecentCanvases, invalidateRecentCanvases, listPendingDrafts } from '@/lib/pendingWork';
-import type { LocalCreationEntry } from '@/domains/canvas/infrastructure/localCanvasStore';
+import { updateLocalCreationSession, type LocalCreationEntry } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 import { SplitButton } from '@/components/ui';
 import { menuItemStyle } from '@/components/workspace/MenuSurface';
@@ -145,11 +145,34 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
     }
   }, [hasTenant, onNavigate, router, t, currentProjectId]);
 
-  const active = recent.find((session) => session.id === currentId)
-    ?? drafts.find((draft) => draft.sessionId === currentId);
+  const activeSession = recent.find((session) => session.id === currentId);
+  const activeDraft = activeSession ? undefined : drafts.find((draft) => draft.sessionId === currentId);
+  const active = activeSession ?? activeDraft;
   const activeTitle = active
     ? ('title' in active ? active.title : undefined) ?? t('untitled')
     : null;
+
+  // Where a canvas's name is renamed now that the canvas itself no longer carries an
+  // editable title — this is the ONE place both the display and the edit live, so it
+  // cannot say one name while a stale in-flight edit says another.
+  const [titleDraft, setTitleDraft] = useState('');
+  useEffect(() => { if (activeTitle != null) setTitleDraft(activeTitle); }, [currentId, activeTitle]);
+  const commitTitle = () => {
+    if (!currentId) return;
+    const value = titleDraft.trim();
+    if (!value) { setTitleDraft(activeTitle ?? ''); return; }
+    if (activeDraft) {
+      updateLocalCreationSession(currentId, { title: value });
+      setDrafts(listPendingDrafts());
+      return;
+    }
+    if (activeSession && value !== activeSession.title) {
+      setRecent((prev) => prev.map((session) => (session.id === currentId ? { ...session, title: value } : session)));
+      void creationSessionsApi.update(currentId, { title: value })
+        .then(() => invalidateRecentCanvases())
+        .catch(() => setTitleDraft(activeSession.title));
+    }
+  };
 
   const allEntries: RecentEntry[] = [
     ...drafts
@@ -228,7 +251,17 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
               <span className="nav-sessions__count">(1)</span>
             </div>
             <span className="nav-item active nav-sessions__item" aria-current="page">
-              <span className="nav-item-label">{activeTitle}</span>
+              <input
+                className="nav-item-label nav-sessions__title-input"
+                aria-label={t('renameAria')}
+                value={titleDraft}
+                onChange={(event) => setTitleDraft(event.target.value)}
+                onBlur={commitTitle}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') (event.currentTarget as HTMLInputElement).blur();
+                  else if (event.key === 'Escape') setTitleDraft(activeTitle ?? '');
+                }}
+              />
             </span>
           </>
         )}

@@ -79,7 +79,7 @@ export function DashboardCreationLauncher() {
     </div>
 
     <div className={styles.creationPaths}>
-      <section className={styles.creationPath} aria-labelledby="create-by-type-title">
+      <section className={`${styles.creationPath} ${styles.typePath}`} aria-labelledby="create-by-type-title">
         <div className={styles.pathHeader}>
           <span className={styles.step}>1</span>
           <div><h3 id="create-by-type-title">{t('createByTypeTitle')}</h3><p>{t('createByTypeSubtitle')}</p></div>

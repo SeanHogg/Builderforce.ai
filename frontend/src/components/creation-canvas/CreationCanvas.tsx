@@ -46,7 +46,6 @@ import {
 } from '@/lib/canvasConnectionStyle';
 import { CanvasSurfaceRouter } from './CanvasSurfaceRouter';
 import { CanvasFacilitateSurface } from './CanvasFacilitateSurface';
-import { CanvasJourneyChip } from './CanvasJourneyChip';
 import { publishPoll, setPollState } from '@/lib/pollApi';
 import { pollJoinUrl, pollPublishBody } from '@/lib/pollObject';
 import { CanvasCalendarSurface } from './CanvasCalendarSurface';
@@ -204,7 +203,8 @@ import { canvasMediaSource, isCanvasMediaKind, resolvePublicMediaUrls } from '@/
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
-import { analyzeDependencies, appendCanvasVideoSource, canvasGameToolRedirect, canvasImageToolRedirect, canvasToolRequiresAccount, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, findingFingerprint, normalizeQaSteps, CANVAS_GAME_ACCOUNT_GATE, CANVAS_GAME_TOOL, CANVAS_CORPUS_ACCOUNT_GATE, CANVAS_IMAGE_ACCOUNT_GATE, CANVAS_IMAGE_TOOL, CANVAS_QA_ACCOUNT_GATE, CANVAS_SCREENSHOT_ACCOUNT_GATE, CANVAS_SCREENSHOT_TOOL, CANVAS_SOCIAL_ACCOUNT_GATE, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, DATA_PURPOSES, GAME_PLATFORMS, isGamePlatform, LAWFUL_BASES, QA_FINDING_TYPES, QA_SEVERITIES, QA_STEP_ACTIONS, type CanvasVideoSource, type CreationConnectionKind, type DataPurpose, type DataUsePolicy, type DependencyAnalysis, type LawfulBasis, type QaFindingSeverity, type QaFindingType } from '@builderforce/creation-canvas-contract';
+import { analyzeDependencies, appendCanvasVideoSource, canvasGameToolRedirect, canvasImageToolRedirect, canvasToolRequiresAccount, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, findingFingerprint, normalizeQaSteps, CANVAS_GAME_ACCOUNT_GATE, CANVAS_GAME_TOOL, CANVAS_CORPUS_ACCOUNT_GATE, CANVAS_IMAGE_ACCOUNT_GATE, CANVAS_IMAGE_TOOL, CANVAS_QA_ACCOUNT_GATE, CANVAS_REALIZE_ACCOUNT_GATE, CANVAS_SCREENSHOT_ACCOUNT_GATE, CANVAS_SCREENSHOT_TOOL, CANVAS_SOCIAL_ACCOUNT_GATE, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, DATA_PURPOSES, GAME_PLATFORMS, isGamePlatform, LAWFUL_BASES, QA_FINDING_TYPES, QA_SEVERITIES, QA_STEP_ACTIONS, type CanvasVideoSource, type CreationConnectionKind, type DataPurpose, type DataUsePolicy, type DependencyAnalysis, type LawfulBasis, type QaFindingSeverity, type QaFindingType } from '@builderforce/creation-canvas-contract';
+import { createCanvasRealization, listRealizationTargets, primaryRealizationDoc, rankRealizationIdea, type RealizationView } from '@/lib/canvasRealize';
 import { getStoredTenant, getStoredTenantToken } from '@/lib/auth';
 import { useCanvasCapabilities } from '@/lib/canvasCapabilitiesApi';
 import { claimLocalDraft } from '@/lib/pendingWork';
@@ -2191,9 +2191,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * viewport write and the moment sharing starts — and a fourth caller copying
    * whichever one it happened to sit next to is how a field starts being carried
    * by two of the three.
+   *
+   * The title comes off the STORED snapshot, not this component's own `title`
+   * state: renaming now happens in the session rail, not on the canvas, so this
+   * board is no longer the one place a local session's name changes. Reading it
+   * fresh off storage rather than baking in the closure's copy is what stops a
+   * card move made after a rail rename from writing the OLD name back over it.
    */
   const currentSnapshot = useCallback((viewport = viewportRef.current) => localCreationSnapshot(sessionId, {
-    title,
+    title: readLocalCreationSession(sessionId)?.title ?? title,
     timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })),
     nodes,
     edges,
@@ -2336,11 +2342,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (persistence !== 'local' || !hydrated.current) return;
     const handle = window.setTimeout(() => {
       const prior = readLocalCreationSession(sessionId); if (!prior) return;
-      const snapshot: LocalCreationSnapshot = { ...prior, title, nodes, edges, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), viewport: viewportRef.current, updatedAt: new Date().toISOString() };
+      // `...prior` carries prior.title forward untouched — a rename now happens in
+      // the session rail, not here, so this write must not overwrite it with the
+      // stale copy this component hydrated `title` from.
+      const snapshot: LocalCreationSnapshot = { ...prior, nodes, edges, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), viewport: viewportRef.current, updatedAt: new Date().toISOString() };
       persistSnapshot(snapshot);
     }, 150);
     return () => window.clearTimeout(handle);
-  }, [edges, nodes, persistence, sessionId, storageKey, timeline, title]);
+  }, [edges, nodes, persistence, sessionId, storageKey, timeline]);
 
   useEffect(() => {
     if (persistence !== 'server') return;
@@ -8051,6 +8060,102 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       };
     },
   }, {
+    /**
+     * The catalog half of "Idea → Real" — the 8 tested proof forms `canvas_realize`
+     * builds from. Static copy, no tenant — guest-safe for the same reason
+     * `canvas_list_diagnostics` is.
+     */
+    name: 'canvas_list_realization_targets',
+    description: 'List the 8 tested "Idea → Real" proof forms this platform can build — a phone line, a pilot, a smoke test, a live system, and others — with what each one answers, its fidelity and its effort. Call this BEFORE canvas_realize whenever the right targetKey is not already obvious, or to show the user their options.',
+    parameters: { type: 'object', additionalProperties: false, properties: {} },
+    mutates: false,
+    run: async () => {
+      try {
+        const { targets } = await listRealizationTargets();
+        return { targets };
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : 'The realization catalog could not be read.' };
+      }
+    },
+  }, {
+    /**
+     * Turns an idea into one of the 8 tested proofs through the SAME pipeline
+     * `/realize` uses (`planRealization` + `POST /api/realizations`) — never an
+     * improvisation. GUEST-GATED rather than absent: see CANVAS_REALIZE_ACCOUNT_GATE
+     * and the note beside this tool in the contract for the measured failure this
+     * closes (2026-08-29: a signed-in board asked for a phone line got an unrunnable
+     * legacy `workflow` card with zero authored steps, and a hand-typed Twilio guide
+     * with the wrong webhook URLs and no WEBHOOK_SHARED_SECRET).
+     *
+     * Deliberately PLANS ONLY — it never calls `/api/realizations/:id/build`. That
+     * second step provisions a real project, seeds a board of tickets and wires
+     * external connectors, and the realization API's own contract is that a human
+     * reviews the plan before any of that exists (see the docstring on
+     * `POST /api/realizations/:id/build`). The plan itself lands on the board
+     * immediately as the real generated document; going live is one click away.
+     */
+    name: 'canvas_realize',
+    description: 'Turn an idea into one of the platform\'s 8 tested "Idea → Real" proofs — a phone line with real Twilio-signed routes, a pilot, a smoke test, a live production system, etc. — using the platform\'s own realization pipeline, the exact one the /realize page uses. Use this instead of canvas_add_object whenever the user asks to "stand up", "build" or "make real" something matching one of these proof forms. Call canvas_list_realization_targets first if the right targetKey is not obvious; omit it to auto-rank the idea against all 8 and use the top match.',
+    parameters: {
+      type: 'object', required: ['idea'], additionalProperties: false,
+      properties: {
+        idea: { type: 'string', description: 'What to build, in the user\'s own words — the fuller the brief, the better the generated routes, copy and tasks.' },
+        targetKey: { type: 'string', description: 'One of the keys from canvas_list_realization_targets, e.g. "phone-line". Omit to auto-rank the idea and use the top recommendation.' },
+      },
+    },
+    mutates: true,
+    run: async (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      if (!getStoredTenantToken()) {
+        requireAccount('realize', t('gateRealizeTitle'), t('gateRealizeBody'));
+        return accountGateResult('canvas_realize', CANVAS_REALIZE_ACCOUNT_GATE);
+      }
+      const args = raw as { idea?: string; targetKey?: string };
+      const idea = typeof args.idea === 'string' ? args.idea.trim() : '';
+      if (!idea) return { error: 'Say what to build.' };
+
+      let targetKey = typeof args.targetKey === 'string' ? args.targetKey.trim() : '';
+      if (!targetKey) {
+        try {
+          const ranked = await rankRealizationIdea(idea, sessionId);
+          const top = ranked.recommendations[0];
+          if (!top) return { error: 'No realization target matched that idea. Call canvas_list_realization_targets and name one with targetKey.' };
+          targetKey = top.key;
+        } catch (error) {
+          return { error: error instanceof Error ? error.message : 'The idea could not be read.' };
+        }
+      }
+
+      let realization: RealizationView;
+      try {
+        realization = (await createCanvasRealization({ idea, targetKey, sessionId })).realization;
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : `That could not be planned as a "${targetKey}".` };
+      }
+
+      const doc = primaryRealizationDoc(realization.plan.files ?? {});
+      const node = stage.createObject('document');
+      node.data = {
+        ...node.data,
+        title: `${realization.title} — ${realization.plan.blueprintName}`,
+        subtitle: realization.plan.summary,
+        content: doc?.content ?? realization.plan.summary,
+        status: 'Plan ready',
+      };
+      stage.addObject(`Realize "${realization.title}"`, node);
+
+      return {
+        ok: true, proposed: true,
+        object: { id: node.id, kind: 'document', title: String(node.data.title), created: true },
+        realizationId: realization.id, targetKey: realization.targetKey,
+        summary: realization.plan.summary,
+        tasks: realization.plan.tasks,
+        requiredConnectors: realization.plan.requiredConnectors,
+        requiredSecrets: realization.plan.requiredSecrets,
+        nextStep: `The plan is on the board. Open /realize/${realization.id} to review it and build it live — that step creates the real project, publishes it and wires its connectors.`,
+      };
+    },
+  }, {
     name: 'canvas_add_image',
     description: 'Find or create an actual image and put the finished image on the Canvas. ALWAYS use this instead of canvas_add_object for an image request. Use mode="generate" for create/draw/generate/make requests, mode="find" for find/search/stock/photo requests, and mode="auto" only when the user did not express a preference.',
     parameters: {
@@ -11742,7 +11847,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       {/* ── THE FLOATING CHROME ────────────────────────────────────────────────────
           There is no chrome band any more. The board takes the whole shell and each
           piece of chrome floats over it in the region `lib/canvasChrome.ts` gives it:
-          what this canvas IS (top left), how it is READ (top centre), how work LEAVES
+          is the work safe (top left), how it is READ (top centre), how work LEAVES
           it (top right), and what you DO to it (the one bar, bottom centre).
 
           The band this replaced was 54px of full-width surface holding a title, a
@@ -11750,9 +11855,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           between things with nothing to do with each other, drawn ABOVE a hard line
           that made the board start below the chrome rather than run behind it. */}
       <CanvasSessionPill
-        title={title}
-        onTitleChange={setTitle}
-        onTitleCommit={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice(t('saved'))).catch(() => setNotice(t('titleSaveFailed'))); }}
         notice={notice}
         // A board that lives only on this device has no connection to report, and
         //  is that absence rather than a fifth connection state — so it is
@@ -11764,15 +11866,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           column; the stylesheet keeps exactly one on screen. */}
       {canvasChromeShows('surfaces', barCollapsed) && <div className={`${styles.floatCard} ${styles.surfaceChips}`}>
         <CanvasSurfaceSwitcher surface={surface} onChange={setSurface} variant="header" />
-      </div>}
-      {/* Where this session sits on the founder's journey — a STATUS chip, so
-          it survives a collapsed bar where `surfaces` (a control) does not.
-          Its own row rather than nested inside `.surfaceChips`: nesting it
-          there would fold it away with the surface switcher on collapse,
-          which is exactly the status/control mix-up this registry exists to
-          prevent. */}
-      {canvasChromeShows('journeyChip', barCollapsed) && <div className={`${styles.floatCard} ${styles.journeyChipCard}`}>
-        <CanvasJourneyChip />
       </div>}
       {chromeSlot ? createPortal(handoffChrome, chromeSlot) : handoffChrome}
 

@@ -18894,7 +18894,6 @@
       "writeAction": "Brain diesen Kurs schreiben lassen",
       "rewriteAction": "Brain diesen Kurs neu schreiben lassen"
     },
-    "sessionTitle": "Sessiontitel",
     "saved": "Session gespeichert",
     "activeCollaborators": "Aktive Mitwirkende",
     "newSession": "Neue Session",
@@ -19399,7 +19398,6 @@
     "connectionKind": "Verbindungstyp",
     "viewOutcomeMetrics": "Ergebniskennzahlen ansehen",
     "outcomeMetricsTitle": "Kennzahlen von Idee bis Lieferung",
-    "titleSaveFailed": "Titel konnte nicht gespeichert werden",
     "closeInvitationPanel": "Einladungsfenster schließen",
     "emailPlaceholder": "name@company.com",
     "invitationRole": "Einladungsrolle",
@@ -20910,6 +20908,8 @@
     "noticeStrokesErased": "{count} Strich(e) gelöscht.",
     "gateQaTitle": "Konto anlegen, um diese Tests auszuführen",
     "gateQaBody": "Die QA-Bibliothek, ihre Anmelde-Personas und ihre geplanten Läufe sind Workspace-Ressourcen. Jeder Fall auf diesem Board enthält bereits lauffähigen Playwright-Quelltext, den du herunterladen und sofort lokal ausführen kannst.",
+    "gateRealizeTitle": "Konto anlegen, um es wirklich live zu schalten",
+    "gateRealizeBody": "Es wirklich zu bauen bedeutet, ein Projekt anzulegen, es zu veröffentlichen und die Connectors zu verbinden, von denen es abhängt — Workspace-Ressourcen. Der Plan, der bereits auf diesem Board liegt — sein Setup-Leitfaden, die benötigten Connectors und Secrets — ist so oder so echt und dir gehörig.",
     "noGeneratedSpec": "Dieses Objekt hat noch keinen generierten Testquelltext.",
     "people": {
       "empty": "Für dieses {label} wurde noch nichts erfasst.",
@@ -24076,7 +24076,6 @@
     "deleteConfirmMessageLocal": "„{title}“ löschen? Dieser reine Browserentwurf kann nicht wiederhergestellt werden."
   },
   "canvasLibrary": {
-    "title": "Deine Canvas",
     "subtitle": "Alles, was du erstellt hast – und die Wege, etwas Neues zu beginnen.",
     "pendingTitle": "Warten auf Speicherung",
     "renameSession": "Sitzung umbenennen",
@@ -24163,6 +24162,7 @@
   "sessions": {
     "newCanvas": "+ Neues Canvas",
     "active": "Aktiv",
+    "renameAria": "Dieses Canvas umbenennen",
     "recents": "Zuletzt",
     "untitled": "Unbenanntes Canvas",
     "draft": "Entwurf",
