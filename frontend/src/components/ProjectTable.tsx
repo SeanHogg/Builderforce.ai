@@ -37,6 +37,8 @@ export interface ProjectTableProps {
   onAssignedAgentClick?: (assignedAgentHost: { id: number; name: string }) => void;
   /** Show a delete action; called once the user confirms in the dialog. */
   onDelete?: (project: Project) => void;
+  /** Toggle a project's archived status (reversible — no confirmation). */
+  onArchiveToggle?: (project: Project) => void;
 }
 
 const cellStyle: React.CSSProperties = { padding: '12px 16px' };
@@ -70,6 +72,7 @@ export function ProjectTable({
   onOpenBuilder,
   onAssignedAgentClick,
   onDelete,
+  onArchiveToggle,
 }: ProjectTableProps) {
   const t = useTranslations('projectTable');
   const router = useRouter();
@@ -225,6 +228,17 @@ export function ProjectTable({
                       project={project}
                       onOpen={(p) => onDetailsClick(p, 'diagnostics')}
                     />
+                  )}
+                  {onArchiveToggle && (
+                    <button
+                      type="button"
+                      onClick={() => onArchiveToggle(project)}
+                      aria-label={project.status === 'archived' ? t('restoreProject') : t('archiveProject')}
+                      title={project.status === 'archived' ? t('restoreProject') : t('archiveProject')}
+                      style={iconButtonStyle}
+                    >
+                      <Icon name="archive" size={16} />
+                    </button>
                   )}
                   {onDelete && (
                     <button

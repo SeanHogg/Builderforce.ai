@@ -10,10 +10,12 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * external MCP clients, and the agent-runtime alike — the server-side twin of
  * the frontend's `platformActions` manifest.
  *
- * Catalog scope: projects + tasks (CRUD), specs/workflows/prompts/approvals/
- * agents/boards/cron (read or simple CRUD), and the full strategy tier —
- * portfolios, initiatives, OKR objectives + key results + lineage links (CRUD,
- * segment-scoped). The dispatch + advertise wiring is the reusable part; adding a
+ * Catalog scope: projects + tasks (CRUD), companies (investor pack — list/get/
+ * create + project consolidation via assign_company/unassign_company),
+ * specs/workflows/prompts/approvals/agents/boards/cron (read or simple CRUD),
+ * and the full strategy tier — portfolios, initiatives, OKR objectives + key
+ * results + lineage links (CRUD, segment-scoped). The dispatch + advertise
+ * wiring is the reusable part; adding a
  * domain is one `CATALOG` entry. Remaining web-Brain domains still to port (so
  * the web Brain can drop its client-side manifest) are tracked in the ROADMAP
  * Consolidated Gap Register.
@@ -34,6 +36,7 @@ import {
   type ErrorLogFilters,
 } from '../observability/errorLogQuery';
 import { ProjectService } from '../project/ProjectService';
+import { listCompanies, companyDetail, unassignedProjects } from '../investor/companyWorkspace';
 import { r2ProjectStoragePurge } from '../ide/projectStorage';
 import { TaskService } from '../task/TaskService';
 import { summarizeTaskActivity } from '../task/taskActivity';
@@ -760,6 +763,29 @@ const CATALOG: BuiltinTool[] = [
     }, ctx.tenantId).then((p) => p.toPlain()),
   },
   { tool: 'projects.delete', mutates: true, description: 'Delete a project permanently.', parameters: obj({ id: N }, ['id']), run: (ctx, a) => ctx.projects.deleteProject(num(a.id), ctx.tenantId).then(() => ({ deleted: num(a.id) })) },
+
+  // ---- Companies (investor pack) — consolidate projects under a company ----
+  { tool: 'companies.list', mutates: false, description: 'List companies in this tenant.', parameters: obj({}), run: (ctx) => listCompanies(ctx.db, ctx.tenantId) },
+  { tool: 'companies.get', mutates: false, description: 'Get a company and its attached projects.', parameters: obj({ id: N }, ['id']), run: (ctx, a) => companyDetail(ctx.db, ctx.tenantId, num(a.id)) },
+  { tool: 'companies.unassigned_projects', mutates: false, description: 'Projects not yet assigned to any company.', parameters: obj({}), run: (ctx) => unassignedProjects(ctx.db, ctx.tenantId) },
+  {
+    tool: 'companies.create', mutates: true,
+    description: 'Create a company to group (consolidate) projects under.',
+    parameters: obj({ name: S, website: S, stage: S, sector: S, country: S, headcount: N, arr: S, valuation: S, currency: S, isPortfolio: B }, ['name']),
+    run: (ctx, a) => replayRoute(ctx, 'POST', '/api/investor/companies', a),
+  },
+  {
+    tool: 'projects.assign_company', mutates: true,
+    description: 'Assign (consolidate) a project under a company.',
+    parameters: obj({ projectId: N, companyId: N }, ['projectId', 'companyId']),
+    run: (ctx, a) => replayRoute(ctx, 'POST', `/api/investor/companies/${num(a.companyId)}/projects`, { projectId: num(a.projectId) }),
+  },
+  {
+    tool: 'projects.unassign_company', mutates: true,
+    description: "Remove a project's company assignment.",
+    parameters: obj({ projectId: N, companyId: N }, ['projectId', 'companyId']),
+    run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/investor/companies/${num(a.companyId)}/projects/${num(a.projectId)}`),
+  },
 
   // ---- Project memory (shared write-through facts, migration 0276) ----
   // The SAME store VS Code, on-prem, and cloud runs read/write, so a belief one

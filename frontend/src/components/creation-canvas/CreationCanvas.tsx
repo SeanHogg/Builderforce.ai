@@ -1501,20 +1501,22 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [activeAgentIds, setActiveAgentIds] = useState<Set<string>>(() => new Set());
   const [modelSelection, setModelSelection] = useState<ChatModelSelection>({ mode: 'auto' });
   const { options: canvasModelOptions, identity: modelIdentity } = useChatModelOptions();
-  const [notice, setNoticeText] = useState('Session saved');
+  const [notice, setNoticeText] = useState('');
   /**
    * The pill's one status line, arbitrated by the use case rather than here.
    *
-   * `outcome()` is what the user did; `saveState()` is routine save chatter that
-   * stays quiet while a fresher outcome is still on screen. The rule and the
-   * reason for it are in `application/PersistCanvas.ts` — what matters at this
-   * call site is that the two are DIFFERENT verbs, so a new message cannot pick
-   * the wrong one by picking the only one.
+   * `outcome()` is what the user did — shown until the next thing happens.
+   * `saveState()` is the routine autosave tick; it no longer has anything of its
+   * own to say, so it clears the line once a recent outcome's hold has expired,
+   * rather than replacing it with ambient "Saving…" / "Saved on this device"
+   * chatter. The rule and the reason for it are in `application/PersistCanvas.ts`
+   * — what matters at this call site is that the two are DIFFERENT verbs, so a
+   * new message cannot pick the wrong one by picking the only one.
    */
   const notices = useRef<CanvasNotices | null>(null);
   if (!notices.current) notices.current = createCanvasNotices(setNoticeText);
   const setNotice = useCallback((text: string) => notices.current!.outcome(text), []);
-  const noteSaveState = useCallback((text: string) => notices.current!.saveState(text), []);
+  const noteSaveState = useCallback(() => notices.current!.saveState(''), []);
 
   /**
    * SHARED FREE SESSION (no account).
@@ -2111,7 +2113,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         hydrated.current = true;
         trackActivity('creation_session_opened', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [...new Set(loadedNodes.map((node) => node.data.kind))] } });
         void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelation.current, action: 'session.open', phase: 'succeeded', durationMs: performance.now() - openedAt }).catch(() => undefined);
-        noteSaveState(t('noticeSessionSaved'));
+        noteSaveState();
       }).catch((error) => {
         void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelation.current, action: 'session.open', phase: 'failed', durationMs: performance.now() - openedAt }).catch(() => undefined);
         setNotice(error instanceof Error ? error.message : t('noticeLoadSessionFailed'));
@@ -2315,10 +2317,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const snapshot = currentSnapshot();
         persistSnapshot(snapshot);
         lastSavedGraph.current = signature;
-        noteSaveState(t('noticeSavedOnDevice'));
+        noteSaveState();
         return;
       }
-      noteSaveState(t('noticeSavingChanges'));
+      noteSaveState();
       saveInFlight.current = true;
       // STABLE across retries of the same board, NEW for a different one — so a
       // retry after a timeout is the same write and an edit made during it is not.
@@ -2334,7 +2336,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         lastSavedGraph.current = result.signature;
         setPersistedObjectIds(new Set(result.objectIds));
         if (pendingSave.current?.key === attempt.key) pendingSave.current = null;
-        if (result.outcome === 'saved') { noteSaveState(t('noticeSessionSaved')); return; }
+        if (result.outcome === 'saved') { noteSaveState(); return; }
         setNodes(result.board.nodes);
         setEdges(result.board.edges);
         // A collaborator's board can carry a kind this build does not declare, and
@@ -2797,7 +2799,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       }
       return { ...node, data };
     }));
-    noteSaveState(t('noticeSavingChanges'));
+    noteSaveState();
     const target = nodesRef.current.find((node) => node.id === nodeId);
     const campaignId = Number(target?.data.campaignId);
     if (target?.data.kind === 'socialCampaign'
@@ -2825,7 +2827,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    */
   const moveDealFromNode = useCallback((nodeId: string, dealId: number, stage: string) => {
     if (!cardsEditable) return;
-    noteSaveState(t('noticeMovingDeal'));
+    noteSaveState();
     void moveDealOnBoard(dealId, stage)
       .then((pipeline) => {
         setNodes((current) => current.map((node) => node.id === nodeId

@@ -181,8 +181,9 @@ describe('the collapsed session bar', () => {
     expect(screen.queryByRole('group', { name: 'Canvas view' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Invite' })).toBeNull();
 
-    // …and the status survives. The roster is the reason the rule exists.
-    expect(screen.getByTestId('canvas-session-pill')).toBeInTheDocument();
+    // …and the status survives. The roster is the reason the rule exists — the pill
+    // itself has nothing to say at rest any more (no ambient "Saved on this device"),
+    // so it is not a fixture to assert on here.
     const roster = screen.getByLabelText('Active collaborators');
     expect(within(roster).getAllByRole('button').length).toBeGreaterThan(0);
     // The roster survives INSIDE the command bar — the element the collapse acts on —
@@ -212,11 +213,10 @@ describe('the collapsed session bar', () => {
     expect(screen.getByTestId('canvas-chrome-slot')).toContainElement(handoff);
     expect(handoff).toHaveAttribute('data-hosted', 'header');
     // The rest of the canvas chrome is UNMOVED. Only the handoff row was portalled, so
-    // the surface switcher and the session pill stay where they float on the board —
-    // asserted here because "I extracted the right subtree" is otherwise invisible until
-    // someone opens the app and finds the top of the canvas empty.
+    // the surface switcher stays where it floats on the board — asserted here because
+    // "I extracted the right subtree" is otherwise invisible until someone opens the
+    // app and finds the top of the canvas empty.
     expect(screen.getByRole('group', { name: 'Canvas view' })).toBeInTheDocument();
-    expect(screen.getByTestId('canvas-session-pill')).toBeInTheDocument();
     // Drawn ONCE. A portal that left a copy behind would be the two bars again.
     expect(screen.getAllByTestId('canvas-handoff')).toHaveLength(1);
 

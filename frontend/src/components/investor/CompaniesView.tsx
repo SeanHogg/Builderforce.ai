@@ -28,6 +28,7 @@ import {
   type CompanyProject,
   type CompanySummary,
 } from '@/lib/investorApi';
+import { ConsolidateProjectsPanel } from './ConsolidateProjectsPanel';
 import {
   buttonStyle, cardStyle, emptyStyle, errorStyle, gapChipStyle, inputStyle, labelStyle,
   listRowStyle, listStyle, message, mutedStyle, primaryButtonStyle, rowStyle, sectionStyle,
@@ -195,6 +196,7 @@ function CompanyWork({
   const [chosen, setChosen] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [consolidating, setConsolidating] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -234,8 +236,22 @@ function CompanyWork({
     <div style={cardStyle}>
       <div style={rowStyle}>
         <h3 style={{ margin: 0, fontSize: 'var(--font-size-body)' }}>{t('companies.workTitle', { name: detail.name })}</h3>
-        <span style={gapChipStyle}>{t('companies.readiness', { percent: detail.readiness })}</span>
+        <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button type="button" style={buttonStyle} onClick={() => setConsolidating(true)}>
+            {t('companies.consolidate')}
+          </button>
+          <span style={gapChipStyle}>{t('companies.readiness', { percent: detail.readiness })}</span>
+        </span>
       </div>
+      {consolidating && (
+        <ConsolidateProjectsPanel
+          companyId={companyId}
+          companyName={detail.name}
+          open
+          onClose={() => setConsolidating(false)}
+          onDone={onChanged}
+        />
+      )}
       <p style={mutedStyle}>{t('companies.workBlurb')}</p>
 
       {error && <p style={errorStyle} role="alert">{error}</p>}

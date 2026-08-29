@@ -89,11 +89,16 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
   const [viewMode, setViewMode] = useState<ProjectsView>('card');
   const [selectedAgentHost, setSelectedAgentHost] = useState<AgentHost | null>(null);
   const [planError, setPlanError] = useState<PlanLimitError | null>(null);
+  // Archived projects stay out of the working view by default — "come back to
+  // them later" means they're findable, not gone, hence a toggle rather than
+  // a permanent filter.
+  const [showArchived, setShowArchived] = useState(false);
 
   // Narrow to the globally-selected project (if any), then apply the preview cap.
   const scopedProjectId = scope?.currentProjectId ?? null;
   const scopedProjects = scopedProjectId != null ? projects.filter((p) => p.id === scopedProjectId) : projects;
-  const visibleProjects = limit != null ? scopedProjects.slice(0, limit) : scopedProjects;
+  const archiveFilteredProjects = showArchived ? scopedProjects : scopedProjects.filter((p) => p.status !== 'archived');
+  const visibleProjects = limit != null ? archiveFilteredProjects.slice(0, limit) : archiveFilteredProjects;
 
   const loadRollup = useCallback(() => {
     toolsApi.rollup()
@@ -155,11 +160,11 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
   }, [searchParams, projects]);
 
   // Surface the count to the parent (tab badge) instead of rendering it here.
-  // Reports the SCOPED count so the badge matches what is shown; re-fires on
-  // create/delete and when the global project scope changes.
+  // Reports the archive-filtered count so the badge matches what is shown; re-fires
+  // on create/delete/archive and when the global project scope changes.
   useEffect(() => {
-    onCount?.(scopedProjects.length);
-  }, [scopedProjects.length, onCount]);
+    onCount?.(archiveFilteredProjects.length);
+  }, [archiveFilteredProjects.length, onCount]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -246,6 +251,18 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
       setError(tSchedule('rescheduleFailed'));
     }
   }, [applyProjectPatch, tSchedule]);
+
+  // Archive/restore path shared by the card and table row actions. Reversible
+  // status flip — no confirmation, matches the creation-sessions archive toggle.
+  const toggleArchiveProject = useCallback(async (project: Project) => {
+    const nextStatus = project.status === 'archived' ? 'active' : 'archived';
+    try {
+      const updated = await updateProject(project.publicId ?? project.id, { status: nextStatus });
+      applyProjectPatch(updated);
+    } catch {
+      setError(nextStatus === 'archived' ? t('errArchive') : t('errRestore'));
+    }
+  }, [applyProjectPatch, t]);
 
   // Single delete path shared by the card / table / details-panel actions:
   // remove locally, close the panel if it was open, clear the global scope if it
@@ -353,7 +370,15 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
       {/* The project count lives on the surrounding tab (see TabCountBadge), so
           this row only holds the controls, right-aligned. */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+            />
+            {t('showArchived')}
+          </label>
           <ViewToggle value={viewMode} onChange={setViewMode} card table calendar gantt />
           {viewAllHref && (
             <Link href={viewAllHref} style={{ fontSize: 13, fontWeight: 600, color: 'var(--coral-bright)', textDecoration: 'none' }}>
@@ -432,6 +457,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
                 if (agentHost) setSelectedAgentHost(agentHost);
               }}
               onDelete={removeProject}
+              onArchiveToggle={toggleArchiveProject}
             />
           ))}
         </div>
@@ -467,6 +493,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
             if (agentHost) setSelectedAgentHost(agentHost);
           }}
           onDelete={removeProject}
+          onArchiveToggle={toggleArchiveProject}
         />
       )}
 

@@ -33,7 +33,7 @@
  * here", whichever of the three roster shapes the session happens to be in.
  */
 export type CanvasChromeSlot =
-  /** Saved / saving / "saved on this device", plus the realtime connection state. */
+  /** The last outcome worth reporting, plus the realtime connection state. */
   | 'saveState'
   /** Who is in this session right now, and who is typing. */
   | 'roster'
@@ -89,8 +89,10 @@ export type CanvasChromePlace = 'pill' | 'chips' | 'topRight' | 'bar';
  * held only on this device is kept by taking an account, and the header already makes
  * exactly that offer — the green CTA turns into "Keep your work" the moment this browser
  * holds a local board. A second button on the canvas saying the same word put two bars on
- * one screen competing to be the way to save. `saveState` in the pill still reports where
- * the board lives, because that is a fact and not a control.
+ * one screen competing to be the way to save, and ambient "Saved on this device" chatter
+ * sitting in the pill at rest was the same collision one notch quieter — the header CTA
+ * already says it. `saveState` in the pill now carries only what is not said anywhere
+ * else: the last outcome, until it has nothing left to add.
  */
 const SLOT_KIND: Readonly<Record<CanvasChromeSlot, CanvasChromeKind>> = {
   saveState: 'status',

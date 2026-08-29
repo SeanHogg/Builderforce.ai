@@ -42,6 +42,10 @@ export interface ProjectCardProps {
   onDelete?: (project: Project) => void;
   /** Show the delete icon. Defaults to true when onDelete is provided. */
   showDeleteButton?: boolean;
+  /** Toggle the project's archived status (reversible — no confirmation). */
+  onArchiveToggle?: (project: Project) => void;
+  /** Show the archive/restore icon. Defaults to true when onArchiveToggle is provided. */
+  showArchiveButton?: boolean;
   /** Override the Builder action. Defaults to opening the project on Canvas. */
   onOpenBuilder?: (project: Project) => void;
   /** Latest per-diagnostic scores (SOC 2, Quality, …) for this project, from the
@@ -67,6 +71,8 @@ export function ProjectCard({
   onAssignedAgentClick,
   onDelete,
   showDeleteButton = !!onDelete,
+  onArchiveToggle,
+  showArchiveButton = !!onArchiveToggle,
   onOpenBuilder,
   diagnostics,
   connections,
@@ -87,6 +93,12 @@ export function ProjectCard({
     e.stopPropagation();
     if (!onDelete) return;
     setShowConfirm(true);
+  };
+
+  const isArchived = project.status === 'archived';
+  const handleArchiveClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onArchiveToggle?.(project);
   };
 
   // Shared style for the square icon buttons in the card header so they can't drift.
@@ -248,6 +260,17 @@ export function ProjectCard({
           >
             <span style={{ fontSize: 18 }} aria-hidden><Icon source="💻" size="1em" /></span>
           </button>
+          {showArchiveButton && onArchiveToggle && (
+            <button
+              type="button"
+              onClick={handleArchiveClick}
+              aria-label={isArchived ? t('restoreProject') : t('archiveProject')}
+              title={isArchived ? t('restoreProject') : t('archiveProject')}
+              style={iconButtonStyle}
+            >
+              <Icon name="archive" size={16} />
+            </button>
+          )}
           {showDeleteButton && onDelete && (
             <>
               <button
