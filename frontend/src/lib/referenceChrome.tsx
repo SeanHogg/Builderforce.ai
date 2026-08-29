@@ -25,6 +25,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import type { Stage } from './navGroups';
 
 /** One row of the panel's index rail, with its label already localized. */
 export interface ReferenceChromeSection {
@@ -44,6 +45,14 @@ export interface ReferenceChrome {
    * anchors. Its presence is what makes the rail read as a choice.
    */
   activeId?: string;
+  /**
+   * Set only by a page that offers the founder's-journey stage switcher in the
+   * panel header (currently just the dashboard). The stage whose menu the rail
+   * is showing — not necessarily the tenant's real position, see `currentStage`.
+   */
+  stage?: Stage;
+  /** The tenant's actual journey position (wayfinding), independent of `stage`. */
+  currentStage?: Stage | null;
 }
 
 interface ReferenceChromeStore {
@@ -56,6 +65,13 @@ interface ReferenceChromeStore {
   select: ((id: string) => void) | null;
   publishSelect: (handler: ((id: string) => void) | null) => void;
   /**
+   * The page's stage-switcher handler, when it published one alongside
+   * `chrome.stage` — mirrors `select`/`publishSelect` but for the header's
+   * Idea/Make/Run/Measure control rather than the rail.
+   */
+  stageSelect: ((stage: Stage) => void) | null;
+  publishStageSelect: (handler: ((stage: Stage) => void) | null) => void;
+  /**
    * True while something is actually RENDERING the published sections as a rail.
    * Publishing does not imply that: the same page renders standalone (no panel,
    * no rail) as often as it renders in one.
@@ -66,6 +82,7 @@ interface ReferenceChromeStore {
 
 const NOOP_STORE: ReferenceChromeStore = {
   chrome: null, publish: () => {}, select: null, publishSelect: () => {},
+  stageSelect: null, publishStageSelect: () => {},
   railActive: false, setRailActive: () => {},
 };
 
@@ -78,8 +95,10 @@ export function ReferenceChromeProvider({ children }: { children: React.ReactNod
   // JSON. So it lives in a ref, and only its PRESENCE is state — the rail needs
   // to re-render when a selector appears, not when the closure is replaced.
   const [hasSelect, setHasSelect] = useState(false);
+  const [hasStageSelect, setHasStageSelect] = useState(false);
   const [railActive, setRailActive] = useState(false);
   const selectRef = useRef<((id: string) => void) | null>(null);
+  const stageSelectRef = useRef<((stage: Stage) => void) | null>(null);
 
   const publishSelect = useCallback((handler: ((id: string) => void) | null) => {
     selectRef.current = handler;
@@ -88,9 +107,19 @@ export function ReferenceChromeProvider({ children }: { children: React.ReactNod
   // Stable identity, always calling the latest closure.
   const select = useCallback((id: string) => { selectRef.current?.(id); }, []);
 
+  const publishStageSelect = useCallback((handler: ((stage: Stage) => void) | null) => {
+    stageSelectRef.current = handler;
+    setHasStageSelect(handler != null);
+  }, []);
+  const stageSelect = useCallback((stage: Stage) => { stageSelectRef.current?.(stage); }, []);
+
   const value = useMemo<ReferenceChromeStore>(
-    () => ({ chrome, publish: setChrome, select: hasSelect ? select : null, publishSelect, railActive, setRailActive }),
-    [chrome, hasSelect, publishSelect, railActive, select],
+    () => ({
+      chrome, publish: setChrome, select: hasSelect ? select : null, publishSelect,
+      stageSelect: hasStageSelect ? stageSelect : null, publishStageSelect,
+      railActive, setRailActive,
+    }),
+    [chrome, hasSelect, publishSelect, hasStageSelect, publishStageSelect, railActive, select, stageSelect],
   );
   return <ReferenceChromeContext.Provider value={value}>{children}</ReferenceChromeContext.Provider>;
 }
@@ -122,6 +151,22 @@ export function usePublishReferenceSelect(handler: ((id: string) => void) | null
   const { publishSelect } = useContext(ReferenceChromeContext);
   useEffect(() => { publishSelect(handler); });
   useEffect(() => () => publishSelect(null), [publishSelect]);
+}
+
+/** The page's stage-switcher handler, when it published `chrome.stage`. */
+export function useStageSelect(): ((stage: Stage) => void) | null {
+  return useContext(ReferenceChromeContext).stageSelect;
+}
+
+/**
+ * Hand the panel header's Idea/Make/Run/Measure control this page's handler.
+ * Paired with `chrome.stage` on {@link usePublishReferenceChrome} — a page
+ * publishes both together, since a stage with nothing to select onto is inert.
+ */
+export function usePublishStageSelect(handler: ((stage: Stage) => void) | null): void {
+  const { publishStageSelect } = useContext(ReferenceChromeContext);
+  useEffect(() => { publishStageSelect(handler); });
+  useEffect(() => () => publishStageSelect(null), [publishStageSelect]);
 }
 
 /**

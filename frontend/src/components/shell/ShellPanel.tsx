@@ -32,8 +32,9 @@ import { panelWidth } from '@/lib/workbenchPolicy';
 import { destTitleKey, publicDestinationFor } from '@/lib/publicDestinations';
 import { seatHueVar } from '@/lib/seats';
 import { ShellIndex, useShellDestination } from './ShellIndex';
-import { useOwnReferenceRail, useReferenceChrome, useReferenceSelect, type ReferenceChromeSection } from '@/lib/referenceChrome';
+import { useOwnReferenceRail, useReferenceChrome, useReferenceSelect, useStageSelect, type ReferenceChromeSection } from '@/lib/referenceChrome';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
+import { StageHeaderSwitcher } from './StageHeaderSwitcher';
 
 /**
  * The index rail for a reference page opened as a panel (§11.4.5).
@@ -171,6 +172,7 @@ export function ShellPanel({ children }: { children: React.ReactNode }) {
   // rail at all.
   const published = useReferenceChrome();
   const selectSection = useReferenceSelect();
+  const selectStage = useStageSelect();
   const sections: ReferenceChromeSection[] | undefined = published?.sections?.length ? published.sections : undefined;
   // Tell the page its tabs are on screen already, so it can drop its own copy of
   // them. Only a SELECTOR rail replaces a control — an anchor rail is a table of
@@ -193,6 +195,11 @@ export function ShellPanel({ children }: { children: React.ReactNode }) {
       // it — leaving no way to choose what new items (a creation session, a
       // task, a quality collector) get created under while the panel is open.
       // Same switcher, carried into the one other place chrome can hide it.
+      headerCenter={
+        published?.stage && selectStage
+          ? <StageHeaderSwitcher activeStage={published.stage} currentStage={published.currentStage} onSelect={selectStage} />
+          : undefined
+      }
       headerActions={<TenantProjectSwitcher />}
       title={
         published?.title ? published.title

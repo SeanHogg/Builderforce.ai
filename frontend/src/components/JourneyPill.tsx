@@ -12,8 +12,8 @@ import { SlideOutPanel } from './SlideOutPanel';
  * JourneyPill — a header chip naming where the tenant sits on the founder's
  * journey (Idea → Make → Run → Measure), for once account setup is done.
  * Mirrors `OnboardingProgressPill`'s shape (self-gating render, a slide-out
- * for the detail) and shares `useFounderJourney()` with the dashboard's
- * `JourneyStrip`/`ActRail` rather than recomputing the position.
+ * for the detail) and shares `useFounderJourney()` with the dashboard panel's
+ * `StageHeaderSwitcher`/`ActRail` rather than recomputing the position.
  *
  * Self-gating: renders nothing with no signal yet (a brand-new tenant with no
  * idea and no company) — TopBar drops it in unconditionally.

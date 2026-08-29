@@ -1,0 +1,44 @@
+.rail {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-width: 0;
+}
+.rail::-webkit-scrollbar { display: none; }
+
+.cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: var(--radius-full, 999px);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font: 600 var(--font-size-small)/1 var(--font-sans);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cell:hover { color: var(--text-primary); }
+
+.cell[data-active='true'] {
+  color: var(--text-primary);
+  background: var(--surface-interactive);
+  border-color: var(--text-muted);
+}
+
+/* The tenant's actual journey position — a ring, so it reads even when a
+   different stage is the one currently selected. */
+.cell[aria-current='step'] { box-shadow: 0 0 0 1px var(--bg-base), 0 0 0 2px var(--border-strong, var(--text-muted)); }
+
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
+.cell[data-stage='idea'] .dot { background: var(--stage-idea); }
+.cell[data-stage='make'] .dot { background: var(--stage-make); }
+.cell[data-stage='run'] .dot { background: var(--stage-run); }
+.cell[data-stage='measure'] .dot { background: var(--stage-measure); }
+
+@media (max-width: 640px) {
+  .cell { padding: 6px 8px; font-size: var(--font-size-eyebrow); }
+}

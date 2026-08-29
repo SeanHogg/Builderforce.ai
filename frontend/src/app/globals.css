@@ -2300,6 +2300,104 @@ html[data-theme='light'] .nebula {
   container-name: panel;
 }
 
+/* The row that holds the panel's index column beside its body (`SlideOutPanel`).
+   Named separately from `.ui-panel-body` above it (nested named containers don't
+   collide) because this one has to measure the DRAWER, before the index has
+   claimed its share — the body's own container only ever sees what's left over.
+   ---------------------------------------------------------------------------
+   Below `slide-panel` this narrow, a fixed-width column and a body can no longer
+   share the row — that's `sheet` on an ordinary monitor as much as it's a phone,
+   which is why this keys off the drawer's measured width rather than a viewport
+   media query (a phone gets `--panel-width-sheet: 96vw` already; a `sheet` panel
+   opened on a wide desktop monitor never touches a `max-width` breakpoint at
+   all). Below the line the column becomes a horizontally scrolling strip ABOVE
+   the body instead of a sidebar squeezing it — the same layout `.ui-index`
+   already offers past `INDEX_ROW_LIMIT`, applied here by the panel rather than
+   chosen by the index's own `orientation` prop, since a caller picks
+   `orientation="vertical"` for the column it expects to have room for, not for
+   the width the reader happens to have chosen. */
+.slide-panel-body-row {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  align-items: stretch;
+  container-type: inline-size;
+  container-name: slide-panel;
+}
+
+.slide-panel-index {
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--border-subtle);
+  background: var(--surface-sunken);
+  padding: var(--space-3);
+}
+
+@container slide-panel (max-width: 560px) {
+  .slide-panel-body-row {
+    flex-direction: column;
+  }
+  .slide-panel-index {
+    width: 100%;
+    max-width: 100%;
+    /* Default for arbitrary index content that ISN'T a nav list (e.g. the
+       session manager's folder editor, with per-row rename/delete controls and
+       a project picker) — it stays a vertical list, just capped and scrollable
+       in place, rather than pushing the body an unbounded distance down the
+       page. A nav list overrides this back to one line below. */
+    max-height: 40vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+    padding: var(--space-2);
+  }
+  /* `ShellIndex`'s `orientation="vertical"` column — Workforce's fourteen
+     sub-views etc. — laid out as the same scrolling strip `data-scroll="true"`
+     already renders past six items, so the two mobile answers stay one answer. */
+  .slide-panel-index .ui-index[data-orientation='vertical'] {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    min-width: 0;
+    overflow-x: visible;
+  }
+  .slide-panel-index:has(> .ui-index[data-orientation='vertical']),
+  .slide-panel-index:has(> .ref-index) {
+    max-height: none;
+    overflow-y: hidden;
+    overflow-x: auto;
+  }
+  .slide-panel-index .ui-index[data-orientation='vertical'] .ui-index__item {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  /* The dashboard's own `ReferenceIndex` (§11.4.5) — same treatment, its own
+     class since it predates `.ui-index` and still paints its active state as a
+     left border, which reads as "active" in a column and not in a row. */
+  .slide-panel-index .ref-index {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 2px;
+  }
+  .slide-panel-index .ref-index__item {
+    width: auto;
+    flex-shrink: 0;
+    white-space: nowrap;
+    border-left: none;
+    border-bottom: 2px solid transparent;
+  }
+  .slide-panel-index .ref-index__item:hover {
+    border-left-color: transparent;
+    border-bottom-color: var(--border-strong);
+  }
+  .slide-panel-index .ref-index__item[aria-current='true'] {
+    border-left-color: transparent;
+    border-bottom-color: var(--accent);
+  }
+}
+
 /* A reference page inside the panel gets NO wrapper padding — it brings its own
    full-bleed bands, and boxing them produced a marketing page with a 16px frame
    inside a drawer, which reads as a mistake in both. Its READING COLUMN still

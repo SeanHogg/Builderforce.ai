@@ -49,6 +49,13 @@ export interface SlideOutPanelProps {
   tabs?: SlideOutPanelTab[];
   activeTabId?: string;
   onTabChange?: (tabId: string) => void;
+  /**
+   * Rendered between the title block and `headerActions`, taking the header's
+   * remaining width — e.g. the founder's-journey stage switcher. The title
+   * block stops stretching to fill the header when this is present, so the
+   * two share the row instead of the switcher being squeezed to its content.
+   */
+  headerCenter?: React.ReactNode;
   /** Header actions (e.g. buttons) rendered after title. */
   headerActions?: React.ReactNode;
   /** Main content. */
@@ -96,6 +103,7 @@ export function SlideOutPanel({
   tabs,
   activeTabId,
   onTabChange,
+  headerCenter,
   headerActions,
   children,
   width = 'sheet',
@@ -155,7 +163,7 @@ export function SlideOutPanel({
           overflow: 'hidden',
         }}
       >
-        {(title != null || headerActions != null) && (
+        {(title != null || headerCenter != null || headerActions != null) && (
           <div
             style={{
               display: 'flex',
@@ -194,7 +202,7 @@ export function SlideOutPanel({
               </svg>
             </button>
             {(title != null || crumb != null) && (
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ flex: headerCenter != null ? '0 1 auto' : 1, minWidth: 0 }}>
                 {crumb != null && (
                   <div className="ui-eyebrow" style={{ color: accentVar ? `var(${accentVar})` : 'var(--text-muted)' }}>{crumb}</div>
                 )}
@@ -202,6 +210,12 @@ export function SlideOutPanel({
                   <div style={{ fontWeight: 700, fontSize: 'var(--font-size-card-title)', color: 'var(--text-primary)' }}>{title}</div>
                 )}
               </div>
+            )}
+            {/* Takes the header's remaining width — the founder's-journey
+                stage switcher is the one thing that wants room here rather
+                than sitting flush against the title. */}
+            {headerCenter != null && (
+              <div style={{ flex: 1, minWidth: 0 }}>{headerCenter}</div>
             )}
             {/* Before the width control: an action (e.g. the project switcher)
                 is something to use, the resize control is chrome around the
@@ -246,18 +260,15 @@ export function SlideOutPanel({
           </div>
         )}
         {/* Index column beside the body, not above it — §3.4. Fourteen sub-views
-            fit down the left edge; a horizontal bar cannot hold them. */}
-        <div style={{ flex: 1, display: 'flex', minHeight: 0, alignItems: 'stretch' }}>
+            fit down the left edge; a horizontal bar cannot hold them. That holds
+            at `wide`/`full`, but `sheet` (or any width on a phone) narrows this
+            row below the point a fixed-width column and a body can coexist —
+            `.slide-panel-body-row` measures itself (not the viewport, same
+            reasoning as `.ui-panel-body`) and flips to a top strip the index
+            scrolls horizontally instead, in globals.css. */}
+        <div className="slide-panel-body-row">
           {index != null && (
-            <div
-              style={{
-                flexShrink: 0,
-                overflowY: 'auto',
-                borderRight: '1px solid var(--border-subtle)',
-                background: 'var(--surface-sunken)',
-                padding: 'var(--space-3)',
-              }}
-            >
+            <div className="slide-panel-index">
               {index}
             </div>
           )}

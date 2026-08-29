@@ -10,6 +10,9 @@ import { useAuth } from '@/lib/AuthContext';
 import { useRequireAuth } from '@/lib/useRequireAuth';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { useOnboardingPrompt } from '@/lib/onboarding';
+import { useFounderJourney } from '@/lib/useFounderJourney';
+import { groupsForStage, NAV_GROUPS, type Stage } from '@/lib/navGroups';
+import { useSampleWorkspace } from '@/domains/guest/presentation/useSampleWorkspace';
 import { ChatInput } from '@/components/ChatInput';
 import { ProjectsContent } from '@/components/ProjectsContent';
 import { TabCountBadge } from '@/components/TabCountBadge';
@@ -24,7 +27,6 @@ import { DashboardCreationLauncher, DashboardCreationSessions } from '@/componen
 import { DashboardIdeasTab } from '@/components/dashboard/DashboardIdeasTab';
 import { DashboardQualityTab } from '@/components/dashboard/DashboardQualityTab';
 import { DashboardKnowledgeTab } from '@/components/dashboard/DashboardKnowledgeTab';
-import { JourneyStrip } from '@/components/dashboard/JourneyStrip';
 import { ActRail } from '@/components/dashboard/ActRail';
 import { BusinessTab } from '@/components/dashboard/BusinessTab';
 import { InterviewsTab } from '@/components/dashboard/InterviewsTab';
@@ -35,7 +37,7 @@ import { useWorkforcePresence } from '@/lib/useWorkforcePresence';
 import { agentHosts, tasksApi, approvalsApi, creationSessionsApi, type AgentHost } from '@/lib/builderforceApi';
 import type { WorkspaceCanvasPanel } from '@/components/workspace-canvas/WorkspaceCanvas';
 import { WorkspacePanelList } from '@/components/workspace-canvas/WorkspacePanelList';
-import { usePublishReferenceChrome, usePublishReferenceSelect, useReferenceRailActive } from '@/lib/referenceChrome';
+import { usePublishReferenceChrome, usePublishReferenceSelect, usePublishStageSelect, useReferenceRailActive } from '@/lib/referenceChrome';
 import styles from './Dashboard.module.css';
 
 // The founder's journey (PRD: "Idea to Real"), not the generic Create/Projects
@@ -54,9 +56,15 @@ export default function DashboardPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const t = useTranslations('dashboard');
+  const tNav = useTranslations('nav');
   const { isAuthenticated, hasTenant, webToken, tenantToken, tenant } = useAuth();
   const { currentProjectId } = useProjectScope();
   const tenantId = tenant?.id != null ? Number(tenant.id) : undefined;
+  const journey = useFounderJourney();
+  const { isSample } = useSampleWorkspace();
+  // A guest previewing the product is always shown mid-idea — that is the
+  // sample workspace's own posture — never the "no signal yet" empty state.
+  const currentStage: Stage | null = journey.stage ?? (isSample ? 'idea' : null);
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
@@ -71,6 +79,11 @@ export default function DashboardPage() {
   const [approvalDates, setApprovalDates] = useState<string[]>([]);
   const [taskStats, setTaskStats] = useState<{ total: number; inProgress: number; done: number } | null>(null);
   const [taskDates, setTaskDates] = useState<string[]>([]);
+  // Which stage's menu the header switcher (and the panel's rail) is showing —
+  // browsing a stage is independent of the tenant's REAL journey position
+  // (`journey.stage`, the switcher's wayfinding ring). Idea is the default home,
+  // so browsing starts there regardless of where the tenant actually is.
+  const [activeStage, setActiveStage] = useState<Stage>('idea');
 
   // Ideas is the default home — the Idea phase is where the journey starts.
   const tabParam = searchParams.get('tab');
@@ -186,20 +199,36 @@ export default function DashboardPage() {
     count: key === 'projects' && !loading ? scopedProjects.length : undefined,
   }));
 
+  // Idea has no destinations of its own in `navGroups.ts` (its one row, Create,
+  // IS the canvas) — its menu is these dashboard-native tabs instead. Make/Run/
+  // Measure reuse the same stage grouping the Sidebar renders (`groupsForStage`)
+  // rather than a second, dashboard-only list of the same destinations.
+  const stageGroups = activeStage === 'idea' ? null : groupsForStage(NAV_GROUPS, activeStage);
+  const sections = activeStage === 'idea'
+    ? tabRows.map(({ key, label, count }) => ({ id: key, label: count != null ? `${label} · ${count}` : label }))
+    : (stageGroups ?? []).map((group) => ({ id: group.id, label: tNav(group.labelKey) }));
+
   // Opened from anywhere in the operator shell this route renders inside
   // `ShellPanel`, which without this called it "Panel" — the generic fallback —
   // because the dashboard is not a nav group. It names itself, and hands over its
-  // five tabs as the panel's index rail; they are VIEWS, not anchors, so the rail
-  // switches rather than scrolls (`usePublishReferenceSelect`).
+  // menu (Idea's own tabs, or another stage's real destinations) as the panel's
+  // index rail; they are VIEWS/links, not anchors, so the rail switches rather
+  // than scrolls (`usePublishReferenceSelect`). `chrome.stage` + `stageSelect`
+  // put the Idea/Make/Run/Measure control in the panel HEADER (`ShellPanel`),
+  // rather than this page rendering its own banner.
   usePublishReferenceChrome({
     title: t('title'),
-    sections: tabRows.map(({ key, label, count }) => ({
-      id: key,
-      label: count != null ? `${label} · ${count}` : label,
-    })),
-    activeId: activeTab,
+    sections,
+    activeId: activeStage === 'idea' ? activeTab : undefined,
+    stage: activeStage,
+    currentStage,
   });
-  usePublishReferenceSelect((key) => selectTab(key as DashboardTab));
+  usePublishReferenceSelect((id) => {
+    if (activeStage === 'idea') { selectTab(id as DashboardTab); return; }
+    const group = stageGroups?.find((g) => g.id === id);
+    if (group) router.push(group.href);
+  });
+  usePublishStageSelect(setActiveStage);
   // Opened as a panel, the rail IS the tab bar — so the inline one below would be
   // the same five buttons a second time. Standalone there is no rail, and the
   // inline bar is the only way to change view, so it must stay.
@@ -252,7 +281,7 @@ export default function DashboardPage() {
       subtitle: activeTab === 'ideas' ? t('panel.creationsSubtitle') : t('panel.workspaceWidget'),
       icon: activeTab === 'quality' ? '◆' : activeTab === 'knowledge' ? '▤' : '◇',
       content: <div className={styles.workspaceWidget}>
-        {!railHasTabs && (
+        {!railHasTabs && activeStage === 'idea' && (
           <nav aria-label={t('widgetsLabel')}>{tabRows.map(({ key, label, count }) => (
             <button key={key} type="button" data-active={activeTab === key} onClick={() => selectTab(key)}>
               {label}<TabCountBadge count={loading ? null : count ?? undefined} />
@@ -280,7 +309,6 @@ export default function DashboardPage() {
 
   return <>
     {showOnboarding && webToken && <OnboardingStepper webToken={webToken} tenantToken={tenantToken} tenant={tenant} initialProgress={onboardingProgress} onComplete={handleOnboardingComplete} onDismiss={handleOnboardingDismiss} />}
-    <JourneyStrip />
     <WorkspacePanelList panels={panels} />
   </>;
 }
