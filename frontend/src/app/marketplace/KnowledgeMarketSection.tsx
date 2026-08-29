@@ -151,7 +151,7 @@ export function KnowledgeMarketSection({ search = '' }: { search?: string }) {
               <span>{t('installs', { count: l.installCount })}</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <span style={{ fontWeight: 700 }}>{l.priceCents > 0 ? formatCents(l.priceCents) : t('free')}</span>
+              <span style={{ fontWeight: 700 }}>{l.priceCents > 0 ? formatCents(l.priceCents, { currency: l.currency }) : t('free')}</span>
               <button type="button" className="btn btn-primary btn-sm" disabled={installing === l.id} onClick={() => acquire(l)}>
                 {installing === l.id
                   ? t('installing')

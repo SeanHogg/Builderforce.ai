@@ -1,3 +1,32 @@
+## ✅ RESOLVED 2026-08-29 — A knowledge listing could only be priced in USD
+
+`marketplace_knowledge` had no `currency` column (unlike `catalog_items`, which already carries
+one), so `startKnowledgeCheckout` hardcoded `'USD'` and a non-US seller priced a listing in a
+currency they do not use.
+
+**Fix.** Migration 1124 adds `marketplace_knowledge.currency varchar(8)`, nullable, mirroring
+`catalog_items.currency` exactly (NULL reads as USD). The publish surface
+(`POST /documents/:id/list` in `knowledgeRoutes.ts`) now accepts and normalizes a `currency` field
+(uppercased, 8 chars, defaults to `'USD'`); `startKnowledgeCheckout` (`knowledgeCommerce.ts`) sends
+`listing.currency ?? 'USD'` to the payment provider instead of a literal `'USD'`. The public browse
+projection (`knowledgeMarket.ts` `PublicListing`) and both listing-read routes now surface the
+resolved currency. Settlement is deliberately untouched: seller/commission ledger entries still net
+out in `usd_cents`, matching the exact precedent `listingCommerce.ts` already sets for creation
+listings (`currency: listing.currency ?? 'USD'` feeding Stripe while `creditSeller` posts in
+`usd_cents` regardless) — this is a pricing/display fix, not a multi-currency ledger.
+
+Frontend: `KnowledgeDocClient.tsx`'s publish control gained a currency `<Select>` (options from the
+shared `KNOWN_CURRENCIES` in `canvasMoney.ts`, the same short list every other price-entry surface
+offers) next to the price input, and both the seller's own listing view and the public
+`KnowledgeMarketSection.tsx` browse cards now format the price through `formatCents(cents,
+{ currency })` instead of a hardcoded `$`. Localized `priceLabel`/`listedFor`/new `currencyLabel`
+keys across all five catalogs (en/zh/es/fr/de).
+
+**Verification.** `knowledgeCommerce.test.ts` — added 2 tests (charges in the listing's currency;
+falls back to USD for a pre-migration NULL), 17/17 passing. `knowledgeRoutes.test.ts` +
+`knowledgeMarket`/`knowledgeCommerce` suites — 35/35 passing. Full `tsc --noEmit` clean on both
+`api` and `frontend`. All five i18n catalogs parse as valid JSON.
+
 ## ✅ RESOLVED 2026-08-29 — Canvas Brain had no bridge to the "Idea → Real" realization pipeline, so "stand up a phone line" produced an unrunnable card
 
 Two diagnostics traced the same defect from opposite ends. A guest session showed a visitor

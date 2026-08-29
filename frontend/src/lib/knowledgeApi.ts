@@ -159,6 +159,7 @@ export interface KnowledgeListing {
   category: string | null;
   tags: string[];
   priceCents: number;
+  currency: string;
   authorName: string | null;
   installCount: number;
   createdAt: string;
@@ -169,6 +170,7 @@ export interface MyKnowledgeListing {
   id: string;
   sourceDocumentId: string | null;
   priceCents: number;
+  currency: string;
   visibility: string;
   category: string | null;
   tags: string[];
@@ -266,7 +268,7 @@ export const knowledgeApi = {
   docListing: (id: string) =>
     apiRequest<{ listing: MyKnowledgeListing | null }>(`${BASE}/documents/${id}/listing`).then((r) => r.listing),
 
-  publishListing: (id: string, input: { priceCents?: number; category?: string; visibility?: string }) =>
+  publishListing: (id: string, input: { priceCents?: number; currency?: string; category?: string; visibility?: string }) =>
     apiRequest<{ listing: MyKnowledgeListing }>(`${BASE}/documents/${id}/list`, {
       method: 'POST',
       ...jsonBody(input),

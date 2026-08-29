@@ -123,7 +123,7 @@ export async function startKnowledgeCheckout(
   const base = new URL(input.returnUrl);
   const session = await buildPaymentProvider(env).createOneTimeCheckoutSession({
     amountCents: listing.priceCents,
-    currency: 'USD',
+    currency: listing.currency ?? 'USD',
     productName: listing.title,
     billingEmail: input.buyerEmail ?? null,
     // Only the ORIGIN and PATH of the caller's url are kept, so a return url

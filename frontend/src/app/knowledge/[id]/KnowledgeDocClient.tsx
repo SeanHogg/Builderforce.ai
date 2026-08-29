@@ -36,8 +36,13 @@ import {
 } from '../knowledgeStyles';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { formatCents, KNOWN_CURRENCIES } from '@/lib/canvasMoney';
 
 const DOC_TYPES: DocType[] = ['sop', 'process', 'doc', 'postmortem', 'known_error'];
+// A seller picks from the platform's known-currency vocabulary (canvasMoney.ts)
+// rather than a second hand-typed list — Stripe accepts far more, but this is
+// the same short list every other price-entry surface on the platform offers.
+const KNOWLEDGE_LISTING_CURRENCIES = Array.from(KNOWN_CURRENCIES);
 
 export default function KnowledgeDocClient({ docId }: { docId: string }) {
   const t = useTranslations('knowledge');
@@ -951,6 +956,7 @@ function ListingControl({ docId, t }: { docId: string; t: ReturnType<typeof useT
   const [listing, setListing] = useState<MyKnowledgeListing | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [price, setPrice] = useState('0');
+  const [currency, setCurrency] = useState('USD');
   const [busy, setBusy] = useState(false);
 
   const reload = useCallback(() => {
@@ -958,7 +964,10 @@ function ListingControl({ docId, t }: { docId: string; t: ReturnType<typeof useT
       .docListing(docId)
       .then((l) => {
         setListing(l);
-        if (l) setPrice((l.priceCents / 100).toString());
+        if (l) {
+          setPrice((l.priceCents / 100).toString());
+          setCurrency(l.currency || 'USD');
+        }
       })
       .catch(() => setListing(null))
       .finally(() => setLoaded(true));
@@ -972,7 +981,7 @@ function ListingControl({ docId, t }: { docId: string; t: ReturnType<typeof useT
     setBusy(true);
     try {
       const priceCents = Math.max(0, Math.round(parseFloat(price || '0') * 100));
-      const next = await knowledgeApi.publishListing(docId, { priceCents });
+      const next = await knowledgeApi.publishListing(docId, { priceCents, currency });
       setListing(next);
     } finally {
       setBusy(false);
@@ -1005,7 +1014,7 @@ function ListingControl({ docId, t }: { docId: string; t: ReturnType<typeof useT
       {listing ? (
         <>
           <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-            {t('listedFor', { price: (listing.priceCents / 100).toFixed(2) })} · {t('installs', { count: listing.installCount })}
+            {t('listedFor', { price: formatCents(listing.priceCents, { currency: listing.currency }) })} · {t('installs', { count: listing.installCount })}
           </span>
           <button type="button" onClick={list} disabled={busy} style={btnGhost}>
             {busy ? t('saving') : t('updateListing')}
@@ -1026,6 +1035,14 @@ function ListingControl({ docId, t }: { docId: string; t: ReturnType<typeof useT
               onChange={(e) => setPrice(e.target.value)}
               style={{ ...inputStyle, width: 90, minWidth: 0 }}
             />
+          </label>
+          <label style={{ fontSize: 13, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            {t('currencyLabel')}
+            <Select value={currency} onChange={(e) => setCurrency(e.target.value)} style={{ ...inputStyle, width: 90, minWidth: 0 }}>
+              {KNOWLEDGE_LISTING_CURRENCIES.map((code) => (
+                <option key={code} value={code}>{code}</option>
+              ))}
+            </Select>
           </label>
           <button type="button" onClick={list} disabled={busy} style={btnPrimary}>
             {busy ? t('saving') : t('listForSale')}

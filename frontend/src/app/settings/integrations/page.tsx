@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
-import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import { type ViewMode } from '@/components/ViewToggle';
+import { CatalogToolbar } from '@/components/CatalogToolbar';
 import { ProviderKeysSettings } from '@/components/ProviderKeysSettings';
 import { IntegrationsGallery } from '@/components/integrations/IntegrationsGallery';
 import { MailboxIntegrations } from '@/components/integrations/MailboxIntegrations';
@@ -52,8 +53,17 @@ export default function SettingsIntegrationsPage() {
         <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>{t('subtitle')}</p>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', paddingBottom: 16, marginBottom: 22, borderBottom: '1px solid var(--border-subtle)' }}>
-        <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('searchPlaceholder')} aria-label={t('searchPlaceholder')} style={{ flex: '1 1 260px', maxWidth: 370, padding: '9px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13 }} />
+      {/* `sticky` keeps search/category/priority filtering reachable while the
+          Model Providers / Connectors / Apps sections scroll underneath — the
+          same shared toolbar the marketplace/prompts/blog catalogues use. */}
+      <CatalogToolbar
+        sticky
+        search={search}
+        onSearch={setSearch}
+        searchPlaceholder={t('searchPlaceholder')}
+        view={viewMode}
+        onView={setViewMode}
+      >
         <span style={{ fontSize: 13, fontWeight: 650, color: 'var(--text-primary)' }}>{t('categoryLabel')}</span>
         <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
           {CATEGORIES.filter((item) => item.id !== 'developer' || isOwner).map((item) => (
@@ -62,15 +72,12 @@ export default function SettingsIntegrationsPage() {
             </button>
           ))}
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 9 }}>
-          {(category === 'all' || category === 'models') && (
-            <button type="button" onClick={() => setPriorityOpen(true)} style={{ padding: '7px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 12.5, fontWeight: 650, cursor: 'pointer' }}>
-              {t('priorityChip', { leader: priorityLeader ?? t('priorityNone') })}
-            </button>
-          )}
-          <ViewToggle value={viewMode} onChange={setViewMode} />
-        </div>
-      </div>
+        {(category === 'all' || category === 'models') && (
+          <button type="button" onClick={() => setPriorityOpen(true)} style={{ padding: '7px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 12.5, fontWeight: 650, cursor: 'pointer' }}>
+            {t('priorityChip', { leader: priorityLeader ?? t('priorityNone') })}
+          </button>
+        )}
+      </CatalogToolbar>
 
       {show('models') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.models')}</h2><ProviderKeysSettings search={search} viewMode={viewMode} priorityOpen={priorityOpen} onPriorityClose={() => setPriorityOpen(false)} onLeaderChange={setPriorityLeader} /></section>}
       {show('connectors') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.connectors')}</h2><ConnectorsGallery search={search} viewMode={viewMode} /></section>}

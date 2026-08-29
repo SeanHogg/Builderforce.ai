@@ -329,6 +329,10 @@ export const marketplaceKnowledge = pgTable('marketplace_knowledge', {
   tags:             text('tags').notNull().default('[]'),
   /** Sale price in cents (0 = free). */
   priceCents:       integer('price_cents').notNull().default(0),
+  /** ISO 4217 code the price is denominated in. Null reads as USD (migration
+   *  1124) — mirrors catalogItems.currency so a non-US seller can price in
+   *  their own currency; settlement itself still nets out in usd_cents. */
+  currency:         varchar('currency', { length: 8 }),
   /** 'private' | 'tenant' | 'public' */
   visibility:       varchar('visibility', { length: 16 }).notNull().default('public'),
   authorName:       varchar('author_name', { length: 255 }),

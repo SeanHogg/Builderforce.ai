@@ -117,6 +117,18 @@ describe('startKnowledgeCheckout — the session it mints', () => {
     expect(opts.successUrl).toBe('https://app.example.com/knowledge?checkout={CHECKOUT_SESSION_ID}&listing=kn-1');
     expect(opts.cancelUrl).toBe('https://app.example.com/knowledge?checkout=cancelled');
   });
+
+  it('charges in the seller’s own currency rather than assuming USD', async () => {
+    await start(fakeDb([[listing({ currency: 'EUR' })], []]));
+    const opts = createOneTimeCheckoutSession.mock.calls[0]![0];
+    expect(opts.currency).toBe('EUR');
+  });
+
+  it('falls back to USD for a listing published before currency was recorded', async () => {
+    await start(fakeDb([[listing({ currency: null })], []]));
+    const opts = createOneTimeCheckoutSession.mock.calls[0]![0];
+    expect(opts.currency).toBe('USD');
+  });
 });
 
 const paidSession = (over: Record<string, unknown> = {}) => ({

@@ -1071,9 +1071,12 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     const access = await accessFor(c, doc);
     if (!canEditAccess(access)) return c.json({ error: 'Forbidden' }, 403);
 
-    type ListBody = { priceCents?: number; category?: string; visibility?: string };
+    type ListBody = { priceCents?: number; currency?: string; category?: string; visibility?: string };
     const body = await c.req.json<ListBody>().catch((): ListBody => ({}));
     const priceCents = Math.max(0, Math.round(Number(body.priceCents) || 0));
+    const currency = typeof body.currency === 'string' && body.currency.trim()
+      ? body.currency.trim().toUpperCase().slice(0, 8)
+      : 'USD';
     const visibility = (LISTING_VISIBILITIES as readonly string[]).includes(body.visibility ?? '')
       ? (body.visibility as string)
       : 'public';
@@ -1093,6 +1096,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       category: body.category?.trim() || null,
       tags: JSON.stringify(tags),
       priceCents,
+      currency,
       visibility,
       authorName,
       updatedAt: new Date(),
@@ -1103,7 +1107,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       ? await db.update(marketplaceKnowledge).set(values).where(scopedToTenant(marketplaceKnowledge, tenantId, eq(marketplaceKnowledge.id, existing.id))).returning()
       : await db.insert(marketplaceKnowledge).values(values).returning();
     await bumpCacheVersion(c.env as Env, MARKET_VERSION_KEY);
-    return c.json({ listing: { ...listing, tags } });
+    return c.json({ listing: { ...listing, tags, currency: listing?.currency ?? 'USD' } });
   });
 
   // ---- THE CALLER-TENANT'S LISTING FOR A DOC (editor list/unlist UI) ----
@@ -1114,7 +1118,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       .select()
       .from(marketplaceKnowledge)
       .where(and(eq(marketplaceKnowledge.sourceDocumentId, id), eq(marketplaceKnowledge.tenantId, tenantId)));
-    return c.json({ listing: listing ? { ...listing, tags: parseTags(listing.tags) } : null });
+    return c.json({ listing: listing ? { ...listing, tags: parseTags(listing.tags), currency: listing.currency ?? 'USD' } : null });
   });
 
   // ---- UNLIST (seller tenant only) -------------------------------------

@@ -35,6 +35,9 @@ export interface PublicListing {
   category: string | null;
   tags: string[];
   priceCents: number;
+  /** ISO 4217 code `priceCents` is denominated in. Never null on the wire —
+   *  a listing published before migration 1124 reads its NULL column as USD. */
+  currency: string;
   authorName: string | null;
   installCount: number;
   createdAt: Date | null;
@@ -60,6 +63,7 @@ export async function browsePublicListings(env: Env, db: Db): Promise<PublicList
         category: r.category,
         tags: parseListingTags(r.tags),
         priceCents: r.priceCents,
+        currency: r.currency ?? 'USD',
         authorName: r.authorName,
         installCount: r.installCount,
         createdAt: r.createdAt,
