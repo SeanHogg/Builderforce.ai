@@ -23,7 +23,7 @@
  * organizing sessions into folders and tying them to a Project.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -32,7 +32,7 @@ import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { creationSessionsApi, type CreationSessionSummary } from '@/lib/builderforceApi';
 import { fetchRecentCanvases, invalidateRecentCanvases, listPendingDrafts } from '@/lib/pendingWork';
 import { updateLocalCreationSession, type LocalCreationEntry } from '@/domains/canvas/infrastructure/localCanvasStore';
-import { getActiveCanvasSync, subscribeActiveCanvasSync } from '@/lib/activeCanvasSyncStatus';
+import { CanvasSyncBadge } from '@/components/canvas/CanvasSyncBadge';
 import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 import { SplitButton } from '@/components/ui';
 import { menuItemStyle } from '@/components/workspace/MenuSurface';
@@ -105,15 +105,6 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
   });
 
   const currentId = activeCanvasId(pathname);
-  // The board's own connection light, published by `CreationCanvas` — a sibling
-  // in the app shell, not an ancestor, so it cannot reach this component as a
-  // prop. Undefined for every route that isn't the live canvas, including a
-  // local-only board with no connection to report.
-  const syncState = useSyncExternalStore(
-    subscribeActiveCanvasSync,
-    () => getActiveCanvasSync(currentId),
-    () => undefined,
-  );
 
   useEffect(() => {
     setDrafts(listPendingDrafts());
@@ -272,14 +263,7 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
                   else if (event.key === 'Escape') setTitleDraft(activeTitle ?? '');
                 }}
               />
-              {syncState && (
-                <span className="nav-sessions__sync" role="status" aria-live="polite" data-state={syncState}>
-                  {syncState === 'online' ? t('synced')
-                    : syncState === 'offline' ? t('offlineRetry')
-                    : syncState === 'reconnecting' ? t('reconnecting')
-                    : t('connecting')}
-                </span>
-              )}
+              <CanvasSyncBadge sessionId={currentId} />
             </span>
           </>
         )}

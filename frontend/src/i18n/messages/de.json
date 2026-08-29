@@ -18959,10 +18959,6 @@
     "edge": "Verbindung",
     "conversation": "Unterhaltung",
     "tutorial": "Tutorial",
-    "live": "Synchronisiert",
-    "offlineRetry": "Offline · Änderungen werden erneut versucht",
-    "reconnecting": "Verbindung wird wiederhergestellt…",
-    "connecting": "Verbindung wird hergestellt…",
     "largeSession": "Große Session · {count} Objekte",
     "dashboardTitle": "Kreationen",
     "pinSession": "Anheften",
@@ -24171,7 +24167,11 @@
     "manage": "Sitzungen & Ordner verwalten",
     "manageAria": "Sitzungen verwalten",
     "tiedToProject": "In diesem Projekt",
-    "resizeAria": "Sitzungsbereich in der Größe ändern"
+    "resizeAria": "Sitzungsbereich in der Größe ändern",
+    "synced": "Synchronisiert",
+    "offlineRetry": "Offline · Änderungen werden erneut versucht",
+    "reconnecting": "Verbindung wird wiederhergestellt…",
+    "connecting": "Verbindung wird hergestellt…"
   },
   "sessionManagePanel": {
     "title": "Sitzungen & Ordner",
