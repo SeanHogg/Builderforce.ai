@@ -13,7 +13,12 @@ vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')
   .realCatalogIntlMock((await import('@/i18n/messages/en.json')).default as Record<string, unknown>));
 
 const permission = vi.hoisted(() => ({
-  current: { allowed: false, role: undefined, required: 'manager', requiredLabel: 'Manager' },
+  current: {
+    allowed: false,
+    role: undefined as 'owner' | 'manager' | 'developer' | 'viewer' | undefined,
+    required: 'manager',
+    requiredLabel: 'Manager',
+  },
 }));
 vi.mock('@/lib/rbac', () => ({ usePermission: () => permission.current }));
 
@@ -37,7 +42,7 @@ describe('RoleGate', () => {
   });
 
   it('shows the honest role hint to a signed-in person below the required role', () => {
-    permission.current = { allowed: false, role: 'contributor', required: 'developer', requiredLabel: 'Developer' };
+    permission.current = { allowed: false, role: 'viewer', required: 'developer', requiredLabel: 'Developer' };
     sampleWorkspace.current = { ready: true, signedIn: true, isSample: false };
     render(<RoleGate capability="knowledge.create"><button>New document</button></RoleGate>);
     expect(screen.getByTitle(/Requires.*role/i)).toBeInTheDocument();

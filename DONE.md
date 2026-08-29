@@ -23,10 +23,49 @@ reachable instead of shadowed by the error banner.
 **Verification.** `npm run type-check` (tsc + tsgo via the frontend guard manifest) — 2/2 clean.
 Grepped for the anti-pattern and for duplicate imports afterward — zero remaining, zero dupes.
 
-**Left open, logged separately below:** `RoleGate` shows a signed-out visitor "Requires Developer
-role" on Knowledge's "+ New document" (and every other RoleGate-protected action reachable by a
-guest) rather than routing them to `SessionGate`'s create-account CTA — a real but pre-existing gap
-distinct from the one this pass closed, needing a product decision on how the two gates compose.
+**Also fixed in this pass, same root complaint (a guest meeting an unsatisfiable/wrong message
+instead of the honest one):**
+
+**`RoleGate` was telling a signed-out guest to get a different ROLE, when what they needed was an
+ACCOUNT.** Missing a `Capability` (e.g. `knowledge.create` on `/knowledge`'s "+ New document") drew
+`RoleGate`'s "Requires Developer role" hint for everyone, including a guest — honest about the role
+check (`useRole()` reads `undefined` with no account) but wrong about the fix: no role upgrade in an
+account they don't have will ever satisfy it. `SessionGate` already said the correct thing
+("Create an account" / "Sign in") for exactly this situation elsewhere, but nothing composed the
+two gates. Fix: extracted the CTA/lock rendering both gates need into a new shared
+`components/guest/GuestGateNotice.tsx` (`reason`, `variant`, `silent`) — `SessionGate` now delegates
+to it instead of carrying its own copy, and `RoleGate` checks `useSampleWorkspace()` FIRST: a
+signed-out visitor (`ready && !signedIn`) sees `GuestGateNotice` with a new generic
+`guest.gate.reason.account` message ("Create an account to unlock this."), added to all five i18n
+catalogs; a signed-in person below the required role still gets the honest role hint, unchanged.
+`silent` is honored on both branches. New `RoleGate.test.tsx` (4 tests) covers allowed / signed-in
+under-role / signed-out / silent.
+
+**`/learning`, `/method` and `/investor` were 404ing in production** — not deploy staleness (ruled
+out with a live `curl`: every other route 200s, these three genuinely 404 straight off origin).
+Root cause: `middleware.ts` hard-404s any single-segment root path absent from
+`lib/rootRoutes.ts`'s `APP_ROUTE_SEGMENTS`/`BURNRATE_DOMAIN_SEGMENTS` tables (an anti-soft-404
+guard — `app/[burnrateDomain]/page.tsx` is a root catch-all, so an undeclared segment reads as a
+typo). All three routes' `src/app/<segment>/` directories were added without adding the segment to
+that table. `rootRoutes.test.ts` asserts exactly this and would have caught all three — but nothing
+in the deploy pipeline runs vitest: `deploy-frontend` in `release.yml` runs `pnpm run check` (the
+static guard manifest, ~10s) and goes straight to `wrangler deploy`, never `npm test` (which is
+`check && vitest run`, and the full suite — 375 files — didn't finish in a 10-minute run locally, so
+folding it into every deploy was never going to be the fix). Closed two ways: (1) added `learning`,
+`method`, `investor` to `APP_ROUTE_SEGMENTS` in `rootRoutes.ts`; (2) wrote
+`scripts/check-root-routes.mjs` — a standalone guard reproducing `rootRoutes.test.ts`'s exhaustiveness
+check in plain Node (no vitest dependency, matches every other guard's shape), registered in
+`checks.manifest.mjs` so it now runs on every `pnpm run check` — i.e. every deploy, in milliseconds.
+Verified the guard actually catches the regression: reverted the `learning` entry, reran it, got the
+exact `src/app/learning/ exists but is not declared` failure, then restored the fix.
+
+**Verification (whole pass).** `pnpm run check` — 18/18 guards (bumped
+`.frontend-architecture-baseline.json`'s `useClientFiles` 929→930 for the new `GuestGateNotice.tsx`,
+with the prose justification the ratchet requires). `npm run type-check` — 2/2. `eslint` clean on
+every touched/new file. `vitest run` on `rootRoutes.test.ts`, `domains/guest/*` and the new
+`RoleGate.test.tsx` — 40/40. Live `curl` against `builderforce.ai/learning`, `/method`, `/investor`
+confirmed the 404 (before) — the fix itself ships on the next deploy, which is now gated on it never
+regressing.
 
 ## ✅ RESOLVED 2026-08-26 — Guest fixture for the dashboard's Ideas tab (founder's journey)
 
