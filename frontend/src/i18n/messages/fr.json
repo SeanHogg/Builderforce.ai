@@ -18992,6 +18992,8 @@
     "existingCreations": "Vos créations existantes",
     "existingCreationsSubtitle": "Ouvrez un Projet, un Agent, un Site, une App, un Evermind, un LLM, une Voix, une Vidéo, un Flux ou une session Brain dans son Canevas.",
     "loadingCreations": "Chargement des créations…",
+    "loadMoreSessions": "Charger plus",
+    "loadingMore": "Chargement…",
     "noCreations": "Aucune création ne correspond à cette recherche.",
     "brainSession": "Session Brain",
     "workflowRuns": "Flux · {count} exécutions",
@@ -24072,7 +24074,6 @@
     "deleteConfirmMessageLocal": "Supprimer « {title} » ? Ce brouillon enregistré uniquement dans le navigateur ne peut pas être récupéré."
   },
   "canvasLibrary": {
-    "subtitle": "Tout ce que vous avez créé, et les façons de commencer autre chose.",
     "pendingTitle": "En attente d’enregistrement",
     "renameSession": "Renommer la session",
     "moveSession": "Déplacer dans un dossier",

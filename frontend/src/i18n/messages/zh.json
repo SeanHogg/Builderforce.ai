@@ -18992,6 +18992,8 @@
     "existingCreations": "你现有的创作",
     "existingCreationsSubtitle": "在画布中打开现有的项目、智能体、网站、应用、Evermind、LLM、语音、视频、工作流或 Brain 会话。",
     "loadingCreations": "正在加载创作…",
+    "loadMoreSessions": "加载更多",
+    "loadingMore": "正在加载…",
     "noCreations": "没有符合此搜索的现有创作。",
     "brainSession": "Brain 会话",
     "workflowRuns": "工作流 · {count} 次运行",
@@ -24072,7 +24074,6 @@
     "deleteConfirmMessageLocal": "删除“{title}”吗？此仅存于浏览器的草稿无法恢复。"
   },
   "canvasLibrary": {
-    "subtitle": "您创建的全部内容，以及开始新作品的方式。",
     "pendingTitle": "等待保存",
     "renameSession": "重命名会话",
     "moveSession": "移动到文件夹",

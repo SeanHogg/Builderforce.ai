@@ -18992,6 +18992,8 @@
     "existingCreations": "Tus creaciones existentes",
     "existingCreationsSubtitle": "Abre un Proyecto, Agente, Sitio, App, Evermind, LLM, Voz, Vídeo, Flujo o sesión de Brain dentro de su Lienzo.",
     "loadingCreations": "Cargando creaciones…",
+    "loadMoreSessions": "Cargar más",
+    "loadingMore": "Cargando…",
     "noCreations": "Ninguna creación coincide con esta búsqueda.",
     "brainSession": "Sesión de Brain",
     "workflowRuns": "Flujo · {count} ejecuciones",
@@ -24072,7 +24074,6 @@
     "deleteConfirmMessageLocal": "¿Eliminar «{title}»? Este borrador del navegador no se puede recuperar."
   },
   "canvasLibrary": {
-    "subtitle": "Todo lo que has creado y las formas de empezar algo nuevo.",
     "pendingTitle": "Pendientes de guardar",
     "renameSession": "Renombrar sesión",
     "moveSession": "Mover a carpeta",

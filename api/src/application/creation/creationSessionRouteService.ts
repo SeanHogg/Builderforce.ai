@@ -656,6 +656,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     const status = c.req.query('status') === 'archived' ? 'archived' : 'active';
     const limit = Math.min(100, Math.max(1, Number(c.req.query('limit') ?? 30)));
+    const offset = Math.max(0, Number(c.req.query('offset') ?? 0));
     const projectId = Number(c.req.query('projectId'));
     const hasProjectFilter = Number.isInteger(projectId) && projectId > 0;
     const rows = await db
@@ -700,8 +701,9 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
         ) : undefined,
       ))
       .orderBy(desc(creationSessions.lastActivityAt))
-      .limit(limit);
-    return c.json({ sessions: rows });
+      .limit(limit)
+      .offset(offset);
+    return c.json({ sessions: rows, hasMore: rows.length === limit });
   });
 
   router.get('/quotas', async (c) => {
@@ -730,7 +732,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId, segmentId } = scope(c);
     const userId = c.get('userId') as string;
     const q = (c.req.query('q') ?? '').trim().slice(0, 200);
-    if (q.length < 2) return c.json({ sessions: [] });
+    if (q.length < 2) return c.json({ sessions: [], hasMore: false });
+    const searchLimit = Math.min(100, Math.max(1, Number(c.req.query('limit') ?? 30)));
     const pattern = `%${q.replace(/[\\%_]/g, '\\$&')}%`;
     const status = creationSessionSearchStatus(c.req.query('status'));
     const kind = (c.req.query('kind') ?? '').trim().slice(0, 48);
@@ -790,7 +793,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
         toDate ? sql`${creationSessions.lastActivityAt} <= ${toDate}` : undefined,
       ))
       .orderBy(desc(creationSessionMembers.pinned), desc(creationSessions.lastActivityAt))
-      .limit(Math.min(100, Math.max(1, Number(c.req.query('limit') ?? 30))));
+      .limit(searchLimit)
+      .offset(Math.max(0, Number(c.req.query('offset') ?? 0)));
     // Search matches are only hints. Revalidate every authoritative resource
     // represented in the preview because access can be revoked after insertion.
     const safeRows = await Promise.all(rows.map(async (row) => {
@@ -828,7 +832,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
         } : null,
       };
     }));
-    return c.json({ sessions: safeRows });
+    return c.json({ sessions: safeRows, hasMore: rows.length === searchLimit });
   });
 
   router.get('/templates', async (c) => {

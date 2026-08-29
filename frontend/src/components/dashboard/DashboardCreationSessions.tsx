@@ -39,6 +39,7 @@ const CANVAS_STARTERS = [
  *  read below accepts it and normalises rather than silently resetting. */
 type CreationLibraryView = 'card' | 'table';
 const CREATION_LIBRARY_VIEW_KEY = 'builderforce.dashboard.creationLibraryView';
+const SESSIONS_PAGE_SIZE = 24;
 
 function modalityStarterPrompt(id: string, label: string, tagline: string): string {
   if (id === 'evermind') return 'Create an Evermind dataset, tokenizer, tuning, evaluation, and telemetry pipeline on this Canvas.';
@@ -123,6 +124,8 @@ export function DashboardCreationSessions() {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<'active' | 'archived'>('active');
   const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [creating, setCreating] = useState(false);
   const [sessionQuota, setSessionQuota] = useState<{ usage: number; limit: number } | null>(null);
   const [builds, setBuilds] = useState<IdeProject[]>([]);
@@ -145,10 +148,26 @@ export function DashboardCreationSessions() {
 
   const reload = useCallback(() => {
     setLoading(true);
-    const load = query.trim().length >= 2 ? creationSessionsApi.search({ q: query.trim(), status }) : creationSessionsApi.list(status);
-    void load.then((result) => setSessions(result.sessions)).finally(() => setLoading(false));
+    const load = query.trim().length >= 2
+      ? creationSessionsApi.search({ q: query.trim(), status, limit: SESSIONS_PAGE_SIZE })
+      : creationSessionsApi.list(status, undefined, { offset: 0, limit: SESSIONS_PAGE_SIZE });
+    void load.then((result) => { setSessions(result.sessions); setHasMore(result.hasMore); }).finally(() => setLoading(false));
   }, [query, status]);
   useEffect(reload, [reload]);
+
+  // Loads the NEXT page onto the end of what is already showing — `reload`
+  // above always replaces from offset 0, which is what a changed search or
+  // status filter needs, but would otherwise re-fetch (and re-render) every
+  // session already on screen just to reach one more page.
+  const loadMore = useCallback(() => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    const offset = sessions.length;
+    const load = query.trim().length >= 2
+      ? creationSessionsApi.search({ q: query.trim(), status, limit: SESSIONS_PAGE_SIZE, offset })
+      : creationSessionsApi.list(status, undefined, { offset, limit: SESSIONS_PAGE_SIZE });
+    void load.then((result) => { setSessions((prev) => [...prev, ...result.sessions]); setHasMore(result.hasMore); }).finally(() => setLoadingMore(false));
+  }, [loadingMore, hasMore, sessions.length, query, status]);
   useEffect(() => { void creationSessionsApi.quotas().then((result) => setSessionQuota({ usage: result.usage.sessions, limit: result.limits.sessions })).catch(() => undefined); }, []);
   useEffect(() => {
     let active = true;
@@ -267,16 +286,16 @@ export function DashboardCreationSessions() {
       </div>
     </article>; });
 
-  return <section style={{ marginBottom: 40 }}>
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 16 }}>
-      <div><h2 style={{ margin: 0, fontSize: 20 }}>{t('dashboardTitle')}</h2><p style={{ margin: '5px 0 0', color: 'var(--text-secondary)', fontSize: 13 }}>{t('dashboardSubtitle')}</p></div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+  return <section className={styles.sessionsRoot} style={{ marginBottom: 40 }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+      <div style={{ minWidth: 0 }}><h2 style={{ margin: 0, fontSize: 20 }}>{t('dashboardTitle')}</h2><p style={{ margin: '5px 0 0', color: 'var(--text-secondary)', fontSize: 13 }}>{t('dashboardSubtitle')}</p></div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end', minWidth: 0 }}>
         {/* The canonical control (`components/ViewToggle`), not a fourth inline
             copy of the same button pair — it owns the glyphs, the order and the
             pressed state, so this library reads exactly like Projects and Tasks. */}
         <ViewToggle<CreationLibraryView> value={libraryView} onChange={selectLibraryView} />
         <select aria-label={t('creationStatusLabel')} value={status} onChange={(event) => setStatus(event.target.value as 'active' | 'archived')} style={{ border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', padding: '9px' }}><option value="active">{t('active')}</option><option value="archived">{t('archived')}</option></select>
-        <input aria-label={t('searchCreationsLabel')} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('searchSessions')} style={{ width: 310, maxWidth: '42vw', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', padding: '9px 11px', background: 'var(--bg-elevated)', color: 'var(--text-primary)' }} />
+        <input aria-label={t('searchCreationsLabel')} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('searchSessions')} style={{ flex: '1 1 160px', minWidth: 140, maxWidth: 310, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', padding: '9px 11px', background: 'var(--bg-elevated)', color: 'var(--text-primary)' }} />
         <button onClick={createBlank} disabled={creating || sessionLimitReached} title={sessionLimitReached ? t('sessionLimitHint') : undefined} className="btn btn-primary">{creating ? t('creatingSession') : sessionLimitReached ? t('sessionLimitShort') : `+ ${t('newSession')}`}</button>
       </div>
     </div>
@@ -294,5 +313,10 @@ export function DashboardCreationSessions() {
           {libraryView === 'table' && <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 18 }}>›</span>}
         </button>)}
       </div>}
+    {!loading && !resourcesLoading && hasMore && (
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
+        <button onClick={loadMore} disabled={loadingMore} className="btn btn-secondary">{loadingMore ? t('loadingMore') : t('loadMoreSessions')}</button>
+      </div>
+    )}
   </section>;
 }

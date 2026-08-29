@@ -3,6 +3,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
   align-items: start;
   gap: 24px;
+  min-width: 0;
 }
 
 .creationsColumn {
@@ -13,7 +14,13 @@
   min-width: 0;
 }
 
-@media (max-width: 900px) {
+/* This page always opens inside `ShellPanel` (`.ui-panel-body`, the named
+   `panel` container in globals.css) — a `@media` breakpoint here would only
+   ever see the browser viewport, never the drawer's actual (often much
+   narrower) width, which is exactly the "looks horrible at the minimal panel
+   width" bug: two columns kept trying to sit side by side in a panel with no
+   room for either. */
+@container panel (max-width: 760px) {
   .layout {
     grid-template-columns: 1fr;
   }

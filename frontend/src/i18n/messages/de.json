@@ -18992,6 +18992,8 @@
     "existingCreations": "Deine bestehenden Kreationen",
     "existingCreationsSubtitle": "Öffne ein Projekt, einen Agenten, eine Website, App, Evermind, ein LLM, Voice, Video, einen Workflow oder eine Brain-Session in ihrem Canvas.",
     "loadingCreations": "Kreationen werden geladen…",
+    "loadMoreSessions": "Mehr laden",
+    "loadingMore": "Wird geladen…",
     "noCreations": "Keine bestehende Kreation passt zur Suche.",
     "brainSession": "Brain-Session",
     "workflowRuns": "Workflow · {count} Läufe",
@@ -24072,7 +24074,6 @@
     "deleteConfirmMessageLocal": "„{title}“ löschen? Dieser reine Browserentwurf kann nicht wiederhergestellt werden."
   },
   "canvasLibrary": {
-    "subtitle": "Alles, was du erstellt hast – und die Wege, etwas Neues zu beginnen.",
     "pendingTitle": "Warten auf Speicherung",
     "renameSession": "Sitzung umbenennen",
     "moveSession": "In Ordner verschieben",

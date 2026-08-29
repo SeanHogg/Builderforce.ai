@@ -9310,19 +9310,21 @@ export interface CreationTemplate { id: string; name: string; description: strin
 export interface CreationSessionInvitation { id: string; email: string; role: CreationSessionSummary['role']; expiresAt: string; acceptedAt: string | null; revokedAt: string | null; createdAt: string }
 
 export const creationSessionsApi = {
-  list: (status: 'active' | 'archived' = 'active', projectId?: number | null): Promise<{ sessions: CreationSessionSummary[] }> => {
+  list: (status: 'active' | 'archived' = 'active', projectId?: number | null, page?: { offset: number; limit: number }): Promise<{ sessions: CreationSessionSummary[]; hasMore: boolean }> => {
     const params = new URLSearchParams({ status });
     if (projectId != null) params.set('projectId', String(projectId));
+    if (page) { params.set('offset', String(page.offset)); params.set('limit', String(page.limit)); }
     return request(`/api/creation-sessions?${params}`);
   },
-  search: (input: { q: string; status?: 'active' | 'archived'; kind?: string; projectId?: number; collaborator?: string; limit?: number }) => {
+  search: (input: { q: string; status?: 'active' | 'archived'; kind?: string; projectId?: number; collaborator?: string; limit?: number; offset?: number }) => {
     const params = new URLSearchParams({ q: input.q });
     if (input.status) params.set('status', input.status);
     if (input.kind) params.set('kind', input.kind);
     if (input.projectId) params.set('projectId', String(input.projectId));
     if (input.collaborator) params.set('collaborator', input.collaborator);
     if (input.limit) params.set('limit', String(input.limit));
-    return request<{ sessions: Array<CreationSessionSummary & { matchingObjectId?: string | null }> }>(`/api/creation-sessions/search?${params}`);
+    if (input.offset) params.set('offset', String(input.offset));
+    return request<{ sessions: Array<CreationSessionSummary & { matchingObjectId?: string | null }>; hasMore: boolean }>(`/api/creation-sessions/search?${params}`);
   },
   quotas: () => request<{ usage: { sessions: number; templates: number }; limits: { sessions: number; collaboratorsPerSession: number; templates: number; historyPerSession: number; datasetRows: number; realtimeEditors: number; artifactBytesPerSession: number } }>('/api/creation-sessions/quotas'),
   create: (body: { title?: string; description?: string; initialPrompt?: string; projectIds?: number[] }) =>

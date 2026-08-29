@@ -46,11 +46,13 @@ export default function CanvasLibraryPage() {
 
   return (
     <main style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: 'clamp(16px, 3vw, 28px)', maxWidth: 1400, margin: '0 auto', width: '100%' }}>
-      <header style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.95rem', maxWidth: '62ch' }}>
-          {isAuthenticated ? t('subtitle') : t('signedOutSubtitle')}
-        </p>
-      </header>
+      {!isAuthenticated && (
+        <header style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.95rem', maxWidth: '62ch' }}>
+            {t('signedOutSubtitle')}
+          </p>
+        </header>
+      )}
 
       {/* Account-less boards held in THIS browser that were never claimed — the
           library is the one place they are guaranteed to be visible. */}

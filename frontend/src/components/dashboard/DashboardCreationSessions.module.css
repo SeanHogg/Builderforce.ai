@@ -1,5 +1,18 @@
 .launcher {
   padding: 4px 0 0;
+  min-width: 0;
+  container-type: inline-size;
+  container-name: creation-launcher;
+}
+
+/* Named separately from `.launcher` so the session library's own breakpoints
+   key off ITS rendered width — this component is dropped into a wide board
+   panel and a ~300px slide-out sidebar column alike, and a `@media` query
+   would only ever see the browser viewport, not either of those. */
+.sessionsRoot {
+  min-width: 0;
+  container-type: inline-size;
+  container-name: creation-sessions;
 }
 
 .launcherHeader {
@@ -288,7 +301,8 @@
   cursor: not-allowed;
 }
 
-@media (max-width: 760px) {
+@container creation-launcher (max-width: 380px) {
   .launcherHeader h2 { font-size: 19px; }
   .creationPath { padding: 14px; }
+  .typePath { height: 300px; }
 }
