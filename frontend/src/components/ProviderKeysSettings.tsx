@@ -71,23 +71,23 @@ const wrapStyle: React.CSSProperties = {
   display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))',
 };
 const sectionTitle: React.CSSProperties = {
-  fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6,
+  fontSize: 'var(--font-size-card-title)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6,
 };
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)',
+  width: '100%', padding: '8px 12px', fontSize: 'var(--font-size-small)', background: 'var(--bg-elevated)',
   color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
   boxSizing: 'border-box', fontFamily: 'var(--font-mono)', minWidth: 0,
 };
 const buttonPrimary: React.CSSProperties = {
-  padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--surface-interactive)',
+  padding: '6px 12px', fontSize: 'var(--font-size-small)', fontWeight: 600, background: 'var(--surface-interactive)',
   color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const buttonDanger: React.CSSProperties = {
-  padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'none',
+  padding: '6px 12px', fontSize: 'var(--font-size-small)', fontWeight: 600, background: 'none',
   color: 'var(--coral-bright)', border: '1px solid var(--coral-bright)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
 const dividerRow: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0', color: 'var(--text-muted)', fontSize: 11, fontWeight: 600,
+  display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0', color: 'var(--text-muted)', fontSize: 'var(--font-size-eyebrow)', fontWeight: 600,
 };
 const dividerLine: React.CSSProperties = { flex: 1, height: 1, background: 'var(--border-subtle)' };
 
@@ -203,13 +203,13 @@ function ReorderableList({
         >
           {/* Affordance only — the whole row is the drag source, so the grip needs no
               handlers of its own (and must not steal the row's aria-label). */}
-          <span aria-hidden="true" title={t('precedence.drag')} style={{ fontSize: 13, lineHeight: 1, color: 'var(--text-muted)' }}>⠿</span>
-          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', minWidth: 18, textAlign: 'center' }}>{i + 1}</span>
-          <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', minWidth: 0, wordBreak: 'break-word' }}>
+          <span aria-hidden="true" title={t('precedence.drag')} style={{ fontSize: 'var(--font-size-small)', lineHeight: 1, color: 'var(--text-muted)' }}>⠿</span>
+          <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-muted)', minWidth: 18, textAlign: 'center' }}>{i + 1}</span>
+          <span style={{ flex: 1, fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-primary)', minWidth: 0, wordBreak: 'break-word' }}>
             {labelFor(key)}
           </span>
           {i === 0 && (
-            <span style={{ fontSize: 10.5, fontWeight: 700, color: 'rgba(34,197,94,0.9)', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+            <span style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, color: 'var(--success-text)', textTransform: 'uppercase', letterSpacing: 0.4 }}>
               {t('precedence.leads')}
             </span>
           )}
@@ -261,8 +261,8 @@ function PrecedencePanel({
   return (
     <div style={{ ...cardStyle, marginBottom: 20 }}>
       <div style={sectionTitle}>{t('precedence.title')}</div>
-      <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 12px' }}>{t('precedence.subtitle')}</p>
-      {order.length === 0 && <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t('status.notConnected')}</div>}
+      <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '0 0 12px' }}>{t('precedence.subtitle')}</p>
+      {order.length === 0 && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('status.notConnected')}</div>}
       <ReorderableList keys={order} labels={labels} onReorder={onReorder} t={t} />
     </div>
   );
@@ -386,14 +386,14 @@ function probeVerdict(
  * caller passes a `canShowTrace` flag it would have to derive from the same field.
  */
 function ProbeResultLine({ result, t }: { result: ProbeVerdict; t: TFn }) {
-  const color = result.tone === 'ok' ? 'rgba(34,197,94,0.9)'
+  const color = result.tone === 'ok' ? 'var(--success-text)'
     : result.tone === 'warn' ? 'var(--warning-text)'
     : 'var(--error)';
   const { diagnostic } = result;
   return (
     <div
       role={result.tone === 'error' ? 'alert' : 'status'}
-      style={{ fontSize: 11.5, color, marginTop: 7, lineHeight: 1.5 }}
+      style={{ fontSize: 'var(--font-size-eyebrow)', color, marginTop: 7, lineHeight: 1.5 }}
     >
       {result.message}
       {diagnostic && (
@@ -406,7 +406,7 @@ function ProbeResultLine({ result, t }: { result: ProbeVerdict; t: TFn }) {
             ariaLabel={t('diagnostic.copyTraceAria')}
             compact
           />
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>
             {diagnostic.edgeBlocked
               ? t('diagnostic.traceEdgeBlocked', { status: diagnostic.status })
               : t('diagnostic.traceHint', { status: diagnostic.status })}
@@ -440,7 +440,7 @@ function UsageStrip({
 }) {
   const fmt = useFormat();
   return (
-    <div style={{ fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+    <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', lineHeight: 1.5 }}>
       {t('diagnostic.usage', {
         days,
         requests: fmt.number(requests),
@@ -457,7 +457,7 @@ function UsageStrip({
  *  not discover that from their provider's spend dashboard afterwards. */
 function ProbeCostNote({ t }: { t: TFn }) {
   return (
-    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
+    <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
       {t('diagnostic.testCost')}
     </div>
   );
@@ -491,7 +491,7 @@ function AuthAlertNotice({ alert, t }: { alert: RenderableAuthAlert; t: TFn }) {
         marginTop: 8,
         padding: '8px 10px',
         borderRadius: 'var(--radius-md)',
-        fontSize: 11.5,
+        fontSize: 'var(--font-size-eyebrow)',
         lineHeight: 1.5,
         background: 'var(--warning-bg, rgba(245,158,11,0.16))',
         color: 'var(--warning-text)',
@@ -538,8 +538,8 @@ function ProviderStatusChip({
     : t('status.keyConfigured', { label });
   const color = authType === null ? 'var(--text-muted)'
     : alert ? 'var(--warning-text)'
-    : 'rgba(34,197,94,0.9)';
-  return <span style={{ fontSize: 12, fontWeight: 650, color, ...style }}>{text}</span>;
+    : 'var(--success-text)';
+  return <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 650, color, ...style }}>{text}</span>;
 }
 
 /**
@@ -685,14 +685,14 @@ function ProviderConnectionCard({
   return (
     <div style={cardStyle}>
       <div style={sectionTitle}>{config.label}</div>
-      <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 12px' }}>{blurb}</p>
+      <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '0 0 12px' }}>{blurb}</p>
 
       <div style={{ padding: 12, marginBottom: 14, borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
           {/* `usable` alone would paint this green for a credential that decrypts and then
               403s on every call, so an outstanding alert downgrades it the same way it
               downgrades the chip below. */}
-          <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, color: diagnostic?.authAlert ? 'var(--warning-text)' : diagnostic?.usable ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)' }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 'var(--font-size-small)', fontWeight: 700, color: diagnostic?.authAlert ? 'var(--warning-text)' : diagnostic?.usable ? 'var(--success-text)' : 'var(--text-muted)' }}>
             {t('diagnostic.currentStatus', { status: diagnostic?.status ? stateLabel(t, diagnostic.status) : t('diagnostic.checking') })}
           </span>
           <button type="button" onClick={testConnection} disabled={testing || !configured} style={{ ...buttonPrimary, opacity: testing || !configured ? 0.5 : 1 }}>
@@ -714,7 +714,7 @@ function ProviderConnectionCard({
         {diagnostic?.authAlert && <AuthAlertNotice alert={diagnostic.authAlert} t={t} />}
       </div>
 
-      {error && <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>{t('errorPrefix', { message: error })}</div>}
+      {error && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--coral-bright)', marginBottom: 10 }}>{t('errorPrefix', { message: error })}</div>}
 
       <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <ProviderStatusChip
@@ -740,7 +740,7 @@ function ProviderConnectionCard({
             </button>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+              <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: 0 }}>
                 {t.rich(`provider.${config.id}.pastePrompt`, { code: (chunks) => <code>{chunks}</code> })}
               </p>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -761,7 +761,7 @@ function ProviderConnectionCard({
               </div>
             </div>
           )}
-          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '8px 0 0' }}>
+          <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', margin: '8px 0 0' }}>
             {t.rich('ownAccountNote', { b: (chunks) => <strong style={{ color: 'var(--text-primary)' }}>{chunks}</strong> })}
           </p>
           <div style={dividerRow}><div style={dividerLine} /> {t('orUseApiKey')} <div style={dividerLine} /></div>
@@ -870,12 +870,12 @@ function OllamaLocalConnectionCard({
   return (
     <div style={cardStyle}>
       <div style={sectionTitle}>{config.label}</div>
-      <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 8px' }}>{t('ollamaLocal.blurb')}</p>
-      <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '0 0 12px' }}>{t('ollamaLocal.hostNote')}</p>
+      <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '0 0 8px' }}>{t('ollamaLocal.blurb')}</p>
+      <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', margin: '0 0 12px' }}>{t('ollamaLocal.hostNote')}</p>
 
       <div style={{ padding: 12, marginBottom: 14, borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
-          <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, color: diagnostic?.authAlert ? 'var(--warning-text)' : diagnostic?.usable ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)' }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 'var(--font-size-small)', fontWeight: 700, color: diagnostic?.authAlert ? 'var(--warning-text)' : diagnostic?.usable ? 'var(--success-text)' : 'var(--text-muted)' }}>
             {t('diagnostic.currentStatus', { status: diagnostic?.status ? stateLabel(t, diagnostic.status) : t('diagnostic.checking') })}
           </span>
           <button type="button" onClick={testConnection} disabled={testing || !configured} style={{ ...buttonPrimary, opacity: testing || !configured ? 0.5 : 1 }}>
@@ -894,7 +894,7 @@ function OllamaLocalConnectionCard({
         {diagnostic?.authAlert && <AuthAlertNotice alert={diagnostic.authAlert} t={t} />}
       </div>
 
-      {error && <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>{t('errorPrefix', { message: error })}</div>}
+      {error && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--coral-bright)', marginBottom: 10 }}>{t('errorPrefix', { message: error })}</div>}
 
       <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <ProviderStatusChip label={config.label} subscription={config.label} authType={configured ? 'api_key' : null} t={t} style={{ flex: 1, minWidth: 0 }} />
@@ -906,7 +906,7 @@ function OllamaLocalConnectionCard({
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)' }}>
+        <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
           {t('ollamaLocal.baseUrlLabel')}
           <input
             type="text"
@@ -917,7 +917,7 @@ function OllamaLocalConnectionCard({
             style={{ ...inputStyle, marginTop: 5 }}
           />
         </label>
-        <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)' }}>
+        <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
           {t('ollamaLocal.modelLabel')}
           <input
             type="text"
@@ -928,7 +928,7 @@ function OllamaLocalConnectionCard({
             style={{ ...inputStyle, marginTop: 5 }}
           />
         </label>
-        <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)' }}>
+        <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
           {t('ollamaLocal.apiKeyLabel')}
           <input
             type="password"
@@ -1097,7 +1097,7 @@ function OpenRouterConnectionsPanel({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div>
         <div style={sectionTitle}>{t('openRouter.title')}</div>
-        <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 12px' }}>
+        <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '0 0 12px' }}>
           {t('openRouter.subtitle')}
         </p>
         <button type="button" style={buttonPrimary} onClick={() => begin()} disabled={busy}>
@@ -1112,12 +1112,12 @@ function OpenRouterConnectionsPanel({
           <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 180 }}>
               <div style={sectionTitle}>{connection.label}</div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
                 {t('openRouter.modelCount', { count: connection.models.length })}
                 {' · '}
                 {connection.hasKey ? t('openRouter.ownKey') : t('openRouter.managedKey')}
               </div>
-              <div style={{ marginTop: 7, fontSize: 11.5, color: 'var(--text-secondary)', wordBreak: 'break-word' }}>
+              <div style={{ marginTop: 7, fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-secondary)', wordBreak: 'break-word' }}>
                 {connection.models.join(' → ')}
               </div>
               {/* Consumption sits beside health because "healthy" and "being used" are
@@ -1163,27 +1163,27 @@ function OpenRouterConnectionsPanel({
       ))}
 
       {connections.length === 0 && !creating && (
-        <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t('openRouter.empty')}</div>
+        <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('openRouter.empty')}</div>
       )}
 
       {creating && (
         <div style={{ ...cardStyle, borderColor: 'var(--accent, var(--border-subtle))' }}>
           <div style={sectionTitle}>{editing ? t('openRouter.editTitle') : t('openRouter.createTitle')}</div>
-          <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+          <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginBottom: 10 }}>
             {t('openRouter.name')}
             <input value={label} onChange={(e) => setLabel(e.target.value)} style={{ ...inputStyle, marginTop: 5 }} />
           </label>
-          <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+          <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginBottom: 10 }}>
             {t('openRouter.apiKey')}
             <input type="password" autoComplete="off" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-or-v1-…" style={{ ...inputStyle, marginTop: 5 }} />
           </label>
           {editing?.hasKey && (
-            <label style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+            <label style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginBottom: 12 }}>
               <input type="checkbox" checked={clearKey} onChange={(e) => setClearKey(e.target.checked)} />
               {t('openRouter.clearKey')}
             </label>
           )}
-          <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginBottom: 12 }}>{t('openRouter.billing')}</div>
+          <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginBottom: 12 }}>{t('openRouter.billing')}</div>
 
           {/* ORDER IS ROUTING, not presentation: this list is the cascade seed — position 1
               is what agents run and what Test connection probes, and the rest are the
@@ -1191,10 +1191,10 @@ function OpenRouterConnectionsPanel({
               models, never WHICH FIRST, so the selection gets its own ranked editor. */}
           {selected.length > 0 && (
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+              <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
                 {t('openRouter.orderTitle')}
               </div>
-              <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '0 0 8px' }}>{t('openRouter.orderHint')}</p>
+              <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', margin: '0 0 8px' }}>{t('openRouter.orderHint')}</p>
               <ReorderableList
                 keys={selected}
                 labels={modelLabels}
@@ -1216,16 +1216,16 @@ function OpenRouterConnectionsPanel({
               <label key={model.id} style={{ display: 'flex', gap: 9, padding: '8px 10px', borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer' }}>
                 <input type="checkbox" checked={selected.includes(model.id)} onChange={() => toggleModel(model.id)} />
                 <span style={{ minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>{model.name}</span>
-                  <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', wordBreak: 'break-all' }}>{model.id}</span>
+                  <span style={{ display: 'block', fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-primary)' }}>{model.name}</span>
+                  <span style={{ display: 'block', fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', wordBreak: 'break-all' }}>{model.id}</span>
                 </span>
               </label>
             ))}
           </div>
-          <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 7 }}>
+          <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginTop: 7 }}>
             {t('openRouter.selected', { count: selected.length })}
           </div>
-          {error && <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginTop: 9 }}>{error}</div>}
+          {error && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--coral-bright)', marginTop: 9 }}>{error}</div>}
           <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
             <button type="button" style={buttonPrimary} disabled={busy} onClick={() => void save()}>{busy ? t('saving') : t('save')}</button>
             <button type="button" style={{ ...buttonPrimary, background: 'none' }} disabled={busy} onClick={cancel}>{t('cancel')}</button>
@@ -1380,13 +1380,13 @@ export function ProviderKeysSettings({
 
   return (
     <div>
-      <div style={{ ...sectionTitle, fontSize: 15, marginBottom: 4 }}>{t('title')}</div>
-      <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 14px' }}>{t('subtitle')}</p>
+      <div style={{ ...sectionTitle, fontSize: 'var(--font-size-card-title)', marginBottom: 4 }}>{t('title')}</div>
+      <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '0 0 14px' }}>{t('subtitle')}</p>
 
-      {error && <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>{t('errorPrefix', { message: error })}</div>}
+      {error && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--coral-bright)', marginBottom: 10 }}>{t('errorPrefix', { message: error })}</div>}
 
       {loading ? (
-        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>
+        <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('loading')}</div>
       ) : (
         <>
           <div style={viewMode === 'card' ? wrapStyle : { display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1394,7 +1394,7 @@ export function ProviderKeysSettings({
               <ClickableCard ariaLabel="OpenRouter" onClick={() => setOpenRouterOpen(true)} style={{ ...cardStyle, cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: viewMode === 'table' ? 'row' : 'column', alignItems: viewMode === 'table' ? 'center' : 'stretch', gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={sectionTitle}>OpenRouter</div>
-                  <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t('openRouter.cardBlurb')}</div>
+                  <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('openRouter.cardBlurb')}</div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   {/* Registered ≠ working: a registration whose key was revoked or ran out of
@@ -1402,9 +1402,9 @@ export function ProviderKeysSettings({
                       green forever. A live alert downgrades it exactly as it does a provider. */}
                   <span style={{
                     flex: 1, minWidth: 0,
-                    fontSize: 12, fontWeight: 650, whiteSpace: 'normal',
+                    fontSize: 'var(--font-size-small)', fontWeight: 650, whiteSpace: 'normal',
                     color: brokenConnections ? 'var(--warning-text)'
-                      : openRouterConnections.length ? 'rgba(34,197,94,0.9)'
+                      : openRouterConnections.length ? 'var(--success-text)'
                       : 'var(--text-muted)',
                   }}>
                     {brokenConnections
@@ -1426,7 +1426,7 @@ export function ProviderKeysSettings({
               <ClickableCard ariaLabel={t('ollamaLocal.title')} onClick={() => setOllamaLocalOpen(true)} style={{ ...cardStyle, cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: viewMode === 'table' ? 'row' : 'column', alignItems: viewMode === 'table' ? 'center' : 'stretch', gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={sectionTitle}>{t('ollamaLocal.title')}</div>
-                  <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t('ollamaLocal.cardBlurb')}</div>
+                  <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('ollamaLocal.cardBlurb')}</div>
                   {alertByProvider['ollama-local'] && <AuthAlertNotice alert={alertByProvider['ollama-local']!} t={t} />}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -1457,7 +1457,7 @@ export function ProviderKeysSettings({
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flex: 1, minWidth: 0 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={sectionTitle}>{p.label}</div>
-                    <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t(`provider.${p.id}.blurb`)}</div>
+                    <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t(`provider.${p.id}.blurb`)}</div>
                     {/* Surfaced on the grid, not only in the drawer: an account that is
                         connected-but-rejected looks identical to a healthy one here, and
                         an operator who never opens the drawer would never find out. */}

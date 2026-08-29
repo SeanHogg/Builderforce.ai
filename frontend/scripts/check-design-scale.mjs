@@ -98,8 +98,13 @@ const BASELINE = {
    * families and moved onto tokens (-19 total); `GateHint.tsx` and the new
    * `EvermindBuildPanel.tsx` each added one legitimate `rgba()` inside a
    * `color-mix()`/`box-shadow` expression the guard still counts (+2 total).
+   *
+   * 176 -> 174 (2026-08-29) — `ProviderKeysSettings.tsx`'s two `rgba(34,197,94,0.9)`
+   * "usable" status greens (one predating this baseline, one added with the Ollama
+   * local-provider card) named `--success-text`, the family every other tone in the
+   * same conditional (`--warning-text` / `--error`) already used.
    */
-  themeLockedColours: 176,
+  themeLockedColours: 174,
   /**
    * ONE, and it is `UnreadBadge`'s `borderRadius: size` — a live expression, not a
    * literal, so there is no scale step to name. Came down from 6 when the résumé
@@ -161,8 +166,15 @@ const BASELINE = {
    * this changelog can track per file, the same drift `useClientFiles` in
    * `check-frontend-architecture.mjs` describes the same day. The count that
    * gates the build is the live scan, and 3646 is what it reads now.
+   *
+   * 3,646 → 3,603: `ProviderKeysSettings.tsx`'s whole 51-literal type ramp (43
+   * predating this baseline, 8 added with the Ollama local-provider card) named
+   * roles instead of numbers — the near-13px cluster (13 / 12.5 / 12) onto
+   * `--font-size-small`, the sub-12px captions and uppercase status pills
+   * (11.5 / 11 / 10.5) onto `--font-size-eyebrow`, and the two panel headings
+   * (15 / 14) onto `--font-size-card-title`.
    */
-  offScaleFontSizes: 3646,
+  offScaleFontSizes: 3603,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.
