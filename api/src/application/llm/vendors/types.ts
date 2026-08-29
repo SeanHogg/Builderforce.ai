@@ -21,7 +21,7 @@ import { needsMessageShapeSanitizing, sanitizeMessageShape, type ChatMessageLike
 
 export type VendorId =
   // ── Bespoke wire-format vendors (hand-rolled modules)
-  | 'openrouter' | 'cerebras' | 'ollama' | 'nvidia' | 'googleai' | 'cloudflare' | 'anthropic' | 'openai-codex' | 'xai-oauth'
+  | 'openrouter' | 'cerebras' | 'ollama' | 'ollama-local' | 'nvidia' | 'googleai' | 'cloudflare' | 'anthropic' | 'openai-codex' | 'xai-oauth'
   // ── ONE operator-configured Azure resource/deployment (OpenAI-wire-compatible
   //    body, but a per-resource URL + `api-key` header — see azureOpenai.ts).
   | 'azure-openai'
@@ -72,6 +72,12 @@ export interface VendorEnv {
   OPENROUTER_MODEL_KEYS?: Readonly<Record<string, string>> | null;
   CEREBRAS_API_KEY?: string | null;
   OLLAMA_API_KEY?: string | null;
+  /** BYO-only: a tenant's self-hosted Ollama connection, composed as
+   *  `<apiKey>::<baseUrl>::<model>` by `ollamaLocal.ts`'s `apiKeyFrom`. There is no
+   *  operator-level equivalent — this is the ONLY source, populated from the tenant's
+   *  stored `ollama-local` provider row. See `ollamaLocal.ts` for the wire format and
+   *  why the call rides `requiresLocalEgress`. */
+  OLLAMA_LOCAL_CONFIG?: string | null;
   NVIDIA_API_KEY?: string | null;
   /** Google AI (Gemini) API key — direct call to generativelanguage.googleapis.com.
    *  Powers the gateway's premium fallback at the tail of every cascade. */

@@ -59,6 +59,33 @@ describe("egress destination fence", () => {
   });
 });
 
+describe("the local-Ollama carve-out", () => {
+  const opts = { allowedLocalOrigin: "http://127.0.0.1:11434" };
+
+  it("allows exactly the configured origin on the chat path, in plain HTTP", () => {
+    expect(rejectEgressTarget("http://127.0.0.1:11434/api/chat", opts)).toBeNull();
+  });
+
+  it("still refuses everything else without the option", () => {
+    expect(rejectEgressTarget("http://127.0.0.1:11434/api/chat")).not.toBeNull();
+  });
+
+  it("refuses a different origin even with the option set — the cloud cannot name a new one", () => {
+    expect(rejectEgressTarget("http://10.0.0.9:11434/api/chat", opts)).not.toBeNull();
+    expect(rejectEgressTarget("http://169.254.169.254/api/chat", opts)).not.toBeNull();
+  });
+
+  it("refuses any path other than the chat endpoint — no same-origin proxy", () => {
+    expect(rejectEgressTarget("http://127.0.0.1:11434/api/pull", opts)).not.toBeNull();
+    expect(rejectEgressTarget("http://127.0.0.1:11434/", opts)).not.toBeNull();
+  });
+
+  it("falls through to the static rules on a malformed allowedLocalOrigin", () => {
+    expect(rejectEgressTarget("http://127.0.0.1:11434/api/chat", { allowedLocalOrigin: "not-a-url" }))
+      .not.toBeNull();
+  });
+});
+
 describe("performing an allowlisted call", () => {
   it("returns the provider's status, body and correlation headers", async () => {
     globalThis.fetch = vi.fn(async () => new Response(

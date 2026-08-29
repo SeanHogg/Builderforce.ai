@@ -1324,6 +1324,13 @@ export class LlmProxyService {
       // NO operator-level Meta key — this is the ONLY source. When absent the meta
       // vendor no-key-skips at dispatch, same as any other unbound vendor.
       ...(this.tenantVendorKeys.meta ? { META_API_KEY: this.tenantVendorKeys.meta } : {}),
+      // A tenant BYO Ollama Cloud key overrides the operator OLLAMA_API_KEY (set
+      // above) for the `ollama` vendor — tenant-funded → byo, $0 to us.
+      ...(this.tenantVendorKeys.ollama ? { OLLAMA_API_KEY: this.tenantVendorKeys.ollama } : {}),
+      // A tenant's self-hosted Ollama connection powers the `ollama-local` vendor.
+      // There is NO operator-level equivalent — this is the ONLY source. Absent →
+      // the vendor no-key-skips at dispatch, same as `meta`.
+      ...(this.tenantVendorKeys['ollama-local'] ? { OLLAMA_LOCAL_CONFIG: this.tenantVendorKeys['ollama-local'] } : {}),
     };
   }
 

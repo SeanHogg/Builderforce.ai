@@ -61,6 +61,7 @@ const PROVIDERS: ProviderConfig[] = [
   { id: 'qwen',      label: 'Qwen',                keyPlaceholder: 'sk-…',    supportsOauth: false },
   { id: 'minimax',   label: 'MiniMax',             keyPlaceholder: 'sk-…',    supportsOauth: false },
   { id: 'xai',       label: 'xAI (Grok)',           keyPlaceholder: 'xai-…',   supportsOauth: true },
+  { id: 'ollama',    label: 'Ollama Cloud',         keyPlaceholder: 'sk-…',    supportsOauth: false },
 ];
 
 const cardStyle: React.CSSProperties = {
@@ -111,6 +112,8 @@ const PROVIDER_LABEL: Record<LlmProvider, string> = {
   qwen: 'Qwen',
   minimax: 'MiniMax',
   xai: 'xAI (Grok)',
+  ollama: 'Ollama Cloud',
+  'ollama-local': 'Ollama (self-hosted)',
 };
 
 /**
@@ -783,6 +786,172 @@ function ProviderConnectionCard({
   );
 }
 
+/**
+ * Self-hosted Ollama's connect card — a dedicated form (base URL + the ONE model this
+ * connection dispatches to + an optional key) rather than the single-apiKey
+ * {@link ProviderConnectionCard}, because a self-hosted instance has no fixed
+ * catalog: the tenant names both where it lives and which model to call, exactly
+ * like a `direct/azure-openai/<deployment>` connection names one Azure deployment.
+ *
+ * Reuses the same status chip / Test button / diagnostic plumbing as every other
+ * provider card — `providerKeysApi.status('ollama-local')` and `.test('ollama-local')`
+ * are generic over `LlmProvider` and need no special casing there.
+ */
+function OllamaLocalConnectionCard({
+  configured,
+  onChange,
+  onHealthChange,
+  t,
+}: {
+  configured: boolean;
+  onChange: (authType: ProviderAuthType | null) => void;
+  onHealthChange: (alert: ProviderAuthAlert | null) => void;
+  t: TFn;
+}) {
+  const config: ProviderConfig = { id: 'ollama-local', label: t('ollamaLocal.title'), keyPlaceholder: '', supportsOauth: false };
+  const [baseUrl, setBaseUrl] = useState('');
+  const [model, setModel] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [diagnostic, setDiagnostic] = useState<ProviderDiagnostic | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<ProbeVerdict | null>(null);
+  const disconnect = useProviderDisconnect(t);
+  const toast = useToast();
+
+  const loadDiagnostic = () => providerKeysApi.status('ollama-local').then(setDiagnostic).catch((e: Error) => setError(e.message));
+  useEffect(() => { void loadDiagnostic(); }, [configured]);
+
+  const testConnection = async () => {
+    setTesting(true); setTestResult(null); setError(null);
+    try {
+      const result = await providerKeysApi.test('ollama-local');
+      const verdict = probeVerdict(t, result);
+      setTestResult(verdict);
+      if (verdict.tone === 'error') toast.error(verdict.message, { title: t('diagnostic.failedTitle', { label: config.label }) });
+      else if (verdict.tone === 'warn') toast.warning(verdict.message, { title: t('diagnostic.upstreamTitle', { label: config.label }) });
+      onHealthChange(result.authAlert ?? null);
+      await loadDiagnostic();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : t('diagnostic.failedGeneric');
+      setTestResult({ message, tone: 'error' });
+      toast.error(message, { title: t('diagnostic.failedTitle', { label: config.label }) });
+    } finally { setTesting(false); }
+  };
+
+  const save = async () => {
+    const url = baseUrl.trim();
+    const modelId = model.trim();
+    if (!url || !modelId) return;
+    setBusy(true); setError(null);
+    try {
+      await providerKeysApi.setOllamaLocal(url, modelId, apiKey.trim() || undefined);
+      onChange('api_key');
+      setBaseUrl(''); setModel(''); setApiKey('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('errSaveKey'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    setBusy(true); setError(null);
+    try {
+      if (await disconnect(config, configured ? 'api_key' : null)) onChange(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('errRemove'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={cardStyle}>
+      <div style={sectionTitle}>{config.label}</div>
+      <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 8px' }}>{t('ollamaLocal.blurb')}</p>
+      <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '0 0 12px' }}>{t('ollamaLocal.hostNote')}</p>
+
+      <div style={{ padding: 12, marginBottom: 14, borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, color: diagnostic?.authAlert ? 'var(--warning-text)' : diagnostic?.usable ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)' }}>
+            {t('diagnostic.currentStatus', { status: diagnostic?.status ? stateLabel(t, diagnostic.status) : t('diagnostic.checking') })}
+          </span>
+          <button type="button" onClick={testConnection} disabled={testing || !configured} style={{ ...buttonPrimary, opacity: testing || !configured ? 0.5 : 1 }}>
+            {testing ? t('diagnostic.testing') : t('diagnostic.test')}
+          </button>
+        </div>
+        <UsageStrip
+          t={t}
+          days={diagnostic?.usage.periodDays ?? 30}
+          requests={diagnostic?.usage.requests ?? 0}
+          tokens={diagnostic?.usage.tokens ?? 0}
+          lastUsedAt={diagnostic?.usage.lastUsedAt ?? null}
+        />
+        <ProbeCostNote t={t} />
+        {testResult && <ProbeResultLine result={testResult} t={t} />}
+        {diagnostic?.authAlert && <AuthAlertNotice alert={diagnostic.authAlert} t={t} />}
+      </div>
+
+      {error && <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>{t('errorPrefix', { message: error })}</div>}
+
+      <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <ProviderStatusChip label={config.label} subscription={config.label} authType={configured ? 'api_key' : null} t={t} style={{ flex: 1, minWidth: 0 }} />
+        {configured && (
+          <button type="button" onClick={remove} disabled={busy} style={{ ...buttonDanger, padding: '2px 10px' }}>
+            {t('remove')}
+          </button>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)' }}>
+          {t('ollamaLocal.baseUrlLabel')}
+          <input
+            type="text"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder={t('ollamaLocal.baseUrlPlaceholder')}
+            disabled={busy}
+            style={{ ...inputStyle, marginTop: 5 }}
+          />
+        </label>
+        <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)' }}>
+          {t('ollamaLocal.modelLabel')}
+          <input
+            type="text"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder={t('ollamaLocal.modelPlaceholder')}
+            disabled={busy}
+            style={{ ...inputStyle, marginTop: 5 }}
+          />
+        </label>
+        <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)' }}>
+          {t('ollamaLocal.apiKeyLabel')}
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder={t('ollamaLocal.apiKeyPlaceholder')}
+            disabled={busy}
+            style={{ ...inputStyle, marginTop: 5 }}
+          />
+        </label>
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy || !baseUrl.trim() || !model.trim()}
+          style={{ ...buttonPrimary, alignSelf: 'flex-start', opacity: busy || !baseUrl.trim() || !model.trim() ? 0.5 : 1 }}
+        >
+          {busy ? t('saving') : configured ? t('replace') : t('save')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function OpenRouterConnectionsPanel({
   connections,
   usageWindowDays,
@@ -1095,6 +1264,7 @@ export function ProviderKeysSettings({
   const [error, setError] = useState<string | null>(null);
   const [activeProvider, setActiveProvider] = useState<LlmProvider | null>(null);
   const [openRouterOpen, setOpenRouterOpen] = useState(false);
+  const [ollamaLocalOpen, setOllamaLocalOpen] = useState(false);
   const [usageByProvider, setUsageByProvider] = useState<Partial<Record<LlmProvider, { tokens: number }>>>({});
   const visibleProviders = PROVIDERS.filter((p) => !search.trim() || `${p.label} ${p.id}`.toLowerCase().includes(search.trim().toLowerCase()));
 
@@ -1252,6 +1422,36 @@ export function ProviderKeysSettings({
                 </div>
               </ClickableCard>
             )}
+            {(!search.trim() || 'ollama self-hosted local'.includes(search.trim().toLowerCase())) && (
+              <ClickableCard ariaLabel={t('ollamaLocal.title')} onClick={() => setOllamaLocalOpen(true)} style={{ ...cardStyle, cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: viewMode === 'table' ? 'row' : 'column', alignItems: viewMode === 'table' ? 'center' : 'stretch', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={sectionTitle}>{t('ollamaLocal.title')}</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t('ollamaLocal.cardBlurb')}</div>
+                  {alertByProvider['ollama-local'] && <AuthAlertNotice alert={alertByProvider['ollama-local']!} t={t} />}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <ProviderStatusChip
+                    label={t('ollamaLocal.title')}
+                    subscription={t('ollamaLocal.title')}
+                    authType={authByProvider['ollama-local'] ?? null}
+                    {...(alertByProvider['ollama-local'] ? { alert: alertByProvider['ollama-local']! } : {})}
+                    t={t}
+                    style={{ flex: 1, minWidth: 0, whiteSpace: 'normal' }}
+                  />
+                  <ConnectToggleButton
+                    connected={authByProvider['ollama-local'] != null}
+                    name={t('ollamaLocal.title')}
+                    onConnect={() => setOllamaLocalOpen(true)}
+                    onDisconnect={async () => {
+                      if (await disconnectProvider(
+                        { id: 'ollama-local', label: t('ollamaLocal.title'), keyPlaceholder: '', supportsOauth: false },
+                        authByProvider['ollama-local'] ?? null,
+                      )) applyAuthChange('ollama-local', null);
+                    }}
+                  />
+                </div>
+              </ClickableCard>
+            )}
             {visibleProviders.map((p) => (
               <ClickableCard key={p.id} ariaLabel={p.label} onClick={() => setActiveProvider(p.id)} style={{ ...cardStyle, cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: viewMode === 'table' ? 'row' : 'column', alignItems: viewMode === 'table' ? 'center' : 'stretch', gap: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flex: 1, minWidth: 0 }}>
@@ -1328,6 +1528,21 @@ export function ProviderKeysSettings({
                 t={t}
                 onChanged={refresh}
                 onHealthChange={applyConnectionAlert}
+              />
+            </div>
+          </SlideOutPanel>
+
+          <SlideOutPanel open={ollamaLocalOpen} onClose={() => setOllamaLocalOpen(false)} title={t('ollamaLocal.title')} widthStorageKey="provider-ollama-local">
+            <div style={{ padding: 20 }}>
+              <OllamaLocalConnectionCard
+                configured={authByProvider['ollama-local'] != null}
+                t={t}
+                onHealthChange={(alert) => setAlertByProvider((prev) => {
+                  const next = { ...prev };
+                  if (alert) next['ollama-local'] = alert; else delete next['ollama-local'];
+                  return next;
+                })}
+                onChange={(authType) => applyAuthChange('ollama-local', authType)}
               />
             </div>
           </SlideOutPanel>

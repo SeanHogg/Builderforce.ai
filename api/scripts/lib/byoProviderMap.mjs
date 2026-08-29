@@ -48,8 +48,10 @@ function loadProviderByVendor() {
   const byVendor = new Map();
 
   const mapBlock = blockAfter(source, /export const PROVIDER_VENDOR_MAP[^=]*=\s*/, '{', '}', 'PROVIDER_VENDOR_MAP');
-  for (const [, provider, vendorId] of mapBlock.matchAll(/(\w+)\s*:\s*\{[^}]*?vendorId:\s*'([^']+)'/g)) {
-    byVendor.set(vendorId, provider);
+  // A provider key is usually a bare identifier (`anthropic:`), but one containing a
+  // hyphen (`'ollama-local':`) must be quoted — match either form.
+  for (const [, quotedProvider, bareProvider, vendorId] of mapBlock.matchAll(/(?:'([\w-]+)'|(\w+))\s*:\s*\{[^}]*?vendorId:\s*'([^']+)'/g)) {
+    byVendor.set(vendorId, quotedProvider ?? bareProvider);
   }
   if (byVendor.size === 0) throw new Error('byoProviderMap: PROVIDER_VENDOR_MAP parsed to nothing');
 

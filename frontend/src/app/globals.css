@@ -2447,6 +2447,74 @@ html[data-theme='light'] .nebula {
   }
 }
 
+/* The panel header (`SlideOutPanel`) — close button + crumb/title on one side,
+   header actions + width control on the other, and — when a page publishes one
+   (`headerCenter`, e.g. the founder's-journey Idea/Make/Run/Measure switcher) —
+   a center slot that stays CENTERED regardless of how wide its neighbours are.
+   ---------------------------------------------------------------------------
+   `1fr auto 1fr` is what makes that centering hold: the lead and trail groups
+   sit in equal-width flexible tracks, so the center track lands in the true
+   middle of the row instead of drifting toward whichever side is narrower.
+   Keyed off the header's own measured width (not the viewport) for the same
+   reason as `.ui-panel-body`/`.slide-panel-body-row` — a `sheet` panel on a
+   wide monitor never reaches a viewport breakpoint at all. */
+.slide-panel-header {
+  container-type: inline-size;
+  container-name: slide-panel-header;
+}
+.slide-panel-header__row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  grid-template-areas: 'lead center trail';
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+}
+.slide-panel-header__row:not(:has(.slide-panel-header__center)) {
+  grid-template-columns: 1fr auto;
+  grid-template-areas: 'lead trail';
+}
+.slide-panel-header__lead {
+  grid-area: lead;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  justify-self: start;
+}
+.slide-panel-header__center {
+  grid-area: center;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+.slide-panel-header__trail {
+  grid-area: trail;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  justify-self: end;
+}
+
+/* Below this, the centered switcher drops to its own full-width row under the
+   close button/title/actions instead of sharing their row — sharing it here
+   means the switcher's pill rail fights them for space on the same line. It
+   still centers on its own row rather than hugging the left edge (§ mobile
+   pass — previously it did not). */
+@container slide-panel-header (max-width: 560px) {
+  .slide-panel-header__row:has(.slide-panel-header__center) {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      'lead trail'
+      'center center';
+    padding-bottom: 12px;
+  }
+  .slide-panel-header__center {
+    padding-top: 4px;
+  }
+}
+
 /* A reference page inside the panel gets NO wrapper padding — it brings its own
    full-bleed bands, and boxing them produced a marketing page with a 16px frame
    inside a drawer, which reads as a mistake in both. Its READING COLUMN still

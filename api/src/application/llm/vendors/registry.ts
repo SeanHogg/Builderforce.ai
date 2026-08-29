@@ -16,6 +16,7 @@ import { evermindModule } from './evermind';
 import { googleAiModule } from './googleai';
 import { nvidiaModule } from './nvidia';
 import { ollamaModule } from './ollama';
+import { ollamaLocalModule } from './ollamaLocal';
 import { openRouterModule } from './openrouter';
 import { openAiCodexModule } from './openaiCodex';
 import { xaiOAuthModule } from './xaiOAuth';
@@ -65,10 +66,11 @@ import {
 // touching the tuned free/paid cascade. See openaiCompatibleVendors.ts.
 const MODULES: ReadonlyArray<VendorModule> = [
   cerebrasModule, ollamaModule, nvidiaModule, cloudflareModule, openRouterModule, googleAiModule, anthropicModule, openAiCodexModule, xaiOAuthModule,
-  // `azure-openai`/`amazon-bedrock` are autoRoute:false (one operator-configured
-  // deployment/credential, explicit `direct/<vendor>/<id>` pin only) — position
-  // never affects auto-selected FREE/PRO pool ordering.
-  azureOpenAiModule, amazonBedrockModule,
+  // `azure-openai`/`amazon-bedrock`/`ollama-local` are autoRoute:false (one
+  // operator- or tenant-configured deployment/credential, explicit
+  // `direct/<vendor>/<id>` pin only) — position never affects auto-selected
+  // FREE/PRO pool ordering.
+  azureOpenAiModule, amazonBedrockModule, ollamaLocalModule,
   // `evermind` is autoRoute:false (explicit `evermind/<ref>` pin only), so its
   // position never affects the auto-selected FREE/PRO pool ordering.
   evermindModule,
@@ -83,6 +85,7 @@ const MODULES_BY_ID: Record<VendorId, VendorModule> = {
   cerebras:   cerebrasModule,
   nvidia:     nvidiaModule,
   ollama:     ollamaModule,
+  'ollama-local': ollamaLocalModule,
   googleai:   googleAiModule,
   cloudflare: cloudflareModule,
   anthropic:  anthropicModule,
@@ -138,6 +141,7 @@ const VENDOR_PREFIXES: ReadonlyArray<{ prefix: string; vendor: VendorId }> = [
   // derived `direct/<vendor>/` mapping below) — added explicitly.
   { prefix: 'direct/azure-openai/', vendor: 'azure-openai' },
   { prefix: 'direct/amazon-bedrock/', vendor: 'amazon-bedrock' },
+  { prefix: 'direct/ollama-local/', vendor: 'ollama-local' },
   // Cloudflare model ids natively start with `@cf/...` so they're
   // self-identifying without a `cloudflare/` URL-style prefix. We still accept
   // `cloudflare/@cf/...` for symmetry with the other vendors — callers who

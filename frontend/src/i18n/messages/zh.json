@@ -13602,7 +13602,22 @@
         "subscription": "SuperGrok 订阅",
         "pastePrompt": "批准访问后，复制 xAI 页面显示的代码并粘贴到这里。",
         "pastePlaceholder": "粘贴 xAI 登录代码…"
+      },
+      "ollama": {
+        "blurb": "粘贴 Ollama Cloud API 密钥，即可用您自己的 Ollama 账户运行开放权重模型（GPT-OSS、Kimi、GLM、DeepSeek、Qwen、Gemma）。"
       }
+    },
+    "ollamaLocal": {
+      "title": "Ollama（自托管）",
+      "cardBlurb": "连接运行在您自己机器或网络上的自托管 Ollama 实例。",
+      "blurb": "将云端智能体运行路由到您自己的自托管 Ollama 实例，而非托管提供商。",
+      "hostNote": "请求会通过您已连接的 Builderforce 运行时中转，因此下方的基础 URL 必须是该运行时自身可以访问的 Ollama 地址（通常是它自己的本地主机）——并且该运行时必须已配置好 Ollama 才会允许此调用。",
+      "baseUrlLabel": "基础 URL",
+      "baseUrlPlaceholder": "http://127.0.0.1:11434",
+      "modelLabel": "模型",
+      "modelPlaceholder": "例如 llama3.1:8b",
+      "apiKeyLabel": "API 密钥（可选）",
+      "apiKeyPlaceholder": "仅当您的实例需要时填写"
     },
     "diagnostic": {
       "currentStatus": "当前状态：{status}",

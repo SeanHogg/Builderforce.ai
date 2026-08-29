@@ -41,7 +41,7 @@ function tierForOllamaModel(modelId: string): AiModelTier {
   return CATALOG_BY_ID.get(modelId)?.tier ?? 'FREE';
 }
 
-const parseOllamaResponse: ResponseParser = (raw) => {
+export const parseOllamaResponse: ResponseParser = (raw) => {
   const r = raw as { message?: { content?: unknown }; prompt_eval_count?: unknown; eval_count?: unknown };
   const content = String(r?.message?.content ?? '');
   // Ollama's native token fields (`prompt_eval_count` / `eval_count`) don't match
@@ -60,6 +60,29 @@ const parseOllamaResponse: ResponseParser = (raw) => {
   return { content, ...(Object.keys(usage).length > 0 ? { usage } : {}) };
 };
 
+/**
+ * Ollama's native `/api/chat` request body — `options.num_predict`/`temperature`/
+ * `top_p` instead of OpenAI's top-level fields, no `tool_choice`. Shared by the Cloud
+ * module (below) and the self-hosted `ollama-local` module (`ollamaLocal.ts`) so the
+ * two never drift on wire format.
+ */
+export function buildOllamaChatBody(params: VendorCallParams): Record<string, unknown> {
+  const { model, messages, tools, maxTokens, temperature, topP, extraBody } = params;
+  const options: Record<string, unknown> = {};
+  if (maxTokens   != null) options['num_predict'] = maxTokens;
+  if (temperature != null) options['temperature'] = temperature;
+  if (topP        != null) options['top_p']       = topP;
+
+  return {
+    model,
+    messages,
+    stream: false,
+    ...(tools ? { tools } : {}),
+    ...(Object.keys(options).length > 0 ? { options } : {}),
+    ...(extraBody ?? {}),
+  };
+}
+
 export const ollamaModule: VendorModule = {
   id: 'ollama',
   catalog: CATALOG,
@@ -73,27 +96,12 @@ export const ollamaModule: VendorModule = {
   autoRoute: false,
   apiKeyFrom(env) { return env.OLLAMA_API_KEY ?? null; },
   async call(params: VendorCallParams): Promise<VendorCallResult> {
-    const { model, messages, tools, maxTokens, temperature, topP, extraBody } = params;
-    const options: Record<string, unknown> = {};
-    if (maxTokens   != null) options['num_predict'] = maxTokens;
-    if (temperature != null) options['temperature'] = temperature;
-    if (topP        != null) options['top_p']       = topP;
-
-    const body: Record<string, unknown> = {
-      model,
-      messages,
-      stream: false,
-      ...(tools ? { tools } : {}),
-      ...(Object.keys(options).length > 0 ? { options } : {}),
-      ...(extraBody ?? {}),
-    };
-
     return executeChatCompletion({
       vendorId: 'ollama',
       endpoint: ENDPOINT,
       apiKey: params.apiKey,
       model: params.model,
-      body,
+      body: buildOllamaChatBody(params),
       parseResponse: parseOllamaResponse,
       ...forwardCallOpts(params),
     });

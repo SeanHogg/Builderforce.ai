@@ -660,6 +660,91 @@ describe('POST /provider-keys/:provider/test', () => {
   });
 });
 
+describe('PUT /provider-keys/ollama-local', () => {
+  beforeEach(() => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(mockDb({
+      keyRow: { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'pro', billingStatus: 'active', tokenDailyLimitOverride: null },
+    }));
+  });
+
+  const put = (body: unknown) => buildApp().request(
+    new Request('http://test.local/provider-keys/ollama-local', {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer bfk_test', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+    {}, baseEnv as Record<string, unknown>, fakeExecutionCtx,
+  );
+
+  it('rejects a missing baseUrl', async () => {
+    const res = await put({ model: 'llama3.1:8b' });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: 'baseUrl is required' });
+  });
+
+  it('rejects a missing model', async () => {
+    const res = await put({ baseUrl: 'http://127.0.0.1:11434' });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: 'model is required' });
+  });
+
+  it('rejects a malformed baseUrl', async () => {
+    const res = await put({ baseUrl: 'not-a-url', model: 'llama3.1:8b' });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: 'baseUrl must be a valid URL' });
+  });
+
+  it('rejects a non-http(s) baseUrl scheme', async () => {
+    const res = await put({ baseUrl: 'ftp://127.0.0.1:11434', model: 'llama3.1:8b' });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: 'baseUrl must be http or https' });
+  });
+
+  it('rejects a field containing the "::" sentinel separator', async () => {
+    const res = await put({ baseUrl: 'http://127.0.0.1:11434', model: 'weird::model' });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: 'baseUrl, model, and apiKey may not contain "::"' });
+  });
+
+  it('composes the <apiKey>::<baseUrl>::<model> sentinel and stores it, with apiKey empty when omitted', async () => {
+    const realModule = await import('../../application/llm/tenantProviderKeyService');
+    const spy = vi.spyOn(realModule, 'setTenantProviderKey').mockResolvedValue(undefined);
+    const clearSpy = vi.spyOn(
+      await import('../../application/llm/providerAuthAlerts'),
+      'clearProviderAuthAlert',
+    ).mockResolvedValue(undefined);
+
+    const res = await put({ baseUrl: 'http://127.0.0.1:11434/v1', model: 'llama3.1:8b' });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, provider: 'ollama-local' });
+    expect(spy).toHaveBeenCalledWith(
+      expect.anything(), 1, 'ollama-local', '::http://127.0.0.1:11434/v1::llama3.1:8b', null,
+    );
+    expect(clearSpy).toHaveBeenCalledWith(expect.anything(), 1, 'ollama-local');
+
+    spy.mockRestore();
+    clearSpy.mockRestore();
+  });
+
+  it('includes a non-empty apiKey in the composed sentinel', async () => {
+    const realModule = await import('../../application/llm/tenantProviderKeyService');
+    const spy = vi.spyOn(realModule, 'setTenantProviderKey').mockResolvedValue(undefined);
+    vi.spyOn(await import('../../application/llm/providerAuthAlerts'), 'clearProviderAuthAlert')
+      .mockResolvedValue(undefined);
+
+    const res = await put({ baseUrl: 'http://127.0.0.1:11434', model: 'llama3.1:8b', apiKey: 'proxy-token' });
+
+    expect(res.status).toBe(200);
+    expect(spy).toHaveBeenCalledWith(
+      expect.anything(), 1, 'ollama-local', 'proxy-token::http://127.0.0.1:11434::llama3.1:8b', null,
+    );
+    spy.mockRestore();
+  });
+});
+
 describe('POST /v1/chat/completions strict-pin gate', () => {
   beforeEach(() => {
     mocks.hashSecret.mockReset();

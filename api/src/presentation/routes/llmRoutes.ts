@@ -1614,7 +1614,32 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
     const provider = c.req.param('provider');
     if (!isSupportedProvider(provider)) return c.json({ error: 'unsupported provider' }, 400);
-    const body = await c.req.json<{ apiKey?: string }>().catch(() => ({} as { apiKey?: string }));
+    const body = await c.req.json<{ apiKey?: string; baseUrl?: string; model?: string }>()
+      .catch(() => ({} as { apiKey?: string; baseUrl?: string; model?: string }));
+
+    // `ollama-local` stores a composed `<apiKey>::<baseUrl>::<model>` sentinel (see
+    // `ollamaLocal.ts`) instead of a bare credential — baseUrl/model are REQUIRED
+    // (apiKey is not: self-hosted Ollama commonly has no auth), and neither may
+    // contain the `::` separator (a stray one would desync `splitSentinel`).
+    if (provider === 'ollama-local') {
+      const baseUrl = body.baseUrl?.trim();
+      const model = body.model?.trim();
+      const apiKey = body.apiKey?.trim() ?? '';
+      if (!baseUrl) return c.json({ error: 'baseUrl is required' }, 400);
+      if (!model) return c.json({ error: 'model is required' }, 400);
+      let parsedUrl: URL;
+      try { parsedUrl = new URL(baseUrl); } catch { return c.json({ error: 'baseUrl must be a valid URL' }, 400); }
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        return c.json({ error: 'baseUrl must be http or https' }, 400);
+      }
+      if (baseUrl.includes('::') || model.includes('::') || apiKey.includes('::')) {
+        return c.json({ error: 'baseUrl, model, and apiKey may not contain "::"' }, 400);
+      }
+      await setTenantProviderKey(c.env, access.tenantId, provider, `${apiKey}::${baseUrl}::${model}`, access.userId);
+      await clearProviderAuthAlert(c.env, access.tenantId, provider);
+      return c.json({ ok: true, provider });
+    }
+
     const apiKey = body.apiKey?.trim();
     if (!apiKey) return c.json({ error: 'apiKey is required' }, 400);
     await setTenantProviderKey(c.env, access.tenantId, provider, apiKey, access.userId);

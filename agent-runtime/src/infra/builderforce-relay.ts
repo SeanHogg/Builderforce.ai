@@ -114,6 +114,16 @@ export type BuilderforceRelayOptions = {
   gatewayUrl?: string;
   /** Workspace path for updating .builderforce/context.yaml with assignment metadata. */
   workspaceDir?: string;
+  /**
+   * Origin (scheme://host[:port]) of THIS machine's own locally-configured Ollama
+   * instance — i.e. `models.providers.ollama.baseUrl` from `.builderforce/config.yaml`,
+   * normalized to its origin. Passed straight through to `performHostEgress` as the
+   * one allowed carve-out for a `host.egress.request`: the cloud can ask this host to
+   * call its OWN self-hosted Ollama over plain HTTP, but only the origin THIS machine
+   * already configured for itself — never an origin named in the cloud request. Absent
+   * when the tenant has no local Ollama connection configured.
+   */
+  ollamaLocalOrigin?: string;
 };
 
 export class BuilderforceRelayService implements IRelayService {
@@ -1018,6 +1028,8 @@ export class BuilderforceRelayService implements IRelayService {
               ? (msg.headers as Record<string, string>)
               : {},
           body: typeof msg.body === "string" ? msg.body : null,
+        }, {
+          ...(this.opts.ollamaLocalOrigin ? { allowedLocalOrigin: this.opts.ollamaLocalOrigin } : {}),
         }).then((frame) => {
           this.sendToRelay(frame);
         });

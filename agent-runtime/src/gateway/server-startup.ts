@@ -5,6 +5,7 @@ import {
   resolveConfiguredModelRef,
   resolveHooksGmailModel,
 } from "../agents/model-selection.js";
+import { resolveOllamaApiBase } from "../agents/models-config.providers.js";
 import { resolveAgentSessionDirs } from "../agents/session-dirs.js";
 import { cleanStaleLockFiles } from "../agents/session-write-lock.js";
 import { registerPlatformPersonasAsRoles } from "../builderforce/agent-roles.js";
@@ -357,11 +358,21 @@ async function startBuilderforceServices(
       );
       initApprovalGate({ baseUrl, agentNodeId: String(agentNodeId), apiKey });
 
+      // Local Ollama egress carve-out: only when THIS machine's own config already
+      // named an Ollama provider (set via `builderforce onboard` custom-provider, or
+      // hand-edited in .builderforce/config.yaml) — never inferred, so a host that
+      // never configured Ollama never opens this door. See `ollamaLocalOrigin` above.
+      const ollamaProviderConfig = params.cfg.models?.providers?.ollama;
+      const ollamaLocalOrigin = ollamaProviderConfig
+        ? resolveOllamaApiBase(ollamaProviderConfig.baseUrl)
+        : undefined;
+
       relay = new BuilderforceRelayService({
         baseUrl,
         agentNodeId: String(agentNodeId),
         apiKey,
         workspaceDir: params.defaultWorkspaceDir,
+        ...(ollamaLocalOrigin ? { ollamaLocalOrigin } : {}),
       });
       relay.start();
       params.log.warn(`[builderforce] relay started for agentNode ${agentNodeId}`);

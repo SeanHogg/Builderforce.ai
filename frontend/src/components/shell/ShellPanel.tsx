@@ -31,10 +31,18 @@ import { TenantProjectSwitcher } from '@/components/TenantProjectSwitcher';
 import { panelWidth } from '@/lib/workbenchPolicy';
 import { destTitleKey, publicDestinationFor } from '@/lib/publicDestinations';
 import { seatHueVar } from '@/lib/seats';
+import { groupsForStage, NAV_GROUPS, type Stage } from '@/lib/navGroups';
+import { METHOD_STAGES } from '@/lib/methodology';
+import { useFounderJourney } from '@/lib/useFounderJourney';
 import { ShellIndex, useShellDestination } from './ShellIndex';
 import { useOwnReferenceRail, useReferenceChrome, useReferenceSelect, useStageSelect, type ReferenceChromeSection } from '@/lib/referenceChrome';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 import { StageHeaderSwitcher } from './StageHeaderSwitcher';
+
+/** `group.stage` narrowed to the four the header switcher offers (§ methodology.ts). */
+function asMethodStage(stage: Stage | undefined): (typeof METHOD_STAGES)[number] | undefined {
+  return stage && (METHOD_STAGES as readonly Stage[]).includes(stage) ? (stage as (typeof METHOD_STAGES)[number]) : undefined;
+}
 
 /**
  * The index rail for a reference page opened as a panel (§11.4.5).
@@ -179,6 +187,23 @@ export function ShellPanel({ children }: { children: React.ReactNode }) {
   // contents beside the page, not instead of anything in it.
   useOwnReferenceRail(sections != null && selectSection != null);
 
+  // The founder's-journey Idea/Make/Run/Measure switcher, on EVERY panel whose
+  // destination sits in the arc — not just the dashboard's own hand-wired one.
+  // A page opts in with `usePublishStageSelect` when it wants to own the click
+  // (the dashboard swaps its inline tab set); every other destination gets this
+  // default instead, straight off the registry row `useShellDestination` already
+  // resolved, so `StageHeaderSwitcher` reaches every panel without a second page
+  // having to wire it up. `group.stage` is one of the full `STAGES` (it can be
+  // 'admin'/'reach'/'expand'); the switcher only ever offers the four the method
+  // is sold as, so a stage outside that set renders no switcher at all rather
+  // than one with nothing highlighted.
+  const journey = useFounderJourney();
+  const fallbackStage = published?.stage ? undefined : asMethodStage(group?.stage);
+  const selectFallbackStage = useCallback((stage: Stage) => {
+    const target = groupsForStage(NAV_GROUPS, stage)[0];
+    if (target) router.push(target.href);
+  }, [router]);
+
   return (
     <SlideOutPanel
       open
@@ -198,7 +223,9 @@ export function ShellPanel({ children }: { children: React.ReactNode }) {
       headerCenter={
         published?.stage && selectStage
           ? <StageHeaderSwitcher activeStage={published.stage} currentStage={published.currentStage} onSelect={selectStage} />
-          : undefined
+          : fallbackStage
+            ? <StageHeaderSwitcher activeStage={fallbackStage} currentStage={journey.stage} onSelect={selectFallbackStage} />
+            : undefined
       }
       headerActions={<TenantProjectSwitcher />}
       title={

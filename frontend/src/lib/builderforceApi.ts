@@ -3633,7 +3633,7 @@ export const empMetricsApi = {
  * and meters them. The key is write-only: we only ever read which providers are
  * configured, never the secret.
  */
-export type LlmProvider = 'anthropic' | 'openai' | 'google' | 'meta' | 'kimi' | 'moonshot' | 'qwen' | 'minimax' | 'xai';
+export type LlmProvider = 'anthropic' | 'openai' | 'google' | 'meta' | 'kimi' | 'moonshot' | 'qwen' | 'minimax' | 'xai' | 'ollama' | 'ollama-local';
 
 /** How a configured provider authenticates: a pasted API key, or a connected
  *  Claude Pro/Max subscription via OAuth. */
@@ -3875,6 +3875,16 @@ export const providerKeysApi = {
     request<{ ok: true; provider: LlmProvider }>(`/llm/provider-keys/${provider}`, {
       method: 'PUT',
       body: JSON.stringify({ apiKey }),
+    }),
+
+  /** `ollama-local` only: connect a self-hosted Ollama instance by base URL + the ONE
+   *  model this connection dispatches to (apiKey optional — self-hosted Ollama
+   *  commonly has no auth). See `ollamaLocal.ts` for the server-side sentinel this
+   *  composes into. */
+  setOllamaLocal: (baseUrl: string, model: string, apiKey?: string): Promise<{ ok: true; provider: LlmProvider }> =>
+    request<{ ok: true; provider: LlmProvider }>('/llm/provider-keys/ollama-local', {
+      method: 'PUT',
+      body: JSON.stringify({ baseUrl, model, ...(apiKey ? { apiKey } : {}) }),
     }),
 
   remove: (provider: LlmProvider): Promise<{ ok: true }> =>

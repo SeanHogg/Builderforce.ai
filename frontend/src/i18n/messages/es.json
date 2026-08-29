@@ -13602,7 +13602,22 @@
         "subscription": "suscripción SuperGrok",
         "pastePrompt": "Después de aprobar el acceso, copia el código mostrado en la página de xAI y pégalo aquí.",
         "pastePlaceholder": "Pega el código de acceso de xAI…"
+      },
+      "ollama": {
+        "blurb": "Pega una clave API de Ollama Cloud para ejecutar modelos de pesos abiertos (GPT-OSS, Kimi, GLM, DeepSeek, Qwen, Gemma) en tu propia cuenta de Ollama."
       }
+    },
+    "ollamaLocal": {
+      "title": "Ollama (autoalojado)",
+      "cardBlurb": "Conecta una instancia de Ollama autoalojada que se ejecute en tu propia máquina o red.",
+      "blurb": "Enruta las ejecuciones de agentes en la nube a tu propia instancia de Ollama autoalojada en lugar de un proveedor gestionado.",
+      "hostNote": "Las solicitudes se retransmiten a través de tu runtime de Builderforce conectado, así que la URL base de abajo debe ser la dirección de Ollama que ese runtime pueda alcanzar (normalmente su propio localhost) — y ese runtime ya debe tener Ollama configurado para permitir la llamada.",
+      "baseUrlLabel": "URL base",
+      "baseUrlPlaceholder": "http://127.0.0.1:11434",
+      "modelLabel": "Modelo",
+      "modelPlaceholder": "p. ej. llama3.1:8b",
+      "apiKeyLabel": "Clave API (opcional)",
+      "apiKeyPlaceholder": "Solo si tu instancia la requiere"
     },
     "diagnostic": {
       "currentStatus": "Estado actual: {status}",

@@ -13493,7 +13493,7 @@
   },
   "providerKeys": {
     "title": "Bring your own models",
-    "subtitle": "Connect your own Anthropic, OpenAI, Google, Kimi, Qwen, MiniMax, or Meta account. Connected providers power your agents on your own account and drive the model choices in every picker — usage on your machine (on-prem & VS Code) is free; cloud-agent usage is still billed. Credentials are stored encrypted and never shown again.",
+    "subtitle": "Connect your own Anthropic, OpenAI, Google, Kimi, Qwen, MiniMax, Meta, or Ollama account. Connected providers power your agents on your own account and drive the model choices in every picker — usage on your machine (on-prem & VS Code) is free; cloud-agent usage is still billed. Credentials are stored encrypted and never shown again.",
     "loading": "Loading…",
     "errorPrefix": "Error: {message}",
     "openRouter": {
@@ -13602,7 +13602,22 @@
         "subscription": "SuperGrok subscription",
         "pastePrompt": "After approving access, copy the code shown on the xAI page and paste it below.",
         "pastePlaceholder": "Paste the xAI sign-in code…"
+      },
+      "ollama": {
+        "blurb": "Paste an Ollama Cloud API key to run open-weight models (GPT-OSS, Kimi, GLM, DeepSeek, Qwen, Gemma) on your own Ollama account."
       }
+    },
+    "ollamaLocal": {
+      "title": "Ollama (self-hosted)",
+      "cardBlurb": "Connect a self-hosted Ollama instance running on your own machine or network.",
+      "blurb": "Route cloud-agent runs to your own self-hosted Ollama instance instead of a hosted provider.",
+      "hostNote": "Requests are relayed through your connected Builderforce runtime, so the base URL below must be the Ollama address that runtime itself can reach (typically its own localhost) — and that runtime must already have Ollama configured for it to allow the call.",
+      "baseUrlLabel": "Base URL",
+      "baseUrlPlaceholder": "http://127.0.0.1:11434",
+      "modelLabel": "Model",
+      "modelPlaceholder": "e.g. llama3.1:8b",
+      "apiKeyLabel": "API key (optional)",
+      "apiKeyPlaceholder": "Only if your instance requires one"
     },
     "diagnostic": {
       "currentStatus": "Current status: {status}",
