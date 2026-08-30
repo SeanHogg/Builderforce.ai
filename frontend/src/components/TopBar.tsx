@@ -22,7 +22,6 @@ import { CommandPalette } from './workspace/CommandPalette';
 import { OnboardingProgressPill } from './OnboardingProgressPill';
 import { JourneyPill } from './JourneyPill';
 import { useOnboardingPrompt } from '@/lib/onboarding';
-import { CanvasChromeSlotTarget } from '@/lib/canvas/CanvasChromeSlot';
 
 const PREVIEW_ROLES: PreviewRole[] = ['owner', 'manager', 'developer', 'viewer'];
 
@@ -86,12 +85,6 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
         )}
       </div>
       <div className="topbar-right">
-        {/* The board's own doors out — Make it real, Invite, Publish, the overflow —
-            portalled up from the canvas so the window carries ONE bar of controls
-            instead of this one and a second card floating just beneath it. The canvas
-            still owns them; only the DOM position is ours. See `CanvasChromeSlot`.
-            Empty, and collapsed by `:empty`, whenever no board is on the stage. */}
-        <CanvasChromeSlotTarget className="canvas-chrome-slot" />
         {/* Workspace scope stays in the header. Canvas/session navigation lives in
             the sidebar, so it has one canonical home instead of two selectors. */}
         <TenantProjectSwitcher />

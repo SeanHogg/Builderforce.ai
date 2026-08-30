@@ -39,12 +39,25 @@ const SURFACE_ICON: Partial<Record<CanvasSurfaceId, () => React.JSX.Element>> = 
   graph: GraphSurfaceIcon,
   scene3d: ThreeDIcon,
   app: AppSurfaceIcon,
+  insights: InsightsSurfaceIcon,
   calendar: CalendarSurfaceIcon,
   page: PageSurfaceIcon,
   play: PlaySurfaceIcon,
   site: SiteSurfaceIcon,
   timeline: TimelineSurfaceIcon,
 };
+
+/** What the session is worth, read back — two bars, one rising. The same reading
+ *  every widget card gives, small enough for a 16px tab. */
+export function InsightsSurfaceIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M1.7 14.3V1.9" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    <path d="M1.7 14.3h12.6" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    <rect x="4" y="9.4" width="2.1" height="4.2" rx=".5" fill="currentColor" />
+    <rect x="7.6" y="6.6" width="2.1" height="7" rx=".5" fill="currentColor" />
+    <rect x="11.2" y="4.1" width="2.1" height="9.5" rx=".5" fill="currentColor" />
+  </svg>;
+}
 
 /** A month: a grid under a header bar, which is the axis the flat board never had. */
 export function CalendarSurfaceIcon() {

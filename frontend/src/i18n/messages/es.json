@@ -22340,6 +22340,13 @@
           "request": "llamada"
         }
       },
+      "insights": {
+        "label": "Estadísticas",
+        "enter": "Ver lo que esto vale",
+        "active": "Estás en Estadísticas",
+        "regionLabel": "Las estadísticas de esta sesión",
+        "openFull": "Abrir panel completo"
+      },
       "page": {
         "label": "Página",
         "open": "Abrir como página"

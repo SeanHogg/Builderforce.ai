@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 
@@ -15,7 +14,6 @@ import {
   readCanvasBarCollapsed,
   writeCanvasBarCollapsed,
 } from '@/lib/canvasChrome';
-import { CanvasChromeSlotProvider, CanvasChromeSlotTarget } from '@/lib/canvas/CanvasChromeSlot';
 import { CreationCanvas } from './CreationCanvas';
 
 /**
@@ -72,7 +70,7 @@ describe('the canvas chrome rule', () => {
    * drawn anywhere, which is the quietest possible way to lose a control.
    */
   it('gives every slot exactly one floating region', () => {
-    const placed = (['pill', 'chips', 'topRight', 'bar'] as const).flatMap((place) => canvasChromeSlotsIn(place));
+    const placed = (['pill', 'chips', 'bar'] as const).flatMap((place) => canvasChromeSlotsIn(place));
     expect([...placed].sort()).toEqual(
       ['actions', 'handoff', 'roster', 'saveState', 'surfaceControls', 'surfaceStatus', 'surfaces'].sort(),
     );
@@ -95,11 +93,14 @@ describe('the canvas chrome rule', () => {
     }
   });
 
-  /** Share and Publish are placed apart from the glyphs because they ARE apart: a word
-   *  opens somewhere else, a glyph acts here. */
-  it('separates the two doors out of the canvas from the buttons that act on it', () => {
-    expect(canvasChromePlace('handoff')).toBe('topRight');
+  /** Share and Publish share a REGION with the glyphs now (both `bar`), but not a
+   *  SLOT — a word opens somewhere else, a glyph acts here, and `handoff` staying its
+   *  own slot is what lets the bar draw it behind its own divider rather than folding
+   *  it into the same run as `actions`. */
+  it('keeps the two doors out of the canvas a distinct slot from the buttons that act on it', () => {
+    expect(canvasChromePlace('handoff')).toBe('bar');
     expect(canvasChromePlace('actions')).toBe('bar');
+    expect(canvasChromeKind('handoff')).toBe('control');
   });
 
   /**
@@ -110,43 +111,9 @@ describe('the canvas chrome rule', () => {
    * fact is not the offer.
    */
   it('has no save slot, because the header is the one place that offers to keep the work', () => {
-    const every = (['pill', 'chips', 'topRight', 'bar'] as const).flatMap((place) => canvasChromeSlotsIn(place));
+    const every = (['pill', 'chips', 'bar'] as const).flatMap((place) => canvasChromeSlotsIn(place));
     expect(every).not.toContain('save');
     expect(every).toContain('saveState');
-  });
-});
-
-/**
- * THE SHARED PALETTE BLOCK PAINTS NOTHING.
- *
- * `.canvasPalette` exists so the handoff row keeps the board's tokens after it is
- * portalled into the application header, and it is a SECOND SELECTOR on the shell's
- * token block rather than a copy of it. That is right for custom properties and
- * catastrophic for anything else: for one release the block also carried
- * `background: var(--canvas-board-background)` and `height: calc(100vh - …)`, so the
- * portalled toolbar drew an opaque 360 x 1009 board-coloured panel over the canvas —
- * a floating row wearing the whole board's clothes, covering the surface switcher and
- * most of the objects.
- *
- * Read from the stylesheet rather than from a rendered element on purpose: jsdom does
- * not do layout, so the only way to catch "this rule paints" is to look at the rule.
- */
-describe('the canvas palette shared with the header', () => {
-  it('carries custom properties and nothing that paints or lays out', async () => {
-    // Path from the vitest root (`frontend/`), not `import.meta.url`: the dom
-    // environment rewrites module URLs to a non-file scheme and `readFile` refuses them.
-    const css = await readFile('src/components/creation-canvas/CreationCanvas.module.css', 'utf8');
-    const start = css.indexOf('.canvasShell,\n.canvasPalette {');
-    expect(start).toBeGreaterThan(-1);
-    const block = css.slice(start, css.indexOf('\n}', start));
-
-    const offenders = block
-      .split('\n')
-      .map((line) => line.trim())
-      // Declarations only: skip the selector, comments and blank lines.
-      .filter((line) => /^[a-z-]+ *:/i.test(line))
-      .filter((line) => !line.startsWith('--'));
-    expect(offenders).toEqual([]);
   });
 });
 
@@ -192,82 +159,26 @@ describe('the collapsed session bar', () => {
   });
 
   /**
-   * ── THE ROW LIVES IN THE HEADER ────────────────────────────────────────────────
-   * The canvas used to float its own card in the top-right corner, fourteen pixels
-   * under an application header that ran the full width of the window — two bars of
-   * controls in one corner, which the operator read (correctly) as one thing drawn
-   * twice. The row is portalled into the header's slot instead.
-   *
-   * Asserted through the DOM rather than through a flag, because the whole claim is
-   * about WHERE the node ends up.
+   * ── THE ROW LIVES IN THE BAR ─────────────────────────────────────────────────────
+   * The canvas used to float this card in the top-right corner (or portal it into
+   * whichever header the shell had mounted) — two bars of controls in one corner,
+   * which the operator read (correctly) as one thing drawn twice, and a row that read
+   * differently signed in versus signed out because the two headers are structurally
+   * different chromes. It draws inside `.commandBar` instead now, on every surface
+   * with no header involved at all.
    */
-  it('hands its doors-out row to the header when the shell offers a slot', () => {
-    render(
-      <CanvasChromeSlotProvider>
-        <header><CanvasChromeSlotTarget className="canvas-chrome-slot" /></header>
-        <CreationCanvas sessionId="chrome-slot-test" persistence="local" />
-      </CanvasChromeSlotProvider>,
-    );
+  it('draws its doors-out row inside the command bar, on every surface', () => {
+    render(<CreationCanvas sessionId="chrome-bar-test" persistence="local" />);
 
     const handoff = screen.getByTestId('canvas-handoff');
-    expect(screen.getByTestId('canvas-chrome-slot')).toContainElement(handoff);
-    expect(handoff).toHaveAttribute('data-hosted', 'header');
-    // The rest of the canvas chrome is UNMOVED. Only the handoff row was portalled, so
-    // the surface switcher stays where it floats on the board — asserted here because
-    // "I extracted the right subtree" is otherwise invisible until someone opens the
-    // app and finds the top of the canvas empty.
-    expect(screen.getByRole('group', { name: 'Canvas view' })).toBeInTheDocument();
-    // Drawn ONCE. A portal that left a copy behind would be the two bars again.
+    expect(within(screen.getByTestId('canvas-command-bar')).getByTestId('canvas-handoff')).toBe(handoff);
+    // Drawn ONCE, not duplicated by whatever renders around the canvas.
     expect(screen.getAllByTestId('canvas-handoff')).toHaveLength(1);
 
-    // …and it still WORKS from up there: the share panel is a child of the row, so it
-    // anchors to the button that opened it wherever that button was drawn.
+    // …and it works from there: the share panel is a child of the row, so it anchors
+    // to the button that opened it.
     fireEvent.click(within(handoff).getByRole('button', { name: 'Invite' }));
     expect(within(handoff).getByRole('dialog', { name: 'Invite collaborators' })).toBeInTheDocument();
-  });
-
-  /**
-   * ONE BOARD PUBLISHES, however many are mounted.
-   *
-   * `CanvasStage` keeps every opened board mounted and hides all but the selected one
-   * with `visibility: hidden`, so switching boards does not throw away the state of the
-   * one you left. A PORTAL escapes that: `visibility` inherits down the DOM and the
-   * portalled row is a child of the header, not of the box that was hidden. Three cached
-   * boards therefore put three live copies of Make it real / Invite / Publish in the
-   * header — the exact duplication this whole seam exists to remove, reintroduced by the
-   * mechanism that removed it.
-   */
-  it('publishes only the board on stage, however many are kept mounted behind it', () => {
-    render(
-      <CanvasChromeSlotProvider>
-        <header><CanvasChromeSlotTarget className="canvas-chrome-slot" /></header>
-        <CreationCanvas sessionId="chrome-slot-cached-board" persistence="local" stageActive={false} />
-        <CreationCanvas sessionId="chrome-slot-staged-board" persistence="local" stageActive />
-      </CanvasChromeSlotProvider>,
-    );
-
-    const slot = screen.getByTestId('canvas-chrome-slot');
-    const hosted = screen.getAllByTestId('canvas-handoff').filter((row) => slot.contains(row));
-    expect(hosted).toHaveLength(1);
-    // The cached board keeps its own row in its own corner, where its container's
-    // `visibility: hidden` can still reach it.
-    const inCorner = screen.getAllByTestId('canvas-handoff').filter((row) => !slot.contains(row));
-    expect(inCorner).toHaveLength(1);
-    expect(inCorner[0]).toHaveAttribute('data-hosted', 'canvas');
-  });
-
-  /**
-   * The fallback is not a nicety — the VS Code webview, the `/embed` tree and every
-   * component test render the canvas with no header above it. A surface must not lose
-   * its only route to Invite and Publish by having nowhere to consolidate into.
-   */
-  it('keeps the row in its own corner on a surface that offers no header', () => {
-    render(<CreationCanvas sessionId="chrome-slot-fallback-test" persistence="local" />);
-
-    const handoff = screen.getByTestId('canvas-handoff');
-    expect(handoff).toHaveAttribute('data-hosted', 'canvas');
-    expect(screen.queryByTestId('canvas-chrome-slot')).toBeNull();
-    expect(within(handoff).getByRole('button', { name: 'Invite' })).toBeInTheDocument();
   });
 
   /** A collapse with no way back is a one-way door, so the toggle is the one control

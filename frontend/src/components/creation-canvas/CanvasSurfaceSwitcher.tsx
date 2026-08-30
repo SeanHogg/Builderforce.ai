@@ -47,13 +47,23 @@ export interface CanvasSurfaceSwitcherProps {
   onChange: (surface: CanvasSurfaceId) => void;
   /** `header` = the desktop session bar; `mobile` = the phone-sized action stack. */
   variant: 'header' | 'mobile';
+  /**
+   * Narrow the offer to these ids, in the registry's own order. Omitted means every
+   * board surface, which is what the phone stack always passes — a phone has no phase
+   * stepper of its own to widen the set back out with, so narrowing there would be a
+   * dead end rather than a phase. The desktop header passes this from
+   * `surfacesForPhase()` so the fused widget's two rows agree about what phase X offers.
+   */
+  allowedIds?: readonly CanvasSurfaceId[];
 }
 
-export function CanvasSurfaceSwitcher({ surface, onChange, variant }: CanvasSurfaceSwitcherProps) {
+export function CanvasSurfaceSwitcher({ surface, onChange, variant, allowedIds }: CanvasSurfaceSwitcherProps) {
   const t = useTranslations('creationCanvas');
   // The contents are decided by the registry, not filtered here: an object-scoped surface
-  // has no answer to "press this with nothing selected", so it is never offered.
-  const ordered = boardCanvasSurfaces();
+  // has no answer to "press this with nothing selected", so it is never offered. A phase
+  // narrows that set further, but never past it — see `allowedIds`.
+  const allowed = allowedIds ? new Set(allowedIds) : null;
+  const ordered = boardCanvasSurfaces().filter((def) => !allowed || allowed.has(def.id));
 
   const tabs = ordered.map((def) => {
     const pressed = surface === def.id;

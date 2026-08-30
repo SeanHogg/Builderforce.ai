@@ -161,9 +161,20 @@ export function BrainSurfaceBody({
   const showPresence = joinedCollaborator != null || typingCollaborators.length > 0;
 
   return <>
-    <div className={styles.brainDockTabs} role="tablist" aria-label={t('brainDock')}>
-      <button type="button" role="tab" aria-selected={tab === 'chat'} className={tab === 'chat' ? styles.activeTab : ''} onClick={() => setTab('chat')}>{t('chat')}</button>
-      <button type="button" role="tab" aria-selected={tab === 'context'} className={tab === 'context' ? styles.activeTab : ''} onClick={() => setTab('context')}>{t('context')}</button>
+    {/* Chat is the panel's own content, not a tab beside another tab — the reader
+        already knows they are in chat because the surface switcher says so. Context
+        is a CONFIGURATION of this same panel, not a second destination, so it is one
+        icon toggle rather than a second tab fighting the first for the same label. */}
+    <div className={styles.brainDockTabs}>
+      <span className={styles.brainDockTitle}>{t('chat')}</span>
+      <button
+        type="button"
+        className={styles.brainDockContextToggle}
+        aria-pressed={tab === 'context'}
+        aria-label={t('context')}
+        title={t('context')}
+        onClick={() => setTab((current) => (current === 'context' ? 'chat' : 'context'))}
+      ><Icon source="ⓘ" size="1em" /></button>
     </div>
     {showPresence && <div className={styles.humanChatActivity} aria-live="polite">
       {joinedCollaborator && <span data-state="joined">

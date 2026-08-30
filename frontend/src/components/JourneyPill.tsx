@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Icon } from '@/components/ui/Icon';
 import { METHOD_STAGES } from '@/lib/methodology';
 import { useFounderJourney } from '@/lib/useFounderJourney';
@@ -16,15 +16,33 @@ import { SlideOutPanel } from './SlideOutPanel';
  * `StageHeaderSwitcher`/`ActRail` rather than recomputing the position.
  *
  * Self-gating: renders nothing with no signal yet (a brand-new tenant with no
- * idea and no company) — TopBar drops it in unconditionally.
+ * idea and no company), and nothing on a canvas session route — TopBar drops
+ * it in unconditionally either way.
+ *
+ * ── WHY THE SECOND GATE ───────────────────────────────────────────────────
+ * The pill exists to name a stage when nothing else on screen does. A canvas
+ * session (`/create/<sessionId>`, never `/create/new` or `/create/invitations/
+ * <token>`, which are not sessions) now shows its OWN fused phase stepper
+ * (`PhaseModalitySelector`) — five stages, not this pill's one, colour-synced
+ * off the same `--stage-*` tokens — so keeping both would repeat the same fact
+ * at lower fidelity in two corners of the same screen.
  */
+const NON_SESSION_CREATE_SEGMENTS = new Set(['new', 'invitations', 'build']);
+
+function isCanvasSessionRoute(pathname: string | null): boolean {
+  if (!pathname) return false;
+  const match = /^\/create\/([^/]+)/.exec(pathname);
+  return match != null && !NON_SESSION_CREATE_SEGMENTS.has(match[1]);
+}
+
 export function JourneyPill() {
   const t = useTranslations('nav');
   const router = useRouter();
+  const pathname = usePathname();
   const journey = useFounderJourney();
   const [open, setOpen] = useState(false);
 
-  if (!journey.stage) return null;
+  if (!journey.stage || isCanvasSessionRoute(pathname)) return null;
 
   return (
     <>

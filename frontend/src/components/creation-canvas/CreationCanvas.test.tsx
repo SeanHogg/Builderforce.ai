@@ -851,7 +851,7 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     await waitFor(() => expect(screen.getAllByText('concept.png').length).toBeGreaterThan(0));
   });
 
-  it('keeps exactly ONE Brain transcript — the dock — with its connected work behind a tab', () => {
+  it('keeps exactly ONE Brain transcript — the dock — with its connected work behind a toggle', () => {
     render(<CreationCanvas sessionId="brain-object-details-test" persistence="local" />);
 
     // One transcript, not three: the Brain Object and the details panel no longer
@@ -868,7 +868,10 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(autoApply).toHaveAttribute('aria-checked', 'false');
     expect(localStorage.getItem('brain.autoApprove')).toBe('0');
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Context' }));
+    // Context is a lighter icon toggle on the panel now, not a second tab beside
+    // Chat — the reader already knows they are in chat because the surface
+    // switcher says so, and Context is a configuration of the same panel.
+    fireEvent.click(screen.getByRole('button', { name: 'Context' }));
     expect(screen.getByRole('heading', { name: 'Agents' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Associated tickets' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Connected objects' })).toBeInTheDocument();
@@ -975,7 +978,9 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     fireEvent.click(surfaceTab('App'));
     expect(brainPanel()).toContainElement(screen.getByTestId('canvas-composer'));
     expect(screen.getByTestId('canvas-composer')).toHaveAttribute('data-placement', 'docked');
-    expect(within(brainPanel()).getByRole('tablist', { name: 'Brain chat' })).toBeInTheDocument();
+    // Same header row on every surface: still finds the Context toggle beside the
+    // transcript, not shrunk down to a card with no room for it.
+    expect(within(brainPanel()).getByRole('button', { name: 'Context' })).toBeInTheDocument();
 
     fireEvent.click(surfaceTab('Board'));
     expect(brainPanel()).toContainElement(screen.getByTestId('canvas-composer'));

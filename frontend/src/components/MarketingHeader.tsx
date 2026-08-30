@@ -18,7 +18,6 @@ import {
 import { seatHueVar, type SeatOrPlatform } from '@/lib/seats';
 import { isNavItemActive } from '@/lib/nav';
 import { registerHref } from '@/lib/auth';
-import { CanvasChromeSlotTarget } from '@/lib/canvas/CanvasChromeSlot';
 import { rendersAppShell } from '@/lib/shellRouting';
 import { useMobileNav } from '@/lib/useMobileNav';
 import { listLocalCreationSessions } from '@/domains/canvas/infrastructure/localCanvasStore';
@@ -357,16 +356,10 @@ export default function MarketingHeader() {
           ))}
         </nav>
 
-        {/* Right side: the board's own actions, then theme + auth CTAs (desktop),
-            hamburger (mobile).
-
-            The canvas PORTALS its handoff row in here rather than floating a second
-            card fourteen pixels below this one — see `CanvasChromeSlot`. The target
-            renders nothing on a marketing page (no provider) and collapses when no
-            board is on the stage (`:empty`), so this costs the public pages a
-            container that never appears. */}
+        {/* Right side: theme + auth CTAs (desktop), hamburger (mobile). The canvas's
+            own doors out (Invite, Publish, the overflow) live in its bottom command
+            bar now, not here — see `CreationCanvas.tsx`'s `handoffChrome`. */}
         <div className="mh-right">
-          <CanvasChromeSlotTarget className="canvas-chrome-slot" />
           <HeaderCartButton className="mh-cart" />
           <ThemeToggleButton />
           <Link href="/login" className="mh-signin">{tc('signIn')}</Link>

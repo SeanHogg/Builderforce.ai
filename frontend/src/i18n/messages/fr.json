@@ -22340,6 +22340,13 @@
           "request": "appel"
         }
       },
+      "insights": {
+        "label": "Analyses",
+        "enter": "Voir ce que ça vaut",
+        "active": "Vous êtes dans Analyses",
+        "regionLabel": "Les analyses de cette session",
+        "openFull": "Ouvrir le tableau de bord complet"
+      },
       "page": {
         "label": "Page",
         "open": "Ouvrir en pleine page"

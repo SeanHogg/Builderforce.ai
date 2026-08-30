@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type PointerEvent } from 'react';
-import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
 import {
   addEdge,
@@ -24,8 +23,8 @@ import { AccessibleOutlineIcon, AddObjectIcon, CANVAS_FIT_MIN_ZOOM, CanvasComman
 import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
 import { canvasSurfaceDefinition, readCanvasSurface, writeCanvasSurface, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
+import { DEFAULT_CANVAS_PHASE, readCanvasPhase, surfacesForPhase, writeCanvasPhase, type CanvasPhase } from '@/lib/canvasPhases';
 import { canvasChromeShows, readCanvasBarCollapsed, writeCanvasBarCollapsed } from '@/lib/canvasChrome';
-import { useCanvasChromeSlot } from '@/lib/canvas/CanvasChromeSlot';
 import { canvasApp } from '@/lib/canvasApp';
 import { isTypingTarget } from '@/lib/keyboardTarget';
 import { canvasNodeMessages, canvasNodeSettingsPanel, canvasPersonOrigin, isCanvasPersonKind, type CanvasNodePanelId } from '@/lib/canvasNodeAffordances';
@@ -50,6 +49,8 @@ import { publishPoll, setPollState } from '@/lib/pollApi';
 import { pollJoinUrl, pollPublishBody } from '@/lib/pollObject';
 import { CanvasCalendarSurface } from './CanvasCalendarSurface';
 import { CanvasSurfaceSwitcher } from './CanvasSurfaceSwitcher';
+import { PhaseModalitySelector } from './PhaseModalitySelector';
+import { CanvasInsightsSurface } from './CanvasInsightsSurface';
 import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasSessionActions';
 import { CanvasSessionPill } from './CanvasSessionPill';
 import { RemoteCursors } from './RemoteCursors';
@@ -1109,19 +1110,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * bar arriving expanded for one frame is the safe direction to be wrong in.
    */
   const [barCollapsed, setBarCollapsedState] = useState(false);
-  /**
-   * The header's container for this board's handoff row, when a header offered one.
-   *
-   * `null` in the VS Code webview, the embed and a bare component test — those keep
-   * the floating corner card, because a surface with no header has nowhere to
-   * consolidate INTO. See `lib/canvas/CanvasChromeSlot.tsx` for why the seam is a DOM
-   * slot rather than a context full of handlers.
-   *
-   * Also `null` for a board the shell is keeping mounted BEHIND the one on stage: a
-   * portal escapes the `visibility: hidden` that hides it, so a cached board would
-   * otherwise put a second live copy of Make it real / Invite / Publish in the header.
-   */
-  const chromeSlot = useCanvasChromeSlot(stageActive);
   useEffect(() => { setBarCollapsedState(readCanvasBarCollapsed()); }, []);
   /**
    * Where the prompt lives — floating, docked into Brain, or closed. Read in an effect
@@ -1150,6 +1138,23 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // restored without the object it was about.
     writeCanvasSurface(next);
   }, []);
+  /**
+   * Which stage of ITS OWN methodology this session is in — see `lib/canvasPhases.ts`
+   * for why this is not `useFounderJourney()`. Same SSR-safe pattern as `surface`:
+   * a safe default in the initial state, the real preference restored in a mount-only
+   * effect below, because reading `localStorage` during render is a hydration mismatch.
+   */
+  const [phase, setPhaseState] = useState<CanvasPhase>(DEFAULT_CANVAS_PHASE);
+  useEffect(() => { setPhaseState(readCanvasPhase()); }, []);
+  const setPhase = useCallback((next: CanvasPhase) => {
+    setPhaseState(next);
+    writeCanvasPhase(next);
+    // Additive narrowing (see `surfacesForPhase`), so this only ever RESETS the surface
+    // when the one already open falls outside the new phase's offer — pressing Idea
+    // while reading the app it built must not silently pull the reader back to the
+    // board over a surface the new phase would still have shown them.
+    if (!surfacesForPhase(next).includes(surface)) setSurface('graph');
+  }, [surface, setSurface]);
   const [shareOpen, setShareOpen] = useState(initialShareOpen);
   const [accountGate, setAccountGate] = useState<AccountGate | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -1845,20 +1850,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // how the bar came to be drawn straight over the prompt on exactly that surface.
   const commandBarSpaceRef = useChromeSpace(shellRef, '--canvas-command-bar-space', { gap: COMMAND_BAR_CLEARANCE });
   // The band the floating chrome owns at the TOP of the shell, published as
-  // `--canvas-top-chrome-space`. It is measured off the top-right card because that is the
-  // TALLEST of the three cards sharing that line (the session pill, the surface chips and
-  // this one all sit at `top:14px`), so clearing it clears all three.
+  // `--canvas-top-chrome-space`. It is measured off the fused phase/surface card because
+  // that is the TALLER of the two cards sharing that line now that Invite / Publish / •••
+  // moved into the bottom bar (see `handoffChrome`'s own header for why) — the session
+  // pill is a single row, the fused widget is two, so clearing the widget clears the pill.
   //
-  // TWO things read it, and both were broken without it. Every panel that opens in the
-  // top-right corner is anchored to the same `top:14px; right:14px` as the card, which
-  // floats at z-index 20 over panels at 9 — so the details panel's expand and close buttons
-  // sat underneath Share / Publish / Save and could not be clicked: the panel could be
-  // opened and not shut. And every FULL-BLEED surface draws from the shell's top edge, so
-  // the conversation surface drew its own header underneath the pill — the session's name
-  // painted over by the same session's name, with its participants marooned beside the
-  // surface tabs. Measured rather than declared for the reason the bottom bands are: the
-  // card grows by a wrapped Save button, by whatever the surface contributes to `handoff`,
-  // and shrinks when the bar is collapsed.
+  // TWO things read it, and both were broken without it. Every FULL-BLEED surface draws
+  // from the shell's top edge, so the conversation surface drew its own header underneath
+  // the pill — the session's name painted over by the same session's name, with its
+  // participants marooned beside the surface tabs. And a panel anchored to the shell's top
+  // edge needs to know how much of it the floating cards already own. Measured rather than
+  // declared for the reason the bottom bands are: the widget grows by a row when a surface
+  // is added to `CANVAS_SURFACES`, and its content changes with the phase.
   const topChromeSpaceRef = useChromeSpace(shellRef, '--canvas-top-chrome-space', { edge: 'top', gap: TOP_CHROME_CLEARANCE });
   const paletteSearchRef = useRef<HTMLInputElement | null>(null);
   /**
@@ -11694,27 +11697,31 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * THE BOARD'S DOORS OUT — Make it real, Invite, Publish, and the overflow that holds
    * everything a phone cannot fit.
    *
-   * Built here rather than inline because it is rendered in one of TWO places: the
-   * header's slot when the shell offers one, and the canvas's own top-right corner when
-   * it does not. Same element, same state, same menus anchored to the same triggers —
-   * `createPortal` moves the DOM node and nothing else, which is why the share panel and
-   * the ••• sheet keep working without either of them knowing where they ended up.
+   * ── WHY THIS LIVES IN THE BAR NOW, NOT THE HEADER ────────────────────────────────
+   * It used to portal into the application header's own top-right corner — a DOM slot
+   * (`lib/canvas/CanvasChromeSlot.tsx`, since removed) that let the row escape into
+   * whichever header the shell had mounted, `MarketingHeader` signed out or `TopBar`
+   * signed in. That solved one collision (two bars of controls fourteen pixels apart) by
+   * creating a smaller one: the header's OWN cluster — cart, theme, sign-in-or-out — sat
+   * beside a row that belonged to the canvas, not the shell, so a visitor read one corner
+   * as two systems that happened to share it. It also meant Invite/Publish/••• read
+   * differently signed in versus signed out, because the two headers are structurally
+   * different chromes, not a swapped button or two.
    *
-   * See `lib/canvas/CanvasChromeSlot.tsx` for why the corner emptied out.
+   * The bar already answers "what can I do to this canvas" for every other action; these
+   * two are answered the same way now, kept a visual step apart — a divider, not a
+   * border of their own — from the glyphs beside them. See `CanvasSessionActions` for why
+   * a glyph acts on the board and a word opens somewhere else, and why that distinction
+   * survives the move: it is drawn with weight, not with a second card.
    */
   const handoffChrome = (
       <div
-        // Measured ONLY while it floats over the board. Hosted in the header it is not
-        // over the board at all, so the band the board reserves for top chrome collapses:
-        // `useChromeSpace` publishes 0px the moment this ref stops being handed the node,
-        // exactly as the composer's does when the prompt moves into the Brain panel.
-        ref={chromeSlot ? undefined : topChromeSpaceRef}
-        // The canvas owns its palette, so the row CARRIES it rather than inheriting the
-        // header's — the menus that hang off these buttons are canvas surfaces wherever
-        // the buttons happen to be drawn.
-        className={chromeSlot ? `${styles.canvasPalette} ${styles.headerChrome}` : `${styles.floatCard} ${styles.topRightCard}`}
+        // Nothing left to carry: the row is now a plain group inside `.commandBar`,
+        // which is already inside `.canvasShell` and already has every token this row's
+        // menus read. There is nothing to escape into any more, so there is nothing to
+        // re-declare the palette for.
+        className={styles.handoffGroup}
         data-testid="canvas-handoff"
-        data-hosted={chromeSlot ? 'header' : 'canvas'}
       >
           {/* The two doors OUT of this canvas — bring a person in, or put the result
               where strangers can reach it. They are the only worded actions in the
@@ -11858,21 +11865,26 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       {/* ── THE FLOATING CHROME ────────────────────────────────────────────────────
           There is no chrome band any more. The board takes the whole shell and each
           piece of chrome floats over it in the region `lib/canvasChrome.ts` gives it:
-          is the work safe (top left), how it is READ (top centre), how work LEAVES
-          it (top right), and what you DO to it (the one bar, bottom centre).
+          is the work safe (top left), how it is READ and which phase it is in (top
+          centre), and what you DO to it — including how work LEAVES it (the one bar,
+          bottom centre).
 
           The band this replaced was 54px of full-width surface holding a title, a
           switcher, seven buttons, a roster and a save button — mostly empty space
           between things with nothing to do with each other, drawn ABOVE a hard line
           that made the board start below the chrome rather than run behind it. */}
       <CanvasSessionPill notice={notice} />
-      {/* Which surface this canvas is read through, ON the canvas rather than in a bar
-          across it. The phone's copy of this decision lives in the board's control
-          column; the stylesheet keeps exactly one on screen. */}
-      {canvasChromeShows('surfaces', barCollapsed) && <div className={`${styles.floatCard} ${styles.surfaceChips}`}>
-        <CanvasSurfaceSwitcher surface={surface} onChange={setSurface} variant="header" />
+      {/* Which PHASE this session is in and which surface reads it — ON the canvas
+          rather than in a bar across it, fused into one widget (`PhaseModalitySelector`).
+          The phone's copy of the surface half lives in the board's control column, with
+          no phase row of its own — a phone has nowhere to widen the offer back out, so it
+          keeps every board surface rather than risk a dead end; the stylesheet keeps
+          exactly one of the two on screen. Measured for `--canvas-top-chrome-space`: this
+          card is now the taller of the two on the top line, now that the doors-out row
+          no longer floats up here (see `handoffChrome`'s own header). */}
+      {canvasChromeShows('surfaces', barCollapsed) && <div ref={topChromeSpaceRef} className={`${styles.floatCard} ${styles.surfaceChips}`}>
+        <PhaseModalitySelector phase={phase} onPhaseChange={setPhase} surface={surface} onSurfaceChange={setSurface} />
       </div>}
-      {chromeSlot ? createPortal(handoffChrome, chromeSlot) : handoffChrome}
 
       {/* THE object panel — config, schedule, messages or persona short, or the object's
           whole inspector wide, from one shell anchored to one card.
@@ -11944,6 +11956,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         collapsed={barCollapsed}
         onToggleCollapse={() => setBarCollapsed(!barCollapsed)}
         handlers={sessionActionHandlers}
+        handoff={handoffChrome}
         // The board's Run takes this canvas to the surface that runs it. Offered only
         // when the App surface would actually have something to open — the SAME question
         // that surface asks, asked of the same projection, so the bar can never promise a
@@ -12317,6 +12330,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               onExit={() => setSurface('graph')}
               onOpenObject={revealObject}
             />,
+            // What the session is worth, read back. Board-scoped for the same reason
+            // `app` is — the metrics are about the whole session, not one card.
+            insights: <CanvasInsightsSurface onExit={() => setSurface('graph')} />,
             // The five medium runtimes. Each takes the object the surface is ABOUT, so
             // each is rendered only when one resolves — `surfaceNode` going null is what
             // the effect above turns back into the board.

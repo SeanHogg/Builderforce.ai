@@ -22340,6 +22340,13 @@
           "request": "调用"
         }
       },
+      "insights": {
+        "label": "洞察",
+        "enter": "查看这个画布的价值",
+        "active": "你正在查看洞察",
+        "regionLabel": "此会话的洞察",
+        "openFull": "打开完整看板"
+      },
       "page": {
         "label": "页面",
         "open": "以页面方式打开"

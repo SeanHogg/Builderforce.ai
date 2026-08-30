@@ -97,6 +97,14 @@ export interface CanvasCommandBarProps {
   /** The ••• sheet's trigger and whatever else the host keeps beside the actions. */
   extras?: React.ReactNode;
   /**
+   * The two doors OUT of this canvas — Invite and Publish — plus the ••• overflow.
+   * Drawn behind its own divider, after the roster, so it reads as a distinct GROUP
+   * rather than more glyphs in the same run: a word opens somewhere else, a glyph acts
+   * here, and the divider is what keeps saying so now that both live in one bar. See
+   * `CreationCanvas.tsx`'s `handoffChrome` for why this moved out of the header.
+   */
+  handoff?: React.ReactNode;
+  /**
    * How tall this bar actually is, published to the shell as `--canvas-command-bar-space`
    * by whoever passes the ref — the band the prompt floats above.
    *
@@ -123,6 +131,7 @@ export function CanvasCommandBar({
   onTogglePrompt,
   promptOpen = true,
   extras,
+  handoff,
   hostRef,
 }: CanvasCommandBarProps) {
   const t = useTranslations('creationCanvas');
@@ -199,6 +208,16 @@ export function CanvasCommandBar({
         <span className={styles.commandBarDivider} aria-hidden />
         {roster}
         {team}
+      </>}
+
+      {/* The doors out — Invite, Publish, ••• — behind their own divider so the group
+          reads apart from the roster beside it, the same way it always read apart from
+          the glyphs when it had a card of its own. Folds away with the rest of the
+          controls: `handoff` is `SLOT_KIND.control` in `canvasChrome.ts`, same as
+          `actions`, so `showsActions` is the right gate rather than a new one. */}
+      {handoff && showsActions && <>
+        <span className={styles.commandBarDivider} aria-hidden />
+        {handoff}
       </>}
 
       {showsQuickAdd && <>
