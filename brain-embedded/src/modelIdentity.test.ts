@@ -45,6 +45,24 @@ describe('displayModelName', () => {
     expect(displayModelName('tenant_model:reviewer', FREE)).toBe('tenant_model:reviewer');
   });
 
+  it('names a model running on the user’s own machine, on any plan', () => {
+    // Masking here did not withhold a name, it asserted a false one: a free-plan
+    // viewer running this on their own GPU was told "Builderforce Free" — our
+    // gateway's name for a turn that never reached it, with no other surface
+    // saying otherwise. An on-device model is the user's to begin with.
+    expect(displayModelName('local/freetoken/gpt-oss-20b', FREE)).toBe('local/freetoken/gpt-oss-20b');
+    expect(displayModelName('local/ollama/qwen3:8b', FREE)).toBe('local/ollama/qwen3:8b');
+    // An Ollama id may itself contain '/' and ':' — the ref survives whole.
+    expect(displayModelName('local/ollama/hf.co/user/repo:q4_K_M', FREE)).toBe('local/ollama/hf.co/user/repo:q4_K_M');
+    // And it is not a special case of being allowed to choose.
+    expect(displayModelName('local/freetoken/gpt-oss-20b', PAID)).toBe('local/freetoken/gpt-oss-20b');
+  });
+
+  it('still masks a catalog id that merely mentions local', () => {
+    // The prefix is a ref grammar, not a substring search.
+    expect(displayModelName('meta/local-llama-3', FREE)).toBe(BUILDERFORCE_PRODUCT_NAME.free);
+  });
+
   it('falls back to the product for a missing model and for an unwired host', () => {
     expect(displayModelName(null, PAID)).toBe(BUILDERFORCE_PRODUCT_NAME.pro);
     expect(displayModelName('   ', FREE)).toBe(BUILDERFORCE_PRODUCT_NAME.free);

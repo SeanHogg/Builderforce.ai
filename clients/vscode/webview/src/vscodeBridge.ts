@@ -72,6 +72,10 @@ export interface InitData {
   localRoute?: { baseUrl: string; model: string };
   grounding?: string;
   signedIn: boolean;
+  /** The configured `builderforce.permissionMode`, as a boolean: the standing answer to
+   *  "apply edits without asking?". Seeds the Auto-mode switch, which overrides it live.
+   *  Re-pushed when the setting changes, so an open panel follows it. */
+  autoApproveDefault?: boolean;
   hasWorkspace: boolean;
   /** The live editor context (active file / selection / open tabs) at init time.
    *  Kept fresh afterwards via `editorContext` messages (see {@link onEditorContext}). */

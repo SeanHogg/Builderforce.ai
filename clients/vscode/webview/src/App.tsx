@@ -17,7 +17,6 @@ import {
   deriveChatTitle,
   DEFAULT_CHAT_TITLE,
   buildComposerDirectives,
-  localStorageConfirmationPersistence,
   effortProfile,
   useToolConfirmationGate,
   isEffort,
@@ -85,6 +84,8 @@ import { buildIdeSystemPrompt } from './systemPrompt';
 import { activeProjectDirective, editorContextDirective } from '../../src/idePersona';
 import { buildTranscript, hasTranscriptContent } from './transcript';
 import { rewriteToLocalUrl } from '../../src/localModels';
+import { readStored, writeStored } from './storage';
+import { autoApprovePersistence } from './autoApprove';
 
 /** Read a localized string from the host's bundle, falling back to English. */
 function makeT(labels: LabelBundle) {
@@ -105,28 +106,7 @@ const MEMORY_KEY = (chatId: number) => `bf_brain_memory:${chatId}`;
  */
 const EFFORT_KEY = 'bf_brain_effort';
 const THINKING_KEY = 'bf_brain_thinking';
-const AUTO_APPROVE_KEY = 'bf_brain_auto_approve';
 
-/**
- * Storage for the human-in-the-loop auto-approve toggle, using the SHARED guarded
- * accessor (a partitioned/blocked webview store must degrade to "not persisted", never
- * throw). The key is this surface's own — the editor's gate is deliberately independent
- * of the web app's, since a mutating tool here touches the user's real working tree.
- */
-const AUTO_APPROVE_PERSISTENCE = localStorageConfirmationPersistence(AUTO_APPROVE_KEY);
-
-/**
- * The ONE guarded localStorage accessor pair for the composer's persisted
- * switches. `localStorage` can throw in a webview (storage partitioned/blocked),
- * so every read/write is wrapped here rather than repeating a try/catch per
- * switch — the memory toggle, effort, and thinking all go through these.
- */
-function readStored(key: string): string | null {
-  try { return window.localStorage.getItem(key); } catch { return null; }
-}
-function writeStored(key: string, value: string): void {
-  try { window.localStorage.setItem(key, value); } catch { /* storage blocked */ }
-}
 
 /**
  * Best-effort decode of the tenant JWT's claims for the diagnostics dump — the api
@@ -577,14 +557,18 @@ function Chat({ init }: { init: InitData }) {
   // remembered it, so one product decision was answered two ways by accident. The guarded
   // storage accessor is the shared one; the KEY and the default (off in the editor, where
   // a mutating tool touches the user's real working tree) are this surface's policy.
+  // `defaultOn` carries the SETTING, not a constant: it is both the seed for a panel
+  // that has never been toggled and the hook's re-read trigger, so a setting change
+  // reaches an open panel (the host re-pushes init on `onDidChangeConfiguration`).
+  const autoApproveSetting = init.autoApproveDefault ?? false;
   const {
     autoApprove,
     setAutoApprove: setAutoApproveMode,
     needsConfirm,
   } = useToolConfirmationGate({
     isMutating,
-    persistence: AUTO_APPROVE_PERSISTENCE,
-    defaultOn: false,
+    persistence: useMemo(() => autoApprovePersistence(autoApproveSetting), [autoApproveSetting]),
+    defaultOn: autoApproveSetting,
   });
   const [input, setInput] = useState('');
   const [inputFocused, setInputFocused] = useState(false);
