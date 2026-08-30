@@ -44,10 +44,12 @@ export type CanvasChromeSlot =
   /**
    * Share and Publish — the two ways work LEAVES this canvas.
    *
-   * A separate slot from `actions` because they are a separate PLACE, and the reason is
+   * A separate slot from `actions`, though the same PLACE now (`bar`) — the reason is
    * the same one that makes them the only worded actions in the registry: a glyph acts on
    * the board and a word opens somewhere else. Grouping "undo" with "publish to a public
-   * URL" put a keystroke you take back beside a decision you cannot, at the same weight.
+   * URL" put a keystroke you take back beside a decision you cannot, at the same weight —
+   * so the two stay a slot apart, drawn behind their own divider, rather than folded into
+   * `actions` just because they now share a region with it.
    */
   | 'handoff'
   /** A runtime's own controls — an app surface's Run/Stop and its readings. */
@@ -69,18 +71,20 @@ export type CanvasChromeKind = 'status' | 'control';
  * guests on it.
  *
  * The trap in that move is that "float it" is a per-element decision, so it decays into
- * four components each holding its own `position:absolute` and its own idea of which
+ * three components each holding its own `position:absolute` and its own idea of which
  * corner is free. Placement is therefore declared HERE, beside the collapse rule, for the
  * same reason the collapse rule is here: one table answers both "is this on screen" and
  * "where", and a slot added later cannot be given a home by accident.
  *
- *   `pill`     — top left. Is the work somewhere safe: saved, and its connection state.
- *   `chips`    — top centre. How it is being READ. Non-blocking, on the canvas.
- *   `topRight` — top right. How work LEAVES it: Share, Publish, and the overflow.
- *   `bar`      — bottom centre. What you DO to it, including whatever the surface
- *                itself contributes.
+ *   `pill`  — top left. Is the work somewhere safe: saved, and its connection state.
+ *   `chips` — top centre. How it is being READ, and which PHASE of the session's own
+ *             methodology you are in — the two are fused into one widget.
+ *   `bar`   — bottom centre. What you DO to it AND how work LEAVES it: Share, Publish
+ *             and the overflow sit here too now, behind their own divider — see
+ *             `handoff`'s own doc for why that used to be a fourth place (`topRight`)
+ *             and is not any more.
  */
-export type CanvasChromePlace = 'pill' | 'chips' | 'topRight' | 'bar';
+export type CanvasChromePlace = 'pill' | 'chips' | 'bar';
 
 /**
  * Which each slot is. The whole rule is this table plus the predicate under it.
@@ -118,7 +122,7 @@ const SLOT_PLACE: Readonly<Record<CanvasChromeSlot, CanvasChromePlace>> = {
   roster: 'bar',
   surfaces: 'chips',
   actions: 'bar',
-  handoff: 'topRight',
+  handoff: 'bar',
   surfaceControls: 'bar',
   surfaceStatus: 'bar',
 };

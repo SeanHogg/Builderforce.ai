@@ -70,7 +70,7 @@ describe('canvas surface registry', () => {
     // cannot point one at the meetings, releases, holidays or connected accounts whose
     // dates already existed. The reading became a value on a `calendar` OBJECT, so the
     // month is entered from the card that IS it, like every other object surface.
-    expect(boardCanvasSurfaces().map((def) => def.id)).toEqual(['chat', 'graph', 'scene3d', 'app']);
+    expect(boardCanvasSurfaces().map((def) => def.id)).toEqual(['chat', 'graph', 'scene3d', 'app', 'insights']);
   });
 
   /**
@@ -254,13 +254,12 @@ describe('the chat surface on the canvas', () => {
   it('never offers an object surface on the switcher', () => {
     render(<CreationCanvas sessionId="surface-rail-scope-test" persistence="local" />);
     // The switcher's WHOLE contents, in one read, rather than four name-filtered scans
-    // of the entire canvas. Stronger as well as ~8x cheaper: an object surface leaking
-    // in fails here whatever it is called — including a fifth nobody has added yet —
-    // and the count is pinned to the board surfaces the registry declares, so adding a
-    // board surface without a button (or a button without a surface) also fails.
+    // of the entire canvas. Stronger as well as cheaper: an object surface leaking in
+    // fails here whatever it is called. Not pinned to `boardCanvasSurfaces().length`
+    // any more — a session's own phase (`lib/canvasPhases.ts`) narrows the offer, and a
+    // fresh canvas opens in the default Idea phase, which does not yet offer Insights.
     const offered = within(switcher()).getAllByRole('button').map((button) => button.textContent);
     expect(offered).toEqual(['Chat', 'Board', '3D space', 'App']);
-    expect(offered).toHaveLength(boardCanvasSurfaces().length);
   });
 
   /**

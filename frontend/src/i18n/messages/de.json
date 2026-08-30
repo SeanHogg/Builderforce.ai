@@ -22340,6 +22340,13 @@
           "request": "Aufruf"
         }
       },
+      "insights": {
+        "label": "Einblicke",
+        "enter": "Sehen, was das wert ist",
+        "active": "Du bist in Einblicke",
+        "regionLabel": "Einblicke dieser Sitzung",
+        "openFull": "Vollständiges Dashboard öffnen"
+      },
       "page": {
         "label": "Seite",
         "open": "Als Seite öffnen"

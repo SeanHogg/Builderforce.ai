@@ -1,10 +1,4 @@
-/* `.canvasPalette` is the SECOND selector on this block, never a copy of it.
-   The handoff row is portalled into the application header (see `CanvasChromeSlot`), so
-   it renders outside `.canvasShell` and would otherwise inherit the shell's tokens — a
-   canvas menu drawn in the shell's palette, which is the exact collapse the note below
-   describes. Two selectors, one definition: the row cannot drift from the board. */
-.canvasShell,
-.canvasPalette {
+.canvasShell {
   /* The Canvas follows the shell's light-theme brand hierarchy: primary actions,
      focus treatments and object-picker glyphs are brand blue on paper. */
   --canvas-accent: var(--coral-bright);
@@ -126,14 +120,8 @@
 
 /* ── TOKENS ABOVE, THE SHELL ITSELF HERE ──────────────────────────────────────────
    Split deliberately, and this comment is the guard on it: everything above is a custom
-   property and NOTHING above paints. `.canvasPalette` shares that block so the handoff
-   row keeps the board's palette after it is portalled into the application header, and
-   the moment a paint or layout declaration is added up there it lands on that row too.
-   It did: `background: var(--canvas-board-background)` and `height: 100vh - topbar` were
-   inside the shared block for one release, so the portalled row drew an opaque
-   360 × 1009 board-coloured panel over the canvas — a floating toolbar wearing the
-   whole board's clothes. Layout and paint belong to the shell, which is the only element
-   that IS the board. */
+   property and NOTHING above paints. Layout and paint belong to the shell, which is the
+   only element that IS the board. */
 .canvasShell {
   height: calc(100vh - var(--shell-topbar-height, 58px));
   min-height: 620px;
@@ -172,16 +160,19 @@
    THE FLOATING CHROME
    ══════════════════════════════════════════════════════════════════════════════════
    There is no chrome band. The canvas takes the whole shell and every control floats
-   over it in one of four regions, declared in `lib/canvasChrome.ts`:
+   over it in one of three regions, declared in `lib/canvasChrome.ts`:
 
      .sessionPill    top left      is the work somewhere safe
-     .surfaceChips   top centre    how it is being READ
-     .topRightCard   top right     how work LEAVES it
-     .commandBar     bottom centre what you DO to it
+     .surfaceChips   top centre    how it is being READ (and which phase you are in)
+     .commandBar     bottom centre what you DO to it — including how work LEAVES it
+
+   `handoff` (Invite, Publish, the overflow) used to be a fourth region, `topRight`. It
+   is `bar`-placed now, drawn inside `.commandBar` behind its own divider rather than
+   in a card of its own — see `.handoffGroup` and `CreationCanvas.tsx`'s `handoffChrome`.
 
    Every one of them is the same card — one surface, one border, one shadow — so the
-   four read as one system floating at one height rather than four visitors. The shared
-   look is `.floatCard`; only placement differs below it.
+   three read as one system floating at one height rather than three visitors. The
+   shared look is `.floatCard`; only placement differs below it.
 
    They are all `position:absolute` against `.canvasShell`, which is why the shell is a
    containing block and the board no longer subtracts a band from its own height. */
@@ -199,21 +190,14 @@
   box-shadow:0 1px 2px var(--canvas-shadow), 0 14px 34px -14px var(--canvas-shadow);
 }
 
-/* ── ONE HEIGHT FOR THE TOP ROW ───────────────────────────────────────────────────
-   The three cards on the top line are read as one row, so they have to MEASURE as one
-   row. Left to themselves they did not: the pill came out at its 26px input plus 6px
-   padding (38px), the chips at a 28px tab plus 4px (36px) and the top-right card at its
-   34px controls plus 6px (46px) — three cards on one line at three heights, which is
-   exactly the "four visitors" the floating chrome exists to avoid.
-
-   The tallest content in the row is the 34px control the handoff buttons, More and Save
-   all share, so the row is that plus one card's worth of padding and its border. Stated
-   ONCE here and read by all three below rather than by each card guessing its own
-   padding; `min-height` rather than `height` so a card that genuinely wraps (a long
-   title, a surface that contributes an extra handoff button) still grows instead of
-   clipping — and `--canvas-top-chrome-space` is measured from the real box either way. */
+/* ── ONE FLOOR FOR THE TOP ROW ─────────────────────────────────────────────────────
+   Two cards share this line now, not three. Left to themselves they still would not
+   agree: the pill comes out at its 26px input plus 6px padding (38px) and the fused
+   phase/surface widget is two rows tall, comfortably past it. `--canvas-top-card-h` is
+   the FLOOR both meet, not a height either is forced to — `min-height` rather than
+   `height`, so the widget still grows with its own content instead of clipping it. */
 .canvasShell { --canvas-top-card-h:44px; }
-.sessionPill, .surfaceChips, .topRightCard { min-height:var(--canvas-top-card-h); }
+.sessionPill, .surfaceChips { min-height:var(--canvas-top-card-h); }
 
 .sessionPill { top:14px; left:calc(14px + var(--brain-dock-left, 0px)); gap:7px; padding:6px 10px 6px 8px; min-width:0; }
 .pillStatus { display:flex; align-items:center; gap:7px; min-width:0; }
@@ -225,58 +209,47 @@
 /* Centred on the OPEN board, not on the window: with Brain docked to one edge, a card
    centred on the viewport sits a third of the way under it. Same correction the minimap
    and the prompt dock already make, from the same two variables. */
+/* Column, not row: the fused widget stacks the phase stepper over the (phase-narrowed)
+   modality tabs, so this card's own flex axis has to flip from `.floatCard`'s row —
+   see `PhaseModalitySelector`. */
 .surfaceChips {
-  top:14px; padding:4px; gap:4px;
+  top:14px; padding:6px; gap:0;
+  flex-direction:column; align-items:stretch;
   left:calc(50% + (var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)) / 2);
   transform:translateX(-50%);
 }
 
-/* Padding-block 4px, not 6px: this is the card whose content SETS the row height, so
-   its own box has to land ON `--canvas-top-card-h` (34 + 8 + 2 borders) rather than one
-   padding step past it, which would push it back to 46px and make the min-height above
-   a floor the other two met and this one cleared. */
-.topRightCard { top:14px; right:calc(14px + var(--brain-dock-right, 0px)); gap:6px; padding:4px 6px; }
-
-/* ── THE SAME ROW, HOSTED IN THE HEADER ───────────────────────────────────────────
-   `.topRightCard` above is the FALLBACK now: the surfaces with no header of their own
-   (the VS Code webview, the embed, a bare component test) still float it in the corner.
-   Everywhere else the shell offers a slot and the row is portalled into it, which is
-   what stopped the window carrying two bars of controls fourteen pixels apart.
-
-   In the header it stops being a card. It has no border, no plate and no shadow of its
-   own — the header IS the surface, and a bordered card inside a bar is the doubled
-   chrome all over again, one level in. What it keeps is `position:relative`, because
-   the menus that hang off these buttons anchor with `right:0; top:42px` and that offset
-   has to resolve against the ROW rather than against whatever the header's own layout
-   happens to position. */
-.headerChrome { position:relative; display:flex; align-items:center; gap:6px; }
-/* Nothing on the stage ⇒ nothing here. Said with `:empty` rather than with a "is there
-   a board" boolean handed to the header, so the header never learns what a board is. */
-.headerChrome:empty { display:none; }
-/* The menus keep their own plate, and it must sit ABOVE the header's stacking context
-   rather than inside it — a sheet that opens behind the bar that spawned it is worse
-   than one that does not open. */
-.headerChrome > .moreMenu,
-.headerChrome > .shareMenu,
-.headerChrome > .templateMenu { z-index:60; }
+/* ── THE DOORS OUT, INSIDE THE BAR ─────────────────────────────────────────────────
+   `.handoffGroup` is a plain row, not a card — it has no border, no plate and no
+   shadow of its own, because `.commandBar` already draws one and a bordered card
+   inside a bar is the doubled chrome the floating-chrome redesign removed everywhere
+   else. What it keeps is `position:relative`, because the menus that hang off these
+   buttons anchor with `right:0` and that offset has to resolve against THIS group
+   rather than against the whole bar, which is wider than the buttons that open them. */
+.handoffGroup { position:relative; display:flex; align-items:center; gap:6px; }
+/* The menus keep their own plate, and it must sit ABOVE the bar's own stacking
+   context rather than inside it — a sheet that opens behind the row that spawned it
+   is worse than one that does not open. */
+.handoffGroup > .moreMenu,
+.handoffGroup > .shareMenu,
+.handoffGroup > .templateMenu { z-index:60; }
 
 /* ── WHERE ANYTHING UNDER THE TOP CHROME STARTS ───────────────────────────────────
-   The three cards on this line float at z-index 20. Everything that opens beneath them
-   was anchored to the same `top:14px` they are, so the chrome was drawn straight over
-   it. The details panel is where that bit hardest: it opens at `top:14px; right:14px`,
-   exactly where the top-right card is, so its own expand and close buttons sat
-   underneath Share / Publish / More — the panel could be opened and then
-   not shut. History, the change set and the merge sheet share that corner and that bug.
+   The remaining two cards on this line float at z-index 20. Everything that opens
+   beneath them, or draws full-bleed from the shell's own top edge, has to know how
+   far down that goes — the conversation surface is where it bit hardest: with nothing
+   reserved, it drew its own header underneath the floating session pill, the
+   session's name painted over by the same session's name.
 
-   ONE band answers it for all of them, the way `--canvas-command-bar-space` answers the
-   bottom. `--canvas-top-chrome-space` is the top-right card's real bottom edge plus its
-   clearance, MEASURED by `useChromeSpace` and written onto the shell as an inline style
-   (see `CreationCanvas.tsx`) — the card's height is not a number this file can state,
-   because it changes with whatever the surface contributes to `handoff`, and when the
-   bar is collapsed. What stays here is the value used before
-   the first measurement lands (server render, and any browser without `ResizeObserver`);
-   the inline property wins the moment it does. */
-.canvasShell { --canvas-top-chrome-space:64px; }  /* 14px corner + the 44px row + 6px clearance */
+   ONE band answers it, the way `--canvas-command-bar-space` answers the bottom.
+   `--canvas-top-chrome-space` is the fused phase/surface widget's real bottom edge
+   plus its clearance, MEASURED by `useChromeSpace` and written onto the shell as an
+   inline style (see `CreationCanvas.tsx`) — its height is not a number this file can
+   state, because a surface can be added to `CANVAS_SURFACES` and the widget grows a
+   phase's worth of buttons wider than another's. What stays here is the value used
+   before the first measurement lands (server render, and any browser without
+   `ResizeObserver`); the inline property wins the moment it does. */
+.canvasShell { --canvas-top-chrome-space:64px; }  /* 14px corner + a two-row widget + 6px clearance */
 
 /* ── THE ONE COMMAND BAR ──────────────────────────────────────────────────────────
    Bottom centre, over the board rather than under it. It holds Run, whatever the
@@ -457,11 +430,15 @@
 /* Anchored to the END of the action row, not to a hard-coded offset from it. The two
    menus used to sit at `right:76px` and `right:150px`, which were measurements of the
    buttons that happened to follow them — so both drifted the moment the save button was
-   absent (every signed-in session) or the row was reordered. `.sessionActions` is the
-   positioning context; right:0 is the answer that stays true. */
+   absent (every signed-in session) or the row was reordered. `.handoffGroup` is the
+   positioning context; right:0 is the answer that stays true.
+   `bottom:calc(100% + 10px)`, not `top`: the row that opens these lives in the bottom
+   command bar now, so a sheet that dropped DOWN from it would open off the bottom of
+   the window. It opens upward instead, clearing the row by the same gap the top-anchored
+   version used to leave below it. */
 .shareMenu {
-  position:absolute; right:0; top:42px; width:300px; padding:15px; background:var(--canvas-panel);
-  color:var(--canvas-ink); border:1px solid var(--canvas-line); border-radius:var(--radius-lg); box-shadow:0 18px 55px var(--canvas-shadow);
+  position:absolute; right:0; bottom:calc(100% + 10px); width:300px; padding:15px; background:var(--canvas-panel);
+  color:var(--canvas-ink); border:1px solid var(--canvas-line); border-radius:var(--radius-lg); box-shadow:0 -18px 55px var(--canvas-shadow);
 }
 .shareMenu .shareMenuHeader { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .shareMenu .shareMenuClose { width:28px; height:28px; display:grid; flex:none; place-items:center; padding:0; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--canvas-muted); font-size:20px; line-height:1; cursor:pointer; }
@@ -500,9 +477,10 @@
 .accountGateBenefits { width:100%; display:grid; gap:7px; box-sizing:border-box; margin:18px 0; padding:12px 14px; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:var(--canvas-panel-muted); color:var(--canvas-ink); font-size:11px; text-align:left; }
 .accountGateActions { width:100%; display:grid; grid-template-columns:1fr 1fr; gap:8px; }.accountGateActions button { min-height:39px; }
 .accountGateLater { margin-top:12px; border:0; background:transparent; color:var(--canvas-muted); font:600 10px var(--font-sans); cursor:pointer; }.accountGateLater:hover { color:var(--canvas-ink); text-decoration:underline; }
+/* Opens upward — see `.shareMenu` for why: its trigger lives in the bottom bar. */
 .moreMenu {
-  position:absolute; right:0; top:42px; width:250px; display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:9px;
-  border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:var(--canvas-panel); box-shadow:0 20px 60px var(--canvas-shadow);
+  position:absolute; right:0; bottom:calc(100% + 10px); width:250px; display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:9px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:var(--canvas-panel); box-shadow:0 -20px 60px var(--canvas-shadow);
 }
 .moreMenu button,.moreMenu label { min-width:0; padding:7px 8px; border:0; border-radius:var(--radius-md); background:transparent; color:var(--canvas-ink); font:600 11px var(--font-sans); text-align:left; cursor:pointer; }
 .moreMenu button { display:flex; align-items:center; gap:8px; }.moreMenu button > span { width:22px; height:22px; flex:none; display:grid; place-items:center; border-radius:var(--radius-sm); font-size:12px; }
@@ -1908,7 +1886,8 @@
 .frameFocusBar button { padding:4px 10px; border:1px solid var(--canvas-line); border-radius:999px; background:var(--canvas-panel-muted); color:var(--canvas-ink); font:inherit; font-size:10px; font-weight:600; cursor:pointer; }
 .frameFocusBar button:hover,.frameFocusBar button:focus-visible { background:var(--canvas-hover); }
 .canvasToolActive { border-color:#5b5ce2!important; background:#eeebff!important; color:#503cc9!important; }
-.templateMenu { position:absolute; z-index:18; right:0; top:42px; width:330px; max-height:70vh; overflow:auto; padding:12px; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:#fff; box-shadow:0 18px 55px rgba(60,48,36,.18); }
+/* Opens upward — see `.shareMenu` for why: its trigger lives in the bottom bar. */
+.templateMenu { position:absolute; z-index:18; right:0; bottom:calc(100% + 10px); width:330px; max-height:70vh; overflow:auto; padding:12px; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:#fff; box-shadow:0 -18px 55px rgba(60,48,36,.18); }
 .templateMenu header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }.templateMenu header button { border:0;background:transparent;font-size:18px;cursor:pointer; }
 .templateMenu > button { display:grid; width:100%; gap:3px; margin:6px 0; padding:10px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:#fbfdff; color:var(--canvas-ink); text-align:left; cursor:pointer; }.templateMenu > button small { color:var(--canvas-muted); }
 .templateMenu > button i { color:var(--canvas-accent); font-size:8px; font-style:normal; }
@@ -2390,7 +2369,7 @@
    separate piece of chrome, always floating at its own `bottom:14px`. Without this
    `max()` this surface's content ran the full height of the shell in that placement,
    with the command bar painted straight across whatever sat at the bottom of it. */
-.objectSurface,.appSurface { position:absolute; z-index:7; top:0; right:var(--brain-dock-right,0px); bottom:0; left:var(--brain-dock-left,0px); box-sizing:border-box; display:flex; flex-direction:column; min-width:0; padding-block:var(--canvas-top-chrome-space) max(var(--composer-space, 0px), calc(var(--canvas-command-bar-space, 66px) + 14px)); background:var(--canvas-board-background); color:var(--canvas-ink); }
+.objectSurface,.appSurface,.insightsSurface { position:absolute; z-index:7; top:0; right:var(--brain-dock-right,0px); bottom:0; left:var(--brain-dock-left,0px); box-sizing:border-box; display:flex; flex-direction:column; min-width:0; padding-block:var(--canvas-top-chrome-space) max(var(--composer-space, 0px), calc(var(--canvas-command-bar-space, 66px) + 14px)); background:var(--canvas-board-background); color:var(--canvas-ink); }
 .objectSurfaceHeader { display:flex; flex:none; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 16px 10px 62px; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel); }
 .objectSurfaceMark { display:grid; place-items:center; width:26px; height:26px; flex:none; border-radius:var(--radius-sm); background:var(--canvas-brain-icon-bg); color:var(--canvas-brain-accent); }
 .objectSurfaceTitle { min-width:0; flex:1; display:flex; flex-direction:column; }
@@ -2412,7 +2391,14 @@
    must be the same control everywhere it appears. Every value is a canvas token, the
    header wraps rather than fixing a width, and the toolbar collapses to two rows before
    360px instead of overflowing. */
-.appSurfaceBody { min-height:0; flex:1; display:flex; flex-direction:column; min-width:0; }
+.appSurfaceBody,.insightsSurfaceBody { min-height:0; flex:1; display:flex; flex-direction:column; min-width:0; }
+/* The insights body scrolls where the app surface's does not: a running app fills its
+   own frame, but a widget grid is exactly as tall as however many cards are pinned —
+   sometimes one, sometimes a screenful — so the surface has to be able to grow past
+   the fold rather than clip it. */
+.insightsSurfaceBody { overflow-y:auto; gap:16px; padding:20px; }
+.insightsFullLink { align-self:flex-start; color:var(--canvas-accent); font-size:12px; font-weight:650; text-decoration:none; }
+.insightsFullLink:hover { text-decoration:underline; }
 /* The surface's own controls, INSIDE the session bar — ONE row of it.
    It used to wrap, which sounds accommodating and is not: the bar it lives in is
    `flex-wrap:nowrap` and 28px tall per control, so a contribution that wraps makes the
@@ -2486,9 +2472,11 @@
    numbers are never restated here, because a stylesheet's copy of them is precisely what
    let the CSS widths and the frame widths disagree in the first place. */
 .appStage .appFrame,.siteStage .siteFrame { flex:0 1 auto; width:var(--device-width,100%); }
-.appIdle,.appEmpty { display:grid; place-content:center; justify-items:center; gap:6px; flex:1; padding:32px 24px; text-align:center; }
-.appIdle strong,.appEmpty strong { color:var(--canvas-ink); font-size:13px; }
-.appIdle p,.appEmpty p { max-width:44ch; margin:0; color:var(--canvas-muted); font-size:11.5px; line-height:1.6; }
+.appIdle,.appEmpty,.insightsEmpty { display:grid; place-content:center; justify-items:center; gap:6px; flex:1; padding:32px 24px; text-align:center; }
+.appIdle strong,.appEmpty strong,.insightsEmpty strong { color:var(--canvas-ink); font-size:13px; }
+.appIdle p,.appEmpty p,.insightsEmpty p { max-width:44ch; margin:0; color:var(--canvas-muted); font-size:11.5px; line-height:1.6; }
+.insightsEmpty a { color:var(--canvas-accent); font-size:12px; font-weight:650; text-decoration:none; }
+.insightsEmpty a:hover { text-decoration:underline; }
 
 /* Code. The tree collapses above the source on a phone rather than fighting it for width. */
 .appCode { min-height:0; flex:1; display:grid; grid-template-columns:minmax(150px,220px) minmax(0,1fr); }
@@ -2834,6 +2822,40 @@
    meaning. `aria-label` keeps the name, so nothing is lost to a screen reader. */
 @media (max-width:1180px) { .surfaceTab > span { display:none; } .surfaceTab { padding:5px 8px; } }
 
+/* THE FUSED WIDGET — phase stepper over modality tabs, one card. See
+   `PhaseModalitySelector`. `.phaseModalityGroup` is the flex column the two rows
+   stack in; `.surfaceChips` already supplies the card's own border/shadow/background,
+   so neither row draws one of its own — same "trough IS the card" rule `.surfaceTab`
+   follows against `.surfaceChips`. */
+.phaseModalityGroup { display:flex; flex-direction:column; }
+.phaseStepper { display:flex; align-items:center; gap:2px; padding:2px 4px 6px; }
+.phaseStep {
+  display:inline-flex; align-items:center; gap:5px; padding:4px 8px;
+  border:1px solid transparent; border-radius:var(--radius-full); background:transparent;
+  color:var(--canvas-muted); font-family:inherit; font-size:11px; font-weight:650; white-space:nowrap; cursor:pointer;
+}
+.phaseStep:hover,.phaseStep:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+.phaseStepDot { width:6px; height:6px; border-radius:50%; background:var(--canvas-muted); flex:none; }
+/* The active step wears its OWN stage colour, same token every other stage indicator in
+   the product reads (`nav-stage__dot`, `StageHeaderSwitcher`) — one vocabulary, drawn a
+   third place, never a fourth palette invented for this card. */
+.phaseStep[data-stage='idea'][aria-selected='true'] { color:var(--stage-idea); border-color:var(--stage-idea); background:color-mix(in srgb, var(--stage-idea) 14%, transparent); }
+.phaseStep[data-stage='idea'][aria-selected='true'] .phaseStepDot { background:var(--stage-idea); }
+.phaseStep[data-stage='make'][aria-selected='true'] { color:var(--stage-make); border-color:var(--stage-make); background:color-mix(in srgb, var(--stage-make) 14%, transparent); }
+.phaseStep[data-stage='make'][aria-selected='true'] .phaseStepDot { background:var(--stage-make); }
+.phaseStep[data-stage='run'][aria-selected='true'] { color:var(--stage-run); border-color:var(--stage-run); background:color-mix(in srgb, var(--stage-run) 14%, transparent); }
+.phaseStep[data-stage='run'][aria-selected='true'] .phaseStepDot { background:var(--stage-run); }
+.phaseStep[data-stage='measure'][aria-selected='true'] { color:var(--stage-measure); border-color:var(--stage-measure); background:color-mix(in srgb, var(--stage-measure) 14%, transparent); }
+.phaseStep[data-stage='measure'][aria-selected='true'] .phaseStepDot { background:var(--stage-measure); }
+.phaseStep[data-stage='reach'][aria-selected='true'] { color:var(--stage-reach); border-color:var(--stage-reach); background:color-mix(in srgb, var(--stage-reach) 14%, transparent); }
+.phaseStep[data-stage='reach'][aria-selected='true'] .phaseStepDot { background:var(--stage-reach); }
+.phaseModalityDivider { height:1px; margin:0 -6px 6px; background:var(--canvas-line); }
+/* Narrow desktop: the stepper is the row most willing to give up its words first — the
+   dot alone still carries the colour, and `aria-selected`/`title` keep the name for
+   anyone not reading it by eye. Same breakpoint `.surfaceTab` gives up its own words at,
+   so the two rows go compact together rather than one outlasting the other. */
+@media (max-width:1180px) { .phaseStep span:not(.phaseStepDot) { display:none; } .phaseStep { padding:4px 6px; } }
+
 .brainDock { position:absolute; z-index:17; top:0; bottom:0; box-sizing:border-box; display:flex; flex-direction:column; width:var(--brain-dock-size,330px); border:1px solid var(--canvas-brain-border); background:var(--canvas-brain-surface); color:var(--canvas-ink); box-shadow:0 0 44px var(--canvas-shadow); }
 .brainDock[data-side='left'] { left:0; border-left:0; border-radius:0 var(--radius-lg) var(--radius-lg) 0; }
 .brainDock[data-side='right'] { right:0; border-right:0; border-radius:var(--radius-lg) 0 0 var(--radius-lg); }
@@ -2859,13 +2881,11 @@
 .brainDockHeader strong { flex:1; min-width:0; overflow:hidden; color:var(--canvas-ink); font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
 .brainDockMark { display:grid; place-items:center; width:22px; height:22px; flex:none; border-radius:var(--radius-sm); background:var(--canvas-brain-icon-bg); color:var(--canvas-brain-accent); font-size:12px; }
 .brainDockActions { display:flex; flex:none; align-items:center; gap:2px; }
-.brainDockActions button { width:26px; height:26px; display:grid; place-items:center; padding:0; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--canvas-muted); font:600 13px var(--font-sans); line-height:1; cursor:pointer; }
-.brainDockActions button:hover,.brainDockActions button:focus-visible { background:color-mix(in srgb,var(--canvas-brain-accent) 14%,transparent); color:var(--canvas-brain-accent); outline:none; }
-.brainDockActions button[aria-pressed='true'] { background:color-mix(in srgb,var(--canvas-brain-accent) 20%,transparent); color:var(--canvas-brain-accent); }
-.brainDockTabs { display:flex; flex:none; gap:2px; padding:6px 8px 0; border-bottom:1px solid var(--canvas-brain-border); }
-.brainDockTabs button { padding:6px 10px; border:0; border-bottom:2px solid transparent; background:transparent; color:var(--canvas-muted); font:650 10px var(--font-sans); cursor:pointer; }
-.brainDockTabs button:hover { color:var(--canvas-ink); }
-.brainDockTabs .activeTab { border-bottom-color:var(--canvas-brain-accent); color:var(--canvas-brain-accent); }
+.brainDockActions button,.brainDockContextToggle { width:26px; height:26px; display:grid; place-items:center; padding:0; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--canvas-muted); font:600 13px var(--font-sans); line-height:1; cursor:pointer; }
+.brainDockActions button:hover,.brainDockActions button:focus-visible,.brainDockContextToggle:hover,.brainDockContextToggle:focus-visible { background:color-mix(in srgb,var(--canvas-brain-accent) 14%,transparent); color:var(--canvas-brain-accent); outline:none; }
+.brainDockActions button[aria-pressed='true'],.brainDockContextToggle[aria-pressed='true'] { background:color-mix(in srgb,var(--canvas-brain-accent) 20%,transparent); color:var(--canvas-brain-accent); }
+.brainDockTabs { display:flex; flex:none; align-items:center; gap:2px; padding:6px 8px; border-bottom:1px solid var(--canvas-brain-border); }
+.brainDockTitle { flex:1; min-width:0; color:var(--canvas-ink); font:650 10px var(--font-sans); text-transform:uppercase; letter-spacing:.04em; }
 .humanChatActivity { display:grid; flex:none; gap:5px; padding:7px 9px; border-bottom:1px solid var(--canvas-brain-border); background:color-mix(in srgb,var(--canvas-brain-accent) 6%,var(--canvas-panel)); }
 .humanChatActivity > span { display:grid; grid-template-columns:22px minmax(0,1fr) auto; align-items:center; gap:7px; min-width:0; }
 .humanChatActivity b { overflow:hidden; color:var(--canvas-ink); font-size:9px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }.humanChatActivity i { color:var(--canvas-brain-accent); font-size:10px; font-style:normal; letter-spacing:2px; animation:collaboratorTyping 1.2s ease-in-out infinite; }
@@ -2955,13 +2975,6 @@
      this correct for the next chrome as well. */
   .sessionActionCluster > [data-phone='menu'],
   .sessionActionSolo > [data-phone='menu'] { display:none; }
-  /* THE SAME DECLARATION, NOW THAT THE ROW IS IN THE HEADER. `phone:'menu'` has always
-     meant "on a phone this action lives in the ••• sheet", and the sheet already draws
-     every one of them (`.moreMenuPhoneOnly`). The corner card was the one chrome that
-     ignored the declaration and kept three worded buttons on a 360px screen; hosted in
-     a header that has already given up its nav and its CTAs, it cannot. What is left is
-     ••• — which is the route to all three, and the only one that fits. */
-  .headerChrome > [data-phone='menu'] { display:none; }
   /* An empty cluster still draws its gap, so it stands down as a whole. */
   .sessionActionCluster:not(:has([data-phone='bar'])),
   .sessionActionSolo:not(:has([data-phone='bar'])) { display:none; }
@@ -2973,14 +2986,13 @@
      sideways instead, which loses placement and never loses a control. */
   .sessionPill { left:8px; top:8px; right:auto; max-width:calc(100% - 16px); gap:4px; padding:4px 7px 4px 6px; }
   .sessionPill .spark { display:none; }
-  .topRightCard { top:8px; right:8px; gap:3px; padding:4px; }
-  /* Same row, same rule: the phone keeps its 34px handoff buttons, so the row keeps the
-     desktop height and the pill beside it is padded up to match rather than sitting a
-     third of a card short of the buttons across from it. */
-  /* The pre-measurement value tracks the 8px corner and the smaller controls. A phone
-     needs the band MORE than a desktop, not less: the panels go full width here, so the
-     card sits over the middle of each one's header rather than over one corner of it. */
-  .canvasShell { --canvas-top-chrome-space:58px; }  /* 8px corner + the same 44px row + 6px */
+  /* The fused phase/surface widget stands down here (`.surfaceChips { display:none }`
+     above) and nothing replaces it at the top — the phone's surface decision lives in
+     the board's own control column instead. The pill is what is left, and it is often
+     ABSENT (see `CanvasSessionPill`'s own self-gating): this is a rough pre-measurement
+     guess for the rare moment it shows, corrected to the real value once `useChromeSpace`
+     measures the actual box. */
+  .canvasShell { --canvas-top-chrome-space:46px; }  /* 8px corner + a pill's worth + clearance */
   .commandBar { left:8px; right:8px; bottom:8px; transform:none; max-width:none; gap:4px; padding:5px; overflow-x:auto; scrollbar-width:none; }
   .commandBar::-webkit-scrollbar { display:none; }
   .commandBar > * { flex:none; }
@@ -3009,10 +3021,10 @@
   /* The sheet is now the phone's ONLY route to five session actions, so it stops being
      a two-column grid of 28px rows. One column, one 40px target per row, and it may
      scroll — a menu that runs off the bottom of a phone is a menu with a hidden half. */
-  .moreMenu { top:44px; right:0; width:min(300px,calc(100vw - 16px)); max-height:calc(100dvh - 120px); overflow-y:auto; overscroll-behavior:contain; grid-template-columns:1fr; box-sizing:border-box; }
+  .moreMenu { bottom:calc(100% + 10px); right:0; width:min(300px,calc(100vw - 16px)); max-height:calc(100dvh - 120px); overflow-y:auto; overscroll-behavior:contain; grid-template-columns:1fr; box-sizing:border-box; }
   .moreMenu button,.moreMenu label { min-height:40px; padding:8px 10px; font-size:12px; }
   .moreMenu select { max-width:50%; min-height:32px; }
-  .shareMenu { top:44px; right:0; width:min(300px,calc(100vw - 16px)); max-height:calc(100dvh - 120px); overflow-y:auto; overscroll-behavior:contain; box-sizing:border-box; }
+  .shareMenu { bottom:calc(100% + 10px); right:0; width:min(300px,calc(100vw - 16px)); max-height:calc(100dvh - 120px); overflow-y:auto; overscroll-behavior:contain; box-sizing:border-box; }
   .shareMenu button { min-height:40px; }
   .shareMenu > div { flex-wrap:wrap; }
   .shareMenu input,.shareMenu select { min-height:40px; flex:1 1 140px; }
@@ -3023,7 +3035,10 @@
      header rather than one corner of it — they need the measured band more than the
      desktop layout does, not less. Only the left/right/bottom insets are restated. */
   .palette { top:var(--canvas-top-chrome-space); right:8px; bottom:calc(var(--composer-space) + 8px); left:44px; width:auto; max-height:none; }
-  .templateMenu { top:8px; right:8px; left:8px; width:auto; max-height:calc(100% - var(--composer-space) - 16px); box-sizing:border-box; }
+  /* A big picker sheet, not a tight popover — it still reads from the TOP of the
+     screen regardless of where its `•••` trigger sits, so `bottom` is reset rather
+     than restated. */
+  .templateMenu { top:8px; right:8px; left:8px; bottom:auto; width:auto; max-height:calc(100% - var(--composer-space) - 16px); box-sizing:border-box; }
   .mergePanel { inset:var(--canvas-top-chrome-space) 8px calc(var(--composer-space) + 8px); width:auto; box-sizing:border-box; }
   /* The phone session bar is 50px, not 54 — keep the board's height in step with
      it while the canvas owns the viewport. */
@@ -3346,8 +3361,7 @@
 /* The Canvas is a workspace, so its dark theme uses layered ink surfaces instead
    of the marketing site's near-black background. This keeps hierarchy visible
    without turning cards and controls into bright white islands. */
-:global(html:not([data-theme='light'])) .canvasShell,
-:global(html:not([data-theme='light'])) .canvasPalette {
+:global(html:not([data-theme='light'])) .canvasShell {
   /* Dark uses the brighter blue rung needed to carry on ink. */
   --canvas-accent:#3978f6;
   --canvas-board:#09111f;

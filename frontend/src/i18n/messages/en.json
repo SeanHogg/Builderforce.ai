@@ -22340,6 +22340,13 @@
           "request": "call"
         }
       },
+      "insights": {
+        "label": "Insights",
+        "enter": "See what this is worth",
+        "active": "You are in Insights",
+        "regionLabel": "This session's insights",
+        "openFull": "Open full dashboard"
+      },
       "page": {
         "label": "Page",
         "open": "Open as a page"
