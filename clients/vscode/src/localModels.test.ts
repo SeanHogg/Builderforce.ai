@@ -3,6 +3,7 @@ import {
   GATEWAY_COMPLETIONS_PATH,
   LOCAL_MODEL_PREFIX,
   formatLocalModelRef,
+  isLocalChatEndpoint,
   isLocalModelRef,
   listLocalModels,
   listProviderModels,
@@ -83,6 +84,47 @@ describe("base URL normalization", () => {
   it("appends the OpenAI routes exactly once", () => {
     expect(localChatCompletionsUrl("http://127.0.0.1:1919/v1")).toBe("http://127.0.0.1:1919/v1/chat/completions");
     expect(localModelsUrl("http://127.0.0.1:11434/")).toBe("http://127.0.0.1:11434/v1/models");
+  });
+});
+
+describe("the host-proxy destination fence", () => {
+  const config = {
+    enabled: true,
+    baseUrls: { ollama: "http://127.0.0.1:11434", freetoken: "http://127.0.0.1:1919" },
+  };
+
+  it("allows exactly the configured chat endpoints", () => {
+    expect(isLocalChatEndpoint(config, "http://127.0.0.1:11434/v1/chat/completions")).toBe(true);
+    expect(isLocalChatEndpoint(config, "http://127.0.0.1:1919/v1/chat/completions")).toBe(true);
+  });
+
+  it("refuses any other path on a configured origin — this is not a same-origin proxy", () => {
+    for (const url of [
+      "http://127.0.0.1:11434/v1/models",
+      "http://127.0.0.1:11434/api/pull", // Ollama's model-management surface
+      "http://127.0.0.1:1919/",
+      "http://127.0.0.1:1919/v1/chat/completions/../../admin",
+    ]) {
+      expect(isLocalChatEndpoint(config, url), url).toBe(false);
+    }
+  });
+
+  it("refuses an origin the host never configured", () => {
+    for (const url of [
+      "http://127.0.0.1:9999/v1/chat/completions",
+      "http://169.254.169.254/v1/chat/completions", // cloud metadata
+      "https://evil.example/v1/chat/completions",
+      "http://localhost:1919/v1/chat/completions", // same host, different origin string
+    ]) {
+      expect(isLocalChatEndpoint(config, url), url).toBe(false);
+    }
+  });
+
+  it("opens nothing for a provider whose URL was blanked", () => {
+    const partial = { enabled: true, baseUrls: { ollama: "", freetoken: "http://127.0.0.1:1919" } };
+    expect(isLocalChatEndpoint(partial, "http://127.0.0.1:1919/v1/chat/completions")).toBe(true);
+    // An empty base must not normalize into a prefix that matches anything.
+    expect(isLocalChatEndpoint(partial, "/v1/chat/completions")).toBe(false);
   });
 });
 

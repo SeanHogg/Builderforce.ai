@@ -1,11 +1,6 @@
 import * as vscode from "vscode";
 import { productForPlan, type ModelIdentityContext } from "@seanhogg/builderforce-brain-embedded";
-import {
-  completeLocal,
-  parseLocalModelRef,
-  type LocalModelsConfig,
-  type LocalProviderId,
-} from "./localModels";
+import { type LocalModelsConfig, type LocalProviderId } from "./localModels";
 
 /** Single source of truth for the SecretStorage key (DRY). */
 export const SECRET_KEY = "builderforce.apiKey";
@@ -431,13 +426,6 @@ export async function complete(
   model: string | undefined,
   signal?: AbortSignal,
 ): Promise<string> {
-  // A pinned on-device model is served by the runtime on this machine — no gateway, and
-  // so no API key. Checked BEFORE the sign-in guard: the whole point of the local path is
-  // that it works signed out (and offline).
-  const local = parseLocalModelRef(model);
-  if (local) {
-    return completeLocal(getLocalModelsConfig().baseUrls[local.provider], local.model, messages, signal);
-  }
   const key = await getApiKey(secrets);
   if (!key) throw new Error("not_signed_in");
   const body: Record<string, unknown> = { messages, stream: false };

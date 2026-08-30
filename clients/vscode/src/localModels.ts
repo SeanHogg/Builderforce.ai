@@ -101,6 +101,27 @@ export function localModelsUrl(baseUrl: string): string {
   return `${normalizeLocalBaseUrl(baseUrl)}/v1/models`;
 }
 
+/**
+ * Whether `url` is one of the chat endpoints this machine is configured to serve.
+ *
+ * The destination fence for the webview's host-performed fetch (`llm.fetch` in
+ * `brainWebview.ts`). The webview is our own bundle, but a proxy that forwards whatever
+ * URL it is handed is a request forwarder into the user's machine — and it would outlive
+ * whatever we currently believe that bundle can be made to send. So the host, not the
+ * caller, decides where a proxied request may land: the same rule the agent host's egress
+ * relay applies to the cloud.
+ *
+ * Lives here, beside the endpoint composition it compares against, so the fence cannot
+ * drift from the URLs the rest of the module builds — and so it is testable without an
+ * extension host.
+ */
+export function isLocalChatEndpoint(config: LocalModelsConfig, url: string): boolean {
+  return LOCAL_PROVIDER_IDS.some((provider) => {
+    const base = config.baseUrls[provider];
+    return base.trim().length > 0 && localChatCompletionsUrl(base) === url;
+  });
+}
+
 /** Compose the pinned ref for a model on a local runtime. */
 export function formatLocalModelRef(provider: LocalProviderId, model: string): string {
   return `${LOCAL_MODEL_PREFIX}${provider}/${model}`;

@@ -12,6 +12,7 @@ import { registerChatSessions } from "./chatSessions";
 import { scanCodebase } from "./codebaseScan";
 import { getModels, getWebBaseUrl, getLocalModelsConfig, SECRET_KEY, clearPersonalityBlockCache } from "./gateway";
 import { listLocalModels, type LocalModel, type LocalProviderId } from "./localModels";
+import { resolveModelRoute, routeRequiresSignIn } from "./modelRouting";
 import { InsightsController } from "./insights";
 import { EvermindViewProvider } from "./evermindView";
 import { DiagnosticsController } from "./diagnostics";
@@ -1240,15 +1241,17 @@ async function maybeScan(context: vscode.ExtensionContext, force: boolean): Prom
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!root) return;
   const key = await context.secrets.get(SECRET_KEY);
-  if (!key) return;
-
-  const model =
-    vscode.workspace.getConfiguration("builderforce").get<string>("defaultModel") || undefined;
+  // The SAME route the chat participant runs on, rather than a second reading of
+  // `builderforce.defaultModel`: that divergence meant pinning an on-device model left
+  // the scan summarizing through the gateway under a different model entirely. A local
+  // route also needs no account, so the sign-in gate follows the route, not the key.
+  const route = await resolveModelRoute(context.secrets);
+  if (!key && routeRequiresSignIn(route)) return;
 
   const work = async (progress?: vscode.Progress<{ message?: string }>) => {
     progress?.report({ message: "Scanning workspace…" });
     try {
-      setGroundingSummary(await scanCodebase(context.secrets, root, model, force));
+      setGroundingSummary(await scanCodebase(context.secrets, root, route, force));
     } catch (e) {
       console.error("BuilderForce codebase scan failed:", e);
     }

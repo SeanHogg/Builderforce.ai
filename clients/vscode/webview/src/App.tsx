@@ -60,6 +60,7 @@ import { EvermindStatusBadge } from './EvermindStatusBadge';
 import { PlanBadge, fetchPlanSnapshot, invalidatePlanSnapshot, openUpgrade } from './accountPlan';
 import {
   getToken,
+  hostFetch,
   getEditorContext,
   onInit,
   onIntent,
@@ -81,6 +82,7 @@ import { buildHostTools } from './hostTools';
 import { buildIdeSystemPrompt } from './systemPrompt';
 import { activeProjectDirective, editorContextDirective } from '../../src/idePersona';
 import { buildTranscript, hasTranscriptContent } from './transcript';
+import { rewriteToLocalUrl } from '../../src/localModels';
 
 /** Read a localized string from the host's bundle, falling back to English. */
 function makeT(labels: LabelBundle) {
@@ -434,7 +436,10 @@ export function App() {
     return <div className="bf-center">Connecting…</div>;
   }
   const t = makeT(init.labels);
-  if (!init.signedIn || !getToken()) {
+  // An on-device route needs no account — refusing to render the panel would be gating
+  // the user out of their own hardware. Gateway-backed extras (persistence, platform
+  // tools) degrade on their own when signed out; the chat itself works.
+  if ((!init.signedIn || !getToken()) && !init.localRoute) {
     return (
       <div className="bf-center">
         <p>{t('app.signInPrompt', 'Sign in to BuilderForce to start.')}</p>
@@ -458,16 +463,32 @@ export function App() {
 function ConfiguredApp({ init }: { init: InitData }) {
   const config = useMemo<BrainConfig>(
     () => ({
-      transport: {
-        baseUrl: init.baseUrl,
-        getToken,
-        onUnauthorized: () => void refreshToken(),
-        defaultModel: init.model,
-      },
+      // Two transports, one streamer. An on-device route points at the runtime on this
+      // machine, sends no bearer token (it has no account), and performs its request
+      // through the HOST — the webview cannot open a plain-HTTP localhost connection
+      // itself. Everything else is unchanged, so the agent loop and tool-call protocol
+      // are identical either way.
+      //
+      // Persistence deliberately stays on the gateway even for a local turn: the chat
+      // transcript, its project links and the audit trail are platform records, and the
+      // model that produced the text has no bearing on where the text is kept.
+      transport: init.localRoute
+        ? {
+            baseUrl: init.localRoute.baseUrl,
+            getToken: () => null,
+            defaultModel: init.localRoute.model,
+            fetch: (input: string, requestInit: RequestInit) => hostFetch(rewriteToLocalUrl(input), requestInit),
+          }
+        : {
+            baseUrl: init.baseUrl,
+            getToken,
+            onUnauthorized: () => void refreshToken(),
+            defaultModel: init.model,
+          },
       persistence: createPersistence(init.baseUrl, getToken, () => void refreshToken()),
       resolveSystemPrompt: () => buildIdeSystemPrompt({ hasWorkspace: init.hasWorkspace, grounding: init.grounding }),
     }),
-    [init.baseUrl, init.model, init.hasWorkspace, init.grounding],
+    [init.baseUrl, init.model, init.hasWorkspace, init.grounding, init.localRoute],
   );
 
   return (

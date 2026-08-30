@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { formatEvermindLearnStep, type ChatCompletionMessage } from "@seanhogg/builderforce-brain-embedded";
-import { ChatMessage, SECRET_KEY, fetchLimbicBlock, getBaseUrl, getLocalModelsConfig } from "./gateway";
-import { createLocalStream, parseLocalModelRef } from "./localModels";
+import { ChatMessage, SECRET_KEY, fetchLimbicBlock } from "./gateway";
+import { resolveModelRoute, routeRequiresSignIn, routeStream } from "./modelRouting";
 import {
   getCurrentUserId,
   createBrainChat,
@@ -14,13 +14,12 @@ import { formatChatErrorVerdict } from "./upgradeAction";
 import { getGroundingWithHistory } from "./grounding";
 import { getEditorContextLive } from "./editorContext";
 import { editorContextDirective } from "./idePersona";
-import { resolveEffectiveModelChoice } from "./modelState";
 import { getSelectedProject } from "./projectState";
 import { buildSystemMessages } from "./prompt";
 import { TOOL_DEFS, type ToolDef } from "./fileTools";
 import { listPlatformTools } from "./platformTools";
 import { cognitionToolDefs } from "./cognition";
-import { createNativeStream, runNativeBrain, unlinkedRunId, type NativeApprovalRequest } from "./nativeBrainRun";
+import { runNativeBrain, unlinkedRunId, type NativeApprovalRequest } from "./nativeBrainRun";
 
 const PARTICIPANT_ID = "builderforce.agent";
 
@@ -84,9 +83,8 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
     // Resolved BEFORE the sign-in gate because the answer decides whether that gate
     // applies at all: an on-device model is served by this machine, so a local turn owes
     // nothing to an account. Safe signed out — every lookup inside is best-effort.
-    const modelChoice = await resolveEffectiveModelChoice(ctx.secrets);
-    const localPin = parseLocalModelRef(modelChoice.model);
-    if (!key && !localPin) {
+    const modelChoice = await resolveModelRoute(ctx.secrets);
+    if (!key && routeRequiresSignIn(modelChoice)) {
       stream.markdown(vscode.l10n.t("You're not signed in to BuilderForce."));
       stream.markdown("\n\n");
       stream.button({ command: "builderforce.signIn", title: vscode.l10n.t("Sign in to BuilderForce") });
@@ -205,13 +203,9 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
       ...(modelChoice.routingMode ? { routingMode: modelChoice.routingMode } : {}),
       permissionMode,
       maxIterations: MAX_ITERATIONS,
-      // One loop, two destinations: a local pin streams straight to the runtime on this
-      // machine, anything else to the gateway. Both are the SAME shared streamer, so the
-      // tool-call protocol and error mapping are identical either way. `key` is
-      // guaranteed non-null on the gateway branch by the sign-in gate above.
-      stream: localPin
-        ? createLocalStream(getLocalModelsConfig().baseUrls[localPin.provider], localPin.model)
-        : createNativeStream(getBaseUrl(), key!),
+      // The transport for this route — gateway or on-device — decided in `modelRouting`,
+      // never here. The sign-in gate above guarantees a key on the gateway branch.
+      stream: routeStream(modelChoice, key),
       signal: abort.signal,
       approve: async (req: NativeApprovalRequest) => {
         const prompt = req.gateReason

@@ -2,9 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
-## [2026.8.134] — Your own machine can answer now
+## [2026.8.135] — Your own machine can answer now
 
 - **The models on your own computer show up in the model picker.** Turn on **BuilderForce › Local Models: Enabled** and everything your Ollama install has pulled, plus whatever your FreeToken engine is serving, appears under **On this device** beside the rest. Pick one and the whole turn runs on your hardware — the same tools, the same edits, the same approvals as any other chat.
+- **Every AI surface honours the choice, not just one of them.** The chat panel, the `@builderforce` participant and the workspace scan all run on the model you picked. They used to answer that question separately — the scan in particular read its own setting, so pinning a local model left it quietly summarizing your repo through the gateway on a different model entirely. There is now one place that decides where a turn runs, and all three ask it.
+- **The chat panel reaches your machine through the extension.** A webview cannot open a plain-HTTP connection to `localhost`, so its turns are performed by the extension host and streamed back — which also means your runtime does not have to be reconfigured to accept the editor as an origin. Only the model endpoints you have configured can be reached this way.
 - **A local turn never leaves your machine.** It does not reach the BuilderForce gateway, spends nothing from your plan, and keeps working with the network down. It does not even need you signed in: pin a local model and chat answers signed out, which is rather the point of running one.
 - **Being on a plan without model choice no longer hides them.** The picker used to answer "model choice needs a paid plan" and stop there. That is a statement about what our gateway will serve, and it has nothing to say about hardware you already own — so the models on this machine are offered either way.
 - **Point the settings wherever your runtimes actually live.** Ollama defaults to `http://127.0.0.1:11434` and FreeToken to `http://127.0.0.1:1919`, and both accept either the bare address or the `/v1` form that most documentation shows.
