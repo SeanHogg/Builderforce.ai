@@ -4096,7 +4096,7 @@ function productModelName(identity) {
 function productForPlan(isPaid) {
   return isPaid ? "pro" : "free";
 }
-var USER_CONFIGURED_PREFIXES = ["project_evermind:", "tenant_model:"];
+var USER_CONFIGURED_PREFIXES = ["project_evermind:", "tenant_model:", "local/"];
 function isUserConfiguredModelRef(model) {
   return typeof model === "string" && USER_CONFIGURED_PREFIXES.some((p) => model.startsWith(p));
 }

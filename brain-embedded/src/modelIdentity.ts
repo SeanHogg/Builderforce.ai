@@ -76,10 +76,19 @@ export function productForPlan(isPaid: boolean): RoutedProduct {
 
 /**
  * Refs that name something the USER configured rather than a catalog model: a project's
- * own learned Evermind head, or a saved workspace LLM config. These are never masked —
- * masking them would hide a thing the user themselves created and named.
+ * own learned Evermind head, a saved workspace LLM config, or a model served by a
+ * runtime on their own machine. These are never masked — masking them would hide a
+ * thing the user themselves created and named.
+ *
+ * `local/` earns its place here for the same reason as the other two, and one more.
+ * The masking rule exists so a routed plan cannot leak an upstream id the viewer never
+ * chose; an on-device model is the opposite case — they chose it, installed it, and are
+ * paying for the hardware it runs on. Masking it did not merely withhold a name, it
+ * asserted a false one: a free-plan viewer running gpt-oss-20b on their own GPU was
+ * told "Builderforce Free", which names OUR gateway for a turn that never touched it.
+ * There was then no surface anywhere that said where the answer came from.
  */
-const USER_CONFIGURED_PREFIXES = ['project_evermind:', 'tenant_model:'] as const;
+const USER_CONFIGURED_PREFIXES = ['project_evermind:', 'tenant_model:', 'local/'] as const;
 
 /** True when `model` is a user-configured ref (Evermind head / saved LLM config)
  *  rather than an upstream catalog id. */

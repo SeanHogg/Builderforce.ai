@@ -2,6 +2,14 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.8.139] — Permission Mode now actually moves the panel
+
+- **Setting Permission Mode to `acceptEdits` left the chat panel still asking.** The setting moved the `@builderforce` participant, which reads it every turn, while the panel kept its own Auto-mode switch — defaulted off in code, remembered separately, and never once looking at the setting. One question about your working tree, answered two different ways depending on which surface you happened to use. The panel now starts from the setting, and an open panel follows it the moment you change it.
+- **Your in-panel switch still wins, until you change the setting again.** Flipping Auto mode by hand sticks across reloads as it did before; changing the setting is the newer instruction and overrides it. That includes turning it back down: switching to `ask` disarms a panel someone left on auto, which is the direction that matters most.
+## [2026.8.138] — The chat now says when the answer came from your own machine
+
+- **Picking a model on this machine did not change what the chat said it was running.** The composer still read "Builderforce Free" — our name for a turn our gateway routed — while the answer was in fact produced by your GPU and never left the building. The picker was the only place that ever said "On this device", and it says it once, at the moment you choose. Every surface that names a model now names an on-device one: the composer chip, the provenance line under a reply, and the model picker.
+- **Why it was hidden at all.** Model names are deliberately masked on a routed plan, so a plan that picks the model per turn cannot leak an upstream name you never chose. A model on your own machine is the opposite of that case — you chose it and you own the hardware — so it is now treated like your other configured models, which were already exempt.
 ## [2026.8.137] — A local chat works with nobody signed in
 
 - **Picking a model on this machine and not signing in used to give you a chat that could not send.** The panel opened, you typed, and the message failed — before the model on your machine was ever called. The reason had nothing to do with your runtime: a chat is saved as you go, and saving needs an account, so the very first step of the turn was refused and everything after it never ran. A signed-out on-device chat now keeps its conversation in the panel itself, and the turn reaches your hardware as it should.

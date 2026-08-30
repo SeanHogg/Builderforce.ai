@@ -104,3 +104,31 @@ describe("model routing is centralized", () => {
     expect(scan).not.toContain('from "./gateway"');
   });
 });
+
+/**
+ * The permission mode is the SECOND product question two surfaces answered separately.
+ * Same guard, same reason: the participant read the setting per turn while the panel
+ * defaulted its own switch off and never looked, so changing `permissionMode` moved one
+ * and not the other.
+ */
+describe("the permission mode is decided in one place", () => {
+  it("reads the permissionMode setting only in its own module", () => {
+    const readers = sourceFiles()
+      .filter(({ text }) => text.includes('"permissionMode"'))
+      .map(({ name }) => name);
+    expect(readers).toEqual(["permissionMode.ts"]);
+  });
+
+  it("hands the panel the resolved value instead of letting it derive one", () => {
+    const host = stripComments(fs.readFileSync(path.join(SRC, "brainWebview.ts"), "utf8"));
+    expect(host).toContain("autoApproveDefault");
+  });
+
+  it("re-pushes it to an open panel when the setting changes", () => {
+    // Without this the two surfaces disagree for as long as the panel stays open —
+    // the same failure, merely delayed.
+    const ext = stripComments(fs.readFileSync(path.join(SRC, "extension.ts"), "utf8"));
+    expect(ext).toContain("onDidChangeConfiguration");
+    expect(ext).toContain("PERMISSION_MODE_SETTING");
+  });
+});

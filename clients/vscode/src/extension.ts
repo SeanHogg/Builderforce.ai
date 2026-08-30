@@ -13,6 +13,7 @@ import { scanCodebase } from "./codebaseScan";
 import { getModels, getWebBaseUrl, getLocalModelsConfig, SECRET_KEY, clearPersonalityBlockCache } from "./gateway";
 import { listLocalModels, type LocalModel, type LocalProviderId } from "./localModels";
 import { resolveModelRoute, routeRequiresSignIn } from "./modelRouting";
+import { PERMISSION_MODE_SETTING } from "./permissionMode";
 import { InsightsController } from "./insights";
 import { EvermindViewProvider } from "./evermindView";
 import { DiagnosticsController } from "./diagnostics";
@@ -483,6 +484,13 @@ export function activate(context: vscode.ExtensionContext): void {
     // A manual model pick re-pushes Brain init so an open chat switches immediately
     // (parity with project change; the native participant re-resolves per turn).
     onModelChange(() => BrainWebview.refresh()),
+    // Changing the permission setting has to reach an ALREADY-OPEN panel. The
+    // participant re-reads it per turn, so without this the two surfaces disagree for
+    // as long as the panel stays open — which is the whole failure this seam exists to
+    // prevent, just delayed.
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration(PERMISSION_MODE_SETTING)) BrainWebview.refresh();
+    }),
   );
 
   void maybeScan(context, false);

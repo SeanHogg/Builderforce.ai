@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { formatEvermindLearnStep, type ChatCompletionMessage } from "@seanhogg/builderforce-brain-embedded";
 import { ChatMessage, SECRET_KEY, fetchLimbicBlock } from "./gateway";
 import { resolveModelRoute, routeRequiresSignIn, routeStream } from "./modelRouting";
+import { permissionMode as resolvePermissionMode } from "./permissionMode";
 import {
   getCurrentUserId,
   createBrainChat,
@@ -93,7 +94,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
 
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const cfg = vscode.workspace.getConfiguration("builderforce");
-    const permissionMode = cfg.get<"ask" | "acceptEdits">("permissionMode") ?? "ask";
+    const permissionMode = resolvePermissionMode();
 
     // Limbic affective layer + PERSONALITY (gateway-injected) — parity with the
     // webview chat and the cloud (V3) / on-prem agents. Passing the signed-in

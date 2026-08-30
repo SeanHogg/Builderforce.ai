@@ -1,0 +1,106 @@
+[
+ {
+  "k": "LEGIT",
+  "lang": "en",
+  "eligible": 9,
+  "unknown": 7,
+  "share": 0.778,
+  "text": "Shipped multi-tenant RBAC, deprecated the leg"
+ },
+ {
+  "k": "LEGIT",
+  "lang": "en",
+  "eligible": 10,
+  "unknown": 7,
+  "share": 0.7,
+  "text": "Kubernetes autoscaling was tuned, Grafana das"
+ },
+ {
+  "k": "LEGIT",
+  "lang": "en",
+  "eligible": 9,
+  "unknown": 6,
+  "share": 0.667,
+  "text": "We migrated Postgres to Aurora, swapped Redis"
+ },
+ {
+  "k": "LEGIT",
+  "lang": "en",
+  "eligible": 9,
+  "unknown": 6,
+  "share": 0.667,
+  "text": "Braintree checkout replaced Adyen, and the Tw"
+ },
+ {
+  "k": "GIB",
+  "lang": "en",
+  "eligible": 8,
+  "unknown": 5,
+  "share": 0.625,
+  "text": "s sopactuth sar the sed then doas Requirement"
+ },
+ {
+  "k": "GIB",
+  "lang": "en",
+  "eligible": 9,
+  "unknown": 5,
+  "share": 0.556,
+  "text": "s codecPRD bAnd APReus and the coded tocket d"
+ },
+ {
+  "k": "LEGIT",
+  "lang": null,
+  "eligible": 11,
+  "unknown": 6,
+  "share": 0.545,
+  "text": "Terraform modules were refactored, Vault secr"
+ },
+ {
+  "k": "LEGIT",
+  "lang": "en",
+  "eligible": 10,
+  "unknown": 5,
+  "share": 0.5,
+  "text": "Sentry flagged a regression in the Stripe web"
+ },
+ {
+  "k": "LEGIT",
+  "lang": "en",
+  "eligible": 8,
+  "unknown": 4,
+  "share": 0.5,
+  "text": "The Evermind coordinator quarantined v813 bec"
+ },
+ {
+  "k": "GIB",
+  "lang": "en",
+  "eligible": 9,
+  "unknown": 4,
+  "share": 0.444,
+  "text": "ss author dollation section code exostolated "
+ },
+ {
+  "k": "LEGIT",
+  "lang": "en",
+  "eligible": 9,
+  "unknown": 3,
+  "share": 0.333,
+  "text": "Onboarding funnel telemetry now lands in Snow"
+ },
+ {
+  "k": "LEGIT",
+  "lang": "en",
+  "eligible": 10,
+  "unknown": 2,
+  "share": 0.2,
+  "text": "Anthropic and OpenAI vendors were added behin"
+ },
+ {
+  "k": "LEGIT",
+  "lang": "en",
+  "eligible": 7,
+  "unknown": 1,
+  "share": 0.143,
+  "text": "Refactored the tokenizer, retrained embedding"
+ }
+]
