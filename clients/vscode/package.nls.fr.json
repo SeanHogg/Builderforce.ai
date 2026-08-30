@@ -1,5 +1,5 @@
 {
-  "extension.description": "Agent de codage IA BuilderForce : discutez avec un agent qui connaît votre base de code depuis la barre latérale de VS Code.",
+  "extension.description": "Agent de codage IA BuilderForce : discutez avec un agent qui connaît votre base de code depuis la barre latérale de VS Code, via notre passerelle ou avec un modèle exécuté sur votre propre machine (Ollama, FreeToken).",
   "view.welcome": "Bienvenue",
   "welcome.signIn": "Connectez-vous à BuilderForce pour utiliser les Sessions, Projets et tâches, la Boîte de réception, les Insights, Evermind, les Diagnostics et les Réunions.\n[Se connecter](command:builderforce.signIn)\n\nAgent de codage IA auto-hébergé — discutez avec un agent qui connaît votre code, directement dans votre barre latérale.",
   "view.sessions": "Sessions",

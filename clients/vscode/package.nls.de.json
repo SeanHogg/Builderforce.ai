@@ -1,5 +1,5 @@
 {
-  "extension.description": "BuilderForce KI-Coding-Agent — chatte mit einem Agenten, der deine Codebasis kennt, in der VS-Code-Seitenleiste.",
+  "extension.description": "BuilderForce KI-Coding-Agent — chatte mit einem Agenten, der deine Codebasis kennt, in der VS-Code-Seitenleiste — über unser Gateway oder mit einem Modell auf deinem eigenen Rechner (Ollama, FreeToken).",
   "view.welcome": "Willkommen",
   "welcome.signIn": "Melden Sie sich bei BuilderForce an, um Sitzungen, Projekte & Aufgaben, Posteingang, Insights, Evermind, Diagnose und Meetings zu nutzen.\n[Anmelden](command:builderforce.signIn)\n\nSelbst gehosteter KI-Coding-Agent – chatten Sie direkt in Ihrer Seitenleiste mit einem Codebase-fähigen Agenten.",
   "view.sessions": "Sitzungen",

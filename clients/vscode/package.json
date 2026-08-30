@@ -21,7 +21,12 @@
     "chat",
     "coding assistant",
     "builderforce",
-    "copilot"
+    "copilot",
+    "local llm",
+    "local models",
+    "ollama",
+    "freetoken",
+    "offline"
   ],
   "icon": "media/icon.png",
   "galleryBanner": {

@@ -1,5 +1,5 @@
 {
-  "extension.description": "BuilderForce AI coding agent — chat with a codebase-aware agent in your VS Code sidebar.",
+  "extension.description": "BuilderForce AI coding agent — chat with a codebase-aware agent in your VS Code sidebar, on our gateway or on a model running on your own machine (Ollama, FreeToken).",
   "view.welcome": "Welcome",
   "welcome.signIn": "Sign in to BuilderForce to use Sessions, Projects & Tasks, Inbox, Insights, Evermind, Diagnostics and Meetings.\n[Sign In](command:builderforce.signIn)\n\nSelf-hosted AI coding agent — chat with a codebase-aware agent right here in your sidebar.",
   "view.sessions": "Sessions",

@@ -37,6 +37,13 @@ A codebase-aware BuilderForce AI coding agent in your editor sidebar.
 - **Your gateway, your models** — defaults to `https://api.builderforce.ai`; override
   `builderforce.baseUrl` for self-hosted, and pick any model from the live pool or let the
   gateway choose.
+- **Or run the model on your own machine** — turn on `builderforce.localModels.enabled` and
+  everything your **Ollama** install has pulled, plus whatever your **FreeToken** engine is
+  serving, appears in the model picker under **On this device**. Pick one and the turn runs on
+  your hardware with the same tools, edits, and approvals as any other chat: nothing is spent
+  from your plan, and it keeps working with the network down. See
+  [Running the model on your own machine](#running-the-model-on-your-own-machine) for what
+  does and doesn't stay local.
 
 ## Getting started
 
@@ -47,6 +54,42 @@ A codebase-aware BuilderForce AI coding agent in your editor sidebar.
 4. Ask it to build or change something — it will scan the repo, propose edits, and apply
    them on your approval.
 
+## Running the model on your own machine
+
+The extension speaks the OpenAI-compatible API that both runtimes expose, so no adapter or
+extra tooling is involved.
+
+1. **Start a runtime** and leave it serving:
+   - **Ollama** — `ollama serve`, with at least one model pulled (`ollama pull qwen3:8b`).
+     Listens on `http://127.0.0.1:11434`.
+   - **FreeToken** — start the engine for a model in the desktop app. Listens on
+     `http://127.0.0.1:1919`.
+2. **Turn it on** — tick **BuilderForce › Local Models: Enabled** in settings. Only change the
+   two URL settings if you moved a runtime off its default address; both the bare address and
+   the `/v1` form work.
+3. **Pick a model** — run **BuilderForce: Pick Model** and choose a row under **On this
+   device**. Each row is labelled with the runtime serving it.
+4. **Chat as usual.** To go back to the gateway, pick any other model.
+
+A runtime that isn't running simply contributes no rows — the picker still opens, so you can
+run only one of the two.
+
+### What stays on your machine, and what doesn't
+
+**The inference is entirely local.** Your prompt, the code context gathered from your repo,
+and the model's reply are exchanged only with the runtime on your machine. They are not sent
+to the BuilderForce gateway or to any model provider, and the turn costs nothing from your
+plan.
+
+**Your transcript is still a platform record.** The sidebar chat saves its conversation to
+your BuilderForce account exactly as it always has — that is what makes it the same
+conversation in the web app — so the text of a local chat is stored server-side like any
+other. The model that produced the text has no bearing on where the text is kept. The
+`@builderforce` participant and the codebase scan store nothing when you are signed out.
+
+If you need a turn that touches no server at all, use `@builderforce` in the VS Code chat view
+with a local model picked and no account signed in.
+
 ## Settings
 
 | Setting | Default | Description |
@@ -54,6 +97,9 @@ A codebase-aware BuilderForce AI coding agent in your editor sidebar.
 | `builderforce.baseUrl` | `https://api.builderforce.ai` | Gateway base URL; `/llm/v1/...` is appended. |
 | `builderforce.defaultModel` | `""` | Default model id (empty = gateway chooses). |
 | `builderforce.permissionMode` | `ask` | How the agent applies edits (`ask` \| `acceptEdits`). |
+| `builderforce.localModels.enabled` | `false` | Offer models served by a runtime on this machine (Ollama, FreeToken) in the model picker. |
+| `builderforce.localModels.ollamaUrl` | `http://127.0.0.1:11434` | Your Ollama runtime. `/v1/models` and `/v1/chat/completions` are appended, so the bare address and the `/v1` form both work. |
+| `builderforce.localModels.freetokenUrl` | `http://127.0.0.1:1919` | Your FreeToken engine, same URL rules as above. |
 
 ## Development
 

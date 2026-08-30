@@ -1,5 +1,5 @@
 {
-  "extension.description": "BuilderForce AI 编程代理 —— 在 VS Code 侧边栏中与了解你代码库的代理对话。",
+  "extension.description": "BuilderForce AI 编程代理 —— 在 VS Code 侧边栏中与了解你代码库的代理对话，可使用我们的网关，也可使用运行在你自己机器上的模型（Ollama、FreeToken）。",
   "view.welcome": "欢迎",
   "welcome.signIn": "登录 BuilderForce 即可使用会话、项目与任务、收件箱、洞察、Evermind、诊断和会议。\n[登录](command:builderforce.signIn)\n\n自托管的 AI 编码智能体——直接在侧边栏中与了解你代码库的智能体对话。",
   "view.sessions": "会话",
