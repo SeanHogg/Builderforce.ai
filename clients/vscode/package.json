@@ -679,6 +679,21 @@
           "default": "",
           "description": "%config.defaultModel.desc%"
         },
+        "builderforce.localModels.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%config.localModels.enabled.desc%"
+        },
+        "builderforce.localModels.ollamaUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:11434",
+          "markdownDescription": "%config.localModels.ollamaUrl.desc%"
+        },
+        "builderforce.localModels.freetokenUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:1919",
+          "markdownDescription": "%config.localModels.freetokenUrl.desc%"
+        },
         "builderforce.permissionMode": {
           "type": "string",
           "enum": [

@@ -86,6 +86,44 @@ describe("the local-Ollama carve-out", () => {
   });
 });
 
+describe("the local-FreeToken carve-out", () => {
+  const opts = { allowedFreetokenOrigin: "http://127.0.0.1:1919" };
+
+  it("allows exactly the configured origin on the OpenAI chat path, in plain HTTP", () => {
+    expect(rejectEgressTarget("http://127.0.0.1:1919/v1/chat/completions", opts)).toBeNull();
+  });
+
+  it("still refuses everything else without the option", () => {
+    expect(rejectEgressTarget("http://127.0.0.1:1919/v1/chat/completions")).not.toBeNull();
+  });
+
+  it("refuses a different origin even with the option set — the cloud cannot name a new one", () => {
+    expect(rejectEgressTarget("http://10.0.0.9:1919/v1/chat/completions", opts)).not.toBeNull();
+    expect(rejectEgressTarget("http://169.254.169.254/v1/chat/completions", opts)).not.toBeNull();
+  });
+
+  it("refuses any path other than the chat endpoint — no same-origin proxy", () => {
+    expect(rejectEgressTarget("http://127.0.0.1:1919/v1/models", opts)).not.toBeNull();
+    expect(rejectEgressTarget("http://127.0.0.1:1919/", opts)).not.toBeNull();
+  });
+
+  it("does not let either runtime's path be used against the other's origin", () => {
+    // The two carve-outs are independent: each origin is allowed on ITS OWN path only,
+    // so opening one never widens the other.
+    const both = { allowedLocalOrigin: "http://127.0.0.1:11434", allowedFreetokenOrigin: "http://127.0.0.1:1919" };
+    expect(rejectEgressTarget("http://127.0.0.1:11434/v1/chat/completions", both)).not.toBeNull();
+    expect(rejectEgressTarget("http://127.0.0.1:1919/api/chat", both)).not.toBeNull();
+    // …while each still works on its own path.
+    expect(rejectEgressTarget("http://127.0.0.1:11434/api/chat", both)).toBeNull();
+    expect(rejectEgressTarget("http://127.0.0.1:1919/v1/chat/completions", both)).toBeNull();
+  });
+
+  it("falls through to the static rules on a malformed allowedFreetokenOrigin", () => {
+    expect(rejectEgressTarget("http://127.0.0.1:1919/v1/chat/completions", { allowedFreetokenOrigin: "not-a-url" }))
+      .not.toBeNull();
+  });
+});
+
 describe("performing an allowlisted call", () => {
   it("returns the provider's status, body and correlation headers", async () => {
     globalThis.fetch = vi.fn(async () => new Response(

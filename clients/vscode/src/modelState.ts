@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { getProjectEvermindHead } from "./bfApi";
 import { getModels, isModelAllowed } from "./gateway";
+import { isLocalModelRef } from "./localModels";
 import { getSelectedProject } from "./projectState";
 
 /**
@@ -91,6 +92,12 @@ async function entitled(
   model: string | undefined,
 ): Promise<string | undefined> {
   if (!model) return undefined;
+  // An on-device model is not in the tenant's catalog and never will be: it is served by
+  // a runtime on this machine, bills nothing, and needs no plan. Entitlement is a
+  // statement about what the GATEWAY will serve, so applying it here would drop a
+  // perfectly good local pin the moment the user signed in — the exact failure this
+  // function exists to prevent, inverted.
+  if (isLocalModelRef(model)) return model;
   const choices = await getModels(secrets).catch(() => undefined);
   if (!choices) return model;
   return isModelAllowed(choices, model) ? model : undefined;

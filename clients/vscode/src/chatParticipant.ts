@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { formatEvermindLearnStep, type ChatCompletionMessage } from "@seanhogg/builderforce-brain-embedded";
-import { ChatMessage, SECRET_KEY, fetchLimbicBlock, getBaseUrl } from "./gateway";
+import { ChatMessage, SECRET_KEY, fetchLimbicBlock, getBaseUrl, getLocalModelsConfig } from "./gateway";
+import { createLocalStream, parseLocalModelRef } from "./localModels";
 import {
   getCurrentUserId,
   createBrainChat,
@@ -78,7 +79,14 @@ function splitSystemPrompt(messages: readonly ChatMessage[]): {
 export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.ChatRequestHandler {
   return async (request, context, stream, token) => {
     const key = await ctx.secrets.get(SECRET_KEY);
-    if (!key) {
+    // Resolve per turn so an explicit pick, the active project's Evermind, or the
+    // configured default is honored the same way the Brain webview + cloud/on-prem do.
+    // Resolved BEFORE the sign-in gate because the answer decides whether that gate
+    // applies at all: an on-device model is served by this machine, so a local turn owes
+    // nothing to an account. Safe signed out — every lookup inside is best-effort.
+    const modelChoice = await resolveEffectiveModelChoice(ctx.secrets);
+    const localPin = parseLocalModelRef(modelChoice.model);
+    if (!key && !localPin) {
       stream.markdown(vscode.l10n.t("You're not signed in to BuilderForce."));
       stream.markdown("\n\n");
       stream.button({ command: "builderforce.signIn", title: vscode.l10n.t("Sign in to BuilderForce") });
@@ -87,9 +95,6 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
 
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const cfg = vscode.workspace.getConfiguration("builderforce");
-    // Resolve per turn so an explicit pick, the active project's Evermind, or the
-    // configured default is honored the same way the Brain webview + cloud/on-prem do.
-    const modelChoice = await resolveEffectiveModelChoice(ctx.secrets);
     const permissionMode = cfg.get<"ask" | "acceptEdits">("permissionMode") ?? "ask";
 
     // Limbic affective layer + PERSONALITY (gateway-injected) — parity with the
@@ -200,7 +205,13 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
       ...(modelChoice.routingMode ? { routingMode: modelChoice.routingMode } : {}),
       permissionMode,
       maxIterations: MAX_ITERATIONS,
-      stream: createNativeStream(getBaseUrl(), key),
+      // One loop, two destinations: a local pin streams straight to the runtime on this
+      // machine, anything else to the gateway. Both are the SAME shared streamer, so the
+      // tool-call protocol and error mapping are identical either way. `key` is
+      // guaranteed non-null on the gateway branch by the sign-in gate above.
+      stream: localPin
+        ? createLocalStream(getLocalModelsConfig().baseUrls[localPin.provider], localPin.model)
+        : createNativeStream(getBaseUrl(), key!),
       signal: abort.signal,
       approve: async (req: NativeApprovalRequest) => {
         const prompt = req.gateReason

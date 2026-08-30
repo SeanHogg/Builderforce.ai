@@ -17,6 +17,7 @@ import { googleAiModule } from './googleai';
 import { nvidiaModule } from './nvidia';
 import { ollamaModule } from './ollama';
 import { ollamaLocalModule } from './ollamaLocal';
+import { freetokenModule } from './freetoken';
 import { openRouterModule } from './openrouter';
 import { openAiCodexModule } from './openaiCodex';
 import { xaiOAuthModule } from './xaiOAuth';
@@ -70,7 +71,7 @@ const MODULES: ReadonlyArray<VendorModule> = [
   // operator- or tenant-configured deployment/credential, explicit
   // `direct/<vendor>/<id>` pin only) — position never affects auto-selected
   // FREE/PRO pool ordering.
-  azureOpenAiModule, amazonBedrockModule, ollamaLocalModule,
+  azureOpenAiModule, amazonBedrockModule, ollamaLocalModule, freetokenModule,
   // `evermind` is autoRoute:false (explicit `evermind/<ref>` pin only), so its
   // position never affects the auto-selected FREE/PRO pool ordering.
   evermindModule,
@@ -86,6 +87,7 @@ const MODULES_BY_ID: Record<VendorId, VendorModule> = {
   nvidia:     nvidiaModule,
   ollama:     ollamaModule,
   'ollama-local': ollamaLocalModule,
+  freetoken:  freetokenModule,
   googleai:   googleAiModule,
   cloudflare: cloudflareModule,
   anthropic:  anthropicModule,
@@ -142,6 +144,7 @@ const VENDOR_PREFIXES: ReadonlyArray<{ prefix: string; vendor: VendorId }> = [
   { prefix: 'direct/azure-openai/', vendor: 'azure-openai' },
   { prefix: 'direct/amazon-bedrock/', vendor: 'amazon-bedrock' },
   { prefix: 'direct/ollama-local/', vendor: 'ollama-local' },
+  { prefix: 'direct/freetoken/', vendor: 'freetoken' },
   // Cloudflare model ids natively start with `@cf/...` so they're
   // self-identifying without a `cloudflare/` URL-style prefix. We still accept
   // `cloudflare/@cf/...` for symmetry with the other vendors — callers who

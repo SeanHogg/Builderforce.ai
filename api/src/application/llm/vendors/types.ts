@@ -22,6 +22,12 @@ import { needsMessageShapeSanitizing, sanitizeMessageShape, type ChatMessageLike
 export type VendorId =
   // ── Bespoke wire-format vendors (hand-rolled modules)
   | 'openrouter' | 'cerebras' | 'ollama' | 'ollama-local' | 'nvidia' | 'googleai' | 'cloudflare' | 'anthropic' | 'openai-codex' | 'xai-oauth'
+  // ── A tenant's OWN FreeToken engine. OpenAI-wire (so it reuses the shared body +
+  //    SSE helpers) but self-hosted like `ollama-local`, so its base URL and model
+  //    arrive in the same `<apiKey>::<baseUrl>::<model>` sentinel — which is why it is
+  //    a small bespoke module rather than a `createOpenAICompatibleVendor` call (that
+  //    factory bakes in ONE fixed vendor host).
+  | 'freetoken'
   // ── ONE operator-configured Azure resource/deployment (OpenAI-wire-compatible
   //    body, but a per-resource URL + `api-key` header — see azureOpenai.ts).
   | 'azure-openai'
@@ -78,6 +84,12 @@ export interface VendorEnv {
    *  stored `ollama-local` provider row. See `ollamaLocal.ts` for the wire format and
    *  why the call rides `requiresLocalEgress`. */
   OLLAMA_LOCAL_CONFIG?: string | null;
+  /** BYO-only: a tenant's self-hosted FreeToken engine, composed as
+   *  `<apiKey>::<baseUrl>::<model>` by `freetoken.ts`'s `apiKeyFrom` — the same
+   *  three-field sentinel `ollamaLocal.ts` uses, for the same reason (the registry's
+   *  `apiKeyFrom` contract is a single string). Populated only from the tenant's stored
+   *  `freetoken` provider row; there is no operator-level equivalent. */
+  FREETOKEN_CONFIG?: string | null;
   NVIDIA_API_KEY?: string | null;
   /** Google AI (Gemini) API key — direct call to generativelanguage.googleapis.com.
    *  Powers the gateway's premium fallback at the tail of every cascade. */

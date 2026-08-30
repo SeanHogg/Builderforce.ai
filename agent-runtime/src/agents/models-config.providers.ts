@@ -185,6 +185,25 @@ export function resolveOllamaApiBase(configuredBaseUrl?: string): string {
   return trimmed.replace(/\/v1$/i, "");
 }
 
+/** Default origin a FreeToken engine serves on. */
+const FREETOKEN_API_BASE_URL = "http://127.0.0.1:1919";
+
+/**
+ * Derive a FreeToken engine's ROOT origin from a configured base URL — the twin of
+ * {@link resolveOllamaApiBase}, and normalized by the same rule (strip a trailing slash,
+ * then a trailing `/v1`) because users configure `baseUrl` with the documented `/v1`
+ * suffix just as often as without it.
+ *
+ * The relay's egress fence compares a requested URL against this origin exactly, so the
+ * normalization here and the endpoint `api/.../vendors/freetoken.ts` builds must agree.
+ */
+export function resolveFreetokenApiBase(configuredBaseUrl?: string): string {
+  if (!configuredBaseUrl) {
+    return FREETOKEN_API_BASE_URL;
+  }
+  return normalizeBaseUrl(configuredBaseUrl).replace(/\/v1$/i, "");
+}
+
 export async function discoverOllamaModels(baseUrl?: string): Promise<ModelDefinitionConfig[]> {
   // Skip Ollama discovery in test environments
   if (process.env.VITEST || process.env.NODE_ENV === "test") {
