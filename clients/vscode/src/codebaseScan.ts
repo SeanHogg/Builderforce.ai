@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import * as fs from "fs/promises";
 import * as path from "path";
 import * as crypto from "crypto";
-import { complete } from "./gateway";
+import { routeComplete, type ModelRoute } from "./modelRouting";
 
 const SKIP_DIRS = new Set([
   ".git", "node_modules", "dist", "out", "build", ".next", "coverage", ".turbo",
@@ -171,7 +171,7 @@ function buildContextYaml(data: ScanData, root: string): string {
 export async function scanCodebase(
   secrets: vscode.SecretStorage,
   root: string,
-  model: string | undefined,
+  route: ModelRoute,
   force = false,
 ): Promise<string | undefined> {
   const bfDir = path.join(root, ".builderforce");
@@ -197,7 +197,8 @@ export async function scanCodebase(
   // Best-effort one-shot overview (skipped silently if the call fails, e.g. quota).
   let overview = "";
   try {
-    overview = await complete(
+    overview = await routeComplete(
+      route,
       secrets,
       [
         {
@@ -207,7 +208,6 @@ export async function scanCodebase(
         },
         { role: "user", content: `Project map:\n\n${compactMap}` },
       ],
-      model,
     );
   } catch {
     /* grounding still works from the deterministic map */

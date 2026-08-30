@@ -3,12 +3,14 @@ import { artifactRoutePath } from "@seanhogg/builderforce-brain-embedded";
 import { BUILD_ID, BUILT_AT } from "./buildInfo";
 import { getTenantJwt, getCurrentUserId } from "./bfApi";
 import { TOOL_DEFS } from "./fileTools";
-import { getBaseUrl, getWebBaseUrl, SECRET_KEY, fetchPersonalityBlock, fetchLimbicBlock, getSessionTabMode, type SessionTabMode } from "./gateway";
+import { getBaseUrl, getWebBaseUrl, getLocalModelsConfig, SECRET_KEY, fetchPersonalityBlock, fetchLimbicBlock, getSessionTabMode, type SessionTabMode } from "./gateway";
 import { attentionFor, sessionTabIcon, sessionTabPrefix } from "./attention";
 import { getGroundingWithHistory } from "./grounding";
 import { appendSessionNote, readRecentSessionNotes, SessionNotes } from "./sessionNotes";
 import { getEditorContext, getEditorContextLive, watchEditorContext } from "./editorContext";
-import { resolveEffectiveModelChoice, setSelectedModel, setSelectedModelPool } from "./modelState";
+import { setSelectedModel, setSelectedModelPool } from "./modelState";
+import { resolveModelRoute } from "./modelRouting";
+import { isLocalChatEndpoint } from "./localModels";
 import { modelChoiceLabels } from "./modelChoiceLabels";
 import { getSelectedProject } from "./projectState";
 import { getProjectNames } from "./projectNames";
@@ -40,6 +42,12 @@ interface BrainInbound extends WebviewInbound {
    *  with `model` set to the id to pin. */
   mode?: string;
   model?: string;
+  /** For `llm.fetch`: the request the host performs against a local model runtime on
+   *  the webview's behalf. `url` is fenced to the configured on-device endpoints. */
+  url?: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string | null;
 }
 
 /** A work item to auto-link to the chat the intent opens, so the conversation is
@@ -130,6 +138,7 @@ function buildLabels(): Record<string, string> {
     // Composer + chrome
     "app.signInPrompt": t("Sign in to BuilderForce to start."),
     "app.signIn": t("Sign in"),
+    "app.summarizeNeedsAccount": t("Summarizing a chat needs a BuilderForce account. This conversation is only on this machine."),
     "app.beta": t("beta"),
     "app.newChat": t("New chat"),
     "app.conversation": t("Conversation"),
@@ -485,6 +494,83 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
         this.respond(msg.id, true, { block });
         break;
       }
+      // A completion the HOST performs for the webview against a runtime on this
+      // machine. See `hostFetch` in vscodeBridge.ts for why it cannot be done in the
+      // webview (plain-HTTP localhost is CSP-blocked there, and the runtime would have
+      // to allow the `vscode-webview://` origin by CORS besides).
+      case "llm.fetch": {
+        void this.proxyLocalFetch(msg);
+        break;
+      }
+      case "llm.abort": {
+        const controller = typeof msg.id === "string" ? this.localFetches.get(msg.id) : undefined;
+        controller?.abort();
+        break;
+      }
+    }
+  }
+
+  /** In-flight host-performed fetches, so the webview can cancel one it started. */
+  private readonly localFetches = new Map<string, AbortController>();
+
+  /**
+   * Perform one webview-requested fetch against a LOCAL runtime and stream the response
+   * back frame by frame.
+   *
+   * The destination is fenced to the configured on-device endpoints, exactly the
+   * "the host, not the caller, names the origin" rule the agent host's egress relay
+   * applies: the webview is our own bundle, but a proxy that forwards any URL it is
+   * handed is a same-origin request forwarder into the user's machine, and it would
+   * outlive whatever we currently believe the webview can be made to send.
+   *
+   * Bytes are decoded with a STREAMING decoder so a multi-byte character split across
+   * two network chunks is not corrupted on its way through postMessage.
+   */
+  private async proxyLocalFetch(msg: BrainInbound): Promise<void> {
+    const id = typeof msg.id === "string" ? msg.id : "";
+    if (!id) return;
+    const url = typeof msg.url === "string" ? msg.url : "";
+    const send = (type: string, payload: Record<string, unknown>): void => {
+      void this.panel.webview.postMessage({ type, id, ...payload });
+    };
+
+    if (!isLocalChatEndpoint(getLocalModelsConfig(), url)) {
+      send("llm.error", { error: `refused: ${url} is not a configured local model endpoint` });
+      return;
+    }
+
+    const controller = new AbortController();
+    this.localFetches.set(id, controller);
+    try {
+      const res = await fetch(url, {
+        method: msg.method ?? "POST",
+        headers: msg.headers ?? {},
+        ...(typeof msg.body === "string" ? { body: msg.body } : {}),
+        signal: controller.signal,
+      });
+      const headers: Record<string, string> = {};
+      res.headers.forEach((value, key) => { headers[key] = value; });
+      send("llm.open", { status: res.status, statusText: res.statusText, headers });
+
+      const reader = res.body?.getReader();
+      if (!reader) {
+        send("llm.end", {});
+        return;
+      }
+      const decoder = new TextDecoder();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const text = decoder.decode(value, { stream: true });
+        if (text) send("llm.chunk", { text });
+      }
+      const tail = decoder.decode();
+      if (tail) send("llm.chunk", { text: tail });
+      send("llm.end", {});
+    } catch (e) {
+      send("llm.error", { error: e instanceof Error ? e.message : String(e) });
+    } finally {
+      this.localFetches.delete(id);
     }
   }
 
@@ -648,7 +734,9 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
         /* personality is best-effort — never blocks init */
       }
     }
-    const modelChoice = await resolveEffectiveModelChoice(this.ctx.secrets);
+    // The SAME seam every other AI surface routes through, so the panel cannot drift
+    // onto a different model (or a different transport) from the chat participant.
+    const modelChoice = await resolveModelRoute(this.ctx.secrets);
     void this.panel.webview.postMessage({
       type: "init",
       baseUrl: getBaseUrl(),
@@ -667,6 +755,11 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
       model: modelChoice.model,
       modelStrict: modelChoice.modelStrict,
       routingMode: modelChoice.routingMode,
+      // Present only for an on-device model: switches the panel onto the host-proxied
+      // transport, and lets it render without an account.
+      ...(modelChoice.local
+        ? { localRoute: { baseUrl: modelChoice.local.baseUrl, model: modelChoice.local.model } }
+        : {}),
       grounding: await getGroundingWithHistory(root),
       // Live editor context (active file / selection / open tabs). Seeds the React
       // app's ambient system channel; refreshed via `editorContext` messages below.

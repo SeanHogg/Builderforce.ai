@@ -5,6 +5,12 @@ export { cerebrasModule }   from './cerebras';
 export { googleAiModule }   from './googleai';
 export { nvidiaModule }     from './nvidia';
 export { ollamaModule }     from './ollama';
+export { freetokenModule }  from './freetoken';
+export {
+  normalizeSelfHostedBaseUrl,
+  splitSelfHostedSentinel,
+  type SelfHostedConnection,
+} from './selfHostedSentinel';
 export { createOpenAICompatibleVendor } from './openaiCompatible';
 export {
   openAICompatibleModules,

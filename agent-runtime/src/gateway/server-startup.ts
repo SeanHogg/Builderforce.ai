@@ -5,7 +5,7 @@ import {
   resolveConfiguredModelRef,
   resolveHooksGmailModel,
 } from "../agents/model-selection.js";
-import { resolveOllamaApiBase } from "../agents/models-config.providers.js";
+import { resolveFreetokenApiBase, resolveOllamaApiBase } from "../agents/models-config.providers.js";
 import { resolveAgentSessionDirs } from "../agents/session-dirs.js";
 import { cleanStaleLockFiles } from "../agents/session-write-lock.js";
 import { registerPlatformPersonasAsRoles } from "../builderforce/agent-roles.js";
@@ -367,12 +367,20 @@ async function startBuilderforceServices(
         ? resolveOllamaApiBase(ollamaProviderConfig.baseUrl)
         : undefined;
 
+      // Same rule for a locally-configured FreeToken engine: the carve-out opens ONLY
+      // when this machine's own config already named a freetoken provider.
+      const freetokenProviderConfig = params.cfg.models?.providers?.freetoken;
+      const freetokenLocalOrigin = freetokenProviderConfig
+        ? resolveFreetokenApiBase(freetokenProviderConfig.baseUrl)
+        : undefined;
+
       relay = new BuilderforceRelayService({
         baseUrl,
         agentNodeId: String(agentNodeId),
         apiKey,
         workspaceDir: params.defaultWorkspaceDir,
         ...(ollamaLocalOrigin ? { ollamaLocalOrigin } : {}),
+        ...(freetokenLocalOrigin ? { freetokenLocalOrigin } : {}),
       });
       relay.start();
       params.log.warn(`[builderforce] relay started for agentNode ${agentNodeId}`);

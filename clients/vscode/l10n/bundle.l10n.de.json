@@ -206,6 +206,7 @@
   "Model choice needs a paid plan or a connected provider account.": "Die Modellwahl erfordert einen kostenpflichtigen Tarif oder ein verbundenes Anbieterkonto.",
   "Model choice needs a paid plan or a connected provider account. Connect your own Anthropic/OpenAI key to pick models and have turns billed to your account.": "Die Modellwahl erfordert einen kostenpflichtigen Tarif oder ein verbundenes Anbieterkonto. Verbinde deinen eigenen Anthropic-/OpenAI-Schlüssel, um Modelle zu wählen und Anfragen über dein Konto abzurechnen.",
   "Model in use": "Verwendetes Modell",
+  "Models served on this machine": "Modelle, die auf diesem Rechner bereitgestellt werden",
   "Never": "Nie",
   "New chat": "Neuer Chat",
   "New chat name": "Neuer Chat-Name",
@@ -241,6 +242,7 @@
   "Off": "Aus",
   "Off — the model answers directly. Turn on for a reasoning pass before the answer.": "Aus – das Modell antwortet direkt. Schalte es ein, um vor der Antwort einen Denkschritt einzufügen.",
   "On": "Ein",
+  "On this device": "Auf diesem Gerät",
   "Only a project manager can change these settings.": "Nur ein Projektmanager kann diese Einstellungen ändern.",
   "Open": "Öffnen",
   "Open Chat": "Chat öffnen",
@@ -327,6 +329,7 @@
   "Run {name}?": "{name} ausführen?",
   "Running": "Wird ausgeführt",
   "Running {0}…": "{0} wird ausgeführt…",
+  "Runs on this machine — no plan usage, works offline": "Läuft auf diesem Rechner — kein Kontingentverbrauch, funktioniert offline",
   "Saved workspace LLM configuration": "Gespeicherte LLM-Konfiguration des Workspace",
   "Search models…": "Modelle suchen…",
   "See your unresolved runtime errors and fix the top one": "Sieh deine ungelösten Laufzeitfehler und behebe den wichtigsten",
@@ -487,5 +490,6 @@
   "{agent}'s run on {kind} #{ref} was cancelled": "Der Lauf von {agent} für {kind} #{ref} wurde abgebrochen",
   "{count} tokens left": "{count} Token übrig",
   "{input} input / {output} output per 1M tokens + $0.01 per request": "{input} Eingabe / {output} Ausgabe pro 1 Mio. Tokens + $0,01 pro Anfrage",
-  "● Live": "● Live"
+  "● Live": "● Live",
+  "Summarizing a chat needs a BuilderForce account. This conversation is only on this machine.": "Das Zusammenfassen eines Chats erfordert ein BuilderForce-Konto. Diese Unterhaltung existiert nur auf diesem Rechner."
 }

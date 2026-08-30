@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { productForPlan, type ModelIdentityContext } from "@seanhogg/builderforce-brain-embedded";
+import { type LocalModelsConfig, type LocalProviderId } from "./localModels";
 
 /** Single source of truth for the SecretStorage key (DRY). */
 export const SECRET_KEY = "builderforce.apiKey";
@@ -34,6 +35,23 @@ export function getBaseUrl(): string {
 
 export function getApiKey(secrets: vscode.SecretStorage): Thenable<string | undefined> {
   return secrets.get(SECRET_KEY);
+}
+
+/**
+ * The on-device runtime settings (`builderforce.localModels.*`), read HERE with the
+ * other configuration accessors so `localModels.ts` stays free of `vscode` and testable
+ * in the harness. Single source of truth: every surface that offers or dispatches a
+ * local model reads this.
+ */
+export function getLocalModelsConfig(): LocalModelsConfig {
+  const cfg = vscode.workspace.getConfiguration("builderforce");
+  return {
+    enabled: cfg.get<boolean>("localModels.enabled") === true,
+    baseUrls: {
+      ollama: cfg.get<string>("localModels.ollamaUrl") || "http://127.0.0.1:11434",
+      freetoken: cfg.get<string>("localModels.freetokenUrl") || "http://127.0.0.1:1919",
+    } satisfies Record<LocalProviderId, string>,
+  };
 }
 
 /** How the Sessions view opens chats (see `builderforce.sessionTabs`). */

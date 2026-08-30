@@ -124,6 +124,13 @@ export type BuilderforceRelayOptions = {
    * when the tenant has no local Ollama connection configured.
    */
   ollamaLocalOrigin?: string;
+  /**
+   * Origin of THIS machine's own locally-configured FreeToken engine — the exact twin of
+   * {@link ollamaLocalOrigin}, carrying the same "the host, not the cloud request, names
+   * the origin" rule. Absent when the tenant has no local FreeToken connection
+   * configured, which keeps that carve-out closed on every host that does not use one.
+   */
+  freetokenLocalOrigin?: string;
 };
 
 export class BuilderforceRelayService implements IRelayService {
@@ -1030,6 +1037,7 @@ export class BuilderforceRelayService implements IRelayService {
           body: typeof msg.body === "string" ? msg.body : null,
         }, {
           ...(this.opts.ollamaLocalOrigin ? { allowedLocalOrigin: this.opts.ollamaLocalOrigin } : {}),
+          ...(this.opts.freetokenLocalOrigin ? { allowedFreetokenOrigin: this.opts.freetokenLocalOrigin } : {}),
         }).then((frame) => {
           this.sendToRelay(frame);
         });

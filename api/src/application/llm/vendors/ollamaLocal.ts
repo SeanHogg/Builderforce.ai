@@ -27,9 +27,12 @@ import {
   parseOllamaResponse,
 } from './ollama';
 import {
+  normalizeSelfHostedBaseUrl,
+  splitSelfHostedSentinel,
+} from './selfHostedSentinel';
+import {
   executeChatCompletion,
   forwardCallOpts,
-  VendorFatalError,
   type VendorCallParams,
   type VendorCallResult,
   type VendorEnv,
@@ -40,35 +43,6 @@ import {
 const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'default', label: 'Configured model (self-hosted Ollama)', brand: 'Ollama', tier: 'FREE' },
 ];
-
-/**
- * Strip a trailing `/v1` and slash exactly like the on-prem host's own
- * `resolveOllamaApiBase` does — the two MUST agree, because the host's destination
- * fence compares this module's request path byte-for-byte against
- * `OLLAMA_LOCAL_EGRESS_PATH` ('/api/chat'). A tenant who saved the OpenAI-compatible
- * `.../v1` form (the more commonly documented one) must still land on the native
- * `/api/chat` endpoint the host allows.
- */
-function normalizeOllamaBaseUrl(raw: string): string {
-  const trimmed = raw.trim().replace(/\/+$/, '');
-  return trimmed.replace(/\/v1$/i, '');
-}
-
-/** Split the `<apiKey>::<baseUrl>::<model>` sentinel back apart. `apiKey` may be
- *  empty (self-hosted Ollama commonly has no auth); `baseUrl` and `model` may not. */
-function splitSentinel(raw: string): { apiKey: string; baseUrl: string; model: string } {
-  const i = raw.indexOf('::');
-  if (i < 0) {
-    throw new VendorFatalError('ollama-local', 500, 'malformed ollama-local sentinel (expected "<apiKey>::<baseUrl>::<model>")');
-  }
-  const apiKey = raw.slice(0, i);
-  const rest = raw.slice(i + 2);
-  const j = rest.indexOf('::');
-  if (j < 0) {
-    throw new VendorFatalError('ollama-local', 500, 'malformed ollama-local sentinel (expected "<apiKey>::<baseUrl>::<model>")');
-  }
-  return { apiKey, baseUrl: rest.slice(0, j), model: rest.slice(j + 2) };
-}
 
 export const ollamaLocalModule: VendorModule = {
   id: 'ollama-local',
@@ -82,8 +56,9 @@ export const ollamaLocalModule: VendorModule = {
     return env.OLLAMA_LOCAL_CONFIG ?? null;
   },
   async call(params: VendorCallParams): Promise<VendorCallResult> {
-    const { apiKey, baseUrl, model } = splitSentinel(params.apiKey);
-    const endpoint = `${normalizeOllamaBaseUrl(baseUrl)}/api/chat`;
+    const { apiKey, baseUrl, model } = splitSelfHostedSentinel('ollama-local', params.apiKey);
+    // The native path the on-prem host's egress fence allows — see the module header.
+    const endpoint = `${normalizeSelfHostedBaseUrl(baseUrl)}/api/chat`;
     return executeChatCompletion({
       vendorId: 'ollama-local',
       endpoint,

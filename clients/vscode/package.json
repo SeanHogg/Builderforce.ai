@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.8.133",
+  "version": "2026.8.137",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -21,7 +21,12 @@
     "chat",
     "coding assistant",
     "builderforce",
-    "copilot"
+    "copilot",
+    "local llm",
+    "local models",
+    "ollama",
+    "freetoken",
+    "offline"
   ],
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -678,6 +683,21 @@
           "type": "string",
           "default": "",
           "description": "%config.defaultModel.desc%"
+        },
+        "builderforce.localModels.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%config.localModels.enabled.desc%"
+        },
+        "builderforce.localModels.ollamaUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:11434",
+          "markdownDescription": "%config.localModels.ollamaUrl.desc%"
+        },
+        "builderforce.localModels.freetokenUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:1919",
+          "markdownDescription": "%config.localModels.freetokenUrl.desc%"
         },
         "builderforce.permissionMode": {
           "type": "string",

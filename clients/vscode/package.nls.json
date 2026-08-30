@@ -1,5 +1,5 @@
 {
-  "extension.description": "BuilderForce AI coding agent — chat with a codebase-aware agent in your VS Code sidebar.",
+  "extension.description": "BuilderForce AI coding agent — chat with a codebase-aware agent in your VS Code sidebar, on our gateway or on a model running on your own machine (Ollama, FreeToken).",
   "view.welcome": "Welcome",
   "welcome.signIn": "Sign in to BuilderForce to use Sessions, Projects & Tasks, Inbox, Insights, Evermind, Diagnostics and Meetings.\n[Sign In](command:builderforce.signIn)\n\nSelf-hosted AI coding agent — chat with a codebase-aware agent right here in your sidebar.",
   "view.sessions": "Sessions",
@@ -53,6 +53,9 @@
   "config.baseUrl.desc": "Base URL of the BuilderForce gateway. Defaults to the primary domain (`https://builderforce.ai/gateway`), which works on corporate networks that whitelist the main site but block the `api.` subdomain. The OpenAI-compatible endpoint `/llm/v1/chat/completions` is appended automatically. Override for self-hosted deployments or to call `https://api.builderforce.ai` directly.",
   "config.webUrl.desc": "Base URL of the BuilderForce web app (where embedded pages like the board live). Leave empty to derive it from `builderforce.baseUrl` (api.* → root domain).",
   "config.defaultModel.desc": "Default model id to use. Leave empty to let the gateway pick from the curated coding pool.",
+  "config.localModels.enabled.desc": "Offer models served by a runtime on this machine (Ollama, FreeToken) in the model picker. The inference runs entirely on your device: nothing is sent to the BuilderForce gateway or to a model provider, no plan usage, and it works offline. The sidebar chat still saves its transcript to your BuilderForce account as usual.",
+  "config.localModels.ollamaUrl.desc": "Base URL of your Ollama runtime. The OpenAI-compatible paths `/v1/models` and `/v1/chat/completions` are appended automatically, so both `http://127.0.0.1:11434` and `http://127.0.0.1:11434/v1` work.",
+  "config.localModels.freetokenUrl.desc": "Base URL of your FreeToken engine. The OpenAI-compatible paths `/v1/models` and `/v1/chat/completions` are appended automatically, so both `http://127.0.0.1:1919` and `http://127.0.0.1:1919/v1` work.",
   "config.permissionMode.desc": "How the agent applies changes to your workspace.",
   "config.permissionMode.ask": "Ask before applying each file edit or command (recommended).",
   "config.permissionMode.acceptEdits": "Apply file edits automatically without prompting.",

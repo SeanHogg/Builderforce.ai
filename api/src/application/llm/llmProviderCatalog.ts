@@ -16,11 +16,11 @@
 
 export type LlmProvider =
   | 'anthropic' | 'openai' | 'google' | 'meta' | 'kimi' | 'moonshot' | 'qwen' | 'minimax' | 'xai'
-  | 'ollama' | 'ollama-local';
+  | 'ollama' | 'ollama-local' | 'freetoken';
 
 export const SUPPORTED_PROVIDERS: readonly LlmProvider[] = [
   'anthropic', 'openai', 'google', 'meta', 'kimi', 'moonshot', 'qwen', 'minimax', 'xai',
-  'ollama', 'ollama-local',
+  'ollama', 'ollama-local', 'freetoken',
 ];
 
 export type ProviderAuthType = 'api_key' | 'oauth';
@@ -30,14 +30,15 @@ export type ProviderAuthType = 'api_key' | 'oauth';
  *  subscription (Anthropic today) — the OAuth path is resolved separately via
  *  `resolveAnthropicOAuthToken`, so it isn't part of the api-key overlay.
  *
- *  `ollama-local` is the one entry whose "key" is not a bare credential: it stores
+ *  `ollama-local` and `freetoken` are the entries whose "key" is not a bare credential:
+ *  each stores
  *  the composed `<apiKey>::<baseUrl>::<model>` sentinel `ollamaLocal.ts` expects —
  *  see `llmRoutes.ts`'s `PUT /provider-keys/ollama-local` composition. */
 export const PROVIDER_VENDOR_MAP: Record<LlmProvider, {
   vendorId: string;
   envKey: 'CLAUDE_API_KEY' | 'OPENAI_API_KEY' | 'GOOGLE_API_KEY' | 'META_API_KEY'
     | 'KIMI_CODE_API_KEY' | 'MOONSHOT_API_KEY' | 'QWEN_API_KEY' | 'MINIMAX_API_KEY' | 'XAI_API_KEY'
-    | 'OLLAMA_API_KEY' | 'OLLAMA_LOCAL_CONFIG';
+    | 'OLLAMA_API_KEY' | 'OLLAMA_LOCAL_CONFIG' | 'FREETOKEN_CONFIG';
   oauth: boolean;
 }> = {
   anthropic: { vendorId: 'anthropic', envKey: 'CLAUDE_API_KEY', oauth: true },
@@ -51,6 +52,7 @@ export const PROVIDER_VENDOR_MAP: Record<LlmProvider, {
   xai:       { vendorId: 'xai',       envKey: 'XAI_API_KEY', oauth: true },
   ollama:    { vendorId: 'ollama',    envKey: 'OLLAMA_API_KEY', oauth: false },
   'ollama-local': { vendorId: 'ollama-local', envKey: 'OLLAMA_LOCAL_CONFIG', oauth: false },
+  freetoken: { vendorId: 'freetoken', envKey: 'FREETOKEN_CONFIG', oauth: false },
 };
 
 export function isSupportedProvider(p: string): p is LlmProvider {

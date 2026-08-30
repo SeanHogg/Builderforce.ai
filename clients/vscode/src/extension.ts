@@ -10,7 +10,9 @@ import { ProjectPagePanel, projectPageChoices } from "./projectPagePanel";
 import { registerChatParticipant } from "./chatParticipant";
 import { registerChatSessions } from "./chatSessions";
 import { scanCodebase } from "./codebaseScan";
-import { getModels, getWebBaseUrl, SECRET_KEY, clearPersonalityBlockCache } from "./gateway";
+import { getModels, getWebBaseUrl, getLocalModelsConfig, SECRET_KEY, clearPersonalityBlockCache } from "./gateway";
+import { listLocalModels, type LocalModel, type LocalProviderId } from "./localModels";
+import { resolveModelRoute, routeRequiresSignIn } from "./modelRouting";
 import { InsightsController } from "./insights";
 import { EvermindViewProvider } from "./evermindView";
 import { DiagnosticsController } from "./diagnostics";
@@ -1059,7 +1061,59 @@ async function signOut(
  * (Sessions view overflow, command palette, the native `@builderforce` participant)
  * still needs a way to change models.
  */
+/** Display name of each on-device runtime. Product names, so they are NOT localized —
+ *  every locale writes "Ollama" and "FreeToken" the same way, and routing a brand
+ *  through the message catalog would add keys no translator should ever change. */
+const LOCAL_PROVIDER_LABEL: Record<LocalProviderId, string> = {
+  ollama: "Ollama",
+  freetoken: "FreeToken",
+};
+
+/**
+ * Picker rows for the models this MACHINE can serve.
+ *
+ * Their own group, above the gateway tiers, because they belong to a different funding
+ * story than any of them: nothing is spent, no account is consulted, and the turn works
+ * with the network down. That is also why they survive the `canChooseModel` gate and the
+ * signed-out path below — a gated pin is dead because the GATEWAY would refuse it, and
+ * these never reach the gateway.
+ */
+function localModelRows(
+  models: readonly LocalModel[],
+): Array<vscode.QuickPickItem & { selection?: ChatModelSelection }> {
+  if (models.length === 0) return [];
+  return [
+    { label: vscode.l10n.t("On this device"), kind: vscode.QuickPickItemKind.Separator },
+    ...models.map((entry) => ({
+      label: `$(vm) ${entry.model}`,
+      description: LOCAL_PROVIDER_LABEL[entry.provider],
+      detail: vscode.l10n.t("Runs on this machine — no plan usage, works offline"),
+      selection: { mode: "model", model: entry.ref } as ChatModelSelection,
+    })),
+  ];
+}
+
+/**
+ * The local-only picker — what a user sees when the gateway cannot offer a choice (no
+ * entitlement, or signed out) but this machine can. Without it those two paths dead-end
+ * on a message about plans, which is the wrong answer for someone who has a runtime
+ * already running locally.
+ */
+async function pickLocalOnly(rows: Array<vscode.QuickPickItem & { selection?: ChatModelSelection }>): Promise<boolean> {
+  const pick = await vscode.window.showQuickPick(rows, {
+    title: vscode.l10n.t("Select BuilderForce model"),
+    placeHolder: vscode.l10n.t("Models served on this machine"),
+    matchOnDescription: true,
+  });
+  if (!pick?.selection || pick.selection.mode !== "model") return false;
+  setSelectedModel(pick.selection.model);
+  return true;
+}
+
 async function pickModel(context: vscode.ExtensionContext): Promise<void> {
+  // Probed FIRST, and outside the try: the gateway lookup below throws when signed out,
+  // and a local runtime must still be offerable in that state.
+  const localRows = localModelRows(await listLocalModels(getLocalModelsConfig()));
   try {
     const { models, freeModels, configuredModels, canUsePremiumModels, premiumModels, canChooseModel, byo, premiumInfo, identity } =
       await getModels(context.secrets, true);
@@ -1085,6 +1139,11 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
     // premium override, or a connected BYO account). Without it the gateway rejects a
     // pinned model, so offering one would be a dead control — clear the pin instead.
     if (!canChooseModel) {
+      // The entitlement being absent says the GATEWAY will refuse a pin. It says nothing
+      // about a runtime on this machine, so offer those before falling back to the
+      // upgrade path — otherwise a developer with Ollama running is told to buy a plan to
+      // use hardware they already own.
+      if (localRows.length > 0 && (await pickLocalOnly(localRows))) return;
       setSelectedModel(undefined);
       const action = await vscode.window.showInformationMessage(
         vscode.l10n.t(
@@ -1138,6 +1197,8 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
       );
     }
 
+    rows.push(...localRows);
+
     const pick = await vscode.window.showQuickPick(rows, {
       title: vscode.l10n.t("Select BuilderForce model"),
       placeHolder: byo.providers.length > 0
@@ -1161,6 +1222,8 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
   } catch (e) {
     const message = (e as { message?: string }).message ?? String(e);
     if (message.includes("not_signed_in")) {
+      // Signed out is not a dead end when this machine can serve the turn itself.
+      if (localRows.length > 0 && (await pickLocalOnly(localRows))) return;
       const action = await vscode.window.showWarningMessage(vscode.l10n.t("Sign in to BuilderForce first."), vscode.l10n.t("Sign In"));
       if (action) void vscode.commands.executeCommand("builderforce.signIn");
     } else {
@@ -1178,15 +1241,17 @@ async function maybeScan(context: vscode.ExtensionContext, force: boolean): Prom
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!root) return;
   const key = await context.secrets.get(SECRET_KEY);
-  if (!key) return;
-
-  const model =
-    vscode.workspace.getConfiguration("builderforce").get<string>("defaultModel") || undefined;
+  // The SAME route the chat participant runs on, rather than a second reading of
+  // `builderforce.defaultModel`: that divergence meant pinning an on-device model left
+  // the scan summarizing through the gateway under a different model entirely. A local
+  // route also needs no account, so the sign-in gate follows the route, not the key.
+  const route = await resolveModelRoute(context.secrets);
+  if (!key && routeRequiresSignIn(route)) return;
 
   const work = async (progress?: vscode.Progress<{ message?: string }>) => {
     progress?.report({ message: "Scanning workspace…" });
     try {
-      setGroundingSummary(await scanCodebase(context.secrets, root, model, force));
+      setGroundingSummary(await scanCodebase(context.secrets, root, route, force));
     } catch (e) {
       console.error("BuilderForce codebase scan failed:", e);
     }

@@ -2,6 +2,26 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.8.137] — A local chat works with nobody signed in
+
+- **Picking a model on this machine and not signing in used to give you a chat that could not send.** The panel opened, you typed, and the message failed — before the model on your machine was ever called. The reason had nothing to do with your runtime: a chat is saved as you go, and saving needs an account, so the very first step of the turn was refused and everything after it never ran. A signed-out on-device chat now keeps its conversation in the panel itself, and the turn reaches your hardware as it should.
+- **That conversation lives in the panel and nowhere else.** It is not queued, not uploaded later, and not in your BuilderForce history — closing the panel ends it. Sign in and chats are saved to your account again, exactly as before. Summarizing a chat still needs an account, and now says so instead of failing quietly.
+
+## [2026.8.136] — Saying plainly where a local turn’s words go
+
+- **We were overstating what stays on your machine, and now we don’t.** Both the Local Models setting and the 2026.8.135 release note said a local turn needs no BuilderForce account and never reaches our gateway. The inference genuinely doesn’t — your prompt, your code and the reply are exchanged only with the runtime on your device. But the sidebar chat still saves its transcript to your account exactly as it always has, because that is what makes it the same conversation in the web app. If you picked a model on this machine expecting the text to stay here as well, it did not. Corrected in the settings UI, the release notes and the extension page, in every language we ship.
+- **The extension page now tells you how to set this up.** It described a product that only talks to our gateway. It now names both runtimes, tells you how to start each one and on which address, walks through enabling the setting and picking a model, and spells out what does and does not leave your machine.
+- **Two translation defects went with it.** The German setting called a conversational turn a *Zug* — a train, or a move in chess — and the French text had lost its apostrophes.
+
+## [2026.8.135] — Your own machine can answer now
+
+- **The models on your own computer show up in the model picker.** Turn on **BuilderForce › Local Models: Enabled** and everything your Ollama install has pulled, plus whatever your FreeToken engine is serving, appears under **On this device** beside the rest. Pick one and the whole turn runs on your hardware — the same tools, the same edits, the same approvals as any other chat.
+- **Every AI surface honours the choice, not just one of them.** The chat panel, the `@builderforce` participant and the workspace scan all run on the model you picked. They used to answer that question separately — the scan in particular read its own setting, so pinning a local model left it quietly summarizing your repo through the gateway on a different model entirely. There is now one place that decides where a turn runs, and all three ask it.
+- **The chat panel reaches your machine through the extension.** A webview cannot open a plain-HTTP connection to `localhost`, so its turns are performed by the extension host and streamed back — which also means your runtime does not have to be reconfigured to accept the editor as an origin. Only the model endpoints you have configured can be reached this way.
+- **The inference never leaves your machine — your transcript still does.** Your prompt, the code context gathered from your repo and the model's reply are exchanged only with the runtime on your device: nothing reaches the BuilderForce gateway, nothing is spent from your plan, and it keeps working with the network down. The sidebar chat still saves its conversation to your account exactly as it always has — that is what makes it the same chat in the web app — so the text of a local chat is stored server-side like any other. The `@builderforce` participant and the workspace scan need no account at all, and store nothing while you are signed out.
+- **Being on a plan without model choice no longer hides them.** The picker used to answer "model choice needs a paid plan" and stop there. That is a statement about what our gateway will serve, and it has nothing to say about hardware you already own — so the models on this machine are offered either way.
+- **Point the settings wherever your runtimes actually live.** Ollama defaults to `http://127.0.0.1:11434` and FreeToken to `http://127.0.0.1:1919`, and both accept either the bare address or the `/v1` form that most documentation shows.
+
 ## [2026.8.133] — When something goes wrong in the editor, someone can actually find out why
 
 - **An error in the extension used to end with you.** It was written to the BuilderForce output panel and nowhere else, so unless you thought to open that panel, copy it out and send it, nobody could see what had happened. Turn on **BuilderForce: Report Errors** in settings and the errors the extension catches are filed against your selected project, in the same Quality feed as everything else your workspace already tracks.

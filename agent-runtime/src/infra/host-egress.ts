@@ -41,6 +41,17 @@ const EGRESS_ALLOWED_HOSTS: ReadonlySet<string> = new Set([
  */
 const OLLAMA_LOCAL_EGRESS_PATH = "/api/chat";
 
+/**
+ * The ONLY path a locally-configured FreeToken origin may be called on — see
+ * {@link EgressOptions.allowedFreetokenOrigin}. FreeToken serves the OpenAI-compatible
+ * route, so this is `/v1/chat/completions` where Ollama's is its native `/api/chat`;
+ * both are pinned for the same reason, that an origin match alone would turn this relay
+ * into a general proxy to whatever else listens on the user's configured port.
+ *
+ * Must agree byte-for-byte with the path `api/.../vendors/freetoken.ts` builds.
+ */
+const FREETOKEN_LOCAL_EGRESS_PATH = "/v1/chat/completions";
+
 export interface EgressOptions {
   /**
    * The origin (scheme://host[:port]) of THIS machine's own locally-configured Ollama
@@ -53,6 +64,13 @@ export interface EgressOptions {
    * allowlist above enforces for Kimi Code.
    */
   allowedLocalOrigin?: string;
+  /**
+   * The origin of THIS machine's own locally-configured FreeToken engine, read from ITS
+   * OWN config — the exact twin of {@link EgressOptions.allowedLocalOrigin}, and subject
+   * to the same rule: the cloud may ask for `<origin>{@link FREETOKEN_LOCAL_EGRESS_PATH}`
+   * and nothing else. A host that never configured FreeToken never opens this door.
+   */
+  allowedFreetokenOrigin?: string;
 }
 
 /** Ceiling on a relayed response body. A chat completion is orders of magnitude
@@ -99,12 +117,14 @@ export interface HostEgressResponseFrame {
 /** Why this destination is not allowed, or null when it is. Separated from the
  *  performing code so the rule is testable on its own.
  *
- *  `opts.allowedLocalOrigin` is the one deliberate carve-out from "https + static
- *  allowlist": a plain-HTTP request whose origin matches EXACTLY, on EXACTLY
- *  {@link OLLAMA_LOCAL_EGRESS_PATH}, is let through — because that origin is not
- *  attacker-reachable in the first place (it is this machine's OWN local Ollama, as
- *  this machine itself configured it), so the "credential in the clear" and "walk an
- *  allowlisted host" concerns the https/allowlist rules exist for don't apply to it. */
+ *  `opts.allowedLocalOrigin` / `opts.allowedFreetokenOrigin` are the deliberate
+ *  carve-outs from "https + static allowlist": a plain-HTTP request whose origin matches
+ *  EXACTLY, on EXACTLY that runtime's one registered path
+ *  ({@link OLLAMA_LOCAL_EGRESS_PATH} / {@link FREETOKEN_LOCAL_EGRESS_PATH}), is let
+ *  through — because that origin is not attacker-reachable in the first place (it is
+ *  this machine's OWN local runtime, as this machine itself configured it), so the
+ *  "credential in the clear" and "walk an allowlisted host" concerns the https/allowlist
+ *  rules exist for don't apply to it. */
 export function rejectEgressTarget(rawUrl: string | undefined, opts: EgressOptions = {}): string | null {
   if (!rawUrl) return "url required";
   let url: URL;
@@ -113,20 +133,24 @@ export function rejectEgressTarget(rawUrl: string | undefined, opts: EgressOptio
   } catch {
     return "malformed url";
   }
-  if (opts.allowedLocalOrigin) {
+  // One rule, applied once per configured runtime: an EXACT origin match on the ONE path
+  // that runtime is registered for. Written once so a second carve-out cannot drift into
+  // a laxer test than the first.
+  const matchesLocalTarget = (configuredOrigin: string | undefined, path: string): boolean => {
+    if (!configuredOrigin) return false;
     let allowed: URL;
     try {
-      allowed = new URL(opts.allowedLocalOrigin);
+      allowed = new URL(configuredOrigin);
     } catch {
-      allowed = undefined as unknown as URL; // malformed local config — falls through to the static rules below
+      return false; // malformed local config — falls through to the static rules below
     }
-    if (
-      allowed
-      && url.origin === allowed.origin
-      && url.pathname === OLLAMA_LOCAL_EGRESS_PATH
-    ) {
-      return null;
-    }
+    return url.origin === allowed.origin && url.pathname === path;
+  };
+  if (
+    matchesLocalTarget(opts.allowedLocalOrigin, OLLAMA_LOCAL_EGRESS_PATH)
+    || matchesLocalTarget(opts.allowedFreetokenOrigin, FREETOKEN_LOCAL_EGRESS_PATH)
+  ) {
+    return null;
   }
   if (url.protocol !== "https:") return "only https is allowed";
   if (!EGRESS_ALLOWED_HOSTS.has(url.hostname)) return `host not allowed: ${url.hostname}`;

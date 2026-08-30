@@ -206,6 +206,7 @@
   "Model choice needs a paid plan or a connected provider account.": "Elegir modelo requiere un plan de pago o una cuenta de proveedor conectada.",
   "Model choice needs a paid plan or a connected provider account. Connect your own Anthropic/OpenAI key to pick models and have turns billed to your account.": "Elegir modelo requiere un plan de pago o una cuenta de proveedor conectada. Conecta tu propia clave de Anthropic/OpenAI para elegir modelos y que se facturen a tu cuenta.",
   "Model in use": "Modelo en uso",
+  "Models served on this machine": "Modelos servidos en esta máquina",
   "Never": "Nunca",
   "New chat": "Nuevo chat",
   "New chat name": "Nuevo nombre del chat",
@@ -241,6 +242,7 @@
   "Off": "Desactivado",
   "Off — the model answers directly. Turn on for a reasoning pass before the answer.": "Desactivado: el modelo responde directamente. Actívalo para añadir una fase de razonamiento antes de la respuesta.",
   "On": "Activado",
+  "On this device": "En este dispositivo",
   "Only a project manager can change these settings.": "Solo un manager de proyecto puede cambiar estos ajustes.",
   "Open": "Abrir",
   "Open Chat": "Abrir chat",
@@ -327,6 +329,7 @@
   "Run {name}?": "¿Ejecutar {name}?",
   "Running": "En ejecución",
   "Running {0}…": "Ejecutando {0}…",
+  "Runs on this machine — no plan usage, works offline": "Se ejecuta en esta máquina: sin consumo del plan, funciona sin conexión",
   "Saved workspace LLM configuration": "Configuración de LLM guardada en el espacio de trabajo",
   "Search models…": "Buscar modelos…",
   "See your unresolved runtime errors and fix the top one": "Ve tus errores de ejecución sin resolver y corrige el principal",
@@ -487,5 +490,6 @@
   "{agent}'s run on {kind} #{ref} was cancelled": "La ejecución de {agent} en {kind} #{ref} se canceló",
   "{count} tokens left": "quedan {count} tokens",
   "{input} input / {output} output per 1M tokens + $0.01 per request": "{input} de entrada / {output} de salida por 1 M de tokens + $0.01 por solicitud",
-  "● Live": "● En vivo"
+  "● Live": "● En vivo",
+  "Summarizing a chat needs a BuilderForce account. This conversation is only on this machine.": "Resumir un chat requiere una cuenta de BuilderForce. Esta conversación solo existe en esta máquina."
 }
