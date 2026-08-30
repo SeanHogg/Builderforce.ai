@@ -2,6 +2,13 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.8.134] — Your own machine can answer now
+
+- **The models on your own computer show up in the model picker.** Turn on **BuilderForce › Local Models: Enabled** and everything your Ollama install has pulled, plus whatever your FreeToken engine is serving, appears under **On this device** beside the rest. Pick one and the whole turn runs on your hardware — the same tools, the same edits, the same approvals as any other chat.
+- **A local turn never leaves your machine.** It does not reach the BuilderForce gateway, spends nothing from your plan, and keeps working with the network down. It does not even need you signed in: pin a local model and chat answers signed out, which is rather the point of running one.
+- **Being on a plan without model choice no longer hides them.** The picker used to answer "model choice needs a paid plan" and stop there. That is a statement about what our gateway will serve, and it has nothing to say about hardware you already own — so the models on this machine are offered either way.
+- **Point the settings wherever your runtimes actually live.** Ollama defaults to `http://127.0.0.1:11434` and FreeToken to `http://127.0.0.1:1919`, and both accept either the bare address or the `/v1` form that most documentation shows.
+
 ## [2026.8.133] — When something goes wrong in the editor, someone can actually find out why
 
 - **An error in the extension used to end with you.** It was written to the BuilderForce output panel and nowhere else, so unless you thought to open that panel, copy it out and send it, nobody could see what had happened. Turn on **BuilderForce: Report Errors** in settings and the errors the extension catches are filed against your selected project, in the same Quality feed as everything else your workspace already tracks.
