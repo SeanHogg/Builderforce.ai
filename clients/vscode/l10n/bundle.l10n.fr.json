@@ -490,5 +490,6 @@
   "{agent}'s run on {kind} #{ref} was cancelled": "L’exécution de {agent} sur {kind} #{ref} a été annulée",
   "{count} tokens left": "{count} jetons restants",
   "{input} input / {output} output per 1M tokens + $0.01 per request": "{input} en entrée / {output} en sortie par million de tokens + $0,01 par requête",
-  "● Live": "● En direct"
+  "● Live": "● En direct",
+  "Summarizing a chat needs a BuilderForce account. This conversation is only on this machine.": "Résumer une conversation nécessite un compte BuilderForce. Celle-ci n’existe que sur cette machine."
 }

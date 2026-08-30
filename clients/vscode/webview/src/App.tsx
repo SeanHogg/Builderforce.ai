@@ -33,6 +33,7 @@ import {
   type ChatMode,
   type Effort,
   type BrainConfig,
+  type BrainPersistenceAdapter,
   type BrainChat,
   type DirectedRecipient,
   type RecipientChoice,
@@ -78,6 +79,7 @@ import { Project360Screen } from './Project360Screen';
 import { ProjectPageScreen } from './ProjectPageScreen';
 import { EvermindScreen } from './EvermindScreen';
 import { createPersistence } from './persistence';
+import { createInMemoryPersistence } from './localPersistence';
 import { buildHostTools } from './hostTools';
 import { buildIdeSystemPrompt } from './systemPrompt';
 import { activeProjectDirective, editorContextDirective } from '../../src/idePersona';
@@ -437,8 +439,11 @@ export function App() {
   }
   const t = makeT(init.labels);
   // An on-device route needs no account — refusing to render the panel would be gating
-  // the user out of their own hardware. Gateway-backed extras (persistence, platform
-  // tools) degrade on their own when signed out; the chat itself works.
+  // the user out of their own hardware. The chat then runs on a session-local store
+  // (see `createInMemoryPersistence`), because the run loop persists the user turn
+  // BEFORE it streams: left on the gateway adapter, that write 401s and the model is
+  // never reached. Other gateway-backed extras (platform tools, the work inbox) degrade
+  // on their own.
   if ((!init.signedIn || !getToken()) && !init.localRoute) {
     return (
       <div className="bf-center">
@@ -461,6 +466,22 @@ export function App() {
 }
 
 function ConfiguredApp({ init }: { init: InitData }) {
+  // The panel only renders signed out on an on-device route (see the gate above), and
+  // that conversation has nowhere durable to go. Hold ONE session store for the life of
+  // the panel so re-rendering — a token re-mint, a grounding refresh — does not silently
+  // start a new empty chat under the user.
+  const signedOut = !init.signedIn || !getToken();
+  const memoryRef = useRef<BrainPersistenceAdapter | null>(null);
+  const memoryStore = (t: (key: string, fallback: string) => string): BrainPersistenceAdapter => {
+    memoryRef.current ??= createInMemoryPersistence({
+      summarizeUnavailable: t(
+        'app.summarizeNeedsAccount',
+        'Summarizing a chat needs a BuilderForce account. This conversation is only on this machine.',
+      ),
+    });
+    return memoryRef.current;
+  };
+
   const config = useMemo<BrainConfig>(
     () => ({
       // Two transports, one streamer. An on-device route points at the runtime on this
@@ -469,9 +490,11 @@ function ConfiguredApp({ init }: { init: InitData }) {
       // itself. Everything else is unchanged, so the agent loop and tool-call protocol
       // are identical either way.
       //
-      // Persistence deliberately stays on the gateway even for a local turn: the chat
-      // transcript, its project links and the audit trail are platform records, and the
-      // model that produced the text has no bearing on where the text is kept.
+      // Persistence stays on the gateway for a SIGNED-IN local turn: the transcript, its
+      // project links and the audit trail are platform records, and the model that
+      // produced the text has no bearing on where the text is kept. Signed out there is
+      // no account to keep it in, so the conversation lives in this panel and nowhere
+      // else — and is gone when it closes.
       transport: init.localRoute
         ? {
             baseUrl: init.localRoute.baseUrl,
@@ -485,10 +508,12 @@ function ConfiguredApp({ init }: { init: InitData }) {
             onUnauthorized: () => void refreshToken(),
             defaultModel: init.model,
           },
-      persistence: createPersistence(init.baseUrl, getToken, () => void refreshToken()),
+      persistence: signedOut
+        ? memoryStore(makeT(init.labels))
+        : createPersistence(init.baseUrl, getToken, () => void refreshToken()),
       resolveSystemPrompt: () => buildIdeSystemPrompt({ hasWorkspace: init.hasWorkspace, grounding: init.grounding }),
     }),
-    [init.baseUrl, init.model, init.hasWorkspace, init.grounding, init.localRoute],
+    [init.baseUrl, init.model, init.hasWorkspace, init.grounding, init.localRoute, signedOut],
   );
 
   return (

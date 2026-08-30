@@ -490,5 +490,6 @@
   "{agent}'s run on {kind} #{ref} was cancelled": "{agent}'s run on {kind} #{ref} was cancelled",
   "{count} tokens left": "{count} tokens left",
   "{input} input / {output} output per 1M tokens + $0.01 per request": "{input} input / {output} output per 1M tokens + $0.01 per request",
-  "● Live": "● Live"
+  "● Live": "● Live",
+  "Summarizing a chat needs a BuilderForce account. This conversation is only on this machine.": "Summarizing a chat needs a BuilderForce account. This conversation is only on this machine."
 }

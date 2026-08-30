@@ -138,6 +138,7 @@ function buildLabels(): Record<string, string> {
     // Composer + chrome
     "app.signInPrompt": t("Sign in to BuilderForce to start."),
     "app.signIn": t("Sign in"),
+    "app.summarizeNeedsAccount": t("Summarizing a chat needs a BuilderForce account. This conversation is only on this machine."),
     "app.beta": t("beta"),
     "app.newChat": t("New chat"),
     "app.conversation": t("Conversation"),

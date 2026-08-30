@@ -2,6 +2,17 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.8.137] — A local chat works with nobody signed in
+
+- **Picking a model on this machine and not signing in used to give you a chat that could not send.** The panel opened, you typed, and the message failed — before the model on your machine was ever called. The reason had nothing to do with your runtime: a chat is saved as you go, and saving needs an account, so the very first step of the turn was refused and everything after it never ran. A signed-out on-device chat now keeps its conversation in the panel itself, and the turn reaches your hardware as it should.
+- **That conversation lives in the panel and nowhere else.** It is not queued, not uploaded later, and not in your BuilderForce history — closing the panel ends it. Sign in and chats are saved to your account again, exactly as before. Summarizing a chat still needs an account, and now says so instead of failing quietly.
+
+## [2026.8.136] — Saying plainly where a local turn’s words go
+
+- **We were overstating what stays on your machine, and now we don’t.** Both the Local Models setting and the 2026.8.135 release note said a local turn needs no BuilderForce account and never reaches our gateway. The inference genuinely doesn’t — your prompt, your code and the reply are exchanged only with the runtime on your device. But the sidebar chat still saves its transcript to your account exactly as it always has, because that is what makes it the same conversation in the web app. If you picked a model on this machine expecting the text to stay here as well, it did not. Corrected in the settings UI, the release notes and the extension page, in every language we ship.
+- **The extension page now tells you how to set this up.** It described a product that only talks to our gateway. It now names both runtimes, tells you how to start each one and on which address, walks through enabling the setting and picking a model, and spells out what does and does not leave your machine.
+- **Two translation defects went with it.** The German setting called a conversational turn a *Zug* — a train, or a move in chess — and the French text had lost its apostrophes.
+
 ## [2026.8.135] — Your own machine can answer now
 
 - **The models on your own computer show up in the model picker.** Turn on **BuilderForce › Local Models: Enabled** and everything your Ollama install has pulled, plus whatever your FreeToken engine is serving, appears under **On this device** beside the rest. Pick one and the whole turn runs on your hardware — the same tools, the same edits, the same approvals as any other chat.

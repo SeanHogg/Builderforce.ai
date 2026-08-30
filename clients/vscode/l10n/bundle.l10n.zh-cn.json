@@ -490,5 +490,6 @@
   "{agent}'s run on {kind} #{ref} was cancelled": "{agent} 在 {kind} #{ref} 上的运行已取消",
   "{count} tokens left": "剩余 {count} 个令牌",
   "{input} input / {output} output per 1M tokens + $0.01 per request": "每 100 万 token {input} 输入 / {output} 输出，另加每次请求 $0.01",
-  "● Live": "● 进行中"
+  "● Live": "● 进行中",
+  "Summarizing a chat needs a BuilderForce account. This conversation is only on this machine.": "总结对话需要 BuilderForce 账号。此对话仅存在于本机。"
 }

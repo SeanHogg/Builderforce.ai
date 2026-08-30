@@ -53,7 +53,7 @@
   "config.baseUrl.desc": "BuilderForce 网关的基础 URL。默认使用主域名（`https://builderforce.ai/gateway`），可在仅将主站点加入白名单、却屏蔽 `api.` 子域名的企业网络中正常工作。会自动追加 OpenAI 兼容端点 `/llm/v1/chat/completions`。自托管部署或需直接调用 `https://api.builderforce.ai` 时可覆盖。",
   "config.webUrl.desc": "BuilderForce 网页应用的基础 URL（看板等内嵌页面所在处）。留空则从 `builderforce.baseUrl` 推导（api.* → 根域名）。",
   "config.defaultModel.desc": "要使用的默认模型 id。留空则让网关从精选的编程模型池中选择。",
-  "config.localModels.enabled.desc": "在模型选择器中提供由本机运行时（Ollama、FreeToken）提供的模型。本地对话完全在你的设备上运行：无需 BuilderForce 账号，不消耗套餐额度，并可离线使用。",
+  "config.localModels.enabled.desc": "在模型选择器中提供由本机运行时（Ollama、FreeToken）提供的模型。推理完全在你的设备上运行：不会发送到 BuilderForce 网关或任何模型提供方，不消耗套餐额度，并可离线使用。侧边栏聊天仍会像往常一样将对话记录保存到你的 BuilderForce 账号。",
   "config.localModels.ollamaUrl.desc": "你的 Ollama 运行时的基础 URL。会自动追加 OpenAI 兼容路径 `/v1/models` 和 `/v1/chat/completions`，因此 `http://127.0.0.1:11434` 和 `http://127.0.0.1:11434/v1` 均可使用。",
   "config.localModels.freetokenUrl.desc": "你的 FreeToken 引擎的基础 URL。会自动追加 OpenAI 兼容路径 `/v1/models` 和 `/v1/chat/completions`，因此 `http://127.0.0.1:1919` 和 `http://127.0.0.1:1919/v1` 均可使用。",
   "config.permissionMode.desc": "代理如何将更改应用到你的工作区。",
