@@ -166,9 +166,11 @@
      .surfaceChips   top centre    how it is being READ (and which phase you are in)
      .commandBar     bottom centre what you DO to it — including how work LEAVES it
 
-   `handoff` (Invite, Publish, the overflow) used to be a fourth region, `topRight`. It
-   is `bar`-placed now, drawn inside `.commandBar` behind its own divider rather than
-   in a card of its own — see `.handoffGroup` and `CreationCanvas.tsx`'s `handoffChrome`.
+   `handoff` (Publish, the overflow) used to be a fourth region, `topRight`, and used
+   to carry Invite too. It is `bar`-placed now, drawn inside `.commandBar` behind its
+   own divider rather than in a card of its own — see `.handoffGroup` and
+   `CreationCanvas.tsx`'s `handoffChrome`. Invite itself sits with the roster now,
+   as `.rosterInvite` — see that rule.
 
    Every one of them is the same card — one surface, one border, one shadow — so the
    three read as one system floating at one height rather than three visitors. The
@@ -229,10 +231,11 @@
 .handoffGroup { position:relative; display:flex; align-items:center; gap:6px; }
 /* The menus keep their own plate, and it must sit ABOVE the bar's own stacking
    context rather than inside it — a sheet that opens behind the row that spawned it
-   is worse than one that does not open. */
+   is worse than one that does not open. The invite sheet gets the same rule from
+   `.rosterInviteAnchor` now that Share opens beside the roster instead of here. */
 .handoffGroup > .moreMenu,
-.handoffGroup > .shareMenu,
-.handoffGroup > .templateMenu { z-index:60; }
+.handoffGroup > .templateMenu,
+.rosterInviteAnchor > .shareMenu { z-index:60; }
 
 /* ── WHERE ANYTHING UNDER THE TOP CHROME STARTS ───────────────────────────────────
    The remaining two cards on this line float at z-index 20. Everything that opens
@@ -339,6 +342,20 @@
 .collaborators button { padding:0; cursor:pointer; }
 .collaborators button[data-typing="true"] { border:2px solid var(--canvas-accent); box-shadow:0 0 0 3px color-mix(in srgb,var(--canvas-accent) 20%,transparent); animation:collaboratorTyping 1.4s ease-in-out infinite; }
 .avatarPink { background:#e94b9b; }.avatarOrange { background:#ff9827; }.avatarGreen { background:#43b77d; }
+/* Bring someone into THIS group. A dashed circle rather than a filled one — the
+   avatars beside it are people who are already here, this is the empty slot that
+   adds one — sized to sit with them rather than announce itself as a separate
+   control. No text: the roster it trails already says who is part of this. */
+.rosterInvite {
+  flex:none; display:grid; place-items:center; width:26px; height:26px; margin-left:4px; padding:0;
+  border:1.5px dashed var(--canvas-line); border-radius:50%; background:transparent; color:var(--canvas-muted); cursor:pointer;
+}
+.rosterInvite:hover, .rosterInvite:focus-visible { border-color:var(--canvas-accent); border-style:solid; color:var(--canvas-accent); outline:none; }
+.rosterInvite > svg { display:block; width:13px; height:13px; }
+/* Anchors the invite sheet to THIS button rather than to the bar as a whole — the
+   sheet is `position:absolute; right:0`, and its containing block has to be the
+   control that opened it or it opens off the button that spawned it. */
+.rosterInviteAnchor { position:relative; display:flex; align-items:center; }
 .primaryButton, .secondaryButton, .fullButton {
   border-radius:var(--radius-md); padding:8px 13px; border:1px solid var(--canvas-line); cursor:pointer; font-family:inherit; font-size:12px; font-weight:650;
 }
@@ -538,10 +555,10 @@
    projected from the 2D viewport and would float over the scene pointing at
    nothing. */
 .flowWrap:not([data-view='graph']) :global(.react-flow) { z-index:9 !important; pointer-events:none; background:transparent; }
-/* The palette drops objects onto the flat board, so it stands down whenever a surface
-   has taken the centre rather than sitting on top of that surface's own heading. */
-.flowWrap:not([data-view='graph']) .paletteToggle,
-.flowWrap:not([data-view='graph']) .palette { display:none; }
+/* The "add to canvas" toggle drops objects onto the flat board, so it stands down
+   whenever a surface has taken the centre rather than sitting on top of that
+   surface's own heading. */
+.flowWrap:not([data-view='graph']) .paletteToggle { display:none; }
 .flowWrap:not([data-view='graph']) :global(.react-flow__viewport),
 .flowWrap:not([data-view='graph']) :global(.react-flow__background),
 .flowWrap:not([data-view='graph']) .remoteCursor { display:none; }
@@ -678,23 +695,6 @@
 .changeSetPanel footer { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:7px; padding:10px; border-top:1px solid #e6e0f5; background:#faf8ff; }
 
 .paletteToggle { position:absolute; top:16px; left:calc(12px + var(--brain-dock-left, 0px)); z-index:8; width:30px; height:30px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:#fff; color:var(--canvas-muted); cursor:pointer; box-shadow:0 5px 15px rgba(60,48,36,.1); }
-.palette {
-  position:absolute; z-index:7; top:14px; bottom:14px; left:calc(50px + var(--brain-dock-left, 0px)); width:225px; max-height:calc(100% - 28px); display:flex; flex-direction:column; padding:12px; border:1px solid var(--canvas-line);
-  border-radius:var(--radius-lg); background:rgba(255,255,255,.98); box-shadow:0 14px 40px rgba(60,48,36,.12); color:var(--canvas-ink); overflow:hidden;
-}
-.paletteHeader { display:flex; justify-content:space-between; align-items:center; font-size:13px; }
-.paletteHeader button { border:0; background:transparent; color:var(--canvas-muted); cursor:pointer; font-size:18px; }
-.paletteSearchWrap { position:relative; flex:none; margin:10px 0 7px; }.paletteSearchWrap > span { position:absolute; left:9px; top:50%; transform:translateY(-50%); color:var(--canvas-muted); font-size:15px; }.paletteSearchWrap > button { position:absolute; right:5px; top:50%; transform:translateY(-50%); width:24px; height:24px; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--canvas-muted); cursor:pointer; }
-.search { box-sizing:border-box; width:100%; margin:0; padding:9px 31px 9px 29px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:#fbfdff; color:var(--canvas-ink); font-family:inherit; font-size:11px; }.search:focus { outline:2px solid color-mix(in srgb,var(--canvas-accent) 18%,transparent); border-color:color-mix(in srgb,var(--canvas-accent) 55%,var(--canvas-line)); }
-.paletteSections { min-height:0; margin:0 -5px -5px; padding:0 5px 5px; overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--canvas-line) transparent; }
-.paletteSection { padding:3px 0; border-top:1px solid var(--canvas-line); }.paletteSection:first-child { border-top:0; }
-.paletteSectionToggle { width:100%; display:grid; grid-template-columns:24px 1fr auto 15px; align-items:center; gap:6px; padding:7px 3px; border:0; border-radius:var(--radius-md); background:transparent; color:var(--canvas-muted); cursor:pointer; text-align:left; }.paletteSectionToggle:hover,.paletteSectionToggle:focus-visible { outline:none; background:#f3f7fc; }.paletteSectionToggle strong { font-size:9px; letter-spacing:.08em; text-transform:uppercase; }.paletteSectionToggle small { min-width:18px; padding:2px 5px; border-radius:var(--radius-full); background:var(--canvas-hover); color:var(--canvas-muted); font-size:8px; text-align:center; }
-.paletteGroupIcon { width:22px; height:22px; display:grid; place-items:center; border-radius:var(--radius-sm); background:color-mix(in srgb,var(--canvas-accent) 12%,var(--canvas-panel)); color:var(--canvas-accent); font-size:11px; }.paletteChevron { color:var(--canvas-muted); font-size:15px; transform-origin:center; }
-.paletteGrid { display:grid; grid-template-columns:1fr 1fr; gap:5px; }
-.paletteGrid button { display:flex; align-items:center; gap:6px; min-width:0; min-height:38px; padding:7px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:#fbfdff; color:var(--canvas-ink); cursor:grab; text-align:left; font-family:inherit; font-size:9px; font-weight:600; line-height:1.2; }
-.paletteGrid button:hover,.paletteGrid button:focus-visible { outline:none; border-color:#8fb4ff; background:#f1f6ff; box-shadow:0 2px 8px color-mix(in srgb,var(--canvas-accent) 10%,transparent); }
-.paletteGrid button:disabled { opacity:.45; cursor:not-allowed; }
-.paletteGrid span { color:var(--canvas-accent); font-size:13px; }
 
 .node { box-sizing:border-box; width:260px; display:flex; flex-direction:column; container-type:inline-size; border:1px solid var(--canvas-widget-border); border-radius:var(--radius-lg); background:var(--canvas-widget-surface); color:var(--canvas-ink); box-shadow:0 7px 24px rgba(60,48,36,.1); overflow:hidden; transition:border-color .15s, box-shadow .15s; }
 .wideNode { width:455px; }
@@ -2936,9 +2936,8 @@
 .mobileCanvasActions { display:none; }
 
 @media (max-width:1100px) {
-  .palette { width:195px; }
   /* Narrower side panels leave a narrower centre; the prompt stays centred but
-     stops short of the palette and the object panel rather than sliding under them. */
+     stops short of the object panel rather than sliding under it. */
   .composerDock { right:calc(260px + var(--brain-dock-right, 0px)); left:calc(260px + var(--brain-dock-left, 0px)); max-width:520px; }
 }
 @media (max-width:760px) {
@@ -3028,13 +3027,6 @@
   .shareMenu button { min-height:40px; }
   .shareMenu > div { flex-wrap:wrap; }
   .shareMenu input,.shareMenu select { min-height:40px; flex:1 1 140px; }
-  /* Clears the floating palette toggle, which still owns the top-left corner at this
-     width — the single board rail only forms below 560px, where the inset grows to match
-     it (see that block). */
-  /* These go full width here, so the top chrome sits over the MIDDLE of each one's
-     header rather than one corner of it — they need the measured band more than the
-     desktop layout does, not less. Only the left/right/bottom insets are restated. */
-  .palette { top:var(--canvas-top-chrome-space); right:8px; bottom:calc(var(--composer-space) + 8px); left:44px; width:auto; max-height:none; }
   /* A big picker sheet, not a tight popover — it still reads from the TOP of the
      screen regardless of where its `•••` trigger sits, so `bottom` is reset rather
      than restated. */
@@ -3151,18 +3143,9 @@
   .flowWrap[data-brain-open='true'] .boardRail { top:56px; bottom:auto; flex-direction:row; max-width:calc(100% - 20px); overflow-x:auto; }
   .flowWrap[data-brain-open='true'] .boardRail button { border-bottom:0; border-right:1px solid var(--canvas-line); }
   .flowWrap[data-brain-open='true'] .boardRail button:last-child { border-right:0; }
-  /* The palette is the phone's own full-board sheet and owns that top strip while
-     it is open, so the row stands down rather than hiding under it. The toggle that
-     CLOSES the palette has to survive that, though — standing the whole rail down
-     with the sheet open leaves the `×` in the sheet's own header as the only way
-     out, and the rail's own button reading as broken. */
-  .flowWrap[data-brain-open='true']:has(.palette) .boardRail > .mobileCanvasActions { display:none; }
   .boardRail button:hover,.boardRail button:focus-visible { background:var(--canvas-hover); outline:none; }
   /* A mode that is ON is lit here exactly as it is on the desktop rail. */
   .boardRail button[aria-pressed='true'] { background:color-mix(in srgb,var(--canvas-accent) 88%,#000); color:var(--text-on-accent); }
-  /* The palette sheet clears the rail, and the rail's width is what decides by how
-     much — 10px inset plus a 38px command plus the gap. */
-  .palette { left:56px; }
   .historyPanel,.diagnosticsPanel { top:8px; right:8px; bottom:calc(var(--composer-space) + 8px); left:8px; width:auto; }
   .changeSetPanel { top:8px; right:8px; bottom:calc(var(--composer-space) + 8px); left:8px; width:auto; max-height:none; display:flex; flex-direction:column; }
   .changeSetPanel > div { flex:1; min-height:0; max-height:none; }
@@ -3221,7 +3204,6 @@
 .changeSetPanel,
 .changeSetPanel label,
 .paletteToggle,
-.palette,
 .templateMenu,
 .mergePanel,
 .inspector,
@@ -3266,8 +3248,6 @@
   color:var(--canvas-ink);
 }
 .selectionToolbar button,
-.paletteSectionToggle,
-.paletteGrid button,
 .templateMenu > button,
 .historyPanel > div > button,
 .checkpointForm input,
@@ -3296,11 +3276,7 @@
 .evermindBrain { background:radial-gradient(circle at 35% 40%,rgba(226,129,194,.22),transparent 34%),radial-gradient(circle at 70% 48%,rgba(123,91,231,.21),transparent 35%),var(--canvas-panel-muted); }
 .evermindEmpty,.evermindBrain > em,.evermindLegend { color:var(--canvas-muted); }
 .selectionToolbar button:hover,
-.presentBar button:hover:not(:disabled),
-.paletteSectionToggle:hover,
-.paletteSectionToggle:focus-visible,
-.paletteGrid button:hover,
-.paletteGrid button:focus-visible { background:var(--canvas-hover); }
+.presentBar button:hover:not(:disabled) { background:var(--canvas-hover); }
 /* `.nodeHeader` is absent for the same reason `.node` is:a card's rule is its
    object palette's, and a chrome border here overrode the widget/Brain border on
    every card header. */
@@ -3323,15 +3299,6 @@
 .sourceList code,
 .composer textarea,
 .scopeChip { color:var(--canvas-muted); }
-.search {
-  border-color:var(--canvas-line);
-  background:var(--canvas-panel-muted);
-  color:var(--canvas-ink);
-}
-.paletteSection { border-color:var(--canvas-line); }
-.paletteSectionToggle { color:var(--canvas-ink); }
-.paletteSectionToggle small { background:var(--canvas-panel-muted); color:var(--canvas-muted); }
-.paletteGroupIcon,
 .moreMenu button > span,
 .moreMenu label i { background:color-mix(in srgb, var(--canvas-accent) 15%, var(--canvas-panel)); color:var(--canvas-accent-ink); }
 .message { background:color-mix(in srgb, var(--canvas-accent) 11%, var(--canvas-panel)); }
@@ -3353,7 +3320,6 @@
 .handle { border-color:var(--canvas-panel)!important; }
 .historyPanel,
 .changeSetPanel,
-.palette,
 .templateMenu,
 .mergePanel,
 .composer { box-shadow:0 14px 42px var(--canvas-shadow); }
@@ -3415,14 +3381,11 @@
 :global(html:not([data-theme='light'])) .selected {
   box-shadow:0 0 0 2px #4b8cff,0 16px 42px rgba(0,0,0,.36);
 }
-:global(html:not([data-theme='light'])) .paletteGrid button,
 :global(html:not([data-theme='light'])) .selectionToolbar button,
 :global(html:not([data-theme='light'])) .iconButton,
 :global(html:not([data-theme='light'])) .scopeChip {
   background:#142238;
 }
-:global(html:not([data-theme='light'])) .paletteGrid button:hover,
-:global(html:not([data-theme='light'])) .paletteGrid button:focus-visible,
 :global(html:not([data-theme='light'])) .selectionToolbar button:hover {
   background:#1c304b;
   border-color:rgba(103,156,255,.5);

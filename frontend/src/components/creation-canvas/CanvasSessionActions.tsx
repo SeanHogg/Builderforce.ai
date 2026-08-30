@@ -99,14 +99,17 @@ export interface CanvasSessionActionsProps {
   /**
    * `bar` — the floating command bar: the surface's own status and controls, then the
    *         glyph clusters that act on the board.
-   * `handoff` — the top-right card: the worded actions only, which is Share and Publish.
-   *         They are split out because they are placed apart (`canvasChrome.ts`), and
-   *         they are placed apart because a word opens somewhere else while a glyph acts
-   *         here. The split is read from `def.chrome`, so a worded action added to the
-   *         registry lands in the right corner without either call site being edited.
+   * `handoff` — the doors-out group: the worded actions, which is Publish (and any
+   *         future action that opens somewhere else rather than acting on the board).
+   *         Read from `def.chrome`, so a worded action added to the registry lands
+   *         there without either call site being edited.
+   * `roster` — the trailing chip on the live roster: Share, drawn as a bare glyph the
+   *         same size as the avatars it follows rather than a worded button beside
+   *         them, because it answers the same question the roster does ("who is part
+   *         of this") instead of opening a second, unrelated place.
    * `menu` — the ••• sheet, which carries whatever a phone's bar could not.
    */
-  variant: 'bar' | 'menu' | 'handoff';
+  variant: 'bar' | 'menu' | 'handoff' | 'roster';
   /**
    * The surface being read. The registry decides which actions mean anything on it —
    * an outcome scorecard over a conversation with no objects is a button whose only
@@ -181,8 +184,8 @@ export function CanvasSessionActions({ handlers, variant, surface, collapsed = f
   }
 
   if (variant === 'handoff') {
-    // No trough and no cluster: these two are not a segmented set, they are the two doors
-    // out of this canvas, and they are the whole contents of the corner they sit in.
+    // No trough and no cluster: Publish is not a segmented set, it is a door out of
+    // this canvas, and it is the whole contents of the corner it sits in.
     if (!canvasChromeShows('handoff', collapsed)) return null;
     return <>
       {offered(canvasSessionActionsFor(surface).filter((def) => def.chrome === 'labelled')).map((def) => {
@@ -192,13 +195,36 @@ export function CanvasSessionActions({ handlers, variant, surface, collapsed = f
           key={def.id}
           type="button"
           className={styles.sessionActionLabelled}
-          {...(def.id === 'share' ? { 'data-tour': 'creation-share' } : {})}
           data-phone={def.phone}
           disabled={handler?.disabled}
           title={title}
           onClick={() => handler?.run()}
           {...aria}
         ><Glyph /><span>{label}</span><i aria-hidden><DisclosureIcon /></i></button>;
+      })}
+    </>;
+  }
+
+  if (variant === 'roster') {
+    // Share, drawn the same size as the avatars it trails and with no word beside
+    // it — the roster already says "who is part of this"; this glyph is how you add
+    // to it, so it belongs at the group's own end rather than in a labelled button
+    // that reads as a second, unrelated place to go.
+    return <>
+      {offered(canvasSessionActionsFor(surface).filter((def) => def.chrome === 'roster')).map((def) => {
+        const { handler, active, label: _label, title, ...aria } = describe(def);
+        const Glyph = (active && ACTIVE_ACTION_ICON[def.id]) || ACTION_ICON[def.id];
+        return <button
+          key={def.id}
+          type="button"
+          className={styles.rosterInvite}
+          data-tour="creation-share"
+          disabled={handler?.disabled}
+          aria-label={title}
+          title={title}
+          onClick={() => handler?.run()}
+          {...aria}
+        ><Glyph /></button>;
       })}
     </>;
   }

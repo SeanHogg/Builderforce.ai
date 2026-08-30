@@ -18930,7 +18930,6 @@
     "moreActions": "More session actions",
     "createAndView": "Create and view",
     "sessionTools": "Session tools",
-    "clearSearch": "Clear search",
     "selectionActions": "Selection actions",
     "selectedCount": "{count} selected",
     "diagnostics": "Diagnostics",
@@ -18949,8 +18948,6 @@
     "exitPresentation": "Exit presentation",
     "share": "Invite",
     "run": "Run",
-    "addToCanvas": "Add to canvas",
-    "searchObjectTypes": "Search object types…",
     "askBrain": "Ask Brain about this canvas",
     "sendBrain": "Send to Brain",
     "resizePrompt": "Resize prompt area",
@@ -19468,7 +19465,6 @@
     "inviteFailed": "Invite failed",
     "largeSessionHint": "Only visible Objects are rendered. Use frames or hide heavy Objects to keep navigation fast.",
     "toggleObjectPalette": "Toggle object palette",
-    "closePalette": "Close palette",
     "tourLabel": "Guided tour",
     "tourOfferTitle": "Welcome to the Creation Canvas",
     "tourOfferBody": "See how Brain, objects, connections, collaborators, and delivery fit together in six quick steps. You can leave the tour at any time.",
@@ -20324,8 +20320,6 @@
         "request": "call"
       }
     },
-    "expandPaletteGroup": "Expand {group} section",
-    "collapsePaletteGroup": "Collapse {group} section",
     "game": {
       "title": "Play it somewhere real",
       "shipAction": "Play on a device",

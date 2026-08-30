@@ -71,7 +71,7 @@ describe('node density', () => {
     render(<CreationCanvas sessionId="node-density-test" persistence="local" />);
 
     fireEvent.click(screen.getByTestId('canvas-quick-add-build'));
-    fireEvent.click(within(screen.getByTestId('canvas-palette')).getByRole('button', { name: 'Code' }));
+    fireEvent.click(screen.getByTestId('canvas-picker-code'));
 
     const card = () => screen.getByTestId('canvas-node-code');
     expect(card()).toHaveAttribute('data-density', 'expanded');

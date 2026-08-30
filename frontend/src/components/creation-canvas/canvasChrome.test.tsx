@@ -93,11 +93,11 @@ describe('the canvas chrome rule', () => {
     }
   });
 
-  /** Share and Publish share a REGION with the glyphs now (both `bar`), but not a
-   *  SLOT — a word opens somewhere else, a glyph acts here, and `handoff` staying its
-   *  own slot is what lets the bar draw it behind its own divider rather than folding
-   *  it into the same run as `actions`. */
-  it('keeps the two doors out of the canvas a distinct slot from the buttons that act on it', () => {
+  /** Publish shares a REGION with the glyphs now (both `bar`), but not a SLOT — a word
+   *  opens somewhere else, a glyph acts here, and `handoff` staying its own slot is
+   *  what lets the bar draw it behind its own divider rather than folding it into the
+   *  same run as `actions`. */
+  it('keeps the door out of the canvas a distinct slot from the buttons that act on it', () => {
     expect(canvasChromePlace('handoff')).toBe('bar');
     expect(canvasChromePlace('actions')).toBe('bar');
     expect(canvasChromeKind('handoff')).toBe('control');
@@ -141,12 +141,12 @@ describe('the collapsed session bar', () => {
 
     // Expanded: the switcher and Share are both reachable.
     expect(screen.getByRole('group', { name: 'Canvas view' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Invite' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Invite collaborators' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('canvas-bar-collapse'));
 
     expect(screen.queryByRole('group', { name: 'Canvas view' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Invite' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Invite collaborators' })).toBeNull();
 
     // …and the status survives. The roster is the reason the rule exists — the pill
     // itself has nothing to say at rest any more (no ambient "Saved on this device"),
@@ -174,11 +174,24 @@ describe('the collapsed session bar', () => {
     expect(within(screen.getByTestId('canvas-command-bar')).getByTestId('canvas-handoff')).toBe(handoff);
     // Drawn ONCE, not duplicated by whatever renders around the canvas.
     expect(screen.getAllByTestId('canvas-handoff')).toHaveLength(1);
+  });
 
-    // …and it works from there: the share panel is a child of the row, so it anchors
-    // to the button that opened it.
-    fireEvent.click(within(handoff).getByRole('button', { name: 'Invite' }));
-    expect(within(handoff).getByRole('dialog', { name: 'Invite collaborators' })).toBeInTheDocument();
+  /**
+   * Share draws as the roster's own trailing chip now, not a worded button inside
+   * `handoff` beside Publish — so its panel has to anchor to ITS OWN row, not the
+   * doors-out group at the other end of the bar, or the sheet would open off the
+   * button that spawned it.
+   */
+  it('opens the invite sheet from the roster row, not the doors-out group', () => {
+    render(<CreationCanvas sessionId="chrome-roster-invite-test" persistence="local" />);
+
+    const rosterInvite = screen.getByTestId('canvas-roster-invite');
+    expect(within(screen.getByTestId('canvas-command-bar')).getByTestId('canvas-roster-invite')).toBe(rosterInvite);
+    expect(within(rosterInvite).getByRole('button', { name: 'Invite collaborators' })).toBeInTheDocument();
+    expect(within(screen.getByTestId('canvas-handoff')).queryByRole('button', { name: 'Invite collaborators' })).toBeNull();
+
+    fireEvent.click(within(rosterInvite).getByRole('button', { name: 'Invite collaborators' }));
+    expect(within(rosterInvite).getByRole('dialog', { name: 'Invite collaborators' })).toBeInTheDocument();
   });
 
   /** A collapse with no way back is a one-way door, so the toggle is the one control
@@ -195,6 +208,6 @@ describe('the collapsed session bar', () => {
     expect(toggle()).toHaveAccessibleName('Show the toolbar');
 
     fireEvent.click(toggle());
-    expect(screen.getByRole('button', { name: 'Invite' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Invite collaborators' })).toBeInTheDocument();
   });
 });

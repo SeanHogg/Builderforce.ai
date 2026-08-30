@@ -18930,7 +18930,6 @@
     "moreActions": "Weitere Session-Aktionen",
     "createAndView": "Erstellen und ansehen",
     "sessionTools": "Session-Werkzeuge",
-    "clearSearch": "Suche löschen",
     "selectionActions": "Auswahlaktionen",
     "selectedCount": "{count} ausgewählt",
     "diagnostics": "Diagnose",
@@ -18949,8 +18948,6 @@
     "exitPresentation": "Präsentation beenden",
     "share": "Einladen",
     "run": "Ausführen",
-    "addToCanvas": "Zum Canvas hinzufügen",
-    "searchObjectTypes": "Objekttypen durchsuchen…",
     "askBrain": "Brain zu diesem Canvas fragen",
     "sendBrain": "An Brain senden",
     "resizePrompt": "Größe des Prompt-Bereichs ändern",
@@ -19468,7 +19465,6 @@
     "inviteFailed": "Einladung fehlgeschlagen",
     "largeSessionHint": "Nur sichtbare Objekte werden gerendert. Nutzen Sie Rahmen oder blenden Sie schwere Objekte aus, damit die Navigation schnell bleibt.",
     "toggleObjectPalette": "Objektpalette umschalten",
-    "closePalette": "Palette schließen",
     "tourLabel": "Geführte Tour",
     "tourOfferTitle": "Willkommen im Creation Canvas",
     "tourOfferBody": "Erfahren Sie in sechs kurzen Schritten, wie Brain, Objekte, Verbindungen, Zusammenarbeit und Bereitstellung zusammenspielen. Sie können die Tour jederzeit verlassen.",
@@ -20324,8 +20320,6 @@
         "request": "Aufruf"
       }
     },
-    "expandPaletteGroup": "Bereich {group} ausklappen",
-    "collapsePaletteGroup": "Bereich {group} einklappen",
     "game": {
       "title": "Wirklich spielbar machen",
       "shipAction": "Auf einem Gerät spielen",

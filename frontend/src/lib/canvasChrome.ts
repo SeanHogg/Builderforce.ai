@@ -42,14 +42,17 @@ export type CanvasChromeSlot =
   /** Undo, redo, outcomes, diagnostics, full screen — the glyphs that act on the board. */
   | 'actions'
   /**
-   * Share and Publish — the two ways work LEAVES this canvas.
+   * Publish — the door work LEAVES this canvas through, and the ••• overflow beside it.
    *
-   * A separate slot from `actions`, though the same PLACE now (`bar`) — the reason is
-   * the same one that makes them the only worded actions in the registry: a glyph acts on
-   * the board and a word opens somewhere else. Grouping "undo" with "publish to a public
-   * URL" put a keystroke you take back beside a decision you cannot, at the same weight —
-   * so the two stay a slot apart, drawn behind their own divider, rather than folded into
-   * `actions` just because they now share a region with it.
+   * A separate slot from `actions`, though the same PLACE now (`bar`) — grouping "undo"
+   * with "publish to a public URL" put a keystroke you take back beside a decision you
+   * cannot, at the same weight — so it stays a slot apart, drawn behind its own divider,
+   * rather than folded into `actions` just because they now share a region with it.
+   *
+   * Share used to be the other worded action here. It draws as the roster's own
+   * trailing chip now (`chrome: 'roster'` in `canvasSessionActions.ts`) — folding with
+   * `actions` rather than `handoff` when the bar collapses, since it is gated the same
+   * way the glyphs beside the roster are, not by this slot.
    */
   | 'handoff'
   /** A runtime's own controls — an app surface's Run/Stop and its readings. */

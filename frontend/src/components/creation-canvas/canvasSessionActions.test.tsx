@@ -236,13 +236,13 @@ describe('the session actions on the canvas', () => {
     const roster = screen.getByLabelText('Active collaborators');
     expect(within(roster).queryByRole('button', { name: 'Invite collaborator' })).toBeNull();
 
-    const share = screen.getByRole('button', { name: 'Invite' });
+    const share = screen.getByRole('button', { name: 'Invite collaborators' });
     expect(share).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(share);
     expect(screen.getByRole('dialog', { name: 'Invite collaborators' })).toBeInTheDocument();
     // The button reports the panel it owns, so nothing else has to explain where the
     // sheet came from.
-    expect(screen.getByRole('button', { name: 'Invite' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: 'Invite collaborators' })).toHaveAttribute('aria-expanded', 'true');
   });
 
   /** Acting from the sheet dismisses the sheet — a menu that stays open over the panel it

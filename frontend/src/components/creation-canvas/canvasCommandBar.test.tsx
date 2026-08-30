@@ -30,7 +30,9 @@ describe('the floating command bar', () => {
     // the regions `canvasChrome.ts` gives them, rather than deleted with it. (The
     // session pill is one of those pieces too, but it has nothing to say at rest —
     // no ambient "Saved on this device" — so there is nothing to assert on here.)
-    expect(within(screen.getByTestId('canvas-handoff')).getByRole('button', { name: 'Invite' })).toBeInTheDocument();
+    // Invite draws as the roster's own trailing chip now, not inside `canvas-handoff`
+    // beside Publish — see `canvasChrome.test.tsx` for the dedicated coverage of that.
+    expect(within(screen.getByTestId('canvas-roster-invite')).getByRole('button', { name: 'Invite collaborators' })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Canvas view' })).toBeInTheDocument();
   });
 

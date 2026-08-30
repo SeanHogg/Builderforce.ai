@@ -8,7 +8,7 @@ import { test, expect } from '@playwright/test';
  * `/send to brain/i`. Both consequences were silent: the suite could only ever pass
  * in English, in a product that ships five locales, and any copy edit turned it red
  * with no behaviour change. The canvas now carries stable `data-testid`s on the
- * board, the composer, the palette and every node, so these assert BEHAVIOUR and
+ * board, the composer, the object picker and every node, so these assert BEHAVIOUR and
  * survive both a re-word and a locale switch.
  *
  * Where a test genuinely asserts COPY (the guest gate wording), it says so and uses
@@ -42,21 +42,21 @@ test('signed-in user can create and reopen a durable Canvas Session', async ({ p
   await expect(page.getByTestId('canvas-composer')).toBeVisible();
 });
 
-test('the QA objects are in the palette and land on the board', async ({ page }) => {
+test('the QA objects are in the object picker and land on the board', async ({ page }) => {
   await page.goto('/create/new');
   await expect(page.getByTestId('canvas-session-title')).toBeVisible();
 
-  const palette = page.getByTestId('canvas-palette');
-  if (!(await palette.isVisible())) await page.getByRole('button', { name: /object palette/i }).click();
-  await expect(palette).toBeVisible();
+  const picker = page.getByTestId('canvas-object-picker');
+  if (!(await picker.isVisible())) await page.getByRole('button', { name: /object palette/i }).click();
+  await expect(picker).toBeVisible();
 
-  // The palette search matches on KIND as well as on the localized label, so
+  // The picker's search matches on KIND as well as on the localized label, so
   // filtering here stays locale-independent.
-  await page.getByTestId('canvas-palette-search').fill('quality');
+  await picker.locator('input').fill('quality');
   for (const kind of ['testPlan', 'testCase', 'testRun', 'defect']) {
-    await expect(page.getByTestId(`canvas-palette-${kind}`), `${kind} is offered`).toBeVisible();
+    await expect(page.getByTestId(`canvas-picker-${kind}`), `${kind} is offered`).toBeVisible();
   }
 
-  await page.getByTestId('canvas-palette-testPlan').click();
+  await page.getByTestId('canvas-picker-testPlan').click();
   await expect(page.getByTestId('canvas-node-testPlan')).toBeVisible();
 });
