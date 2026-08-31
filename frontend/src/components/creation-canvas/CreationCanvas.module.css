@@ -305,22 +305,6 @@
 .runButton:hover, .runButton:focus-visible { filter:brightness(1.07); outline:none; }
 .runButton > svg { display:block; width:13px; height:13px; }
 
-/* The add-object circles. Colour is the identity — a glyph at this size beside five
-   other glyphs at this size is a texture, not a menu — so each carries its group's board
-   palette token and the hues are never repeated as literals here. */
-.quickAdd { display:flex; align-items:center; gap:5px; flex:none; }
-.quickAdd button {
-  position:relative; display:grid; place-items:center; width:26px; height:26px; padding:0;
-  border:0; border-radius:50%; color:var(--text-on-accent);
-  font-family:inherit; font-size:14px; font-weight:700; line-height:1; cursor:pointer;
-  transition:transform .14s ease;
-}
-.quickAdd button:hover, .quickAdd button:focus-visible { transform:translateY(-1px); outline:none; }
-/* A ring OUTSIDE the circle, so the fill that identifies the group is never covered by
-   the mark that says the palette is open. */
-.quickAdd button:focus-visible { box-shadow:0 0 0 2px var(--canvas-panel), 0 0 0 4px var(--canvas-accent); }
-@media (prefers-reduced-motion: reduce) { .quickAdd button { transition:none; } }
-
 .sessionActions, .collaborators { display:flex; align-items:center; }
 /* `white-space:nowrap` with nowhere to overflow to meant this was HARD CLIPPED by the
    bar rather than shortened — "Saved on this device" reading "Saved or" mid-word, which

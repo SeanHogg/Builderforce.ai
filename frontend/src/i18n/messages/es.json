@@ -22551,15 +22551,7 @@
     "commandBar": "Comandos del lienzo",
     "runCanvas": "Ejecutar",
     "runCanvasTitle": "Abre la aplicación que construye este tablero y ejecútala",
-    "quickAddGroup": "Añadir al tablero",
-    "quickAdd": {
-      "build": "Construir",
-      "data": "Datos",
-      "work": "Trabajo",
-      "agents": "Agentes",
-      "people": "Personas",
-      "all": "Todos los objetos"
-    },
+    "quickAdd": "Añadir al tablero",
     "runCanvasLabel": "Ejecutar este lienzo",
     "nodePanel": {
       "config": "Ajustes",

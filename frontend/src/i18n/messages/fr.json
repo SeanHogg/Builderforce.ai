@@ -22551,15 +22551,7 @@
     "commandBar": "Commandes du canevas",
     "runCanvas": "Exécuter",
     "runCanvasTitle": "Ouvrir l'application construite par ce tableau et l'exécuter",
-    "quickAddGroup": "Ajouter au tableau",
-    "quickAdd": {
-      "build": "Créer",
-      "data": "Données",
-      "work": "Travail",
-      "agents": "Agents",
-      "people": "Personnes",
-      "all": "Tous les objets"
-    },
+    "quickAdd": "Ajouter au tableau",
     "runCanvasLabel": "Exécuter ce canevas",
     "nodePanel": {
       "config": "Reglages",

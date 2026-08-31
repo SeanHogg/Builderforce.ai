@@ -3,9 +3,8 @@
 // would only add another file to the architecture ratchet's client-component tally — the
 // same reason `CanvasSessionActions` omits it.
 import { useTranslations } from 'next-intl';
-import { CollapseBarIcon, ExpandBarIcon, PromptIcon, RunCanvasIcon } from '@/components/canvas/CanvasCommands';
+import { AddObjectIcon, ClosePaletteIcon, CollapseBarIcon, ExpandBarIcon, PromptIcon, RunCanvasIcon } from '@/components/canvas/CanvasCommands';
 import { canvasChromeShows } from '@/lib/canvasChrome';
-import { CANVAS_QUICK_ADD } from '@/lib/canvasQuickAdd';
 import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import type { CanvasSessionActionId } from '@/lib/canvasSessionActions';
 import { mergeRefs } from '@/lib/mergeRefs';
@@ -36,7 +35,6 @@ import styles from './CreationCanvas.module.css';
  *   `canvasSurfaces.ts`       — which surface is being read, and what that surface has
  *   `canvasSurfaceActions`    — what the RUNTIME contributed (an app's Run, its readings,
  *                               the address it is running at)
- *   `canvasQuickAdd.ts`       — the six circles that open the palette
  *
  * So "the bar changes with the surface" is not a switch statement here: the App surface
  * publishes Run / Preview·Code·Console / the viewport switcher into the contribution seam
@@ -64,12 +62,15 @@ export interface CanvasCommandBarProps {
    */
   onRun?: () => void;
   /**
-   * Opens the object picker on a group; no group means every group. The circle's own
-   * screen rect goes with it so the picker can open ABOVE the button that summoned it —
-   * this bar is at the bottom of the window, so a popover placed below it is off-screen.
+   * Opens the object picker. Always called with no group — the bar used to offer five
+   * more circles that each pre-filtered a group, but a circle identified by colour alone
+   * told nobody what pressing it did, so the shortlist collapsed into the one door it
+   * always had for "show me everything". The button's own screen rect goes with the
+   * call so the picker can open ABOVE the button that summoned it — this bar is at the
+   * bottom of the window, so a popover placed below it is off-screen.
    */
   onQuickAdd: (group: CreationObjectGroup | undefined, anchor: DOMRect) => void;
-  /** Whether the picker is open, so the circles can report it. */
+  /** Whether the picker is open, so the button can report it. */
   quickAddOpen: boolean;
   /**
    * Move around the board — zoom, fit, arrange. Contributed by the host because React
@@ -145,9 +146,8 @@ export function CanvasCommandBar({
   hostRef,
 }: CanvasCommandBarProps) {
   const t = useTranslations('creationCanvas');
-  const tQuick = useTranslations('creationCanvas.quickAdd');
   const showsActions = canvasChromeShows('actions', collapsed);
-  // The circles add OBJECTS, so they belong to a surface that has objects to add them to.
+  // The button adds OBJECTS, so it belongs to a surface that has objects to add them to.
   // Asked of the registry rather than listed here, for the same reason the session actions
   // ask it: a surface added later answers correctly without this file changing.
   const showsQuickAdd = showsActions && surface === 'graph';
@@ -242,24 +242,20 @@ export function CanvasCommandBar({
 
       {showsQuickAdd && <>
         <span className={styles.commandBarDivider} aria-hidden />
-        {/* Six circles, identified by colour because a glyph at 26px next to five other
-            glyphs at 26px is a texture rather than a menu. The last one opens the palette
-            whole, so the shortlist can never become the only way in. */}
-        <div className={styles.quickAdd} role="group" aria-label={t('quickAddGroup')}>
-          {CANVAS_QUICK_ADD.map((entry) => {
-            const label = tQuick(entry.labelKey as 'build');
-            return <button
-              key={entry.id}
-              type="button"
-              data-testid={`canvas-quick-add-${entry.id}`}
-              style={{ background: `var(${entry.tokenVar})` }}
-              aria-pressed={quickAddOpen}
-              aria-label={label}
-              title={label}
-              onClick={(event) => onQuickAdd(entry.group, event.currentTarget.getBoundingClientRect())}
-            >{entry.group ? null : <span aria-hidden>+</span>}</button>;
-          })}
-        </div>
+        {/* ONE door onto the palette. This used to be six circles — five identified by
+            colour alone, each pre-filtering a group, plus a sixth that opened the palette
+            whole — but a dot with no glyph next to five other dots told nobody what
+            pressing it did. The shortlist is gone; every group is still one press away,
+            through the picker's own category rail rather than a menu that duplicated it. */}
+        <button
+          type="button"
+          className={styles.sessionActionButton}
+          data-testid="canvas-quick-add"
+          aria-pressed={quickAddOpen}
+          aria-label={t('quickAdd')}
+          title={t('quickAdd')}
+          onClick={(event) => onQuickAdd(undefined, event.currentTarget.getBoundingClientRect())}
+        >{quickAddOpen ? <ClosePaletteIcon /> : <AddObjectIcon />}</button>
       </>}
 
       {/* The toggle is never hidden — a collapse with no way back is a one-way door — and

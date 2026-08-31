@@ -191,13 +191,25 @@ describe('the session actions on the canvas', () => {
    */
   it('carries every phone-overflow action in the ••• sheet', () => {
     render(<CreationCanvas sessionId="session-actions-overflow-test" persistence="local" />);
+
+    // Several overflow actions (`run`, `outcomes`) declare `needs: 'objects'` and the bar
+    // hides them via a runtime `available` handler until the canvas actually holds one — a
+    // fresh, empty canvas is exactly the state those actions are NOT available in, which is
+    // a different question from whether the surface can carry objects at all.
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByTestId('canvas-picker-task'));
+
     fireEvent.click(screen.getByRole('button', { name: 'More session actions' }));
 
     const sheet = screen.getByTestId('canvas-more-menu');
-    for (const def of phoneOverflowActions()) {
+    // `prove` is withheld by its own handler for `persistence === 'local'` — proving an
+    // idea needs a server-persisted session, which this fixture deliberately is not — so
+    // it is excluded here rather than asserted, the same way the fixture excludes it.
+    for (const def of phoneOverflowActions().filter((action) => action.id !== 'prove')) {
       const label = (CANVAS_COPY[def.labelKey] as string);
       expect(within(sheet).getByRole('button', { name: label })).toBeInTheDocument();
     }
+    expect(within(sheet).queryByRole('button', { name: 'Make it real' })).toBeNull();
     // Sanity: the sheet carries the overflow, not a second copy of the whole bar.
     expect(within(sheet).queryByRole('button', { name: 'Undo canvas change' })).toBeNull();
   });

@@ -22551,15 +22551,7 @@
     "commandBar": "Canvas-Befehle",
     "runCanvas": "Ausführen",
     "runCanvasTitle": "Die von diesem Board gebaute App öffnen und ausführen",
-    "quickAddGroup": "Zum Board hinzufügen",
-    "quickAdd": {
-      "build": "Bauen",
-      "data": "Daten",
-      "work": "Arbeit",
-      "agents": "Agenten",
-      "people": "Personen",
-      "all": "Alle Objekte"
-    },
+    "quickAdd": "Zum Board hinzufügen",
     "runCanvasLabel": "Dieses Canvas ausführen",
     "nodePanel": {
       "config": "Einstellungen",
