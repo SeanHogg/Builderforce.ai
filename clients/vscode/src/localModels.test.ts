@@ -9,6 +9,8 @@ import {
   listProviderModels,
   localChatCompletionsUrl,
   localModelsUrl,
+  localModelOptions,
+  LOCAL_PROVIDER_LABEL,
   localTransport,
   normalizeLocalBaseUrl,
   parseLocalModelRef,
@@ -205,5 +207,37 @@ describe("catalog discovery", () => {
     });
     expect(models.map((m) => m.ref)).toEqual(["local/freetoken/m"]);
     expect(spy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("rows for the shared model-list builder", () => {
+  it("converts discovered models into list rows once, for both pickers", () => {
+    // The panel's menu and the QuickPick both build from these. They used to disagree
+    // because only the QuickPick knew local models existed at all.
+    expect(
+      localModelOptions([
+        { ref: "local/freetoken/gpt-oss-20b", provider: "freetoken", model: "gpt-oss-20b" },
+        { ref: "local/ollama/qwen3:8b", provider: "ollama", model: "qwen3:8b" },
+      ]),
+    ).toEqual([
+      { id: "local/freetoken/gpt-oss-20b", label: "gpt-oss-20b", runtime: "FreeToken" },
+      { id: "local/ollama/qwen3:8b", label: "qwen3:8b", runtime: "Ollama" },
+    ]);
+  });
+
+  it("pins the id to the REF, not the bare model name", () => {
+    // The id becomes the selection. A bare name would pin something the router cannot
+    // resolve to a runtime — and would collide with a gateway model of the same name.
+    const [row] = localModelOptions([{ ref: "local/ollama/llama3.1-8b", provider: "ollama", model: "llama3.1-8b" }]);
+    expect(row.id.startsWith(LOCAL_MODEL_PREFIX)).toBe(true);
+    expect(parseLocalModelRef(row.id)).toEqual({ provider: "ollama", model: "llama3.1-8b" });
+  });
+
+  it("names both runtimes without translating them", () => {
+    expect(LOCAL_PROVIDER_LABEL).toEqual({ ollama: "Ollama", freetoken: "FreeToken" });
+  });
+
+  it("has nothing to offer when nothing was discovered", () => {
+    expect(localModelOptions([])).toEqual([]);
   });
 });

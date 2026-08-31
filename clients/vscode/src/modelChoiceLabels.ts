@@ -35,6 +35,10 @@ export function modelChoiceLabels(): ModelChoiceLabels {
     // in five bundles.
     byoDetail: t("Billed to your own {provider} account — no plan credit used.").replace("{provider}", "{vendor}"),
     configuredDetail: t("Saved workspace LLM configuration"),
+    // Brand tokens (Ollama / FreeToken) are substituted into {runtime} by the shared
+    // builder, so the sentence is translated once and the product names are not.
+    categoryLocal: t("On this device"),
+    localDetail: t("Runs on this machine via {runtime} — no plan usage, works offline."),
     evermindLabel: t("Project Evermind"),
     evermindDetail: t("Your project's own learned Evermind model."),
   };

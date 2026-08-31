@@ -11,7 +11,7 @@ import { registerChatParticipant } from "./chatParticipant";
 import { registerChatSessions } from "./chatSessions";
 import { scanCodebase } from "./codebaseScan";
 import { getModels, getWebBaseUrl, getLocalModelsConfig, SECRET_KEY, clearPersonalityBlockCache } from "./gateway";
-import { listLocalModels, type LocalModel, type LocalProviderId } from "./localModels";
+import { listLocalModels, localModelOptions, type LocalModel } from "./localModels";
 import { resolveModelRoute, routeRequiresSignIn } from "./modelRouting";
 import { PERMISSION_MODE_SETTING } from "./permissionMode";
 import { InsightsController } from "./insights";
@@ -22,7 +22,7 @@ import { setGroundingSummary } from "./grounding";
 import { onModelChange, setSelectedModel, setSelectedModelPool } from "./modelState";
 import { modelChoiceLabels } from "./modelChoiceLabels";
 // The model list itself: one builder for the composer `/` menu AND this picker.
-import { buildModelItems, modelCategoryLabel, type ChatModelSelection, type ModelCategory } from "@seanhogg/builderforce-brain-embedded";
+import { buildModelItems, modelCategoryLabel, type ChatModelSelection, type ModelCategory, type ModelChoiceLabels } from "@seanhogg/builderforce-brain-embedded";
 import { getSelectedProject, initProjectState, onProjectChange, setSelectedProject } from "./projectState";
 import { invalidateProjectNames } from "./projectNames";
 import { ProjectsTreeProvider } from "./projectsTree";
@@ -1072,10 +1072,6 @@ async function signOut(
 /** Display name of each on-device runtime. Product names, so they are NOT localized —
  *  every locale writes "Ollama" and "FreeToken" the same way, and routing a brand
  *  through the message catalog would add keys no translator should ever change. */
-const LOCAL_PROVIDER_LABEL: Record<LocalProviderId, string> = {
-  ollama: "Ollama",
-  freetoken: "FreeToken",
-};
 
 /**
  * Picker rows for the models this MACHINE can serve.
@@ -1088,15 +1084,22 @@ const LOCAL_PROVIDER_LABEL: Record<LocalProviderId, string> = {
  */
 function localModelRows(
   models: readonly LocalModel[],
+  labels: ModelChoiceLabels,
 ): Array<vscode.QuickPickItem & { selection?: ChatModelSelection }> {
   if (models.length === 0) return [];
+  // Through the shared builder, not a parallel one: this fallback picker and the
+  // composer's menu must name a runtime the same way, and the group heading and funding
+  // sentence are already translated once in `modelChoiceLabels`.
+  const items = buildModelItems(
+    { local: localModelOptions(models), byo: [], free: [], plan: [], paid: [] },
+    labels,
+  ).filter((item) => item.category === "local");
   return [
-    { label: vscode.l10n.t("On this device"), kind: vscode.QuickPickItemKind.Separator },
-    ...models.map((entry) => ({
-      label: `$(vm) ${entry.model}`,
-      description: LOCAL_PROVIDER_LABEL[entry.provider],
-      detail: vscode.l10n.t("Runs on this machine — no plan usage, works offline"),
-      selection: { mode: "model", model: entry.ref } as ChatModelSelection,
+    { label: modelCategoryLabel("local", labels), kind: vscode.QuickPickItemKind.Separator },
+    ...items.map((item) => ({
+      label: `$(vm) ${item.label}`,
+      detail: item.detail,
+      selection: item.selection,
     })),
   ];
 }
@@ -1121,7 +1124,8 @@ async function pickLocalOnly(rows: Array<vscode.QuickPickItem & { selection?: Ch
 async function pickModel(context: vscode.ExtensionContext): Promise<void> {
   // Probed FIRST, and outside the try: the gateway lookup below throws when signed out,
   // and a local runtime must still be offerable in that state.
-  const localRows = localModelRows(await listLocalModels(getLocalModelsConfig()));
+  const localModels = await listLocalModels(getLocalModelsConfig());
+  const localRows = localModelRows(localModels, modelChoiceLabels());
   try {
     const { models, freeModels, configuredModels, canUsePremiumModels, premiumModels, canChooseModel, byo, premiumInfo, identity } =
       await getModels(context.secrets, true);
@@ -1167,6 +1171,7 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
     const items = buildModelItems(
       {
         configured: configuredModels.map((model) => ({ id: model.ref, label: model.name })),
+        local: localModelOptions(localModels),
         byo: byo.models.map((model) => ({ id: model.id, vendor: model.vendor })),
         free: freeModels,
         plan: models,

@@ -76,6 +76,9 @@ export interface InitData {
    *  "apply edits without asking?". Seeds the Auto-mode switch, which overrides it live.
    *  Re-pushed when the setting changes, so an open panel follows it. */
   autoApproveDefault?: boolean;
+  /** Models served by a runtime on this machine, ready for the shared list builder.
+   *  Empty when the feature is off or no runtime is reachable. */
+  localModels?: Array<{ id: string; label: string; runtime: string }>;
   hasWorkspace: boolean;
   /** The live editor context (active file / selection / open tabs) at init time.
    *  Kept fresh afterwards via `editorContext` messages (see {@link onEditorContext}). */

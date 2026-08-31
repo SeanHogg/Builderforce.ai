@@ -33,6 +33,9 @@ export type ChatModelSelection =
 export interface ChatModelOptions {
   /** Tenant-defined named LLM configs (`tenant_model:<slug>`). */
   configured?: Array<{ id: string; label: string }>;
+  /** Models served by a runtime on the user's OWN machine (`local/<runtime>/<model>`).
+   *  `runtime` is the display name of what serves it (Ollama, FreeToken). */
+  local?: Array<{ id: string; label: string; runtime: string }>;
   /** Models the tenant's own connected provider accounts can serve. */
   byo: Array<{ id: string; vendor: string; cost?: string }>;
   free: Array<string | { id: string; cost?: string }>;
@@ -41,7 +44,7 @@ export interface ChatModelOptions {
 }
 
 /** Funding tier of a model row — the axis the list is grouped and filtered by. */
-export type ModelCategory = 'auto' | 'byo' | 'free' | 'plan' | 'paid' | 'configured';
+export type ModelCategory = 'auto' | 'local' | 'byo' | 'free' | 'plan' | 'paid' | 'configured';
 
 /** One row in the model list. `detail` is the funding sentence for that row. */
 export interface ModelItem {
@@ -65,6 +68,8 @@ export interface ModelChoiceLabels {
   categoryPlan: string;
   categoryPaid: string;
   categoryConfigured: string;
+  /** Group name for models served by a runtime on this machine. */
+  categoryLocal: string;
   /** The funding sentence for the routed row. Its NAME comes from the product
    *  ({@link BUILDERFORCE_PRODUCT_NAME}), not from a label — a brand token is not
    *  translated, and the tier it states must match what the gateway actually funds. */
@@ -80,6 +85,8 @@ export interface ModelChoiceLabels {
   /** `{vendor}` is substituted with the connected provider's display name. */
   byoDetail: string;
   configuredDetail: string;
+  /** Funding sentence for an on-device row. `{runtime}` is the serving runtime's name. */
+  localDetail: string;
   /** Display name for a `project_evermind:<id>` pin (the raw pin is not a model name). */
   evermindLabel: string;
   /** Funding line for a `project_evermind:<id>` pin (a plan feature, not a catalog model). */
@@ -102,6 +109,8 @@ export const DEFAULT_MODEL_CHOICE_LABELS: ModelChoiceLabels = {
   paidCostDetail: '{input} input / {output} output per 1M tokens + $0.01 per request',
   byoDetail: 'Billed to your own {vendor} account — no plan credit used.',
   configuredDetail: 'Saved workspace LLM configuration',
+  categoryLocal: 'On this device',
+  localDetail: 'Runs on this machine via {runtime} — no plan usage, works offline.',
   evermindLabel: 'Project Evermind',
   evermindDetail: "Your project's own learned Evermind model.",
 };
@@ -141,7 +150,7 @@ export function premiumCostLabel(pricing: { prompt: number; completion: number }
 }
 
 /** The categories, in display order. Only the populated ones are ever offered. */
-export const MODEL_CATEGORIES: ModelCategory[] = ['auto', 'byo', 'free', 'plan', 'paid', 'configured'];
+export const MODEL_CATEGORIES: ModelCategory[] = ['auto', 'local', 'byo', 'free', 'plan', 'paid', 'configured'];
 
 export function modelCategoryLabel(category: ModelCategory, labels: ModelChoiceLabels): string {
   switch (category) {
@@ -151,6 +160,7 @@ export function modelCategoryLabel(category: ModelCategory, labels: ModelChoiceL
     case 'plan': return labels.categoryPlan;
     case 'paid': return labels.categoryPaid;
     case 'configured': return labels.categoryConfigured;
+    case 'local': return labels.categoryLocal;
   }
 }
 
@@ -160,6 +170,9 @@ export function modelCategoryLabel(category: ModelCategory, labels: ModelChoiceL
  * accounts (BYO pool + its models, in the server-supplied provider priority
  * order), then saved workspace LLM configs. A model already listed in a cheaper
  * group is never repeated.
+ *
+ * On-device models lead the whole list: they spend nothing, need no account, and run
+ * on hardware the user has already paid for, so nothing on the list is cheaper.
  *
  * `identity` names the ROUTED row after the product that actually funds it —
  * "Builderforce Free" / "Builderforce PRO" rather than a bare "Auto" — because that
@@ -182,6 +195,11 @@ export function buildModelItems(
     seen.add(id);
     items.push({ key: `model:${id}`, label, detail, category, selection: { mode: 'model', model: id } });
   };
+  // Ahead of every funded group: an on-device model spends nothing and runs on
+  // hardware the user already owns, which makes it the cheapest route on the list.
+  for (const model of options.local ?? []) {
+    add(model.id, model.label, labels.localDetail.replace('{runtime}', model.runtime), 'local');
+  }
   for (const value of options.free) {
     const model = normalized(value);
     add(model.id, model.id, model.cost ?? labels.freeDetail, 'free');

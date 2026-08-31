@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { autoApproveDefault } from "./permissionMode";
+import { listLocalModels, localModelOptions } from "./localModels";
 import { artifactRoutePath } from "@seanhogg/builderforce-brain-embedded";
 import { BUILD_ID, BUILT_AT } from "./buildInfo";
 import { getTenantJwt, getCurrentUserId } from "./bfApi";
@@ -766,6 +767,11 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
       // used to default this off in its own code and never consult the setting, so
       // changing the setting moved the participant and left the panel asking.
       autoApproveDefault: autoApproveDefault(),
+      // The models this MACHINE can serve, in the shared builder's row shape. The
+      // composer's menu is built from the gateway catalogue, which by definition cannot
+      // know about them — so without this the panel offered no way to pick one and the
+      // feature existed only in the command palette.
+      localModels: localModelOptions(await listLocalModels(getLocalModelsConfig())),
       grounding: await getGroundingWithHistory(root),
       // Live editor context (active file / selection / open tabs). Seeds the React
       // app's ambient system channel; refreshed via `editorContext` messages below.
