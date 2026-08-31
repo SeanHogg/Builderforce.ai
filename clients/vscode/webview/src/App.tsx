@@ -855,6 +855,30 @@ function Chat({ init }: { init: InitData }) {
   }, [apiReq, init.baseUrl, costLine]);
   const modelSurface = modelChoices?.surface ?? null;
 
+  /**
+   * The gateway catalogue plus this machine's own models.
+   *
+   * Two reasons this is a merge rather than another fetch. The menu is built from the
+   * gateway's model list, which by definition cannot know what a runtime on this laptop
+   * is serving — so the on-device group appeared in the command palette and nowhere in
+   * the chat the user was typing into. And the catalogue is unavailable precisely when
+   * on-device models matter most: signed out, or offline. So local models also stand the
+   * menu up on their own when the gateway list never arrives.
+   */
+  const composerModels = useMemo<ComposerModelSurface | null>(() => {
+    const local = init.localModels ?? [];
+    if (!modelChoices) {
+      return local.length === 0
+        ? null
+        : {
+            surface: {},
+            options: { byo: [], free: [], plan: [], paid: [], local },
+            identity: { product: 'free', canChoose: false },
+          };
+    }
+    return local.length === 0 ? modelChoices : { ...modelChoices, options: { ...modelChoices.options, local } };
+  }, [modelChoices, init.localModels]);
+
   // The user's CHOICE, reconstructed from what the host resolved: a strict pin, the
   // BYO pool, or auto (in which case `init.model` is whatever auto landed on — the
   // configured default or the project's Evermind pin — and the menu names it).
@@ -1641,7 +1665,7 @@ function Chat({ init }: { init: InitData }) {
           loading={conv.loadingMessages}
           assistantName="BuilderForce"
           labels={tlLabels}
-          modelIdentity={modelChoices?.identity}
+          modelIdentity={composerModels?.identity}
           onAnswerQuestion={answerQuestion}
           onReplayMessage={replayMessage}
           // The editor rates turns too now — before the thumbs moved into the shared
@@ -1920,12 +1944,12 @@ function Chat({ init }: { init: InitData }) {
               ? t('app.thinkingOnDesc', 'The model reasons before answering, with a {budget}-token thinking budget at this effort. Slower, better on hard problems.')
                   .replace('{budget}', effortProfile(effort).thinkingBudgetTokens.toLocaleString())
               : t('app.thinkingOffDesc', 'Off — the model answers directly. Turn on for a reasoning pass before the answer.'))}
-            model={modelChoices ? {
+            model={composerModels ? {
               selection: modelSelection,
-              options: modelChoices.options,
+              options: composerModels.options,
               onChange: chooseModel,
               effective: init.model,
-              identity: modelChoices.identity,
+              identity: composerModels.identity,
             } : undefined}
             onAccountSettings={() => post('settings')}
           />

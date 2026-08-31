@@ -285,3 +285,32 @@ export async function listLocalModels(config: LocalModelsConfig): Promise<LocalM
   );
   return lists.flat();
 }
+
+/**
+ * Display names for the runtimes. Brand tokens, deliberately NOT localized — "Ollama" is
+ * "Ollama" in every catalog, and putting it through l10n would invite a translation.
+ */
+export const LOCAL_PROVIDER_LABEL: Record<LocalProviderId, string> = {
+  ollama: "Ollama",
+  freetoken: "FreeToken",
+};
+
+/**
+ * On-device models in the shape the SHARED model-list builder takes.
+ *
+ * Both editor pickers — the composer's `/` menu in the panel and the `Pick Model`
+ * QuickPick — render from `buildModelItems`, so this is the one conversion between "what
+ * the runtimes reported" and "a row in the list". The panel's menu had no idea local
+ * models existed at all: it was built purely from the gateway catalogue, so a user who
+ * enabled the feature saw the on-device group in the command palette and nowhere in the
+ * chat they were actually typing into.
+ */
+export function localModelOptions(
+  models: readonly LocalModel[],
+): Array<{ id: string; label: string; runtime: string }> {
+  return models.map((entry) => ({
+    id: entry.ref,
+    label: entry.model,
+    runtime: LOCAL_PROVIDER_LABEL[entry.provider],
+  }));
+}

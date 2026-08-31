@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.8.140] — Your machine’s models are in the chat’s own model menu
+
+- **The `/` model menu in the chat panel had no way to pick a local model.** It is built from the list of models our gateway serves, which by definition cannot know what Ollama or FreeToken is running on your laptop — so the **On this device** group appeared only in the command palette, and the menu you actually type next to offered nothing but gateway models. On-device models now lead that menu, above every funded group, because nothing on the list is cheaper than hardware you already own.
+- **The menu now stands up on its own when the gateway list cannot be fetched** — signed out, or with the network down. That is exactly when a model on your own machine is the one you want, and it used to be the moment the menu disappeared entirely.
+- **One list, one set of words.** The palette picker and the chat menu are now built from the same rows, so the group heading and the "runs on this machine via Ollama" line cannot drift apart between the two places you choose a model.
 ## [2026.8.139] — Permission Mode now actually moves the panel
 
 - **Setting Permission Mode to `acceptEdits` left the chat panel still asking.** The setting moved the `@builderforce` participant, which reads it every turn, while the panel kept its own Auto-mode switch — defaulted off in code, remembered separately, and never once looking at the setting. One question about your working tree, answered two different ways depending on which surface you happened to use. The panel now starts from the setting, and an open panel follows it the moment you change it.

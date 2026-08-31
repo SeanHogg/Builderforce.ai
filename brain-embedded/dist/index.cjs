@@ -4129,6 +4129,8 @@ var DEFAULT_MODEL_CHOICE_LABELS = {
   paidCostDetail: "{input} input / {output} output per 1M tokens + $0.01 per request",
   byoDetail: "Billed to your own {vendor} account \u2014 no plan credit used.",
   configuredDetail: "Saved workspace LLM configuration",
+  categoryLocal: "On this device",
+  localDetail: "Runs on this machine via {runtime} \u2014 no plan usage, works offline.",
   evermindLabel: "Project Evermind",
   evermindDetail: "Your project's own learned Evermind model."
 };
@@ -4152,7 +4154,7 @@ function perMillionUsd(rate) {
 function premiumCostLabel(pricing, template) {
   return template.replace("{input}", perMillionUsd(pricing.prompt)).replace("{output}", perMillionUsd(pricing.completion));
 }
-var MODEL_CATEGORIES = ["auto", "byo", "free", "plan", "paid", "configured"];
+var MODEL_CATEGORIES = ["auto", "local", "byo", "free", "plan", "paid", "configured"];
 function modelCategoryLabel(category, labels) {
   switch (category) {
     case "auto":
@@ -4167,6 +4169,8 @@ function modelCategoryLabel(category, labels) {
       return labels.categoryPaid;
     case "configured":
       return labels.categoryConfigured;
+    case "local":
+      return labels.categoryLocal;
   }
 }
 function buildModelItems(options, labels, identity = DEFAULT_MODEL_IDENTITY) {
@@ -4180,6 +4184,9 @@ function buildModelItems(options, labels, identity = DEFAULT_MODEL_IDENTITY) {
     seen.add(id);
     items.push({ key: `model:${id}`, label, detail, category, selection: { mode: "model", model: id } });
   };
+  for (const model of options.local ?? []) {
+    add(model.id, model.label, labels.localDetail.replace("{runtime}", model.runtime), "local");
+  }
   for (const value of options.free) {
     const model = normalized(value);
     add(model.id, model.id, model.cost ?? labels.freeDetail, "free");

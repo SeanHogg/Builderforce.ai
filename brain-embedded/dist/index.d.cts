@@ -3369,6 +3369,13 @@ interface ChatModelOptions {
         id: string;
         label: string;
     }>;
+    /** Models served by a runtime on the user's OWN machine (`local/<runtime>/<model>`).
+     *  `runtime` is the display name of what serves it (Ollama, FreeToken). */
+    local?: Array<{
+        id: string;
+        label: string;
+        runtime: string;
+    }>;
     /** Models the tenant's own connected provider accounts can serve. */
     byo: Array<{
         id: string;
@@ -3389,7 +3396,7 @@ interface ChatModelOptions {
     }>;
 }
 /** Funding tier of a model row — the axis the list is grouped and filtered by. */
-type ModelCategory = 'auto' | 'byo' | 'free' | 'plan' | 'paid' | 'configured';
+type ModelCategory = 'auto' | 'local' | 'byo' | 'free' | 'plan' | 'paid' | 'configured';
 /** One row in the model list. `detail` is the funding sentence for that row. */
 interface ModelItem {
     key: string;
@@ -3411,6 +3418,8 @@ interface ModelChoiceLabels {
     categoryPlan: string;
     categoryPaid: string;
     categoryConfigured: string;
+    /** Group name for models served by a runtime on this machine. */
+    categoryLocal: string;
     /** The funding sentence for the routed row. Its NAME comes from the product
      *  ({@link BUILDERFORCE_PRODUCT_NAME}), not from a label — a brand token is not
      *  translated, and the tier it states must match what the gateway actually funds. */
@@ -3426,6 +3435,8 @@ interface ModelChoiceLabels {
     /** `{vendor}` is substituted with the connected provider's display name. */
     byoDetail: string;
     configuredDetail: string;
+    /** Funding sentence for an on-device row. `{runtime}` is the serving runtime's name. */
+    localDetail: string;
     /** Display name for a `project_evermind:<id>` pin (the raw pin is not a model name). */
     evermindLabel: string;
     /** Funding line for a `project_evermind:<id>` pin (a plan feature, not a catalog model). */
@@ -3454,6 +3465,9 @@ declare function modelCategoryLabel(category: ModelCategory, labels: ModelChoice
  * accounts (BYO pool + its models, in the server-supplied provider priority
  * order), then saved workspace LLM configs. A model already listed in a cheaper
  * group is never repeated.
+ *
+ * On-device models lead the whole list: they spend nothing, need no account, and run
+ * on hardware the user has already paid for, so nothing on the list is cheaper.
  *
  * `identity` names the ROUTED row after the product that actually funds it —
  * "Builderforce Free" / "Builderforce PRO" rather than a bare "Auto" — because that
