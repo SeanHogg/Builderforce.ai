@@ -196,7 +196,7 @@ describe('the session actions on the canvas', () => {
     // hides them via a runtime `available` handler until the canvas actually holds one — a
     // fresh, empty canvas is exactly the state those actions are NOT available in, which is
     // a different question from whether the surface can carry objects at all.
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add to the board' }));
     fireEvent.click(screen.getByTestId('canvas-picker-task'));
 
     fireEvent.click(screen.getByRole('button', { name: 'More session actions' }));
@@ -273,32 +273,24 @@ describe('the session actions on the canvas', () => {
 
 describe('the board rail', () => {
   /**
-   * ONE rail on a phone, not two. The "add to canvas" toggle floated alone at the
-   * top-left while the view commands stacked at the bottom-left — two toolbars down the
-   * same edge of a 360px screen, with nothing saying why the add button was not part of
-   * the set. They are siblings in one container now, and the toggle is its first command.
-   */
-  /**
    * MOVING AROUND THE BOARD IS NOT ON THE RAIL ANY MORE.
    *
    * Zoom, fit and arrange moved into the one command bar, which is where "what can I do
-   * to this canvas" lives. The rail keeps only what the bar does not carry: the palette
-   * toggle, the phone's surface switcher and the panels. Two floating toolbars each
-   * holding half the view commands is the split this seam exists to prevent — so the
-   * assertion is that there is exactly ONE of each, and that it is in the bar.
+   * to this canvas" lives. "Add to canvas" used to float as a second, top-left toggle on
+   * the rail — a second door onto the exact same picker the bar's own button already
+   * opens — which is the split this seam exists to prevent, so that toggle is gone and
+   * the bar's button is the ONE way in. The rail keeps only what the bar does not carry:
+   * the phone's surface switcher and the panels.
    */
-  it('gives the view commands to the command bar and leaves the rail its panels', () => {
+  it('gives the view commands and add-to-canvas to the command bar, leaving the rail its panels', () => {
     render(<CreationCanvas sessionId="board-rail-test" persistence="local" />);
 
-    for (const name of ['Zoom in', 'Zoom out', 'Fit canvas to view', 'Arrange canvas objects']) {
+    for (const name of ['Zoom in', 'Zoom out', 'Fit canvas to view', 'Arrange canvas objects', 'Add to the board']) {
       const buttons = screen.getAllByRole('button', { name });
       expect(buttons).toHaveLength(1);
       expect(buttons[0].closest('[data-testid="canvas-command-bar"]')).not.toBeNull();
     }
 
-    // The palette toggle stays on the rail — it drops objects ONTO the board, which is a
-    // board gesture rather than a session command — and there is still exactly one of it.
-    expect(screen.getAllByRole('button', { name: 'Toggle object palette' })).toHaveLength(1);
     expect(screen.getByRole('group', { name: 'Canvas panels' })).toBeInTheDocument();
   });
 });

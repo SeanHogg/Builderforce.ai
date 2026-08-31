@@ -19,7 +19,7 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AccessibleOutlineIcon, AddObjectIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasSocialIcon, CleanLayoutIcon, ClosePaletteIcon, DepthIcon, DropToLayersIcon, FitViewIcon, LayerGuidesIcon, MarqueeSelectIcon, MinimapIcon, MoreActionsIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
+import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasSocialIcon, CleanLayoutIcon, DepthIcon, DropToLayersIcon, FitViewIcon, LayerGuidesIcon, MarqueeSelectIcon, MinimapIcon, MoreActionsIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
 import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
 import { canvasSurfaceDefinition, readCanvasSurface, writeCanvasSurface, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
@@ -1209,24 +1209,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
   const boxOf = (rect: DOMRect) => ({ top: rect.top, right: rect.right });
 
-  /** The board's own "add to canvas" button — read back for its screen rect so a door
-   *  into the picker with no card or circle of its own to anchor beside (the composer's
-   *  "add context" row, the large-canvas notice's "Frame" button, the guided tour) can
-   *  still open beside something real rather than at a guessed position. */
-  const paletteToggleRef = useRef<HTMLButtonElement | null>(null);
-
   /**
-   * Opens the object picker with no group filter — the bar's "all" circle, reached
-   * from doors that have no card or circle of their own to anchor beside. The
-   * composer's "add context" row, the large-canvas notice's "Frame" button, and the
-   * guided tour all call this; each opens beside the board's own toggle (see
-   * `paletteToggleRef`) since that is the nearest real "add to canvas" affordance
-   * on screen.
+   * Opens the object picker with no group filter — the command bar's own "add to
+   * canvas" button reaches it directly by anchoring on its own rect; this is for the
+   * doors that have no card or circle of their own to anchor beside (the composer's
+   * "add context" row, the large-canvas notice's "Frame" button, the guided tour), so
+   * they open at a fixed, sensible corner instead.
    */
   const openObjectPicker = useCallback(() => {
     setNodePanel(null);
-    const rect = paletteToggleRef.current?.getBoundingClientRect();
-    setObjectPicker({ anchor: rect ? anchorFrom(boxOf(rect), 400) : { x: 54, y: 54 } });
+    setObjectPicker({ anchor: { x: 54, y: 54 } });
   }, []);
 
   /**
@@ -11960,6 +11952,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // from two places. It replaced a group-focus helper that drove the palette rail;
         // keeping both would have been two answers to one question.
         onQuickAdd={(group, rect) => {
+          // A second press on the same open, unfiltered picker closes it — the button's
+          // `aria-pressed` already says it is a toggle, so a press while it reads pressed
+          // has to behave like one rather than just re-anchoring the picker in place.
+          if (!group && objectPickerOpen) { setObjectPicker(null); return; }
           setNodePanel(null);
           setObjectPicker({ anchor: { x: Math.min(Math.max(12, rect.left - 170), Math.max(12, window.innerWidth - 412)), y: Math.max(12, rect.top - 330) }, ...(group ? { group } : {}) });
         }}
@@ -12230,29 +12226,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         </BrainSurfaceProvider>
 
         {/* ── THE BOARD'S FLOATING CONTROLS ────────────────────────────────────────
-            ONE rail on a phone, not two. The "add to canvas" toggle used to float on
-            its own at the top-left while the view commands stacked at the bottom-left,
-            which put two separate toolbars down the same edge of a 360px screen with
-            nothing saying why the add button was not part of the set. They are siblings
-            in one container now: on a desktop the container is `display:contents`, so
-            the toggle keeps its own corner and the phone column stays stood down; on a
-            phone the container IS the rail and the toggle is its first command.
-
-            Every command draws its glyph from the shared canvas icon set, so the rail is
-            one toolbar at one size rather than a column of whatever a phone font makes
-            of ⌗ / ⌘ / ◱ next to two real icons. */}
+            "Add to canvas" is not here — it used to float as its own top-left toggle,
+            a second door onto the exact same picker the command bar's own button
+            already opens. Two controls for one decision was the failure the surface
+            registry was written to prevent, so the toggle is gone and the bar's single
+            button (see `CanvasCommandBar`) is the ONE way in. What remains on this rail
+            is what the bar does not carry: the surface switcher's phone form. */}
         <div className={styles.boardRail}>
-        {/* The board's ONE toggle into "add to canvas" — the picker itself is the SAME
-            component the command bar's category circles and a node's own `+` open (see
-            `objectPicker` and the comment above `<CanvasObjectPicker>`), anchored here off
-            this button's own rect exactly the way the bar's circles anchor off theirs. */}
-        {!presentMode && <button ref={paletteToggleRef} data-tour="creation-object-palette" className={styles.paletteToggle} aria-pressed={objectPickerOpen} onClick={() => { if (objectPickerOpen) { setObjectPicker(null); return; } openObjectPicker(); }} aria-label={t('toggleObjectPalette')}>{objectPickerOpen ? <ClosePaletteIcon /> : <AddObjectIcon />}</button>}
-        {/* ZOOM, FIT AND ARRANGE ARE NOT HERE ANY MORE. They moved into the one command
-            bar, which is where "what can I do to this canvas" now lives — keeping a copy
-            on this rail would be the same decision with two controls, on two floating
-            toolbars, which is the exact failure the surface registry was written to
-            prevent. What stays is what the bar does not carry: the surface switcher's
-            phone form, the panels, and the 3D-only commands. */}
         {/* The phone's column keeps ONLY what the bar does not carry: which surface this
             canvas is read through, in the form that fits a 360px screen. Files, the
             outline and the scene's depth/layer commands were duplicated here while the bar

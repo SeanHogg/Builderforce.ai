@@ -19464,7 +19464,6 @@
     "collaboratorInvited": "已在 Builderforce 中邀请协作者",
     "inviteFailed": "邀请失败",
     "largeSessionHint": "仅渲染可见对象。使用框架或隐藏较重的对象可保持导航流畅。",
-    "toggleObjectPalette": "切换对象面板",
     "tourLabel": "引导式导览",
     "tourOfferTitle": "欢迎使用创作画布",
     "tourOfferBody": "通过六个简短步骤，了解 Brain、对象、连接、协作者和交付如何协同工作。您可以随时退出导览。",

@@ -62,7 +62,7 @@ vi.mock('@xyflow/react', async () => {
  * the legacy palette aside this replaced.
  */
 function addBuilder() {
-  fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add to the board' }));
   fireEvent.click(screen.getByTestId('canvas-picker-build'));
 }
 
@@ -113,7 +113,7 @@ describe('Builder objects on the Canvas', () => {
   it('grows an authored Website into a connected Builder that builds a website', async () => {
     render(<CreationCanvas sessionId="builder-from-website-test" persistence="local" />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add to the board' }));
     fireEvent.click(screen.getByTestId('canvas-picker-website'));
     fireEvent.click(screen.getByRole('button', { name: 'Build this site with code' }));
 

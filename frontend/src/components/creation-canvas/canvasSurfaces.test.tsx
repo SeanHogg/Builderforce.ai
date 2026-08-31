@@ -304,7 +304,7 @@ describe('the chat surface on the canvas', () => {
     // Adding selects, which is what opens the details panel the control lives in.
     // The seeded board's own cards draw the SAME control on their own header now
     // (it is no longer panel-only), so this scopes to the panel deliberately.
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add to the board' }));
     fireEvent.click(screen.getByTestId('canvas-picker-resume'));
     const panel = screen.getByRole('dialog', { name: /Everything/ });
     const open = within(panel).getByTestId('open-page-surface');
@@ -338,7 +338,7 @@ describe('the chat surface on the canvas', () => {
     // Not in the rail — that is the modality this replaced.
     expect(within(switcher()).queryByRole('button', { name: 'Calendar' })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add to the board' }));
     fireEvent.click(screen.getByTestId('canvas-picker-calendar'));
     // The card draws the month itself, at card size, from the same component the
     // surface mounts — so a board-bound calendar is readable without opening anything.
@@ -378,7 +378,7 @@ describe('the chat surface on the canvas', () => {
    */
   it('offers no full-size surface for a kind whose card is the whole object', () => {
     render(<CreationCanvas sessionId="surface-no-open-test" persistence="local" />);
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add to the board' }));
     fireEvent.click(screen.getByTestId('canvas-picker-task'));
     // Scoped to the task's OWN object panel and its OWN card — other seeded
     // objects on this board (a website among them) draw this control on their
@@ -406,7 +406,7 @@ describe('the chat surface on the canvas', () => {
 
     // Scoped to the object panel — the seeded board already carries its own
     // website card, which draws this same control on its own header now.
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add to the board' }));
     fireEvent.click(screen.getByTestId('canvas-picker-website'));
     const panel = screen.getByRole('dialog', { name: /Everything/ });
     const open = within(panel).getByTestId('open-site-surface');

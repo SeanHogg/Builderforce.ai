@@ -249,6 +249,7 @@ export function CanvasCommandBar({
             through the picker's own category rail rather than a menu that duplicated it. */}
         <button
           type="button"
+          data-tour="creation-object-palette"
           className={styles.sessionActionButton}
           data-testid="canvas-quick-add"
           aria-pressed={quickAddOpen}

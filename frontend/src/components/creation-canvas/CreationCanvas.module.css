@@ -539,10 +539,6 @@
    projected from the 2D viewport and would float over the scene pointing at
    nothing. */
 .flowWrap:not([data-view='graph']) :global(.react-flow) { z-index:9 !important; pointer-events:none; background:transparent; }
-/* The "add to canvas" toggle drops objects onto the flat board, so it stands down
-   whenever a surface has taken the centre rather than sitting on top of that
-   surface's own heading. */
-.flowWrap:not([data-view='graph']) .paletteToggle { display:none; }
 .flowWrap:not([data-view='graph']) :global(.react-flow__viewport),
 .flowWrap:not([data-view='graph']) :global(.react-flow__background),
 .flowWrap:not([data-view='graph']) .remoteCursor { display:none; }
@@ -677,8 +673,6 @@
 .changeSetPanel header { display:flex; justify-content:space-between; padding:13px; border-bottom:1px solid #e6e0f5; background:#faf8ff; }.changeSetPanel header div { display:grid; gap:3px; }.changeSetPanel header strong { font-size:12px; }.changeSetPanel header small { color:#796d99; font-size:9px; }.changeSetPanel header button { border:0; background:transparent; color:var(--canvas-muted); font-size:17px; cursor:pointer; }
 .changeSetPanel > div { display:grid; max-height:310px; overflow:auto; padding:8px; gap:5px; }.changeSetPanel label { display:flex; align-items:flex-start; gap:8px; padding:8px; border:1px solid #e2ddef; border-radius:var(--radius-md); background:#fff; cursor:pointer; }.changeSetPanel label input { margin-top:2px; accent-color:#7357e7; }.changeSetPanel label span { display:grid; gap:2px; }.changeSetPanel label b { font-size:9px; }.changeSetPanel label small { color:#83769f; font-size:8px; }
 .changeSetPanel footer { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:7px; padding:10px; border-top:1px solid #e6e0f5; background:#faf8ff; }
-
-.paletteToggle { position:absolute; top:16px; left:calc(12px + var(--brain-dock-left, 0px)); z-index:8; width:30px; height:30px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:#fff; color:var(--canvas-muted); cursor:pointer; box-shadow:0 5px 15px rgba(60,48,36,.1); }
 
 .node { box-sizing:border-box; width:260px; display:flex; flex-direction:column; container-type:inline-size; border:1px solid var(--canvas-widget-border); border-radius:var(--radius-lg); background:var(--canvas-widget-surface); color:var(--canvas-ink); box-shadow:0 7px 24px rgba(60,48,36,.1); overflow:hidden; transition:border-color .15s, box-shadow .15s; }
 .wideNode { width:455px; }
@@ -3114,7 +3108,6 @@
      element some assistive tech stops announcing. It inherits the rail's direction, so
      the whole thing still lies down in a row when the Brain sheet takes the bottom. */
   .mobileCanvasActions { display:flex; flex-direction:inherit; min-width:0; min-height:0; }
-  .paletteToggle { position:static; }
   .boardRail button { flex:none; width:38px; height:38px; display:grid; place-items:center; padding:0; border:0; border-bottom:1px solid var(--canvas-line); border-radius:0; background:var(--canvas-panel); color:var(--canvas-ink); box-shadow:none; cursor:pointer; }
   /* One drawn size for every command on the rail. Without it each icon fills the
      whole 38px cell, which is what made Files and the accessible outline tower
@@ -3187,7 +3180,6 @@
 .historyPanel header,
 .changeSetPanel,
 .changeSetPanel label,
-.paletteToggle,
 .templateMenu,
 .mergePanel,
 .inspector,
