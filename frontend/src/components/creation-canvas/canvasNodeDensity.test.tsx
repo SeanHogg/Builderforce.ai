@@ -70,7 +70,7 @@ describe('node density', () => {
   it('draws a card down to an orb and back', () => {
     render(<CreationCanvas sessionId="node-density-test" persistence="local" />);
 
-    fireEvent.click(screen.getByTestId('canvas-quick-add-build'));
+    fireEvent.click(screen.getByTestId('canvas-quick-add'));
     fireEvent.click(screen.getByTestId('canvas-picker-code'));
 
     const card = () => screen.getByTestId('canvas-node-code');

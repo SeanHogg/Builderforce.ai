@@ -22549,15 +22549,7 @@
     "commandBar": "画布命令",
     "runCanvas": "运行",
     "runCanvasTitle": "打开此画板构建的应用并运行",
-    "quickAddGroup": "添加到画板",
-    "quickAdd": {
-      "build": "构建",
-      "data": "数据",
-      "work": "工作",
-      "agents": "智能体",
-      "people": "人员",
-      "all": "全部对象"
-    },
+    "quickAdd": "添加到画板",
     "runCanvasLabel": "运行此画布",
     "nodePanel": {
       "config": "设置",
