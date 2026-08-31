@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.8.141] — Local models kept their platform tools, and a wrong explanation was withdrawn
+
+- **Pinning a model on your machine silently disconnected every platform tool.** Projects, tasks, OKRs and the rest are fetched from the gateway, but the panel was fetching them from wherever the MODEL lived — so choosing an on-device model pointed that lookup at your local runtime, which serves no such thing. The catalogue failed, the Brain lost its tools, and turns answered "I don’t have that data" with nothing in the trace. Where the model runs and where your work lives are now two separate questions.
+- **"This is a model limitation, not a configuration error" is no longer said.** When a run ends without the model ever calling a tool, that notice used to rule out configuration outright and tell you to pick a different model. It was wrong in the case that matters most: a self-hosted runtime rejecting every request — a prompt over its context budget, say — looks exactly the same from inside the chat, and the real reason was sitting in the runtime’s own log while we sent you to change models. The notice now says the two are indistinguishable from here and points at the log that separates them.
 ## [2026.8.140] — Your machine’s models are in the chat’s own model menu
 
 - **The `/` model menu in the chat panel had no way to pick a local model.** It is built from the list of models our gateway serves, which by definition cannot know what Ollama or FreeToken is running on your laptop — so the **On this device** group appeared only in the command palette, and the menu you actually type next to offered nothing but gateway models. On-device models now lead that menu, above every funded group, because nothing on the list is cheaper than hardware you already own.

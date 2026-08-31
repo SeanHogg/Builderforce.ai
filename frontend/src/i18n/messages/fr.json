@@ -308,7 +308,9 @@
     "fork": "Bifurquer",
     "forking": "Bifurcation…",
     "forkHint": "Résume cette conversation et poursuit dans une nouvelle à partir de ce résumé",
-    "sessionUnavailable": "Disponible dès que la conversation compte quelques messages et qu’aucune exécution n’est en cours"
+    "sessionUnavailable": "Disponible dès que la conversation compte quelques messages et qu’aucune exécution n’est en cours",
+    "categoryLocal": "Sur cet appareil",
+    "localDetail": "S’exécute sur cette machine via {runtime} — sans consommer le forfait, et fonctionne hors ligne."
   },
   "repoContext": {
     "title": "Ajouter le contexte du dépôt",

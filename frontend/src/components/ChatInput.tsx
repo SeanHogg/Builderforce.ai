@@ -450,6 +450,12 @@ export function ChatInput({
     categoryPlan: t('categoryPlan'),
     categoryPaid: t('categoryPaid'),
     categoryConfigured: t('categoryConfigured'),
+    // Present for type completeness and parity of wording: the browser cannot reach a
+    // runtime on the user’s own machine, so this group only ever populates in the
+    // editor. Keeping the strings here means the two hosts describe it identically if
+    // the web app ever gains a route to one.
+    categoryLocal: t('categoryLocal'),
+    localDetail: t('localDetail'),
     autoDetail: t('autoDetail'),
     poolLabel: t('poolLabel'),
     poolDetail: t('poolDetail'),

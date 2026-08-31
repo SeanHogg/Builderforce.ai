@@ -315,9 +315,20 @@ describe('stallExhaustedNotice', () => {
     expect(blank).not.toContain('description of intended actions');
   });
 
-  it('names the model, because switching model is the only remedy that works', () => {
+  it('names the model, and sends the reader to the log before they switch it', () => {
     expect(stallExhaustedNotice('xai-oauth/grok-4.3')).toContain('xai-oauth/grok-4.3');
-    expect(stallExhaustedNotice('xai-oauth/grok-4.3')).toContain('pick a different model');
+    expect(stallExhaustedNotice('xai-oauth/grok-4.3')).toContain('check your runtime or gateway log');
+  });
+
+  it('never claims this cannot be a configuration problem', () => {
+    // It said exactly that, and was wrong where it mattered most: a self-hosted runtime
+    // rejecting every request for an over-length prompt is indistinguishable from here,
+    // and the notice sent the reader to change models while their server log held the
+    // real reason. A notice may describe what it saw; it may not rule out what it
+    // cannot see.
+    const notice = stallExhaustedNotice('local/freetoken/gpt-oss-20b');
+    expect(notice).not.toContain('not a configuration error');
+    expect(notice).toContain('context limit');
   });
 
   it('reads sensibly when the loop never resolved a model', () => {
@@ -343,7 +354,8 @@ describe('stallExhaustedNotice', () => {
   });
 
   it('does not list the current model as one it failed over FROM', () => {
-    expect(stallExhaustedNotice('coder-1', ['coder-1'])).toContain('pick a different model');
+    // The single-model branch, identified by the advice it ends with.
+    expect(stallExhaustedNotice('coder-1', ['coder-1'])).toContain('check your runtime or gateway log');
   });
 });
 

@@ -308,7 +308,9 @@
     "fork": "Abzweigen",
     "forking": "Wird abgezweigt…",
     "forkHint": "Fasst diesen Chat zusammen und setzt ihn in einem neuen Chat ab dieser Zusammenfassung fort",
-    "sessionUnavailable": "Verfügbar, sobald der Chat einige Nachrichten hat und kein Lauf aktiv ist"
+    "sessionUnavailable": "Verfügbar, sobald der Chat einige Nachrichten hat und kein Lauf aktiv ist",
+    "categoryLocal": "Auf diesem Gerät",
+    "localDetail": "Läuft über {runtime} auf diesem Rechner — kein Verbrauch des Kontingents, funktioniert offline."
   },
   "repoContext": {
     "title": "Repository-Kontext hinzufügen",

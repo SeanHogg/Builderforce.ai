@@ -371,6 +371,15 @@ export function modelFailoverNotice(from: string | null | undefined, to: string,
  * both refused to act" tells the reader whether to pick a third or to suspect their
  * tool catalog.
  *
+ * What it must NOT do is name a cause it has not established. This notice used to end
+ * "This is a model limitation, not a configuration error — pick a different model", and
+ * that sentence was wrong in the one case it most needed to be right: a self-hosted
+ * runtime rejecting every request (a prompt over its KV budget, say) yields the same
+ * empty turns as a model that will not call tools, and the reader was told to go change
+ * a setting that was never the problem while the actual reason sat in their server log.
+ * From here the two are genuinely indistinguishable, so the notice now says so and points
+ * at the evidence that separates them.
+ *
  * @param model the model that actually answered last, when the loop resolved one.
  * @param tried every model attempted this run, when the loop failed over.
  * @param emptyTurn the run ended on blank turns rather than on narration.
@@ -385,8 +394,10 @@ export function stallExhaustedNotice(model?: string | null, tried?: readonly str
       ? ` This run already failed over from ${others.map((m) => `\`${m}\``).join(', ')}, so the problem`
         + ' is unlikely to be any single model — check that the tool catalog loaded (see the'
         + ' "Tools available to the model" line in a copied diagnostics report).'
-      : ' This is a model limitation, not a configuration error — pick a different model for this chat'
-        + ' and send the message again.')
+      : ' Before switching models, check your runtime or gateway log for this turn: a request'
+        + ' REJECTED upstream — a prompt over the context limit, an exhausted quota — produces'
+        + ' exactly these symptoms, and no other model will fix it. If the log is clean, this is'
+        + ' a model limitation and a different model is the answer.')
   );
 }
 
