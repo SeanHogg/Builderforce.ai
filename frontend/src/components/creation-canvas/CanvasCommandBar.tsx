@@ -97,13 +97,22 @@ export interface CanvasCommandBarProps {
   /** The ••• sheet's trigger and whatever else the host keeps beside the actions. */
   extras?: React.ReactNode;
   /**
-   * The two doors OUT of this canvas — Invite and Publish — plus the ••• overflow.
-   * Drawn behind its own divider, after the roster, so it reads as a distinct GROUP
-   * rather than more glyphs in the same run: a word opens somewhere else, a glyph acts
-   * here, and the divider is what keeps saying so now that both live in one bar. See
+   * The door OUT of this canvas — Publish — plus the ••• overflow. Drawn behind its
+   * own divider, after the roster, so it reads as a distinct GROUP rather than more
+   * glyphs in the same run: a word opens somewhere else, a glyph acts here, and the
+   * divider is what keeps saying so now that both live in one bar. See
    * `CreationCanvas.tsx`'s `handoffChrome` for why this moved out of the header.
    */
   handoff?: React.ReactNode;
+  /**
+   * The invite sheet Share opens — built by the host (it owns the session's member
+   * list and the guest-room state) and handed down so it can render right beside the
+   * roster's own trailing chip. It has to arrive as a prop rather than live inside
+   * `handoff`: the panel anchors `right:0` against the nearest positioned ancestor,
+   * and that has to be the button that opened it, not the doors-out group at the
+   * other end of the bar.
+   */
+  inviteMenu?: React.ReactNode;
   /**
    * How tall this bar actually is, published to the shell as `--canvas-command-bar-space`
    * by whoever passes the ref — the band the prompt floats above.
@@ -132,6 +141,7 @@ export function CanvasCommandBar({
   promptOpen = true,
   extras,
   handoff,
+  inviteMenu,
   hostRef,
 }: CanvasCommandBarProps) {
   const t = useTranslations('creationCanvas');
@@ -208,6 +218,16 @@ export function CanvasCommandBar({
         <span className={styles.commandBarDivider} aria-hidden />
         {roster}
         {team}
+        {/* Bring someone into THIS group — drawn as its trailing chip, not a worded
+            button in the corner beside it. See `chrome: 'roster'` in
+            `canvasSessionActions.ts` for why Share moved here. Its own positioned
+            box, because `inviteMenu` anchors `right:0` against whatever wraps this
+            button — it has to be this wrapper and not the bar itself, or the sheet
+            opens off the button that spawned it. */}
+        {showsActions && <span className={styles.rosterInviteAnchor} data-testid="canvas-roster-invite">
+          <CanvasSessionActions variant="roster" surface={surface} handlers={handlers} />
+          {inviteMenu}
+        </span>}
       </>}
 
       {/* The doors out — Invite, Publish, ••• — behind their own divider so the group

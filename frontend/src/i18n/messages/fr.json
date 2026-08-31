@@ -18930,7 +18930,6 @@
     "moreActions": "Plus d’actions de Session",
     "createAndView": "Créer et afficher",
     "sessionTools": "Outils de Session",
-    "clearSearch": "Effacer la recherche",
     "selectionActions": "Actions de sélection",
     "selectedCount": "{count} sélectionnés",
     "diagnostics": "Diagnostic",
@@ -18949,8 +18948,6 @@
     "exitPresentation": "Quitter la présentation",
     "share": "Inviter",
     "run": "Exécuter",
-    "addToCanvas": "Ajouter au Canevas",
-    "searchObjectTypes": "Rechercher des types d'objets…",
     "askBrain": "Interroger Brain sur ce canevas",
     "sendBrain": "Envoyer à Brain",
     "resizePrompt": "Redimensionner la zone de saisie",
@@ -19468,7 +19465,6 @@
     "inviteFailed": "Échec de l’invitation",
     "largeSessionHint": "Seuls les objets visibles sont rendus. Utilisez des cadres ou masquez les objets lourds pour garder une navigation fluide.",
     "toggleObjectPalette": "Basculer la palette d’objets",
-    "closePalette": "Fermer la palette",
     "tourLabel": "Visite guidée",
     "tourOfferTitle": "Bienvenue dans le Canvas de création",
     "tourOfferBody": "Découvrez en six étapes rapides comment Brain, les objets, les connexions, les collaborateurs et la livraison fonctionnent ensemble. Vous pouvez quitter la visite à tout moment.",
@@ -20324,8 +20320,6 @@
         "request": "appel"
       }
     },
-    "expandPaletteGroup": "Développer la section {group}",
-    "collapsePaletteGroup": "Réduire la section {group}",
     "game": {
       "title": "Jouez-y pour de vrai",
       "shipAction": "Jouer sur un appareil",

@@ -195,7 +195,7 @@ import { computeProjectHealth } from '@/lib/projectHealth';
 import { createCloudAgent, updateAgent } from '@/lib/api';
 import { presentationSequence, presentationStepAt, presentationViewport, stepPresentation } from '@/lib/canvasPresentation';
 import { localCheckpointSummaries, readLocalCheckpoint, saveLocalCheckpoint, type LocalCheckpointSummary } from '@/lib/creationCheckpoints';
-import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData, creationObjectDefinition, creationObjectMutableFields, creationPaletteGroupsFor, emptyShellProblem, sanitizeCreationObjectPatch, type CreationObjectGroup } from './creationObjectRegistry';
+import { CREATION_OBJECT_REGISTRY, createDefaultCreationData, creationObjectDefinition, creationObjectMutableFields, emptyShellProblem, sanitizeCreationObjectPatch, type CreationObjectGroup } from './creationObjectRegistry';
 import { CREATION_TEMPLATES, type CreationTemplate } from './creationTemplates';
 import { describeMailboxFilter, mailboxApi, resolveMailboxConnection, type MailboxFilter } from '@/lib/mailboxApi';
 import { describeSocialFilter, socialApi, totalEngagement, type SocialCampaign, type SocialFeedFilter, type SocialFeedItem, type SocialNetwork } from '@/lib/socialApi';
@@ -206,8 +206,7 @@ import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { analyzeDependencies, appendCanvasVideoSource, canvasGameToolRedirect, canvasImageToolRedirect, canvasToolRequiresAccount, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, findingFingerprint, normalizeQaSteps, CANVAS_GAME_ACCOUNT_GATE, CANVAS_GAME_TOOL, CANVAS_CORPUS_ACCOUNT_GATE, CANVAS_IMAGE_ACCOUNT_GATE, CANVAS_IMAGE_TOOL, CANVAS_QA_ACCOUNT_GATE, CANVAS_REALIZE_ACCOUNT_GATE, CANVAS_SCREENSHOT_ACCOUNT_GATE, CANVAS_SCREENSHOT_TOOL, CANVAS_SOCIAL_ACCOUNT_GATE, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, DATA_PURPOSES, GAME_PLATFORMS, isGamePlatform, LAWFUL_BASES, QA_FINDING_TYPES, QA_SEVERITIES, QA_STEP_ACTIONS, type CanvasVideoSource, type CreationConnectionKind, type DataPurpose, type DataUsePolicy, type DependencyAnalysis, type LawfulBasis, type QaFindingSeverity, type QaFindingType } from '@builderforce/creation-canvas-contract';
 import { createCanvasRealization, listRealizationTargets, primaryRealizationDoc, rankRealizationIdea, type RealizationView } from '@/lib/canvasRealize';
-import { getStoredTenant, getStoredTenantToken } from '@/lib/auth';
-import { useCanvasCapabilities } from '@/lib/canvasCapabilitiesApi';
+import { getStoredTenantToken } from '@/lib/auth';
 import { claimLocalDraft } from '@/lib/pendingWork';
 import { downloadBlob, downloadJson, downloadText, toCsv } from '@/lib/download';
 import { OfficeExportUnavailableError, exportCsv, exportDocx, exportPdf, exportPptx, exportXlsx } from '@/lib/exportApi';
@@ -492,8 +491,6 @@ const GUIDED_TOUR_AUTHORING_SCHEMA = {
     steps: { type: 'array', minItems: 1, items: { type: 'object', required: ['id', 'title', 'body', 'targetObjectId'], properties: { id: { type: 'string' }, title: { type: 'string' }, body: { type: 'string' }, targetObjectId: { type: 'string', description: 'Canvas object id to spotlight; use an empty string until a target exists.' } } } },
   },
 } as const;
-const PALETTE_COLLAPSE_STORAGE_KEY = 'builderforce:create:palette-collapsed-groups';
-const PALETTE_OPEN_STORAGE_KEY = 'builderforce:create:palette-open';
 /**
  * The anchored panel's two widths.
  *
@@ -624,10 +621,6 @@ function specBoardOf(source: readonly CreationFlowNode[]) {
   return makeSpecDeriveBoard(source.map((node) => node.data as unknown as Record<string, unknown>));
 }
 
-const PALETTE_GROUP_ICONS: Record<CreationObjectGroup, string> = {
-  Build: '✦', Data: '▦', Knowledge: '▤', Insights: '↗', Work: '✓', Quality: '⛉', Teaching: '◈', Research: '⌕',
-  Pitch: '◈', People: '●', Hiring: '◐', Career: '⌖', Operations: '⬢', Revenue: '⌸', Agents: '✧', Models: '◉', Collaborate: '◇', Integrations: '⌘',
-};
 type MergeItem = { key: string; source: CreationFlowNode; target: CreationFlowNode | null; choice: 'branch' | 'parent' };
 type MergeReview = { parentId: string; parentRevision: number; parentNodes: CreationFlowNode[]; parentEdges: Edge[]; items: MergeItem[] };
 type FramePreset = { id: string; name: string; data: CreationNodeData };
@@ -1072,7 +1065,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    */
   const [connectionStyle, setConnectionStyleState] = useState<ConnectionStyle>(DEFAULT_CONNECTION_STYLE);
   const [title, setTitle] = useState('Untitled session');
-  const [paletteOpen, setPaletteOpen] = useState(true);
   const [minimapOpen, setMinimapOpen] = useState(true);
   /**
    * WHICH SURFACE this canvas is being read through — the board, the 3D space, or the
@@ -1167,21 +1159,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // The one catalogue, shared with the prompt picker. Installable templates are
   // fetched only while the browser is open — a guest canvas never opens it.
   const templateEntries = useTemplateCatalog({ includeWorkspace: templateOpen });
-  const [paletteSearch, setPaletteSearch] = useState('');
-  const [collapsedPaletteGroups, setCollapsedPaletteGroups] = useState<Set<CreationObjectGroup>>(new Set());
-  const [palettePreferencesReady, setPalettePreferencesReady] = useState(false);
-  useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(PALETTE_COLLAPSE_STORAGE_KEY) || '[]') as unknown;
-      const allowed = new Set(CREATION_PALETTE_GROUPS.map((group) => group.group));
-      setCollapsedPaletteGroups(new Set(Array.isArray(saved) ? saved.filter((group): group is CreationObjectGroup => typeof group === 'string' && allowed.has(group as CreationObjectGroup)) : []));
-    } catch { setCollapsedPaletteGroups(new Set()); }
-    try {
-      const savedOpen = localStorage.getItem(PALETTE_OPEN_STORAGE_KEY);
-      setPaletteOpen(savedOpen === '1' || (savedOpen == null && window.innerWidth > 760));
-    } catch { setPaletteOpen(window.innerWidth > 760); }
-    setPalettePreferencesReady(true);
-  }, []);
   /**
    * Whether this board builds something the App surface could actually open.
    *
@@ -1216,6 +1193,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    */
   const [nodePanel, setNodePanel] = useState<{ nodeId: string; panel: CanvasNodePanelId | null; box: { top: number; right: number } | null; expanded: boolean } | null>(null);
   const [objectPicker, setObjectPicker] = useState<{ anchor: { x: number; y: number }; group?: CreationObjectGroup; fromNodeId?: string } | null>(null);
+  /**
+   * "The add-to-canvas picker is up, opened from a DOOR rather than a node's own
+   * `+`" — the one condition every entry point that offers a pressed/open state
+   * (the command bar's circles, the board's own toggle) reads, so the two can never
+   * disagree about whether the picker is "the add flow" being open.
+   */
+  const objectPickerOpen = objectPicker !== null && !objectPicker.fromNodeId;
 
   /** Beside the badge, clamped so a card at the right edge does not open a panel off it. */
   const anchorFrom = (rect: { top: number; right: number }, width: number) => ({
@@ -1224,6 +1208,26 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   });
 
   const boxOf = (rect: DOMRect) => ({ top: rect.top, right: rect.right });
+
+  /** The board's own "add to canvas" button — read back for its screen rect so a door
+   *  into the picker with no card or circle of its own to anchor beside (the composer's
+   *  "add context" row, the large-canvas notice's "Frame" button, the guided tour) can
+   *  still open beside something real rather than at a guessed position. */
+  const paletteToggleRef = useRef<HTMLButtonElement | null>(null);
+
+  /**
+   * Opens the object picker with no group filter — the bar's "all" circle, reached
+   * from doors that have no card or circle of their own to anchor beside. The
+   * composer's "add context" row, the large-canvas notice's "Frame" button, and the
+   * guided tour all call this; each opens beside the board's own toggle (see
+   * `paletteToggleRef`) since that is the nearest real "add to canvas" affordance
+   * on screen.
+   */
+  const openObjectPicker = useCallback(() => {
+    setNodePanel(null);
+    const rect = paletteToggleRef.current?.getBoundingClientRect();
+    setObjectPicker({ anchor: rect ? anchorFrom(boxOf(rect), 400) : { x: 54, y: 54 } });
+  }, []);
 
   /**
    * The card's box on screen, found through the card itself.
@@ -1617,8 +1621,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const prepareTourStep = useCallback((step: number) => {
     setMoreOpen(false);
     setShareOpen(false);
-    if (step === 1) setPaletteOpen(true);
-  }, []);
+    if (step === 1) openObjectPicker();
+  }, [openObjectPicker]);
   /**
    * Where the presentation is standing, as an INDEX rather than a node id.
    *
@@ -1714,24 +1718,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // — the VS Code webview, the embed, and the component tests.
   const [hasAccount, setHasAccount] = useState(false);
   const [claimingDraft, setClaimingDraft] = useState(false);
-  // The workspace this browser will authenticate AS, read from the same store for the
-  // same reasons the token above is: the canvas mounts in surfaces with no AuthProvider.
-  // It is the key the entitlement set is resolved against.
-  const [tenantId, setTenantId] = useState<number | string | null>(null);
   useEffect(() => {
     setHasAccount(!!getStoredTenantToken());
-    setTenantId(getStoredTenant()?.id ?? null);
   }, []);
-  /**
-   * ENTITLEMENT for the object palette, resolved by the server.
-   *
-   * The registry has always stamped a `capability` onto the kinds that need one and
-   * `availableCreationObjects` has always filtered by it — and nothing called it, so the
-   * palette rendered from the raw group list and a card marked as needing an entitlement
-   * was placeable by anybody. This is the call that was missing. A guest board resolves to
-   * the empty set, which is correct: it has no workspace to be entitled through.
-   */
-  const canvasCapabilities = useCanvasCapabilities(tenantId);
   const requireAccount = useCallback((action: string, title: string, description: string) => {
     setAccountGate({ action, title, description });
     trackActivity('creation_account_gate_shown', { sessionId, metadata: { clientSurface: canvasSurface(), action } });
@@ -1788,13 +1777,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     requireAccount(action, title, description);
     return accountGateResult(tool, reason);
   }, [requireAccount]);
-  useEffect(() => {
-    if (!palettePreferencesReady) return;
-    try {
-      localStorage.setItem(PALETTE_COLLAPSE_STORAGE_KEY, JSON.stringify([...collapsedPaletteGroups]));
-      localStorage.setItem(PALETTE_OPEN_STORAGE_KEY, paletteOpen ? '1' : '0');
-    } catch { /* storage can be unavailable in hardened contexts */ }
-  }, [collapsedPaletteGroups, paletteOpen, palettePreferencesReady]);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const flowRef = useRef<ReactFlowInstance<CreationFlowNode, Edge> | null>(null);
   const hydrated = useRef(false);
@@ -1863,7 +1845,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // declared for the reason the bottom bands are: the widget grows by a row when a surface
   // is added to `CANVAS_SURFACES`, and its content changes with the phase.
   const topChromeSpaceRef = useChromeSpace(shellRef, '--canvas-top-chrome-space', { edge: 'top', gap: TOP_CHROME_CLEARANCE });
-  const paletteSearchRef = useRef<HTMLInputElement | null>(null);
   /**
    * The executive contract THIS TURN is running, read off the prompt when the
    * run starts.
@@ -2027,13 +2008,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setMemoryEnabled(enabled);
     try { localStorage.setItem(memoryStorageKey, enabled ? '1' : '0'); } catch { /* storage may be unavailable */ }
   }, [memoryStorageKey]);
-
-  const openPalette = useCallback(() => {
-    setPaletteOpen(true);
-    // The palette starts open on wide screens. Focusing its search field makes
-    // every Add affordance useful even when opening it is otherwise a no-op.
-    window.requestAnimationFrame(() => paletteSearchRef.current?.focus());
-  }, []);
 
   useEffect(() => {
     try { setFramePresets(JSON.parse(localStorage.getItem('builderforce:create-frame-presets') || '[]') as FramePreset[]); } catch { setFramePresets([]); }
@@ -11604,7 +11578,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         <label className={styles.scopeChip}>⌁ <span className="sr-only">{t('brainScope')}</span><select aria-label={t('brainScope')} value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">{t('entireCanvas')}</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? t('selectedObjects', { count: effectiveSelectedIds.length }) : t('selectedObject')}</option><option value="connected" disabled={!effectiveSelectedIds.length}>{t('connectedScope')}</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>{t('currentFrame')}</option></select></label>
       </>}
       onAttach={attachCanvasArtifact}
-      onAddContext={openPalette}
+      onAddContext={openObjectPicker}
       autoMode={autoApply}
       onAutoModeChange={setAutoApplyMode}
       modelSelection={modelSelection}
@@ -11694,8 +11668,58 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   })();
 
   /**
-   * THE BOARD'S DOORS OUT — Make it real, Invite, Publish, and the overflow that holds
-   * everything a phone cannot fit.
+   * THE INVITE SHEET — opened by the roster's own trailing chip now (`.rosterInvite`
+   * in `CanvasCommandBar`), so it is built here and handed down as its own prop
+   * rather than nested inside `handoffChrome`: the panel anchors `right:0` against
+   * whichever `position:relative` box renders it, and that box has to be the one
+   * sitting right under the button that opened it, not the doors-out group at the
+   * OTHER end of the bar.
+   */
+  const inviteMenu = shareOpen ? <div className={styles.shareMenu} role="dialog" aria-label={t('inviteCollaborators')}>
+    <div className={styles.shareMenuHeader}>
+      <strong>{t('inviteCollaborators')}</strong>
+      <button type="button" className={styles.shareMenuClose} aria-label={t('closeInvitationPanel')} onClick={() => setShareOpen(false)}>×</button>
+    </div>
+    <p>{persistence === 'local' ? (inRoom ? t('sharedLiveHint') : t('sharedInviteHint')) : t('invitedCanBuild')}</p>
+    {/* NO ACCOUNT: invite by link into a shared free session. Everyone edits
+        the same board and shares one free-message allowance; signing up is
+        offered as the way to KEEP it, not as the price of sharing it. */}
+    {persistence === 'local' ? (sharedRoom.code ? <>
+      <GuestInviteLink code={sharedRoom.code} surface="canvas" full={sharedRoom.full} />
+      <div className={styles.shareRoomPeople} aria-label={t('sharedPeopleHere', { count: sharedRoom.participants.length })}>
+        {sharedRoom.participants.map((person) => <span key={`${person.name}-${person.joinedAt}`}>{person.name}{person.isHost ? ` ${t('sharedHostTag')}` : ''}</span>)}
+      </div>
+      <div className={styles.shareRoomActions}>
+        <button type="button" onClick={() => void sharedRoom.leave()}>{t('sharedStopSharing')}</button>
+        <button type="button" onClick={() => requireAccount('save', t('gateSaveSessionTitle'), t('gateSaveBody'))}>{t('sharedSaveToKeep')}</button>
+      </div>
+      {/* No call button here. "Get someone in here" and "talk to them" are one
+          errand, but they are not one CONTROL: the call is a session action in
+          the bar on every surface and in both auth states, and a second copy in
+          this panel would be one decision with two homes. */}
+    </> : <button disabled={sharedRoom.busy} onClick={() => void sharedRoom.start()}>{sharedRoom.busy ? t('sharedStarting') : t('sharedStart')}</button>) : <>
+      <div><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder={t('emailPlaceholder')} /><select aria-label={t('invitationRole')} value={inviteRole} onChange={(event) => setInviteRole(event.target.value as CreationSessionSummary['role'])}><option value="viewer">{t('roleViewer')}</option><option value="commenter">{t('roleCommenter')}</option><option value="editor">{t('roleEditor')}</option><option value="runner">{t('roleRunner')}</option><option value="owner">{t('roleOwner')}</option></select><button disabled={!inviteEmail.trim()} onClick={() => { void creationSessionsApi.invite(sessionId, { email: inviteEmail.trim() }, inviteRole).then(async (result) => { if ('acceptPath' in result) { await copyTextToClipboard(`${canvasWebOrigin()}${result.acceptPath}`); setPendingInvitations((current) => [...current.filter((item) => item.id !== result.invitationId), { id: result.invitationId, email: result.email, role: result.role as CreationSessionSummary['role'], expiresAt: result.expiresAt, acceptedAt: null, revokedAt: null, createdAt: new Date().toISOString() }]); setNotice(result.emailSent ? t('invitationEmailed') : t('invitationSavedLinkCopied')); } else { const detail = await creationSessionsApi.get(sessionId); setAllMembers(detail.members); setNotice(result.emailSent ? t('collaboratorInvitedEmail') : t('collaboratorInvited')); } setInviteEmail(''); }).catch((error) => setNotice(error instanceof Error ? error.message : t('inviteFailed'))); }}>{t('invite')}</button></div>
+      {sessionRole === 'owner' && <div aria-label={t('sessionMembers')}>{allMembers.map((member) => <div key={member.userId} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
+        <span>{member.displayName || t('collaborator')}{member.userId === currentUserId ? ` ${t('youSuffix')}` : ''}</span>
+        <select aria-label={t('roleFor', { name: member.displayName || member.userId })} value={member.role} onChange={(event) => { const role = event.target.value as CreationSessionSummary['role']; void creationSessionsApi.members.update(sessionId, member.userId, role).then(() => setAllMembers((current) => current.map((item) => item.userId === member.userId ? { ...item, role } : item))).catch((error) => setNotice(error instanceof Error ? error.message : t('roleUpdateFailed'))); }}><option value="viewer">{t('roleViewer')}</option><option value="commenter">{t('roleCommenter')}</option><option value="editor">{t('roleEditor')}</option><option value="runner">{t('roleRunner')}</option><option value="owner">{t('roleOwner')}</option></select>
+        <button type="button" disabled={member.userId === currentUserId} aria-label={t('removeMember', { name: member.displayName || t('member') })} onClick={() => { void creationSessionsApi.members.remove(sessionId, member.userId).then(() => setAllMembers((current) => current.filter((item) => item.userId !== member.userId))).catch((error) => setNotice(error instanceof Error ? error.message : t('memberRemovalFailed'))); }}>×</button>
+      </div>)}{!!pendingInvitations.length && <div aria-label={t('pendingInvitations')} style={{ marginTop: 10 }}><strong>{t('pendingInvitations')}</strong>{pendingInvitations.map((invitation) => <div key={invitation.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
+        <span>{invitation.email}</span><small>{invitation.role}</small><button type="button" aria-label={t('revokeInvitation', { email: invitation.email })} onClick={() => { void creationSessionsApi.invitations.revoke(sessionId, invitation.id).then(() => { setPendingInvitations((current) => current.filter((item) => item.id !== invitation.id)); setNotice(t('invitationRevoked')); }).catch((error) => setNotice(error instanceof Error ? error.message : t('invitationRevokeFailed'))); }}>×</button>
+      </div>)}</div>}</div>}
+    </>}
+    <small>{t('accessLabel', { access: persistence === 'local' ? (inRoom ? t('sharedAnyoneWithLink') : t('privateOnDevice')) : inviteRole })}</small>
+  </div> : null;
+
+  /**
+   * PUBLISH, and the overflow that holds everything a phone cannot fit.
+   *
+   * Invite used to live here too, worded and beside Publish. It now draws as the
+   * trailing chip on the roster itself (`chrome: 'roster'` in
+   * `canvasSessionActions.ts`, rendered by `CanvasCommandBar`'s own
+   * `CanvasSessionActions variant="roster"`) — a glyph the same size as the avatars it
+   * follows, because "who is here" and "bring someone else in" read as one group, not
+   * two: the word was the only thing telling them apart, and it was telling a lie
+   * about how separate they were.
    *
    * ── WHY THIS LIVES IN THE BAR NOW, NOT THE HEADER ────────────────────────────────
    * It used to portal into the application header's own top-right corner — a DOM slot
@@ -11704,15 +11728,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * signed in. That solved one collision (two bars of controls fourteen pixels apart) by
    * creating a smaller one: the header's OWN cluster — cart, theme, sign-in-or-out — sat
    * beside a row that belonged to the canvas, not the shell, so a visitor read one corner
-   * as two systems that happened to share it. It also meant Invite/Publish/••• read
-   * differently signed in versus signed out, because the two headers are structurally
-   * different chromes, not a swapped button or two.
+   * as two systems that happened to share it. It also meant Publish/••• read differently
+   * signed in versus signed out, because the two headers are structurally different
+   * chromes, not a swapped button or two.
    *
-   * The bar already answers "what can I do to this canvas" for every other action; these
-   * two are answered the same way now, kept a visual step apart — a divider, not a
-   * border of their own — from the glyphs beside them. See `CanvasSessionActions` for why
-   * a glyph acts on the board and a word opens somewhere else, and why that distinction
-   * survives the move: it is drawn with weight, not with a second card.
+   * The bar already answers "what can I do to this canvas" for every other action; this
+   * is answered the same way now, kept a visual step apart — a divider, not a border of
+   * its own — from the glyphs beside it.
    */
   const handoffChrome = (
       <div
@@ -11723,10 +11745,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         className={styles.handoffGroup}
         data-testid="canvas-handoff"
       >
-          {/* The two doors OUT of this canvas — bring a person in, or put the result
-              where strangers can reach it. They are the only worded actions in the
-              registry and they are here for the same reason they are worded: a glyph
-              acts on the board, a word opens somewhere else. */}
+          {/* Publish — put the result where strangers can reach it. The only worded
+              action left in this corner, and it is worded for the reason it always
+              was: a glyph acts on the board, a word opens somewhere else. */}
           <CanvasSessionActions variant="handoff" surface={surface} collapsed={barCollapsed} handlers={sessionActionHandlers} />
           {canvasChromeShows('actions', barCollapsed) && <button className={`${styles.secondaryButton} ${styles.iconAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} title={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}><MoreActionsIcon /></button>}
           {/* NO SAVE BUTTON HERE. A guest board is kept by taking an account, and the
@@ -11778,40 +11799,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             <label><span><i aria-hidden>─</i>{t('connector.line')}</span><select aria-label={t('connector.line')} value={connectionStyle.line} onChange={(event) => setConnectionStyle({ line: event.target.value as ConnectionStyle['line'] })}>{CONNECTION_LINES.map((line) => <option key={line} value={line}>{t(`connector.line_${line}` as 'connector.line_solid')}</option>)}</select></label>
             <label><span><i aria-hidden>→</i>{t('connector.ends')}</span><select aria-label={t('connector.ends')} value={connectionStyle.ends} onChange={(event) => setConnectionStyle({ ends: event.target.value as ConnectionStyle['ends'] })}>{CONNECTION_ENDS.map((ends) => <option key={ends} value={ends}>{t(`connector.ends_${ends}` as 'connector.ends_arrow')}</option>)}</select></label>
             <label><span><i aria-hidden>⌐</i>{t('connector.router')}</span><select aria-label={t('connector.router')} value={connectionStyle.router} onChange={(event) => setConnectionStyle({ router: event.target.value as ConnectionStyle['router'] })}>{CONNECTION_ROUTERS.map((router) => <option key={router} value={router}>{t(`connector.router_${router}` as 'connector.router_step')}</option>)}</select></label>
-          </div>}
-          {shareOpen && <div className={styles.shareMenu} role="dialog" aria-label={t('inviteCollaborators')}>
-            <div className={styles.shareMenuHeader}>
-              <strong>{t('inviteCollaborators')}</strong>
-              <button type="button" className={styles.shareMenuClose} aria-label={t('closeInvitationPanel')} onClick={() => setShareOpen(false)}>×</button>
-            </div>
-            <p>{persistence === 'local' ? (inRoom ? t('sharedLiveHint') : t('sharedInviteHint')) : t('invitedCanBuild')}</p>
-            {/* NO ACCOUNT: invite by link into a shared free session. Everyone edits
-                the same board and shares one free-message allowance; signing up is
-                offered as the way to KEEP it, not as the price of sharing it. */}
-            {persistence === 'local' ? (sharedRoom.code ? <>
-              <GuestInviteLink code={sharedRoom.code} surface="canvas" full={sharedRoom.full} />
-              <div className={styles.shareRoomPeople} aria-label={t('sharedPeopleHere', { count: sharedRoom.participants.length })}>
-                {sharedRoom.participants.map((person) => <span key={`${person.name}-${person.joinedAt}`}>{person.name}{person.isHost ? ` ${t('sharedHostTag')}` : ''}</span>)}
-              </div>
-              <div className={styles.shareRoomActions}>
-                <button type="button" onClick={() => void sharedRoom.leave()}>{t('sharedStopSharing')}</button>
-                <button type="button" onClick={() => requireAccount('save', t('gateSaveSessionTitle'), t('gateSaveBody'))}>{t('sharedSaveToKeep')}</button>
-              </div>
-              {/* No call button here. "Get someone in here" and "talk to them" are one
-                  errand, but they are not one CONTROL: the call is a session action in
-                  the bar on every surface and in both auth states, and a second copy in
-                  this panel would be one decision with two homes. */}
-            </> : <button disabled={sharedRoom.busy} onClick={() => void sharedRoom.start()}>{sharedRoom.busy ? t('sharedStarting') : t('sharedStart')}</button>) : <>
-              <div><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder={t('emailPlaceholder')} /><select aria-label={t('invitationRole')} value={inviteRole} onChange={(event) => setInviteRole(event.target.value as CreationSessionSummary['role'])}><option value="viewer">{t('roleViewer')}</option><option value="commenter">{t('roleCommenter')}</option><option value="editor">{t('roleEditor')}</option><option value="runner">{t('roleRunner')}</option><option value="owner">{t('roleOwner')}</option></select><button disabled={!inviteEmail.trim()} onClick={() => { void creationSessionsApi.invite(sessionId, { email: inviteEmail.trim() }, inviteRole).then(async (result) => { if ('acceptPath' in result) { await copyTextToClipboard(`${canvasWebOrigin()}${result.acceptPath}`); setPendingInvitations((current) => [...current.filter((item) => item.id !== result.invitationId), { id: result.invitationId, email: result.email, role: result.role as CreationSessionSummary['role'], expiresAt: result.expiresAt, acceptedAt: null, revokedAt: null, createdAt: new Date().toISOString() }]); setNotice(result.emailSent ? t('invitationEmailed') : t('invitationSavedLinkCopied')); } else { const detail = await creationSessionsApi.get(sessionId); setAllMembers(detail.members); setNotice(result.emailSent ? t('collaboratorInvitedEmail') : t('collaboratorInvited')); } setInviteEmail(''); }).catch((error) => setNotice(error instanceof Error ? error.message : t('inviteFailed'))); }}>{t('invite')}</button></div>
-              {sessionRole === 'owner' && <div aria-label={t('sessionMembers')}>{allMembers.map((member) => <div key={member.userId} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
-                <span>{member.displayName || t('collaborator')}{member.userId === currentUserId ? ` ${t('youSuffix')}` : ''}</span>
-                <select aria-label={t('roleFor', { name: member.displayName || member.userId })} value={member.role} onChange={(event) => { const role = event.target.value as CreationSessionSummary['role']; void creationSessionsApi.members.update(sessionId, member.userId, role).then(() => setAllMembers((current) => current.map((item) => item.userId === member.userId ? { ...item, role } : item))).catch((error) => setNotice(error instanceof Error ? error.message : t('roleUpdateFailed'))); }}><option value="viewer">{t('roleViewer')}</option><option value="commenter">{t('roleCommenter')}</option><option value="editor">{t('roleEditor')}</option><option value="runner">{t('roleRunner')}</option><option value="owner">{t('roleOwner')}</option></select>
-                <button type="button" disabled={member.userId === currentUserId} aria-label={t('removeMember', { name: member.displayName || t('member') })} onClick={() => { void creationSessionsApi.members.remove(sessionId, member.userId).then(() => setAllMembers((current) => current.filter((item) => item.userId !== member.userId))).catch((error) => setNotice(error instanceof Error ? error.message : t('memberRemovalFailed'))); }}>×</button>
-              </div>)}{!!pendingInvitations.length && <div aria-label={t('pendingInvitations')} style={{ marginTop: 10 }}><strong>{t('pendingInvitations')}</strong>{pendingInvitations.map((invitation) => <div key={invitation.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
-                <span>{invitation.email}</span><small>{invitation.role}</small><button type="button" aria-label={t('revokeInvitation', { email: invitation.email })} onClick={() => { void creationSessionsApi.invitations.revoke(sessionId, invitation.id).then(() => { setPendingInvitations((current) => current.filter((item) => item.id !== invitation.id)); setNotice(t('invitationRevoked')); }).catch((error) => setNotice(error instanceof Error ? error.message : t('invitationRevokeFailed'))); }}>×</button>
-              </div>)}</div>}</div>}
-            </>}
-            <small>{t('accessLabel', { access: persistence === 'local' ? (inRoom ? t('sharedAnyoneWithLink') : t('privateOnDevice')) : inviteRole })}</small>
           </div>}
           {templateOpen && <div className={styles.templateMenu}>
             <header><div><strong>{t('canvasTemplates')}</strong><small>{t('marketplacePacks')}</small></div><button onClick={() => setTemplateOpen(false)} aria-label={t('closeTemplates')}>×</button></header>
@@ -11928,9 +11915,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         >{expanded ? <Inspector node={target} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={(patch) => updateNodeData(target.id, patch)} onWebsiteViewportChange={(viewport) => updateWebsiteViewport(target.id, viewport)} onRun={() => runWorkflow(target.id)} onPublishWebsite={() => publishWebsite(target.id)} onOpenBuild={() => openBuild(target.id)} onAttachBuild={(ide) => attachBuild(target.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(target.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(target.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(target.id)} onRunCreativeAction={(action) => runCreativeAction(target.id, action)} onShipGame={() => openGamePanel(target.id)} onPublishListing={() => openPublishPanel(target.id)} onOpenReleases={() => openReleasesPanel(target.id)} onUnpackWorkflow={() => unpackWorkflow(target.id)} onBuildWorkflow={() => { void compileWorkflow(target.id); }} onBuildFlow={() => { void buildFlow(target.id); }} onOpenEvermindBuild={() => openEvermindBuild(target.id)} onLoadEvermindTemplate={(templateId) => loadEvermindTemplate(target.id, templateId)} onRemoveConnection={(edgeId) => setEdges((current) => current.filter((edge) => edge.id !== edgeId))} onSaveAgent={saveAgent} onOpenBuiltinAgent={(intent) => openBuiltinAgentSurfaceFromNode(target.id, intent)} onAddAgentKnowledge={(content) => addAgentKnowledge(target.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(target.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onConvertDiagram={async (format, diagramId) => { const result = await convertObjectToDiagram(target.id, format, diagramId); return result.ok ? t(diagramId && diagramId !== '__new__' ? 'diagramAddedStatus' : 'diagramCreatedStatus') : result.error || t('drawioAppendFailed'); }} onExportArtifact={(action) => exportArtifact(target.id, action)} onAskBrain={(request) => { openBrainDock(); evaluateCanvas(request); }} onResumeTailor={tailorResumeFromNode} onResumeDetach={detachResumeFromNode} onResumeShare={createResumeShare} onResumeSharesList={listResumeShares} onResumeShareRevoke={revokeResumeShare} /> : null}</CanvasNodePanel>;
       })()}
 
-      {/* ONE picker, two doors: a node's `+` (insert, connected) and the command
-          bar's category circles (add). Contents from `CREATION_PALETTE_GROUPS`, so it can
-          never fall behind the object registry. */}
+      {/* ONE picker, two doors: a node's `+` (insert, connected) and everything else
+          (add) — the command bar's category circles, the board's own toggle, the
+          composer's "add context" row, the large-canvas notice's "Frame" button. This
+          replaced a hand-rolled palette aside that read the same registry through a
+          second, drifting rendering of it. Contents from `CREATION_PALETTE_GROUPS`, so
+          it can never fall behind the object registry. */}
       {objectPicker && <CanvasObjectPicker
         anchor={objectPicker.anchor}
         {...(objectPicker.group ? { group: objectPicker.group } : {})}
@@ -11957,6 +11947,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         onToggleCollapse={() => setBarCollapsed(!barCollapsed)}
         handlers={sessionActionHandlers}
         handoff={handoffChrome}
+        inviteMenu={inviteMenu}
         // The board's Run takes this canvas to the surface that runs it. Offered only
         // when the App surface would actually have something to open — the SAME question
         // that surface asks, asked of the same projection, so the bar can never promise a
@@ -11972,7 +11963,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           setNodePanel(null);
           setObjectPicker({ anchor: { x: Math.min(Math.max(12, rect.left - 170), Math.max(12, window.innerWidth - 412)), y: Math.max(12, rect.top - 330) }, ...(group ? { group } : {}) });
         }}
-        quickAddOpen={objectPicker !== null && !objectPicker.fromNodeId}
+        quickAddOpen={objectPickerOpen}
         roster={
           /* WHO IS HERE is the single most important thing a folded bar can still say.
              A collapsed roster is a team nobody can see is working, and on a shared
@@ -12177,7 +12168,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           <button type="button" onClick={exitFrame}>{t('frameSection.exit')}</button>
         </div>}
         {loadingSession && <div className={styles.canvasSkeleton} role="status" aria-live="polite"><span /><span /><span /><b>{t('loadingSession')}</b></div>}
-        {surfaceDef.showsObjects && nodes.length > 100 && <div className={styles.performanceNotice} role="status"><strong>{t('largeSession', { count: nodes.length })}</strong><span>{t('largeSessionHint')}</span><button type="button" onClick={openPalette}>{t('frame')}</button></div>}
+        {surfaceDef.showsObjects && nodes.length > 100 && <div className={styles.performanceNotice} role="status"><strong>{t('largeSession', { count: nodes.length })}</strong><span>{t('largeSessionHint')}</span><button type="button" onClick={openObjectPicker}>{t('frame')}</button></div>}
         <BrainSurfaceProvider value={brainSurface}>
         <ReactFlow<CreationFlowNode, Edge>
           nodes={framedBoard.nodes}
@@ -12251,7 +12242,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             one toolbar at one size rather than a column of whatever a phone font makes
             of ⌗ / ⌘ / ◱ next to two real icons. */}
         <div className={styles.boardRail}>
-        {!presentMode && <button className={styles.paletteToggle} onClick={() => setPaletteOpen((value) => !value)} aria-label={t('toggleObjectPalette')}>{paletteOpen ? <ClosePaletteIcon /> : <AddObjectIcon />}</button>}
+        {/* The board's ONE toggle into "add to canvas" — the picker itself is the SAME
+            component the command bar's category circles and a node's own `+` open (see
+            `objectPicker` and the comment above `<CanvasObjectPicker>`), anchored here off
+            this button's own rect exactly the way the bar's circles anchor off theirs. */}
+        {!presentMode && <button ref={paletteToggleRef} data-tour="creation-object-palette" className={styles.paletteToggle} aria-pressed={objectPickerOpen} onClick={() => { if (objectPickerOpen) { setObjectPicker(null); return; } openObjectPicker(); }} aria-label={t('toggleObjectPalette')}>{objectPickerOpen ? <ClosePaletteIcon /> : <AddObjectIcon />}</button>}
         {/* ZOOM, FIT AND ARRANGE ARE NOT HERE ANY MORE. They moved into the one command
             bar, which is where "what can I do to this canvas" now lives — keeping a copy
             on this rail would be the same decision with two controls, on two floating
@@ -12472,26 +12467,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           onClose={closeDockPanel}
           onVisibleChange={setOutlineHighlightIds}
         />}
-
-        {!presentMode && paletteOpen && <aside id="canvas-object-palette" data-testid="canvas-palette" className={styles.palette}>
-          <div className={styles.paletteHeader}><strong>{t('addToCanvas')}</strong><button onClick={() => setPaletteOpen(false)} aria-label={t('closePalette')}>×</button></div>
-          <div className={styles.paletteSearchWrap}><span aria-hidden><Icon source="⌕" size="1em" /></span><input ref={paletteSearchRef} data-testid="canvas-palette-search" className={styles.search} aria-label={t('searchObjectTypes')} value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder={t('searchObjectTypes')} />{paletteSearch && <button type="button" aria-label={t('clearSearch')} onClick={() => setPaletteSearch('')}>×</button>}</div>
-          <div className={styles.paletteSections}>{creationPaletteGroupsFor(persistence === 'server', canvasCapabilities).map((group) => ({ ...group, items: group.items.filter((item) => `${t(`object.${item.kind}`)} ${t(`group.${item.group}`)} ${item.group} ${item.kind}`.toLowerCase().includes(paletteSearch.trim().toLowerCase())) })).filter((group) => group.items.length).map((group) => {
-            const collapsed = !paletteSearch.trim() && collapsedPaletteGroups.has(group.group);
-            const regionId = `canvas-palette-${group.group.toLowerCase()}`;
-            return <section key={group.group} className={styles.paletteSection}>
-              {/* Named explicitly: without it the control's accessible name is
-                  its own contents — "Build 22 ⌄" — which tells a screen-reader
-                  user nothing about what pressing it does, and silently changes
-                  every time an object is added to the group. */}
-              <button type="button" className={styles.paletteSectionToggle} aria-expanded={!collapsed} aria-controls={regionId} aria-label={t(collapsed ? 'expandPaletteGroup' : 'collapsePaletteGroup', { group: t(`group.${group.group}`) })} onClick={() => setCollapsedPaletteGroups((current) => { const next = new Set(current); if (next.has(group.group)) next.delete(group.group); else next.add(group.group); return next; })}>
-                <span className={styles.paletteGroupIcon} aria-hidden><Icon source={PALETTE_GROUP_ICONS[group.group]} size={18} /></span><strong>{t(`group.${group.group}`)}</strong><small>{group.items.length}</small><span className={styles.paletteChevron} aria-hidden><Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={15} /></span>
-              </button>
-              {!collapsed && <div id={regionId} className={styles.paletteGrid}>{group.items.map((item) => <button key={item.kind} data-testid={`canvas-palette-${item.kind}`} aria-label={t(`object.${item.kind}`)} data-locked={item.locked ? 'true' : undefined} title={item.locked ? t('objectNeedsUpgrade') : undefined} disabled={!canEdit || item.locked} draggable={canEdit && !item.locked} onDragStart={(event) => { event.dataTransfer.setData(DND_MIME, item.kind); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => { if (item.locked) { setNotice(t('objectNeedsUpgrade')); return; } addAtCenter(item.kind); }}><span><Icon source={item.icon} size={20} /></span>{t(`object.${item.kind}`)}</button>)}</div>}
-            </section>;
-          })}</div>
-        </aside>}
-
 
         {buildFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('build.focusLabel')}>
           <header><div><strong>{t('build.focusTitle')}</strong><small>{t('build.focusHint')}</small></div><button type="button" onClick={() => setBuildFocus(null)} aria-label={t('build.closeBuilder')}>×</button></header>

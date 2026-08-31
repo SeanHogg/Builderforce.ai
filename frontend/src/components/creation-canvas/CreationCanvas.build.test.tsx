@@ -54,13 +54,16 @@ vi.mock('@xyflow/react', async () => {
 });
 
 /**
- * By TESTID, not by role+name. Every palette entry carries
- * `data-testid="canvas-palette-<kind>"` for exactly this, and a name-filtered role
+ * By TESTID, not by role+name. Every object-picker entry carries
+ * `data-testid="canvas-picker-<kind>"` for exactly this, and a name-filtered role
  * query has to build an accessible name for every button on a mounted canvas —
- * the whole palette — which is most of what these four tests were spending.
+ * the whole picker, once it is open — which is most of what these four tests
+ * were spending. The picker is closed until the board's toggle opens it, unlike
+ * the legacy palette aside this replaced.
  */
 function addBuilder() {
-  fireEvent.click(screen.getByTestId('canvas-palette-build'));
+  fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+  fireEvent.click(screen.getByTestId('canvas-picker-build'));
 }
 
 // No suite-level timeout override — see the note in `CreationCanvas.test.tsx`:
@@ -110,7 +113,8 @@ describe('Builder objects on the Canvas', () => {
   it('grows an authored Website into a connected Builder that builds a website', async () => {
     render(<CreationCanvas sessionId="builder-from-website-test" persistence="local" />);
 
-    fireEvent.click(screen.getByTestId('canvas-palette-website'));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByTestId('canvas-picker-website'));
     fireEvent.click(screen.getByRole('button', { name: 'Build this site with code' }));
 
     await waitFor(() => expect(screen.getByText(/Builder added/)).toBeInTheDocument());

@@ -139,7 +139,8 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
 
     const edgeIdsBefore = screen.getByTestId('flow').getAttribute('data-edge-ids')?.split(',').filter(Boolean) ?? [];
 
-    fireEvent.click(screen.getByTestId('canvas-palette-task'));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByTestId('canvas-picker-task'));
     const sourceId = screen.getByTestId('canvas-node-task').getAttribute('data-node-id');
     expect(sourceId).toBeTruthy();
 
@@ -359,7 +360,7 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(group).toContainElement(screen.getByRole('button', { name: 'Redo canvas change' }));
   });
 
-  it('keeps the mobile canvas view action rail available when the palette is closed', () => {
+  it('keeps the mobile canvas view action rail available when the object picker is closed', () => {
     render(<CreationCanvas sessionId="mobile-canvas-actions-test" persistence="local" />);
     const controls = screen.getByRole('group', { name: 'Canvas view controls' });
     expect(controls).toContainElement(screen.getByRole('button', { name: 'Zoom in' }));
@@ -368,21 +369,25 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(controls).toContainElement(screen.getByRole('button', { name: 'Arrange canvas objects' }));
   });
 
-  it('defaults the mobile palette closed and remembers the user preference', async () => {
+  /**
+   * Replaces a prior test asserting the legacy palette aside defaulted open on wide
+   * screens and remembered its open/closed state across a remount via
+   * `localStorage`. The board's toggle now opens the SAME `CanvasObjectPicker` every
+   * other door opens — a transient anchored popover, not a panel with a remembered
+   * preference — so there is nothing left to persist; this asserts the toggle still
+   * opens and closes it, on a phone width same as any other.
+   */
+  it('opens and closes the object picker from the board toggle on a phone width', () => {
     const desktopWidth = window.innerWidth;
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
-    const first = render(<CreationCanvas sessionId="mobile-palette-test" persistence="local" />);
+    render(<CreationCanvas sessionId="mobile-palette-test" persistence="local" />);
 
-    await waitFor(() => expect(screen.queryByText('Add to canvas')).not.toBeInTheDocument());
+    expect(screen.queryByTestId('canvas-object-picker')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
-    await waitFor(() => expect(screen.getByText('Add to canvas')).toBeInTheDocument());
-    expect(localStorage.getItem('builderforce:create:palette-open')).toBe('1');
+    expect(screen.getByTestId('canvas-object-picker')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    expect(screen.queryByTestId('canvas-object-picker')).not.toBeInTheDocument();
 
-    first.unmount();
-    render(<CreationCanvas sessionId="mobile-palette-restored-test" persistence="local" />);
-    await waitFor(() => expect(screen.getByText('Add to canvas')).toBeInTheDocument());
-    fireEvent.click(screen.getByRole('button', { name: 'Close palette' }));
-    await waitFor(() => expect(localStorage.getItem('builderforce:create:palette-open')).toBe('0'));
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: desktopWidth });
   });
 
@@ -637,7 +642,8 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
 
   it('applies the inspector project view selection to the canvas widget', () => {
     render(<CreationCanvas sessionId="project-view-test" persistence="local" />);
-    fireEvent.click(screen.getByRole('button', { name: 'Project' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByTestId('canvas-picker-project'));
 
     const projectView = screen.getByLabelText('Project view');
     fireEvent.change(projectView, { target: { value: 'metrics' } });
@@ -655,9 +661,10 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
    */
   it('widens the anchored panel into the whole inspector and narrows it back', () => {
     render(<CreationCanvas sessionId="inspector-width-test" persistence="local" />);
-    fireEvent.click(screen.getByRole('button', { name: 'Project' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByTestId('canvas-picker-project'));
 
-    // A palette add opens the panel wide: adding an object is a request to configure it.
+    // Adding an object from the picker opens the panel wide: it is a request to configure it.
     const panel = screen.getByRole('dialog', { name: /Everything/ });
     expect(within(panel).getByRole('complementary', { name: 'Details panel' })).toBeInTheDocument();
 
@@ -759,7 +766,8 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
 
   it('renders mockup delivery selections and uses explicit unassignment', () => {
     render(<CreationCanvas sessionId="mockup-settings-test" persistence="local" />);
-    fireEvent.click(screen.getByRole('button', { name: 'Mockup' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByTestId('canvas-picker-mockup'));
 
     fireEvent.change(screen.getByLabelText('Delivery project'), { target: { value: '' } });
     fireEvent.change(screen.getByLabelText('Assign agent'), { target: { value: 'web-analyst' } });
@@ -790,7 +798,8 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(screen.getByText('Product lead')).toBeInTheDocument();
     expect(screen.getAllByText('Validate the launch scope.').length).toBeGreaterThan(1);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Task' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByTestId('canvas-picker-task'));
     fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'blocked' } });
     fireEvent.change(screen.getByLabelText('Priority'), { target: { value: 'urgent' } });
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Resolve the release dependency.' } });
@@ -802,7 +811,8 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
 
   it('gives task widgets actionable status, agent, and PRD details', () => {
     render(<CreationCanvas sessionId="task-details-test" persistence="local" />);
-    fireEvent.click(screen.getByRole('button', { name: 'Task' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByTestId('canvas-picker-task'));
 
     expect(screen.getByLabelText('Status')).toBeInTheDocument();
     expect(screen.getByLabelText('Assigned agent')).toHaveDisplayValue(/Campaign Strategist/);
@@ -1164,7 +1174,7 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     // as the price of sharing it. This assertion used to expect an account gate
     // here; guest rooms superseded that, and the gate would now break the very
     // flow the share panel exists for.
-    fireEvent.click(screen.getByRole('button', { name: 'Invite' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Invite collaborators' }));
     expect(screen.getByRole('dialog', { name: 'Invite collaborators' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: /Create an account/ })).not.toBeInTheDocument();
   });
@@ -1183,10 +1193,11 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
    * opened a MODAL holding a second canvas — and that editor is gone: a step is an
    * object on this board, configured in this board's inspector.
    */
-  it('places an executable step from the palette and configures it in place', () => {
+  it('places an executable step from the object picker and configures it in place', () => {
     render(<CreationCanvas sessionId="flow-step-test" persistence="local" />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Step' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByTestId('canvas-picker-flowStep'));
 
     expect(screen.getByDisplayValue('Step')).toBeInTheDocument();
     // The four questions a step in a graph answers — what it does, its paths, its data
@@ -1198,40 +1209,41 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(screen.queryByRole('dialog', { name: 'Workflow focus editor' })).not.toBeInTheDocument();
   });
 
-  it('adds a selected object from the palette', () => {
+  it('adds a selected object from the object picker', () => {
     render(<CreationCanvas sessionId="palette-test" persistence="local" />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Dataset' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByTestId('canvas-picker-dataset'));
 
     expect(screen.getByDisplayValue('Imported dataset.csv')).toBeInTheDocument();
   });
 
-  it('uses the open object palette without duplicating Add in the header', () => {
-    render(<CreationCanvas sessionId="palette-add-test" persistence="local" />);
-
-    expect(screen.getByText('Add to canvas')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '＋ Add' })).not.toBeInTheDocument();
-  });
-
-  it('collapses palette sections, reveals search matches, and retains the state', async () => {
-    const first = render(<CreationCanvas sessionId="palette-collapse-test" persistence="local" />);
-    const build = screen.getByRole('button', { name: /Build section/ });
-    fireEvent.click(build);
-    expect(build).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByRole('button', { name: 'Workflow' })).not.toBeInTheDocument();
+  /**
+   * Replaces two prior tests written against the legacy palette aside:
+   * - "uses the open object palette without duplicating Add in the header" asserted
+   *   a static "Add to canvas" header the aside drew when open by default — there is
+   *   no equivalent header on the anchored `CanvasObjectPicker` dialog, so nothing
+   *   is left to assert there.
+   * - "collapses palette sections, reveals search matches, and retains the state"
+   *   asserted collapsible `<section>`s and a `localStorage`-persisted collapsed-group
+   *   set — `CanvasObjectPicker` has neither; it offers a category RAIL instead of
+   *   collapsible sections, and nothing about which category is showing survives a
+   *   remount. What both tests actually protected — that searching filters the
+   *   catalog and excludes a LEGACY kind — still applies, and is asserted here.
+   */
+  it('filters the object picker by search, excluding legacy kinds', () => {
+    render(<CreationCanvas sessionId="picker-search-test" persistence="local" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
 
     // Searching for 'Workflow' should NOT find it: it is a LEGACY kind, filtered from
-    // all palette and available-objects views. The test pivots to 'Website' instead.
-    fireEvent.change(screen.getByRole('textbox', { name: 'Search object types…' }), { target: { value: 'Website' } });
-    expect(screen.getByRole('button', { name: 'Website' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
-    expect(screen.queryByRole('button', { name: 'Website' })).not.toBeInTheDocument();
-    await waitFor(() => expect(localStorage.getItem('builderforce:create:palette-collapsed-groups')).toContain('Build'));
+    // every object-picker and available-objects view. The test pivots to 'Website' instead.
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search objects...' }), { target: { value: 'Website' } });
+    expect(screen.getByTestId('canvas-picker-website')).toBeInTheDocument();
+    expect(screen.queryByTestId('canvas-picker-workflow')).not.toBeInTheDocument();
 
-    first.unmount();
-    render(<CreationCanvas sessionId="palette-collapse-reopen-test" persistence="local" />);
-    await waitFor(() => expect(screen.getByRole('button', { name: /Build section/ })).toHaveAttribute('aria-expanded', 'false'));
-    expect(screen.queryByRole('button', { name: 'Workflow' })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search objects...' }), { target: { value: 'Workflow' } });
+    expect(screen.queryByTestId('canvas-picker-website')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('canvas-picker-workflow')).not.toBeInTheDocument();
   });
 
   it('turns an AI request into a connected evaluation object', async () => {
@@ -1246,7 +1258,8 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
   it('expands optional project context into related live objects', () => {
     render(<CreationCanvas sessionId="project-test" persistence="local" />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Project' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByTestId('canvas-picker-project'));
     fireEvent.click(screen.getByRole('button', { name: 'Add all related items' }));
 
     expect(screen.getByText('Project relationships added to canvas')).toBeInTheDocument();
@@ -1265,7 +1278,8 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
 
   it('edits a website prototype live from the inspector', () => {
     render(<CreationCanvas sessionId="website-editor-test" persistence="local" />);
-    fireEvent.click(screen.getByRole('button', { name: 'Website' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByTestId('canvas-picker-website'));
     fireEvent.change(screen.getByLabelText('Headline'), { target: { value: 'Build the future together' } });
     fireEvent.change(screen.getByLabelText('Call to action'), { target: { value: 'Start building' } });
     fireEvent.change(screen.getByLabelText('Accent color'), { target: { value: '#d946ef' } });
@@ -1392,7 +1406,8 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
 
   it('imports tabular data and creates a connected visualization', async () => {
     render(<CreationCanvas sessionId="dataset-visual-test" persistence="local" />);
-    fireEvent.click(screen.getByRole('button', { name: 'Dataset' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByTestId('canvas-picker-dataset'));
     const file = new File(['Region,Revenue\nNorth,120\nSouth,90'], 'revenue.csv', { type: 'text/csv' });
     Object.defineProperty(file, 'text', { value: vi.fn().mockResolvedValue('Region,Revenue\nNorth,120\nSouth,90') });
     await act(async () => {
@@ -1407,7 +1422,8 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
 
   it('designs Evermind creation and training as a canvas-native pipeline', () => {
     render(<CreationCanvas sessionId="evermind-pipeline-test" persistence="local" />);
-    fireEvent.click(screen.getByRole('button', { name: 'Evermind' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByTestId('canvas-picker-evermind'));
 
     expect(screen.getByDisplayValue('Untitled Evermind')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Knowledge map with 0 learned contributions' })).toBeInTheDocument();
@@ -1445,7 +1461,8 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
 
   it('keeps anonymous object comments unblocked as a save-later collaboration step', () => {
     render(<CreationCanvas sessionId="local-comment-test" persistence="local" />);
-    fireEvent.click(screen.getByRole('button', { name: 'Note' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByTestId('canvas-picker-note'));
     fireEvent.click(screen.getByRole('button', { name: 'Activity' }));
 
     expect(screen.getByText('Collaboration starts when you save')).toBeInTheDocument();
@@ -1454,7 +1471,8 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
 
   it('requires two canonical projects before creating a live comparison', () => {
     render(<CreationCanvas sessionId="comparison-gate-test" persistence="local" />);
-    fireEvent.click(screen.getByRole('button', { name: 'Project' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByTestId('canvas-picker-project'));
     fireEvent.click(screen.getByRole('button', { name: 'Compare projects on canvas' }));
 
     expect(screen.getByRole('dialog', { name: 'Create an account to compare projects' })).toBeInTheDocument();
@@ -1462,7 +1480,8 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
 
   it('gathers staff and agents into an impromptu stand-up frame', () => {
     render(<CreationCanvas sessionId="standup-test" persistence="local" />);
-    fireEvent.click(screen.getByRole('button', { name: 'Stand-up' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByTestId('canvas-picker-standup'));
     fireEvent.click(screen.getByRole('button', { name: 'Gather and start stand-up' }));
 
     expect(screen.getByRole('dialog', { name: 'Create an account to start a collaborative stand-up' })).toBeInTheDocument();
@@ -1490,7 +1509,8 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
 
   it('customizes and saves a reusable spatial frame', () => {
     render(<CreationCanvas sessionId="frame-preset-test" persistence="local" />);
-    fireEvent.click(screen.getAllByRole('button', { name: 'Frame' }).find((button) => button.getAttribute('draggable') === 'true')!);
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByTestId('canvas-picker-frame'));
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Decision review' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save as reusable frame' }));
     fireEvent.click(screen.getByRole('button', { name: 'More session actions' }));
@@ -1503,7 +1523,8 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
 
   it('renders frame colors and drawing stroke settings live', () => {
     render(<CreationCanvas sessionId="spatial-settings-test" persistence="local" />);
-    fireEvent.click(screen.getAllByRole('button', { name: 'Frame' }).find((button) => button.getAttribute('draggable') === 'true')!);
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByTestId('canvas-picker-frame'));
     fireEvent.change(screen.getByLabelText('Purpose'), { target: { value: 'Architecture review' } });
     fireEvent.change(screen.getByLabelText('Fill color'), { target: { value: '#123456' } });
     fireEvent.change(screen.getByLabelText('Border color'), { target: { value: '#abcdef' } });
@@ -1514,7 +1535,8 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     // recolour — the controls exist and the card says how many strokes it holds.
     // (The pen's own colour and width are chosen in the drawing toolbar, before
     // the stroke, which is what `renders the pen tray` below covers.)
-    fireEvent.click(screen.getByRole('button', { name: 'Drawing' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    fireEvent.click(screen.getByTestId('canvas-picker-drawing'));
     fireEvent.change(screen.getByLabelText('Stroke color'), { target: { value: '#ff0000' } });
     fireEvent.change(screen.getByLabelText('Stroke width'), { target: { value: '9' } });
     expect(screen.getByText('0 stroke(s)')).toBeInTheDocument();

@@ -86,9 +86,12 @@ export interface CanvasSessionActionDef {
   /**
    * `icon` = a glyph inside its cluster's trough. `labelled` = its own button with a
    * word on it, which is reserved for actions that open somewhere else rather than
-   * acting on the board — a glyph can say "undo", only a label can say "Share".
+   * acting on the board — a glyph can say "undo", only a label can say "Publish".
+   * `roster` = a glyph drawn as a trailing chip on the roster itself — "bring a
+   * person into THIS group", so it belongs at the end of the avatars it grows
+   * rather than in its own worded button beside them.
    */
-  chrome: 'icon' | 'labelled';
+  chrome: 'icon' | 'labelled' | 'roster';
   /**
    * What the button reports about itself. `pressed` is a mode you are in (full screen);
    * `expanded` is a panel this button owns (the invite sheet); `none` is a command that
@@ -241,9 +244,16 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // It needs OBJECTS for the same reason the scorecard does: "make this real" over a
   // conversation with nothing on it has nothing to make real.
   { id: 'prove', cluster: 'session', order: 8, chrome: 'labelled', state: 'none', phone: 'menu', labelKey: 'proveThisIdea', titleKey: 'proveThisIdeaTitle', needs: 'objects' },
-  { id: 'share', cluster: 'session', order: 9, chrome: 'labelled', state: 'expanded', phone: 'menu', labelKey: 'share', titleKey: 'inviteCollaborators' },
-  // Publish sits beside Share because they are the two ways work leaves this canvas —
-  // one brings a person IN, one puts the result where strangers can reach it.
+  // Share draws as the trailing chip on the roster now, not a worded button beside
+  // it: "who is here" and "bring someone else in" are one group to look at, and the
+  // word was the only thing telling them apart. The icon alone still opens the same
+  // sheet — `inviteCollaborators` — so nothing about WHAT it does changed, only where
+  // it reads as belonging.
+  { id: 'share', cluster: 'session', order: 9, chrome: 'roster', state: 'expanded', phone: 'menu', labelKey: 'share', titleKey: 'inviteCollaborators' },
+  // Publish is the other of the two ways work leaves this canvas — Share brings a
+  // person IN, this puts the result where strangers can reach it. They no longer
+  // sit beside each other (Share moved to the roster), but the pairing is still why
+  // this exists at all.
   //
   // It is here from the first second of a session, before there is anything worth
   // publishing, and that is the point: it was previously reachable ONLY through

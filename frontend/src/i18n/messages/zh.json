@@ -18930,7 +18930,6 @@
     "moreActions": "更多会话操作",
     "createAndView": "创建与查看",
     "sessionTools": "会话工具",
-    "clearSearch": "清除搜索",
     "selectionActions": "选择操作",
     "selectedCount": "已选择 {count} 个",
     "diagnostics": "诊断",
@@ -18949,8 +18948,6 @@
     "exitPresentation": "退出演示",
     "share": "邀请",
     "run": "运行",
-    "addToCanvas": "添加到画布",
-    "searchObjectTypes": "搜索对象类型…",
     "askBrain": "就此画布询问 Brain",
     "sendBrain": "发送给 Brain",
     "resizePrompt": "调整提示词区域大小",
@@ -19468,7 +19465,6 @@
     "inviteFailed": "邀请失败",
     "largeSessionHint": "仅渲染可见对象。使用框架或隐藏较重的对象可保持导航流畅。",
     "toggleObjectPalette": "切换对象面板",
-    "closePalette": "关闭面板",
     "tourLabel": "引导式导览",
     "tourOfferTitle": "欢迎使用创作画布",
     "tourOfferBody": "通过六个简短步骤，了解 Brain、对象、连接、协作者和交付如何协同工作。您可以随时退出导览。",
@@ -20324,8 +20320,6 @@
         "request": "请求"
       }
     },
-    "expandPaletteGroup": "展开「{group}」分组",
-    "collapsePaletteGroup": "收起「{group}」分组",
     "game": {
       "title": "在真实设备上游玩",
       "shipAction": "在设备上游玩",

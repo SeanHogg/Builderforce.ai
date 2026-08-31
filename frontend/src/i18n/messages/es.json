@@ -18930,7 +18930,6 @@
     "moreActions": "Más acciones de sesión",
     "createAndView": "Crear y ver",
     "sessionTools": "Herramientas de sesión",
-    "clearSearch": "Borrar búsqueda",
     "selectionActions": "Acciones de selección",
     "selectedCount": "{count} seleccionados",
     "diagnostics": "Diagnóstico",
@@ -18949,8 +18948,6 @@
     "exitPresentation": "Salir de la presentación",
     "share": "Invitar",
     "run": "Ejecutar",
-    "addToCanvas": "Añadir al Lienzo",
-    "searchObjectTypes": "Buscar tipos de objeto…",
     "askBrain": "Pregunta a Brain sobre este lienzo",
     "sendBrain": "Enviar a Brain",
     "resizePrompt": "Cambiar el tamaño del área de indicaciones",
@@ -19468,7 +19465,6 @@
     "inviteFailed": "Error al invitar",
     "largeSessionHint": "Solo se renderizan los objetos visibles. Usa marcos u oculta objetos pesados para mantener la navegación rápida.",
     "toggleObjectPalette": "Alternar la paleta de objetos",
-    "closePalette": "Cerrar la paleta",
     "tourLabel": "Visita guiada",
     "tourOfferTitle": "Te damos la bienvenida al Lienzo de Creación",
     "tourOfferBody": "Descubre en seis pasos breves cómo funcionan juntos Brain, los objetos, las conexiones, los colaboradores y la entrega. Puedes salir de la visita en cualquier momento.",
@@ -20324,8 +20320,6 @@
         "request": "llamada"
       }
     },
-    "expandPaletteGroup": "Expandir la sección {group}",
-    "collapsePaletteGroup": "Contraer la sección {group}",
     "game": {
       "title": "Juégalo en un sitio real",
       "shipAction": "Jugar en un dispositivo",
