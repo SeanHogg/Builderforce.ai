@@ -308,7 +308,9 @@
     "fork": "Fork",
     "forking": "Forking…",
     "forkHint": "Summarize this chat and continue in a new one from that summary",
-    "sessionUnavailable": "Available once this chat has a few messages and no run in flight"
+    "sessionUnavailable": "Available once this chat has a few messages and no run in flight",
+    "categoryLocal": "On this device",
+    "localDetail": "Runs on this machine via {runtime} — no plan usage, works offline."
   },
   "repoContext": {
     "title": "Add repository context",

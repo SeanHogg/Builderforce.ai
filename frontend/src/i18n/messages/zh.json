@@ -308,7 +308,9 @@
     "fork": "分叉",
     "forking": "正在分叉…",
     "forkHint": "总结本对话，并基于该总结在新对话中继续",
-    "sessionUnavailable": "需本对话已有若干条消息且当前没有正在进行的运行"
+    "sessionUnavailable": "需本对话已有若干条消息且当前没有正在进行的运行",
+    "categoryLocal": "在此设备上",
+    "localDetail": "通过 {runtime} 在本机运行 —— 不消耗套餐额度，可离线使用。"
   },
   "repoContext": {
     "title": "添加仓库上下文",

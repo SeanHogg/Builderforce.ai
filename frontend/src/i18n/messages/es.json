@@ -308,7 +308,9 @@
     "fork": "Bifurcar",
     "forking": "Bifurcando…",
     "forkHint": "Resume este chat y continúa en uno nuevo a partir de ese resumen",
-    "sessionUnavailable": "Disponible cuando el chat tenga algunos mensajes y no haya una ejecución en curso"
+    "sessionUnavailable": "Disponible cuando el chat tenga algunos mensajes y no haya una ejecución en curso",
+    "categoryLocal": "En este dispositivo",
+    "localDetail": "Se ejecuta en esta máquina mediante {runtime}: no consume el plan y funciona sin conexión."
   },
   "repoContext": {
     "title": "Añadir contexto del repositorio",
