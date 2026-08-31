@@ -140,7 +140,9 @@ describe("the panel is wired to it", () => {
   it("recomputes the runtime when the account state changes", () => {
     // Without `signedOut` in the deps, signing in mid-session leaves the panel writing
     // to the session store and never persisting the conversation.
-    const deps = app.match(/\[init\.baseUrl,[^\]]*\]/);
+    // Anchored on `init.grounding` so it identifies the RUNTIME memo specifically —
+    // other memos in this file also open with `init.baseUrl`.
+    const deps = app.match(/\[init\.baseUrl,[^\]]*init\.grounding[^\]]*\]/);
     expect(deps?.[0]).toContain("signedOut");
   });
 

@@ -19,6 +19,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useBrainConfig } from './config';
+import type { BrainTransport } from './streamChatCompletion';
 import { useRegisterBrainActions, type BrainAction } from './BrainActionsContext';
 import { setMcpToolStatus } from './mcpToolStatus';
 import { fetchMcpToolEntries, mcpActionsFrom, type McpToolEntry, type McpToolResultInfo } from './mcpCatalog';
@@ -41,10 +42,26 @@ export interface UseMcpExtensionsOptions {
    * the same way. Kept generic (no app types) so the package stays portable.
    */
   onToolResult?: (info: McpToolResultInfo) => void;
+  /**
+   * Where the PLATFORM lives, when that is not where completions go.
+   *
+   * `config.transport` answers two different questions that used to have one answer:
+   * which endpoint streams the model, and which endpoint serves the tool catalogue. A
+   * host that runs the model on the user's own machine splits them — the completion goes
+   * to a local runtime, while projects, tasks and OKRs still live on the gateway. Left
+   * conflated, pinning an on-device model pointed the catalogue fetch at the local
+   * runtime, which serves no such route: the Brain silently lost every platform tool and
+   * answered "I don't have that data" with an empty trace.
+   *
+   * Omit it and the model transport is used, which is correct for every host that has
+   * only one endpoint.
+   */
+  transport?: BrainTransport;
 }
 
 export function useMcpExtensions(options?: UseMcpExtensionsOptions): { loading: boolean; toolCount: number; error: string | null } {
-  const { transport } = useBrainConfig();
+  const { transport: modelTransport } = useBrainConfig();
+  const transport = options?.transport ?? modelTransport;
   const [entries, setEntries] = useState<McpToolEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

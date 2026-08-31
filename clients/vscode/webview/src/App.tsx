@@ -32,6 +32,7 @@ import {
   type ChatMode,
   type Effort,
   type BrainConfig,
+  type BrainTransport,
   type BrainPersistenceAdapter,
   type BrainChat,
   type DirectedRecipient,
@@ -462,6 +463,19 @@ function ConfiguredApp({ init }: { init: InitData }) {
     return memoryRef.current;
   };
 
+  // The gateway, as a transport. It funds two DIFFERENT jobs: streaming a turn when no
+  // on-device model is pinned, and serving the platform tool catalogue always. Built
+  // once so those two uses cannot drift to different URLs or auth.
+  const gatewayTransport = useMemo<BrainTransport>(
+    () => ({
+      baseUrl: init.baseUrl,
+      getToken,
+      onUnauthorized: () => void refreshToken(),
+      defaultModel: init.model,
+    }),
+    [init.baseUrl, init.model],
+  );
+
   const config = useMemo<BrainConfig>(
     () => ({
       // Two transports, one streamer. An on-device route points at the runtime on this
@@ -482,25 +496,20 @@ function ConfiguredApp({ init }: { init: InitData }) {
             defaultModel: init.localRoute.model,
             fetch: (input: string, requestInit: RequestInit) => hostFetch(rewriteToLocalUrl(input), requestInit),
           }
-        : {
-            baseUrl: init.baseUrl,
-            getToken,
-            onUnauthorized: () => void refreshToken(),
-            defaultModel: init.model,
-          },
+        : gatewayTransport,
       persistence: signedOut
         ? memoryStore(makeT(init.labels))
         : createPersistence(init.baseUrl, getToken, () => void refreshToken()),
       resolveSystemPrompt: () => buildIdeSystemPrompt({ hasWorkspace: init.hasWorkspace, grounding: init.grounding }),
     }),
-    [init.baseUrl, init.model, init.hasWorkspace, init.grounding, init.localRoute, signedOut],
+    [init.baseUrl, init.model, init.hasWorkspace, init.grounding, init.localRoute, signedOut, gatewayTransport],
   );
 
   return (
     <BrainProvider config={config}>
       <BrainActionsProvider>
         <ToolRegistrar tools={init.tools} />
-        <PlatformTools />
+        <PlatformTools transport={gatewayTransport} />
         <Chat init={init} />
       </BrainActionsProvider>
     </BrainProvider>
@@ -522,8 +531,13 @@ function ToolRegistrar({ tools }: { tools: InitData['tools'] }) {
  * edit local files: one brain, one tool catalog. On any write we nudge the host so
  * its Project & Tasks tree refreshes live.
  */
-function PlatformTools() {
+function PlatformTools({ transport }: { transport: BrainTransport }) {
   useMcpExtensions({
+    // The PLATFORM endpoint, which is not the model endpoint on an on-device route.
+    // Projects, tasks and OKRs live on the gateway no matter which model answers; when
+    // this defaulted to the run's transport, pinning a local model pointed the catalogue
+    // fetch at the local runtime and the Brain lost every platform tool.
+    transport,
     onToolResult: (info) => {
       if (info.mutating && info.ok) {
         post('platform.write', { name: info.name });

@@ -132,3 +132,24 @@ describe("the permission mode is decided in one place", () => {
     expect(ext).toContain("PERMISSION_MODE_SETTING");
   });
 });
+
+/**
+ * The transport answers TWO questions — where the model streams, and where the platform
+ * lives — and an on-device route splits them. Conflating them cost the panel its entire
+ * tool catalogue the moment a local model was pinned: projects, tasks and OKRs were
+ * fetched from the local runtime, which serves no such route, so the Brain answered
+ * "I don't have that data" with zero tool calls in the trace.
+ */
+describe("the platform stays on the gateway when the model does not", () => {
+  const app = fs.readFileSync(path.join(SRC, "..", "webview", "src", "App.tsx"), "utf8");
+
+  it("builds the gateway transport once and hands it to the tool catalogue", () => {
+    expect(app).toContain("gatewayTransport");
+    expect(stripComments(app)).toMatch(/<PlatformTools transport=\{gatewayTransport\}/);
+  });
+
+  it("keeps the run's transport free to be the local one", () => {
+    // The whole point: the completion goes to the machine, the catalogue does not.
+    expect(stripComments(app)).toMatch(/transport: init\.localRoute/);
+  });
+});

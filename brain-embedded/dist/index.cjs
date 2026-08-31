@@ -1111,7 +1111,8 @@ function mcpActionsFrom(entries, transport, onToolResult) {
 
 // src/useMcpExtensions.ts
 function useMcpExtensions(options) {
-  const { transport } = useBrainConfig();
+  const { transport: modelTransport } = useBrainConfig();
+  const transport = options?.transport ?? modelTransport;
   const [entries, setEntries] = (0, import_react4.useState)([]);
   const [loading, setLoading] = (0, import_react4.useState)(true);
   const [error, setError] = (0, import_react4.useState)(null);
@@ -1810,7 +1811,7 @@ function modelFailoverNotice(from, to, emptyTurn = false) {
 function stallExhaustedNotice(model, tried, emptyTurn = false) {
   const who = model && model !== "default" ? `The model \`${model}\`` : "The model";
   const others = (tried ?? []).filter((m) => m && m !== model);
-  return `${who} ${whatItDid(emptyTurn)}, so nothing was actually run and ` + (emptyTurn ? "there is no answer above to show you." : "the answer above is only a description of intended actions.") + (others.length ? ` This run already failed over from ${others.map((m) => `\`${m}\``).join(", ")}, so the problem is unlikely to be any single model \u2014 check that the tool catalog loaded (see the "Tools available to the model" line in a copied diagnostics report).` : " This is a model limitation, not a configuration error \u2014 pick a different model for this chat and send the message again.");
+  return `${who} ${whatItDid(emptyTurn)}, so nothing was actually run and ` + (emptyTurn ? "there is no answer above to show you." : "the answer above is only a description of intended actions.") + (others.length ? ` This run already failed over from ${others.map((m) => `\`${m}\``).join(", ")}, so the problem is unlikely to be any single model \u2014 check that the tool catalog loaded (see the "Tools available to the model" line in a copied diagnostics report).` : " Before switching models, check your runtime or gateway log for this turn: a request REJECTED upstream \u2014 a prompt over the context limit, an exhausted quota \u2014 produces exactly these symptoms, and no other model will fix it. If the log is clean, this is a model limitation and a different model is the answer.");
 }
 function ids(list) {
   return (list ?? []).map((m) => m.id).filter((id) => !!id);
