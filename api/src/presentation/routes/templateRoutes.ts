@@ -8,15 +8,19 @@
  *   • the install   POST /:key/install          validate, bind, materialise
  *   • the author    POST / · POST /:key/publish · DELETE /:key
  *
- * ROLE. Reading the catalogue is MEMBER: a template is a description of work,
- * and hiding the menu from the people who will do it helps nobody. Installing is
- * DEVELOPER+, matching every other surface that creates a workflow and arms a
- * trigger, and authoring or publishing is MANAGER+, because a published template
- * carries the workspace's name.
+ * ROLE. Reading the catalogue is OPEN — signed in or not. A template is a
+ * description of work, and the list of what you can start from IS the menu of
+ * the product: a visitor who is 401'd out of it cannot tell what this is. Signed
+ * out the answer is narrower (built-ins plus what publishers listed publicly, and
+ * nothing connected) rather than forbidden, which is the same shape the team
+ * roster uses — one endpoint answering both visitors, never two catalogues.
+ * Installing is DEVELOPER+, matching every other surface that creates a workflow
+ * and arms a trigger, and authoring or publishing is MANAGER+, because a
+ * published template carries the workspace's name.
  */
 
 import { Hono, type Context } from 'hono';
-import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { authMiddleware, optionalAuthMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -68,11 +72,15 @@ function coerceAnswers(raw: unknown): GuidedAnswers {
 
 export function createTemplateRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
-  router.use('*', authMiddleware);
 
-  // GET / — the catalogue this workspace can start from.
-  router.get('/', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+  // GET / — the catalogue this workspace can start from, or the public one.
+  //
+  // Registered ABOVE the blanket `authMiddleware`, with optional auth of its own:
+  // Hono runs handlers in registration order, so this answers and returns before
+  // the gate below is ever reached, while every route under it keeps the full
+  // gate. `tenantId` is therefore possibly absent — that is the guest.
+  router.get('/', optionalAuthMiddleware, async (c) => {
+    const tenantId = (c.get('tenantId') as number | undefined) ?? null;
     try {
       const [entries, connected] = await Promise.all([
         listTemplatesForTenant(db, tenantId, c.env as Env),
@@ -88,6 +96,37 @@ export function createTemplateRoutes(db: Db): Hono<HonoEnv> {
       return fail(c, e);
     }
   });
+
+  // GET /:key — the full manifest, plus what it will create and what is already
+  // connected. This is the page somebody reads BEFORE starting setup.
+  router.get('/:key', optionalAuthMiddleware, async (c) => {
+    const tenantId = (c.get('tenantId') as number | undefined) ?? null;
+    try {
+      const template = await resolveTemplate(db, tenantId, c.req.param('key'), c.env as Env);
+      if (!template) return c.json({ error: 'Template not found' }, 404);
+      const connected = await connectedConnectorKeys(db, tenantId, c.env as Env);
+      return c.json({
+        template: {
+          ...template.manifest,
+          origin: template.origin,
+          installCount: template.installCount,
+          publisherRef: template.publisherRef,
+          priceCents: template.priceCents,
+          currency: template.currency,
+        },
+        connectedConnectors: [...connected],
+      });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  // Everything below this line is a workspace operation: authoring, publishing,
+  // resolving a setup against live data, installing. Hono applies middleware in
+  // registration order, so the two catalogue reads above answered without it and
+  // every route from here on carries the full gate — which is also what lets
+  // `requireRole` below read a role that is actually there.
+  router.use('*', authMiddleware);
 
   // POST / — save a template of this workspace's own. MANAGER+: a saved template
   // is something other people in the workspace will install.
@@ -109,30 +148,6 @@ export function createTemplateRoutes(db: Db): Hono<HonoEnv> {
         currency: body.currency ?? null,
       });
       return c.json(saved, 201);
-    } catch (e) {
-      return fail(c, e);
-    }
-  });
-
-  // GET /:key — the full manifest, plus what it will create and what is already
-  // connected. This is the page somebody reads BEFORE starting setup.
-  router.get('/:key', async (c) => {
-    const tenantId = c.get('tenantId') as number;
-    try {
-      const template = await resolveTemplate(db, tenantId, c.req.param('key'), c.env as Env);
-      if (!template) return c.json({ error: 'Template not found' }, 404);
-      const connected = await connectedConnectorKeys(db, tenantId, c.env as Env);
-      return c.json({
-        template: {
-          ...template.manifest,
-          origin: template.origin,
-          installCount: template.installCount,
-          publisherRef: template.publisherRef,
-          priceCents: template.priceCents,
-          currency: template.currency,
-        },
-        connectedConnectors: [...connected],
-      });
     } catch (e) {
       return fail(c, e);
     }

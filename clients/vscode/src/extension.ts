@@ -32,6 +32,8 @@ import { AttentionPoller, setLocalChatRuns, onLocalRunsChange, managerAttention 
 import { appUrl } from "./auth";
 import { MeetingsController, joinMeetingInBrowser, joinMeetingNative, openMeetingsWeb, type MeetingItem } from "./meetings";
 import { PendingChangesController } from "./pendingChangesTree";
+import { posixShellReport } from "./posixShell";
+import { buildIdentityReport } from "./buildIdentityReport";
 import { CreationCanvasPanel } from "./creationCanvasPanel";
 import { initErrorReporter, reportExtensionError, surfaceError } from "./errorReporter";
 
@@ -344,6 +346,12 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.diagnose", async () => {
       output.clear();
       output.appendLine("BuilderForce connection diagnostics");
+      output.appendLine("");
+      output.appendLine(buildIdentityReport(context));
+      // Whether this MACHINE can run the POSIX git scripts. Reported because its
+      // absence used to surface only as a raw `cmd.exe` error inside one tool result,
+      // which named neither the cause nor anything the reader could check.
+      output.appendLine(posixShellReport());
       output.appendLine("");
       output.appendLine(await bfApi.diagnose(context.secrets));
       output.show(true);

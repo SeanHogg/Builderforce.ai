@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * The guided setup — the wizard a template is set up in.
  *
@@ -14,6 +16,14 @@
  *
  * It is a SlideOutPanel, not a modal: a modal is reserved for terminal
  * destructive approvals, and this is a form.
+ *
+ * ── SIGNED OUT ──────────────────────────────────────────────────────────────
+ * The catalogue is open to everyone (`GET /api/templates` answers a guest), so
+ * this panel is reachable without an account. Setting one up is not: the plan is
+ * resolved against a LIVE workspace and the install writes to it. So a guest
+ * gets the wall rather than a fetch that would 401 — `SessionGate` states the
+ * reason and the panel skips the request entirely, which is the same shape every
+ * other guest-reachable action uses.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -21,6 +31,8 @@ import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { Icon } from '@/components/ui/Icon';
+import { SessionGate } from '@/components/guest/SessionGate';
+import { useSampleWorkspace } from '@/domains/guest/presentation/useSampleWorkspace';
 import {
   templatesApi,
   TemplateSetupIncompleteError,
@@ -191,6 +203,9 @@ export function GuidedSetupPanel({ templateKey, templateName, open, onClose }: {
   const t = useTranslations('templates');
   const tc = useTranslations('common');
   const router = useRouter();
+  // The same session fact `SessionGate` gates on, read once here so the wizard
+  // does not issue a workspace request it knows will be refused.
+  const { ready: sessionReady, signedIn } = useSampleWorkspace();
 
   const [answers, setAnswers] = useState<GuidedAnswers>({});
   const [touched, setTouched] = useState<string[]>([]);
@@ -218,11 +233,14 @@ export function GuidedSetupPanel({ templateKey, templateName, open, onClose }: {
   useEffect(() => {
     if (!open) return;
     setOutputs(null);
+    // A guest has no workspace to resolve the plan against; the wall below says
+    // so instead of an "Unauthorized" banner over an empty form.
+    if (sessionReady && !signedIn) return;
     void refresh(answers, touched);
     // Deliberately keyed on `open` alone: re-resolving on every keystroke would
     // put an outbound integration call behind each one.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, refresh]);
+  }, [open, refresh, sessionReady, signedIn]);
 
   const setAnswer = (id: string, value: GuidedAnswer) => {
     setAnswers((current) => ({ ...current, [id]: value }));
@@ -276,6 +294,7 @@ export function GuidedSetupPanel({ templateKey, templateName, open, onClose }: {
       width="sheet"
       widthStorageKey="guided-setup"
     >
+      <SessionGate action="save" variant="block">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18, padding: 4 }}>
         {error && (
           <div className="ui-text-small" style={{ padding: 12, color: 'var(--coral-bright)', background: 'var(--surface-coral-soft, rgba(244,114,94,0.12))', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
@@ -357,6 +376,7 @@ export function GuidedSetupPanel({ templateKey, templateName, open, onClose }: {
           </>
         )}
       </div>
+      </SessionGate>
     </SlideOutPanel>
   );
 }

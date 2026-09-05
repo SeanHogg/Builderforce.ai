@@ -43,7 +43,11 @@ const EXCLUDED_TOOLS = new Set(["finish"]);
  *  even though they ride a write/shell-capable surface. */
 const READ_ONLY_TOOLS = new Set(["list_files", "read_file", "search_code", "git_status", "git_diff", "git_history"]);
 
-const MUTATING_CAPS: ReadonlySet<Capability> = new Set<Capability>(["repo.write", "repo.edit", "repo.delete", "shell"]);
+// `git.write` is here for the same reason `shell` is, and more so: committing, pushing
+// and opening a pull request move work out of the working tree, and a push to the base
+// branch leaves the machine entirely. The approval prompt is the ONLY thing standing
+// between "the human asked me to push to main" and it happening.
+const MUTATING_CAPS: ReadonlySet<Capability> = new Set<Capability>(["repo.write", "repo.edit", "repo.delete", "shell", "git.write"]);
 
 function isMutating(name: string, requires: readonly Capability[]): boolean {
   if (READ_ONLY_TOOLS.has(name)) return false;
@@ -87,6 +91,20 @@ export function describeTool(name: string, args: Record<string, unknown>): strin
       return `run: ${typeof args.command === "string" ? args.command.slice(0, 80) : ""}`;
     case "search_code":
       return `search ${typeof args.query === "string" ? `"${args.query.slice(0, 60)}"` : ""}`;
+    // The publish actions name what LEAVES the machine. A prompt reading "git_push" tells
+    // the approver nothing about the one thing they need to weigh — whether this is a
+    // ticket branch or the base branch — so the base-branch case says so outright.
+    case "git_commit": {
+      const files = Array.isArray(args.paths) ? args.paths.filter((p): p is string => typeof p === "string") : [];
+      const where = typeof args.branch === "string" && args.branch ? ` on ${args.branch}` : "";
+      return `commit ${files.length} file${files.length === 1 ? "" : "s"}${where}: ${files.slice(0, 3).join(", ")}${files.length > 3 ? ", …" : ""}`;
+    }
+    case "git_push":
+      return args.allowBaseBranch === true
+        ? "push to the BASE BRANCH (main) — skips pull-request review"
+        : "push the current branch to origin";
+    case "open_pull_request":
+      return `open pull request: ${typeof args.title === "string" ? args.title.slice(0, 70) : ""}`;
     default:
       return name;
   }

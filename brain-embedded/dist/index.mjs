@@ -1698,7 +1698,23 @@ var LOCAL_WORKSPACE_TOOLS = /* @__PURE__ */ new Set([
   "write_file",
   "edit_file",
   "delete_file",
-  "run_command"
+  "run_command",
+  // The git tools, read and publish alike. They belong here for exactly the reason the
+  // file tools do: "commit the change and push to main" is not one domain among many a
+  // query can be relevant to, it is the surface doing its job. The turn that produced
+  // this set is the proof — `run_command` shared no stem with that request, missed the
+  // relevance cut, and the agent spent the run unable to find the tool its own persona
+  // had just told it to use. `git_status` before a commit, and `open_pull_request`
+  // after one, are dropped by the same mechanism on a turn phrased "ship this".
+  "git_status",
+  "git_diff",
+  "git_history",
+  "git_sync_latest",
+  "git_undo",
+  "git_redo",
+  "git_commit",
+  "git_push",
+  "open_pull_request"
 ]);
 var CODE_CHANGE_TOOLS = /* @__PURE__ */ new Set([
   "write_file",

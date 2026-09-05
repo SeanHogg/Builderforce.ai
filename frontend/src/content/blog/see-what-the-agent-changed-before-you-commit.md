@@ -102,4 +102,4 @@ One thing this deliberately does **not** do: give the agent a commit or push ver
 
 **Related reading:** [VS Code as the command centre for your agentic workforce](/blog/vs-code-command-center-for-your-agentic-workforce) · [Read, Prove, Build — the inner loop](/blog/read-prove-build-the-inner-loop) · [Approval gates and human oversight](/blog/approval-gates-and-human-oversight)
 
-Install the [BuilderForce extension](/downloads), ask an agent for a change, and watch the count appear.
+Install the [BuilderForce extension for VS Code](https://marketplace.visualstudio.com/items?itemName=BuilderForce.builderforce-ai), ask an agent for a change, and watch the count appear.

@@ -65,6 +65,14 @@ const SKIP_DIRS = new Set([
  *  are offered, identical to the cloud Container). */
 export const LOCAL_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   "repo.read", "repo.search", "repo.write", "repo.edit", "repo.delete", "shell",
+  // Publishing (commit / push / open a pull request). Backed HERE and on no cloud
+  // surface: those already publish by a different mechanism (a write IS a commit, and
+  // the engine opens the PR at finish), whereas the editor could change a working tree
+  // and had no verb for shipping it — so "commit and push" fell through to a raw
+  // `run_command` shelling `git add -A && git push` at the base branch. Runs on the
+  // same `shell` this provider already backs; the capability is separate because what
+  // a surface may push to a remote is a different question from whether it has a shell.
+  "git.write",
 ]);
 
 function clamp(text: string, max: number): string {

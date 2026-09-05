@@ -38,6 +38,27 @@ describe("the local workspace tools are always advertised", () => {
     }
   });
 
+  it("pins the publish tools the persona now routes shipping through", () => {
+    // The persona used to say "use run_command for git/gh to commit, push and open a
+    // PR" — advice with no tool behind it, which is how a one-line change ended up
+    // pushed to main by a raw shell. It now names these; the pin is what stops the
+    // relevance trim dropping `open_pull_request` on a turn phrased "ship this".
+    const prompt = ideSystemPromptBase(true);
+    for (const name of ["git_commit", "git_push", "open_pull_request"]) {
+      expect(prompt).toContain(name);
+      expect(LOCAL_WORKSPACE_TOOLS.has(name)).toBe(true);
+      expect(coreNames.has(name)).toBe(true);
+    }
+  });
+
+  it("survives the trim on the request that started this: 'commit and push to main'", () => {
+    const catalog = [...coreNames, "builtin_tasks_create"];
+    const pinned = localToolsIn(catalog);
+    for (const name of ["git_commit", "git_push", "open_pull_request", "git_status"]) {
+      expect(pinned).toContain(name);
+    }
+  });
+
   it("survives the trim: a catalog that would drop run_command still keeps it", () => {
     // `run_command` scores zero against this request — no shared stem — so relevance
     // alone dropped it. The pin is what makes that impossible.

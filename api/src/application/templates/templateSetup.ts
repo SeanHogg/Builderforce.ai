@@ -56,8 +56,17 @@ const MAX_SOURCED_OPTIONS = 100;
  *
  * `env` is optional only because two callers still resolve it lazily; pass it,
  * and the read is cached AND invalidated the moment somebody connects something.
+ *
+ * `tenantId === null` is a signed-out visitor reading the public catalogue: they
+ * have no connections, and the honest answer is an empty set — NOT a query with
+ * no tenant to scope it.
  */
-export async function connectedConnectorKeys(db: Db, tenantId: number, env?: Env): Promise<Set<string>> {
+export async function connectedConnectorKeys(
+  db: Db,
+  tenantId: number | null,
+  env?: Env,
+): Promise<Set<string>> {
+  if (tenantId === null) return new Set<string>();
   return new Set(await connectedKeys(db, tenantId, env));
 }
 

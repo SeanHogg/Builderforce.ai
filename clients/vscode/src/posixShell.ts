@@ -95,3 +95,56 @@ export function posixShellOption(command: string): { shell?: string } {
   const bash = findBash();
   return bash ? { shell: bash } : {};
 }
+
+/**
+ * What this machine can actually do with a POSIX script — the fact that decides
+ * whether `git_sync_latest` / `git_undo` / `git_redo` work here at all.
+ *
+ * It exists because the failure it describes was, for a while, undiagnosable from the
+ * outside. A run reported the raw `cmd.exe` message `Environment variable -e not
+ * defined` on a build whose version was AHEAD of the one this guard shipped in, and
+ * nothing available to the reporter could separate the two candidate causes: an
+ * extension host older than its reported version, or a live hole in the detection. A
+ * guard whose presence cannot be observed is indistinguishable from a guard that is
+ * not working, so this reports itself and {@link posixShellReport} puts it in the
+ * connection diagnostics.
+ */
+export interface PosixShellStatus {
+  platform: NodeJS.Platform;
+  /** False off Windows: the default shell is already POSIX, so nothing is routed. */
+  routingRequired: boolean;
+  /** The shell POSIX scripts are routed to, or null when none was found. */
+  shellPath: string | null;
+  /** Every path probed, in order — so a machine with bash SOMEWHERE ELSE is visible. */
+  candidates: string[];
+}
+
+export function posixShellStatus(env: NodeJS.ProcessEnv = process.env): PosixShellStatus {
+  const routingRequired = process.platform === "win32";
+  return {
+    platform: process.platform,
+    routingRequired,
+    shellPath: routingRequired ? findBash(env) : null,
+    candidates: routingRequired ? bashCandidates(env) : [],
+  };
+}
+
+/**
+ * The connection-diagnostics lines for POSIX-script support. Off Windows this is one
+ * line saying nothing needs routing; on Windows it names the shell that will run
+ * `set -e` scripts, or states plainly that none was found and what that costs.
+ */
+export function posixShellReport(env: NodeJS.ProcessEnv = process.env): string {
+  const status = posixShellStatus(env);
+  if (!status.routingRequired) {
+    return `POSIX scripts: not routed (${status.platform} default shell is already POSIX).`;
+  }
+  if (status.shellPath) {
+    return `POSIX scripts: routed to ${status.shellPath} — git_sync_latest / git_undo / git_redo will run correctly here.`;
+  }
+  return [
+    "POSIX scripts: NO POSIX SHELL FOUND — git_sync_latest / git_undo / git_redo cannot run on this machine.",
+    "  Install Git for Windows (it ships bash). Probed, in order:",
+    ...status.candidates.map((c) => `    ${c}`),
+  ].join("\n");
+}

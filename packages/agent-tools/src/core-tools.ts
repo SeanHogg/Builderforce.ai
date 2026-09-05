@@ -564,6 +564,64 @@ export type GitAction = "status" | "diff" | "history" | "sync_latest" | "undo" |
  * refuse to run on a dirty tree so they can never silently discard uncommitted
  * work. Pushing the synced/rewound branch is the CALLER's job (surface-specific).
  */
+/**
+ * The validated `repo` subdirectory, or null.
+ *
+ * Held to a stricter rule than the other args: it becomes the target of a `cd`, so a
+ * `..` segment would walk OUT of the workspace rather than merely widening a diff.
+ * `safeGitArg` permits dots (a directory really can be named `Builderforce.ai`), so
+ * traversal is rejected separately here — the one place it would actually escape.
+ */
+function safeRepoArg(repo: unknown): string | null {
+  const arg = safeGitArg(repo);
+  return arg && !arg.split(/[\\/]/).includes("..") && !arg.startsWith("/") ? arg : null;
+}
+
+/**
+ * Scope a multi-line script into a repository subdirectory.
+ *
+ * A multi-line script cannot take the `cd X && Y` prefix — that would scope only its
+ * FIRST line — so the `cd` becomes a guarded leading statement instead. Every script
+ * that goes through here already requires a POSIX shell (they use `$(…)` and `[ … ]`),
+ * which is what makes a bare `cd` line safe here and not for the one-liners.
+ */
+function repoScopedScript(script: string, repo: unknown): string {
+  const dir = safeRepoArg(repo);
+  return dir ? `cd "${dir}" || exit 1\n${script}` : script;
+}
+
+/**
+ * The remedy for "fatal: not a git repository", shared by every git tool.
+ *
+ * Returning git's raw fatal is what makes this look like the end of the road. It happens
+ * routinely when the OPEN FOLDER holds several checkouts side by side (`/code/`, with
+ * `/code/app` and `/code/api` each a repo): git runs at the root, finds no `.git`, and
+ * the agent — handed a bare fatal with no next step — concludes the tool is unusable and
+ * gives up, or asks the user a question it could have answered itself.
+ *
+ * So the failure carries its own remedy: the tools take a `repo` subdirectory, and this
+ * says so, names the tool that finds it, and shows the exact retry. Discovery is left to
+ * `list_files` rather than a shell one-liner because that tool already works identically
+ * on every surface, whereas a directory scan would need writing three ways for sh, cmd
+ * and PowerShell.
+ */
+function notARepoResult(action: string): ToolResult {
+  return {
+    data: {
+      ok: false,
+      action,
+      error:
+        "not a git repository at the workspace root — this usually means the open folder CONTAINS the repositories rather than being one (several checkouts side by side). "
+        + "Do not conclude git is unavailable: call `list_files` to see the top-level directories, then re-run this tool with `repo` set to the one holding the code you are working on "
+        + `(e.g. { "repo": "my-project" }). If none of them is a checkout, say so plainly — file edits still work, only the git tools need a repository.`,
+    },
+  };
+}
+
+/** Resolve the remote's default branch into `$BASE`, falling back to `main`. Shared so
+ *  "what is the base branch" has ONE answer across sync, commit, push and pull request. */
+const RESOLVE_BASE = `BASE="$(git remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p')"; [ -n "$BASE" ] || BASE=main`;
+
 export function buildGitCommand(action: GitAction, opts?: { path?: string; baseBranch?: string; limit?: number; repo?: string }): string {
   const path = safeGitArg(opts?.path);
   const pathArg = path ? ` -- "${path}"` : "";
@@ -662,18 +720,7 @@ async function runGitTool(action: GitAction, opts: { path?: string; baseBranch?:
   // is left to `list_files` rather than a shell one-liner because that tool already
   // works identically on every surface, whereas a directory-scan command would have to
   // be written three ways for sh, cmd and PowerShell.
-  if (isNotARepo(r) && !opts.repo) {
-    return {
-      data: {
-        ok: false,
-        action,
-        error:
-          "not a git repository at the workspace root — this usually means the open folder CONTAINS the repositories rather than being one (several checkouts side by side). "
-          + "Do not conclude git is unavailable: call `list_files` to see the top-level directories, then re-run this tool with `repo` set to the one holding the code you are working on "
-          + `(e.g. { "repo": "my-project" }). If none of them is a checkout, say so plainly — file edits still work, only the git tools need a repository.`,
-      },
-    };
-  }
+  if (isNotARepo(r) && !opts.repo) return notARepoResult(action);
   const result = gitToolResult(action, r);
   // Say WHERE it ran whenever that was not the obvious place, so a later command in
   // the same run does not have to rediscover the scope.
@@ -761,10 +808,6 @@ export const gitRedoTool: ToolDefinition = defineTool({
 // act that the surface's own approval gate prompts for (every tool here is mutating).
 // They are gated on `git.write`, NOT `shell` — see that capability for why the cloud
 // surfaces must not be handed a second route to publishing.
-
-/** Resolve the base branch into `$BASE`, or fall back to `main`. Shared by every
- *  script below so "what is the base branch" has ONE answer per surface. */
-const RESOLVE_BASE = `BASE="$(git remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p')"; [ -n "$BASE" ] || BASE=main`;
 
 /** Shell-quote a model-supplied string for a single-quoted POSIX argument. Commit
  *  messages and PR bodies are free text — they cannot go through `safeGitArg`, which
@@ -1051,6 +1094,9 @@ export const CORE_TOOLS: readonly ToolDefinition[] = [
   gitSyncLatestTool,
   gitUndoTool,
   gitRedoTool,
+  gitCommitTool,
+  gitPushTool,
+  openPullRequestTool,
   webFetchTool,
   webSearchTool,
   memoryRecallTool,

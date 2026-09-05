@@ -58,11 +58,21 @@ export interface ResolvedTemplate {
   updatedAt: string | null;
 }
 
-const catalogCacheKey = (tenantId: number): string => `templates:catalog:${tenantId}`;
+/** `null` is the SIGNED-OUT catalogue — built-ins plus what publishers listed
+ *  publicly — and it is a cache key of its own so a guest's answer is never
+ *  served from (or written into) a workspace's slot. */
+const catalogCacheKey = (tenantId: number | null): string =>
+  tenantId === null ? 'templates:catalog:public' : `templates:catalog:${tenantId}`;
 
-/** Drop the cached catalogue for a workspace. Call after ANY template write. */
+/** Drop the cached catalogue for a workspace. Call after ANY template write.
+ *  A publish changes what a SIGNED-OUT visitor sees too, so the public slot goes
+ *  with it — otherwise a newly listed template stays invisible on the gallery
+ *  every visitor lands on for five minutes. */
 export async function invalidateTemplateCatalog(env: Env, tenantId: number): Promise<void> {
-  await invalidateCached(env, catalogCacheKey(tenantId));
+  await Promise.all([
+    invalidateCached(env, catalogCacheKey(tenantId)),
+    invalidateCached(env, catalogCacheKey(null)),
+  ]);
 }
 
 function builtinResolved(manifest: TemplateManifest): ResolvedTemplate {
@@ -133,14 +143,18 @@ async function loadTenantTemplates(db: Db, tenantId: number): Promise<ResolvedTe
  * are excluded here so a template it published does not appear twice — it is
  * already in the tenant list, where it can be edited.
  */
-async function loadPublishedTemplates(db: Db, tenantId: number): Promise<ResolvedTemplate[]> {
+async function loadPublishedTemplates(db: Db, tenantId: number | null): Promise<ResolvedTemplate[]> {
   const rows = await db
     .select()
     .from(catalogItems)
     .where(and(
       eq(catalogItems.kind, TEMPLATE_CATALOG_KIND),
       eq(catalogItems.visibility, 'public'),
-      or(isNull(catalogItems.tenantId), eq(catalogItems.tenantId, tenantId)),
+      // A signed-out visitor has no workspace to widen the read for, so they see
+      // exactly the platform-owned listings.
+      tenantId === null
+        ? isNull(catalogItems.tenantId)
+        : or(isNull(catalogItems.tenantId), eq(catalogItems.tenantId, tenantId)),
     ))
     .orderBy(desc(catalogItems.installCount))
     .limit(200);
@@ -151,21 +165,29 @@ async function loadPublishedTemplates(db: Db, tenantId: number): Promise<Resolve
 }
 
 /**
- * The full catalogue for a workspace.
+ * The full catalogue for a workspace — or, with `tenantId === null`, for a
+ * signed-out visitor.
  *
  * A key collision resolves to the FIRST entry, and the order below is the
  * precedence stated in this module's header: built-in, then the workspace's own,
  * then published.
+ *
+ * THE CATALOGUE IS NOT A PRIVATE READ. What you can start from is the menu of
+ * the product; a visitor who cannot see it cannot tell what this is. So a guest
+ * gets the same list minus the halves that only exist inside a workspace — no
+ * owned templates, and no cross-tenant widening. Installing is still gated, at
+ * the install route, which is where the gate belongs (guest preview, session
+ * gates ACTIONS).
  */
 export async function listTemplatesForTenant(
   db: Db,
-  tenantId: number,
+  tenantId: number | null,
   env?: Env,
 ): Promise<ResolvedTemplate[]> {
   const load = async (): Promise<ResolvedTemplate[]> => {
     // Independent reads, so they overlap rather than queue.
     const [owned, published] = await Promise.all([
-      loadTenantTemplates(db, tenantId),
+      tenantId === null ? Promise.resolve<ResolvedTemplate[]>([]) : loadTenantTemplates(db, tenantId),
       loadPublishedTemplates(db, tenantId),
     ]);
     const claimed = new Set([...BUILTIN_TEMPLATES.keys(), ...owned.map((t) => t.manifest.key)]);
@@ -187,7 +209,7 @@ export async function listTemplatesForTenant(
  */
 export async function resolveTemplate(
   db: Db,
-  tenantId: number,
+  tenantId: number | null,
   key: string,
   env?: Env,
 ): Promise<ResolvedTemplate | null> {
