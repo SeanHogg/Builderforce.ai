@@ -115,10 +115,25 @@ export interface LiveActivityProps {
 
 function LiveActivityInner({ activity, isRunning, labels: partial }: LiveActivityProps) {
   const labels = { ...DEFAULT_LIVE_ACTIVITY_LABELS, ...partial };
-  // A run with no published phase yet (an older run store, or the instant between
-  // acceptance and the first phase) still gets an indicator — falling back to
-  // `starting` rather than rendering nothing, which is the very failure this fixes.
-  const live: BrainRunActivity | null = activity ?? (isRunning ? { phase: 'starting', startedAt: Date.now(), step: 0 } : null);
+
+  // A run with no published phase yet — an older run store, a surface that drives the
+  // timeline off `isRunning` alone, or the instant between acceptance and the first
+  // phase — still gets an indicator, falling back to `starting` rather than rendering
+  // nothing (which is the very failure this component exists to fix).
+  //
+  // Its start time MUST be captured once and held. Reading `Date.now()` inline while
+  // building the fallback makes `startedAt` change on every render, which changes the
+  // ticker effect's dependency, which schedules a state update, which re-renders —
+  // an unbounded update loop that takes the whole host surface down with it.
+  const [fallbackStart, setFallbackStart] = useState<number | null>(() => (isRunning ? Date.now() : null));
+  useEffect(() => {
+    // Functional update, and `prev ?? Date.now()` rather than a fresh stamp: React
+    // bails out when the value is unchanged, so a run that is already going does not
+    // pay an extra render on mount and the clock does not restart under it.
+    setFallbackStart((prev) => (isRunning ? prev ?? Date.now() : null));
+  }, [isRunning]);
+  const live: BrainRunActivity | null =
+    activity ?? (isRunning && fallbackStart != null ? { phase: 'starting', startedAt: fallbackStart, step: 0 } : null);
 
   const [now, setNow] = useState(() => Date.now());
   const startedAt = live?.startedAt;

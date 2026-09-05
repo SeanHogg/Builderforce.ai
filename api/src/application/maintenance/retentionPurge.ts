@@ -40,6 +40,14 @@ export async function runRetentionPurge(env: Env, now: number = Date.now()): Pro
       name: `${table.relation}@${connection}`,
       run: () => table.purge(dbFor(connection), cutoff(now, table.retentionDays)),
     }))),
+    // Column-level retention, on its own shorter window. Runs AFTER every purge so it
+    // never rewrites a row that was about to be deleted anyway.
+    ...SWEPT_TABLES.flatMap((table) => (table.redact
+      ? table.connections.map((connection) => ({
+        name: `${table.relation}.payload@${connection}`,
+        run: () => table.redact!.run(dbFor(connection), cutoff(now, table.redact!.afterDays)),
+      }))
+      : [])),
     // Lapsed agent memories (0371). NOT an age-based purge like the rest, and
     // deliberately NOT in SWEPT_TABLES: a fact expires when its own author said it
     // would, so the policy lives on the row, this only reclaims what recall already

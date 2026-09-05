@@ -506,7 +506,11 @@ function phaseLine(activity, labels) {
 }
 function LiveActivityInner({ activity, isRunning, labels: partial }) {
   const labels = { ...DEFAULT_LIVE_ACTIVITY_LABELS, ...partial };
-  const live = activity ?? (isRunning ? { phase: "starting", startedAt: Date.now(), step: 0 } : null);
+  const [fallbackStart, setFallbackStart] = useState3(() => isRunning ? Date.now() : null);
+  useEffect(() => {
+    setFallbackStart((prev) => isRunning ? prev ?? Date.now() : null);
+  }, [isRunning]);
+  const live = activity ?? (isRunning && fallbackStart != null ? { phase: "starting", startedAt: fallbackStart, step: 0 } : null);
   const [now, setNow] = useState3(() => Date.now());
   const startedAt = live?.startedAt;
   useEffect(() => {

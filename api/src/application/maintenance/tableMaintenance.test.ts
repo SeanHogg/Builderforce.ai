@@ -116,6 +116,19 @@ describe('vacuumRelation', () => {
   });
 });
 
+describe('SWEPT_TABLES redact windows', () => {
+  it('always blanks a payload STRICTLY BEFORE the row that carries it is purged', () => {
+    // A redact window >= the retention window is a silent no-op: the row is deleted before
+    // its payload is ever blanked, so the table keeps the size the redaction was added to
+    // reclaim and nothing anywhere reports a problem.
+    for (const table of SWEPT_TABLES) {
+      if (!table.redact) continue;
+      expect(table.redact.afterDays, `${table.relation} redact window`).toBeLessThan(table.retentionDays);
+      expect(table.redact.afterDays, `${table.relation} redact window`).toBeGreaterThan(0);
+    }
+  });
+});
+
 describe('runTableVacuum', () => {
   /** Vacuum operations per sweep = one per (table, endpoint), NOT one per table: four
    *  relations live on both databases and are vacuumed on each. */

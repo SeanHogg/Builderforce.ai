@@ -1,3 +1,93 @@
+## ✅ RESOLVED 2026-09-05 — The agent could spin for 26 tool calls and the diagnostic called it "context exhaustion"
+
+A real VSIX capture: the user asked for a one-line CSS change. The agent read ONE 566-line
+file seven times at overlapping offsets (1, 140, 141, 208, 240, 340, 440), re-ran a search it
+had already run, made 26 tool calls, changed nothing — and the "Copy Diagnostic" report led
+with **"Likely CONTEXT EXHAUSTION (case A) — the transcript outgrew the model window."**
+
+That verdict sent the reader at the wrong problem. The 33k prompt peak and the 6 truncated
+tool results were real, but they were *consequences* of the re-reading, not its cause; nothing
+about shrinking the transcript or switching models would have helped. Three separate defects
+sat behind it, and all three are closed.
+
+### 1. The loop was invisible to every diagnostic signal
+
+The A-vs-B triage in `brainTriage.ts` had no vocabulary for "every turn succeeded and nothing
+got done". A run with zero errors, zero empty finishes and zero stalls scored clean, so the
+verdict fell through to whichever context/degradation heuristic happened to trip.
+
+New `brain-embedded/src/runProgress.ts` (pure, ~250 lines, own tests) measures what the old
+block never asked:
+
+- **Repetition** — exact duplicate calls, *and* revisits to the same TARGET. The target
+  signature is what catches the real loop: seven reads at different offsets are seven
+  different calls, so exact-duplicate detection stays silent on all of them.
+- **Reach** — distinct targets against targeted calls. 26 calls over 3 targets is spinning;
+  26 over 22 is working.
+- **Effect** — whether an edit-shaped request produced any successful mutation. Edit intent is
+  read from the USER turns only (an assistant restating the task would make it self-fulfilling)
+  and questions are excluded, so "why did you change X?" is not read as a change request.
+- **Time** — wall clock split into model time vs tool time, plus the slowest single step.
+
+`likelyCause` gains `no-progress`, ranked **above** `context-exhaustion` and
+`model-degradation` precisely because a spinning run also trips those — they have to be
+outranked or the loop is never named. The verdict text states the remedy that actually
+applies (widen the read / act on what you have) and explicitly rules out the two that don't.
+
+### 2. A mid-run capture was read as a finished one
+
+`computeBrainDiagnostics` now takes a `{ running }` context, and both copy surfaces pass it.
+A report taken while the agent is still working leads with **"⚠ CAPTURED MID-RUN"** naming the
+in-flight step and its elapsed time, and the `no-effect` half of the no-progress verdict is
+suppressed — a run that has not reached its write yet has not declined to make it. Without
+this, pressing Copy Diagnostic on a working agent produced a report that indicted it.
+
+### 3. The report was hard-truncated from the END, where the failure lives
+
+The transcript capped each payload at 4 KB but had no TOTAL budget, so a 26-call run assembled
+a report the paste target cut at 50,000 characters — losing every turn after the tenth. New
+`transcriptBudget.ts`: one pool for the whole report, per-payload cap decaying as it drains,
+and a byte-identical repeat charged nothing and replaced by a back reference (which is itself
+a finding — it makes the repetition visible in the body). Tool step headings now carry their
+duration, so "where did the time go" is answerable without cross-referencing.
+
+### 4. …and the loop is now actually fought, not just reported
+
+Diagnosing a loop after the fact is not the same as stopping one. The run loop already
+suppressed EXACT repeat reads; new `readCoverage.ts` tracks reads per TARGET and attaches an
+advisory to the copy the model sees — at the third visit a reminder naming the argument sets
+already tried, at the fifth a hard "STOP RE-READING … request it whole in one call, or make
+the edit". It does not block the read (a legitimate second pass is normal work) and it resets
+after any mutation, since a read after a change is new information. Recorded as its own
+`tools.revisit_guard` trace step so triage can see the loop was fought.
+
+### 5. "Thinking…" for 67 seconds looked exactly like a hang
+
+The timeline renders SETTLED steps: a tool appears only once it has finished. A `search_code`
+that took 1m 07s therefore showed a static "Thinking…" line and a 2px pulsing dot for the whole
+minute — indistinguishable from a wedged extension host.
+
+The run store now publishes a `BrainRunActivity` on phase ENTRY (`starting` / `thinking` /
+`writing` / `tool` / `awaiting` / `finishing`), carrying the tool name, the target derived from
+its arguments, the loop step and a start timestamp; it is cleared on Stop and at run end. New
+`<LiveActivity>` in `brain-ui` renders it: a rotating conic sweep in the gutter dot, a shimmer
+travelling across the label, an indeterminate progress bar, a live elapsed counter in tabular
+figures, and an explicit "Still working — 1m 07s elapsed" past 12 seconds. `awaiting`
+deliberately does NOT animate — nothing is progressing while the run waits on a human.
+
+Wired on all three surfaces (VSIX webview, web `BrainPanel`, canvas `BrainDock`) off ONE shared
+label bundle (`useLiveActivityLabels`), localized in all five catalogs plus all five VS Code
+l10n bundles. `prefers-reduced-motion` keeps the information and drops the movement rather than
+falling back to the static line this replaced.
+
+**Files.** New: `brain-embedded/src/{runProgress,runActivity,readCoverage,transcriptBudget}.ts`
+(+ tests), `packages/brain-ui/src/LiveActivity.tsx` (+ tests),
+`frontend/src/i18n/useLiveActivityLabels.ts`. Changed: `brainTriage.ts`, `brainRunStore.ts`,
+`useBrainConversation.ts`, `BrainTimeline.tsx`, `brain-ui/styles.css`, the VSIX
+`transcript.ts` / `App.tsx` / `brainWebview.ts`, `BrainPanel.tsx`, `BrainDock.tsx`, 10 locale
+catalogs. Shipped as VSIX **2026.8.142** (brain-embedded 2026.8.21, brain-ui 2026.8.18).
+415 + 82 + 181 tests green; all four packages typecheck.
+
 ## ✅ RESOLVED 2026-09-05 — Two Neon databases growing unbounded: retention covered 8 tables, none of them the expensive ones
 
 `builderforce-primary` had reached **2,777 MB** and `builderforce-transactional` **372 MB**. The

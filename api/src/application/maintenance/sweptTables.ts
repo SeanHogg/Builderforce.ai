@@ -26,7 +26,7 @@
  * ADDING A LOG TABLE: append an entry. Retention, vacuum and the per-table
  * autovacuum tuning guard (`npm run check:swept-tables`) all pick it up.
  */
-import { and, eq, lt } from 'drizzle-orm';
+import { and, eq, isNotNull, lt, or } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import {
@@ -71,6 +71,31 @@ export interface SweptTable {
   rationale: string;
   /** Delete rows older than `cutoff`. Takes the db for its own connection. */
   purge: (db: Db, cutoff: Date) => Promise<unknown>;
+  /**
+   * Optional COLUMN-level retention, on a shorter window than the row's.
+   *
+   * WHY A SECOND WINDOW. On some of these relations the fat part of a row and the useful
+   * part have very different lifespans. `tool_audit_events` is the case that motivated
+   * this: it is retained 90 days because the SOC 2 evidence export reads up to 90 days —
+   * but that export, and the compliance summary beside it, select only `ts`, `toolName`,
+   * `category`, `agentHostId`, `cloudAgentRef`, `executionId` and `durationMs`. The
+   * `args` and `result` payloads they never touch were 186 MB of a 298 MB table: 62% of
+   * it, and 20% of the whole database, kept solely because the narrow columns beside them
+   * had to be.
+   *
+   * Blanking the payload past a shorter window keeps the compliance record complete for
+   * its full 90 days at a third of the size. It is deliberately a SEPARATE knob from
+   * `retentionDays` rather than a shorter retention: dropping the ROW would break the
+   * evidence pack, and that is exactly the trade this exists to avoid making.
+   */
+  redact?: {
+    /** Days before the payload columns are blanked — must be < `retentionDays`. */
+    afterDays: number;
+    /** What the payload is and why nothing needs it past the window. */
+    rationale: string;
+    /** Blank the payload on rows older than `cutoff`, leaving the row itself intact. */
+    run: (db: Db, cutoff: Date) => Promise<unknown>;
+  };
 }
 
 export const SWEPT_TABLES: readonly SweptTable[] = [
@@ -138,8 +163,31 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     relation: 'tool_audit_events',
     connections: ['primary'],
     retentionDays: 90,
-    rationale: 'Agent tool-audit timeline, on the same window as the other agent/telemetry streams.',
+    rationale:
+      'Agent tool-audit timeline. The 90d window is NOT arbitrary and must not be shortened to '
+      + 'save space: it is the window the SOC 2 evidence export reads (`insights/complianceInsights.ts` '
+      + '→ `buildEvidencePack`, `parseDays(…, 90)`). Shrink the ROW instead — see `redact` below.',
     purge: (db, cutoff) => db.delete(toolAuditEvents).where(acrossTenants(toolAuditEvents, 'scheduled_sweep', lt(toolAuditEvents.createdAt, cutoff))),
+    redact: {
+      afterDays: 30,
+      rationale:
+        'The verbatim tool `args`/`result` payloads. No consumer reads either column past the live '
+        + 'timeline: the compliance summary and the evidence pack both project only ts, tool, category, '
+        + 'agent, execution and duration. At 154 + 139 bytes average they were 186 MB of a 298 MB '
+        + 'relation, so blanking them past 30d keeps 90 days of COMPLETE compliance evidence while '
+        + 'returning ~20% of the entire database.',
+      run: (db, cutoff) => db.update(toolAuditEvents)
+        .set({ args: null, result: null })
+        .where(acrossTenants(
+          toolAuditEvents, 'scheduled_sweep',
+          and(
+            lt(toolAuditEvents.createdAt, cutoff),
+            // Only rows that still carry a payload, so a re-run is a no-op rather than
+            // rewriting every old row — and its page — on every nightly tick.
+            or(isNotNull(toolAuditEvents.args), isNotNull(toolAuditEvents.result)),
+          ),
+        )),
+    },
   },
   {
     relation: 'pr_reconciliation_items',
