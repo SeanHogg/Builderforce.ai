@@ -564,17 +564,25 @@ export type GitAction = "status" | "diff" | "history" | "sync_latest" | "undo" |
  * refuse to run on a dirty tree so they can never silently discard uncommitted
  * work. Pushing the synced/rewound branch is the CALLER's job (surface-specific).
  */
-export function buildGitCommand(action: GitAction, opts?: { path?: string; baseBranch?: string; limit?: number }): string {
+export function buildGitCommand(action: GitAction, opts?: { path?: string; baseBranch?: string; limit?: number; repo?: string }): string {
   const path = safeGitArg(opts?.path);
   const pathArg = path ? ` -- "${path}"` : "";
+  // A workspace root is not always the repository root: a monorepo checkout, or simply
+  // a folder holding several projects, has its `.git` one level down. `repo` scopes the
+  // command into that subdirectory. `cd X && Y` is the one chaining form that behaves
+  // identically under sh, cmd and PowerShell, so this stays portable across every
+  // surface that runs these strings. Omitted ⇒ byte-for-byte the previous command, so
+  // the Container image's execTool and its tests are unaffected.
+  const repo = safeGitArg(opts?.repo);
+  const scoped = (cmd: string): string => (repo ? `cd "${repo}" && ${cmd}` : cmd);
   switch (action) {
     case "status":
-      return "git status --short --branch";
+      return scoped("git status --short --branch");
     case "diff":
-      return `git --no-pager diff${pathArg}`;
+      return scoped(`git --no-pager diff${pathArg}`);
     case "history": {
       const limit = Number.isFinite(opts?.limit) && (opts!.limit as number) > 0 ? Math.min(Math.floor(opts!.limit as number), 200) : 30;
-      return `git --no-pager log --oneline -n ${limit}${pathArg}`;
+      return scoped(`git --no-pager log --oneline -n ${limit}${pathArg}`);
     }
     case "sync_latest": {
       const base = safeGitArg(opts?.baseBranch);
@@ -614,25 +622,62 @@ function gitToolResult(action: GitAction, r: { ok: boolean; stdout?: string; exi
   return { data: { ok: r.ok, action, output: out.slice(0, 20_000), ...(r.error ? { error: r.error } : {}) } };
 }
 
-async function runGitTool(action: GitAction, opts: { path?: string; baseBranch?: string; limit?: number }, ctx: { caps: { shell?: { run(c: string): Promise<{ ok: boolean; stdout?: string; exitCode?: number; error?: string }> } } }): Promise<ToolResult> {
+/** git's own wording when the working directory has no repository above it. */
+const NOT_A_REPO = /not a git repository/i;
+
+function isNotARepo(r: { stdout?: string; error?: string }): boolean {
+  return NOT_A_REPO.test(`${r.stdout ?? ""} ${r.error ?? ""}`);
+}
+
+async function runGitTool(action: GitAction, opts: { path?: string; baseBranch?: string; limit?: number; repo?: string }, ctx: { caps: { shell?: { run(c: string): Promise<{ ok: boolean; stdout?: string; exitCode?: number; error?: string }> } } }): Promise<ToolResult> {
   const r = await ctx.caps.shell!.run(buildGitCommand(action, opts));
-  return gitToolResult(action, r);
+  // "fatal: not a git repository" is not the end of the road, and returning it raw is
+  // what makes it look like one. It happens routinely when the OPEN FOLDER holds
+  // several checkouts side by side (`/code/`, with `/code/app` and `/code/api` each a
+  // repo): git is run at the root, finds no `.git`, and the agent — handed a bare
+  // fatal with no next step — concludes the tool is unusable and gives up, or asks the
+  // user a question it could have answered itself.
+  //
+  // So the failure carries its own remedy: the tools take a `repo` subdirectory, and
+  // this says so, names the tool that finds it, and shows the exact retry. Discovery
+  // is left to `list_files` rather than a shell one-liner because that tool already
+  // works identically on every surface, whereas a directory-scan command would have to
+  // be written three ways for sh, cmd and PowerShell.
+  if (isNotARepo(r) && !opts.repo) {
+    return {
+      data: {
+        ok: false,
+        action,
+        error:
+          "not a git repository at the workspace root — this usually means the open folder CONTAINS the repositories rather than being one (several checkouts side by side). "
+          + "Do not conclude git is unavailable: call `list_files` to see the top-level directories, then re-run this tool with `repo` set to the one holding the code you are working on "
+          + `(e.g. { "repo": "my-project" }). If none of them is a checkout, say so plainly — file edits still work, only the git tools need a repository.`,
+      },
+    };
+  }
+  const result = gitToolResult(action, r);
+  // Say WHERE it ran whenever that was not the obvious place, so a later command in
+  // the same run does not have to rediscover the scope.
+  if (opts.repo && (result.data as { ok?: boolean }).ok) {
+    (result.data as Record<string, unknown>).repo = opts.repo;
+  }
+  return result;
 }
 
 export const gitStatusTool: ToolDefinition = defineTool({
   name: "git_status",
-  description: "Show the current branch and any uncommitted changes (git status). Use it to see what you have modified before committing, syncing, or finishing.",
-  parameters: { type: "object", properties: {} },
+  description: "Show the current branch and any uncommitted changes (git status). Use it to see what you have modified before committing, syncing, or finishing. If the open folder contains several checkouts rather than being one repo, pass `repo` to name the one you mean.",
+  parameters: { type: "object", properties: { repo: { type: "string", description: 'Optional subdirectory holding the repository, when the open folder CONTAINS checkouts rather than being one (e.g. "my-project"). Omit when the workspace root is itself the repo.' } } },
   requires: ["shell"],
-  execute: (_args, ctx) => runGitTool("status", {}, ctx),
+  execute: (args, ctx) => runGitTool("status", { repo: typeof args.repo === "string" ? args.repo : undefined }, ctx),
 });
 
 export const gitDiffTool: ToolDefinition = defineTool({
   name: "git_diff",
   description: "Show the uncommitted diff of your working tree (optionally for one path). Use it to review exactly what you changed before finishing.",
-  parameters: { type: "object", properties: { path: { type: "string", description: "Optional repo-relative file/dir to scope the diff to." } } },
+  parameters: { type: "object", properties: { path: { type: "string", description: "Optional repo-relative file/dir to scope the diff to." }, repo: { type: "string", description: 'Optional subdirectory holding the repository, when the open folder CONTAINS checkouts rather than being one (e.g. "my-project"). Omit when the workspace root is itself the repo.' } } },
   requires: ["shell"],
-  execute: (args, ctx) => runGitTool("diff", { path: typeof args.path === "string" ? args.path : undefined }, ctx),
+  execute: (args, ctx) => runGitTool("diff", { path: typeof args.path === "string" ? args.path : undefined, repo: typeof args.repo === "string" ? args.repo : undefined }, ctx),
 });
 
 export const gitHistoryTool: ToolDefinition = defineTool({
@@ -643,10 +688,11 @@ export const gitHistoryTool: ToolDefinition = defineTool({
     properties: {
       path: { type: "string", description: "Optional repo-relative file/dir to scope history to." },
       limit: { type: "number", description: "Max commits to return (default 30, max 200)." },
+      repo: { type: "string", description: 'Optional subdirectory holding the repository, when the open folder CONTAINS checkouts rather than being one (e.g. "my-project"). Omit when the workspace root is itself the repo.' },
     },
   },
   requires: ["shell"],
-  execute: (args, ctx) => runGitTool("history", { path: typeof args.path === "string" ? args.path : undefined, limit: typeof args.limit === "number" ? args.limit : undefined }, ctx),
+  execute: (args, ctx) => runGitTool("history", { path: typeof args.path === "string" ? args.path : undefined, limit: typeof args.limit === "number" ? args.limit : undefined, repo: typeof args.repo === "string" ? args.repo : undefined }, ctx),
 });
 
 export const gitSyncLatestTool: ToolDefinition = defineTool({

@@ -542,3 +542,13 @@ export function chooseStallFailover(input: StallFailoverInput): string | undefin
   // than assumed of every implementation.
   return next && !input.tried.includes(next) ? next : undefined;
 }
+
+// What a turn is ASKING FOR, and what a turn PROMISED — the predicates the answer
+// cache, the run loop and the run diagnostics must all agree on. Kept in their own
+// module (this file is already large) and re-exported so consumers have one import.
+export {
+  asksForChange,
+  promisesUnfinishedWork,
+  isContinuationDirective,
+  continuationDirective,
+} from './requestIntent';

@@ -488,6 +488,14 @@ export interface BrainDiagnostics {
   truncatedToolResults: number;
   /** The single largest tool result (label + pre-trim bytes). */
   largestToolResult: { label: string; bytes: number } | null;
+  /**
+   * The steps that FAILED, most recent first — label plus the message the tool
+   * actually returned. `Errors: 1` on its own tells a reader that something went
+   * wrong and nothing about what, so the only way to act on it was to scroll the
+   * whole transcript hunting for the failure. Capped, because a run that fails
+   * repeatedly should not push everything else out of the report.
+   */
+  errorSteps: { label: string; message: string }[];
   /** Distinct models that actually answered, first-seen order. */
   modelsUsed: string[];
   /** Distinct Evermind/SSM artifacts among them. */
@@ -571,6 +579,34 @@ export interface BrainDiagnostics {
     | 'model-degradation'
     | 'inconclusive'
     | 'healthy';
+}
+
+/** How many failing steps the report names before it stops listing them. */
+const MAX_REPORTED_ERRORS = 5;
+
+/** Longest error message quoted per failing step. */
+const MAX_ERROR_CHARS = 240;
+
+/**
+ * The message a failed step actually returned. Tool failures carry it as
+ * `{ error }` or `{ ok: false, output }`; a thrown step puts it straight in
+ * `result`. Falls back to a compact serialization so a failure is never reported
+ * as an empty string.
+ */
+function errorMessageOf(e: BrainTraceEvent): string {
+  const r = e.result;
+  let text: string;
+  if (typeof r === 'string') text = r;
+  else if (r && typeof r === 'object') {
+    const o = r as Record<string, unknown>;
+    text = typeof o.error === 'string' && o.error
+      ? o.error
+      : typeof o.output === 'string' && o.output
+        ? o.output
+        : JSON.stringify(r);
+  } else text = String(r ?? '(no message)');
+  const flat = text.replace(/\s+/g, ' ').trim();
+  return flat.length > MAX_ERROR_CHARS ? `${flat.slice(0, MAX_ERROR_CHARS)}…` : flat || '(no message)';
 }
 
 /** Byte length of a JSON-serialized value (UTF-16 length is a fine proxy here). */
@@ -664,6 +700,13 @@ export function computeBrainDiagnostics(
     if (!largestToolResult || bytes > largestToolResult.bytes) largestToolResult = { label: ev.label, bytes };
   }
 
+  // WHAT failed, not just how many. Newest first: the last failure is usually the
+  // one that ended the run.
+  const errorSteps = errors
+    .slice(-MAX_REPORTED_ERRORS)
+    .reverse()
+    .map((e) => ({ label: e.label, message: errorMessageOf(e) }));
+
   const modelsUsed = modelsUsedInTrace(events);
   const evermindUsed = modelsUsed.filter(isEvermindModel);
   const memoryAnswers = memoryAnswersInTrace(events);
@@ -734,6 +777,7 @@ export function computeBrainDiagnostics(
     turns: llm.length,
     toolCalls: toolEvents.length,
     errors: errors.length,
+    errorSteps,
     loopExhausted,
     tokensMeasured,
     promptTokenPeak,
@@ -817,6 +861,12 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
   // sizes because they answer the question those sizes raise: 102 KB of tool output
   // across 26 calls is either research or a loop, and only these lines say which.
   lines.push(...(d.progress ? formatRunProgress(d.progress) : []));
+  // WHICH steps failed. `Errors: 1` alone forced a reader to scroll the transcript
+  // hunting for the failure; naming it is the difference between a number and a lead.
+  if (d.errorSteps?.length) {
+    for (const e of d.errorSteps) lines.push(`Failed step: ${e.label} — ${e.message}`);
+    if (d.errors > d.errorSteps.length) lines.push(`(+${d.errors - d.errorSteps.length} earlier failure(s) not listed)`);
+  }
   // What the model could actually CALL, per turn — not the registry-wide total. A run
   // whose turns saw 0 tools and a run whose turns saw 64 and ignored them used to render
   // identically, which is how "try a different model" became the standing advice for a

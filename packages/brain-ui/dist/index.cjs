@@ -125,7 +125,28 @@ function splitThinkSegments(content) {
     offset = match.index + match[0].length;
   }
   push(content.length);
-  return segments.length > 0 ? segments : [{ kind: "answer", content }];
+  if (segments.length === 0) return [{ kind: "answer", content }];
+  return promoteSwallowedAnswer(segments);
+}
+var MAX_FRAGMENT_CHARS = 40;
+var REPLY_OPENER = /^[A-Z0-9#*\-_>`[|("']/;
+function isFragment(text) {
+  return text.length > 0 && text.length <= MAX_FRAGMENT_CHARS && !REPLY_OPENER.test(text);
+}
+function promoteSwallowedAnswer(segments) {
+  const answers = segments.filter((s) => s.kind === "answer");
+  if (answers.length === 0) return segments;
+  const answerText = answers.map((s) => s.content).join(" ").trim();
+  if (!isFragment(answerText)) return segments;
+  const thoughts = segments.filter((s) => s.kind === "thought");
+  const richest = thoughts.reduce(
+    (best, s) => !best || s.content.length > best.content.length ? s : best,
+    null
+  );
+  if (!richest || richest.content.length <= answerText.length) return segments;
+  const promoted = [{ kind: "answer", content: `${richest.content} ${answerText}`.trim() }];
+  for (const s of thoughts) if (s !== richest) promoted.unshift(s);
+  return promoted;
 }
 
 // src/Markdown.tsx

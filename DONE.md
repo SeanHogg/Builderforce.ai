@@ -1,3 +1,47 @@
+## ✅ RESOLVED 2026-09-05 — Both Neon branches brought under the 0.5 GB Free-plan limit, without shortening the SOC 2 evidence window
+
+Follow-on to the retention work above. After the backlog drain primary still read **931 MB**
+at the branch, against a **0.5 GB per-branch** Free-plan limit. A bloat measurement settled
+what kind of problem was left: only **36 MB** of the remainder was reclaimable dead space, so
+this was live data, not vacuum debt.
+
+**`tool_audit_events` was 47% of the database and could not be purged.** Its 90-day window is
+the window `buildEvidencePack` reads (`parseDays(…, 90)`) — shortening it would have silently
+truncated SOC 2 evidence. But a per-column measurement showed `args` (154 B avg) and `result`
+(139 B) were **186 MB of a 298 MB relation**, and *no consumer reads either column*: the
+compliance summary and the evidence pack both project only ts, tool, category, agent,
+execution and duration.
+
+So the registry gained a second, shorter window — `SweptTable.redact` — that blanks a payload
+while leaving the row that carries it. `tool_audit_events` went **515 MB → 176 MB with the
+full 90 days of compliance evidence intact**. A test asserts `redact.afterDays <
+retentionDays` for every entry, because a redact window at or beyond the retention window is a
+silent no-op: the row is deleted before its payload is ever blanked.
+
+**`executions` got the same treatment, and deliberately NOT a registry entry.** The approved
+plan was a 60-day retention; measuring first showed that would have freed nothing — only **136
+of 31,362 rows** are older than 60 days — while cascading into twelve child relations
+(`execution_messages`, `task_file_changes`, `agent_run_principals`, …). The size was one
+column: `payload` at 977 B/row, 29 MB of a 52 MB heap. `application/runtime/executionPayloadRetention.ts`
+blanks it past 30d as a declared non-registry policy, alongside the expired-memories and
+visitor-activity policies. `result` and `error_message` are left intact — they are what a
+person reads when opening a past run, and `scoreRunOutcome` grades against them. Every run row
+survives, so DORA, the lifecycle ledger and usage attribution are untouched.
+
+**`activity_log`'s primary copy was migrated, not deleted.** The 85,359 rows stranded there by
+the wrong-endpoint bug (pre-split history from 2026-03-23, plus everything the outbox drainer
+appended afterwards) were moved to the transactional endpoint, deduped on `event_key`. The
+audit trail is now on one endpoint and those events are visible again.
+
+**Also:** `execution_rollbacks` added at 30d (18,199 rows, all already past the window, nothing
+references it); `activity_signals` and `integration_sync_logs` narrowed 90d → 30d; four
+never-scanned indexes dropped (27 MB). `creation_session_snapshots`/`_events` were considered
+and **rejected**: the snapshot is the canvas replay checkpoint and events replay *from* it, so
+an age-based purge risks breaking session restore for 13 MB.
+
+**Result: primary 2,777 MB → 428 MB (branch ~494 MB); transactional 373 → 384 MB** (it absorbed
+the migrated audit rows and still shrank on reclaim). Both branches under 0.5 GB.
+
 ## ✅ RESOLVED 2026-09-05 — The agent could spin for 26 tool calls and the diagnostic called it "context exhaustion"
 
 A real VSIX capture: the user asked for a one-line CSS change. The agent read ONE 566-line

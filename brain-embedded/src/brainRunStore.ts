@@ -58,6 +58,9 @@ import {
   MAX_ANNOUNCEMENT_RECOVERIES,
   MAX_MODEL_FAILOVERS,
   toolNamesMentionedIn,
+  isContinuationDirective,
+  promisesUnfinishedWork,
+  continuationDirective,
 } from '@builderforce/agent-stall';
 import {
   formatEvermindMemoryBlock,
@@ -696,6 +699,21 @@ function latestUserText(convo: ChatCompletionMessage[]): string {
  * keep everything after it — correctness over the size cap, and bounded by the
  * run's max iterations anyway.
  */
+/**
+ * The text of the most recent ASSISTANT turn — the counterpart to
+ * {@link latestUserText}. Read as a pair to decide whether a bare directive
+ * ("Fix") is a continuation of a proposal the previous turn left unfinished.
+ * Walks backwards because the working transcript also carries `tool` rows and the
+ * loop's own injected turns, so position alone does not identify a reply.
+ */
+function lastAssistantText(convo: ChatCompletionMessage[]): string {
+  for (let i = convo.length - 1; i >= 0; i -= 1) {
+    const m = convo[i];
+    if (m.role === 'assistant') return typeof m.content === 'string' ? m.content.trim() : '';
+  }
+  return '';
+}
+
 export function windowed(convo: ChatCompletionMessage[]): ChatCompletionMessage[] {
   let w = convo.slice(-HISTORY_WINDOW);
   while (w.length > 0 && w[0].role !== 'user') w = w.slice(1);
@@ -1379,6 +1397,27 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // (BrainService.agentReply). `chatMode` is optional and defaults to WORK so any host
   // that has not adopted the mode yet keeps the behaviour it shipped with.
   systemPrompt = `${systemPrompt}\n\n${chatModeDirective(runMode, chatId)}\n\n${turnOptimizationDirective()}`;
+
+  // A bare "Fix" / "do it" / "go ahead" has no subject of its own — it points at the
+  // proposal in the previous assistant turn. Read as a fresh, contextless request it
+  // is genuinely ambiguous, and the model then does the reasonable-looking thing: it
+  // asks what to fix, while the answer sits one message above it in the same
+  // transcript. The user has to re-explain something they already said, and the turn
+  // produced nothing.
+  //
+  // Resolved HERE rather than left to the model to notice, because the connection is
+  // structural and cheap to verify — a contentless directive landing directly on a
+  // turn that promised unfinished work — and because a model that misreads it burns a
+  // whole turn asking.
+  if (isContinuationDirective(latestUserText(convo)) && promisesUnfinishedWork(lastAssistantText(convo))) {
+    systemPrompt = `${systemPrompt}\n\n${continuationDirective()}`;
+    pushTrace(c, {
+      ts: nowIso(),
+      category: 'message',
+      label: 'turn.continuation_resolved',
+      result: "The user's bare directive was resolved against the previous turn's unfinished proposal, so the run carries that proposal out instead of asking what to fix.",
+    });
+  }
 
   // Read-only tool calls whose (name+args) exactly repeat within a run return a
   // "already returned above" stub instead of re-fetching + re-injecting the full

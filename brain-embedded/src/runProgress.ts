@@ -29,6 +29,7 @@
  * so every copy surface computes the identical block.
  */
 
+import { asksForChange } from '@builderforce/agent-stall';
 import { isCodeChangeTool } from './chatWorkLinking';
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 import { activityTarget } from './runActivity';
@@ -53,27 +54,17 @@ export function isMutationTool(name: string): boolean {
 }
 
 /**
- * Prose in the user's REQUEST that asks for a change to be made, rather than for
- * something to be found or explained. Deliberately verb-led: "reduce the height",
- * "fix the gate", "add a column" all demand an effect; "where is", "why does",
- * "explain", "how do I" do not. Used ONLY to decide whether zero mutations is a
- * finding or the expected shape of an answer — never to steer the run.
- */
-const EDIT_INTENT = /\b(add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show)\b/i;
-
-/** Prose that asks a QUESTION instead of demanding a change. Checked first: an
- *  edit verb inside a question ("why did you change X?") is not an edit request. */
-const QUESTION_INTENT = /^\s*(what|why|how|where|when|which|who|is|are|does|do|did|can|could|should|would|explain|describe|tell me|show me|list)\b|\?\s*$/i;
-
-/**
  * Whether the run was asked to CHANGE something. Reads the user turns only — the
  * assistant's own restatement of the task would make this trivially self-fulfilling.
- * Uses the FIRST user turn (the request), plus any later user turn, since a
- * follow-up can turn a question into a task.
+ * Uses the first user turn (the request) plus any later one, since a follow-up can
+ * turn a question into a task.
+ *
+ * The per-message predicate is `asksForChange` from `@builderforce/agent-stall`: the
+ * SERVER needs the identical judgement to decide whether an answer may be replayed
+ * from cache (a change request must never be), so it cannot live here.
  */
 export function hasEditIntent(messages: BrainMessage[]): boolean {
-  const asks = messages.filter((m) => m.role === 'user').map((m) => (m.content ?? '').slice(0, 600));
-  return asks.some((text) => !QUESTION_INTENT.test(text) && EDIT_INTENT.test(text));
+  return messages.some((m) => m.role === 'user' && asksForChange(m.content));
 }
 
 /** The structural signature of a call — what makes two calls "the same call". */
@@ -301,7 +292,7 @@ export function runProgressVerdict(p: RunProgress): string | null {
   // a run that is re-reading the same file.
   const remedy = p.spinning
     ? 'This is a LOOP, not context pressure and not a model that "won\'t call tools" — the numbers on those signals are a consequence of the re-reading, not its cause. Look at the repeated targets above: the agent is not retaining what it already read (the result was truncated, or the read was too narrow to answer the question). Widen the read, or cache the file in the transcript, rather than shrinking context or switching models.'
-    : 'Check whether the agent was ever offered a mutating tool this run (see the tools-advertised line) before concluding the model refused to act.';
+    : 'Check the "Answered from memory" line first — a turn served from the Q&A cache or an Evermind head does NO work by construction, so a run made largely of those has no mutating call to find. Otherwise check whether the agent was ever offered a mutating tool this run (see the tools-advertised line) before concluding the model refused to act.';
 
   return `${loop}${effect}${remedy}`;
 }

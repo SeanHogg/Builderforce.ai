@@ -1727,6 +1727,35 @@ function resolveRecipient(choice, mention) {
   return choice ?? mention;
 }
 
+// ../packages/agent-stall/src/requestIntent.ts
+var CHANGE_VERB = /\b(add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show|bump|revert|restore|install|upgrade|downgrade|rewrite|extract|split|merge)\b/i;
+var QUESTION_SHAPE = /^\s*(what|why|how|where|when|which|who|is|are|was|were|does|do|did|can|could|should|would|will|explain|describe|summar|tell me|show me|list|compare|review|analyse|analyze)\b|\?\s*$/i;
+function asksForChange(text) {
+  const t = (text ?? "").trim();
+  if (!t) return false;
+  const head = t.slice(0, 600);
+  if (QUESTION_SHAPE.test(head)) return false;
+  return CHANGE_VERB.test(head);
+}
+var NOTHING_DONE = /\b(nothing (has been|was|is) (changed|modified|applied|edited|written|saved)|no (changes?|edits?) (have been|were|was) (made|applied|written|saved)|(not|never) (yet )?(been )?(applied|written|saved|committed)|has not been (changed|applied|modified)|before (applying|making) the edit)\b/i;
+var DEFERRED_PROMISE = /\b(re-?run me|run me again|ask me again|in a follow-?up|next run|on the next turn|say the word|let me know and I'?ll|I'?ll (then )?(apply|make|write|implement|create|edit|fix|update|do|proceed|carry)|I will (then )?(apply|make|write|implement|create|edit|fix|update|proceed))\b/i;
+var BUDGET_EXHAUSTED = /\b(tool-?call budget|step budget|iteration (cap|limit|budget)|ran out of (tool calls|steps|budget)|hit (the|my) (tool|step|budget))\b/i;
+function promisesUnfinishedWork(text) {
+  const t = (text ?? "").trim();
+  if (!t) return false;
+  return NOTHING_DONE.test(t) || DEFERRED_PROMISE.test(t) || BUDGET_EXHAUSTED.test(t);
+}
+var CONTINUATION = /^\s*(?:ok(?:ay)?[,\s]*)?(?:please\s+)?(?:now\s+)?(?:just\s+)?(?:go\s+ahead|carry\s+on|keep\s+going|make\s+it\s+so|do\s+it|do\s+that|do\s+so|fix\s+it|fix\s+that|apply\s+it|apply\s+that|apply|fix|go|proceed|continue|yes|yep|yeah|y|sure|confirm(?:ed)?|approved?|ship\s+it|send\s+it|run\s+it|do\s+the\s+fix|make\s+the\s+change)\s*[.!]*\s*$/i;
+var MAX_CONTINUATION_CHARS = 40;
+function isContinuationDirective(text) {
+  const t = (text ?? "").trim();
+  if (!t || t.length > MAX_CONTINUATION_CHARS) return false;
+  return CONTINUATION.test(t);
+}
+function continuationDirective() {
+  return `The user's last message is a bare directive ("fix", "do it", "go ahead") with no subject of its own. It refers to the proposal in YOUR immediately preceding message, which described work you had not yet carried out. Carry out that exact proposal now, using the tools, starting from the files and the change it already named \u2014 do NOT ask the user what to fix, and do NOT re-derive the analysis you have already done and can read above. If the earlier proposal named a specific file and edit, apply that edit. Report what you changed when it is done.`;
+}
+
 // ../packages/agent-stall/src/index.ts
 var ANNOUNCE_SUBJECT = "\\b(?:i(?: will|'ll| am going to|'m going to| am about to| plan to|'d need to| would need to| will need to| need to)|let(?:'?s| me| us)|going to|about to|next,? i'?l?l?|now)";
 var ANNOUNCE_FILLER = "(?:\\s+(?:now|then|first|next|quickly|briefly|just|also|actually|go ahead and|try to|attempt to))*";
@@ -1968,11 +1997,8 @@ var MUTATION_TOOL = /(^|_)(write|edit|save|create|update|delete|apply|patch|publ
 function isMutationTool(name) {
   return isCodeChangeTool(name) || MUTATION_TOOL.test(name);
 }
-var EDIT_INTENT = /\b(add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show)\b/i;
-var QUESTION_INTENT = /^\s*(what|why|how|where|when|which|who|is|are|does|do|did|can|could|should|would|explain|describe|tell me|show me|list)\b|\?\s*$/i;
 function hasEditIntent(messages) {
-  const asks = messages.filter((m) => m.role === "user").map((m) => (m.content ?? "").slice(0, 600));
-  return asks.some((text) => !QUESTION_INTENT.test(text) && EDIT_INTENT.test(text));
+  return messages.some((m) => m.role === "user" && asksForChange(m.content));
 }
 function callSignature(ev) {
   let args = "";
@@ -2090,7 +2116,7 @@ function runProgressVerdict(p) {
   const worst = p.repeatedTargets[0];
   const loop = p.spinning ? `NO PROGRESS \u2014 the run kept going back over ground it had already covered: ${Math.round(p.revisitRatio * 100)}% of its targeted calls revisited a target it had already read${worst ? `, worst \`${worst.label}\` \xD7${worst.count}` : ""}${p.duplicateCalls ? `, and ${p.duplicateCalls} call(s) repeated earlier arguments EXACTLY` : ""}. ` : "NO EFFECT \u2014 ";
   const effect = p.noEffect ? `The request asked for a change and the run finished with ZERO successful mutating calls${p.mutationsAttempted ? ` (${p.mutationsAttempted} attempted, all failed)` : " \u2014 it never attempted one"}, so nothing was actually modified. ` : "";
-  const remedy = p.spinning ? `This is a LOOP, not context pressure and not a model that "won't call tools" \u2014 the numbers on those signals are a consequence of the re-reading, not its cause. Look at the repeated targets above: the agent is not retaining what it already read (the result was truncated, or the read was too narrow to answer the question). Widen the read, or cache the file in the transcript, rather than shrinking context or switching models.` : "Check whether the agent was ever offered a mutating tool this run (see the tools-advertised line) before concluding the model refused to act.";
+  const remedy = p.spinning ? `This is a LOOP, not context pressure and not a model that "won't call tools" \u2014 the numbers on those signals are a consequence of the re-reading, not its cause. Look at the repeated targets above: the agent is not retaining what it already read (the result was truncated, or the read was too narrow to answer the question). Widen the read, or cache the file in the transcript, rather than shrinking context or switching models.` : 'Check the "Answered from memory" line first \u2014 a turn served from the Q&A cache or an Evermind head does NO work by construction, so a run made largely of those has no mutating call to find. Otherwise check whether the agent was ever offered a mutating tool this run (see the tools-advertised line) before concluding the model refused to act.';
   return `${loop}${effect}${remedy}`;
 }
 
@@ -2269,6 +2295,19 @@ function formatBrainProvenance(events, opts = {}) {
   }
   return lines;
 }
+var MAX_REPORTED_ERRORS = 5;
+var MAX_ERROR_CHARS = 240;
+function errorMessageOf(e) {
+  const r = e.result;
+  let text;
+  if (typeof r === "string") text = r;
+  else if (r && typeof r === "object") {
+    const o = r;
+    text = typeof o.error === "string" && o.error ? o.error : typeof o.output === "string" && o.output ? o.output : JSON.stringify(r);
+  } else text = String(r ?? "(no message)");
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > MAX_ERROR_CHARS ? `${flat.slice(0, MAX_ERROR_CHARS)}\u2026` : flat || "(no message)";
+}
 function byteLen(v) {
   const s = typeof v === "string" ? v : JSON.stringify(v ?? "");
   return s.length;
@@ -2313,6 +2352,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
     if (ev.truncated) truncatedToolResults += 1;
     if (!largestToolResult || bytes > largestToolResult.bytes) largestToolResult = { label: ev.label, bytes };
   }
+  const errorSteps = errors.slice(-MAX_REPORTED_ERRORS).reverse().map((e) => ({ label: e.label, message: errorMessageOf(e) }));
   const modelsUsed = modelsUsedInTrace(events);
   const evermindUsed = modelsUsed.filter(isEvermindModel);
   const memoryAnswers = memoryAnswersInTrace(events);
@@ -2338,6 +2378,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
     turns: llm.length,
     toolCalls: toolEvents.length,
     errors: errors.length,
+    errorSteps,
     loopExhausted,
     tokensMeasured,
     promptTokenPeak,
@@ -2389,6 +2430,10 @@ function formatBrainDiagnostics(d) {
     `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` \xB7 largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ""}${d.truncatedToolResults ? ` \xB7 ${d.truncatedToolResults} truncated before the model saw them` : ""}`
   );
   lines.push(...d.progress ? formatRunProgress(d.progress) : []);
+  if (d.errorSteps?.length) {
+    for (const e of d.errorSteps) lines.push(`Failed step: ${e.label} \u2014 ${e.message}`);
+    if (d.errors > d.errorSteps.length) lines.push(`(+${d.errors - d.errorSteps.length} earlier failure(s) not listed)`);
+  }
   if (d.advertisedToolsLastTurn != null) {
     const range = d.advertisedToolsMin != null && d.advertisedToolsMin !== d.advertisedToolsLastTurn ? `${d.advertisedToolsMin}\u2013${d.advertisedToolsLastTurn}` : `${d.advertisedToolsLastTurn}`;
     lines.push(
@@ -3027,6 +3072,13 @@ function latestUserText(convo) {
   }
   return "";
 }
+function lastAssistantText(convo) {
+  for (let i = convo.length - 1; i >= 0; i -= 1) {
+    const m = convo[i];
+    if (m.role === "assistant") return typeof m.content === "string" ? m.content.trim() : "";
+  }
+  return "";
+}
 function windowed(convo) {
   let w = convo.slice(-HISTORY_WINDOW);
   while (w.length > 0 && w[0].role !== "user") w = w.slice(1);
@@ -3421,6 +3473,17 @@ ${extra}`;
 ${chatModeDirective(runMode, chatId)}
 
 ${turnOptimizationDirective()}`;
+  if (isContinuationDirective(latestUserText(convo)) && promisesUnfinishedWork(lastAssistantText(convo))) {
+    systemPrompt = `${systemPrompt}
+
+${continuationDirective()}`;
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "turn.continuation_resolved",
+      result: "The user's bare directive was resolved against the previous turn's unfinished proposal, so the run carries that proposal out instead of asking what to fix."
+    });
+  }
   const readDedupe = /* @__PURE__ */ new Set();
   const readCoverage = new ReadCoverage();
   let announcementRecoveries = 0;

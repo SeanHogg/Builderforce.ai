@@ -1464,8 +1464,12 @@ declare function isMutationTool(name: string): boolean;
 /**
  * Whether the run was asked to CHANGE something. Reads the user turns only — the
  * assistant's own restatement of the task would make this trivially self-fulfilling.
- * Uses the FIRST user turn (the request), plus any later user turn, since a
- * follow-up can turn a question into a task.
+ * Uses the first user turn (the request) plus any later one, since a follow-up can
+ * turn a question into a task.
+ *
+ * The per-message predicate is `asksForChange` from `@builderforce/agent-stall`: the
+ * SERVER needs the identical judgement to decide whether an answer may be replayed
+ * from cache (a change request must never be), so it cannot live here.
  */
 declare function hasEditIntent(messages: BrainMessage[]): boolean;
 interface RunProgress {
@@ -1878,6 +1882,17 @@ interface BrainDiagnostics {
         label: string;
         bytes: number;
     } | null;
+    /**
+     * The steps that FAILED, most recent first — label plus the message the tool
+     * actually returned. `Errors: 1` on its own tells a reader that something went
+     * wrong and nothing about what, so the only way to act on it was to scroll the
+     * whole transcript hunting for the failure. Capped, because a run that fails
+     * repeatedly should not push everything else out of the report.
+     */
+    errorSteps: {
+        label: string;
+        message: string;
+    }[];
     /** Distinct models that actually answered, first-seen order. */
     modelsUsed: string[];
     /** Distinct Evermind/SSM artifacts among them. */

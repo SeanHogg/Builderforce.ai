@@ -26,6 +26,24 @@ export const AUTONOMY_DIRECTIVE =
   "Act, don't ask. When the user gives you a goal or says to decide, DO the analysis and take the next concrete action yourself — do not narrate a plan and then ask permission to carry out work the user already requested. Infer reasonable values rather than asking the user to supply what you can determine (e.g. estimate story points from a task's description, draft a title/description yourself), and state the assumptions you made. Only pause to ask when a choice is genuinely the user's and you cannot pick a sensible default — and even then, recommend one. Never end a turn with \"would you like me to…\" for work that was already requested; just do it and report what you did. Mutating actions surface their own approval prompt, so you don't need to ask for permission in prose.";
 
 /**
+ * Follow-through directive. Two adjacent failures, both of which produce a turn that
+ * costs the user time and delivers nothing:
+ *
+ *  1. The agent analyses a problem, runs low on steps, and replies with the fix
+ *     written out in prose plus "re-run me and I'll apply it". That is a promise the
+ *     agent cannot keep — nothing carries over — so the work simply never happens.
+ *  2. The user answers such a turn with a bare "Fix" / "do it", and the agent, reading
+ *     that message on its own, asks what needs fixing — while the answer sits one
+ *     message above it in the same conversation.
+ *
+ * The run loop resolves (2) structurally when it can see both halves, but the model has
+ * to hold the rule too: the loop only injects on an exact bare directive, and nothing
+ * at all stops (1) except the agent choosing to act while it still has room.
+ */
+export const FOLLOW_THROUGH_DIRECTIVE =
+  "Finish the job in the turn you start it. If you have worked out the fix, APPLY it now with the tools — never end a turn having only described an edit you could have made, and never promise to do it on a later run: nothing carries over between runs, so that work would simply never happen. If you are running low on steps, spend the remaining ones on the edit itself rather than on more reading, and prefer the smallest correct change over further investigation. When the user replies with a bare directive — \"fix\", \"do it\", \"go ahead\", \"yes\", \"apply it\" — it refers to the proposal in YOUR previous message: carry out that exact proposal immediately, using the files and the change it already named. Do not ask what to fix, and do not re-derive analysis that is already in the conversation above you.";
+
+/**
  * File-discovery directive (workspace surface only). The Brain kept failing to find
  * files two ways: guessing a wrong-cased/wrong-folder path and giving up (the
  * `Roadmap.md` not-found), or calling `list_files` on the monorepo ROOT and drowning
@@ -60,7 +78,7 @@ export function ideSystemPromptBase(hasWorkspace: boolean): string {
     : 'You are BuilderForce, an AI assistant embedded in VS Code. No workspace folder is open, so the file tools are unavailable — answer conversationally and use markdown when helpful. You still have the BuilderForce platform tools (tasks, projects, OKRs, …) to manage work.';
   // Discovery guidance only applies where the file tools exist; the dispatch-handoff
   // strategy rides both surfaces (platform tools are always available).
-  const parts = [base, AUTONOMY_DIRECTIVE];
+  const parts = [base, AUTONOMY_DIRECTIVE, FOLLOW_THROUGH_DIRECTIVE];
   if (hasWorkspace) parts.push(DISCOVERY_DIRECTIVE);
   parts.push(DISPATCH_STRATEGY_DIRECTIVE);
   return parts.join("\n\n");

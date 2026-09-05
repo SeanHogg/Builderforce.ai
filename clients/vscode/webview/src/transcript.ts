@@ -8,7 +8,7 @@
  * output it carried, and paste it somewhere to triage.
  */
 
-import { buildTimeline, formatPayload, formatDuration } from '@seanhogg/builderforce-brain-ui';
+import { buildTimeline, formatPayload, formatDuration, splitThinkSegments } from '@seanhogg/builderforce-brain-ui';
 import {
   computeBrainDiagnostics,
   detectUnbackedTicketClaim,
@@ -164,10 +164,22 @@ export function buildTranscript(input: TranscriptInput): string {
         if (node.text) lines.push(node.text);
         for (const img of node.images) lines.push(`[image: ${img.name ?? img.url}]`);
         break;
-      case 'assistant':
+      case 'assistant': {
         lines.push(`## ${input.assistantName}`);
-        lines.push(node.text || '(no response)');
+        // Split the vendor's `<think>` blocks exactly as the UI does, so the report
+        // shows what the USER saw. Dumping raw control tags made a reply look
+        // mangled in the report when it had rendered fine, and — worse — hid the
+        // opposite case: a model that seals its answer inside the block ships the
+        // user a fragment, which is only visible once the two are separated.
+        const parts = splitThinkSegments(node.text || '');
+        const answer = parts.filter((p) => p.kind === 'answer').map((p) => p.content).join('\n\n').trim();
+        const thoughts = parts.filter((p) => p.kind === 'thought').map((p) => p.content).join('\n\n').trim();
+        lines.push(answer || '(no response)');
+        // Reasoning is kept, clearly marked as not-the-reply — it is often where a
+        // failing turn explains itself.
+        if (thoughts) lines.push('', `<details><summary>model reasoning (not shown to the user)</summary>\n\n${thoughts}\n\n</details>`);
         break;
+      }
       case 'thinking':
         lines.push(`_thought for ${formatDuration(node.durationMs)}_`);
         break;

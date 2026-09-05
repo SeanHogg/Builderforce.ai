@@ -26,6 +26,7 @@ import type { Env } from '../../env';
 import { getProjectEvermindHead, resolveEffectiveEvermindProjectId, recordEvermindServeOutcome } from './projectEvermind';
 import { getProjectFactByKey, upsertProjectFact, QA_CACHE_SOURCE } from './projectFacts';
 import { EVERMIND_ANSWER_MIN_CHARS, looksLikeCoherentText, isServableText } from './textCoherence';
+import { asksForChange, promisesUnfinishedWork } from '@builderforce/agent-stall';
 
 // Re-exported from the shared, zero-dep coherence module so existing importers keep
 // resolving these from projectMemory — one home for "is this a real, coherent answer"
@@ -118,6 +119,18 @@ export async function resolveMemoryAnswer(
   const q = (question ?? '').trim();
   if (!q || !Number.isInteger(projectId) || projectId <= 0) return null;
 
+  // A request to CHANGE something is never answerable from memory, by ANY route.
+  //
+  // The cache is keyed on the question alone, so an identical ask returns an identical
+  // reply — which is right for "what does this module do?" and catastrophically wrong
+  // for "reduce the height of the box". The correct response to a work order is to do
+  // the work; replaying last time's prose does zero tool calls, zero model calls and
+  // zero work, while looking to the user exactly like an answer. It is the same
+  // reasoning that already bars the Evermind path when the caller has tools (an answer
+  // that lives behind a tool call must not be pre-empted), and it applies with more
+  // force here: the cache cannot even see the current state of the world.
+  if (asksForChange(q)) return null;
+
   // 1) Exact-repeat Q&A cache.
   const cached = await getProjectFactByKey(env, db, tenantId, projectId, qaCacheKey(q)).catch(() => null);
   if (cached && cached.trim().length > 0) {
@@ -189,6 +202,15 @@ export async function cacheProjectAnswer(
   // Never cache garbage: an incoherent answer must not be replayed O(1) on the next
   // repeat (it would pin the gibberish permanently under the Q&A key).
   if (!q || !isServableText(a, { context: q }).coherent || !Number.isInteger(projectId) || projectId <= 0) return;
+  // Never cache a PROMISE. An answer that says "nothing has been changed on disk yet …
+  // re-run me and I'll apply the edit" is honest exactly once, in the conversation that
+  // produced it. Frozen into the cache it becomes a trap: every repeat of the question
+  // replays the promise instead of running, so the work it undertakes to do can never
+  // happen, and the user is told again that it will.
+  if (promisesUnfinishedWork(a)) return;
+  // A work order is not cacheable in the first place (see resolveMemoryAnswer), so
+  // writing one would only ever produce a row that is never read.
+  if (asksForChange(q)) return;
   await upsertProjectFact(env, db, tenantId, projectId, qaCacheKey(q), a, QA_CACHE_SOURCE).catch((error) => {
     /* best-effort — caching never breaks a reply */
   
