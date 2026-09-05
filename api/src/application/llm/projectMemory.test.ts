@@ -251,3 +251,51 @@ describe('looksLikeCoherentText', () => {
     expect(looksLikeCoherentText('   ')).toBe(false);
   });
 });
+
+describe('memory never answers, or caches, a request to CHANGE something', () => {
+  const WORK_ORDER = 'reduce the height of the current scrolling box so the prompt shows on mobile';
+
+  it('refuses to serve a work order from the Q&A cache, even on an exact repeat', async () => {
+    // The failure this closes: an identical work order returned last run's PROSE —
+    // zero tool calls, zero model calls, zero work — while looking to the user like
+    // an answer. The correct response to "change X" is to change X.
+    const { db } = memoryDb([[{ content: 'Here is how you would reduce it…' }]]);
+    const runEvermind = vi.fn(async () => 'should not be called');
+    expect(await resolveMemoryAnswer(env, db, 7, 42, WORK_ORDER, { runEvermind, toolsAvailable: false })).toBeNull();
+    expect(runEvermind).not.toHaveBeenCalled();
+  });
+
+  it('still answers an ordinary QUESTION from the cache', async () => {
+    const { db } = memoryDb([[{ content: 'The board caps itself at 74vh below 900px.' }]]);
+    const ans = await resolveMemoryAnswer(env, db, 7, 42, 'Where is the board height set?', {});
+    expect(ans?.source).toBe('qa-cache');
+  });
+
+  it('never caches an answer that promises work it did not do', async () => {
+    const { db, insert } = memoryDb([]);
+    await cacheProjectAnswer(
+      env, db, 7, 42,
+      'How does the hero board lay out on mobile?',
+      'I found the exact issue but hit the tool-call budget before applying the edit — so nothing has been changed on disk yet. Re-run me and I will apply the edit.',
+    );
+    // Frozen into the cache this becomes a trap: every repeat replays the promise
+    // instead of running, so the work can never happen.
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it('never caches an answer to a work order (it could only ever be a dead row)', async () => {
+    const { db, insert } = memoryDb([]);
+    await cacheProjectAnswer(env, db, 7, 42, WORK_ORDER, 'I reduced the cap to min(56vh, 480px) and the tests pass.');
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it('still caches a real answer to a real question', async () => {
+    const { db, insert } = memoryDb([]);
+    await cacheProjectAnswer(
+      env, db, 7, 42,
+      'Where is the hero board height set?',
+      'It is set in LandingCanvasHero.module.css, where .board caps itself at min(74vh, 620px) below 900px.',
+    );
+    expect(insert).toHaveBeenCalled();
+  });
+});

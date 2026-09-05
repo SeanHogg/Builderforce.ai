@@ -348,3 +348,61 @@ describe('live run activity (the animated in-flight indicator)', () => {
     expect(sawWriting).toBe(true);
   });
 });
+
+describe('a bare "Fix" after an unfinished proposal', () => {
+  const persistence = { sendMessages: async () => [] };
+  const PROPOSAL = "I found the exact issue but hit the tool-call budget before applying the edit — so nothing has been changed on disk yet. Re-run me and I'll apply the edit.";
+
+  /** Capture the system prompt the model was actually handed. */
+  function captureSystem() {
+    const seen: string[] = [];
+    const stream: BrainStreamFn = async (opts) => {
+      const sys = opts.messages.find((m) => m.role === 'system');
+      if (sys && typeof sys.content === 'string') seen.push(sys.content);
+      return { text: 'ok', toolCalls: [], finishReason: 'stop' };
+    };
+    return { stream, seen };
+  }
+
+  it('tells the run to carry out the previous proposal instead of asking what to fix', async () => {
+    const { stream, seen } = captureSystem();
+    await startRun(4501, {
+      resolvedSystemPrompt: 'sys',
+      seed: [
+        { role: 'user', content: 'reduce the height of the scrolling box on mobile' },
+        { role: 'assistant', content: PROPOSAL },
+      ],
+      stream,
+      persistence,
+      userTurn: 'Fix',
+    });
+    expect(seen[0]).toMatch(/bare directive/i);
+    expect(seen[0]).toMatch(/do NOT ask the user what to fix/i);
+  });
+
+  it('leaves a normal turn alone', async () => {
+    const { stream, seen } = captureSystem();
+    await startRun(4502, {
+      resolvedSystemPrompt: 'sys',
+      seed: [{ role: 'assistant', content: PROPOSAL }],
+      stream,
+      persistence,
+      userTurn: 'Actually, use 56vh instead and only below 900px',
+    });
+    expect(seen[0]).not.toMatch(/bare directive/i);
+  });
+
+  it('does not fire when the previous turn had nothing outstanding', async () => {
+    // "Fix" after a COMPLETED turn is genuinely ambiguous, and inventing a referent
+    // for it would be worse than the model asking.
+    const { stream, seen } = captureSystem();
+    await startRun(4503, {
+      resolvedSystemPrompt: 'sys',
+      seed: [{ role: 'assistant', content: 'Done — the cap is now min(56vh, 480px) and the tests pass.' }],
+      stream,
+      persistence,
+      userTurn: 'Fix',
+    });
+    expect(seen[0]).not.toMatch(/bare directive/i);
+  });
+});
