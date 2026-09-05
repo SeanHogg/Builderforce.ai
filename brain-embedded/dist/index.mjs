@@ -3846,7 +3846,7 @@ function subscribeToChatMessages(baseUrl, getToken, chatId, onChanged) {
 // src/transcriptBudget.ts
 var DEFAULT_MIN_PAYLOAD = 240;
 function createPayloadBudget(opts) {
-  const minPayload = opts.minPayload ?? DEFAULT_MIN_PAYLOAD;
+  const minPayload = Math.min(opts.minPayload ?? DEFAULT_MIN_PAYLOAD, opts.perPayload);
   let remaining = Math.max(0, opts.total);
   let spent = 0;
   let trimmed = 0;

@@ -86,7 +86,12 @@ const PHASE_GLYPH: Record<BrainRunPhase, string> = {
   finishing: '◆',
 };
 
-function phaseLine(activity: BrainRunActivity, labels: LiveActivityLabels): string {
+/**
+ * Compose the phase sentence. Exported because it is the whole localizable surface
+ * of this component — which template each phase picks, and whether the subject is
+ * appended — and that is worth testing without standing up a DOM.
+ */
+export function phaseLine(activity: BrainRunActivity, labels: LiveActivityLabels): string {
   const tool = activity.label ?? '';
   const base =
     activity.phase === 'starting' ? labels.starting

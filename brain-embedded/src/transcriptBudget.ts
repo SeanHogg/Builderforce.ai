@@ -67,7 +67,9 @@ const DEFAULT_MIN_PAYLOAD = 240;
  * order, charging each payload as it goes.
  */
 export function createPayloadBudget(opts: PayloadBudgetOptions): PayloadBudget {
-  const minPayload = opts.minPayload ?? DEFAULT_MIN_PAYLOAD;
+  // The floor can never exceed the ceiling: a caller that asks for small blocks must
+  // get small blocks, not the default floor silently overriding their cap.
+  const minPayload = Math.min(opts.minPayload ?? DEFAULT_MIN_PAYLOAD, opts.perPayload);
   let remaining = Math.max(0, opts.total);
   let spent = 0;
   let trimmed = 0;
