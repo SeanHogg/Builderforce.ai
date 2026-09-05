@@ -22,7 +22,7 @@ describe('AboutAppSection', () => {
     const { container } = render(<AboutAppSection />);
 
     expect(container).toHaveTextContent(/Builderforce\.ai is a web application/);
-    expect(container).toHaveTextContent(/turning an idea into a finished thing/);
+    expect(container).toHaveTextContent(/turning an idea into a company/);
   });
 
   it('states that the app is usable without signing in', () => {
