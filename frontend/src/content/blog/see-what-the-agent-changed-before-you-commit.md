@@ -96,7 +96,9 @@ It also sits at a specific seam on the [Idea → Make → Run → Measure](/blog
 - **See what is already staged**, so "commit" holds no surprises.
 - **Hand it to the Brain when you are satisfied** — the Changes section's title action opens a chat seeded to review the diff, commit on a branch, push, and open a pull request, confirming the branch name and title with you first.
 
-One thing this deliberately does **not** do: give the agent a commit or push verb of its own. What a local agent may do to your working tree and your remote is a governance decision — branch or `main`, whether a push needs an approval gate, whether "open a PR and request review" ought to replace "push" as the default finish — and shipping the verbs before the decision would be shipping an agent that can push to a protected branch on its own initiative. The review path came first on purpose.
+One thing this deliberately did **not** do at the time: give the agent a commit or push verb of its own. What a local agent may do to your working tree and your remote is a governance decision — branch or `main`, whether a push needs an approval gate, whether "open a PR and request review" ought to replace "push" as the default finish — and shipping the verbs before the decision would have been shipping an agent that can push to a protected branch on its own initiative. The review path came first on purpose.
+
+**Since then, that decision has been made and the verbs have shipped**: `git_commit` (on a ticket branch, naming the exact files it changed), `git_push` (which refuses the base branch unless you approve that specific act) and `open_pull_request`. See [Ship from the editor](/blog/ship-from-the-editor-commit-branch-pull-request) for how the governance question was answered.
 
 ---
 

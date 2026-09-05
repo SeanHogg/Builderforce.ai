@@ -34,7 +34,7 @@ import { DocxSourceUnusableError, markdownIntoDocxSource } from '../../applicati
 import { markdownToPdf, type PdfTheme } from '../../application/office/pdfWriter';
 import { markdownToPptx } from '../../application/office/slidesRenderer';
 import { MAX_XLSX_COLUMNS, MAX_XLSX_ROWS, rowsToXlsx, type XlsxCell } from '../../application/office/xlsxWriter';
-import { slugify } from '../../domain/shared/strings';
+import { slugify } from '@builderforce/creation-canvas-contract';
 
 const DOCX_CT = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const PPTX_CT = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
@@ -53,7 +53,7 @@ function readBody(body: ExportBody): { error: string } | { markdown: string; tit
   if (!markdown) return { error: 'markdown is required' };
   if (markdown.length > MAX_MARKDOWN_CHARS) return { error: 'markdown too large' };
   const title = (body.title ?? '').trim().slice(0, 200);
-  return { markdown, title, name: slugify(title || 'export', { maxLen: 60, fallback: 'export' }) };
+  return { markdown, title, name: slugify(title || 'export', { maxLength: 60, fallback: 'export' }) };
 }
 
 const HEX6 = /^#?[0-9a-f]{6}$/i;
@@ -99,7 +99,7 @@ function readSheet(body: SheetBody): { error: string } | { columns: string[]; ro
   if (rawRows.length > MAX_XLSX_ROWS) return { error: 'too many rows' };
   const rows = rawRows.map((row) => Array.isArray(row) ? row.map(readCell) : columns.map(() => null));
   const title = (body.title ?? '').trim().slice(0, 200);
-  return { columns, rows, title, name: slugify(title || 'sheet', { maxLen: 60, fallback: 'sheet' }) };
+  return { columns, rows, title, name: slugify(title || 'sheet', { maxLength: 60, fallback: 'sheet' }) };
 }
 
 /** Ceiling on a source container the writer will open. Above this the export

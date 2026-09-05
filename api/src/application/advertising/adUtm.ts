@@ -29,6 +29,8 @@
 export const UTM_PAID_MEDIUM = 'cpc';
 
 /** Wide enough for a readable name, short enough that no network truncates the URL. */
+import { slugify as slugifyBase } from '@builderforce/creation-canvas-contract';
+
 const MAX_SLUG = 48;
 const MAX_UTM_CAMPAIGN = 120;
 
@@ -38,14 +40,7 @@ const MAX_UTM_CAMPAIGN = 120;
  * latter tells you nothing about which campaign it was.
  */
 export function slugify(value: string): string {
-  return value
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, MAX_SLUG)
-    .replace(/-+$/g, '');
+  return slugifyBase(value, { foldDiacritics: true, maxLength: MAX_SLUG });
 }
 
 /**

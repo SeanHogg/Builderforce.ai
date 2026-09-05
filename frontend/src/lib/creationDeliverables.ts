@@ -1,4 +1,4 @@
-import { brandDirective, type BrandBinding } from '@builderforce/creation-canvas-contract';
+import { brandDirective, slugify, type BrandBinding } from '@builderforce/creation-canvas-contract';
 import { apiRequest } from './apiClient';
 import { dxfPreviewSvg, meshFormatFromHint, stlPreviewSvg, svgDataUrl, type MeshFormat } from './creativeGeometry';
 import { gamePosterDataUrl } from './gamePoster';
@@ -45,7 +45,7 @@ function safeColor(value: unknown): string {
 }
 
 function fileSafe(value: unknown): string {
-  return String(value || 'builderforce-artifact').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'builderforce-artifact';
+  return slugify(String(value || 'builderforce-artifact'), { maxLength: 60, fallback: 'builderforce-artifact' });
 }
 
 function textDataUrl(mimeType: string, value: string): string {

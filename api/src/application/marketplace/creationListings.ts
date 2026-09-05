@@ -46,6 +46,7 @@ import {
   resolveListingHarness,
   resolveTrialPolicy,
   sessionListingKinds,
+  slugify as slugifyBase,
   SNAPSHOT_REASON_PUBLICATION,
   SNAPSHOT_REASON_STAGE,
   type ListingDelivery,
@@ -392,8 +393,7 @@ const MAX_TAGS = 12;
  *  detail page is addressed by slug alone, so two tenants owning `space-game`
  *  would be two products at one URL. */
 function slugify(input: string): string {
-  return input.toLowerCase().normalize('NFKD').replace(/[^\p{Letter}\p{Number}]+/gu, '-')
-    .replace(/^-+|-+$/g, '').slice(0, 120) || 'listing';
+  return slugifyBase(input, { unicode: true, foldDiacritics: true, maxLength: 120, fallback: 'listing' });
 }
 
 async function claimSlug(db: Db, base: string, ownListingId: string | null): Promise<string> {

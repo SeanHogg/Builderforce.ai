@@ -34,7 +34,7 @@ import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrast
 import { recordCatalogAdoption } from '../../application/insights/catalogAnalytics';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { slugify as slugifyBase } from '../../domain/shared/strings';
+import { slugify as slugifyBase } from '@builderforce/creation-canvas-contract';
 import { parseJsonArray } from '../../domain/shared/json';
 
 /** Version token for the public prompts-gallery keyspace. The gallery is
@@ -50,7 +50,7 @@ async function invalidatePromptsPublic(env: Env): Promise<void> {
 }
 
 function slugify(s: string): string {
-  return slugifyBase(s, { maxLen: 80, fallback: 'prompt' });
+  return slugifyBase(s, { maxLength: 80, fallback: 'prompt' });
 }
 
 /** A slug unique within the tenant (appends -2, -3, … on collision). */

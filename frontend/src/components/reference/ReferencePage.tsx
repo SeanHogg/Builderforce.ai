@@ -29,6 +29,7 @@
  */
 
 import Link from 'next/link';
+import { slugify } from '@builderforce/creation-canvas-contract';
 import { ReferenceChrome } from './ReferenceChrome';
 import type { ReferenceChromeSection } from '@/lib/referenceChrome';
 
@@ -157,7 +158,7 @@ export function ReferenceGroup({ id, title, children }: { id?: string; title: st
 
 /** A stable anchor id for a data-shaped section label. */
 export function referenceAnchorId(label: string): string {
-  return `ref-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+  return `ref-${slugify(label, { maxLength: 120 })}`;
 }
 
 /**

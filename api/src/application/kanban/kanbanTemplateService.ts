@@ -29,14 +29,14 @@ import { isParkedLane } from '../swimlane/nextLane';
 import { seedLaneStaffingFromWorkforce } from '../swimlane/seedLaneStaffing';
 import { BUILTIN_TEMPLATES, getBuiltinTemplate, isBuiltinTemplateId } from './templateCatalog';
 import type { KanbanTemplate, TemplateLane, TemplateVisibility } from './types';
-import { slugify as slugifyBase } from '../../domain/shared/strings';
+import { slugify as slugifyBase } from '@builderforce/creation-canvas-contract';
 
 const listKey = (tenantId: number) => `kanban:templates:${tenantId}`;
 const publicKey = () => `kanban:templates:public`;
 const oneKey = (tenantId: number, id: string) => `kanban:template:${tenantId}:${id}`;
 
 function slugify(input: string): string {
-  return slugifyBase(input, { maxLen: 110, fallback: 'template' });
+  return slugifyBase(input, { maxLength: 110, fallback: 'template' });
 }
 
 /** A lightweight card for list views (no lanes). */

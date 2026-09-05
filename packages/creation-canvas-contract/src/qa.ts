@@ -1,3 +1,4 @@
+import { slugify } from './slug';
 /**
  * The QA vocabulary — ONE grammar for a test step, a finding and a generated spec,
  * shared by the Creation Canvas (browser), the Agentic QA services (API) and the
@@ -152,12 +153,7 @@ export function defaultFindingSeverity(type: QaFindingType, heat: number): QaFin
 
 /** Stable slug from an arbitrary string (lowercase kebab, ascii-only). */
 export function toSlug(input: string, fallback = 'flow'): string {
-  const s = input
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80);
-  return s || fallback;
+  return slugify(input, { maxLength: 80, fallback });
 }
 
 /** Deterministic short hash (FNV-1a, base36) — used to make flow slugs stable

@@ -8,6 +8,7 @@
  * called, and how big it is. Reading the same object twice and disagreeing is
  * what produced "the document isn't visualized" in the first place.
  */
+import { slugify } from '@builderforce/creation-canvas-contract';
 import { creationDeliverables } from './creationDeliverables';
 import { detectDiagramSource, diagramNotation, type CanvasDiagramSource } from './diagramNotations';
 import { tabularFromObject } from './canvasTabularData';
@@ -301,7 +302,7 @@ function fileMimeType(extension: string, declared?: unknown): string {
 
 /** File-safe stem for an object title, so a downloaded name is predictable. */
 export function fileStem(value: string): string {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 70) || 'untitled';
+  return slugify(value, { maxLength: 70, fallback: 'untitled' });
 }
 
 function byteLength(value: string): number {

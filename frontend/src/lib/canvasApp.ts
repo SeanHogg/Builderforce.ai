@@ -31,7 +31,7 @@
  * decode — see that module for why one framed page's console must not reach another's.
  */
 
-import { robloxScriptsFrom } from '@builderforce/creation-canvas-contract';
+import { robloxScriptsFrom, slugify } from '@builderforce/creation-canvas-contract';
 import { gameDocumentFromUrl, robloxPlaceFromUrl } from './gameTargets';
 import { canvasWebsiteDocument } from './canvasWebsite';
 import { CANVAS_PREVIEW_REPORTER } from './canvasPreviewReport';
@@ -138,8 +138,7 @@ function fileFor(files: readonly CanvasAppFile[], fromDir: string, href: string)
 
 /** A filename from a title with nothing a path segment cannot hold. */
 function slugFile(value: string, fallback: string): string {
-  const slug = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  return `${slug || fallback}.html`;
+  return `${slugify(value, { maxLength: 120, fallback })}.html`;
 }
 
 /**
@@ -202,7 +201,7 @@ export function canvasAppFiles(
       // Luau is not a page, and claiming it as one would break the preview.
       const place = robloxPlaceFromUrl(node.data.outputUrl);
       for (const script of robloxScriptsFrom(place)) {
-        const path = `${(title || node.id).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || node.id}/${script.name}.luau`;
+        const path = `${slugify(title || node.id, { maxLength: 120, fallback: node.id })}/${script.name}.luau`;
         if (seen.has(path)) continue;
         seen.add(path);
         files.push({ nodeId: node.id, path, language: 'luau', source: script.source, role: 'other' });

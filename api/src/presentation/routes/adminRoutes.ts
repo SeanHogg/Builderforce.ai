@@ -42,7 +42,7 @@ import { reviewFeedbackSubmission } from '../../application/feedback/feedbackEng
 import {
   listFeedbackSubmissions, countFeedbackByStatus, parseFeedbackStatus,
 } from '../../application/feedback/feedbackQueries';
-import { slugify } from '../../domain/shared/strings';
+import { slugify } from '@builderforce/creation-canvas-contract';
 import { countActiveSessionsAndTokens } from '../../application/security/sessionCounts';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { computePlatformRollup } from '../../application/admin/platformRollup';
@@ -242,7 +242,7 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
 }
 
 function slugifyName(input: string): string {
-  return slugify(input, { maxLen: 180 });
+  return slugify(input, { maxLength: 180 });
 }
 
 async function assertTenantMember(db: Db, tenantId: number, userId: string): Promise<boolean> {

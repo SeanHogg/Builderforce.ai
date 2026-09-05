@@ -8,6 +8,7 @@
  * no round-trip.
  */
 
+import { slugify } from '@builderforce/creation-canvas-contract';
 import { toCsv } from '@/lib/download';
 import { getBrainCapability } from './capabilities';
 
@@ -88,6 +89,5 @@ export function replyHasArtifact(capability: string | null | undefined, content:
 
 /** A filename-safe stem derived from the chat title (or a fallback). */
 export function exportFilenameStem(title: string, fallback: string): string {
-  const stem = title.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
-  return stem || fallback;
+  return slugify(title, { maxLength: 60, fallback });
 }

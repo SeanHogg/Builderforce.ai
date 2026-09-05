@@ -25,6 +25,7 @@ import {
   type TabularSource,
   type TabularTimeGrain,
 } from './canvasTabularData';
+import { slugify } from '@builderforce/creation-canvas-contract';
 import { evaluateExpression, expressionReferences, isFormulaError, parseExpression, type FormulaError } from './canvasFormula';
 
 export const METRIC_FORMATS = ['number', 'currency', 'percent', 'duration'] as const;
@@ -92,8 +93,7 @@ export function parseMetricOperand(operand: string): { id: string; period: Metri
 }
 
 export function metricSlug(value: string, fallback = 'metric'): string {
-  const slug = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-  return (slug || fallback).slice(0, 60);
+  return slugify(value, { separator: '_', maxLength: 60, fallback });
 }
 
 export function normalizeMetricDefinition(value: unknown): MetricDefinition | null {

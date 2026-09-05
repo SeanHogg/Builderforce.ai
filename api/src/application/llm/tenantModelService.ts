@@ -21,7 +21,7 @@ import {
   getCacheVersion,
   bumpCacheVersion,
 } from '../../infrastructure/cache/readThroughCache';
-import { slugify as slugifyBase } from '../../domain/shared/strings';
+import { slugify as slugifyBase } from '@builderforce/creation-canvas-contract';
 import { parseJsonObject } from '../../domain/shared/json';
 import type { Env } from '../../env';
 
@@ -61,7 +61,7 @@ function versionKey(tenantId: number): string {
 }
 
 function slugify(s: string): string {
-  return slugifyBase(s, { maxLen: 80, fallback: 'model' });
+  return slugifyBase(s, { maxLength: 80, fallback: 'model' });
 }
 
 function safeParams(v: unknown): Record<string, unknown> {

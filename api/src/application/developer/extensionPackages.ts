@@ -14,6 +14,7 @@
  */
 
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { slugify as slugifyBase } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { catalogItems, extensionPackages, extensionVersions, extensionReviewStages, tenants } from '../../infrastructure/database/schema';
@@ -139,11 +140,7 @@ export function toVersionView(row: VersionRow): VersionView {
  * workspace's slug, so a package slug is the last thing that needs deriving.
  */
 export function slugify(input: string): string {
-  return input
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 100);
+  return slugifyBase(input, { maxLength: 100 });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 'use client';
 
 import { Icon } from '@/components/ui/Icon';
+import { slugify } from '@builderforce/creation-canvas-contract';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
@@ -191,7 +192,7 @@ export default function PersonasPage() {
   const savePersona = async () => {
     const name = createForm.name.trim();
     if (!name) return;
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const slug = slugify(name, { maxLength: 80 });
     setError('');
     try {
       await personasApi.create({

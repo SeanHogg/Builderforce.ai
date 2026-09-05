@@ -1,29 +1,11 @@
-/** Shared string utilities (slugging, deterministic hashing). */
-
-export interface SlugifyOptions {
-  /** Max slug length (characters). Default 60. */
-  maxLen?: number;
-  /** Value returned when slugging yields an empty string. Default '' (allowed). */
-  fallback?: string;
-}
-
 /**
- * Lowercase → hyphenate → trim to a URL/id-safe slug. Collapses every run of
- * non `[a-z0-9]` characters to a single '-', strips leading/trailing '-', then
- * caps at `maxLen`. Returns `fallback` when the result is empty.
+ * Shared string utilities (deterministic hashing).
  *
- * (Leading/trailing whitespace is folded to '-' and then stripped, so an
- * explicit `.trim()` is redundant — this matches every former per-module copy.)
+ * Slugging lives in `@builderforce/creation-canvas-contract` (`slugify`), the
+ * one implementation the api, the web app and the VS Code client all compile
+ * against — see that file's header for why the copy that used to sit here was
+ * retired.
  */
-export function slugify(input: string, opts?: SlugifyOptions): string {
-  const s = input
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, opts?.maxLen ?? 60);
-  return s || (opts?.fallback ?? '');
-}
 
 /**
  * FNV-1a 32-bit hash → unsigned 32-bit integer. Deterministic, no crypto/IO.

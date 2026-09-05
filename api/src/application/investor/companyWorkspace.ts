@@ -32,6 +32,7 @@
  */
 
 import { desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { slugify as slugifyBase } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
@@ -390,8 +391,7 @@ export async function createCompany(db: Db, env: Env, tenantId: number, input: C
   return created;
 }
 
-const slugify = (value: string): string =>
-  value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 200) || 'company';
+const slugify = (value: string): string => slugifyBase(value, { maxLength: 200, fallback: 'company' });
 
 // ---------------------------------------------------------------------------
 // One company, in full

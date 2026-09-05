@@ -9,12 +9,12 @@ import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { BUILTIN_ROLES, isBuiltinRoleKey } from './roleCatalog';
 import type { Discipline, JobRole } from './types';
-import { slugify as slugifyBase } from '../../domain/shared/strings';
+import { slugify as slugifyBase } from '@builderforce/creation-canvas-contract';
 
 const rolesKey = (tenantId: number) => `kanban:roles:${tenantId}`;
 
 function slugify(input: string): string {
-  return slugifyBase(input, { maxLen: 60 });
+  return slugifyBase(input, { maxLength: 60 });
 }
 
 export interface JobRoleWrite {

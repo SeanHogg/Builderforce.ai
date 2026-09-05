@@ -1,6 +1,7 @@
 'use client';
 
 import { Icon } from '@/components/ui/Icon';
+import { slugify } from '@builderforce/creation-canvas-contract';
 import { Select } from '@/components/Select';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -148,7 +149,7 @@ export default function SkillsPage() {
   const saveSkill = () => {
     const name = createForm.name.trim();
     if (!name) return;
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const slug = slugify(name, { maxLength: 80 });
     const skill: UserSkill = {
       id: crypto.randomUUID(),
       name,

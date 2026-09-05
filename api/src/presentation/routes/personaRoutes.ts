@@ -48,7 +48,7 @@ import { invalidateCapabilityCache } from '../../application/artifact/capability
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
-import { slugify as slugifyBase } from '../../domain/shared/strings';
+import { slugify as slugifyBase } from '@builderforce/creation-canvas-contract';
 import { parseJsonArray } from '../../domain/shared/json';
 
 /** Version key for the public personas keyspace — bumped on any publish so the
@@ -57,7 +57,7 @@ const PERSONA_PUBLIC_VERSION_KEY = 'personas:public';
 const PERSONA_PUBLIC_CACHE_TTL_SECONDS = 120;
 
 function slugify(s: string): string {
-  return slugifyBase(s, { maxLen: 80, fallback: 'persona' });
+  return slugifyBase(s, { maxLength: 80, fallback: 'persona' });
 }
 
 function safeTags(v: unknown): string[] {
