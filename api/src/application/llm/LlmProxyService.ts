@@ -382,6 +382,18 @@ export interface ProxyEnv extends VendorEnv {
  *  on a single Worker isolate (no contention, just a counter). */
 const chatRequestCursor: { value: number } = { value: 0 };
 
+/**
+ * How many models the last-chance probe may try when EVERY candidate is cooled.
+ *
+ * The probe exists so a cooldown — a hint written by an earlier request — can never
+ * by itself end a request with no upstream contacted. It is deliberately short: the
+ * point is to find one model that still answers, not to re-walk a chain that a
+ * moment ago was believed dead. Three hops covers "the bench is stale" and "one
+ * vendor is genuinely down" without turning the all-cooled path into the widest
+ * cascade in the service.
+ */
+const ALL_COOLED_PROBE_LIMIT = 3;
+
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
@@ -968,7 +980,7 @@ export class LlmProxyService {
         );
       }
       // Every model in the seed + premium fallback list is on cooldown. The
-      // guaranteed paid backstop (credited key) is the last chance before we
+      // guaranteed paid backstop (credited key) is the next chance before we
       // surface a hard failure — unless the tenant has exhausted its paid-overflow
       // cap, in which case we don't fund another paid call.
       const backstop = this.disablePaidOverflow ? null : await this.dispatchBackstop(body, requestHeaders);
@@ -978,11 +990,49 @@ export class LlmProxyService {
         backstop.paidOverflow = !this.isTenantFunded(backstop);
         return this.finalize(backstop, tid, startedAt, [...this.backstopModels], 'success');
       }
+      // LAST-CHANCE PROBE — the non-BYO twin of the connected-account probe above,
+      // and the reason a caller can no longer be told "everything is on cooldown".
+      //
+      // A cooldown is a HINT about our shared keys, written by some earlier request
+      // that failed; it is never proof that this request would fail. Returning a
+      // synthetic 429 without dispatching anything spends the user's turn on a
+      // guess — the Creation Canvas turn that motivated this failed in 811ms having
+      // never touched an upstream, and a stale bench (one 429 trips a vendor, and the
+      // escalating TTL benches it for up to an hour) can outlive the saturation that
+      // caused it by a long way. So compose the chain a second time with the cooldown
+      // gate off and actually try it. The cost is bounded exactly like any other
+      // cascade: `freeBudget` caps the free hops, the probe is capped again below, and
+      // a probe that fails writes fresh cooldowns like any other attempt.
+      //
+      // Whatever comes back is the REAL upstream outcome — a 429 from a vendor that
+      // genuinely is saturated, with its own message and per-model `failovers` — which
+      // is both truthful and actionable, unlike the message it replaces.
+      const uncooledChain = applyExcludedModels(
+        this.buildCandidateChain(seed, new Set<string>(), new Set<VendorId>(), pinnedHint, seedHead),
+        body.excludeModels,
+      );
+      // The composer can still return nothing when the seed was emptied for reasons
+      // that are NOT cooldown (plan tier, BYO filtering). Falling back to the raw seed
+      // keeps the probe honest: a model with no key bound is skipped by the dispatcher
+      // itself, which reports that fact rather than inventing one.
+      const probe = (uncooledChain.length > 0 ? uncooledChain : [...seed]).slice(0, ALL_COOLED_PROBE_LIMIT);
+      if (probe.length > 0) {
+        const probed = await this.dispatch(probe, body, requestHeaders, { signal, ignoreCooldown: true });
+        if (probed.response.status < 400) {
+          probed.paidOverflow = isPaidOverflowModel(probed.resolvedModel) && !this.isTenantFunded(probed);
+          if (cacheKey) await this.storeInResponseCache(cacheKey, probed);
+          return this.finalize(probed, tid, startedAt, probe, 'success');
+        }
+        return this.finalize(probed, tid, startedAt, probe);
+      }
+      // Nothing to probe: the pool itself is empty, which is a configuration fact and
+      // not a rate limit. Say that instead of asking the caller to retry a wait that
+      // would never end.
       return this.finalize(
         this.exhaustedResponse(
           seed.slice(),
           0,
-          new Error('All candidate models are on cooldown. Retry in a minute or two.'),
+          new Error('No model is available for this request — no provider key is configured for any model in the pool.'),
         ),
         tid, startedAt, seed.slice(), 'all_cooldown',
       );
@@ -1374,7 +1424,7 @@ export class LlmProxyService {
     candidates: string[],
     body: ChatCompletionRequest,
     requestHeaders?: Record<string, string>,
-    overrides?: { vendorEnv?: VendorEnv; timeoutMs?: number; signal?: AbortSignal },
+    overrides?: { vendorEnv?: VendorEnv; timeoutMs?: number; signal?: AbortSignal; ignoreCooldown?: boolean },
   ): Promise<ProxyResult> {
     // Sanitize tool names (`governance.snapshot` → `governance__DOT__snapshot`)
     // AND tool-call ids (foreign ids with `:` `/` `.` → `^[a-zA-Z0-9_-]+$`)
@@ -1437,6 +1487,12 @@ export class LlmProxyService {
       // rather than our key (Kimi Code). `dispatchInternal` hands it only to a module
       // that declares `requiresLocalEgress`, so this is inert for every other vendor.
       ...(this.hostEgress ? { egress: this.hostEgress } : {}),
+      // Mid-cascade cooldown re-check, decided ONCE per dispatch (its memo is
+      // per-dispatch anyway). A last-chance probe omits it: the caller has already
+      // established that every candidate is cooled and is deliberately trying anyway,
+      // so re-filtering the probe by the very state it exists to override would skip
+      // every hop after the first and hand the caller back the same dead end.
+      ...(overrides?.ignoreCooldown ? {} : { isCooled: this.midCascadeCooldownCheck() }),
     };
 
     if (sanitizedBody.stream) {
@@ -1473,7 +1529,6 @@ export class LlmProxyService {
         result = await dispatchVendor({
           env: vendorEnv,
           modelChain: chain,
-          isCooled: this.midCascadeCooldownCheck(),
           ...callParams,
         });
       } catch (err) {
@@ -1802,7 +1857,6 @@ export class LlmProxyService {
       const result = await dispatchVendorStream({
         env: vendorEnv,
         modelChain: candidates,
-        isCooled: this.midCascadeCooldownCheck(),
         ...callParams,
       });
       // AWAITED. Its own doc-comment says a `void` promise on Workers can be aborted
