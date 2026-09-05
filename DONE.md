@@ -1,3 +1,94 @@
+## ✅ RESOLVED 2026-09-05 — Every `tickets.from_delta` ticket ever minted was stranded at 50%
+
+The run worked this time: the edit landed, the delta ticket was recorded and linked,
+the change was committed and pushed to `main`. The board still showed the ticket at
+**50%, IN_REVIEW** — and would have shown that forever.
+
+The 50% is not a display bug. `ChatTicketService` maps a leaf task in `in_review` to
+`progressPct: 50`, which is honest. The defect is that nothing ever moved the ticket
+out of `in_review`.
+
+### The promise that was never wired
+
+`WorkDeltaService` opens each minted ticket in `in_review` and its docblock claimed:
+
+> The merge/deploy → ticket-complete wiring (githubWebhookRoutes / repoRoutes finalize)
+> flips it to Done once it ships.
+
+**That wiring does not exist.** `githubWebhookRoutes` ingests `push` / `pull_request`
+as engineering *activity*; it never resolves a `work_deltas` row, and `workDeltas` is
+read nowhere outside analytics. `repoRoutes` has no finalize path for it either. So
+every delta ticket the platform has ever created sits at 50%, and `DELTA_DIRECTIVE` —
+the always-on instruction every coding surface prepends — told the model, and through
+it the user, that the ticket "completes automatically once merged and deployed".
+
+That is why the sidebar fills with `1-UNTITLED-…` tickets nobody closed.
+
+### What now closes it
+
+The intended completer was a merge webhook, which can only fire for a change that went
+through a pull request. It cannot fire for the case actually observed: the agent
+committed and pushed **straight to the base branch, inside the same run**. There, the
+run holds first-hand evidence the work shipped and is the only thing that ever will.
+
+New `brain-embedded/src/shipVerification.ts` requires two independent facts before it
+will call a change shipped:
+
+1. a `git push` that actually **succeeded** in this run, and
+2. a git status recorded **after** that push showing a base branch (`main`/`master`),
+   tracking an upstream, with `ahead: 0`.
+
+A push to a feature branch fails on the branch name; an unpushed commit fails on
+`ahead`; a run that only edited files fails on (1); a status taken *before* the push is
+ignored, because it says nothing about whether the push worked. Every ambiguous case
+fails closed — completing a ticket that did not ship is a worse failure than leaving
+one open, so `BASE_BRANCHES` is deliberately just the two conventional defaults and a
+repo with a differently-named base simply does not auto-complete.
+
+`completeShippedTickets` then moves the linked `in_review` tickets to `done`, recording
+`reason: 'shipped-to-base-branch'` on the step so a ticket that closed itself is never
+an unexplained status change in the board's history. Only `in_review` is eligible:
+`in_progress` is ambiguous (a run can push one part of a larger ticket) and `blocked`
+has a reason a merge does not answer. `linkedTicketsToAdvance` and the new
+`linkedTicketsToComplete` now share one row filter, so they can differ only in the lane
+they act on.
+
+`DELTA_DIRECTIVE` and the docblock were rewritten to describe what is real: the ticket
+completes if you merge the change yourself, and correctly stays in review if you leave
+it on a branch.
+
+### Second fault in the same trace: three git tools were dead on Windows
+
+`git_sync_latest` returned `{"ok":false,"output":"Environment variable -e not defined"}`.
+That is `cmd.exe` parsing the `set -e` that opens the script. `child_process.exec` uses
+the platform default shell, and `sync_latest`, `undo` and `redo` are POSIX scripts by
+construction (`set -e`, `$(…)`, `[ … ] || { … }`) shared byte-for-byte with the cloud
+Container, which runs a real sh. All three were unusable in the editor on Windows, and
+the error named neither the cause nor a remedy.
+
+New `clients/vscode/src/posixShell.ts` detects a script that needs sh — on shell
+*control* forms only, so `cd x/y && git push` is not misrouted — and runs it under bash,
+found beside git's own install (Git for Windows ships it) rather than hoping for `PATH`.
+Plain one-liners keep the default shell, so nothing that worked changes. When no POSIX
+shell exists the tool now says exactly that, and what to install, instead of surfacing
+cmd's message about an environment variable.
+
+**Still open (logged to the Gap Register):** the PR path — a delta whose change is
+merged later by a pull request the recording run did not make. `githubWebhookRoutes`
+already receives `pull_request` with `merged: true`, but `work_deltas` stores no branch
+or commit sha to join a merge back to a delta. *Blocker: choosing that join key needs a
+live webhook delivery against a real merged PR; a wrong key silently completes the
+wrong ticket, which is worse than leaving it open.*
+
+**Files.** New: `brain-embedded/src/shipVerification.ts`,
+`clients/vscode/src/posixShell.ts` (+ tests for each). Changed:
+`brain-embedded/src/{brainRunStore,chatWorkLinking}.ts`,
+`api/src/application/delta/WorkDeltaService.ts`,
+`clients/vscode/src/localCapabilities.ts`.
+
+Shipped as VSIX **2026.8.146** (brain-embedded 2026.8.23). Green: 436
+(brain-embedded) + 194 (VSIX); api and both VSIX projects typecheck.
+
 ## ✅ RESOLVED 2026-09-05 — A cached "re-run me and I'll apply the edit" made the same request unworkable forever
 
 The follow-up capture to the run above. The new diagnostic did its job — it led with
