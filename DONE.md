@@ -85,7 +85,7 @@ mutating call to go looking for.
 `clients/vscode/src/idePersona.ts`, `clients/vscode/webview/src/transcript.ts`.
 
 Shipped as VSIX **2026.8.145** (brain-embedded 2026.8.22, brain-ui 2026.8.19,
-agent-stall 2026.7.7). Green: 418 (brain-embedded) + 87 (brain-ui) + 186 (VSIX) + 69 (agent-stall) + 58
+agent-stall 2026.7.7). Green: 418 (brain-embedded) + 87 (brain-ui) + 186 (VSIX) + 72 (agent-stall) + 58
 (agent-tools) + 26 (projectMemory); api, VSIX host and webview all typecheck.
 
 ## ✅ RESOLVED 2026-09-05 — Both Neon branches brought under the 0.5 GB Free-plan limit, without shortening the SOC 2 evidence window

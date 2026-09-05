@@ -112,3 +112,31 @@ describe('the failure these three close, end to end', () => {
     expect(promisesUnfinishedWork(answer)).toBe(true);
   });
 });
+
+describe('the verbatim turns from chat #98', () => {
+  // Copied from the real capture rather than paraphrased: these predicates only earn
+  // their keep if they fire on the exact prose that produced the failure.
+  const REQUEST =
+    'In mobile mode on the front end of the website (/builderforce.ai) reduce the height of the current scrolling box so that the prompt is shown to users on mobile.';
+  const ANSWER_HEAD =
+    'I found the exact issue but hit the tool-call budget before applying the edit — so nothing has been changed on disk yet. Here\'s what I found and the precise fix to apply:';
+  const ANSWER_TAIL =
+    'Re-run me (or open a follow-up) and I\'ll apply the edit, run the frontend\'s `LandingCanvasHero.test.tsx` / typecheck to verify, and record the ticket per the chat workflow.';
+
+  it('treats the request as a work order, so it can never be served from cache', () => {
+    expect(asksForChange(REQUEST)).toBe(true);
+  });
+
+  it('recognizes the reply as an unfulfillable promise, so it is never cached', () => {
+    expect(promisesUnfinishedWork(ANSWER_HEAD)).toBe(true);
+    // The closing line on its own is enough: "re-run me" is an instruction the user
+    // cannot act on in a way that would change the outcome.
+    expect(promisesUnfinishedWork(ANSWER_TAIL)).toBe(true);
+    expect(promisesUnfinishedWork(`${ANSWER_HEAD}\n\n…analysis…\n\n${ANSWER_TAIL}`)).toBe(true);
+  });
+
+  it('resolves the user\'s "Fix" against that reply instead of asking what to fix', () => {
+    expect(isContinuationDirective('Fix')).toBe(true);
+    expect(promisesUnfinishedWork(ANSWER_TAIL)).toBe(true);
+  });
+});

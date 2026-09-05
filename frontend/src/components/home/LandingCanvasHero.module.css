@@ -141,7 +141,7 @@
  */
 .board {
   height: auto;
-  max-height: min(74vh, 620px);
+  max-height: min(52vh, 420px);
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
