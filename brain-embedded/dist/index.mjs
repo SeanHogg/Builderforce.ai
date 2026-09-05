@@ -1066,6 +1066,9 @@ function isReadOnlyPlatformTool(name) {
 var NOT_STARTED_TASK_STATUSES = /* @__PURE__ */ new Set(["backlog", "todo", "ready"]);
 var TASK_TIER_KINDS = /* @__PURE__ */ new Set(["task", "epic", "gap"]);
 function linkedTicketsToAdvance(listResult) {
+  return selectLinkedTasks(listResult, NOT_STARTED_TASK_STATUSES);
+}
+function selectLinkedTasks(listResult, statuses) {
   let rows = listResult;
   if (typeof rows === "string") {
     try {
@@ -1083,10 +1086,14 @@ function linkedTicketsToAdvance(listResult) {
     if (row.exists === false) continue;
     const ref = typeof row.ref === "number" ? String(row.ref) : typeof row.ref === "string" && row.ref.trim() ? row.ref : null;
     if (!ref) continue;
-    if (typeof row.status !== "string" || !NOT_STARTED_TASK_STATUSES.has(row.status.toLowerCase())) continue;
+    if (typeof row.status !== "string" || !statuses.has(row.status.toLowerCase())) continue;
     out.push({ kind: row.kind, ref });
   }
   return out;
+}
+var SHIPPABLE_TASK_STATUSES = /* @__PURE__ */ new Set(["in_review"]);
+function linkedTicketsToComplete(listResult) {
+  return selectLinkedTasks(listResult, SHIPPABLE_TASK_STATUSES);
 }
 function codeChangeFile(args) {
   if (args && typeof args === "object" && "path" in args) {
@@ -2508,6 +2515,65 @@ function handleRouterCall(catalog, name, args) {
   return { dispatch: { name: target, args: a.args ?? {} } };
 }
 
+// src/shipVerification.ts
+var BASE_BRANCHES = /* @__PURE__ */ new Set(["main", "master"]);
+function parseGitShortStatus(output) {
+  if (!output) return null;
+  const header = output.split("\n").map((l) => l.trim()).find((l) => l.startsWith("##"));
+  if (!header) return null;
+  const body = header.slice(2).trim();
+  if (!body || body.startsWith("HEAD (no branch)")) return { branch: null, upstream: null, ahead: 0, behind: 0 };
+  const ahead = /\bahead (\d+)/.exec(body);
+  const behind = /\bbehind (\d+)/.exec(body);
+  const names = body.replace(/\s*\[.*$/, "").trim();
+  const [branch, upstream] = names.split("...");
+  return {
+    branch: branch?.trim() || null,
+    upstream: upstream?.trim() || null,
+    ahead: ahead ? Number(ahead[1]) : 0,
+    behind: behind ? Number(behind[1]) : 0
+  };
+}
+var GIT_PUSH = /\bgit\s+(?:-\S+\s+|--\S+(?:=\S+)?\s+)*push\b/i;
+var GIT_STATUS_CMD = /\bgit\s+(?:-\S+\s+|--\S+(?:=\S+)?\s+)*status\b/i;
+function commandOf(ev) {
+  const a = ev.args;
+  if (typeof a?.command === "string") return a.command;
+  if (typeof a?.cmd === "string") return a.cmd;
+  return "";
+}
+function outputOf(ev) {
+  const r = ev.result;
+  if (typeof r === "string") return r;
+  if (r && typeof r === "object") {
+    const o = r;
+    if (typeof o.output === "string") return o.output;
+    if (typeof o.stdout === "string") return o.stdout;
+  }
+  return "";
+}
+function succeeded(ev) {
+  return !ev.isError && !isFailedToolResult(ev.result);
+}
+function shippedToBaseBranch(events) {
+  const steps = events.filter((e) => e.category === "tool");
+  let pushedAt = -1;
+  for (let i = 0; i < steps.length; i += 1) {
+    if (succeeded(steps[i]) && GIT_PUSH.test(commandOf(steps[i]))) pushedAt = i;
+  }
+  if (pushedAt < 0) return false;
+  for (let i = pushedAt + 1; i < steps.length; i += 1) {
+    const ev = steps[i];
+    if (!succeeded(ev)) continue;
+    const isStatus = ev.label === "git_status" || GIT_STATUS_CMD.test(commandOf(ev));
+    if (!isStatus) continue;
+    const status2 = parseGitShortStatus(outputOf(ev));
+    if (!status2) continue;
+    if (status2.branch && BASE_BRANCHES.has(status2.branch) && status2.upstream && status2.ahead === 0) return true;
+  }
+  return false;
+}
+
 // src/readCoverage.ts
 var REVISIT_NUDGE_AT = 3;
 var REVISIT_HARD_AT = 5;
@@ -3019,6 +3085,10 @@ async function startRun(chatId, req) {
       await advanceLinkedTickets(chatId, c, req).catch(() => {
       });
     }
+    if (!aborted && c.codeChanged && req.projectId != null && req.runTool && shippedToBaseBranch(c.trace)) {
+      await completeShippedTickets(chatId, c, req).catch(() => {
+      });
+    }
     c.activity = null;
     emit(c);
   }
@@ -3077,6 +3147,37 @@ async function advanceLinkedTickets(chatId, c, req) {
       label: "builtin_tasks_update",
       durationMs: nowMs2() - toolStart,
       args: { id, status: "in_progress", auto: true, reason: "worked-ticket-off-backlog" },
+      result: out ?? null,
+      isError: isFailedToolResult(out)
+    });
+  }
+}
+async function completeShippedTickets(chatId, c, req) {
+  if (!req.runTool) return;
+  let listed;
+  try {
+    listed = await req.runTool("builtin_chats_list_tickets", { chatId });
+  } catch {
+    return;
+  }
+  for (const t of linkedTicketsToComplete(listed)) {
+    const id = Number(t.ref);
+    if (!Number.isInteger(id)) continue;
+    const toolStart = nowMs2();
+    let out;
+    try {
+      out = await req.runTool("builtin_tasks_update", { id, status: "done" });
+    } catch (e) {
+      out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+    pushDurableStep(c, chatId, req.persistence, {
+      ts: nowIso(),
+      category: "tool",
+      label: "builtin_tasks_update",
+      durationMs: nowMs2() - toolStart,
+      // The REASON rides on the step: a ticket that closed itself must say what
+      // closed it, or the board's history reads as an unexplained status change.
+      args: { id, status: "done", auto: true, reason: "shipped-to-base-branch" },
       result: out ?? null,
       isError: isFailedToolResult(out)
     });
@@ -4754,6 +4855,7 @@ export {
   API_VERSION_PROBE_TIMEOUT_MS,
   API_VERSION_TTL_MS,
   AUTHORED_BY_META_KEY,
+  BASE_BRANCHES,
   BUILDERFORCE_PRODUCT_NAME,
   BrainActionsProvider,
   BrainContextProvider,
@@ -4869,6 +4971,7 @@ export {
   isUserConfiguredModelRef,
   lastConsolidationIndex,
   linkedTicketsToAdvance,
+  linkedTicketsToComplete,
   localStorageConfirmationPersistence,
   mcpActionsFrom,
   mentionRecipient,
@@ -4883,6 +4986,7 @@ export {
   parseByoUnresolved,
   parseChatActivity,
   parseDirectedRecipient,
+  parseGitShortStatus,
   parseMessageAuthor,
   parseMessageProvenance,
   parsePmoFocus,
@@ -4913,6 +5017,7 @@ export {
   selectToolsForTurn,
   setLastResolvedModel,
   setMcpToolStatus,
+  shippedToBaseBranch,
   shortenTarget,
   stallRecoveriesInTrace,
   stallUnrecoveredInTrace,
