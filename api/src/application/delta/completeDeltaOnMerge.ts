@@ -151,13 +151,20 @@ export async function completeDeltaTicketsOnMerge(
 ): Promise<DeltaMergeOutcome> {
   const link = await resolveRepoLink(db, pr.repoFullName);
   if (!link) return { completed: [], reason: `no project linked to repo '${pr.repoFullName}'` };
+  // The repo link can name a tenant without a project (a connected repo not yet
+  // attached to one). Project scope is one of the three conditions a candidate has to
+  // clear, so without it there is nothing to check against and nothing is touched.
+  const projectId = link.projectId;
+  if (projectId == null) {
+    return { completed: [], reason: `repo '${pr.repoFullName}' is linked to a tenant but not to a project` };
+  }
 
-  const candidates = await candidateTaskIds(db, link.tenantId, link.projectId, pr);
+  const candidates = await candidateTaskIds(db, link.tenantId, projectId, pr);
   if (candidates.length === 0) {
     return { completed: [], reason: 'the merged pull request names no ticket (no recorded task_id, and its branch is not a ticket branch)' };
   }
 
-  const eligible = await eligibleDeltaTickets(db, link.tenantId, link.projectId, candidates);
+  const eligible = await eligibleDeltaTickets(db, link.tenantId, projectId, candidates);
   if (eligible.length === 0) {
     return { completed: [], reason: 'no delta ticket awaiting review matched the merged pull request' };
   }
