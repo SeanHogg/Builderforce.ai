@@ -19,6 +19,7 @@ import type { Env } from '../../env';
 import { SWEPT_TABLES } from './sweptTables';
 import { purgeExpiredMemories } from '../memory/memoryService';
 import { VISITOR_RETENTION_DAYS, purgeVisitorActivity } from '../marketing/visitorActivity';
+import { EXECUTION_PAYLOAD_RETENTION_DAYS, redactStaleExecutionPayloads } from '../runtime/executionPayloadRetention';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const cutoff = (now: number, days: number) => new Date(now - days * DAY_MS);
@@ -61,6 +62,14 @@ export async function runRetentionPurge(env: Env, now: number = Date.now()): Pro
     {
       name: 'visitor_activity',
       run: () => purgeVisitorActivity(db, cutoff(now, VISITOR_RETENTION_DAYS)),
+    },
+    // The dispatch payload on old runs. A THIRD kind of non-registry policy: column-level
+    // on domain data. `executions` is business data with twelve cascading children and
+    // live writers, so the sweep may neither delete from it nor rewrite it — but one
+    // column on it was 29 MB that no reader of a 30-day-old run can reach.
+    {
+      name: 'execution_payloads',
+      run: () => redactStaleExecutionPayloads(db, cutoff(now, EXECUTION_PAYLOAD_RETENTION_DAYS)),
     },
   ];
 

@@ -35,6 +35,7 @@ import {
   brainChatTrace,
   errorEvents,
   executionLifecycleOutbox,
+  executionRollbacks,
   integrationSyncLogs,
   llmFailoverLog,
   llmHealthProbes,
@@ -237,13 +238,26 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     )),
   },
   {
+    relation: 'execution_rollbacks',
+    connections: ['primary'],
+    retentionDays: 30,
+    rationale:
+      'Undo records for a cloud run (`undo_payload` jsonb is most of the 24 MB). Nothing '
+      + 'references this table, and a rollback is only ever actioned while the run it undoes is '
+      + 'recent — every one of its 18,199 rows was already older than 30d, the residue of the '
+      + 'runaway dispatch loop. Safe to sweep: the `executions` row it points at is untouched, '
+      + 'and that FK is ON DELETE SET NULL in the other direction only.',
+    purge: (db, cutoff) => db.delete(executionRollbacks).where(acrossTenants(executionRollbacks, 'scheduled_sweep', lt(executionRollbacks.createdAt, cutoff))),
+  },
+  {
     relation: 'activity_signals',
     connections: ['primary'],
-    retentionDays: 90,
+    retentionDays: 30,
     rationale:
-      'Raw presence/engagement telemetry — 90% of it `heartbeat`. The contributor rollups that '
-      + 'consume it are materialised elsewhere, so only the raw stream is swept, on the same 90d '
-      + 'window as the other event feeds.',
+      'Raw presence/engagement telemetry — 90% of it `heartbeat`, whose only consumer is the '
+      + '"who is active now" read. The contributor rollups are materialised elsewhere and do not '
+      + 'read this stream retrospectively, so the 90d window it started on bought nothing; 30d '
+      + 'matches how far back presence is ever asked about.',
     purge: (db, cutoff) => db.delete(activitySignals).where(acrossTenants(activitySignals, 'scheduled_sweep', lt(activitySignals.createdAt, cutoff))),
   },
   {
