@@ -48,6 +48,11 @@ import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import { ingestForRepo, type IngestEvent } from '../../application/contributors/activityIngest';
 import { ALERT_EVENTS, ingestAlertWebhook } from '../../application/security/githubAlerts';
 import { signalPendingWork } from '../../application/runtime/cronWorkSignal';
+import {
+  completeDeltaTicketsOnMerge,
+  type DeltaMergeOutcome,
+  type MergedPullRequestRef,
+} from '../../application/delta/completeDeltaOnMerge';
 
 /** Labels that trigger auto-dispatch. Lower-cased for comparison. */
 const DISPATCH_LABELS = new Set(['coderclaw', 'ai-task', 'host', 'ai']);
@@ -96,6 +101,26 @@ export function commitEvents(p: Record<string, unknown>): IngestEvent[] {
       occurredAt: gs(ci, 'timestamp') ?? new Date().toISOString(),
     } satisfies IngestEvent;
   });
+}
+
+/**
+ * The merged-PR facts the delta closer needs, or null when this payload is not a merge.
+ * Pure and exported so the extraction is pinned by tests rather than by whichever
+ * payload happened to be in front of the author — a webhook shape read wrong here
+ * would silently stop closing tickets with no error anywhere.
+ */
+export function mergedPullRequestRef(p: Record<string, unknown>): MergedPullRequestRef | null {
+  if (gs(p, 'action') !== 'closed') return null;
+  const pr = g(p, 'pull_request');
+  if (!pr || g(pr, 'merged') !== true) return null;
+  const { full } = repoNames(p);
+  if (!full) return null;
+  return {
+    repoFullName: full,
+    number: gn(p, 'number') ?? gn(pr, 'number'),
+    branchName: gs(g(pr, 'head'), 'ref'),
+    provider: 'github',
+  };
 }
 
 /** pull_request → pr_opened / pr_merged / pr_closed (with merge cycle time). */
@@ -306,7 +331,23 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
       // A PR lifecycle change is work for the frequent reconciler. Signal the
       // shared cron gate so a newly opened PR cannot wait for the 30-minute floor.
       if (event === 'pull_request') c.executionCtx.waitUntil(signalPendingWork(c.env as Env));
-      return c.json({ received: true, processed: true, inserted: out.inserted, skipped: out.skipped });
+      // A MERGE is also the moment a delta ticket's change actually shipped. The run
+      // that recorded the delta left the change on a branch and never saw this merge,
+      // so without it the ticket stays in review forever — the second half of
+      // "completes automatically once merged", the first half being the run's own
+      // push-to-base path (`completeShippedTickets`). Fail-closed and awaited, so the
+      // response says what it did rather than reporting a merge it silently ignored.
+      let deltaTickets: DeltaMergeOutcome | undefined;
+      if (event === 'pull_request') {
+        const merged = mergedPullRequestRef(p);
+        if (merged) {
+          deltaTickets = await completeDeltaTicketsOnMerge(c.env as Env, db, merged).catch((error) => {
+            reportCaughtError(error, { source: 'presentation/routes/githubWebhookRoutes.ts', operation: 'completeDeltaTicketsOnMerge' });
+            return { completed: [], reason: 'delta completion failed — see the error report' };
+          });
+        }
+      }
+      return c.json({ received: true, processed: true, inserted: out.inserted, skipped: out.skipped, ...(deltaTickets ? { deltaTickets } : {}) });
     }
 
     // Security alerts: GitHub's own scanners (CodeQL / Dependabot) feed the SAME

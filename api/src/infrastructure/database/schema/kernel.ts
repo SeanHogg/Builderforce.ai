@@ -208,7 +208,13 @@ export const activityLog = pgTable('activity_log', {
   index('idx_activity_log_actor').on(t.tenantId, t.actorType, t.actorRef, t.occurredAt),
   index('idx_activity_log_target').on(t.tenantId, t.targetType, t.targetId),
   index('idx_activity_log_project').on(t.tenantId, t.projectId, t.occurredAt),
-  index('idx_activity_log_object').on(t.objectId, t.occurredAt),
+  // PARTIAL, for the same reason the visitor index below is: a btree stores NULLs, and
+  // `object_id` is null on every row in the database (no writer has ever set it — see
+  // ActivityInput.objectId). A full index therefore held one entry per row, 19 MB of
+  // pointers to nothing, to serve `/api/objects/:id/activity`. `object_id = X` implies
+  // NOT NULL, so the predicate costs that lookup nothing and the index costs ~0 until a
+  // writer starts populating the column.
+  index('idx_activity_log_object').on(t.objectId, t.occurredAt).where(sql`${t.objectId} IS NOT NULL`),
   // The anonymous visitor journey (1111). Partial, because it serves ONE
   // question — "every visitor event in the last N days", the flow-graph scan —
   // that the tenant-leading indexes above cannot: those rows carry a null tenant,
