@@ -215,7 +215,7 @@ export {
   DEFAULT_CHAT_ACTIVITY_LABELS,
 } from './chatActivity';
 export type { ChatActivity, RunMilestoneActivity, AgentDispatchActivity, ChatActivityLabels, RunMilestonePhase } from './chatActivity';
-export { stepSig, parseStepMessage, traceWithPersistedSteps } from './persistedSteps';
+export { stepSig, parseStepMessage, traceWithPersistedSteps, mergeRecoveredTrace } from './persistedSteps';
 export type { PersistedStep } from './persistedSteps';
 
 // Deployed API version (session-cached) — the "which build produced this capture?"

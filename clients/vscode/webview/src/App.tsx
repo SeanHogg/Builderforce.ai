@@ -29,6 +29,7 @@ import {
   CHAT_MODE_ICON,
   NEW_CHAT_MODE,
   normalizeChatMode,
+  mergeRecoveredTrace,
   type ChatMode,
   type Effort,
   type BrainConfig,
@@ -58,6 +59,7 @@ import { loadComposerModels, invalidateModelSurface, type ComposerModelSurface }
 import { createChatTicketsAdapter } from './chatTicketsAdapter';
 import { adoptChatProject } from './adoptChatProject';
 import { EvermindStatusBadge } from './EvermindStatusBadge';
+import { PendingChangesPanel } from './PendingChangesPanel';
 import { PlanBadge, fetchPlanSnapshot, invalidatePlanSnapshot, openUpgrade } from './accountPlan';
 import {
   getToken,
@@ -204,6 +206,9 @@ interface PersistedTraceRow {
   isError: boolean;
   durationMs: number | null;
   ttftMs: number | null;
+  /** When the event HAPPENED. Null on rows written before migration 1127 — fall back
+   *  to `createdAt` there. Prefer this for ordering: `createdAt` is the batch write. */
+  occurredAt: string | null;
   createdAt: string;
 }
 
@@ -216,7 +221,11 @@ function parseTraceJson(s: string | null): unknown {
 /** Map a persisted trace row back into the in-memory BrainTraceEvent the timeline renders. */
 function persistedToTraceEvent(row: PersistedTraceRow): BrainTraceEvent {
   return {
-    ts: row.createdAt,
+    // `occurredAt` is when it HAPPENED; `createdAt` is when the batch was written — a
+    // run persists its whole trace in ONE insert, so `createdAt` is identical across
+    // every event of that run and cannot order them. Fallback is for rows that predate
+    // migration 1127, whose real instants were never recorded.
+    ts: row.occurredAt ?? row.createdAt,
     category: row.kind as BrainTraceEvent['category'],
     label: row.label ?? '',
     durationMs: row.durationMs ?? undefined,
@@ -1064,7 +1073,9 @@ function Chat({ init }: { init: InitData }) {
       .catch(() => { if (!cancelled) setPersistedTrace([]); });
     return () => { cancelled = true; };
   }, [chatId, apiReq]);
-  const displayTrace = conv.trace.length > 0 ? conv.trace : persistedTrace;
+  // MERGED, not either/or: a live run must not erase the history it is continuing.
+  // Deduped by step identity in the shared primitive — see `mergeRecoveredTrace`.
+  const displayTrace = useMemo(() => mergeRecoveredTrace(persistedTrace, conv.trace), [persistedTrace, conv.trace]);
 
   // Per-turn limbic round-trip: fetch a fresh affective/personality block for THIS
   // turn's text from the host (which calls the gateway), with a short timeout so a
@@ -1228,6 +1239,10 @@ function Chat({ init }: { init: InitData }) {
               isError: e.isError,
               durationMs: e.durationMs,
               ttftMs: e.ttftMs,
+              // The instant the event happened. This POST is ONE batch insert, so
+              // without it every row of the run comes back at the same `created_at`
+              // and the rehydrated timeline has no chronology left to sort on.
+              ts: e.ts,
             })),
           }),
         }).catch(() => {});
@@ -1675,6 +1690,12 @@ function Chat({ init }: { init: InitData }) {
           🩺
         </button>
       </header>
+
+      {/* "The agent changed code and nothing said so" — the chat's own signal, right
+          above the ticket rail. Self-gating: a clean working tree renders nothing (not
+          even a wrapper), so it sits outside the chatId guard and shows on a chat with
+          no ticket too — the edits are just as unreviewed either way. */}
+      <PendingChangesPanel labels={init.labels} />
 
       {chatId != null && (
         <div style={{ padding: '0 12px' }}>

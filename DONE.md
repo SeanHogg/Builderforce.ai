@@ -1,3 +1,152 @@
+## ✅ RESOLVED 2026-09-05 — The VSIX says when an agent has left code on disk, and lets you review it
+
+An agent turn in the editor edits the workspace through the local tools (`write_file` /
+`edit_file` / `delete_file` / `run_command`), so the code on disk moves while the
+conversation is the only record that it did. No BuilderForce surface read that fact: the
+chat, the ticket rail on the chat header, and every section of the sidebar rendered a
+finished turn with no hint that unreviewed edits were now sitting in the working tree —
+and no way to see them. The only route was noticing VS Code's separate Source Control view
+on your own and correlating it to the conversation by memory. A `builderforce.reviewChanges`
+command existed but was palette-only and did nothing but focus that same SCM view.
+
+**One change set, read by every surface.** `clients/vscode/src/gitChangeModel.ts` is the
+host-free domain — `PendingChange`/`PendingChangeSet`, the Git-extension `Status` mapping,
+and a `git status --porcelain` parser — with 18 unit tests over the cases that make a count
+wrong: a rename (the destination is the pending file, not the original), an unmerged pair
+(`UU`/`AA`/`DU` is a conflict, not a staged edit), `AD` (staged an add then deleted it — the
+pending edit is the deletion), a quoted path, CRLF output, and a file staged and then edited
+again, which the SCM view deliberately shows twice and a "N pending" count must not.
+`gitChanges.ts` is the cached read port on top: the built-in Git extension when it is there
+(no process spawn, and its `state.onDidChange` invalidates the cache instead of polling),
+`git status` per workspace folder when it is not.
+
+**Two surfaces, one truth.**
+
+- **Changes** (Activity Bar ▸ BuilderForce ▸ Changes, `pendingChangesTree.ts`) — a numeric
+  badge VS Code also rolls up onto the BuilderForce activity-bar icon, so pending work is
+  visible without the section being open; one row per file with its status and repository;
+  a click that opens the file's real diff. Title actions hand off to Source Control for
+  staging/committing, and to the existing `builderforce.openPullRequest` Brain seed for
+  "commit on a branch and open a PR". Several repositories group; one repository stays flat;
+  past 200 rows a repository folds into a "…more" row rather than becoming a file dump.
+- **The chat**, directly above the ticket rail — the shared, self-gating
+  `PendingChangesBar` (`packages/brain-ui`, so a second surface mounts it unchanged), fed by
+  the host over the webview bridge (`pendingChanges` on `init` and as a live message) and
+  routing "open" and "Review" back through the SAME commands the sidebar uses. A clean tree
+  renders nothing at all — not even a spacer.
+
+**Kept live.** The agent's tools write through `node:fs`, which raises no text-document
+event, so a mutating tool would otherwise leave the chat claiming "nothing pending" until a
+TTL expiry: `BrainWebview.runTool` now fires `refreshPendingChanges()` on any `mutating`
+tool. Repository events, saves and that signal share ONE ref-counted subscription however
+many panels are watching, instead of each panel attaching its own listener to the same
+repository.
+
+**Extracted, and every duplicate migrated.** `gitContext.ts` had its own copy of the Git
+extension typings, activation, repository lookup, path containment and `git` CLI runner.
+Those are now `gitApi.ts` (editor plumbing) and `gitChangeModel.ts` (pure domain), and
+`gitContext` imports both — including for `dirtyCount`, which was `workingTreeChanges.length
++ indexChanges.length` and therefore double-counted a staged-then-edited file. The number
+the persona tells the model is now the same deduped set the two new surfaces render.
+
+Localized in all five catalogs (`l10n/bundle.l10n*.json` and `package.nls*.json`); status
+colours are `gitDecoration.*` theme tokens in the tree and `--bf-*` variables in the bar, so
+both read in light and dark. Verified by `pnpm test` (259) and by the extension-host gate
+`pnpm test:integration` in a real VS Code, whose "every declared command is registered" and
+"every contributed view can be focused" cases cover the new view and its three commands.
+
+## ✅ RESOLVED 2026-09-05 — A reopened Brain chat shows its run in the order it happened
+
+Reopening a chat rendered its history regrouped by KIND — every "Thought for Xs" in one
+block, then every tool call in another — instead of the interleaving the run actually
+produced. Sending one new message appeared to repair it. Both halves had the same cause.
+
+`brain_chat_trace` had ONE timestamp, `created_at`, a `defaultNow()` applied by the single
+batch INSERT a run makes when it settles. Every event of a run therefore came back
+carrying the same instant: the chronology the trace exists to record was discarded at the
+moment it was stored. The client sorts the rehydrated timeline by timestamp, so with every
+stamp tied the sort fell through to its per-kind tie-break, and the kind rank became the
+only thing ordering the run. A live run hid it — its events carry real, distinct wall-clock
+stamps — which is exactly why one new message looked like a fix.
+
+Three changes, because the loss, the render and the recovery are different problems:
+
+- **The loss.** `occurred_at` (migration 1127, nullable, no backfill) records when the
+  event HAPPENED, distinct from when the batch was written. The clients send it, the
+  service stores it, both readers prefer it and fall back to `created_at` only for rows
+  that predate the column — whose real instants were never recorded and cannot be guessed.
+  The server-side agent-reply loop buffers its trace for one append at the end for the same
+  reason, so it stamps every event on the way in (`record()` in `BrainService`).
+- **The render.** `buildSettledTimeline` now ranks all trace-derived nodes at ONE rank and
+  orders them by their position in the trace, which is the sequence the run emitted. The
+  per-kind rank still breaks ties ACROSS sources (a message against a step at the same
+  instant), which is all it was ever for. This is what makes chats already written with
+  flat timestamps read correctly. It also makes the comparator a strict total order:
+  ranking within one stream by kind while ordering across streams by position is
+  intransitive, and an intransitive comparator has no defined result.
+- **The recovery.** Both surfaces picked `live.length > 0 ? live : recovered` — not a
+  merge, a replacement. Reopen a chat with thirty tool steps and they render; send one
+  message and all thirty vanish because a three-event live trace "wins". Now
+  `mergeRecoveredTrace` (shared, in `persistedSteps.ts` beside `traceWithPersistedSteps`)
+  keeps both and drops the duplicate, which it can do only because the event's own instant
+  now round-trips: `stepSig` matches a live event against its persisted twin.
+
+Also closed alongside it: `git_sync_latest`, `git_undo` and `git_redo` took no `repo`
+argument, so in a folder that CONTAINS checkouts rather than being one they could only ever
+run at the root — where there is no repository. `git_status` had learned about `repo`; the
+multi-line actions had not, so a run would scope `git_status` successfully and then fail
+the very next call with nothing that named the reason. They cannot take the `cd X && Y`
+prefix (it would scope only the first line), so they get the `cd` as a guarded leading
+statement instead. The `repo` parameter's description is now declared once and shared by
+all six git tools.
+
+## ✅ RESOLVED 2026-09-05 — Kimi's OAuth protocol has one definition again
+
+The client id, the auth host and its env overrides, the `/api/oauth/{device_authorization,
+token}` paths and the RFC 8628 error vocabulary had been written out TWICE — in
+`api/src/application/llm/kimiOAuth.ts` for the web device connect, and in
+`clients/vscode/src/kimiCodeAuth.ts` for the refresh against the user's local Kimi Code
+install. Both were read from the same source, so they agreed on the day they were written
+and nothing kept them agreeing: rotate the client id and one surface keeps working while
+the other fails with an OAuth error naming nothing useful.
+
+Now `@builderforce/kimi-oauth` — a source-only leaf package, dependency-free and I/O-FREE
+by contract. It BUILDS requests and READS responses; it never performs one. That is what
+lets it be shared at all: the Worker's `fetch` and the extension's injected `fetch` have
+different lifetimes, failure vocabularies and retry policies, and none of that belongs in
+a protocol module. Storage shape stays with each consumer too — the API keeps absolute
+epoch MILLISECONDS beside its other BYO subscription tokens, the extension writes Kimi's
+own on-disk record in SECONDS — so the parser returns the wire's own `expires_in` and lets
+each side convert.
+
+The deferral reason in the old entry was simply WRONG, which is worth recording. It claimed
+closing this meant "wiring a shared package into two different bundlers". It does not:
+`scripts/sourcePackages.mjs` DERIVES every bundler and test-runner alias from the package
+manifests — "a new source-only package is wired everywhere the moment its `package.json`
+exists". The only hand-written lists left are the two `tsconfig` `paths` blocks, and
+`scripts/check-source-package-graph.mjs` holds those to the registry. Total wiring: two
+lines. The estimate that justified deferring was never checked against the machinery that
+already existed to make it cheap.
+
+Two real divergences surfaced only once the two copies sat side by side:
+
+- **A response with no `expires_in` meant different things.** The Worker assumed fifteen
+  minutes; the extension refused to continue. Now ONE policy — `kimiExpiresInSeconds()` —
+  with the raw wire value (`number | null`) still exposed, so the fallback is a visible
+  decision rather than a buried constant.
+- **A dead branch in the extension's retry classifier**: `RETRYABLE_STATUSES.has(status) ?
+  "unavailable" : "unavailable"` — both arms identical, so the retryable set it consulted
+  changed nothing. The shared parser returns `retryable` as data and the branch is gone.
+
+Also dropped as dead once the protocol moved out: the extension's `kimiOAuthHost` wrapper
+and both surfaces' re-exports of `KIMI_OAUTH_CLIENT_ID`, which by then existed only so
+their own tests could import them. Header casing unified to lowercase, which is what the
+Fetch standard normalizes to anyway — spelling them two ways is what invited the drift.
+
+16 tests on the new package pin the shapes both surfaces now depend on, so a change here is
+visibly a change to BOTH. 9,023 API tests and 241 extension tests pass; both typechecks
+clean.
+
 ## ✅ RESOLVED 2026-09-05 — Kimi connects by redirect everywhere, on one OAuth credential, and refreshes itself
 
 Read out of the shipped `moonshot-ai.kimi-code` client, so none of it is guessed: Kimi

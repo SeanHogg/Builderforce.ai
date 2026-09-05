@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseStepMessage, stepSig, traceWithPersistedSteps } from './persistedSteps';
+import { mergeRecoveredTrace, parseStepMessage, stepSig, traceWithPersistedSteps } from './persistedSteps';
 import { computeBrainDiagnostics, formatBrainDiagnostics, type BrainTraceEvent } from './brainTriage';
 import type { BrainMessage } from './types';
 
@@ -51,6 +51,33 @@ describe('parseStepMessage', () => {
     expect(parseStepMessage(null)).toBeNull();
     expect(parseStepMessage('not json')).toBeNull();
     expect(parseStepMessage(JSON.stringify({ kind: 'provenance', model: 'x' }))).toBeNull();
+  });
+});
+
+describe('mergeRecoveredTrace', () => {
+  const ev = (label: string, ts: string): BrainTraceEvent => ({ ts, category: 'tool', label, args: {}, result: {} });
+
+  it('keeps the rehydrated history when a live run starts — it must not replace it', () => {
+    // The regression: reopen a chat with history, send one message, and every earlier
+    // step vanished because a short live trace "won".
+    const recovered = [ev('search_code', '2026-01-01T00:00:00.000Z'), ev('read_file', '2026-01-01T00:00:01.000Z')];
+    const live = [ev('edit_file', '2026-01-02T00:00:00.000Z')];
+    expect(mergeRecoveredTrace(recovered, live).map((e) => e.label))
+      .toEqual(['search_code', 'read_file', 'edit_file']);
+  });
+
+  it('renders an event present in BOTH exactly once', () => {
+    // Switching away from a chat and back re-fetches rows this session already ran.
+    const shared = ev('search_code', '2026-01-01T00:00:00.000Z');
+    const merged = mergeRecoveredTrace([shared, ev('read_file', '2026-01-01T00:00:01.000Z')], [shared]);
+    expect(merged.filter((e) => e.label === 'search_code')).toHaveLength(1);
+    expect(merged.map((e) => e.label)).toEqual(['read_file', 'search_code']);
+  });
+
+  it('returns the other side untouched when either is empty', () => {
+    const live = [ev('a', '2026-01-01T00:00:00.000Z')];
+    expect(mergeRecoveredTrace([], live)).toBe(live);
+    expect(mergeRecoveredTrace(live, [])).toBe(live);
   });
 });
 

@@ -76,5 +76,9 @@
   "command.scheduleMeeting": "BuilderForce: Schedule Meeting",
   "command.joinMeetingBrowser": "Join in Browser",
   "command.joinMeetingNative": "Join Here",
-  "config.reportErrors.desc": "Send errors this extension catches to your BuilderForce workspace, so they appear in Quality alongside every other error. Off by default: with it off, errors are written only to the BuilderForce output channel and never leave this machine."
+  "config.reportErrors.desc": "Send errors this extension catches to your BuilderForce workspace, so they appear in Quality alongside every other error. Off by default: with it off, errors are written only to the BuilderForce output channel and never leave this machine.",
+  "view.changes": "Changes",
+  "command.refreshChanges": "BuilderForce: Refresh Changes",
+  "command.openChange": "BuilderForce: Open Change",
+  "command.openSourceControl": "BuilderForce: Open Source Control"
 }

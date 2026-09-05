@@ -7,10 +7,9 @@ import {
   saveCredential,
   type KimiCredentialFs,
 } from "./kimiCodeCredentials";
+import { KIMI_OAUTH_CLIENT_ID } from "@builderforce/kimi-oauth";
 import {
-  KIMI_OAUTH_CLIENT_ID,
   ensureFreshKimiToken,
-  kimiOAuthHost,
   refreshKimiAccessToken,
   resetKimiTokenRefreshState,
 } from "./kimiCodeAuth";
@@ -148,7 +147,10 @@ describe("the refresh grant", () => {
     const result = await refreshKimiAccessToken("old-r", { fetchImpl, nowMs: NOW });
 
     expect(seen!.url).toBe("https://auth.kimi.com/api/oauth/token");
-    expect(seen!.headers["Content-Type"]).toBe("application/x-www-form-urlencoded");
+    // Lowercase because the shared protocol module spells headers the way the Fetch
+    // standard normalizes them anyway — spelling them two ways is what invited the drift
+    // this package removed.
+    expect(seen!.headers["content-type"]).toBe("application/x-www-form-urlencoded");
     const form = new URLSearchParams(seen!.body);
     expect(form.get("grant_type")).toBe("refresh_token");
     expect(form.get("refresh_token")).toBe("old-r");
@@ -176,12 +178,6 @@ describe("the refresh grant", () => {
     expect(await refreshKimiAccessToken("r", { fetchImpl: denied })).toMatchObject({ kind: "unauthorized" });
     const down = vi.fn(async () => new Response("", { status: 503 }));
     expect(await refreshKimiAccessToken("r", { fetchImpl: down })).toMatchObject({ kind: "unavailable" });
-  });
-
-  it("honours Kimi Code's own host overrides", () => {
-    expect(kimiOAuthHost({ KIMI_CODE_OAUTH_HOST: "https://staging.example/" } as NodeJS.ProcessEnv))
-      .toBe("https://staging.example");
-    expect(kimiOAuthHost({} as NodeJS.ProcessEnv)).toBe("https://auth.kimi.com");
   });
 });
 

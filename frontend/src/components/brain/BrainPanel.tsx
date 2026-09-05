@@ -33,6 +33,7 @@ import {
   reasoningForRun,
   useToolConfirmationGate,
   type BrainTraceEvent,
+  mergeRecoveredTrace,
 } from '@seanhogg/builderforce-brain-embedded';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
@@ -135,13 +136,18 @@ function traceEventToInput(ev: BrainTraceEvent) {
     isError: ev.isError,
     durationMs: ev.durationMs,
     ttftMs: ev.ttftMs,
+    // The instant the event happened. The whole run is posted in ONE insert when it
+    // settles, so `created_at` is identical across it and cannot order the timeline.
+    ts: ev.ts,
   };
 }
 
 /** A persisted trace row → a timeline BrainTraceEvent, so tool/LLM turns survive reload. */
 function traceRowToEvent(r: BrainChatTraceRow): BrainTraceEvent {
   return {
-    ts: r.createdAt ?? new Date().toISOString(),
+    // `occurredAt` is when it HAPPENED; `createdAt` is when the batch was written, and
+    // is the fallback only for rows that predate migration 1127.
+    ts: r.occurredAt ?? r.createdAt ?? new Date().toISOString(),
     category: r.kind as BrainTraceEvent['category'],
     label: r.label ?? '',
     durationMs: r.durationMs ?? undefined,
@@ -724,7 +730,9 @@ export function BrainPanel({
       .catch(() => { if (live) setPersistedTrace([]); });
     return () => { live = false; };
   }, [chats.activeChatId]);
-  const timelineTrace = conv.trace.length > 0 ? conv.trace : persistedTrace;
+  // MERGED, not either/or: a live run must not erase the history it is continuing.
+  // Deduped by step identity in the shared primitive — see `mergeRecoveredTrace`.
+  const timelineTrace = useMemo(() => mergeRecoveredTrace(persistedTrace, conv.trace), [persistedTrace, conv.trace]);
 
   // Persist: when a run settles (running flips true→false with a non-empty trace),
   // POST only the events not yet persisted this session (tracked per-chat) so tool

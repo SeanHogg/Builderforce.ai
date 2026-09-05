@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { KIMI_OAUTH_CLIENT_ID } from '@builderforce/kimi-oauth';
 import {
-  KIMI_OAUTH_CLIENT_ID,
-  kimiOAuthHost,
   pollKimiDeviceToken,
   refreshKimiOAuth,
   startKimiDeviceAuthorization,
@@ -116,10 +115,5 @@ describe('refresh', () => {
     // a bare 400 there would keep a dead account looking merely unlucky.
     globalThis.fetch = vi.fn(async () => jsonResponse({ error: 'invalid_grant' }, 400)) as unknown as typeof fetch;
     await expect(refreshKimiOAuth('r1')).rejects.toMatchObject({ status: 401 });
-  });
-
-  it('honours Kimi Code’s own host overrides', () => {
-    expect(kimiOAuthHost({ KIMI_CODE_OAUTH_HOST: 'https://staging.example/' })).toBe('https://staging.example');
-    expect(kimiOAuthHost({})).toBe('https://auth.kimi.com');
   });
 });

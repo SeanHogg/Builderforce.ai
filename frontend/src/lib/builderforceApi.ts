@@ -617,6 +617,9 @@ export interface BrainChatTraceRow {
   isError: boolean;
   durationMs: number | null;
   ttftMs: number | null;
+  /** When the event HAPPENED. Null on rows written before migration 1127 — fall back
+   *  to `createdAt` there. Prefer this for ordering: `createdAt` is the batch write. */
+  occurredAt: string | null;
   createdAt: string;
 }
 
@@ -630,6 +633,9 @@ export interface BrainChatTraceEventInput {
   durationMs?: number;
   ttftMs?: number;
   turnSeq?: number;
+  /** ISO instant the event happened. A run posts its whole trace in one insert when
+   *  it settles, so without this every row of the run comes back at the same time. */
+  ts?: string;
 }
 
 /** A work-item kind a chat can be tied to (planning spine + roadmap + spec + gap). */

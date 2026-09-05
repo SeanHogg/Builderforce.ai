@@ -76,5 +76,9 @@
   "command.scheduleMeeting": "BuilderForce: Programar reunión",
   "command.joinMeetingBrowser": "Unirse en el navegador",
   "command.joinMeetingNative": "Unirse aquí",
-  "config.reportErrors.desc": "Envía los errores que detecta esta extensión a tu espacio de trabajo de BuilderForce para que aparezcan en Quality junto al resto de errores. Desactivado por defecto: si está desactivado, los errores solo se escriben en el canal de salida de BuilderForce y nunca salen de este equipo."
+  "config.reportErrors.desc": "Envía los errores que detecta esta extensión a tu espacio de trabajo de BuilderForce para que aparezcan en Quality junto al resto de errores. Desactivado por defecto: si está desactivado, los errores solo se escriben en el canal de salida de BuilderForce y nunca salen de este equipo.",
+  "view.changes": "Cambios",
+  "command.refreshChanges": "BuilderForce: Actualizar cambios",
+  "command.openChange": "BuilderForce: Abrir cambio",
+  "command.openSourceControl": "BuilderForce: Abrir control de código fuente"
 }

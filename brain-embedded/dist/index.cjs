@@ -150,6 +150,7 @@ __export(src_exports, {
   localToolsIn: () => localToolsIn,
   mcpActionsFrom: () => mcpActionsFrom,
   mentionRecipient: () => mentionRecipient,
+  mergeRecoveredTrace: () => mergeRecoveredTrace,
   midRunNotice: () => midRunNotice,
   modelCategoryLabel: () => modelCategoryLabel,
   modelFailoversInTrace: () => modelFailoversInTrace,
@@ -1963,6 +1964,13 @@ function traceWithPersistedSteps(messages, trace) {
   }
   if (fromMessages.length === 0) return trace;
   return [...trace, ...fromMessages].sort((a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
+}
+function mergeRecoveredTrace(recovered, live) {
+  if (recovered.length === 0) return live;
+  if (live.length === 0) return recovered;
+  const liveSigs = new Set(live.map((e) => stepSig(e.category, e.label, e.ts)));
+  const kept = recovered.filter((e) => !liveSigs.has(stepSig(e.category, e.label, e.ts)));
+  return kept.length === 0 ? live : [...kept, ...live];
 }
 
 // src/localWorkspaceTools.ts
@@ -5316,6 +5324,7 @@ function artifactRoutePath(kind, ref, projectId) {
   localToolsIn,
   mcpActionsFrom,
   mentionRecipient,
+  mergeRecoveredTrace,
   midRunNotice,
   modelCategoryLabel,
   modelFailoversInTrace,

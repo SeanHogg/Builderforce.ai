@@ -11,7 +11,8 @@
       "@builderforce/agent-tools": ["../../packages/agent-tools/src/index.ts"],
       "@builderforce/agent-tools/*": ["../../packages/agent-tools/src/*"],
       "@builderforce/creation-canvas-contract": ["../../packages/creation-canvas-contract/src/index.ts"],
-      "@builderforce/run-context": ["../../packages/run-context/src/index.ts"]
+      "@builderforce/run-context": ["../../packages/run-context/src/index.ts"],
+      "@builderforce/kimi-oauth": ["../../packages/kimi-oauth/src/index.ts"]
     },
     "sourceMap": true,
     "strict": true,

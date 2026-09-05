@@ -10,6 +10,7 @@ import { attentionFor, sessionTabIcon, sessionTabPrefix } from "./attention";
 import { getGroundingWithHistory } from "./grounding";
 import { appendSessionNote, readRecentSessionNotes, SessionNotes } from "./sessionNotes";
 import { getEditorContext, getEditorContextLive, watchEditorContext } from "./editorContext";
+import { detectPendingChanges, refreshPendingChanges, watchPendingChanges } from "./gitChanges";
 import { setSelectedModel, setSelectedModelPool } from "./modelState";
 import { resolveModelRoute } from "./modelRouting";
 import { resolveLocalChatEndpoint } from "./localModels";
@@ -39,6 +40,12 @@ interface BrainInbound extends WebviewInbound {
   /** For `open.web`: a path on the web app to open in the browser (the host owns the
    *  web base URL), e.g. the pricing or billing page behind an upgrade click. */
   path?: string;
+  /** For `changes.open`: the ABSOLUTE path of the uncommitted file whose diff to
+   *  open. The webview only echoes back a path the host itself sent it. */
+  changePath?: string;
+  /** For `changes.open`: that file's git status, so an untracked file opens as a
+   *  file rather than as a diff against nothing. */
+  changeStatus?: string;
   /** For `model.set`: the composer's model choice — 'auto' (gateway routes),
    *  'byo_pool' (the tenant's connected accounts in priority order), or 'model'
    *  with `model` set to the id to pin. */
@@ -202,6 +209,23 @@ function buildLabels(): Record<string, string> {
     // Chat | Work — the CONVERSATION's mode (migration 0409), not an editor setting.
     // The same chat opened on the web reads the same mode, which is the whole point:
     // one conversation means one thing on every surface.
+    // The pending-changes bar under the ticket rail — the chat's own "this turn left
+    // code on disk" signal. The status words are the SAME source strings the Changes
+    // sidebar renders (`pendingChangesTree.ts`), so one catalog entry serves both.
+    "changes.summary": t("{count} uncommitted changes"),
+    "changes.summaryOne": t("1 uncommitted change"),
+    "changes.hint": t("Changed in your workspace and not committed yet."),
+    "changes.expand": t("Show the changed files"),
+    "changes.collapse": t("Hide the changed files"),
+    "changes.review": t("Review"),
+    "changes.staged": t("staged"),
+    "changes.status.modified": t("modified"),
+    "changes.status.added": t("added"),
+    "changes.status.deleted": t("deleted"),
+    "changes.status.renamed": t("renamed"),
+    "changes.status.untracked": t("new"),
+    "changes.status.conflict": t("conflict"),
+    "changes.status.typechange": t("type changed"),
     "app.mode": t("Mode"),
     "app.modeChat": t("Chat"),
     "app.modeChatHint": t("Just answer — read and reason as much as needed, but do not open or dispatch board work"),
@@ -387,6 +411,10 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
     // or open tabs change, push a fresh snapshot so the agent always knows what the
     // user is looking at (the same context seeded in `init`).
     this.disposables.push(watchEditorContext(() => this.pushEditorContext()));
+    // Keep the chat's pending-changes bar live: a stage, a commit, a checkout or one
+    // of this panel's own mutating tools changes what is waiting for review, and the
+    // conversation is where the user is looking when it happens.
+    this.disposables.push(watchPendingChanges(() => void this.pushPendingChanges()));
   }
 
   protected async onMessage(msg: BrainInbound): Promise<void> {
@@ -464,6 +492,20 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
         }
         break;
       }
+      // The chat's pending-changes bar: open ONE changed file's diff, or take the
+      // user to the full Changes list. Both go through the same commands the sidebar
+      // uses, so "open" and "review" mean exactly one thing across the extension.
+      case "changes.open":
+        if (typeof msg.changePath === "string" && msg.changePath) {
+          void vscode.commands.executeCommand("builderforce.openChange", {
+            path: msg.changePath,
+            status: typeof msg.changeStatus === "string" ? msg.changeStatus : "modified",
+          });
+        }
+        break;
+      case "changes.review":
+        void vscode.commands.executeCommand("builderforce.reviewChanges");
+        break;
       // Run the existing connection-diagnostics command (opens the output channel).
       case "diagnose":
         void vscode.commands.executeCommand("builderforce.diagnose");
@@ -734,6 +776,16 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
     });
   }
 
+  /**
+   * Push the workspace's uncommitted work to the React app, so the chat states that a
+   * turn left code on disk instead of leaving the transcript as the only record of it.
+   * Same read the Changes sidebar renders — one count, two surfaces.
+   */
+  private async pushPendingChanges(): Promise<void> {
+    const pendingChanges = await detectPendingChanges();
+    void this.panel.webview.postMessage({ type: "pendingChanges", pendingChanges });
+  }
+
   /** Hand the React app its config: gateway URL, tenant token, model, grounding, tools, labels. */
   private async sendInit(): Promise<void> {
     const signedIn = !!(await this.ctx.secrets.get(SECRET_KEY));
@@ -814,6 +866,10 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
       // `hasWorkspace` is kept — other consumers read it.
       workspaceRoot: root,
       git: editorContext?.git,
+      // What is uncommitted RIGHT NOW. Seeds the chat's pending-changes bar so a panel
+      // opened after the edits still says they are waiting; refreshed via
+      // `pendingChanges` messages below.
+      pendingChanges: await detectPendingChanges(),
       // The sidebar's active project — injected into the system prompt (so the
       // Brain scopes platform tools without asking for a projectId) AND used to
       // scope newly-created chats. Re-pushed on project change via refresh().
@@ -857,6 +913,10 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
       // or edited so the user SEES each change land (a preview tab beside the
       // chat, focus preserved). Fire-and-forget — never blocks the tool result.
       void this.revealChangedFile(name, args, root);
+      // The tools write through `node:fs`, which raises no text-document event, so
+      // nothing else would tell the chat or the Changes view that the working tree
+      // just moved. A mutating tool IS that signal.
+      if (def.mutating) refreshPendingChanges();
     } catch (e) {
       this.respond(id, false, undefined, (e as Error).message ?? String(e));
     }

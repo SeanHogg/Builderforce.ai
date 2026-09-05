@@ -2048,6 +2048,14 @@ export const brainChatTrace = pgTable('brain_chat_trace', {
   durationMs: integer('duration_ms'),
   /** Time-to-first-token (ms) for an 'llm' step; null otherwise. */
   ttftMs:     integer('ttft_ms'),
+  /**
+   * When the event HAPPENED, as the run observed it. Distinct from `createdAt`,
+   * which is when the batch was written: a run posts its whole trace in one insert
+   * when it settles, so `createdAt` is identical across every event of that run and
+   * cannot order them. Null on rows written before migration 1127 — readers fall
+   * back to `createdAt` there rather than inventing an instant.
+   */
+  occurredAt: timestamp('occurred_at'),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   index('idx_brain_chat_trace_chat').on(t.chatId, t.id),

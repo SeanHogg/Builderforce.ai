@@ -7,22 +7,21 @@
  * the Brain webview, the native `@builderforce` participant and the agents behind
  * them all resolve "the code" to a concrete checkout instead of asking the user.
  *
- * Detection prefers the BUILT-IN Git extension (`vscode.git`) — it is already active
- * in any VS Code with a repo open, it hands over branch / remote / ahead-behind /
- * dirty state with no process spawn, and it fires `state.onDidChange` on checkout so
- * we can invalidate instead of polling. When that extension is unavailable (a
- * stripped host, `git.enabled: false`) we fall back to plain `git` invocations.
+ * Detection prefers the BUILT-IN Git extension — reached through the shared
+ * {@link gitApi} seam, which also owns the `git` CLI fallback and the repository
+ * change subscription this module and {@link gitChanges} both hang off. The dirty
+ * FILE COUNT reported here is the same deduped set the Changes view and the chat's
+ * pending-changes bar render, so the persona can't tell the model "2 uncommitted
+ * files" while the UI shows three.
  *
  * Results ride the shared {@link ttlCache} (project rule: no hand-rolled Map+TTL).
  */
 
-import { exec } from "node:child_process";
-import { promisify } from "node:util";
 import * as vscode from "vscode";
+import { collectRepoChanges, parsePorcelain } from "./gitChangeModel";
+import { findRepository, getGitApi, runGit, watchGitRepositories, type GitApiRepository } from "./gitApi";
 import type { GitContext } from "./idePersona";
 import { ttlCache } from "./ttlCache";
-
-const execFileAsync = promisify(exec);
 
 // The SHAPE lives in `idePersona.ts` (host-free, so it can cross the webview
 // bridge); this module owns the DETECTION. Re-exported for host-side importers.
@@ -81,66 +80,6 @@ function withRemote(ctx: GitContext, remoteUrl: string | undefined): GitContext 
     : { ...ctx, remoteUrl };
 }
 
-// ---------------------------------------------------------------------------
-// Built-in Git extension (preferred path)
-// ---------------------------------------------------------------------------
-
-/**
- * The slice of the `vscode.git` extension API we actually use. Typed locally rather
- * than depending on the (unpublished) `git.d.ts` so the extension keeps compiling
- * when the Git extension is absent.
- */
-interface GitApiRepositoryState {
-  HEAD?: { name?: string; ahead?: number; behind?: number };
-  remotes: { name: string; fetchUrl?: string; pushUrl?: string }[];
-  workingTreeChanges: unknown[];
-  indexChanges: unknown[];
-  onDidChange: vscode.Event<void>;
-}
-interface GitApiRepository {
-  rootUri: vscode.Uri;
-  state: GitApiRepositoryState;
-}
-interface GitApi {
-  repositories: GitApiRepository[];
-  onDidOpenRepository: vscode.Event<GitApiRepository>;
-  onDidCloseRepository: vscode.Event<GitApiRepository>;
-}
-interface GitExtension {
-  getAPI(version: 1): GitApi;
-}
-
-/** The activated Git API, or undefined when the extension isn't present/enabled. */
-async function getGitApi(): Promise<GitApi | undefined> {
-  try {
-    const ext = vscode.extensions.getExtension<GitExtension>("vscode.git");
-    if (!ext) return undefined;
-    const exports = ext.isActive ? ext.exports : await ext.activate();
-    return exports?.getAPI(1);
-  } catch {
-    return undefined;
-  }
-}
-
-/** Normalize for path containment comparison (Windows casing + separators). */
-function normalize(p: string): string {
-  return p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
-}
-
-/** True when `folder` is at or beneath `repoRoot`. */
-function contains(repoRoot: string, folder: string): boolean {
-  const a = normalize(repoRoot);
-  const b = normalize(folder);
-  return b === a || b.startsWith(`${a}/`);
-}
-
-/** The innermost repository containing `folder` (nested repos: deepest root wins). */
-function findRepository(api: GitApi, folder: string): GitApiRepository | undefined {
-  return api.repositories
-    .filter((r) => contains(r.rootUri.fsPath, folder))
-    .sort((a, b) => b.rootUri.fsPath.length - a.rootUri.fsPath.length)[0];
-}
-
 function fromRepository(repo: GitApiRepository): GitContext {
   const state = repo.state;
   const origin = state.remotes.find((r) => r.name === "origin") ?? state.remotes[0];
@@ -151,34 +90,21 @@ function fromRepository(repo: GitApiRepository): GitContext {
       branch: state.HEAD?.name,
       ahead: state.HEAD?.ahead,
       behind: state.HEAD?.behind,
-      dirtyCount: state.workingTreeChanges.length + state.indexChanges.length,
+      // DISTINCT files, from the same collector the Changes view renders — a file
+      // both staged and re-edited is one pending change, not two.
+      dirtyCount: collectRepoChanges(repo).length,
     },
     origin?.fetchUrl ?? origin?.pushUrl,
   );
 }
 
-// ---------------------------------------------------------------------------
-// `git` CLI fallback
-// ---------------------------------------------------------------------------
-
-/** Run a git command in `cwd`; undefined when git is missing or the command fails. */
-async function git(cwd: string, args: string): Promise<string | undefined> {
-  try {
-    const { stdout } = await execFileAsync(`git ${args}`, { cwd, timeout: 5_000, windowsHide: true });
-    const out = stdout.trim();
-    return out || undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 async function fromCli(folder: string): Promise<GitContext> {
-  const root = await git(folder, "rev-parse --show-toplevel");
+  const root = await runGit(folder, "rev-parse --show-toplevel");
   if (!root) return NOT_A_REPO;
   const [branch, remoteUrl, status] = await Promise.all([
-    git(folder, "rev-parse --abbrev-ref HEAD"),
-    git(folder, "remote get-url origin"),
-    git(folder, "status --porcelain"),
+    runGit(folder, "rev-parse --abbrev-ref HEAD"),
+    runGit(folder, "remote get-url origin"),
+    runGit(folder, "status --porcelain=v1 --untracked-files=all"),
   ]);
   return withRemote(
     {
@@ -186,7 +112,7 @@ async function fromCli(folder: string): Promise<GitContext> {
       root,
       // `rev-parse --abbrev-ref HEAD` reports "HEAD" on a detached checkout.
       branch: branch && branch !== "HEAD" ? branch : undefined,
-      dirtyCount: status ? status.split("\n").filter((l) => l.trim()).length : 0,
+      dirtyCount: status ? parsePorcelain(status, root).length : 0,
     },
     remoteUrl,
   );
@@ -247,30 +173,14 @@ function emitChange(): void {
  * Returns a disposable tearing down every subscription.
  */
 export function watchGitContext(onChange: () => void): vscode.Disposable {
-  const subs: vscode.Disposable[] = [changeEmitter.event(onChange)];
-  let disposed = false;
-
-  void getGitApi().then((api) => {
-    if (!api || disposed) return;
-    const bump = () => {
+  const subs: vscode.Disposable[] = [
+    changeEmitter.event(onChange),
+    watchGitRepositories(() => {
       invalidateGitContext();
       emitChange();
-    };
-    const watchRepo = (repo: GitApiRepository) => {
-      subs.push(repo.state.onDidChange(bump));
-    };
-    for (const repo of api.repositories) watchRepo(repo);
-    subs.push(
-      api.onDidOpenRepository((repo) => {
-        watchRepo(repo);
-        bump();
-      }),
-      api.onDidCloseRepository(bump),
-    );
-  });
-
+    }),
+  ];
   return new vscode.Disposable(() => {
-    disposed = true;
     for (const s of subs) s.dispose();
   });
 }

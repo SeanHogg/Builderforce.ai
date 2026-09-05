@@ -49,7 +49,10 @@ export interface BuildTimelineInput {
 }
 
 /** Same-timestamp tie-break so a turn reads recall → thinking → narration → tools
- *  → learn → reconcile → error. */
+ *  → learn → reconcile → error.
+ *
+ *  This rank breaks ties ACROSS the two sources only (a message against a trace
+ *  step). It must never re-rank the trace against ITSELF — see {@link TRACE_RANK}. */
 const ORDER: Record<TimelineNode['kind'], number> = {
   user: 0,
   recall: 1,
@@ -64,6 +67,28 @@ const ORDER: Record<TimelineNode['kind'], number> = {
   error: 7,
   streaming: 8,
 };
+
+/**
+ * The rank EVERY trace-derived node sorts at, whatever its kind.
+ *
+ * The trace is a SEQUENCE, not a bag: the run emitted those events in an order the
+ * array already holds. Ranking them against each other by kind therefore destroys
+ * real information, and did — a reopened chat rehydrates its trace from
+ * `GET /chats/:id/trace`, whose rows are written in ONE batch insert at run end and
+ * so all carry the SAME `created_at`. Every timestamp tied, the kind rank became the
+ * only discriminator and regrouped the run into "every Thought, then every tool call"
+ * instead of the interleaving that actually happened. (A live run hid this: its events
+ * carry distinct wall-clock stamps, which is why sending one new message appeared to
+ * "fix" the order.)
+ *
+ * Collapsing the trace to a single rank keeps the cross-source intent — a step still
+ * sorts after the user turn and the narration that share its instant — while leaving
+ * the trace's own order to the trace. It is also what makes the comparator a TOTAL
+ * order: ranking within one stream by kind and across streams by position is
+ * intransitive (tool-before-thinking in the trace, with an assistant message ranked
+ * between them, is a cycle), and an intransitive comparator has no defined result.
+ */
+const TRACE_RANK = ORDER.tool;
 
 function parseTs(iso: string | undefined, fallback: number): number {
   if (!iso) return fallback;
@@ -216,6 +241,10 @@ export function buildSettledTimeline(messages: BrainMessage[], trace: BrainTrace
     }
   });
 
+  // Everything pushed from here on is trace-derived, and sorts at TRACE_RANK in the
+  // trace's OWN order rather than by kind.
+  const messageNodeCount = nodes.length;
+
   let step = 0;
   trace.forEach((ev, i) => {
     const ts = parseTs(ev.ts, 1e15 + i); // unparseable trace sorts after dated content
@@ -237,10 +266,19 @@ export function buildSettledTimeline(messages: BrainMessage[], trace: BrainTrace
     }
   });
 
-  // Stable chronological sort: timestamp, then per-kind order, then insertion.
-  nodes.sort((a, b) => a.ts - b.ts || a.order - b.order);
-
-  return nodes;
+  // Chronological sort on the tuple (timestamp, rank, position). `position` is the
+  // node's index in this array — messages in `seq` order, then the trace in run order —
+  // so it is unique, which makes the comparator a strict total order and the result
+  // independent of the engine's sort implementation.
+  //
+  // `rank` is the per-kind ORDER for a message and the single TRACE_RANK for a trace
+  // step, so a tie between two trace steps falls through to their run order instead of
+  // being regrouped by kind (see TRACE_RANK).
+  const rank = (n: TimelineNode, i: number): number => (i < messageNodeCount ? n.order : TRACE_RANK);
+  return nodes
+    .map((node, i) => ({ node, i, rank: rank(node, i) }))
+    .sort((a, b) => a.node.ts - b.node.ts || a.rank - b.rank || a.i - b.i)
+    .map((e) => e.node);
 }
 
 /** The trailing live-streaming assistant bubble, or null when nothing is streaming.

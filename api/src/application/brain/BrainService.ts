@@ -277,12 +277,22 @@ const traceColumns = {
   isError: brainChatTrace.isError,
   durationMs: brainChatTrace.durationMs,
   ttftMs: brainChatTrace.ttftMs,
+  occurredAt: brainChatTrace.occurredAt,
   createdAt: brainChatTrace.createdAt,
 } as const;
 
 /** Per-blob cap for a persisted trace arg/result (chars) — a runaway tool result
  *  can't bloat a row; the model already gets the full result live. */
 const TRACE_JSON_MAX_CHARS = 20_000;
+
+/** An ISO instant supplied by a client → Date, or null when absent/unparseable.
+ *  Null is the honest answer: the reader then falls back to the row's write time
+ *  rather than ordering the timeline on a date that was never measured. */
+function parseInstant(iso: unknown): Date | null {
+  if (typeof iso !== 'string' || iso === '') return null;
+  const d = new Date(iso);
+  return Number.isFinite(d.getTime()) ? d : null;
+}
 
 /** One persisted Brain trace event (tool/LLM-turn timeline). Shape mirrors the
  *  webview's BrainTraceEvent, minus the fields we derive on insert. */
@@ -295,6 +305,12 @@ export interface BrainTraceEventInput {
   durationMs?: number;
   ttftMs?: number;
   turnSeq?: number;
+  /**
+   * ISO instant at which the event HAPPENED, as the run observed it. Stored to
+   * `occurred_at`. Send it: a run posts its whole trace in ONE insert when it
+   * settles, so `created_at` is identical across the batch and cannot order it.
+   */
+  ts?: string;
 }
 
 type MessageFeedback = 'up' | 'down' | null;
@@ -1087,6 +1103,9 @@ export class BrainService {
         isError: e.isError === true,
         durationMs: Number.isFinite(e.durationMs as number) ? Number(e.durationMs) : null,
         ttftMs: Number.isFinite(e.ttftMs as number) ? Number(e.ttftMs) : null,
+        // The instant the event happened. Unparseable or absent ⇒ null, so a reader
+        // falls back to `createdAt` instead of ordering on a bogus date.
+        occurredAt: parseInstant(e.ts),
       }));
     if (rows.length === 0) return { appended: 0 };
     await this.db.insert(brainChatTrace).values(rows);
@@ -1297,8 +1316,14 @@ export class BrainService {
      * Buffered rather than written per tool because a Worker should not pay a round-trip
      * inside the loop; one bounded append at the end is enough for a diagnostic and cannot
      * slow the reply. Best-effort throughout — a trace failure must never cost an answer.
+     *
+     * Buffering is exactly why every event is stamped on the way in (see {@link record}):
+     * the single append at the end gives all of them the same `created_at`, which cannot
+     * order them and used to leave a reopened chat's timeline regrouped by kind.
      */
     const trace: BrainTraceEventInput[] = [];
+    /** Append a trace event, stamped with the instant it actually happened. */
+    const record = (ev: BrainTraceEventInput): void => { trace.push({ ...ev, ts: new Date().toISOString() }); };
     // Budget for the announced-but-untaken tool call recovery below (shared with the
     // Brain run loop and the agent runtime via `@builderforce/agent-stall`).
     let announcementRecoveries = 0;
@@ -1369,7 +1394,7 @@ export class BrainService {
       // `toolCalls: 0` and prose that merely names tools is the announced-but-untaken
       // stall, and without this row it is indistinguishable from a turn whose tools all
       // failed — the two have opposite fixes.
-      trace.push({
+      record({
         kind: 'llm',
         label: readModel(result) || activeModel || '(gateway default)',
         result: {
@@ -1429,7 +1454,7 @@ export class BrainService {
             // A DISTINCT kind, not another `llm` row: it records a decision, not a model
             // turn, and counting it as one would corrupt the "every turn was toolless"
             // rollup the diagnostics report computes.
-            trace.push({
+            record({
               kind: 'failover',
               label: next,
               args: { from: lastModel || activeModel || null, to: next, attempt: modelFailovers, of: MAX_MODEL_FAILOVERS },
@@ -1501,7 +1526,7 @@ export class BrainService {
         // The CATALOG id is the label, not the advertised name: it is what a reader greps
         // for and what the prompt/allowlist are written in. A name the model invented that
         // resolves to nothing lands here verbatim, which is itself the diagnosis.
-        trace.push({
+        record({
           kind: 'tool', label: toolId, args: argObj, result: out,
           isError, durationMs: Date.now() - startedAt, turnSeq: iterations,
         });
@@ -1532,7 +1557,7 @@ export class BrainService {
       // Traced like every other model turn. This is the call that decides whether the
       // reply exists at all, and it was the ONLY one leaving no row — so an empty reply
       // produced HERE was invisible to the diagnostics report that exists to explain it.
-      trace.push({
+      record({
         kind: 'llm',
         label: readModel(finalResult) || activeModel || '(gateway default)',
         args: { synthesis: true },

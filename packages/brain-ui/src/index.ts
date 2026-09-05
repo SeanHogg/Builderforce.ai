@@ -93,6 +93,17 @@ export type { AvatarProps } from './ParticipantBadge';
 export { HealthRing, healthRingColor } from './HealthRing';
 export type { HealthRingProps } from './HealthRing';
 
+// The chat's "this turn left code on disk" bar — the count of uncommitted files and
+// a click through to each one's diff. Sits under the ticket rail; self-gating, so a
+// surface with no local working tree passes no changes and it never renders.
+export { PendingChangesBar, DEFAULT_PENDING_CHANGES_LABELS } from './pendingChanges/PendingChangesBar';
+export type {
+  PendingChangesBarProps,
+  PendingChangesLabels,
+  PendingChangeVM,
+  PendingChangeKind,
+} from './pendingChanges/PendingChangesBar';
+
 export { ChatTicketsPanel } from './chatTickets/ChatTicketsPanel';
 export type { ChatTicketsPanelProps } from './chatTickets/ChatTicketsPanel';
 export { useChatParticipants } from './chatTickets/useChatParticipants';

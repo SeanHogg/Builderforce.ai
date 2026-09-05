@@ -578,9 +578,16 @@ export function buildGitCommand(action: GitAction, opts?: { path?: string; baseB
   // `cd`, so a `..` segment would walk OUT of the workspace rather than merely widening
   // a diff. `safeGitArg` permits dots (a directory really can be named `Builderforce.ai`),
   // so traversal is rejected separately here — the one place it would actually escape.
-  const repoArg = safeGitArg(opts?.repo);
-  const repo = repoArg && !repoArg.split(/[\\/]/).includes("..") && !repoArg.startsWith("/") ? repoArg : null;
+  const repo = safeRepoArg(opts?.repo);
   const scoped = (cmd: string): string => (repo ? `cd "${repo}" && ${cmd}` : cmd);
+  // The multi-line actions cannot take the `cd X && Y` prefix — it would scope only the
+  // first line — so they get the `cd` as their own leading statement instead. These
+  // scripts already require a POSIX shell (they use `$(…)` and `[ … ]`), so a bare `cd`
+  // line is safe here in a way it would not be for the one-liners above. Without this,
+  // `sync_latest`/`undo`/`redo` could ONLY ever run at the workspace root: in a folder
+  // that CONTAINS checkouts rather than being one, they were unusable and said nothing
+  // about why, while `git_status` — which does take `repo` — worked one call earlier.
+  const scopedScript = (lines: string[]): string => repoScopedScript(lines.join("\n"), opts?.repo);
   switch (action) {
     case "status":
       return scoped("git status --short --branch");
@@ -592,10 +599,8 @@ export function buildGitCommand(action: GitAction, opts?: { path?: string; baseB
     }
     case "sync_latest": {
       const base = safeGitArg(opts?.baseBranch);
-      const resolveBase = base
-        ? `BASE="${base}"`
-        : `BASE="$(git remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p')"; [ -n "$BASE" ] || BASE=main`;
-      return [
+      const resolveBase = base ? `BASE="${base}"` : RESOLVE_BASE;
+      return scopedScript([
         "set -e",
         resolveBase,
         'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"',
@@ -603,15 +608,23 @@ export function buildGitCommand(action: GitAction, opts?: { path?: string; baseB
         'git fetch origin "$BASE"',
         'git merge --no-edit "origin/$BASE" || { git merge --abort; echo MERGE_CONFLICT; exit 3; }',
         'echo "Synced with origin/$BASE"',
-      ].join("\n");
+      ]);
     }
     case "undo":
       // Drop the last commit, reflog-recoverable via redo. Guard a dirty tree so
       // uncommitted work is never silently lost.
-      return '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }\ngit reset --hard HEAD~1\necho "Undid the last commit (use git_redo to reapply)"';
+      return scopedScript([
+        '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
+        "git reset --hard HEAD~1",
+        'echo "Undid the last commit (use git_redo to reapply)"',
+      ]);
     case "redo":
       // Reapply the change undone by the most recent reset (the reflog redo).
-      return '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }\ngit reset --hard "HEAD@{1}"\necho "Reapplied the last undone change"';
+      return scopedScript([
+        '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
+        'git reset --hard "HEAD@{1}"',
+        'echo "Reapplied the last undone change"',
+      ]);
   }
 }
 
@@ -670,10 +683,17 @@ async function runGitTool(action: GitAction, opts: { path?: string; baseBranch?:
   return result;
 }
 
+/** The `repo` parameter, shared by every git tool — one description so the six
+ *  cannot drift into describing the same argument differently. */
+const REPO_PARAM = {
+  type: "string",
+  description: 'Optional subdirectory holding the repository, when the open folder CONTAINS checkouts rather than being one (e.g. "my-project"). Omit when the workspace root is itself the repo.',
+} as const;
+
 export const gitStatusTool: ToolDefinition = defineTool({
   name: "git_status",
   description: "Show the current branch and any uncommitted changes (git status). Use it to see what you have modified before committing, syncing, or finishing. If the open folder contains several checkouts rather than being one repo, pass `repo` to name the one you mean.",
-  parameters: { type: "object", properties: { repo: { type: "string", description: 'Optional subdirectory holding the repository, when the open folder CONTAINS checkouts rather than being one (e.g. "my-project"). Omit when the workspace root is itself the repo.' } } },
+  parameters: { type: "object", properties: { repo: REPO_PARAM } },
   requires: ["shell"],
   execute: (args, ctx) => runGitTool("status", { repo: typeof args.repo === "string" ? args.repo : undefined }, ctx),
 });
@@ -681,7 +701,7 @@ export const gitStatusTool: ToolDefinition = defineTool({
 export const gitDiffTool: ToolDefinition = defineTool({
   name: "git_diff",
   description: "Show the uncommitted diff of your working tree (optionally for one path). Use it to review exactly what you changed before finishing.",
-  parameters: { type: "object", properties: { path: { type: "string", description: "Optional repo-relative file/dir to scope the diff to." }, repo: { type: "string", description: 'Optional subdirectory holding the repository, when the open folder CONTAINS checkouts rather than being one (e.g. "my-project"). Omit when the workspace root is itself the repo.' } } },
+  parameters: { type: "object", properties: { path: { type: "string", description: "Optional repo-relative file/dir to scope the diff to." }, repo: REPO_PARAM } },
   requires: ["shell"],
   execute: (args, ctx) => runGitTool("diff", { path: typeof args.path === "string" ? args.path : undefined, repo: typeof args.repo === "string" ? args.repo : undefined }, ctx),
 });
@@ -694,7 +714,7 @@ export const gitHistoryTool: ToolDefinition = defineTool({
     properties: {
       path: { type: "string", description: "Optional repo-relative file/dir to scope history to." },
       limit: { type: "number", description: "Max commits to return (default 30, max 200)." },
-      repo: { type: "string", description: 'Optional subdirectory holding the repository, when the open folder CONTAINS checkouts rather than being one (e.g. "my-project"). Omit when the workspace root is itself the repo.' },
+      repo: REPO_PARAM,
     },
   },
   requires: ["shell"],
@@ -705,25 +725,232 @@ export const gitSyncLatestTool: ToolDefinition = defineTool({
   name: "git_sync_latest",
   description:
     "Fetch the latest base branch (e.g. main) and merge it into your working branch so you are NOT building on stale code. Run this FIRST, before editing — a branch created earlier can be far behind main, so its build fails against old dependencies and its pull request would revert newer work. On a merge conflict it safely aborts and tells you which to resolve.",
-  parameters: { type: "object", properties: { baseBranch: { type: "string", description: "Base branch to sync from. Defaults to the remote's default branch (usually main)." } } },
+  parameters: { type: "object", properties: { baseBranch: { type: "string", description: "Base branch to sync from. Defaults to the remote's default branch (usually main)." }, repo: REPO_PARAM } },
   requires: ["shell"],
-  execute: (args, ctx) => runGitTool("sync_latest", { baseBranch: typeof args.baseBranch === "string" ? args.baseBranch : undefined }, ctx),
+  execute: (args, ctx) => runGitTool("sync_latest", { baseBranch: typeof args.baseBranch === "string" ? args.baseBranch : undefined, repo: typeof args.repo === "string" ? args.repo : undefined }, ctx),
 });
 
 export const gitUndoTool: ToolDefinition = defineTool({
   name: "git_undo",
   description: "Undo your most recent commit (keeps the change recoverable — use git_redo to reapply). Refuses if you have uncommitted changes, so it can never discard unsaved work. Use it to back out a change that was wrong.",
-  parameters: { type: "object", properties: {} },
+  parameters: { type: "object", properties: { repo: REPO_PARAM } },
   requires: ["shell"],
-  execute: (_args, ctx) => runGitTool("undo", {}, ctx),
+  execute: (args, ctx) => runGitTool("undo", { repo: typeof args.repo === "string" ? args.repo : undefined }, ctx),
 });
 
 export const gitRedoTool: ToolDefinition = defineTool({
   name: "git_redo",
   description: "Reapply the change you most recently undid with git_undo (reflog redo). Refuses if you have uncommitted changes.",
-  parameters: { type: "object", properties: {} },
+  parameters: { type: "object", properties: { repo: REPO_PARAM } },
   requires: ["shell"],
-  execute: (_args, ctx) => runGitTool("redo", {}, ctx),
+  execute: (args, ctx) => runGitTool("redo", { repo: typeof args.repo === "string" ? args.repo : undefined }, ctx),
+});
+
+// ── Publishing: commit → push → pull request ─────────────────────────────────────
+//
+// The git tools above READ, sync and rewind; none of them could move work out of the
+// working tree. On the cloud surfaces that is correct — a write there IS a commit and
+// the engine opens the PR at finish — but on a LOCAL surface (the editor) an agent
+// could edit a file and then had no verb for shipping it. Asked to "commit and push",
+// it reported it had no git tool, hunted the catalog, found `run_command`, and shelled
+// out `git add -A && git commit && git push` straight to `main`: everything the
+// working tree happened to contain, unreviewed, on the base branch.
+//
+// So these three exist to make the SAFE path the reachable one. The default is a ticket
+// branch, a pull request and a reviewer; pushing the base branch is a distinct, declared
+// act that the surface's own approval gate prompts for (every tool here is mutating).
+// They are gated on `git.write`, NOT `shell` — see that capability for why the cloud
+// surfaces must not be handed a second route to publishing.
+
+/** Resolve the base branch into `$BASE`, or fall back to `main`. Shared by every
+ *  script below so "what is the base branch" has ONE answer per surface. */
+const RESOLVE_BASE = `BASE="$(git remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p')"; [ -n "$BASE" ] || BASE=main`;
+
+/** Shell-quote a model-supplied string for a single-quoted POSIX argument. Commit
+ *  messages and PR bodies are free text — they cannot go through `safeGitArg`, which
+ *  rejects spaces — so they are QUOTED rather than validated. */
+function shellQuote(v: string): string {
+  return `'${v.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * Build the commit script. Commits ONLY the named paths — never `git add -A`.
+ *
+ * That is the whole point of requiring `paths`. A working tree is shared with the
+ * human using it: the run that prompted this tool had three modified files and the
+ * agent had touched one, so `git add -A` would have swept a colleague's in-flight work
+ * into the agent's commit. An agent that cannot say what it changed should not be
+ * committing.
+ *
+ * Refuses to commit onto the base branch: `branch` names the ticket branch, created
+ * from the current HEAD if it does not exist yet.
+ */
+function buildCommitCommand(opts: { message: string; paths: string[]; branch?: string; repo?: string }): string {
+  const branch = safeGitArg(opts.branch);
+  const paths = opts.paths.map((p) => shellQuote(p)).join(" ");
+  return [
+    "set -e",
+    RESOLVE_BASE,
+    'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"',
+    'git config user.name  >/dev/null 2>&1 || git config user.name  "Builderforce Agent"',
+    'CUR="$(git rev-parse --abbrev-ref HEAD)"',
+    // A ticket branch was named: switch to it, creating it if new.
+    ...(branch
+      ? [`git rev-parse --verify --quiet "${branch}" >/dev/null && git checkout "${branch}" || git checkout -b "${branch}"`]
+      : ['[ "$CUR" != "$BASE" ] || { echo ON_BASE_BRANCH; exit 5; }']),
+    `git add -- ${paths}`,
+    // Nothing staged is a fact, not a failure — say which rather than exiting 1 with
+    // git's own "nothing to commit" that reads like a broken tool.
+    'git diff --cached --quiet && { echo NOTHING_STAGED; exit 6; }',
+    `git commit -m ${shellQuote(opts.message)}`,
+    'echo "Committed on $(git rev-parse --abbrev-ref HEAD): $(git rev-parse --short HEAD)"',
+  ].join("\n");
+}
+
+/** Build the push script. Refuses the base branch unless the caller DECLARED it. */
+function buildPushCommand(opts: { allowBaseBranch?: boolean; repo?: string }): string {
+  return [
+    "set -e",
+    RESOLVE_BASE,
+    'CUR="$(git rev-parse --abbrev-ref HEAD)"',
+    ...(opts.allowBaseBranch ? [] : ['[ "$CUR" != "$BASE" ] || { echo ON_BASE_BRANCH; exit 5; }']),
+    // `-u` so a brand-new ticket branch gets its upstream on the first push.
+    'git push -u origin "$CUR"',
+    'echo "Pushed $CUR to origin"',
+  ].join("\n");
+}
+
+/** Build the `gh pr create` script. The GitHub CLI is used rather than the REST API
+ *  because this surface has a shell and the user's own gh auth, so no token has to be
+ *  plumbed through the agent. */
+function buildPullRequestCommand(opts: { title: string; body: string; base?: string; reviewers?: string[]; repo?: string }): string {
+  const base = safeGitArg(opts.base);
+  const reviewers = (opts.reviewers ?? []).map((r) => safeGitArg(r)).filter((r): r is string => !!r);
+  return [
+    "set -e",
+    'command -v gh >/dev/null 2>&1 || { echo NO_GH_CLI; exit 7; }',
+    ...(base ? [`BASE="${base}"`] : [RESOLVE_BASE]),
+    'CUR="$(git rev-parse --abbrev-ref HEAD)"',
+    '[ "$CUR" != "$BASE" ] || { echo ON_BASE_BRANCH; exit 5; }',
+    // Push first when the branch has no upstream — `gh pr create` fails on an unpushed
+    // head, and "open a PR" plainly means the branch has to exist on the remote.
+    'git rev-parse --abbrev-ref "@{upstream}" >/dev/null 2>&1 || git push -u origin "$CUR"',
+    `gh pr create --base "$BASE" --head "$CUR" --title ${shellQuote(opts.title)} --body ${shellQuote(opts.body)}`
+      + reviewers.map((r) => ` --reviewer "${r}"`).join(""),
+  ].join("\n");
+}
+
+/** Decode the sentinels the publish scripts emit into an instruction the agent can
+ *  act on, rather than a raw non-zero exit it can only report. */
+function publishToolResult(action: string, r: { ok: boolean; stdout?: string; exitCode?: number; error?: string }): ToolResult {
+  const out = (r.stdout ?? "").trim();
+  const fail = (error: string): ToolResult => ({ data: { ok: false, action, error, output: out } });
+  if (r.exitCode === 5 || /\bON_BASE_BRANCH\b/.test(out)) {
+    return fail(
+      action === "push"
+        ? "you are on the BASE branch (main/master) and `allowBaseBranch` was not set — pushing here bypasses review. Open a pull request instead (git_commit with a `branch`, then open_pull_request). If the human has explicitly asked you to push the base branch, re-call with allowBaseBranch:true; they will be prompted to approve it."
+        : "you are on the BASE branch (main/master) — committing here bypasses review. Pass `branch` to git_commit to work on a ticket branch (it is created for you), then open_pull_request.",
+    );
+  }
+  if (r.exitCode === 6 || /\bNOTHING_STAGED\b/.test(out)) {
+    return fail("none of the named paths have uncommitted changes — nothing was committed. Run git_status to see what actually differs; do not report a commit that did not happen.");
+  }
+  if (r.exitCode === 7 || /\bNO_GH_CLI\b/.test(out)) {
+    return fail("the GitHub CLI (`gh`) is not installed or not on PATH, so a pull request cannot be opened from here. The branch is committed and pushed; tell the human to open the PR, and give them the branch name.");
+  }
+  return { data: { ok: r.ok, action, output: out.slice(0, 20_000), ...(r.error ? { error: r.error } : {}) } };
+}
+
+/** Run a publish script through the shell capability, with the same not-a-repo remedy
+ *  the read-only git tools give. */
+async function runPublishTool(
+  action: string,
+  command: string,
+  repo: string | undefined,
+  ctx: { caps: { shell?: { run(c: string): Promise<{ ok: boolean; stdout?: string; exitCode?: number; error?: string }> } } },
+): Promise<ToolResult> {
+  const scoped = repoScopedScript(command, repo);
+  const r = await ctx.caps.shell!.run(scoped);
+  if (isNotARepo(r) && !repo) return notARepoResult(action);
+  const result = publishToolResult(action, r);
+  if (repo && (result.data as { ok?: boolean }).ok) (result.data as Record<string, unknown>).repo = repo;
+  return result;
+}
+
+export const gitCommitTool: ToolDefinition = defineTool({
+  name: "git_commit",
+  description:
+    "Commit the files you changed, on a TICKET BRANCH. You must list the exact `paths` to commit — the working tree is shared with the human using it, so committing everything would sweep up their unrelated in-flight work; run git_status/git_diff first if you are unsure what you touched. Pass `branch` to name the ticket branch (created for you if it does not exist); without it, a commit is refused while you are on the base branch, because that bypasses review. After committing, use open_pull_request — that is how work gets reviewed and shipped.",
+  parameters: {
+    type: "object",
+    properties: {
+      message: { type: "string", description: "Commit message. One line saying what changed and why." },
+      paths: { type: "array", items: { type: "string" }, description: "Repo-relative paths to commit. Exactly the files YOU changed — never a catch-all." },
+      branch: { type: "string", description: 'Ticket branch to commit on, created if new (e.g. "ticket/2394-mobile-board-height"). Required in effect when you are on the base branch.' },
+      repo: REPO_PARAM,
+    },
+    required: ["message", "paths"],
+  },
+  requires: ["git.write"],
+  execute: (args, ctx) => {
+    const message = typeof args.message === "string" ? args.message.trim() : "";
+    if (!message) return Promise.resolve({ data: { ok: false, action: "commit", error: "message is required" } });
+    const paths = Array.isArray(args.paths) ? args.paths.filter((p): p is string => typeof p === "string" && p.trim() !== "") : [];
+    if (paths.length === 0) {
+      return Promise.resolve({ data: { ok: false, action: "commit", error: "paths is required — list the exact files you changed. Run git_status to see them. Do not pass '.' or '-A': the working tree may hold changes that are not yours." } });
+    }
+    const repo = typeof args.repo === "string" ? args.repo : undefined;
+    return runPublishTool("commit", buildCommitCommand({ message, paths, branch: typeof args.branch === "string" ? args.branch : undefined, repo }), repo, ctx);
+  },
+});
+
+export const gitPushTool: ToolDefinition = defineTool({
+  name: "git_push",
+  description:
+    "Push the current branch to origin (setting its upstream on the first push). Pushing the BASE branch (main/master) is refused unless you pass allowBaseBranch — that path skips review, so only set it when the human has explicitly asked for it, and expect them to be prompted to approve it. The normal route is a ticket branch: git_commit with a `branch`, git_push, then open_pull_request.",
+  parameters: {
+    type: "object",
+    properties: {
+      allowBaseBranch: { type: "boolean", description: "Set ONLY when the human explicitly asked to push the base branch directly. Default false, which refuses and tells you to open a pull request." },
+      repo: REPO_PARAM,
+    },
+  },
+  requires: ["git.write"],
+  execute: (args, ctx) => {
+    const repo = typeof args.repo === "string" ? args.repo : undefined;
+    return runPublishTool("push", buildPushCommand({ allowBaseBranch: args.allowBaseBranch === true, repo }), repo, ctx);
+  },
+});
+
+export const openPullRequestTool: ToolDefinition = defineTool({
+  name: "open_pull_request",
+  description:
+    "Open a pull request for the current ticket branch against the base branch, pushing it first if it has no upstream yet. This is how a change gets REVIEWED — prefer it over pushing the base branch, and say so when someone asks you to push directly. Pass `reviewers` to request review from specific people or teams. Returns the pull request URL; report that URL rather than claiming the work is shipped, because it is not until the PR is merged.",
+  parameters: {
+    type: "object",
+    properties: {
+      title: { type: "string", description: "Pull request title — what this change does, in one line." },
+      body: { type: "string", description: "Pull request description: what changed, why, and how a reviewer can verify it." },
+      base: { type: "string", description: "Base branch to target. Defaults to the remote's default branch (usually main)." },
+      reviewers: { type: "array", items: { type: "string" }, description: "GitHub usernames or org/team slugs to request review from." },
+      repo: REPO_PARAM,
+    },
+    required: ["title", "body"],
+  },
+  requires: ["git.write"],
+  execute: (args, ctx) => {
+    const title = typeof args.title === "string" ? args.title.trim() : "";
+    const body = typeof args.body === "string" ? args.body : "";
+    if (!title) return Promise.resolve({ data: { ok: false, action: "pull_request", error: "title is required" } });
+    const repo = typeof args.repo === "string" ? args.repo : undefined;
+    const reviewers = Array.isArray(args.reviewers) ? args.reviewers.filter((r): r is string => typeof r === "string") : undefined;
+    return runPublishTool(
+      "pull_request",
+      buildPullRequestCommand({ title, body, base: typeof args.base === "string" ? args.base : undefined, reviewers, repo }),
+      repo,
+      ctx,
+    );
+  },
 });
 
 // ── The ticket's PRD ─────────────────────────────────────────────────────────────

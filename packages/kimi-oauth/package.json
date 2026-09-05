@@ -1,0 +1,17 @@
+{
+  "name": "@builderforce/kimi-oauth",
+  "version": "2026.9.7",
+  "private": true,
+  "type": "module",
+  "description": "The Kimi Code OAuth protocol, in one place: the public client id, the auth host and its env overrides, the request shapes for the device-authorization / device-code / refresh grants, and the parser that turns a raw response into a decided outcome. Shared by the API Worker (web 'connect your subscription' device flow) and the VS Code extension (refresh against the user's local Kimi Code install), so a client-id or endpoint rotation is one edit rather than two. Dependency-free and I/O-free by contract: it builds requests and reads responses, it never performs one.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

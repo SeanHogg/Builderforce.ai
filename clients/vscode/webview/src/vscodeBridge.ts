@@ -9,13 +9,15 @@
  *
  *   webview → host : 'ready', 'tool.call'{id,name,args}, 'token.refresh'{id}, 'signin',
  *                    'chats.changed', 'platform.write'{name}, 'runs.local'{running,awaiting},
- *                    'open.artifact'{kind,ref,projectId}
+ *                    'open.artifact'{kind,ref,projectId},
+ *                    'changes.open'{changePath,changeStatus}, 'changes.review'
  *   host → webview : 'init'{…}, 'token'{token}, 'response'{id,ok,result|error}, 'intent'{intent},
- *                    'editorContext'{editorContext}, 'refresh'
+ *                    'editorContext'{editorContext}, 'pendingChanges'{pendingChanges}, 'refresh'
  */
 
 import type { ModelChoiceLabels } from '@seanhogg/builderforce-brain-embedded';
 import type { EditorContext } from '../../src/idePersona';
+import type { PendingChangeSet } from '../../src/gitChangeModel';
 
 export interface ToolSpecMsg {
   name: string;
@@ -83,6 +85,10 @@ export interface InitData {
   /** The live editor context (active file / selection / open tabs) at init time.
    *  Kept fresh afterwards via `editorContext` messages (see {@link onEditorContext}). */
   editorContext?: EditorContext;
+  /** The workspace's uncommitted work when the panel opened — what the chat's
+   *  pending-changes bar renders. Kept fresh afterwards via `pendingChanges` messages
+   *  (see {@link onPendingChanges}); absent on a host with no workspace or no git. */
+  pendingChanges?: PendingChangeSet;
   /** Which screen this webview should render. The bundled React app is multi-screen:
    *  the host decides via `init` which surface this panel is — the Brain chat (default),
    *  Project 360, or a list-shaped project page (Backlog / PRDs) — same bundle, same
@@ -165,6 +171,23 @@ export function onEditorContext(cb: (c: EditorContext | undefined) => void): () 
   return () => {
     const i = editorContextWaiters.indexOf(cb);
     if (i >= 0) editorContextWaiters.splice(i, 1);
+  };
+}
+
+// The workspace's uncommitted work, pushed live by the host: a stage, a commit, a
+// checkout, or one of this panel's own mutating tools all move it, and the chat is
+// where the user is looking when they do.
+let pendingChanges: PendingChangeSet | undefined;
+const pendingChangesWaiters: Array<(c: PendingChangeSet | undefined) => void> = [];
+export type { PendingChangeSet };
+export const getPendingChanges = (): PendingChangeSet | undefined => pendingChanges;
+
+/** Subscribe to live pending-change updates (what is edited but not committed). */
+export function onPendingChanges(cb: (c: PendingChangeSet | undefined) => void): () => void {
+  pendingChangesWaiters.push(cb);
+  return () => {
+    const i = pendingChangesWaiters.indexOf(cb);
+    if (i >= 0) pendingChangesWaiters.splice(i, 1);
   };
 }
 // Buffer intents that arrive before a subscriber mounts (the host posts `intent`
@@ -361,12 +384,13 @@ export async function refreshToken(): Promise<void> {
 }
 
 window.addEventListener('message', (e: MessageEvent) => {
-  const m = e.data as { type?: string; id?: string; ok?: boolean; result?: unknown; error?: string; token?: string | null; intent?: BrainIntent; editorContext?: EditorContext } & Partial<InitData>;
+  const m = e.data as { type?: string; id?: string; ok?: boolean; result?: unknown; error?: string; token?: string | null; intent?: BrainIntent; editorContext?: EditorContext; pendingChanges?: PendingChangeSet } & Partial<InitData>;
   if (!m || typeof m !== 'object') return;
   if (m.type === 'init') {
     token = m.token ?? null;
     initData = m as InitData;
     editorContext = initData.editorContext;
+    pendingChanges = initData.pendingChanges;
     // Notify without draining — the host re-posts `init` on project/model/auth
     // changes, and subscribers (App's setInit) must keep receiving those updates.
     for (const w of initWaiters.slice()) w(initData);
@@ -376,6 +400,11 @@ window.addEventListener('message', (e: MessageEvent) => {
   if (m.type === 'editorContext') {
     editorContext = m.editorContext;
     for (const w of editorContextWaiters) w(editorContext);
+    return;
+  }
+  if (m.type === 'pendingChanges') {
+    pendingChanges = m.pendingChanges;
+    for (const w of pendingChangesWaiters) w(pendingChanges);
     return;
   }
   if (m.type === 'token') {

@@ -31,6 +31,7 @@ import { InboxTreeProvider } from "./inboxTree";
 import { AttentionPoller, setLocalChatRuns, onLocalRunsChange, managerAttention } from "./attention";
 import { appUrl } from "./auth";
 import { MeetingsController, joinMeetingInBrowser, joinMeetingNative, openMeetingsWeb, type MeetingItem } from "./meetings";
+import { PendingChangesController } from "./pendingChangesTree";
 import { CreationCanvasPanel } from "./creationCanvasPanel";
 import { initErrorReporter, reportExtensionError, surfaceError } from "./errorReporter";
 
@@ -269,6 +270,11 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.scheduleMeeting", () => openMeetingsWeb()),
   );
 
+  // Changes sidebar — what the agent (or you) changed and hasn't committed, with a
+  // count badge and one click per file to the editor's own diff. Self-contained: it
+  // registers its own view, commands and git subscription.
+  context.subscriptions.push(new PendingChangesController());
+
   // Editor activity capture — heartbeats + file-open navigation feed the billable
   // timecard pipeline (source 'vscode'). Best-effort; no-op when signed out.
   context.subscriptions.push(initActivity(context.secrets));
@@ -297,12 +303,6 @@ export function activate(context: vscode.ExtensionContext): void {
         text: vscode.l10n.t("Review my current changes with git_status and git_diff, then commit them on a new branch, push, and open a pull request. Confirm the branch name and PR title with me first."),
       }),
     ),
-    // Review the agent's working-tree changes as one diff before committing — VS Code's
-    // native Source Control view already renders the multi-file diff, so reuse it.
-    vscode.commands.registerCommand("builderforce.reviewChanges", async () => {
-      await vscode.commands.executeCommand("workbench.view.scm").then(undefined, () => undefined);
-      await vscode.commands.executeCommand("workbench.scm.focus").then(undefined, () => undefined);
-    }),
     vscode.commands.registerCommand("builderforce.refreshInsights", () => insights?.refresh()),
     // Internal: repaint the server-backed Sessions list (after auth / chat writes).
     vscode.commands.registerCommand("builderforce.refreshSessions", () => tree.refresh()),

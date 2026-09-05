@@ -56,7 +56,7 @@ const handle: ManagerChatHandle = { chatId: 77, agentRef: 'manager-t1', agentNam
 
 const traceRow = (over: Partial<BrainChatTraceRow> & { id: number; kind: string }): BrainChatTraceRow => ({
   turnSeq: 1, label: null, argsJson: null, resultJson: null,
-  isError: false, durationMs: null, ttftMs: null, createdAt: CAPTURED_AT, ...over,
+  isError: false, durationMs: null, ttftMs: null, occurredAt: null, createdAt: CAPTURED_AT, ...over,
 });
 
 /** What the loop records when the model narrates: model turns, zero tool rows. */

@@ -76,5 +76,9 @@
   "command.scheduleMeeting": "BuilderForce：安排会议",
   "command.joinMeetingBrowser": "在浏览器中加入",
   "command.joinMeetingNative": "在此加入",
-  "config.reportErrors.desc": "将此扩展捕获的错误发送到您的 BuilderForce 工作区，使其与其他所有错误一起显示在 Quality 中。默认关闭：关闭时错误仅写入 BuilderForce 输出通道，绝不离开本机。"
+  "config.reportErrors.desc": "将此扩展捕获的错误发送到您的 BuilderForce 工作区，使其与其他所有错误一起显示在 Quality 中。默认关闭：关闭时错误仅写入 BuilderForce 输出通道，绝不离开本机。",
+  "view.changes": "更改",
+  "command.refreshChanges": "BuilderForce：刷新更改",
+  "command.openChange": "BuilderForce：打开更改",
+  "command.openSourceControl": "BuilderForce：打开源代码管理"
 }

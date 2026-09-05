@@ -48,6 +48,23 @@ export type Capability =
   | "repo.delete"
   /** Run a real shell command in the checked-out repo (only true Linux processes). */
   | "shell"
+  /**
+   * PUBLISH work from the checked-out repo: commit, push, open a pull request.
+   *
+   * Split from `shell` even though it is implemented with one, because the two answer
+   * different questions. `shell` asks "is there a process that can run a command"; this
+   * asks "may this surface move work out of the working tree and onto a remote" — a
+   * governance question with a different answer per surface, and one whose blast radius
+   * ends at someone else's `main` rather than at the run.
+   *
+   * The CLOUD surfaces deliberately do NOT back it. They already publish, by a different
+   * mechanism: a durable-surface write IS a commit (the provider returns a `commitUrl`)
+   * and `cloudAgentEngine` opens the pull request when the run finishes. Advertising
+   * these tools there would offer a second, unimplemented route to the same act — and
+   * because the container derives its schema from its capabilities, a tool its image has
+   * no handler for 400s mid-run.
+   */
+  | "git.write"
   /** Manage long-lived background processes spawned by `shell`. */
   | "process"
   /** Statically validate written config (JSON/YAML) WITHOUT a shell. */

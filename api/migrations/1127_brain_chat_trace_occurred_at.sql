@@ -1,0 +1,25 @@
+-- brain_chat_trace: record WHEN the event happened, not when the batch was written.
+--
+-- A Brain run streams its trace to the client and persists it in ONE batch insert
+-- when the run settles. The row's only timestamp was `created_at`, a `defaultNow()`
+-- applied by that insert — so every event of a run came back carrying the SAME
+-- instant, and the true chronology (the thing the trace exists to record) was
+-- discarded at the moment it was stored.
+--
+-- The client sorts the rehydrated timeline by timestamp. With every stamp tied, the
+-- sort fell through to a per-kind tie-break and regrouped a reopened chat into
+-- "every Thought, then every tool call" instead of the interleaving that actually
+-- happened. A live run hid it — its events carry real, distinct wall-clock stamps —
+-- which is why sending one new message appeared to repair the order.
+--
+-- The renderer's tie-break has been made order-preserving too (see
+-- packages/brain-ui/src/timelineModel.ts), so already-written rows read correctly.
+-- This column removes the loss rather than compensating for it, and is what lets a
+-- run's events interleave correctly with the user/assistant MESSAGES around them —
+-- which the row order alone can never do, since those come from a different table.
+--
+-- NULLABLE, and there is NO BACKFILL. The instant an existing row describes was
+-- never recorded and cannot be recovered; `created_at` is the batch write, not the
+-- event. Readers fall back to `created_at` for those rows, which is what they
+-- already did. A guessed timestamp would look exactly like a measured one.
+ALTER TABLE brain_chat_trace ADD COLUMN IF NOT EXISTS occurred_at timestamp;

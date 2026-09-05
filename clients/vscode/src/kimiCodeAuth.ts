@@ -23,7 +23,20 @@
  * OWN outcome: a rotation lost to another process comes back as `invalid_grant`, and the
  * winner has by then written a fresh credential to the very file we read. So on that
  * error we RE-READ instead of failing, and the loser of the race succeeds anyway.
+ *
+ * The PROTOCOL — client id, host, endpoints, grant types, error vocabulary — lives in
+ * `@builderforce/kimi-oauth`, shared with the API Worker's web device-connect flow. What
+ * stays here is this surface's own concerns: Kimi's on-disk record shape, persisting the
+ * rotation, and the file-level race above.
  */
+
+import {
+  kimiExpiresInSeconds,
+  kimiRefreshTokenRequest,
+  parseKimiTokenResponse,
+  type KimiOAuthEnv,
+  type KimiResponseBody,
+} from "@builderforce/kimi-oauth";
 
 import {
   classifyCredential,
@@ -32,28 +45,6 @@ import {
   type KimiCredentialFs,
   type KimiCredentialRecord,
 } from "./kimiCodeCredentials";
-
-/**
- * Kimi Code's own OAuth constants, read from the shipped client.
- *
- * The client id is a PUBLIC OAuth client identifier — the kind every distributed native
- * client embeds, and not a secret (a public client cannot hold one). It identifies the
- * application, while the refresh token that authorizes the grant is the user's own and
- * never leaves their machine. The host honours the same env overrides Kimi Code does, so
- * a self-hosted or staging deployment keeps working.
- */
-export const KIMI_OAUTH_CLIENT_ID = "17e5f671-d194-4dfb-9706-5516cb48c098";
-export const KIMI_OAUTH_DEFAULT_HOST = "https://auth.kimi.com";
-const TOKEN_PATH = "/api/oauth/token";
-
-export function kimiOAuthHost(env: NodeJS.ProcessEnv = process.env): string {
-  const override = env.KIMI_CODE_OAUTH_HOST ?? env.KIMI_OAUTH_HOST;
-  const host = override?.trim();
-  return (host && host.length > 0 ? host : KIMI_OAUTH_DEFAULT_HOST).replace(/\/+$/, "");
-}
-
-/** Statuses worth another attempt, matching Kimi Code's own retry set. */
-const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 /** Why a refresh could not produce a token. `unauthorized` is terminal for this
  *  credential — only a fresh sign-in inside Kimi Code clears it. */
@@ -67,81 +58,65 @@ export type KimiRefreshResult = { kind: "refreshed"; record: KimiCredentialRecor
 export type KimiFetch = (input: string, init: RequestInit) => Promise<Response>;
 
 /**
- * Perform one `refresh_token` grant.
+ * Perform one `refresh_token` grant against the user's own Kimi account.
  *
- * Form-encoded, exactly as Kimi Code sends it. Device headers are deliberately omitted:
- * they are optional in Kimi Code's own client (`this.deviceHeaders?.()`), and sending a
- * fabricated device identity would be a claim about the machine we have no business
- * making.
+ * The request is shaped by the shared protocol module, so it is byte-identical to the one
+ * the web connect flow sends.
  */
 export async function refreshKimiAccessToken(
   refreshToken: string,
   deps: { fetchImpl?: KimiFetch; env?: NodeJS.ProcessEnv; nowMs?: number } = {},
 ): Promise<KimiRefreshResult> {
   const fetchImpl = deps.fetchImpl ?? ((input, init) => fetch(input, init));
-  const url = `${kimiOAuthHost(deps.env)}${TOKEN_PATH}`;
-  const body = new URLSearchParams({
-    client_id: KIMI_OAUTH_CLIENT_ID,
-    grant_type: "refresh_token",
-    refresh_token: refreshToken,
-  }).toString();
+  const request = kimiRefreshTokenRequest(refreshToken, (deps.env ?? process.env) as KimiOAuthEnv);
 
   let response: Response;
   try {
-    response = await fetchImpl(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
-      body,
+    response = await fetchImpl(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body: request.body,
     });
   } catch (error) {
-    return { kind: "unavailable", detail: `Could not reach ${url}: ${(error as Error).message}` };
+    return { kind: "unavailable", detail: `Could not reach ${request.url}: ${(error as Error).message}` };
   }
 
-  let data: Record<string, unknown> = {};
+  let data: KimiResponseBody = {};
   try {
     const parsed = (await response.json()) as unknown;
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      data = parsed as Record<string, unknown>;
+      data = parsed as KimiResponseBody;
     }
   } catch {
-    // A non-JSON body is handled by the status checks below.
+    // A non-JSON body is handled by the parsed outcome below.
   }
 
-  if (response.status === 200 && typeof data.access_token === "string" && data.access_token.length > 0) {
-    const expiresIn = Number(data.expires_in);
-    if (!Number.isFinite(expiresIn) || expiresIn <= 0) {
-      return { kind: "unavailable", detail: "Kimi's token response carried no usable expires_in." };
-    }
+  const outcome = parseKimiTokenResponse(response.status, data, refreshToken);
+  if (outcome.kind === "tokens") {
+    const expiresIn = kimiExpiresInSeconds(outcome.tokens.expiresInSeconds);
     const nowMs = deps.nowMs ?? Date.now();
     return {
       kind: "refreshed",
       record: {
-        accessToken: data.access_token,
-        // Rotation: keep the NEW refresh token when one is returned, and fall back to the
-        // presented one when it is not, so a server that does not rotate still works.
-        refreshToken: typeof data.refresh_token === "string" && data.refresh_token.length > 0
-          ? data.refresh_token
-          : refreshToken,
+        accessToken: outcome.tokens.accessToken,
+        // Rotation: the shared parser already keeps the NEW refresh token when one is
+        // returned and falls back to the presented one when it is not.
+        refreshToken: outcome.tokens.refreshToken,
         expiresAt: Math.floor(nowMs / 1000) + expiresIn,
-        scope: typeof data.scope === "string" ? data.scope : "",
-        tokenType: typeof data.token_type === "string" ? data.token_type : "Bearer",
+        scope: outcome.tokens.scope,
+        tokenType: outcome.tokens.tokenType,
         expiresIn,
       },
     };
   }
-
-  const errorCode = typeof data.error === "string" ? data.error : "";
-  const detail = typeof data.error_description === "string" ? data.error_description : errorCode;
-  if (response.status === 401 || response.status === 403 || errorCode === "invalid_grant") {
-    return { kind: "unauthorized", detail: detail || `Refresh rejected (HTTP ${response.status}).` };
-  }
-  return {
-    kind: RETRYABLE_STATUSES.has(response.status) ? "unavailable" : "unavailable",
-    detail: detail || `Refresh failed (HTTP ${response.status}).`,
-  };
+  if (outcome.kind === "unauthorized") return { kind: "unauthorized", detail: outcome.detail };
+  if (outcome.kind === "failed") return { kind: "unavailable", detail: outcome.detail };
+  // The device-flow waiting states cannot arise from a refresh grant, but naming the
+  // outcome beats reporting an empty detail if Kimi ever returns one.
+  return { kind: "unavailable", detail: `Kimi returned an unexpected ${outcome.kind} response to a refresh.` };
 }
 
-/** What the caller gets back: a token it may send, or why it cannot have one. */
+/** What the caller gets back/** What the caller gets back: a token it may send, or why it cannot have one. */
 export type KimiTokenResult =
   | { kind: "token"; accessToken: string }
   | { kind: "signed_out"; detail: string }

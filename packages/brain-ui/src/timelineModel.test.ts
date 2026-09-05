@@ -73,6 +73,34 @@ describe('buildSettledTimeline — durable tool/memory step reconstruction', () 
     expect(labels).toContain('run2.tool');
   });
 
+  // A reopened chat rehydrates its trace from GET /chats/:id/trace, whose rows are
+  // written in ONE batch insert at run end and therefore all carry the same
+  // `created_at`. Every timestamp tied, the old per-kind tie-break was the only
+  // discriminator and regrouped the run into "every Thought, then every tool call".
+  it('keeps a rehydrated trace in RUN order when every event shares one timestamp', () => {
+    const ts = '2026-01-01T00:00:00.000Z'; // one batch insert ⇒ one created_at
+    const trace: BrainTraceEvent[] = [
+      { ts, category: 'llm', label: 'llm.complete', durationMs: 3000 },
+      { ts, category: 'tool', label: 'search_code', args: {}, result: {} },
+      { ts, category: 'llm', label: 'llm.complete', durationMs: 4000 },
+      { ts, category: 'tool', label: 'read_file', args: {}, result: {} },
+      { ts, category: 'llm', label: 'llm.complete', durationMs: 2000 },
+      { ts, category: 'tool', label: 'edit_file', args: {}, result: {} },
+    ];
+    const labelled = buildSettledTimeline([], trace).map((n) =>
+      n.kind === 'thinking' ? 'thinking' : (n as { label: string }).label);
+    expect(labelled).toEqual([
+      'thinking', 'search_code', 'thinking', 'read_file', 'thinking', 'edit_file',
+    ]);
+  });
+
+  it('still sorts a message ahead of the same-instant trace step it triggered', () => {
+    const ts = '2026-01-01T00:00:00.000Z';
+    const messages = [{ ...msg(1, 'user', 'go'), createdAt: ts }];
+    const trace: BrainTraceEvent[] = [{ ts, category: 'tool', label: 'search_code', args: {}, result: {} }];
+    expect(buildSettledTimeline(messages, trace).map((n) => n.kind)).toEqual(['user', 'tool']);
+  });
+
   it('ignores a role:tool message whose metadata is missing or not a step', () => {
     const messages = [
       msg(1, 'user', 'q'),

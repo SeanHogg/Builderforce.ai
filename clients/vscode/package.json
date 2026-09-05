@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.9.6",
+  "version": "2026.9.10",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -68,6 +68,10 @@
           "id": "builderforce.sessions",
           "name": "%view.sessions%",
           "when": "builderforce.signedIn"
+        },
+        {
+          "id": "builderforce.changes",
+          "name": "%view.changes%"
         },
         {
           "id": "builderforce.project",
@@ -392,6 +396,21 @@
         "command": "builderforce.openDiagnosticReport",
         "title": "%command.openDiagnosticReport%",
         "icon": "$(output)"
+      },
+      {
+        "command": "builderforce.refreshChanges",
+        "title": "%command.refreshChanges%",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "builderforce.openChange",
+        "title": "%command.openChange%",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "builderforce.openSourceControl",
+        "title": "%command.openSourceControl%",
+        "icon": "$(source-control)"
       }
     ],
     "menus": {
@@ -556,6 +575,21 @@
           "command": "builderforce.refreshDiagnostics",
           "when": "view == builderforce.diagnostics",
           "group": "navigation@1"
+        },
+        {
+          "command": "builderforce.openPullRequest",
+          "when": "view == builderforce.changes",
+          "group": "navigation@1"
+        },
+        {
+          "command": "builderforce.openSourceControl",
+          "when": "view == builderforce.changes",
+          "group": "navigation@2"
+        },
+        {
+          "command": "builderforce.refreshChanges",
+          "when": "view == builderforce.changes",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
@@ -653,6 +687,10 @@
         },
         {
           "command": "builderforce.openDiagnosticReport",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.openChange",
           "when": "false"
         }
       ]

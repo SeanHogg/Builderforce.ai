@@ -137,3 +137,34 @@ export function traceWithPersistedSteps(messages: BrainMessage[], trace: BrainTr
   if (fromMessages.length === 0) return trace;
   return [...trace, ...fromMessages].sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
 }
+
+/**
+ * The trace a REOPENED chat should render: the rows rehydrated from
+ * `GET /chats/:id/trace` plus whatever this session has run since, with any event
+ * present in both kept once.
+ *
+ * Both surfaces used to pick one or the other — `live.length > 0 ? live : recovered`.
+ * That is not a merge, it is a replacement: reopen a chat with thirty tool steps and
+ * they render, then send one message and all thirty vanish, because a three-event live
+ * trace now "wins". The either/or was there to stop DOUBLE rendering, which is real —
+ * switch away from a chat and back and the run this session already persisted comes
+ * back down in the rehydrated rows — but the answer to a duplicate is to drop the
+ * duplicate, not the history.
+ *
+ * Dedup is by {@link stepSig}, the same identity the timeline already uses: category +
+ * label + the instant the event happened. That works because the event's own timestamp
+ * is now stored (`occurred_at`, migration 1127) and round-trips unchanged. Rows written
+ * before it have no recorded instant and fall back to their batch write time, so a
+ * legacy row and its live twin do not match — they render twice in that one narrow
+ * case (same session, chat revisited) rather than silently erasing the conversation's
+ * history in every case.
+ */
+export function mergeRecoveredTrace(recovered: BrainTraceEvent[], live: BrainTraceEvent[]): BrainTraceEvent[] {
+  if (recovered.length === 0) return live;
+  if (live.length === 0) return recovered;
+  const liveSigs = new Set(live.map((e) => stepSig(e.category, e.label, e.ts)));
+  const kept = recovered.filter((e) => !liveSigs.has(stepSig(e.category, e.label, e.ts)));
+  // Recovered first: it is the older history by construction (fetched on chat open,
+  // before this session ran anything). The timeline sorts by timestamp regardless.
+  return kept.length === 0 ? live : [...kept, ...live];
+}
