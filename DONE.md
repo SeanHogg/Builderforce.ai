@@ -1,3 +1,93 @@
+## ✅ RESOLVED 2026-09-05 — A cached "re-run me and I'll apply the edit" made the same request unworkable forever
+
+The follow-up capture to the run above. The new diagnostic did its job — it led with
+`NO EFFECT … ZERO successful mutating calls`, not the old "context exhaustion" — and
+what it exposed underneath was worse than a loop: **turn 1 of chat #98 did no work at
+all, by design.**
+
+`Answered from memory (LLM skipped): 1 turn(s) — Q&A cache`. The identical question had
+been asked in chat #97, whose run ran out of tool budget and replied *"I found the exact
+issue but hit the tool-call budget before applying the edit — so nothing has been changed
+on disk yet … Re-run me and I'll apply the edit."* That answer was cached. Asking again
+replayed it: zero model calls, zero tool calls, zero work, and a fresh promise to do the
+job "next run" that **no amount of re-asking could ever fulfil, because every re-ask hit
+the cache again.** The user then typed "Fix", and the agent asked what needed fixing.
+
+Five faults, all closed.
+
+### 1. The answer cache answered a WORK ORDER
+
+`resolveMemoryAnswer` already bars the Evermind path when the caller has tools — an
+answer that lives behind a tool call must not be pre-empted. The Q&A cache had no such
+bar, and it needs one more: a request to CHANGE something is not answerable from memory
+by any route, because the correct response is to do the work and the cache cannot even
+see the current state of the world.
+
+New `packages/agent-stall/src/requestIntent.ts` (its own module — `index.ts` is already
+544 lines): `asksForChange` gates the READ, `promisesUnfinishedWork` gates the WRITE. An
+answer announcing work it did not do is honest exactly once, in the conversation that
+produced it; frozen into a cache it is a trap.
+
+`hasEditIntent` in `runProgress.ts` was the same judgement written client-side, so it now
+delegates to `asksForChange` rather than drifting from it.
+
+### 2. "Fix" was read as a contextless request
+
+A bare directive has no subject of its own — it points at the previous turn. The run loop
+now detects that shape (`isContinuationDirective`) landing directly on a turn that
+promised unfinished work (`promisesUnfinishedWork`) and injects a directive telling the
+agent to carry out **that** proposal, using the file and edit it already named. Recorded
+as a `turn.continuation_resolved` trace step. Deliberately narrow: "Fix" after a
+*completed* turn is genuinely ambiguous and is left alone, as is "fix the login redirect",
+which says what to do.
+
+`FOLLOW_THROUGH_DIRECTIVE` carries the same rule in the persona for models that never
+reach the structural path, plus its cause: never promise a later run (nothing carries
+over), and spend the last few steps on the edit rather than on more reading.
+
+### 3. The reply the user actually saw was "/task number?"
+
+MiniMax-M1 closed `</think>` in the wrong place, sealing the whole reply inside the think
+block; the only text outside it was the tail of its own sentence. Rendered faithfully,
+that fragment *was* the answer.
+
+`splitThinkSegments` now promotes a swallowed answer. The discriminator is deliberately
+the first character, not the length: `"Done."` is a complete reply and is never
+second-guessed, while `"/task number?"` is visibly a continuation. A response with no
+answer segment at all is a block still streaming and is untouched.
+
+The transcript export also split think blocks instead of dumping raw `<think>` tags —
+the report now shows what the USER saw, with reasoning preserved in a `<details>` block.
+
+### 4. `git_status` → "fatal: not a git repository", full stop
+
+The open folder holds the checkouts rather than being one. The bare fatal gave the model
+nothing to act on, so it abandoned the tool. The git tools now take an optional `repo`
+subdirectory, and the not-a-repo failure carries its own remedy: what happened, that git
+is not unavailable, which tool finds the checkouts (`list_files`), and the exact retry.
+`repo` is held to a stricter rule than the other args — it is the target of a `cd`, so a
+`..` segment would escape the workspace rather than merely widen a diff. Command strings
+are byte-for-byte unchanged when `repo` is absent, so the Container image's `execTool`
+is unaffected.
+
+### 5. `Errors: 1` never said which step failed
+
+A number with no lead. The report now names each failing step and the message it
+returned, newest first. The `NO EFFECT` remedy also points at the "Answered from memory"
+line first — a turn served from cache does no work by construction, so there is no
+mutating call to go looking for.
+
+**Files.** New: `packages/agent-stall/src/requestIntent.ts`,
+`packages/agent-tools/src/git-repo-scope.test.ts`, `clients/vscode/src/idePersona.test.ts`
+(+ tests for each). Changed: `api/src/application/llm/projectMemory.ts`,
+`brain-embedded/src/{brainRunStore,brainTriage,runProgress}.ts`,
+`packages/brain-ui/src/thinkBlocks.ts`, `packages/agent-tools/src/core-tools.ts`,
+`clients/vscode/src/idePersona.ts`, `clients/vscode/webview/src/transcript.ts`.
+
+Shipped as VSIX **2026.8.145** (brain-embedded 2026.8.22, brain-ui 2026.8.19,
+agent-stall 2026.7.7). Green: 418 (brain-embedded) + 87 (brain-ui) + 186 (VSIX) + 69 (agent-stall) + 58
+(agent-tools) + 26 (projectMemory); api, VSIX host and webview all typecheck.
+
 ## ✅ RESOLVED 2026-09-05 — Both Neon branches brought under the 0.5 GB Free-plan limit, without shortening the SOC 2 evidence window
 
 Follow-on to the retention work above. After the backlog drain primary still read **931 MB**

@@ -573,7 +573,13 @@ export function buildGitCommand(action: GitAction, opts?: { path?: string; baseB
   // identically under sh, cmd and PowerShell, so this stays portable across every
   // surface that runs these strings. Omitted ⇒ byte-for-byte the previous command, so
   // the Container image's execTool and its tests are unaffected.
-  const repo = safeGitArg(opts?.repo);
+  //
+  // `repo` is held to a stricter rule than the other args: it becomes the target of a
+  // `cd`, so a `..` segment would walk OUT of the workspace rather than merely widening
+  // a diff. `safeGitArg` permits dots (a directory really can be named `Builderforce.ai`),
+  // so traversal is rejected separately here — the one place it would actually escape.
+  const repoArg = safeGitArg(opts?.repo);
+  const repo = repoArg && !repoArg.split(/[\\/]/).includes("..") && !repoArg.startsWith("/") ? repoArg : null;
   const scoped = (cmd: string): string => (repo ? `cd "${repo}" && ${cmd}` : cmd);
   switch (action) {
     case "status":
