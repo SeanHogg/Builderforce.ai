@@ -47,7 +47,7 @@ export interface ModelRoute {
    * endpoint and bare model id (rather than re-parsing the ref downstream) is what keeps
    * the `local/<provider>/<model>` grammar knowledge in one module.
    */
-  local?: { provider: LocalProviderId; model: string; baseUrl: string };
+  local?: { provider: LocalProviderId; model: string; endpoint: LocalEndpoint };
 }
 
 /**
@@ -59,10 +59,12 @@ export async function resolveModelRoute(secrets: vscode.SecretStorage): Promise<
   const choice = await resolveEffectiveModelChoice(secrets);
   const pin = parseLocalModelRef(choice.model);
   if (!pin) return choice;
-  return {
-    ...choice,
-    local: { ...pin, baseUrl: getLocalModelsConfig().baseUrls[pin.provider] },
-  };
+  // A pin can outlive the thing it points at — a Kimi install signed out since the model
+  // was chosen, an on-device runtime removed from settings. No endpoint means no local
+  // route, so the turn falls back to the gateway rather than dispatching at `undefined`.
+  const endpoint = getLocalModelsConfig().endpoints[pin.provider];
+  if (!endpoint) return choice;
+  return { ...choice, local: { ...pin, endpoint } };
 }
 
 /**
@@ -84,7 +86,7 @@ export function routeRequiresSignIn(route: ModelRoute): boolean {
  * sending an unauthenticated turn that fails opaquely at the gateway.
  */
 export function routeStream(route: ModelRoute, apiKey: string | undefined): BrainStreamFn {
-  if (route.local) return createLocalStream(route.local.baseUrl, route.local.model);
+  if (route.local) return createLocalStream(route.local.endpoint, route.local.model);
   if (!apiKey) throw new Error("not_signed_in");
   return createNativeStream(getBaseUrl(), apiKey);
 }
@@ -101,6 +103,6 @@ export async function routeComplete(
   messages: ChatMessage[],
   signal?: AbortSignal,
 ): Promise<string> {
-  if (route.local) return completeLocal(route.local.baseUrl, route.local.model, messages, signal);
+  if (route.local) return completeLocal(route.local.endpoint, route.local.model, messages, signal);
   return complete(secrets, messages, route.model, signal);
 }

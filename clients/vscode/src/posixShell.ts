@@ -65,10 +65,13 @@ export function findBash(
 /** Where a POSIX shell lives, most-specific first. Pure, so the order is testable. */
 export function bashCandidates(env: NodeJS.ProcessEnv = process.env): string[] {
   const candidates: string[] = [];
-  // Git for Windows: `…\Git\cmd\git.exe` → `…\Git\bin\bash.exe`.
+  // Git for Windows: `…\Git\cmd\git.exe` → `…\Git\bin\bash.exe`. Joined with
+  // `path.win32` rather than `path.join`: these are Windows paths whatever the host
+  // is, and the platform-sensitive join emits `/` separators when this runs — as the
+  // tests do — on Linux.
   for (const key of ["ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"]) {
     const base = env[key];
-    if (base) candidates.push(path.join(base, "Git", "bin", "bash.exe"), path.join(base, "Programs", "Git", "bin", "bash.exe"));
+    if (base) candidates.push(path.win32.join(base, "Git", "bin", "bash.exe"), path.win32.join(base, "Programs", "Git", "bin", "bash.exe"));
   }
   candidates.push("C:\\Program Files\\Git\\bin\\bash.exe", "/bin/bash", "/usr/bin/bash");
   return candidates;

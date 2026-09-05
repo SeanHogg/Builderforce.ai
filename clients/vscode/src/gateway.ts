@@ -1,6 +1,8 @@
 import * as vscode from "vscode";
+import nodeFs from "node:fs";
 import { productForPlan, type ModelIdentityContext } from "@seanhogg/builderforce-brain-embedded";
-import { type LocalModelsConfig, type LocalProviderId } from "./localModels";
+import { type LocalModelsConfig } from "./localModels";
+import { isKimiCodeInstall, loadKimiCodeInstall } from "./kimiCodeInstall";
 
 /** Single source of truth for the SecretStorage key (DRY). */
 export const SECRET_KEY = "builderforce.apiKey";
@@ -45,13 +47,33 @@ export function getApiKey(secrets: vscode.SecretStorage): Thenable<string | unde
  */
 export function getLocalModelsConfig(): LocalModelsConfig {
   const cfg = vscode.workspace.getConfiguration("builderforce");
+  // Kimi Code is not configured, it is DISCOVERED: the user already signed in with its
+  // own app, which wrote the endpoint, the model table and the credential to disk. Asking
+  // them to re-enter any of that would be asking for something they have already given.
+  // A machine without it simply contributes no endpoint and no rows.
+  const kimi = loadKimiCodeInstall(nodeFs);
   return {
     enabled: cfg.get<boolean>("localModels.enabled") === true,
-    baseUrls: {
-      ollama: cfg.get<string>("localModels.ollamaUrl") || "http://127.0.0.1:11434",
-      freetoken: cfg.get<string>("localModels.freetokenUrl") || "http://127.0.0.1:1919",
-    } satisfies Record<LocalProviderId, string>,
+    endpoints: {
+      ollama: { baseUrl: cfg.get<string>("localModels.ollamaUrl") || "http://127.0.0.1:11434" },
+      freetoken: { baseUrl: cfg.get<string>("localModels.freetokenUrl") || "http://127.0.0.1:1919" },
+      ...(isKimiCodeInstall(kimi) ? { "kimi-code": { baseUrl: kimi.baseUrl, token: kimi.token } } : {}),
+    },
+    ...(isKimiCodeInstall(kimi) ? { kimiCodeModels: kimi.models } : {}),
   };
+}
+
+/**
+ * Why the local Kimi Code install is not being offered, or null when it is.
+ *
+ * Exposed separately from {@link getLocalModelsConfig} because "no Kimi rows in the
+ * picker" is indistinguishable from "no Kimi installed" unless something can say which —
+ * and the two remedies (install/sign in vs. re-authenticate) are different. The detail
+ * carries key NAMES only, never a credential value.
+ */
+export function getKimiCodeUnavailableReason(): string | null {
+  const kimi = loadKimiCodeInstall(nodeFs);
+  return isKimiCodeInstall(kimi) ? null : kimi.detail;
 }
 
 /** How the Sessions view opens chats (see `builderforce.sessionTabs`). */

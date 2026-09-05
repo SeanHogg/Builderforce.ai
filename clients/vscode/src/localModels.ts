@@ -56,16 +56,46 @@ export interface LocalChatMessage {
  */
 export const LOCAL_MODEL_PREFIX = "local/";
 
-/** The on-device runtimes the editor can drive. */
-export type LocalProviderId = "ollama" | "freetoken";
+/**
+ * The runtimes the EXTENSION HOST drives directly.
+ *
+ * `ollama` / `freetoken` are on-device engines. `kimi-code` is not — it is Kimi's hosted
+ * API — and it belongs here anyway, because membership of this list means "the extension
+ * host performs this call itself", not "the weights are on this disk". That distinction
+ * is exactly what Kimi requires: its edge refuses our hosted gateway before reading a
+ * credential, while the identical request from the developer's own machine is the
+ * personal interactive client the subscription is licensed for. Same mechanism, and the
+ * reason the whole vendor exists on this path rather than the gateway's.
+ */
+export type LocalProviderId = "ollama" | "freetoken" | "kimi-code";
 
-export const LOCAL_PROVIDER_IDS: readonly LocalProviderId[] = ["ollama", "freetoken"];
+export const LOCAL_PROVIDER_IDS: readonly LocalProviderId[] = ["ollama", "freetoken", "kimi-code"];
 
-/** Resolved `builderforce.localModels.*` settings, read by `gateway.ts`. */
+/**
+ * Where a local provider's calls go, and what (if anything) authenticates them.
+ *
+ * One type for both flavours: an on-device engine has no account and leaves `token`
+ * unset, while `kimi-code` carries the bearer its own install already holds. Callers
+ * never branch on which — they pass the endpoint through.
+ */
+export interface LocalEndpoint {
+  /** Runtime root (unnormalized is fine — every consumer normalizes). */
+  baseUrl: string;
+  /** Bearer credential, when this provider needs one. */
+  token?: string;
+}
+
+/** Resolved `builderforce.localModels.*` settings plus discovered installs, built by
+ *  `gateway.ts`. Providers absent from `endpoints` are simply not offered. */
 export interface LocalModelsConfig {
   enabled: boolean;
-  /** Base origin of each runtime, as configured (unnormalized). */
-  baseUrls: Readonly<Record<LocalProviderId, string>>;
+  /** Endpoint per provider. `kimi-code` appears only when a signed-in install was found;
+   *  the settings-driven engines are always present (an unreachable one contributes no
+   *  models, which is the normal case for a developer running neither). */
+  endpoints: Readonly<Partial<Record<LocalProviderId, LocalEndpoint>>>;
+  /** Models the Kimi Code install declares. Unlike the on-device engines there is no
+   *  `/v1/models` to probe — Kimi's catalog is in its own config, already read. */
+  kimiCodeModels?: readonly { model: string; displayName: string }[];
 }
 
 /** One model a local runtime reported from its `/v1/models` catalog. */
@@ -75,6 +105,10 @@ export interface LocalModel {
   provider: LocalProviderId;
   /** The bare id the runtime itself knows, e.g. `qwen3:8b` / `gpt-oss-20b`. */
   model: string;
+  /** The runtime's own human label, when it publishes one (Kimi declares "K2.7 Coding"
+   *  for `kimi-for-coding`). Absent for the on-device engines, whose `/v1/models` route
+   *  reports bare ids — the picker then falls back to the id, as it always did. */
+  label?: string;
 }
 
 /**
@@ -117,7 +151,7 @@ export function localModelsUrl(baseUrl: string): string {
  */
 export function isLocalChatEndpoint(config: LocalModelsConfig, url: string): boolean {
   return LOCAL_PROVIDER_IDS.some((provider) => {
-    const base = config.baseUrls[provider];
+    const base = config.endpoints[provider]?.baseUrl ?? "";
     return base.trim().length > 0 && localChatCompletionsUrl(base) === url;
   });
 }
@@ -177,18 +211,20 @@ export function rewriteToLocalUrl(url: string): string {
 /**
  * The transport that points the SHARED streamer at a local runtime.
  *
- * `getToken` returns null on purpose: a local runtime has no account, and the streamer
- * omits the `Authorization` header entirely when the token is null — so an unauthenticated
- * editor (signed out, or never signed in) can still run a local turn. That is the whole
- * point of the direct path.
+ * `getToken` returns the endpoint's own credential or null. Null is the on-device case
+ * and is load-bearing: the streamer omits the `Authorization` header entirely for a null
+ * token, so an unauthenticated editor (signed out, or never signed in) can still run a
+ * local turn. A `kimi-code` endpoint carries the bearer from the user's own install
+ * instead — the BuilderForce account is still not consulted either way, which is what
+ * keeps the direct path usable while signed out.
  */
 export function localTransport(
-  baseUrl: string,
+  endpoint: LocalEndpoint,
   fetchImpl: (input: string, init: RequestInit) => Promise<Response> = (input, init) => fetch(input, init),
 ): BrainTransport {
   return {
-    baseUrl: normalizeLocalBaseUrl(baseUrl),
-    getToken: () => null,
+    baseUrl: normalizeLocalBaseUrl(endpoint.baseUrl),
+    getToken: () => endpoint.token ?? null,
     fetch: (input, init) => fetchImpl(rewriteToLocalUrl(input), init),
   };
 }
@@ -204,11 +240,11 @@ export function localTransport(
  * gateway-only fields (`strict`, `routingMode`, `metadata`) rather than rejecting them.
  */
 export function createLocalStream(
-  baseUrl: string,
+  endpoint: LocalEndpoint,
   model: string,
   fetchImpl?: (input: string, init: RequestInit) => Promise<Response>,
 ): BrainStreamFn {
-  const transport = localTransport(baseUrl, fetchImpl);
+  const transport = localTransport(endpoint, fetchImpl);
   return (opts, handlers) => streamChatCompletion({ ...opts, model, transport }, handlers);
 }
 
@@ -219,14 +255,17 @@ export function createLocalStream(
  * is unchanged.
  */
 export async function completeLocal(
-  baseUrl: string,
+  endpoint: LocalEndpoint,
   model: string,
   messages: readonly LocalChatMessage[],
   signal?: AbortSignal,
 ): Promise<string> {
-  const res = await fetch(localChatCompletionsUrl(baseUrl), {
+  const res = await fetch(localChatCompletionsUrl(endpoint.baseUrl), {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      ...(endpoint.token ? { authorization: `Bearer ${endpoint.token}` } : {}),
+    },
     body: JSON.stringify({ model, messages, stream: false }),
     signal,
   });
@@ -273,17 +312,32 @@ export async function listProviderModels(
   }
 }
 
+/** Providers whose catalog is discovered by PROBING an OpenAI `/v1/models` route. Kimi
+ *  is excluded by construction: its catalog is declared in the install's own config, so
+ *  probing would be a needless round trip for an answer already sitting on disk. */
+const PROBED_PROVIDER_IDS: readonly LocalProviderId[] = ["ollama", "freetoken"];
+
 /**
- * Every model reachable on this machine, across both runtimes. Providers are probed
- * concurrently (two localhost round trips must not be serialized behind one another)
- * and a dead provider contributes nothing.
+ * Every model this machine can serve directly. The on-device engines are probed
+ * concurrently (two localhost round trips must not be serialized behind one another) and
+ * a dead one contributes nothing; Kimi's rows come from the install already read.
  */
 export async function listLocalModels(config: LocalModelsConfig): Promise<LocalModel[]> {
   if (!config.enabled) return [];
   const lists = await Promise.all(
-    LOCAL_PROVIDER_IDS.map((provider) => listProviderModels(provider, config.baseUrls[provider])),
+    PROBED_PROVIDER_IDS.map((provider) =>
+      listProviderModels(provider, config.endpoints[provider]?.baseUrl ?? ""),
+    ),
   );
-  return lists.flat();
+  const kimi: LocalModel[] = config.endpoints["kimi-code"]
+    ? (config.kimiCodeModels ?? []).map((entry) => ({
+        ref: formatLocalModelRef("kimi-code", entry.model),
+        provider: "kimi-code" as const,
+        model: entry.model,
+        label: entry.displayName,
+      }))
+    : [];
+  return [...lists.flat(), ...kimi];
 }
 
 /**
@@ -293,6 +347,7 @@ export async function listLocalModels(config: LocalModelsConfig): Promise<LocalM
 export const LOCAL_PROVIDER_LABEL: Record<LocalProviderId, string> = {
   ollama: "Ollama",
   freetoken: "FreeToken",
+  "kimi-code": "Kimi Code",
 };
 
 /**
@@ -310,7 +365,7 @@ export function localModelOptions(
 ): Array<{ id: string; label: string; runtime: string }> {
   return models.map((entry) => ({
     id: entry.ref,
-    label: entry.model,
+    label: entry.label ?? entry.model,
     runtime: LOCAL_PROVIDER_LABEL[entry.provider],
   }));
 }
