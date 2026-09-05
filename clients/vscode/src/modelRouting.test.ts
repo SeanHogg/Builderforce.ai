@@ -92,7 +92,7 @@ describe("model routing is centralized", () => {
     expect(host).toContain("resolveModelRoute");
     expect(host).not.toContain("resolveEffectiveModelChoice");
     // …and the proxy it exposes must be fenced by the shared rule, not a local copy.
-    expect(host).toContain("isLocalChatEndpoint");
+    expect(host).toContain("resolveLocalChatEndpoint");
   });
 
   it("routes every completion surface through the seam", () => {

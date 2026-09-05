@@ -31,6 +31,7 @@ import {
   completeLocal,
   createLocalStream,
   parseLocalModelRef,
+  type LocalEndpoint,
   type LocalProviderId,
 } from "./localModels";
 import { resolveEffectiveModelChoice } from "./modelState";

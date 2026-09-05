@@ -64,16 +64,23 @@ export function getLocalModelsConfig(): LocalModelsConfig {
 }
 
 /**
- * Why the local Kimi Code install is not being offered, or null when it is.
+ * Why an INSTALLED Kimi Code is not being offered, or null when there is nothing to say.
  *
- * Exposed separately from {@link getLocalModelsConfig} because "no Kimi rows in the
- * picker" is indistinguishable from "no Kimi installed" unless something can say which —
- * and the two remedies (install/sign in vs. re-authenticate) are different. The detail
- * carries key NAMES only, never a credential value.
+ * Null covers both "it is working" and "this machine has no Kimi Code at all" — the
+ * second deliberately, because the overwhelming majority of users have never installed it
+ * and must not be told about a product they do not run. What remains is exactly the
+ * confusing case: Kimi Code is sitting right there in the editor and BuilderForce is not
+ * offering it. Same argument as the picker's premium-locked row — silently omitting a
+ * group makes the picker look broken.
+ *
+ * Returns the machine `reason` so the CALLER localizes the sentence (this module is the
+ * config layer, and `kimiCodeInstall` is deliberately `vscode`-free). `detail` carries
+ * credential field NAMES only — never a value — and is shown only where it helps.
  */
-export function getKimiCodeUnavailableReason(): string | null {
+export function getKimiCodeUnavailableReason(): { reason: string; detail: string } | null {
   const kimi = loadKimiCodeInstall(nodeFs);
-  return isKimiCodeInstall(kimi) ? null : kimi.detail;
+  if (isKimiCodeInstall(kimi) || kimi.reason === "no_install") return null;
+  return { reason: kimi.reason, detail: kimi.detail };
 }
 
 /** How the Sessions view opens chats (see `builderforce.sessionTabs`). */

@@ -190,6 +190,18 @@ const EXPIRY_FIELDS = ["expires_at", "expiresAt", "expiry", "expires"] as const;
 /** A string long enough to be a credential rather than an enum like `"Bearer"`. */
 const MIN_TOKEN_LENGTH = 16;
 
+/**
+ * Treat a token as spent this long BEFORE its stated expiry.
+ *
+ * Not defensive padding — it is load-bearing here. Kimi issues access tokens with
+ * `expires_in: 900`, i.e. FIFTEEN MINUTES, so a credential read off disk is routinely
+ * close to the end of its life. Starting a completion with four seconds left produces a
+ * mid-stream 401 that reads to the user as "Kimi is broken", where declining to start
+ * produces the one sentence that actually helps. The window is small enough that it never
+ * rejects a token with useful life left.
+ */
+const EXPIRY_SKEW_MS = 30_000;
+
 interface TokenSearch {
   token?: string;
   /** The field the token came from — logged, never the value. */
@@ -246,10 +258,16 @@ export function resolveKimiToken(raw: string, now: number = Date.now()): { token
       detail: `No bearer token found in the Kimi Code credential store. Fields present: ${seen}.`,
     };
   }
-  if (found.expiresAt !== undefined && found.expiresAt <= now) {
+  if (found.expiresAt !== undefined && found.expiresAt - EXPIRY_SKEW_MS <= now) {
+    // Kimi's access tokens last 15 minutes and are refreshed by Kimi Code ITSELF, on
+    // disk, whenever it runs. So this is not "your account lapsed" — it is "nothing has
+    // refreshed the file lately", and the remedy is to use Kimi Code once, not to
+    // re-authenticate anything. Saying the wrong one sends the user to redo a login that
+    // is perfectly valid.
     return {
       reason: "expired",
-      detail: "The Kimi Code login has expired. Sign in again in Kimi Code and it will refresh on disk.",
+      detail: "The Kimi Code access token on disk has expired (they last 15 minutes). "
+        + "Open Kimi Code once and it refreshes the file.",
     };
   }
   return { token: found.token };

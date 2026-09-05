@@ -12,7 +12,7 @@ import { appendSessionNote, readRecentSessionNotes, SessionNotes } from "./sessi
 import { getEditorContext, getEditorContextLive, watchEditorContext } from "./editorContext";
 import { setSelectedModel, setSelectedModelPool } from "./modelState";
 import { resolveModelRoute } from "./modelRouting";
-import { isLocalChatEndpoint } from "./localModels";
+import { resolveLocalChatEndpoint } from "./localModels";
 import { modelChoiceLabels } from "./modelChoiceLabels";
 import { getSelectedProject } from "./projectState";
 import { getProjectNames } from "./projectNames";
@@ -549,7 +549,8 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
       void this.panel.webview.postMessage({ type, id, ...payload });
     };
 
-    if (!isLocalChatEndpoint(getLocalModelsConfig(), url)) {
+    const endpoint = resolveLocalChatEndpoint(getLocalModelsConfig(), url);
+    if (!endpoint) {
       send("llm.error", { error: `refused: ${url} is not a configured local model endpoint` });
       return;
     }
@@ -557,9 +558,17 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
     const controller = new AbortController();
     this.localFetches.set(id, controller);
     try {
+      // The HOST attaches the credential, and does so LAST so a caller-supplied
+      // `authorization` can never override it — the panel composes the request but must
+      // neither see this machine's Kimi bearer nor be able to aim one somewhere else.
+      // An on-device engine has no token and the header stays absent, exactly as before.
+      const { authorization: _drop, Authorization: _dropCased, ...callerHeaders } = msg.headers ?? {};
       const res = await fetch(url, {
         method: msg.method ?? "POST",
-        headers: msg.headers ?? {},
+        headers: {
+          ...callerHeaders,
+          ...(endpoint.token ? { authorization: `Bearer ${endpoint.token}` } : {}),
+        },
         ...(typeof msg.body === "string" ? { body: msg.body } : {}),
         signal: controller.signal,
       });
@@ -773,7 +782,7 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
       // Present only for an on-device model: switches the panel onto the host-proxied
       // transport, and lets it render without an account.
       ...(modelChoice.local
-        ? { localRoute: { baseUrl: modelChoice.local.baseUrl, model: modelChoice.local.model } }
+        ? { localRoute: { baseUrl: modelChoice.local.endpoint.baseUrl, model: modelChoice.local.model } }
         : {}),
       // The standing "apply edits without asking?" instruction. The panel's Auto-mode
       // switch overrides it live, but the SETTING is what it starts from — the panel

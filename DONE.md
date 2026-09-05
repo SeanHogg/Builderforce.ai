@@ -1,3 +1,44 @@
+## ✅ RESOLVED 2026-09-05 — Kimi Code now runs from the VS Code extension host, using the login Kimi Code already performed
+
+The cloud fix earlier today made the gateway stop pretending it could reach Kimi. It did
+not answer the better question the operator asked: *why can't the VSIX just call Kimi
+locally — it's a CLI on my machine.* The answer was that it can, and the seam already
+existed — `localModels.ts`'s `local/<provider>/<model>` path has the extension host (a Node
+process on the developer's own machine) perform the call itself, with no gateway round
+trip. It carried `ollama` and `freetoken`; Kimi Code is now a third provider on it.
+
+Membership of that list means "the extension host makes this call", NOT "the weights are
+local" — and that is exactly the property Kimi requires. Verified against the live edge
+from this machine: `api.kimi.com/coding/` answers with a JSON API envelope here, where the
+Worker got an HTML 403 block page.
+
+- **Nothing is pasted, captured or impersonated.** New `kimiCodeInstall.ts` reads the
+  user's own install: `KIMI_CODE_HOME` (else `~/.kimi-code`), the `base_url` and model
+  table out of `config.toml`, and the OAuth record out of `credentials/`. Verified against
+  the real install — it resolves `https://api.kimi.com/coding/v1` and all four models with
+  Kimi's own labels (K2.7 Coding, K2.7 Coding Highspeed, K3 at 1M context, K3-256k).
+- **`api_key` in `config.toml` is EMPTY** — the live credential is the OAuth file store.
+  A reader that stopped at the obvious field would have found nothing and silently offered
+  no Kimi models. The token search tries the conventional field names and, on a miss,
+  reports the field names it DID find (never a value), so an unknown shape produces one
+  actionable sentence instead of an empty picker.
+- **The credential never enters the webview.** `isLocalChatEndpoint` became
+  `resolveLocalChatEndpoint`, returning the endpoint rather than a boolean, so one lookup
+  answers both "may this be called?" and "with what?" — a fence and a separate credential
+  lookup could disagree, and either way round is a defect. The panel composes the request
+  and the HOST attaches the Authorization header last, after stripping any caller-supplied
+  one, so the bearer is never handed to a renderer nor aimable elsewhere.
+- **Kimi's catalog costs no round trip** — it is declared on disk, so it is read, not
+  probed. The on-device engines are still probed exactly as before.
+- **The picker explains itself.** An installed-but-unusable Kimi produces a row naming the
+  reason and the remedy, on the same argument as the existing premium-locked row: silently
+  omitting a group makes the picker look broken to someone watching Kimi Code run in the
+  next sidebar over. A machine with no Kimi Code says nothing at all.
+- The `builderforce.localModels.enabled` description promised "nothing is sent to a model
+  provider", which Kimi breaks — rewritten honestly in all five locale catalogs.
+
+VSIX 2026.9.5 packaged. 234 extension tests pass; typecheck clean.
+
 ## ✅ RESOLVED 2026-09-05 — A lifecycle-managed board refused every run that was not stage work
 
 `authorizeManagedTaskExecution` required every dispatch payload to name an `actAsRole`

@@ -10,7 +10,7 @@ import { ProjectPagePanel, projectPageChoices } from "./projectPagePanel";
 import { registerChatParticipant } from "./chatParticipant";
 import { registerChatSessions } from "./chatSessions";
 import { scanCodebase } from "./codebaseScan";
-import { getModels, getWebBaseUrl, getLocalModelsConfig, SECRET_KEY, clearPersonalityBlockCache } from "./gateway";
+import { getModels, getWebBaseUrl, getKimiCodeUnavailableReason, getLocalModelsConfig, SECRET_KEY, clearPersonalityBlockCache } from "./gateway";
 import { listLocalModels, localModelOptions, type LocalModel } from "./localModels";
 import { resolveModelRoute, routeRequiresSignIn } from "./modelRouting";
 import { PERMISSION_MODE_SETTING } from "./permissionMode";
@@ -1211,6 +1211,28 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
     }
 
     rows.push(...localRows);
+
+    // Kimi Code is installed and NOT usable — say so, for the same reason the premium row
+    // above exists. Someone looking at Kimi Code running in the next sidebar over, and at
+    // a BuilderForce picker that offers none of it, is owed the reason and the remedy.
+    // Selecting the row pins nothing (`selection` is undefined, which the handler below
+    // already treats as "no change"); it is there to be READ.
+    const kimiIssue = getKimiCodeUnavailableReason();
+    if (kimiIssue) {
+      rows.push(
+        { label: "Kimi Code", kind: vscode.QuickPickItemKind.Separator },
+        {
+          label: vscode.l10n.t("$(warning) Kimi Code is installed but signed out"),
+          detail: kimiIssue.reason === "expired"
+            ? vscode.l10n.t("Its login has expired — sign in again in Kimi Code and the model appears here.")
+            : kimiIssue.reason === "no_endpoint"
+              ? vscode.l10n.t("Its config declares no API endpoint. Re-run Kimi Code once to rewrite it.")
+              // The shape-mismatch case is the one where OUR reader is the suspect, so it
+              // shows what it actually found (field names only, never a credential).
+              : vscode.l10n.t("Sign in inside Kimi Code and it appears here. {0}", kimiIssue.detail),
+        },
+      );
+    }
 
     const pick = await vscode.window.showQuickPick(rows, {
       title: vscode.l10n.t("Select BuilderForce model"),

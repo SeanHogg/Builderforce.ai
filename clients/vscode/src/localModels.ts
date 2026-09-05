@@ -136,10 +136,20 @@ export function localModelsUrl(baseUrl: string): string {
 }
 
 /**
- * Whether `url` is one of the chat endpoints this machine is configured to serve.
+ * The endpoint `url` belongs to, or null when this machine serves no such endpoint.
  *
  * The destination fence for the webview's host-performed fetch (`llm.fetch` in
- * `brainWebview.ts`). The webview is our own bundle, but a proxy that forwards whatever
+ * `brainWebview.ts`), and — since it returns the ENDPOINT rather than a boolean — also
+ * the place the host learns which credential that destination takes. Those two answers
+ * must come from one lookup: a fence that says "allowed" and a separate lookup that says
+ * "and here is the token" can disagree, and the disagreement would either leak a
+ * credential to the wrong origin or send none to the right one.
+ *
+ * The credential deliberately never reaches the webview. The panel composes the request
+ * and the HOST attaches the Authorization header, so a Kimi bearer read off the user's
+ * disk is never handed to a renderer.
+ *
+ * The webview is our own bundle, but a proxy that forwards whatever
  * URL it is handed is a request forwarder into the user's machine — and it would outlive
  * whatever we currently believe that bundle can be made to send. So the host, not the
  * caller, decides where a proxied request may land: the same rule the agent host's egress
@@ -149,11 +159,16 @@ export function localModelsUrl(baseUrl: string): string {
  * drift from the URLs the rest of the module builds — and so it is testable without an
  * extension host.
  */
-export function isLocalChatEndpoint(config: LocalModelsConfig, url: string): boolean {
-  return LOCAL_PROVIDER_IDS.some((provider) => {
-    const base = config.endpoints[provider]?.baseUrl ?? "";
-    return base.trim().length > 0 && localChatCompletionsUrl(base) === url;
-  });
+export function resolveLocalChatEndpoint(
+  config: LocalModelsConfig,
+  url: string,
+): LocalEndpoint | null {
+  for (const provider of LOCAL_PROVIDER_IDS) {
+    const endpoint = config.endpoints[provider];
+    const base = endpoint?.baseUrl ?? "";
+    if (base.trim().length > 0 && localChatCompletionsUrl(base) === url) return endpoint!;
+  }
+  return null;
 }
 
 /** Compose the pinned ref for a model on a local runtime. */

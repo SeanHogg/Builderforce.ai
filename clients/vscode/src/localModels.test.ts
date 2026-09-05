@@ -2,8 +2,9 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   GATEWAY_COMPLETIONS_PATH,
   LOCAL_MODEL_PREFIX,
+  completeLocal,
   formatLocalModelRef,
-  isLocalChatEndpoint,
+  resolveLocalChatEndpoint,
   isLocalModelRef,
   listLocalModels,
   listProviderModels,
@@ -92,12 +93,15 @@ describe("base URL normalization", () => {
 describe("the host-proxy destination fence", () => {
   const config = {
     enabled: true,
-    baseUrls: { ollama: "http://127.0.0.1:11434", freetoken: "http://127.0.0.1:1919" },
+    endpoints: {
+      ollama: { baseUrl: "http://127.0.0.1:11434" },
+      freetoken: { baseUrl: "http://127.0.0.1:1919" },
+    },
   };
 
   it("allows exactly the configured chat endpoints", () => {
-    expect(isLocalChatEndpoint(config, "http://127.0.0.1:11434/v1/chat/completions")).toBe(true);
-    expect(isLocalChatEndpoint(config, "http://127.0.0.1:1919/v1/chat/completions")).toBe(true);
+    expect(resolveLocalChatEndpoint(config, "http://127.0.0.1:11434/v1/chat/completions")).not.toBeNull();
+    expect(resolveLocalChatEndpoint(config, "http://127.0.0.1:1919/v1/chat/completions")).not.toBeNull();
   });
 
   it("refuses any other path on a configured origin — this is not a same-origin proxy", () => {
@@ -107,7 +111,7 @@ describe("the host-proxy destination fence", () => {
       "http://127.0.0.1:1919/",
       "http://127.0.0.1:1919/v1/chat/completions/../../admin",
     ]) {
-      expect(isLocalChatEndpoint(config, url), url).toBe(false);
+      expect(resolveLocalChatEndpoint(config, url), url).toBeNull();
     }
   });
 
@@ -118,15 +122,18 @@ describe("the host-proxy destination fence", () => {
       "https://evil.example/v1/chat/completions",
       "http://localhost:1919/v1/chat/completions", // same host, different origin string
     ]) {
-      expect(isLocalChatEndpoint(config, url), url).toBe(false);
+      expect(resolveLocalChatEndpoint(config, url), url).toBeNull();
     }
   });
 
   it("opens nothing for a provider whose URL was blanked", () => {
-    const partial = { enabled: true, baseUrls: { ollama: "", freetoken: "http://127.0.0.1:1919" } };
-    expect(isLocalChatEndpoint(partial, "http://127.0.0.1:1919/v1/chat/completions")).toBe(true);
+    const partial = {
+      enabled: true,
+      endpoints: { ollama: { baseUrl: "" }, freetoken: { baseUrl: "http://127.0.0.1:1919" } },
+    };
+    expect(resolveLocalChatEndpoint(partial, "http://127.0.0.1:1919/v1/chat/completions")).not.toBeNull();
     // An empty base must not normalize into a prefix that matches anything.
-    expect(isLocalChatEndpoint(partial, "/v1/chat/completions")).toBe(false);
+    expect(resolveLocalChatEndpoint(partial, "/v1/chat/completions")).toBeNull();
   });
 });
 
@@ -147,7 +154,7 @@ describe("transport", () => {
       seen.push(input);
       return new Response("{}", { status: 200 });
     });
-    const transport = localTransport("http://127.0.0.1:1919/v1", fetchImpl);
+    const transport = localTransport({ baseUrl: "http://127.0.0.1:1919/v1" }, fetchImpl);
 
     // A local runtime has no account: a null token is what makes the streamer omit the
     // Authorization header, which is what lets a signed-out editor run a local turn.
@@ -192,7 +199,10 @@ describe("catalog discovery", () => {
     await expect(
       listLocalModels({
         enabled: false,
-        baseUrls: { ollama: "http://127.0.0.1:11434", freetoken: "http://127.0.0.1:1919" },
+        endpoints: {
+          ollama: { baseUrl: "http://127.0.0.1:11434" },
+          freetoken: { baseUrl: "http://127.0.0.1:1919" },
+        },
       }),
     ).resolves.toEqual([]);
     expect(spy).not.toHaveBeenCalled();
@@ -203,7 +213,7 @@ describe("catalog discovery", () => {
     globalThis.fetch = spy as unknown as typeof fetch;
     const models = await listLocalModels({
       enabled: true,
-      baseUrls: { ollama: "", freetoken: "http://127.0.0.1:1919" },
+      endpoints: { ollama: { baseUrl: "" }, freetoken: { baseUrl: "http://127.0.0.1:1919" } },
     });
     expect(models.map((m) => m.ref)).toEqual(["local/freetoken/m"]);
     expect(spy).toHaveBeenCalledTimes(1);
@@ -233,11 +243,110 @@ describe("rows for the shared model-list builder", () => {
     expect(parseLocalModelRef(row.id)).toEqual({ provider: "ollama", model: "llama3.1-8b" });
   });
 
-  it("names both runtimes without translating them", () => {
-    expect(LOCAL_PROVIDER_LABEL).toEqual({ ollama: "Ollama", freetoken: "FreeToken" });
+  it("names every runtime without translating them", () => {
+    expect(LOCAL_PROVIDER_LABEL).toEqual({
+      ollama: "Ollama",
+      freetoken: "FreeToken",
+      "kimi-code": "Kimi Code",
+    });
   });
 
   it("has nothing to offer when nothing was discovered", () => {
     expect(localModelOptions([])).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Kimi Code. It rides the SAME "the extension host makes the call" path as the on-device
+// engines, for a different reason: not that the weights are local, but that Kimi's edge
+// refuses our hosted gateway before reading a credential while accepting the identical
+// request from the developer's own machine. That makes it the first local provider that
+// carries an account — hence a bearer, hence the containment rules below.
+// ---------------------------------------------------------------------------
+describe("kimi-code as a locally-served provider", () => {
+  const kimiConfig = {
+    enabled: true,
+    endpoints: {
+      ollama: { baseUrl: "http://127.0.0.1:11434" },
+      freetoken: { baseUrl: "http://127.0.0.1:1919" },
+      "kimi-code": { baseUrl: "https://api.kimi.com/coding/v1", token: "kc-secret-token-value" },
+    },
+    kimiCodeModels: [
+      { model: "kimi-for-coding", displayName: "K2.7 Coding" },
+      { model: "k3", displayName: "K3" },
+    ],
+  };
+
+  it("lists Kimi's models WITHOUT a network probe — its catalog is already on disk", async () => {
+    const spy = vi.fn(async () => new Response(JSON.stringify({ data: [] }), { status: 200 }));
+    globalThis.fetch = spy as unknown as typeof fetch;
+    const models = await listLocalModels(kimiConfig);
+
+    expect(models.filter((m) => m.provider === "kimi-code").map((m) => m.ref)).toEqual([
+      "local/kimi-code/kimi-for-coding",
+      "local/kimi-code/k3",
+    ]);
+    // Only the two on-device engines were probed; Kimi contributed no round trip.
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it("offers no Kimi rows when no install was discovered", async () => {
+    // A machine without Kimi Code (or signed out) must show the picker unchanged.
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ data: [] }), { status: 200 })) as unknown as typeof fetch;
+    const models = await listLocalModels({
+      enabled: true,
+      endpoints: { ollama: { baseUrl: "" }, freetoken: { baseUrl: "" } },
+      kimiCodeModels: [{ model: "k3", displayName: "K3" }],
+    });
+    expect(models).toEqual([]);
+  });
+
+  it("shows Kimi's own display name in the picker, not the wire id", () => {
+    const [row] = localModelOptions([
+      { ref: "local/kimi-code/kimi-for-coding", provider: "kimi-code", model: "kimi-for-coding", label: "K2.7 Coding" },
+    ]);
+    expect(row).toEqual({ id: "local/kimi-code/kimi-for-coding", label: "K2.7 Coding", runtime: "Kimi Code" });
+  });
+
+  it("still falls back to the bare id for a runtime that publishes no label", () => {
+    const [row] = localModelOptions([{ ref: "local/ollama/qwen3:8b", provider: "ollama", model: "qwen3:8b" }]);
+    expect(row.label).toBe("qwen3:8b");
+  });
+
+  it("fences the Kimi endpoint and hands back the credential it takes", () => {
+    const resolved = resolveLocalChatEndpoint(kimiConfig, "https://api.kimi.com/coding/v1/chat/completions");
+    expect(resolved).toEqual({ baseUrl: "https://api.kimi.com/coding/v1", token: "kc-secret-token-value" });
+    // One lookup answers both "may this be called?" and "with what?" — a fence and a
+    // separate credential lookup could disagree, and either answer would be a defect.
+    expect(resolveLocalChatEndpoint(kimiConfig, "https://api.kimi.com/coding/v1/models")).toBeNull();
+    expect(resolveLocalChatEndpoint(kimiConfig, "https://evil.example/v1/chat/completions")).toBeNull();
+  });
+
+  it("returns NO token for an on-device engine, so it stays usable signed out", () => {
+    const resolved = resolveLocalChatEndpoint(kimiConfig, "http://127.0.0.1:1919/v1/chat/completions");
+    expect(resolved?.token).toBeUndefined();
+  });
+
+  it("sends the bearer on a Kimi turn and omits it entirely for an on-device one", async () => {
+    const kimi = localTransport({ baseUrl: "https://api.kimi.com/coding/v1", token: "kc-token" });
+    expect(kimi.getToken()).toBe("kc-token");
+    // Null (not "") is what makes the shared streamer omit the header outright — an empty
+    // Bearer would be sent and rejected.
+    expect(localTransport({ baseUrl: "http://127.0.0.1:1919" }).getToken()).toBeNull();
+  });
+
+  it("authenticates the non-streaming completion path too", async () => {
+    let seen: Record<string, string> = {};
+    globalThis.fetch = vi.fn(async (_url: string, init: RequestInit) => {
+      seen = init.headers as Record<string, string>;
+      return new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    // The codebase scanner rides this path; without the header it would 401 on a model
+    // the picker had just offered.
+    await completeLocal({ baseUrl: "https://api.kimi.com/coding/v1", token: "kc-token" }, "k3", [
+      { role: "user", content: "hi" },
+    ]);
+    expect(seen.authorization).toBe("Bearer kc-token");
   });
 });
