@@ -19,7 +19,7 @@
 import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
-import { formatBytes } from './jobVocabulary';
+import { formatBytes } from '@/lib/formatBytes';
 import type { PostingAttachment } from '@/lib/freelance/postings';
 
 export function AttachmentsPanel({
@@ -83,7 +83,7 @@ export function AttachmentsPanel({
           >
             {attachment.name}
           </button>
-          <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{formatBytes(attachment.size)}</span>
+          <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{attachment.size > 0 ? formatBytes(attachment.size) : ''}</span>
           {!readOnly && onRemove && (
             <button
               type="button"

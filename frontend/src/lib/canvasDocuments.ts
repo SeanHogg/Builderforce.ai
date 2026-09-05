@@ -458,12 +458,3 @@ export function canvasFiles(nodes: ReadonlyArray<{ id: string; data: CreationNod
   return files.sort((left, right) => (right.updatedAt ?? '').localeCompare(left.updatedAt ?? '') || left.name.localeCompare(right.name));
 }
 
-const SIZE_UNITS = ['B', 'KB', 'MB', 'GB'];
-
-/** Byte count as a short human label. Shared so every file surface rounds the
- * same way. */
-export function formatBytes(bytes: number): string {
-  const unit = Math.min(SIZE_UNITS.length - 1, Math.max(0, Math.floor(Math.log(Math.max(bytes, 1)) / Math.log(1024))));
-  const value = bytes / 1024 ** unit;
-  return `${unit !== 0 && value < 10 ? value.toFixed(1) : String(Math.round(value))} ${SIZE_UNITS[unit]}`;
-}

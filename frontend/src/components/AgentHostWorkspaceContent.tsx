@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { workspaceApi, type AgentHostDirectory, type AgentHostDirectoryFile } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { formatBytes } from '@/lib/formatBytes';
 
 interface AgentHostWorkspaceContentProps {
   agentHostId: number;
@@ -177,9 +178,7 @@ export function AgentHostWorkspaceContent({ agentHostId }: AgentHostWorkspaceCon
                     {file.relPath}
                   </span>
                   <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
-                    {file.sizeBytes < 1024
-                      ? `${file.sizeBytes}B`
-                      : `${(file.sizeBytes / 1024).toFixed(1)}KB`}
+                    {formatBytes(file.sizeBytes)}
                   </span>
                 </div>
               ))}

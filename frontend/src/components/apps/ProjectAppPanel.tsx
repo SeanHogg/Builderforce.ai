@@ -29,7 +29,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { formatBytes } from '@/lib/canvasDocuments';
+import { formatBytes } from '@/lib/formatBytes';
 import {
   appAddresses,
   appDataFacts,

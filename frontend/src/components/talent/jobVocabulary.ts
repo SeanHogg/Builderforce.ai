@@ -44,16 +44,3 @@ export const matchReasonKey = (code: string): string => `match.${code}`;
 /** `talent.invite.status.<status>` — an invitation's state. */
 export const inviteStatusKey = (status: string): string => `invite.status.${status}`;
 
-/** Bytes → a short human size. Pure formatting of a number the API already returned;
- *  no unit word, so it needs no catalogue entry. */
-export function formatBytes(size: number): string {
-  if (!Number.isFinite(size) || size <= 0) return '';
-  const units = ['B', 'KB', 'MB'];
-  let value = size;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${value < 10 && unit > 0 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
-}

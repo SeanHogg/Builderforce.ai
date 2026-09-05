@@ -7,7 +7,8 @@ import { CanvasDriveIcon, CanvasFilesIcon } from '@/components/canvas/CanvasComm
 import styles from './CreationCanvas.module.css';
 import { CanvasPanelFilters } from './CanvasPanelFilters';
 import { CanvasDriveBrowser } from './CanvasDriveBrowser';
-import { formatBytes, type CanvasFile, type CanvasFileCategory } from '@/lib/canvasDocuments';
+import type { CanvasFile, CanvasFileCategory } from '@/lib/canvasDocuments';
+import { formatBytes } from '@/lib/formatBytes';
 
 const CATEGORY_ICON: Readonly<Record<CanvasFileCategory, string>> = {
   document: '▤', presentation: '▣', diagram: '◈', spreadsheet: '▦',

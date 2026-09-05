@@ -845,7 +845,7 @@ function ProviderConnectionCard({
                 <code
                   style={{
                     fontSize: 'var(--font-size-body)', letterSpacing: '0.12em', padding: '6px 10px',
-                    background: 'var(--bg-subtle)', border: '1px solid var(--border-subtle)',
+                    background: 'var(--bg-muted)', border: '1px solid var(--border-subtle)',
                     borderRadius: 'var(--radius-md)', color: 'var(--text-primary)',
                   }}
                 >

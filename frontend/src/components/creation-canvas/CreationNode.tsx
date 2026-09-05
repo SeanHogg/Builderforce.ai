@@ -53,6 +53,7 @@ import { controlLabels, readGameControls } from '@/lib/gamePoster';
 import { canvasBuildBinding } from '@/lib/canvasBuild';
 import { canvasWebPageUrl, WEB_PAGE_KINDS } from '@/lib/canvasWebPage';
 import { canvasViewport } from '@builderforce/creation-canvas-contract';
+import { formatBytes } from '@/lib/formatBytes';
 import { dashboardWidgetsPatch, readDashboardWidgets } from '@/lib/canvasDashboard';
 import { PIPELINE_MAX_CARDS_PER_CELL, cardProbabilityPercent, cardsAt, pipelineTotals, readPipelineModel, stageTotals } from '@/lib/canvasSalesPipeline';
 import {
@@ -1704,16 +1705,6 @@ function DiagramBody({ data }: { data: CreationNodeData }) {
   </div>;
 }
 
-const FILE_SIZE_UNITS = ['B', 'KB', 'MB', 'GB'];
-
-function formatFileSize(bytes: number): string {
-  const unit = Math.min(FILE_SIZE_UNITS.length - 1, Math.max(0, Math.floor(Math.log(Math.max(bytes, 1)) / Math.log(1024))));
-  const value = bytes / 1024 ** unit;
-  const fractional = unit !== 0 && value < 10;
-  const rounded = fractional ? value.toFixed(1) : String(Math.round(value));
-  return `${rounded} ${FILE_SIZE_UNITS[unit]}`;
-}
-
 /** Non-tabular attachments. Tabular uploads become Dataset objects instead, so
  * this card only has to make an opaque file legible. */
 /**
@@ -1733,7 +1724,7 @@ function ImportPendingBody({ data }: { data: CreationNodeData }) {
     <span className={styles.importSpinner} aria-hidden />
     <div>
       <b>{t('importReading')}</b>
-      <small>{textValue(data.fileName, data.title)}{Number.isFinite(size) && size > 0 ? ` · ${formatFileSize(size)}` : ''}</small>
+      <small>{textValue(data.fileName, data.title)}{Number.isFinite(size) && size > 0 ? ` · ${formatBytes(size)}` : ''}</small>
     </div>
     {/* Three lines of the page that is coming, so the wait reads as a document
         arriving rather than as a card that failed to render. */}
@@ -1752,7 +1743,7 @@ function FileBody({ data }: { data: CreationNodeData }) {
   return <div className={styles.fileBody}>
     <div className={styles.widgetSettings}>
       <span><small>{t('fileType')}</small><b>{mimeType}</b></span>
-      {Number.isFinite(size) && size > 0 && <span><small>{t('fileSize')}</small><b>{formatFileSize(size)}</b></span>}
+      {Number.isFinite(size) && size > 0 && <span><small>{t('fileSize')}</small><b>{formatBytes(size)}</b></span>}
     </div>
     {image
       ? <img className={styles.filePreviewImage} src={image} alt={t('filePreviewAlt', { name })} />

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { canvasDiagram, canvasDocument, canvasFiles, canvasObjectMarkdown, canvasSlides, formatBytes, paginateDocument, plainText } from './canvasDocuments';
+import { canvasDiagram, canvasDocument, canvasFiles, canvasObjectMarkdown, canvasSlides, paginateDocument, plainText } from './canvasDocuments';
+import { formatBytes } from './formatBytes';
 import { PAGE_BREAK_MARKER } from './officeFormats';
 import type { CreationNodeData } from '@/components/creation-canvas/types';
 

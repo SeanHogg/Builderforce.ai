@@ -3,7 +3,7 @@
  * assert the exact IngestEvent shape the producer feeds into activity_events.
  */
 import { describe, it, expect } from 'vitest';
-import { commitEvents, pullRequestEvents, reviewEvents, issueEvents } from './githubWebhookRoutes';
+import { commitEvents, mergedPullRequestRef, pullRequestEvents, reviewEvents, issueEvents } from './githubWebhookRoutes';
 
 describe('commitEvents', () => {
   it('maps each commit on a branch push, preferring login then email', () => {
@@ -71,5 +71,59 @@ describe('issueEvents', () => {
 
   it('ignores other actions', () => {
     expect(issueEvents({ action: 'labeled', issue: { number: 1 } })).toEqual([]);
+  });
+});
+
+/**
+ * The MERGE half of "a delta ticket completes automatically once merged".
+ *
+ * The run that records a delta and leaves its change on a branch never sees the merge,
+ * so this payload is the only evidence that the change shipped. Reading its shape wrong
+ * would stop delta tickets closing with no error anywhere — a silent regression whose
+ * only symptom is tickets accumulating at 50% on the board — so the extraction is pinned
+ * here rather than trusted to whichever payload the author had open.
+ */
+describe('mergedPullRequestRef', () => {
+  const merged = {
+    action: 'closed',
+    number: 42,
+    repository: { full_name: 'acme/api' },
+    pull_request: { merged: true, head: { ref: 'ticket/2394-mobile-board-height' } },
+  };
+
+  it('extracts the repo, number and head branch of a merged pull request', () => {
+    expect(mergedPullRequestRef(merged)).toEqual({
+      repoFullName: 'acme/api',
+      number: 42,
+      branchName: 'ticket/2394-mobile-board-height',
+      provider: 'github',
+    });
+  });
+
+  it('is null for a pull request that was CLOSED without merging', () => {
+    // The distinction the whole feature turns on: nothing shipped, so nothing completes.
+    expect(mergedPullRequestRef({ ...merged, pull_request: { merged: false, head: { ref: 'ticket/1' } } })).toBeNull();
+  });
+
+  it('is null for every non-close action', () => {
+    for (const action of ['opened', 'reopened', 'synchronize', 'edited']) {
+      expect(mergedPullRequestRef({ ...merged, action }), action).toBeNull();
+    }
+  });
+
+  it('is null without a repository — there is no project to scope the ticket to', () => {
+    expect(mergedPullRequestRef({ ...merged, repository: {} })).toBeNull();
+  });
+
+  it('falls back to the number on the pull_request object', () => {
+    const { number: _dropped, ...withoutTopLevel } = merged;
+    expect(mergedPullRequestRef({ ...withoutTopLevel, pull_request: { merged: true, number: 9, head: { ref: 'main' } } }))
+      .toMatchObject({ number: 9 });
+  });
+
+  it('carries a null branch rather than failing when head is absent', () => {
+    // The PR-row `task_id` join still works without a branch; only the fallback is lost.
+    expect(mergedPullRequestRef({ ...merged, pull_request: { merged: true } }))
+      .toMatchObject({ number: 42, branchName: null });
   });
 });

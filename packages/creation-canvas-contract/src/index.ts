@@ -92,6 +92,7 @@ export * from './marketing';
 // used to live inside `marketing.ts` and to serve exactly one hardcoded reading; a
 // deployment, a holiday and an on-call shift are the same shape and were unreachable.
 export * from './calendar';
+export * from './slug';
 // `export *` re-exports a binding; it does not bring it INTO scope here, and the
 // kind list below spreads it — without this import the whole contract module
 // throws `PEOPLE_OBJECT_KINDS is not defined` at import time, which takes every

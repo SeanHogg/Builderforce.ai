@@ -1,3 +1,136 @@
+## ✅ RESOLVED 2026-09-05 — Collapsed the 510k-row dispatch residue: transactional 379 MB → 155 MB, with the diagnostic evidence intact
+
+`activity_log` on the transactional endpoint was **310 MB**, of which **510,632 of 624,491 rows
+(81.8%)** were `ticket.role.dispatched` duplicates — 766 tickets re-dispatched by the loop that
+ran 2026-07-14 → 2026-08-04. After the earlier passes this was the single largest remaining
+object across both databases.
+
+**Collapsed, not deleted.** One row kept per `(target_id, roleKey, day)` — the earliest of each
+group — removing **503,699 rows (98.6%)** and keeping 6,933. The distinction matters because the
+loop's root cause is still open (see the Gap Register): a plain delete would have destroyed the
+evidence a future diagnosis needs. Measured before and after, the pattern is unchanged at daily
+granularity — ticket #147 read 3,671 rows across 17 days before, and 23 rows across **the same
+17 days** after; #507 spans 19 days either way. Every other verb is untouched
+(`execution.submitted` 24,437, `manager.pass` 12,414, …).
+
+Batched by DAY rather than by row count, so the `row_number()` window scans only that day's
+~24k rows instead of re-scanning all 510k on each batch — 21 statements instead of 26 full-table
+passes.
+
+**Result: activity_log 310 MB → 87 MB; transactional database 379 MB → 155 MB.**
+
+### Session total
+
+| Database | Start | End |
+|---|---|---|
+| builderforce-primary | 2,777 MB | **431 MB** |
+| builderforce-transactional | 373 MB | **155 MB** |
+
+Both branches well under the Neon Free 0.5 GB per-branch limit, with retention policy,
+autovacuum tuning and a guard covering all 16 log tables so it stays that way.
+
+## ✅ RESOLVED 2026-09-05 — A merged pull request completes the delta ticket it shipped
+
+`tickets.from_delta` opens its ticket in `in_review` and its tool description tells the
+model the ticket "completes automatically once merged and deployed". Half of that was
+true: a run that pushes to the base branch and verifies it landed closes its own ticket
+(`shippedToBaseBranch` → `completeShippedTickets`). The other half never fired. A run that
+leaves its change on a branch never sees the merge, and `githubWebhookRoutes` received
+`pull_request` with `merged: true` and only ingested it as activity — so every delta whose
+change shipped by pull request sat at 50% on the board forever.
+
+**The join, and the one it deliberately is not.** The obvious implementation matches the
+delta's recorded `files[]` against the PR's changed files, and it is the implementation to
+avoid: overlapping files are the norm on an active repo, so a fuzzy match silently
+completes somebody else's ticket — strictly worse than leaving one open, because a
+wrongly-closed ticket is invisible while a stale one is merely stale. The register logged
+this as blocked on choosing a join key against live payloads.
+
+No new key was needed. `pull_requests` already carries `task_id` for every PR this platform
+opened, and both branch conventions BuilderForce itself creates encode the ticket
+(`builderforce/task-<id>` from the finalize path, `ticket/<id>-slug` from `git_commit`). So
+`completeDeltaOnMerge.ts` takes candidates only from those two exact identities and then
+requires all three of: the ticket is in this repo's tenant and project; it is in
+`in_review`; and a `work_deltas` row points at it — the test for "this IS a delta ticket",
+since an ordinary ticket's lifecycle belongs to its Coordinator and a merge does not get to
+finish it. A candidate failing any one is left alone and the webhook response says which,
+so a no-op is distinguishable from a webhook that never fired.
+
+`taskIdFromBranch` is strict on purpose and pinned by tests in both directions: every shape
+we generate resolves, and `feature/123-whatever`, `fix/login-bug`, `release/2026-09`,
+`ticket/abc` and `ticket/0` all resolve to nothing — a leading number in an unrecognised
+namespace is a coincidence, not an identity. `mergedPullRequestRef` is likewise a pure,
+tested extraction, because reading the payload shape wrong would stop tickets closing with
+no error anywhere and the only symptom would be tickets accumulating at 50% again.
+
+Completion itself goes through `completeTaskOnMerge` — the path the human "Approve & Merge"
+route, the manager sweep and the green-CI webhook already share — so this cannot drift from
+them on lane ordinals, DORA metrics or actor attribution, and it inherits their fallback of
+crediting the agent whose run produced the work rather than stamping the merge anonymous.
+`WorkDeltaService`'s docblock and `DELTA_DIRECTIVE` now describe both completers, and the
+directive tells the model to name its ticket branch so the merge can find its way back.
+
+## ✅ RESOLVED 2026-09-05 — A support report can tell a stale extension host from a live bug
+
+A run reported the raw `cmd.exe` error `Environment variable -e not defined` from
+`git_sync_latest` on a build whose reported version was AHEAD of the one the POSIX-shell
+guard shipped in. Two explanations fitted equally — an install older than the version it
+reported, or a hole in the guard — and nothing in the report could separate them. That is
+the actual defect: a guard whose presence cannot be observed is indistinguishable from one
+that is not working, and every "did you actually get the fix?" question was unanswerable.
+
+Three things were missing, and the register's own explanation for the ambiguity was itself
+wrong.
+
+- **The version line named the wrong half.** It read `UI <version>`, and the number was the
+  EXTENSION HOST'S — the half that runs the tools. It now reads `client`, so it cannot be
+  mistaken for the panel.
+- **The webview had no identity at all.** The register said the two halves could be
+  different ages because the webview was gateway-served. It is not: the Brain webview is
+  packaged inside the `.vsix` (`media/webview`, loaded through `asWebviewUri`), so in a
+  released install they ship together. Saying so was not enough — it had to be checkable.
+  The vite build now stamps the webview with the same source hash the host uses, the report
+  prints both, and a MISMATCH (the `watch:webview` case, where the panel is rebuilt while
+  `out/extension.js` keeps its old stamp) raises a warning naming which half is stale.
+- **Whether the machine could run POSIX scripts was stated nowhere.** `posixShellStatus()` /
+  `posixShellReport()` answer it directly — the shell POSIX scripts route to, or, when none
+  is found, every path that was probed — and the line now appears both at the top of
+  `builderforce.diagnose` (beside a build-identity block naming the host explicitly) and in
+  every copied chat diagnostics report, which is the artifact people actually paste.
+
+The guard itself was re-audited and is sound: `needsPosixShell` matches every script form
+the git tools emit, Node routes a non-`cmd.exe` `shell` option through `-c` rather than
+`/d /s /c`, and the no-bash branch returns a named, actionable error instead of letting the
+script fall through to `cmd.exe`. So the historical failure means that machine ran a host
+predating the guard — which is now provable from any future report rather than inferred.
+
+## ✅ RESOLVED 2026-09-05 — `idx_activity_log_object` indexed 624,491 NULLs (19 MB) for a column no writer sets
+
+A btree stores NULL entries. `activity_log.object_id` is NULL on **every** row — the column
+exists for PRD 20 §6.3's object registry and `ActivityInput.objectId` has never been passed by
+any writer — so `idx_activity_log_object (object_id, occurred_at)` held one entry per row,
+**19 MB of pointers to nothing**, in service of `/api/objects/:id/activity`.
+
+Made partial (`WHERE object_id IS NOT NULL`), matching the `idx_activity_log_visitor_time`
+precedent beside it. `object_id = $1` implies NOT NULL, so the planner still proves the index
+applies — verified with EXPLAIN, which shows the endpoint's lookup still using it. The index
+went **19 MB → 8 KB** and now grows only with rows that actually carry an object.
+
+Applied on both endpoints (`transactional-migrations/0010`, `migrations/1127`) because
+`activity_log` is dual-resident and the Drizzle definition is shared.
+
+**Checked and deliberately NOT dropped:** `idx_activity_log_tenant_time` reports `idx_scan = 0`
+but is genuinely used — `kernel/DomainService.ts` filters `tenant_id + occurred_at >= since`.
+Index-scan counters on the transactional endpoint are unreliable (every index there reads zero,
+including the primary key on a 624k-row table), so index removal on that database must be
+argued from the query, never from the counter.
+
+**Also measured, and reported rather than acted on:** 563 of primary's 735 tables are empty, but
+they hold only 16 MB (13 MB of it their indexes), so table consolidation is a schema-hygiene
+question rather than a size lever — and "empty" does not mean "dead" (`soc_controls`,
+`extension_packages`, `webauthn_challenges` are unused features, not removed ones). A
+leading-prefix redundant-index scan across both databases found **zero** duplicates.
+
 ## ✅ RESOLVED 2026-09-05 — The template catalogue answers a signed-out visitor
 
 `GET /api/templates` returned **401** to anyone without a session, because

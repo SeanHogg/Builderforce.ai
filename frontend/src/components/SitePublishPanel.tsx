@@ -11,6 +11,7 @@ import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { fetchSite, publishSite, type SiteInfo } from '@/lib/api';
+import { formatBytes } from '@/lib/formatBytes';
 import { GitHubDeployPanel } from './builder/GitHubDeployPanel';
 import { SiteDomainPanel, SiteFormsPanel, SiteTrafficPanel } from './site/SiteGrowthPanels';
 import { SiteReleasePanel } from './site/SiteReleasePanel';
@@ -35,11 +36,6 @@ function slugify(raw: string): string {
     .replace(/-+$/g, '');
 }
 
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 type Phase = 'idle' | 'building' | 'uploading' | 'done' | 'error';
 

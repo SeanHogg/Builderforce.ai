@@ -31,7 +31,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import styles from './CreationCanvas.module.css';
 import { driveApi, type DriveConnection, type DriveItem, type DriveProviderStatus } from '@/lib/driveApi';
-import { formatBytes } from '@/lib/canvasDocuments';
+import { formatBytes } from '@/lib/formatBytes';
 
 /** One step of the walk. The root has no id — each provider names it itself. */
 interface Crumb {

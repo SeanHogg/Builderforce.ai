@@ -32,17 +32,12 @@ import {
   type SiteRelease,
 } from '@/lib/api';
 import { useFormat } from "@/i18n/useFormat";
+import { formatBytes } from '@/lib/formatBytes';
 
 interface SiteReleasePanelProps {
   projectId: number;
   /** Build the project and return its dist assets — the same builder publish uses. */
   onBuild: () => Promise<Array<{ path: string; data: Uint8Array }>>;
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function SiteReleasePanel({ projectId, onBuild }: SiteReleasePanelProps) {
