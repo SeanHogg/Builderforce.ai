@@ -79,7 +79,7 @@ export async function dispatchValidatorReview(
   const payload = JSON.stringify({ cloudAgentRef: validatorRef, laneKey: REVIEW_LANE_KEY, validatorReview: true });
   const deferred: Promise<unknown>[] = [];
   try {
-    const execId = await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
+    const { executionId: execId } = await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
       taskId: params.taskId,
       tenantId: params.tenantId,
       payload,

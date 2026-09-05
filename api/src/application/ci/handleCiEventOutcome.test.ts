@@ -13,14 +13,14 @@ vi.mock('./ingestRepoCiEvent', async (orig) => ({
 }));
 
 const { handleCiEventOutcome, AUTOFIX_SKIPPED_EVENT } = await import('./handleCiEventOutcome');
-const { AUTOFIX_DISPATCH_EVENT, AUTOFIX_DEDUPED_REASON } = await import('./ingestRepoCiEvent');
+const { AUTOFIX_DISPATCH_EVENT, AUTOFIX_REFUSED_EVENT, AUTOFIX_DEDUPED_REASON } = await import('./ingestRepoCiEvent');
 
 const EVT: RepoCiEvent = {
   eventType: 'pipeline', branch: 'builderforce/task-7', sha: 'abc',
   outcome: 'failure', rawState: 'failed', targetUrl: 'http://ci/1', runId: 1,
 };
 
-function makeDeps(dispatchResult: number | null = 55) {
+function makeDeps(dispatchResult: { executionId: number | null; refusal?: { reason: string; message: string } } = { executionId: 55 }) {
   const inserts: Array<Record<string, unknown>> = [];
   const pending: Array<Promise<unknown>> = [];
   const dispatchRun = vi.fn(async () => dispatchResult);
@@ -59,15 +59,26 @@ describe('handleCiEventOutcome', () => {
     expect(String(ev?.args)).toContain('"statusKey":"PIPELINE"');
   });
 
-  it('records no loop-guard event when the dispatch yields no execution', async () => {
+  it('records the REFUSAL, not a loop-guard attempt, when the dispatch yields no execution', async () => {
     ingestMock.mockResolvedValue({
       processed: true, taskId: 7, tenantId: 3, buildStatus: 'failure',
       autoFix: { taskId: 7, tenantId: 3, attempt: 1, payload: '{}', sha: 'abc' },
     });
-    const { deps, inserts, settle } = makeDeps(null);
+    const { deps, inserts, settle } = makeDeps({ executionId: null, refusal: { reason: 'cloud_run_limit', message: 'allowance reached' } });
     await handleCiEventOutcome(deps, EVT, 'bitbucket');
     await settle();
+    // The loop-guard counts ONLY real dispatches: a refusal must never spend the
+    // build's auto-fix budget on a run that never existed.
     expect(inserts.find((i) => i.toolName === AUTOFIX_DISPATCH_EVENT)).toBeUndefined();
+
+    // But it must not vanish either. The webhook already answered `autoFixDispatched:
+    // true` (the dispatch is deferred past the response), so with nothing recorded a
+    // red build whose fix never started was indistinguishable from a lost webhook.
+    const refused = inserts.find((i) => i.toolName === AUTOFIX_REFUSED_EVENT);
+    expect(refused).toBeTruthy();
+    expect(refused?.executionId).toBeNull();
+    expect(String(refused?.result)).toContain('allowance reached');
+    expect(String(refused?.args)).toContain('"reason":"cloud_run_limit"');
   });
 
   it('a webhook stays 200 when the dispatch throws', async () => {

@@ -89,7 +89,7 @@ beforeEach(() => {
   mockGate.mockResolvedValue({ blocked: false, flagged: false, dispatchedReviewers: [], dispatchedProducers: [] } as never);
   mockApproval.mockResolvedValue({ allowed: true } as never);
   mockEval.mockResolvedValue(willRun() as never);
-  mockDispatch.mockResolvedValue(4711);
+  mockDispatch.mockResolvedValue({ executionId: 4711 });
 });
 
 describe('staffing a lane starts the tickets ALREADY sitting in it', () => {

@@ -46,7 +46,7 @@ import { checkAutoApprovalRules } from './approvalRuleRoutes';
 import { normalizeRequestKind, isAnswerableKind } from '../../domain/approval/requestKind';
 import { sendSlackNotification, notifyApprovalRequested } from '../../application/approval/approvalNotifier';
 import { resumePausedExecution } from '../../application/runtime/executionResume';
-import { dispatchCloudRunForTask } from './runtimeRoutes';
+import { dispatchCloudRunForTask, type CloudDispatchOutcome } from './runtimeRoutes';
 import { parseApprovalReplay } from '../../application/runtime/executionApprovalGate';
 import { approvalSubjectRef } from '../../application/approval/approvalGate';
 import {
@@ -377,10 +377,12 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
     // runtimeService.submit directly (no gate), so this can't loop. The LLM loop
     // runs in waitUntil; we await setup so the execution exists before responding.
     let startedExecutionId: number | null = null;
+    /** Why the approved run did not start, when it did not — the approver's answer. */
+    let startRefusal: string | null = null;
     if (body.status === 'approved' && existing.actionType === 'task.execution') {
       const replay = parseApprovalReplay(existing.metadata);
       if (replay) {
-        startedExecutionId = await dispatchCloudRunForTask(
+        const started = await dispatchCloudRunForTask(
           env as Env,
           db,
           runtimeService,
@@ -398,7 +400,11 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
             // applies: an approval is not an entitlement.)
             force: true,
           },
-        ).catch(() => null);
+        ).catch((): CloudDispatchOutcome => ({ executionId: null }));
+        startedExecutionId = started.executionId;
+        // An approval that silently starts nothing reads to the approver as though
+        // their decision did nothing. Carry the dispatcher's reason back to them.
+        if (startedExecutionId == null) startRefusal = started.refusal?.message ?? null;
       }
     }
 
@@ -512,8 +518,10 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
 
     const [row] = await db.select().from(approvals).where(and(eq(approvals.id, id), eq(approvals.tenantId, tenantId)));
     // startedExecutionId is set when approving a task.execution gate auto-started a
-    // run — lets the caller (ticket panel / board) follow the new execution.
-    return c.json({ ...row, startedExecutionId });
+    // run — lets the caller (ticket panel / board) follow the new execution. When the
+    // approval was granted but the run was refused, `startRefusal` says which guard
+    // declined, so the approver is never left thinking their decision started work.
+    return c.json({ ...row, startedExecutionId, ...(startRefusal ? { startRefusal } : {}) });
   });
 
   return router;

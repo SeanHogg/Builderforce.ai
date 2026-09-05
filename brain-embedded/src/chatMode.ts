@@ -115,15 +115,33 @@ export function chatConversationDirective(): string {
  * and `tasks.update` already return `autoRun: { dispatched, reason, detail }`, and
  * `chats.dispatch_agent` starts a run directly when autonomy declined.
  *
+ * ── WHY `canEditHere` EXISTS ───────────────────────────────────────────
+ * "Finish by dispatching" is the right obligation on the web Brain, which has no file
+ * tools and can only get code changed by asking someone else to change it. On the IDE
+ * surface it is not: that session HAS the workspace, and read as an unconditional rule
+ * it sends the agent to open a ticket and hire a remote builder for a one-line fix it
+ * was already looking at — measured, on a small UI defect, as a whole turn spent
+ * fighting a dispatch with the file untouched at the end of it.
+ *
+ * So the ordering is stated where the surface actually differs, driven by whether this
+ * run was given code-change tools ({@link ./chatWorkLinking}'s `CODE_CHANGE_TOOLS`,
+ * which is the same set the "a code change is always tied to a ticket" backstop reads).
+ * Doing the work still ends in a ticket — recording is not optional, it is just not a
+ * substitute for doing.
+ *
  * Tool names here are the ADVERTISED (`builtin_*`) names the model actually sees on
  * the gateway relay — never the catalog ids, which appear nowhere in its tool list.
  */
-export function chatWorkDirective(chatId: number): string {
+export function chatWorkDirective(chatId: number, opts?: { canEditHere?: boolean }): string {
+  const doItHere = opts?.canEditHere
+    ? `• DO IT HERE WHEN YOU CAN. This session has the workspace file tools, so anything you could change yourself in a handful of tool calls — a bug fix, a small refactor, a CSS or copy change, anything you have already located in the code — you MAKE, now. Dispatching a cloud agent for work you are already holding costs a whole run to do less than you can, and leaves the user waiting for it. Then record the change against this chat. Dispatch is for work this session genuinely cannot do: a long-horizon or repetitive batch, or work that must run somewhere you are not.\n`
+    : '';
   return (
-    `MODE: WORK. This conversation exists to get something DONE, not to describe it. Take the work all the way to a running agent.\n` +
+    `MODE: WORK. This conversation exists to get something DONE, not to describe it. Take the work all the way to a finished change or a running agent.\n` +
     `${chatWorkLinkingDirective(chatId)}\n` +
-    `• FINISH BY DISPATCHING. A ticket that no agent is running has not started. Every create/update tool returns an \`autoRun\` verdict — read it. When \`autoRun.dispatched\` is true, say which agent picked the work up. When it is false, do not stop there: pick a capable agent (builtin_cloud_agents_list_mine, or builtin_tasks_assignees for the accountable roster) and start the run yourself with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the agent>, taskId=<the ticket>).\n` +
-    `• If dispatch is genuinely refused — no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane — report the EXACT reason the tool returned and what would clear it. Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.`
+    doItHere +
+    `• FINISH BY DISPATCHING what you did not do yourself. A ticket that no agent is running has not started. Every create/update tool returns an \`autoRun\` verdict — read it. When \`autoRun.dispatched\` is true, say which agent picked the work up. When it is false, do not stop there: pick a capable agent (builtin_cloud_agents_list_mine, or builtin_tasks_assignees for the accountable roster) and start the run yourself with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the agent>, taskId=<the ticket>). A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.\n` +
+    `• If dispatch is genuinely refused — no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane, a lifecycle-managed stage with no bound role — the refusal names the reason and what would clear it. Report THAT reason, do not retry the same dispatch hoping for a different answer, and if the work is something you could do here, do it instead. Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.`
   );
 }
 
@@ -132,6 +150,6 @@ export function chatWorkDirective(chatId: number): string {
  * behaviour, so the two surfaces (web Brain, VS Code webview) and the shared agent loop
  * cannot drift on what a mode means.
  */
-export function chatModeDirective(mode: ChatMode, chatId: number): string {
-  return mode === 'work' ? chatWorkDirective(chatId) : chatConversationDirective();
+export function chatModeDirective(mode: ChatMode, chatId: number, opts?: { canEditHere?: boolean }): string {
+  return mode === 'work' ? chatWorkDirective(chatId, opts) : chatConversationDirective();
 }

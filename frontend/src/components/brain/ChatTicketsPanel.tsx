@@ -124,7 +124,9 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
       if (!canDispatchRun) throw new Error(tc('requiresDeveloperRole'));
       await brain.inviteChatAgent(chatId, { agentRef }).catch(() => {});
       await tasksApi.update(Number(ref), { assignedAgentRef: agentRef });
-      const res = await tasksApi.runNow(Number(ref));
+      // Bind the run to THIS chat: without it a chat-dispatched agent runs invisibly,
+      // narrating nowhere and unreachable from the conversation that asked for it.
+      const res = await tasksApi.runNow(Number(ref), { chatId });
       return { started: !!res.executionId, agentName: res.agentRef };
     },
     listQuestions: async (id) => {

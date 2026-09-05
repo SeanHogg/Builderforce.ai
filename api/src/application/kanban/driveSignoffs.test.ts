@@ -69,7 +69,7 @@ describe('driveOutstandingSignoffs', () => {
   beforeEach(() => mockRequestRoleRun.mockReset());
 
   it('reports the role as asked once a run actually started', async () => {
-    mockRequestRoleRun.mockResolvedValue(4813);
+    mockRequestRoleRun.mockResolvedValue({ executionId: 4813 });
 
     const result = await drive([slot()]);
 
@@ -86,7 +86,7 @@ describe('driveOutstandingSignoffs', () => {
    * happened, which is how a ticket sat at "0 of 3 tries" for 26 days.
    */
   it('does NOT report an ask when the dispatcher refused the run', async () => {
-    mockRequestRoleRun.mockResolvedValue(null);
+    mockRequestRoleRun.mockResolvedValue({ executionId: null, refusal: { reason: 'cooldown_active', message: 'backing off' } });
 
     const result = await drive([slot()]);
 
@@ -101,7 +101,7 @@ describe('driveOutstandingSignoffs', () => {
    * deliverable it was itself supposed to write.
    */
   it('sends an owner slot the PRODUCER contract, not a review request', async () => {
-    mockRequestRoleRun.mockResolvedValue(7);
+    mockRequestRoleRun.mockResolvedValue({ executionId: 7 });
 
     await drive([slot({ roleKey: 'business-analyst', roleName: 'Business Analyst', responsibility: 'owner', stageKey: 'requirements' })]);
 

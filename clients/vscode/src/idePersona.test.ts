@@ -46,3 +46,34 @@ describe("FOLLOW_THROUGH_DIRECTIVE", () => {
     expect(FOLLOW_THROUGH_DIRECTIVE).toMatch(/rather than on more reading/i);
   });
 });
+
+/**
+ * Stated only as "know when to hand off", this read as a general preference for handing
+ * off: asked to fix a small UI defect in the workspace it already had open, the agent
+ * opened a ticket, tried to dispatch a remote builder, spent the rest of the turn
+ * fighting the dispatch, and changed nothing. The directive has to carry BOTH halves.
+ */
+describe("DISPATCH_STRATEGY_DIRECTIVE", () => {
+  it("puts doing the work yourself FIRST, ahead of the hand-off", () => {
+    expect(DISPATCH_STRATEGY_DIRECTIVE).toMatch(/DO THE WORK YOURSELF WHEN YOU CAN/);
+    expect(DISPATCH_STRATEGY_DIRECTIVE).toMatch(/handful of tool calls/i);
+    // The ordering is the point: the self-do rule must precede the hand-off recipe, or
+    // a model reading top-down meets "create one task and assign it" first.
+    expect(DISPATCH_STRATEGY_DIRECTIVE.indexOf("DO THE WORK YOURSELF"))
+      .toBeLessThan(DISPATCH_STRATEGY_DIRECTIVE.indexOf("CREATE ONE TASK"));
+  });
+
+  it("still names the hand-off for work that genuinely exceeds the session", () => {
+    expect(DISPATCH_STRATEGY_DIRECTIVE).toMatch(/tasks\.create/);
+    expect(DISPATCH_STRATEGY_DIRECTIVE).toMatch(/assignedAgentRef/);
+    expect(DISPATCH_STRATEGY_DIRECTIVE).toMatch(/repo-wide refactor/i);
+  });
+
+  it("says recording the change is not a substitute for making it", () => {
+    expect(DISPATCH_STRATEGY_DIRECTIVE).toMatch(/recording is not a substitute for doing/i);
+  });
+
+  it("tells the agent to read a refused dispatch rather than retry it", () => {
+    expect(DISPATCH_STRATEGY_DIRECTIVE).toMatch(/refusal names the reason/i);
+  });
+});

@@ -59,11 +59,46 @@ describe('chatModeDirective', () => {
     expect(d).toContain('autoRun');
   });
 
+  /**
+   * "Finish by dispatching" is right on the web Brain, which has no file tools and can
+   * only get code changed by asking someone else. On the IDE surface, read as an
+   * unconditional rule, it sent the agent to hire a remote builder for a one-line fix in
+   * the workspace it already had open — a whole turn spent on the dispatch, file
+   * untouched. So the precedence is stated only where the session can actually act.
+   */
+  describe('doing the work yourself vs. handing it off', () => {
+    it('tells a session WITH file tools to make the change itself first', () => {
+      const d = chatWorkDirective(7, { canEditHere: true });
+      expect(d).toMatch(/DO IT HERE WHEN YOU CAN/);
+      expect(d).toMatch(/workspace file tools/);
+      // Doing it yourself never replaces recording it — that is the linking contract.
+      expect(d).toContain('builtin_chats_dispatch_agent');
+    });
+
+    it('says nothing of the sort where there are no file tools', () => {
+      const d = chatWorkDirective(7);
+      expect(d).not.toMatch(/DO IT HERE WHEN YOU CAN/);
+      // The web Brain's only route to a code change is still the dispatch.
+      expect(d).toContain('builtin_chats_dispatch_agent');
+    });
+
+    it('names the steering tool, so a dispatched agent can be directed', () => {
+      // Advertised automatically because the prompt names it (see `toolNamesMentionedIn`),
+      // which is what makes "dispatch and then direct them" reachable in one turn.
+      expect(chatWorkDirective(7)).toContain('builtin_executions_post_message');
+    });
+
+    it('tells the model to read a refusal rather than retry it', () => {
+      // The measured turn retried the identical dispatch after a refusal, twice.
+      expect(chatWorkDirective(7)).toMatch(/do not retry the same dispatch/i);
+    });
+  });
+
   it('names tools by their ADVERTISED gateway names, never catalog ids', () => {
     // A prompt that prints `chats.dispatch_agent` hands the model a string that appears
     // nowhere in its tool list, and the failure is silent in both directions.
     const d = chatWorkDirective(1);
-    for (const catalogId of ['chats.dispatch_agent', 'cloud_agents.list_mine', 'tasks.assignees']) {
+    for (const catalogId of ['chats.dispatch_agent', 'cloud_agents.list_mine', 'tasks.assignees', 'executions.post_message']) {
       const advertised = `builtin_${catalogId.replace(/[^a-zA-Z0-9]+/g, '_')}`;
       expect(d).toContain(advertised);
       expect(d).not.toContain(` ${catalogId}`);

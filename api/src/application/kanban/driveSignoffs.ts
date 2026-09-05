@@ -127,7 +127,7 @@ export async function driveOutstandingSignoffs(
     // slot `in_progress` on success, which is the record `pickSignoffCandidate` reads to
     // move on to the next role. Without it every pass re-picked slot #1 and roles 2..N
     // were never asked once — the "all reviewers assigned, none executing" state.
-    const executionId = await requestRoleRun(env, db, runtimeService, participants, {
+    const { executionId } = await requestRoleRun(env, db, runtimeService, participants, {
       tenantId: args.tenantId,
       projectId: args.projectId,
       taskId: args.task.id,

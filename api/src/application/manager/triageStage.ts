@@ -41,7 +41,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TaskStatus, isTerminalTaskStatus } from '../../domain/shared/types';
 import { evaluateTaskAutoRun } from '../swimlane/evaluateAutoRun';
 import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
-import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
+import { dispatchCloudRunForTask, type CloudDispatchOutcome } from '../../presentation/routes/runtimeRoutes';
 import { classifySignoffOwnership, resolveRequiredSignoffGate, type SignoffGateResult } from '../kanban/signoffGate';
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
 import { decideTicketReadiness } from './evaluateTicketReadiness';
@@ -1021,7 +1021,7 @@ export async function applyRemedy(
       // just like the ordinary lane trigger does.
       if (evaluation.managedRole) payload.actAsRole = evaluation.managedRole.roleKey;
       const deferred: Promise<unknown>[] = [];
-      const executionId = await dispatchCloudRunForTask(
+      const dispatched = await dispatchCloudRunForTask(
         env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); },
         {
           taskId: task.id, tenantId, payload: JSON.stringify(payload),
@@ -1035,16 +1035,20 @@ export async function applyRemedy(
           // MAX_REMEDY_ATTEMPTS fresh runs across as many passes, then escalation.
           force: true,
         },
-      ).catch(() => null);
+      ).catch((): CloudDispatchOutcome => ({ executionId: null }));
+      const executionId = dispatched.executionId;
       await Promise.allSettled(deferred);
-      // A refusal here is a QUOTA refusal, not a failed recovery: `force: true` already
-      // overrode the breaker and the cooldown, so a null id means the cloud-run allowance
-      // or the token meter said no. That is deferral, so it is not an attempt.
+      // A refusal here is not a failed recovery: `force: true` already overrode the
+      // breaker and the cooldown, so a null id means one of the guards `force` does NOT
+      // clear declined. That is deferral, so it is not an attempt — and the remedy note
+      // now names the guard instead of assuming the allowance.
       return {
         attempted: executionId != null,
         applied: executionId != null,
         startedRun: executionId != null,
-        note: executionId != null ? ' Allowed one fresh attempt past the failure breaker.' : '',
+        note: executionId != null
+          ? ' Allowed one fresh attempt past the failure breaker.'
+          : ` No run started: ${dispatched.refusal?.message ?? 'the dispatcher declined without a reason.'}`,
       };
     }
 

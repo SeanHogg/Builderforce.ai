@@ -58,7 +58,7 @@ beforeEach(() => {
   mockDispatch.mockReset();
   mockDrive.mockReset();
   mockEvaluate.mockResolvedValue({ candidate: { agentRef: 'agent-cto' }, liveExecution: null } as never);
-  mockDispatch.mockResolvedValue(4813);
+  mockDispatch.mockResolvedValue({ executionId: 4813 });
 });
 
 describe('applyRemedy — reset_breaker', () => {
@@ -103,7 +103,7 @@ describe('applyRemedy — reset_breaker', () => {
   });
 
   it('reports NOT applied when the dispatcher still refuses — the attempt did not happen', async () => {
-    mockDispatch.mockResolvedValue(null);
+    mockDispatch.mockResolvedValue({ executionId: null, refusal: { reason: 'cloud_run_limit', message: 'allowance reached' } });
     // `attempted` is asserted EXPLICITLY, not just `applied`. This invariant existed
     // before `attempted` did, and was expressed only through `applied` — so when the two
     // were split, a change that started counting quota refusals as attempts passed this

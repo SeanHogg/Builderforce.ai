@@ -46,6 +46,7 @@ import { createManagerCoachingTask, getEffectiveManagerPolicy } from '../manager
 import { salesRevenueForecast } from '../sales/salesPolicy';
 import { resolveManagerAssignee } from '../manager/managerPolicy';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';
+import { isLifecycleManagedTask } from '../kanban/managedExecutionGuard';
 import { DEP_TYPES } from '../task/taskDependencies';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
@@ -1926,18 +1927,31 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'chats.invite_agent', mutates: true, description: 'Invite an agent into a Brain chat as a participant (agentRef = cloud agent id / workforce ref). Once invited it can be tagged to take action; use chats.dispatch_agent to have it execute a linked ticket.', parameters: obj({ chatId: N, agentRef: S, agentKind: S, role: S }, ['chatId', 'agentRef']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.inviteAgent(ctx.tenantId, num(a.chatId), ctx.userId ?? null, { agentRef: str(a.agentRef), agentKind: a.agentKind != null ? str(a.agentKind) : undefined, role: a.role != null ? str(a.role) : undefined }); if ('error' in r) throw new Error(r.error); return r; } },
   {
     tool: 'chats.dispatch_agent', mutates: true,
-    description: "Tag an invited agent to EXECUTE: assign it to a task/epic (typically one linked to the chat — see chats.list_tickets) and start a run immediately. Returns the started execution. Only task/epic tickets are runnable.",
+    description: "Tag an invited agent to EXECUTE: assign it to a task/epic (typically one linked to the chat — see chats.list_tickets) and start a run immediately, joining it to this chat so it narrates here and can be steered mid-run with executions.post_message. Returns the started execution. Only task/epic tickets are runnable. Use this for work the CURRENT session cannot do itself — a long or repetitive job, or work that must run elsewhere; if you have the workspace file tools and could make the change in a few calls, make it instead of hiring an agent to make it. On a lifecycle-managed board the stage's authorized role decides who executes, so the agent that actually runs may differ from `agentRef` — the response says which one it is. A refusal names the reason and what would clear it: read it and report it, do not retry the identical dispatch.",
     parameters: obj({ chatId: N, agentRef: S, taskId: N }, ['chatId', 'agentRef', 'taskId']),
     run: async (ctx, a) => {
       if (!ctx.env) throw new Error('dispatch unavailable in this context');
       const svc = new ChatTicketService(ctx.db, ctx.env);
-      // Record the agent as a chat participant (idempotent).
+      const taskId = num(a.taskId);
+      // Record the agent as a chat participant (idempotent) — this is what lets the run
+      // narrate here and be steered with `executions.post_message`.
       const invited = await svc.inviteAgent(ctx.tenantId, num(a.chatId), ctx.userId ?? null, { agentRef: str(a.agentRef) });
       if ('error' in invited) throw new Error(invited.error);
       // Assign the agent to the ticket, then start a run — reuses the real routes'
       // authz + the single cloud-run dispatcher (no duplicated dispatch logic).
-      await replayRoute(ctx, 'PATCH', `/api/tasks/${num(a.taskId)}`, { assignedAgentRef: str(a.agentRef) });
-      return replayRoute(ctx, 'POST', `/api/tasks/${num(a.taskId)}/run-now`, { chatId: num(a.chatId) });
+      //
+      // EXCEPT on a lifecycle-managed board, where the Assignee is the COORDINATOR and
+      // never the executor. There the assignment does not change who runs (the stage's
+      // authorized role decides that) and it is not harmless: the task assignment is
+      // authoritative for the manifest's `owner` slot, so overwriting it discards the
+      // evidence recorded against the previous owner. Dispatch, do not reassign.
+      const managed = await isLifecycleManagedTask(ctx.db, ctx.tenantId, taskId).catch(() => false);
+      if (!managed) await replayRoute(ctx, 'PATCH', `/api/tasks/${taskId}`, { assignedAgentRef: str(a.agentRef) });
+      const started = await replayRoute(ctx, 'POST', `/api/tasks/${taskId}/run-now`, { chatId: num(a.chatId) });
+      // `agentRef` in the result is whoever ACTUALLY runs, which on a managed board is the
+      // stage's authorized role holder rather than the agent named in the call. Say so,
+      // so a caller never reports the wrong agent as having picked the work up.
+      return managed ? { ...(started as object), lifecycleManaged: true, requestedAgentRef: str(a.agentRef) } : started;
     },
   },
 

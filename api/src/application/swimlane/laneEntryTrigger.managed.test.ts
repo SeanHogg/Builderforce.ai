@@ -77,8 +77,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockGate.mockResolvedValue({ blocked: false, flagged: false, dispatchedReviewers: [], dispatchedProducers: [] });
   mockApproval.mockResolvedValue({ allowed: true } as never);
-  mockRoleRun.mockResolvedValue(4711);
-  mockDispatch.mockResolvedValue(4711);
+  mockRoleRun.mockResolvedValue({ executionId: 4711 });
+  mockDispatch.mockResolvedValue({ executionId: 4711 });
 });
 
 describe('maybeAutoRunOnLaneEntry — a lifecycle-managed board', () => {
@@ -119,7 +119,7 @@ describe('maybeAutoRunOnLaneEntry — a lifecycle-managed board', () => {
       lifecycleManaged: true,
       managedRole: { roleKey: 'developer', agentRef: 'bob-dev', source: 'manifest', authorizedRoleKeys: ['developer'] },
     }) as never);
-    mockRoleRun.mockResolvedValue(null);
+    mockRoleRun.mockResolvedValue({ executionId: null, refusal: { reason: 'cooldown_active', message: 'backing off' } });
 
     expect(await enter()).toBe(false);
   });

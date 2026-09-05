@@ -68,6 +68,18 @@ const DESIGNER_BRANCH_RE = /^builderforce\/designer-(\d+)\b/;
 /** Telemetry toolName recorded per dispatched auto-fix run (the loop-guard counts these). */
 export const AUTOFIX_DISPATCH_EVENT = 'autofix.dispatch';
 
+/**
+ * Telemetry toolName recorded when the dispatcher REFUSED the auto-fix run.
+ *
+ * Deliberately NOT {@link AUTOFIX_DISPATCH_EVENT}: that name is the loop-guard's
+ * counter, and a refusal is the opposite of an attempt — recording one under the same
+ * name would spend a build's auto-fix budget on a run that never existed. A red build
+ * whose fix never started used to leave no trace at all (the webhook had already
+ * answered `autoFixDispatched: true`, because the dispatch is deferred past the
+ * response), so it read as a lost webhook rather than a stated refusal.
+ */
+export const AUTOFIX_REFUSED_EVENT = 'autofix.refused';
+
 /** `reason` returned when a second status poster reports an already-claimed build. */
 export const AUTOFIX_DEDUPED_REASON = 'auto-fix already dispatched for this build';
 

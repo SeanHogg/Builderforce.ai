@@ -18,7 +18,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * Best-effort: never throws (a webhook must always 200 to stop provider retries).
  */
 import { toolAuditEvents } from '../../infrastructure/database/schema';
-import { ingestRepoCiEvent, AUTOFIX_DISPATCH_EVENT, AUTOFIX_DEDUPED_REASON, type RepoCiEvent, type IngestResult } from './ingestRepoCiEvent';
+import { ingestRepoCiEvent, AUTOFIX_DISPATCH_EVENT, AUTOFIX_REFUSED_EVENT, AUTOFIX_DEDUPED_REASON, type RepoCiEvent, type IngestResult } from './ingestRepoCiEvent';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -28,7 +28,7 @@ export type DispatchRunFn = (params: {
   tenantId: number;
   payload: string;
   submittedBy: string;
-}) => Promise<number | null>;
+}) => Promise<{ executionId: number | null; refusal?: { reason: string; message: string } }>;
 
 export interface CiOutcomeDeps {
   db: Db;
@@ -68,11 +68,28 @@ export async function handleCiEventOutcome(
     const intent = res.autoFix;
     deps.waitUntil((async () => {
       try {
-        const executionId = await deps.dispatchRun({
+        const { executionId, refusal } = await deps.dispatchRun({
           taskId: intent.taskId, tenantId: intent.tenantId,
           payload: intent.payload, submittedBy: 'system:autofix',
         });
-        if (executionId != null) {
+        if (executionId == null) {
+          // A refused auto-fix used to vanish: the webhook had already answered
+          // `autoFixDispatched: true` (the dispatch is deferred past the response, so
+          // that flag can only ever mean "queued"), and the refusal itself was a bare
+          // null nobody recorded. The reason now lands on the same audit stream, under
+          // its OWN name -- `AUTOFIX_REFUSED_EVENT`, never the dispatch name the
+          // loop-guard counts, so a refusal cannot spend the build's fix budget.
+          await db.insert(toolAuditEvents).values({
+            tenantId: intent.tenantId, agentHostId: null, cloudAgentRef: null,
+            executionId: null, sessionKey: `task:${intent.taskId}`,
+            toolName: AUTOFIX_REFUSED_EVENT, category: 'ci',
+            args: JSON.stringify({ taskId: intent.taskId, attempt: intent.attempt, source, sha: intent.sha, statusKey: intent.statusKey ?? null, reason: refusal?.reason ?? null }),
+            result: `auto-fix run REFUSED: ${refusal?.message ?? 'the dispatcher declined without a reason'}`.slice(0, 300),
+            ts: new Date(),
+          }).catch((error) => {
+            reportCaughtError(error, { source: "application/ci/handleCiEventOutcome.ts", operation: "handleCiEventOutcome" });
+          });
+        } else {
           await db.insert(toolAuditEvents).values({
             tenantId: intent.tenantId, agentHostId: null, cloudAgentRef: null,
             executionId, sessionKey: `exec:${executionId}`,

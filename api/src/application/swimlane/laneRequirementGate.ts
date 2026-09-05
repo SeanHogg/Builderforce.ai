@@ -196,7 +196,7 @@ async function enforceLaneAgentApproval(
   const dispatchedReviewers: string[] = [];
   if (decided.ask) {
     const approver = decided.ask;
-    const execId = args.dryRun ? -1 : await requestRoleRun(env, db, runtimeService, participants, {
+    const execId = args.dryRun ? -1 : (await requestRoleRun(env, db, runtimeService, participants, {
       tenantId: args.tenantId,
       projectId: args.projectId,
       taskId: args.taskId,
@@ -209,7 +209,7 @@ async function enforceLaneAgentApproval(
       kind: 'reviewer',
       submittedBy: composeDispatcherLabel(args.submittedBy, 'lane-approver', approver.roleKey),
       ...(args.force ? { force: true } : {}),
-    });
+    })).executionId;
     if (execId != null) dispatchedReviewers.push(approver.roleKey);
   }
 
@@ -348,7 +348,7 @@ export async function enforceLaneRequirements(
       agentRef: string,
     ): Promise<number | null> => {
       if (args.dryRun) return -1;
-      return requestRoleRun(env, db, runtimeService, participants, {
+      const { executionId } = await requestRoleRun(env, db, runtimeService, participants, {
         tenantId: args.tenantId,
         projectId: args.projectId,
         taskId: args.taskId,
@@ -361,6 +361,7 @@ export async function enforceLaneRequirements(
         submittedBy: composeDispatcherLabel(args.submittedBy, kind, roleKey),
         ...(args.force ? { force: true } : {}),
       });
+      return executionId;
     };
 
     // The ticket's manifest state for THIS lane — loaded ONCE and shared by both blocks

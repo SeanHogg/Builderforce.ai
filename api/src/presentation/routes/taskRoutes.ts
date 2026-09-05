@@ -34,13 +34,15 @@ import {
 import { loadPlanVerdictsForTasks } from '../../application/planning/planVerdictStore';
 import { pmoVersionKey } from './pmoRoutes';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
-import { dispatchCloudRunForTask } from './runtimeRoutes';
+import { dispatchCloudRunForTask, type CloudDispatchOutcome } from './runtimeRoutes';
 import { recordCloudToolEvent } from '../../application/runtime/cloudAgentEngine';
 import { evaluateTaskAutoRun, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
 import { resolveLaneAgentHostId } from '../../application/swimlane/laneAgentHost';
 import { routeLaneEntry } from '../../application/swimlane/laneEntryTrigger';
 import { coordinateTicket } from '../../application/manager/coordinateTicket';
 import { TicketParticipantsService } from '../../application/kanban/ticketParticipants';
+import { requestRoleRun } from '../../application/kanban/requestRoleRun';
+import { roleDisplayName } from '../../application/kanban/roleCatalog';
 import { SecurityTicketAccessService } from '../../application/security/SecurityTicketAccessService';
 import { ChatTicketService } from '../../application/brain/ChatTicketService';
 import { BrainService } from '../../application/brain/BrainService';
@@ -602,32 +604,76 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const runNowHostId = await resolveLaneAgentHostId(
       db, c.get('tenantId'), evaln.candidate.runtime, evaln.candidate.target,
     ).catch(() => null);
-    const executionId = await dispatchCloudRunForTask(
-      c.env as Env, db, runtimeService, (p) => c.executionCtx.waitUntil(p),
-      {
+    const tenantId = c.get('tenantId');
+    const submittedBy = (c as { get(k: 'userId'): string | undefined }).get('userId') ?? 'system:run-now';
+    // -- A MANAGED BOARD REFUSES A ROLE-LESS PAYLOAD --------------------------------
+    //
+    // `authorizeManagedTaskExecution` declines any dispatch on a lifecycle-managed board
+    // whose payload carries no `actAsRole` -- and the payload built above never carried
+    // one. So Run now (and `chats.dispatch_agent`, which replays this route) could NEVER
+    // start a run on a managed board: the dispatcher refused, returned null, and this
+    // route reported the refusal as the monthly cloud-run allowance. Measured on project
+    // 11: a workspace with an UNLIMITED run allowance and zero runs used was told twice,
+    // in one chat, that it had exhausted its cloud runs -- so the agent went looking for
+    // a billing problem that did not exist, and the ticket was never dispatched at all.
+    //
+    // The evaluator already resolves the stage's authorized role and the agent together
+    // (`evaln.managedRole`, from the same authority the guard enforces), and on a managed
+    // board `evaln.candidate` exists ONLY when that resolution succeeded -- so whenever we
+    // reach here with a candidate, the role to stamp is known. Dispatch it through
+    // `requestRoleRun`, the one primitive that owns a role-attributed run: it builds the
+    // payload the guard accepts, marks the manifest slot `in_progress` (the record that
+    // this stage was asked, without which the sign-off round-trip never proceeds) and
+    // emits `ticket.role.dispatched`.
+    const outcome: CloudDispatchOutcome = evaln.managedRole
+      ? await requestRoleRun(c.env as Env, db, runtimeService, new TicketParticipantsService(db), {
+        tenantId,
+        projectId: row.projectId,
         taskId: id,
-        tenantId: c.get('tenantId'),
-        payload: JSON.stringify(payloadObj),
-        submittedBy: (c as { get(k: 'userId'): string | undefined }).get('userId') ?? 'system:run-now',
+        taskTitle: row.title ?? null,
+        roleKey: evaln.managedRole.roleKey,
+        roleName: roleDisplayName(evaln.managedRole.roleKey),
+        agentRef: evaln.managedRole.agentRef,
+        model: evaln.candidate.model ?? null,
+        laneKey: row.status,
+        kind: 'producer',
+        submittedBy,
         ...(runNowHostId != null ? { agentHostId: runNowHostId } : {}),
-        // THE human override. Run-now has always ignored the lane gate and the failure
-        // breaker — an explicit click is the approval — so it says so explicitly now
-        // that the breaker is enforced in the dispatcher rather than only in the
-        // evaluator this route already bypassed via `candidate`.
+        // The originating chat, so a run dispatched FROM a conversation narrates back
+        // into it and can be steered there -- the whole point of dispatching from chat.
+        ...(chatId != null ? { chatId } : {}),
+        // THE human override, exactly as below: a person clicked Run now.
         force: true,
-      },
-    );
-    // The dispatcher refuses without creating a run when the tenant is over its
-    // monthly cloud-run allowance — an entitlement `force` deliberately does NOT
-    // clear. Reporting `ok: true, executionId: null` would tell the user work had
-    // started when nothing had, which is the exact lie this whole pass is removing.
-    if (executionId == null) {
+      })
+      : await dispatchCloudRunForTask(
+        c.env as Env, db, runtimeService, (p) => c.executionCtx.waitUntil(p),
+        {
+          taskId: id,
+          tenantId,
+          payload: JSON.stringify(payloadObj),
+          submittedBy,
+          ...(runNowHostId != null ? { agentHostId: runNowHostId } : {}),
+          // THE human override. Run-now has always ignored the lane gate and the failure
+          // breaker -- an explicit click is the approval -- so it says so explicitly now
+          // that the breaker is enforced in the dispatcher rather than only in the
+          // evaluator this route already bypassed via `candidate`.
+          force: true,
+        },
+      );
+    // Reporting `ok: true, executionId: null` would tell the user work had started when
+    // nothing had. Reporting the WRONG refusal sends them to fix a bill that is not the
+    // problem. Both are the same lie, so the dispatcher's own verdict is what ships --
+    // and 402 stays reserved for the entitlement refusals a payment actually clears.
+    if (outcome.executionId == null) {
+      const reason = outcome.refusal?.reason ?? ('no_agent' satisfies AutoRunReason);
+      const entitlement = reason === 'cloud_run_limit' || reason === 'tenant_token_limit';
       return c.json({
-        error: 'The run could not be started. The tenant may have reached its monthly cloud-run allowance — see the ticket\'s Lifecycle panel for the recorded reason.',
-        reason: 'cloud_run_limit' satisfies AutoRunReason,
-      }, 402);
+        error: outcome.refusal?.message
+          ?? 'The run could not be started and the dispatcher gave no reason — see the ticket\'s Lifecycle panel for the recorded verdict.',
+        reason,
+      }, entitlement ? 402 : 409);
     }
-    return c.json({ ok: true, executionId, agentRef: evaln.candidate.agentRef }, 202);
+    return c.json({ ok: true, executionId: outcome.executionId, agentRef: evaln.candidate.agentRef }, 202);
   });
 
   // GET /api/tasks/:id/tree — an Epic and its direct child tasks (parent/child

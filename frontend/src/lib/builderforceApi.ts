@@ -2061,9 +2061,16 @@ export const tasksApi = {
     request<TicketContext>(`/api/tasks/${id}/context`),
 
   /** Triage: dispatch the ticket's owner / first-capable lane agent now,
-   *  overriding the lane gate (an explicit human click is the approval). */
-  runNow: (id: number): Promise<{ ok: true; executionId: number | null; agentRef: string }> =>
-    request<{ ok: true; executionId: number | null; agentRef: string }>(`/api/tasks/${id}/run-now`, { method: 'POST' }),
+   *  overriding the lane gate (an explicit human click is the approval).
+   *
+   *  `chatId` binds the run to the Brain conversation that asked for it, so the agent
+   *  narrates its lifecycle back there and can be steered from it. Omit for a board
+   *  dispatch, which belongs to no conversation. */
+  runNow: (id: number, opts?: { chatId?: number }): Promise<{ ok: true; executionId: number; agentRef: string }> =>
+    request<{ ok: true; executionId: number; agentRef: string }>(`/api/tasks/${id}/run-now`, {
+      method: 'POST',
+      ...(opts?.chatId != null ? { body: JSON.stringify({ chatId: opts.chatId }) } : {}),
+    }),
 
   /** Turn a task into an Epic and fan the given children out as child tasks. */
   decompose: (

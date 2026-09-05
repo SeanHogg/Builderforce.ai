@@ -43,7 +43,7 @@ import { withProvenanceMetadata, type ProvenanceAccount } from './provenance';
 import { selectToolsForTurn } from './selectTools';
 import { routerToolSpecs, isRouterTool, handleRouterCall } from './toolRouter';
 import { setLastResolvedModel } from './lastResolvedModel';
-import { isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, linkedTicketsToComplete, isReadOnlyPlatformTool } from './chatWorkLinking';
+import { isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, linkedTicketsToComplete, isReadOnlyPlatformTool, canChangeCodeHere } from './chatWorkLinking';
 import { shippedToBaseBranch } from './shipVerification';
 import { toolActivity, activityTarget, type BrainRunActivity } from './runActivity';
 import { ReadCoverage, revisitAdvisory, withAdvisory } from './readCoverage';
@@ -1450,7 +1450,14 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // the VS Code webview Brain, mirroring the server-side @agent reply loop
   // (BrainService.agentReply). `chatMode` is optional and defaults to WORK so any host
   // that has not adopted the mode yet keeps the behaviour it shipped with.
-  systemPrompt = `${systemPrompt}\n\n${chatModeDirective(runMode, chatId)}\n\n${turnOptimizationDirective()}`;
+  // WORK mode's ordering depends on what THIS surface can do: an IDE run holding the
+  // workspace tools should make a small change itself rather than hire a cloud agent to
+  // make it, while a web run (no file tools) can only ever get code changed by
+  // dispatching. Derived from the run's own advertised tools, so no host declares its
+  // capability separately — and a host that gains or loses the file tools stays
+  // consistent with the post-run backstop, which reads the same set.
+  const canEditHere = canChangeCodeHere((req.tools ?? []).map((t) => t.function.name));
+  systemPrompt = `${systemPrompt}\n\n${chatModeDirective(runMode, chatId, { canEditHere })}\n\n${turnOptimizationDirective()}`;
 
   // A bare "Fix" / "do it" / "go ahead" has no subject of its own — it points at the
   // proposal in the previous assistant turn. Read as a fresh, contextless request it

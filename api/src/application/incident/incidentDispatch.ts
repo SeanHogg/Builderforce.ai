@@ -60,13 +60,19 @@ export async function dispatchIncidentTriage(
   const payload = JSON.stringify({ cloudAgentRef: incidentRef, laneKey: INCIDENT_TRIAGE_LANE_KEY, incidentTriage: true, incidentId: params.incidentId });
   const deferred: Promise<unknown>[] = [];
   try {
-    await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
+    const { executionId, refusal } = await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
       taskId: params.boardTaskId,
       tenantId: params.tenantId,
       payload,
       submittedBy: `incident:${incidentRef}`,
     });
     await Promise.allSettled(deferred);
+    // A refusal is not a triage. Reporting `true` for one told the incident feed an
+    // agent had picked the incident up when the dispatcher had declined it.
+    if (executionId == null) {
+      reportCaughtError(new Error(`incident triage dispatch refused: ${refusal?.message ?? 'no reason given'}`), { source: "application/incident/incidentDispatch.ts", operation: "dispatchIncidentTriage", context: { logMessage: '[incident] triage dispatch refused', details: { incidentId: params.incidentId, reason: refusal?.reason ?? null } } });
+      return false;
+    }
     return true;
   } catch (err) {
     reportCaughtError(err, { source: "application/incident/incidentDispatch.ts", operation: "dispatchIncidentTriage", context: { logMessage: '[incident] triage dispatch failed', details: params.incidentId } });

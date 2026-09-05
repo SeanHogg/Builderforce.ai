@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   chatWorkLinkingDirective,
   isCodeChangeTool,
+  canChangeCodeHere,
   isTicketRecordingTool,
   codeChangeFile,
   workItemLinkFromCreate,
@@ -85,6 +86,19 @@ describe('code-change vs ticket-recording predicates', () => {
     expect(isCodeChangeTool('read_file')).toBe(false);
     expect(isCodeChangeTool('run_command')).toBe(false);
     expect(isCodeChangeTool('search_code')).toBe(false);
+  });
+
+  /**
+   * The WORK-mode directive tells a session to make a small change itself rather than
+   * hire a cloud agent to make it — advice that is only true where the file tools
+   * exist. Both sides read this one set, so the directive and the post-run backstop
+   * cannot disagree about what "this session can change code" means.
+   */
+  it('answers whether THIS run can change code from its advertised tools', () => {
+    expect(canChangeCodeHere(['read_file', 'search_code', 'edit_file'])).toBe(true);
+    // The web Brain: platform tools only, so dispatching is its only route to a change.
+    expect(canChangeCodeHere(['builtin_tasks_create', 'builtin_chats_dispatch_agent'])).toBe(false);
+    expect(canChangeCodeHere([])).toBe(false);
   });
 
   it('recognises the platform tools that record work against the chat', () => {

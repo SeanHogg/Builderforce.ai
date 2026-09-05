@@ -20,7 +20,9 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *
  * So the sequence lives here once: dispatch → (only if a run actually started) mark the
  * slot in_progress and emit `ticket.role.dispatched` → return the execution id. A caller
- * that gets `null` back knows nothing happened and must say so.
+ * that gets a null id back knows nothing happened and must say so — and now gets the
+ * dispatcher's REASON with it, so "must say so" can be an actionable sentence rather than
+ * the caller's guess.
  */
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -28,7 +30,7 @@ import type { RuntimeService } from '../runtime/RuntimeService';
 import type { TicketParticipantsService } from './ticketParticipants';
 import { buildProducerRequestPayload, buildSignoffRequestPayload } from './signoffRequest';
 import { recordActivity, cloudAgentActor } from '../activity/activityLog';
-import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
+import { dispatchCloudRunForTask, type CloudDispatchOutcome } from '../../presentation/routes/runtimeRoutes';
 
 /** Whether the role is being asked to REVIEW the work or to PRODUCE it. */
 export type RoleRunKind = 'reviewer' | 'producer';
@@ -47,6 +49,19 @@ export interface RoleRunRequest {
   kind: RoleRunKind;
   submittedBy: string;
   prUrl?: string | null;
+  /**
+   * The backplane this run must execute on (`agent_hosts.id`), when the lane or the
+   * caller pinned one. Null/absent = cloud, which is what every role run resolved to
+   * before — the lane trigger resolved its lane's host and then dropped it on this path.
+   */
+  agentHostId?: number | null;
+  /**
+   * The Brain chat that asked for this run. Carried onto the payload so the run narrates
+   * its lifecycle back into that conversation (`parseOriginatingChatId`) — without it a
+   * chat-dispatched agent runs invisibly and cannot be followed or steered from the chat
+   * that started it.
+   */
+  chatId?: number | null;
   /**
    * Override the failure breaker + re-run cooldown, exactly as a human's "Run now" does.
    * Only for a DELIBERATE, attempt-bounded override (the manager's breaker reset) — never
@@ -71,14 +86,16 @@ export function buildRoleRunPayload(req: RoleRunRequest): string {
     roleName: req.roleName,
     laneKey: req.laneKey,
     prUrl: req.prUrl ?? null,
+    chatId: req.chatId ?? null,
   };
   return req.kind === 'producer' ? buildProducerRequestPayload(spec) : buildSignoffRequestPayload(spec);
 }
 
 /**
- * Dispatch the role's run and record it. Returns the execution id, or `null` when the
- * dispatcher refused — in which case NOTHING is recorded, because a slot marked
- * `in_progress` with no run behind it is a slot nobody will ever ask again.
+ * Dispatch the role's run and record it. Returns the dispatcher's outcome — on a refusal
+ * NOTHING is recorded, because a slot marked `in_progress` with no run behind it is a
+ * slot nobody will ever ask again, and the refusal's reason travels back so the caller
+ * can say which guard declined instead of inventing one.
  */
 export async function requestRoleRun(
   env: Env,
@@ -86,22 +103,26 @@ export async function requestRoleRun(
   runtimeService: RuntimeService,
   participants: TicketParticipantsService,
   req: RoleRunRequest,
-): Promise<number | null> {
+): Promise<CloudDispatchOutcome> {
   const payload = buildRoleRunPayload(req);
 
   const deferred: Promise<unknown>[] = [];
-  const executionId = await dispatchCloudRunForTask(
+  const outcome = await dispatchCloudRunForTask(
     env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); },
     {
       taskId: req.taskId,
       tenantId: req.tenantId,
       payload,
       submittedBy: req.submittedBy,
+      // The lane's staffed backplane. Dropping it sent a role run for an on-prem lane
+      // to the cloud, which is the one thing the operator's runtime choice forbids.
+      ...(req.agentHostId != null ? { agentHostId: req.agentHostId } : {}),
       ...(req.force ? { force: true } : {}),
     },
-  ).catch(() => null);
+  ).catch(() => ({ executionId: null }) as CloudDispatchOutcome);
   await Promise.allSettled(deferred);
-  if (executionId == null) return null;
+  const executionId = outcome.executionId;
+  if (executionId == null) return { executionId: null, ...(outcome.refusal ? { refusal: outcome.refusal } : {}) };
 
   await participants
     .markRoleInProgress(env, req.tenantId, req.taskId, req.roleKey, req.laneKey, executionId)
@@ -121,5 +142,5 @@ export async function requestRoleRun(
   }).catch((error) => {
     reportCaughtError(error, { source: "application/kanban/requestRoleRun.ts", operation: "requestRoleRun" });
   });
-  return executionId;
+  return { executionId };
 }

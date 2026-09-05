@@ -316,6 +316,11 @@ export async function maybeAutoRunOnLaneEntry(
         laneKey: lane,
         kind: 'producer',
         submittedBy: composeDispatcherLabel(args.submittedBy, 'producer', evaln.managedRole.roleKey),
+        // The lane's staffed backplane, honoured on this branch too. It was resolved
+        // above and then dropped here, so a MANAGED board whose lane was pinned to an
+        // on-prem machine had every role run sent to the cloud instead -- the operator's
+        // runtime choice discarded on exactly the boards that govern it most tightly.
+        ...(laneAgentHostId != null ? { agentHostId: laneAgentHostId } : {}),
       }
       : null;
 
@@ -373,7 +378,7 @@ export async function maybeAutoRunOnLaneEntry(
       // null when the dispatcher refused (cap, breaker, cooldown) — which it has already
       // recorded as a skip. A refusal is NOT a dispatch, so say so and return false
       // rather than reporting a run that never started.
-      const executionId = await requestRoleRun(env, db, runtimeService, new TicketParticipantsService(db), roleRun);
+      const { executionId } = await requestRoleRun(env, db, runtimeService, new TicketParticipantsService(db), roleRun);
       if (executionId == null) return false;
     } else {
       const deferred: Promise<unknown>[] = [];

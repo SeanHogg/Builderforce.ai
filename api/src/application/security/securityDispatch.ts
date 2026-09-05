@@ -126,13 +126,24 @@ export async function dispatchSecurityAudit(
   const payload = JSON.stringify({ cloudAgentRef: securityRef, laneKey: AUDIT_LANE_KEY, securityAudit: true, auditId });
   const deferred: Promise<unknown>[] = [];
   try {
-    await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
+    const { executionId, refusal } = await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
       taskId: anchorTaskId,
       tenantId: params.tenantId,
       payload,
       submittedBy: params.submittedBy ?? `security:${securityRef}`,
     });
     await Promise.allSettled(deferred);
+    // A refused dispatch left the audit sitting `running` with nothing running it —
+    // indistinguishable from an audit in progress, forever. Finish it with the reason.
+    if (executionId == null) {
+      await audits.finishAudit(params.tenantId, auditId, {
+        status: 'failed',
+        summary: `Audit dispatch refused: ${refusal?.message ?? 'the dispatcher declined without a reason'}`.slice(0, 500),
+      }).catch((error) => {
+        reportCaughtError(error, { source: "application/security/securityDispatch.ts", operation: "dispatchSecurityAudit" });
+      });
+      return null;
+    }
     return auditId;
   } catch {
     // Best-effort — a dispatch failure marks the run failed but never throws.

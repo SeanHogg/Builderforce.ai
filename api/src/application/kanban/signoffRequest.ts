@@ -80,6 +80,12 @@ export interface SignoffRequestSpec {
   laneKey: string | null;
   /** The ticket's pull request, when there is one — the artefact to actually inspect. */
   prUrl?: string | null;
+  /**
+   * The Brain chat that asked for this run, when one did. Read back off the payload by
+   * `parseOriginatingChatId` so the run narrates into that conversation; omitted from the
+   * INSTRUCTION text, which is about the work, not about where the ask came from.
+   */
+  chatId?: number | null;
 }
 
 /**
@@ -156,6 +162,7 @@ export function buildSignoffRequestPayload(
   return JSON.stringify({
     cloudAgentRef: spec.cloudAgentRef,
     ...(spec.model ? { model: spec.model } : {}),
+    ...(spec.chatId ? { chatId: spec.chatId } : {}),
     laneKey: spec.laneKey,
     reviewRole: spec.roleKey,
     reviewInstruction: buildSignoffRequestInstruction(spec),
@@ -173,6 +180,7 @@ export function buildProducerRequestPayload(
   return JSON.stringify({
     cloudAgentRef: spec.cloudAgentRef,
     ...(spec.model ? { model: spec.model } : {}),
+    ...(spec.chatId ? { chatId: spec.chatId } : {}),
     laneKey: spec.laneKey,
     actAsRole: spec.roleKey,
     reviewInstruction: buildProducerRequestInstruction(spec),

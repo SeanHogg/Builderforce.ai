@@ -50,6 +50,19 @@ export function isCodeChangeTool(name: string): boolean {
 }
 
 /**
+ * Whether THIS run can change code itself — i.e. the host advertised the local
+ * workspace tools. The IDE surface does; the web Brain does not.
+ *
+ * Read by the WORK-mode directive, so "do it yourself rather than dispatching a cloud
+ * agent for it" is stated only where it is true. Derived from the same set the
+ * post-run ticket backstop uses, so the two can never disagree about what "this
+ * session can change code" means.
+ */
+export function canChangeCodeHere(toolNames: readonly string[]): boolean {
+  return toolNames.some(isCodeChangeTool);
+}
+
+/**
  * Advertised (gateway `builtin_*`) names of the platform tools that CREATE a
  * chat-linkable work item, mapped to the `chat_ticket_links` kind their result
  * represents. `builtin_tasks_create` is special-cased (its kind is the row's own

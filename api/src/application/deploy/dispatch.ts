@@ -23,12 +23,18 @@ import type { Db } from '../../infrastructure/database/connection';
 import { persistCompiledRun } from '../workflow/instantiateRun';
 import { deploy, type DeployOptions, type DeployPlan } from './index';
 
-/** Starts a cloud run against an existing task; returns the execution id (or null). */
+/**
+ * Starts a cloud run against an existing task.
+ *
+ * Returns the execution id, or the dispatcher's REFUSAL — a deploy that reported
+ * `ok: true, executionId: null` told the caller the agent had been deployed and started
+ * when the dispatcher had declined it, and named no reason anyone could act on.
+ */
 export type CloudRunDispatcher = (params: {
   taskId: number;
   tenantId: number;
   payload?: string;
-}) => Promise<number | null>;
+}) => Promise<{ executionId: number | null; refusal?: { reason: string; message: string } }>;
 
 export interface DispatchContext {
   db: Db;
@@ -46,7 +52,7 @@ export interface DispatchContext {
 
 export type DispatchResult =
   | { ok: true; kind: 'workflow'; plan: DeployPlan; workflowId: string; taskCount: number }
-  | { ok: true; kind: 'cloud'; plan: DeployPlan; executionId: number | null }
+  | { ok: true; kind: 'cloud'; plan: DeployPlan; executionId: number }
   | { ok: true; kind: 'plan-only'; plan: DeployPlan; reason: string }
   | { ok: false; error: string };
 
@@ -88,7 +94,13 @@ export async function deployAndDispatch(
       ...(plan.runInput.model ? { model: plan.runInput.model } : {}),
       ...(spec.policy?.gates?.length ? { policyGates: spec.policy.gates } : {}),
     });
-    const executionId = await ctx.dispatchCloudRun({ taskId: ctx.taskId, tenantId: ctx.tenantId, payload });
+    const { executionId, refusal } = await ctx.dispatchCloudRun({ taskId: ctx.taskId, tenantId: ctx.tenantId, payload });
+    // The deploy itself succeeded; the RUN did not start. That is a failure of the
+    // request the caller made ("deploy and run it"), so say so with the reason rather
+    // than answering ok with a null id nobody checks.
+    if (executionId == null) {
+      return { ok: false, error: `Deployed, but no run started: ${refusal?.message ?? 'the dispatcher declined without a reason.'}` };
+    }
     return { ok: true, kind: 'cloud', plan, executionId };
   }
 

@@ -37,7 +37,7 @@ import {
 import { resolveDefaultCloudAgentRef, UNATTRIBUTED_RUN_MESSAGE } from '../../application/runtime/defaultCloudAgent';
 import { recordAutoRunSkip, clearAutoRunSkip } from '../../application/runtime/autoRunSkipLedger';
 import { enforceCloudRunCap, type CloudRunCapResult } from '../../application/runtime/cloudRunLedger';
-import { assessRerunBackoff, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
+import { assessRerunBackoff, AUTO_RUN_REASON_TEXT, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
 import { evaluateExecutionApprovalGate } from '../../application/runtime/executionApprovalGate';
 import { revertRun } from '../../application/runtime/runRollback';
 import { resolveActorFromContext } from '../../application/activity/activityLog';
@@ -310,9 +310,9 @@ async function dispatchAndQueue(
  * Context-free dispatch: create AND start a cloud run for a task. Used by every
  * non-HTTP dispatcher (the lane trigger, the lane requirement gate's reviewer /
  * producer runs, the AI Manager, the validator / security / incident dispatchers,
- * the CI-webhook auto-fix loop). Returns the new execution id, or null when the
- * task can't be resolved, the tenant is over its cloud-run allowance, or autonomy
- * is in backoff on this ticket.
+ * the CI-webhook auto-fix loop). Returns the new execution id, or — when it refuses —
+ * a {@link CloudDispatchRefusal} naming WHICH of its guards declined and what would
+ * clear it, so no caller has to guess (see that type for the failure that motivated it).
  *
  * ── THIS IS WHERE BACKPRESSURE LIVES ────────────────────────────────────────────
  * The consecutive-failure breaker and the re-run cooldown used to sit inside
@@ -332,6 +332,44 @@ async function dispatchAndQueue(
  * execution row is created, so a quota refusal no longer materialises as a `failed`
  * run that every scheduler then retries as though it were transient.
  */
+/**
+ * Why a dispatch produced no run.
+ *
+ * `dispatchCloudRunForTask` used to answer a refusal with a bare `null`, and every
+ * caller then had to GUESS which of its four refusals it had hit. The `/run-now`
+ * route guessed `cloud_run_limit` and said so in the response — so a ticket refused
+ * because its lifecycle-managed board wants a role-attributed run told the user, and
+ * the agent driving it, that the workspace had run out of monthly cloud runs. A
+ * remedy nobody could act on, for a problem nobody had.
+ *
+ * The reason therefore travels WITH the refusal, in the shared triage vocabulary the
+ * lifecycle ledger and the board chip already resolve, plus the sentence a
+ * non-UI caller should be shown ({@link AUTO_RUN_REASON_TEXT}, extended with the
+ * specific detail the refusing guard knows).
+ */
+export type CloudDispatchRefusalReason = AutoRunReason | 'task_not_found';
+
+export interface CloudDispatchRefusal {
+  reason: CloudDispatchRefusalReason;
+  /** Actionable prose — rendered straight into an HTTP error body and an agent's tool error. */
+  message: string;
+}
+
+/** The outcome of a cloud dispatch: an execution id, or WHY there is none. */
+export interface CloudDispatchOutcome {
+  executionId: number | null;
+  /** Present exactly when `executionId` is null. */
+  refusal?: CloudDispatchRefusal;
+}
+
+/** A refusal outcome, with the shared sentence for `reason` and any specific detail appended. */
+function refuse(reason: CloudDispatchRefusalReason, detail?: string | null): CloudDispatchOutcome {
+  const base = reason === 'task_not_found'
+    ? 'No run: no ticket with that id exists in this workspace.'
+    : AUTO_RUN_REASON_TEXT[reason];
+  return { executionId: null, refusal: { reason, message: detail?.trim() ? `${detail.trim()} ${base}` : base } };
+}
+
 export async function dispatchCloudRunForTask(
   env: Env,
   db: Db,
@@ -357,7 +395,7 @@ export async function dispatchCloudRunForTask(
      */
     execMemo?: ExecutionReadMemo;
   },
-): Promise<number | null> {
+): Promise<CloudDispatchOutcome> {
   const [taskRow] = await db
     .select({
       id: tasks.id, title: tasks.title, description: tasks.description,
@@ -372,7 +410,7 @@ export async function dispatchCloudRunForTask(
     .innerJoin(projects, eq(projects.id, tasks.projectId))
     .where(and(eq(tasks.id, params.taskId), eq(projects.tenantId, params.tenantId)))
     .limit(1);
-  if (!taskRow) return null;
+  if (!taskRow) return refuse('task_not_found');
 
   const submittedBy = params.submittedBy ?? 'system:autofix';
 
@@ -402,7 +440,7 @@ export async function dispatchCloudRunForTask(
       },
       result: `Dispatch refused: ${authorization.reason ?? 'managed execution is not authorized'}`,
     });
-    return null;
+    return refuse('managed_no_role', authorization.reason);
   }
 
   // (1) CLOUD-RUN CAP — checked before the execution row exists. A quota refusal is
@@ -435,7 +473,7 @@ export async function dispatchCloudRunForTask(
       },
       result: `Dispatch refused: monthly cloud-run allowance reached (${cloudGate.used}/${cloudGate.limit} on the ${cloudGate.effectivePlan} plan). Retrying will not clear this — upgrade at builderforce.ai/pricing. On-prem and VS Code runs stay unlimited.`,
     });
-    return null;
+    return refuse('cloud_run_limit', `${cloudGate.used}/${cloudGate.limit} runs used on the ${cloudGate.effectivePlan} plan.`);
   }
 
   // (2) FAILURE BREAKER + RE-RUN COOLDOWN — the same verdict `evaluateTaskAutoRun`
@@ -465,7 +503,7 @@ export async function dispatchCloudRunForTask(
         },
         result: `Dispatch refused (${backoff.blockedBy}) for task ${params.taskId}: ${backoff.consecutiveFailures} consecutive failed runs. A human "Run now" overrides.`,
       });
-      return null;
+      return refuse(backoff.blockedBy, `${backoff.consecutiveFailures} consecutive failed run(s).`);
     }
   }
 
@@ -493,7 +531,7 @@ export async function dispatchCloudRunForTask(
     execution as SubmittedExecution, effectiveTaskRow, params.payload,
     cloudGate ? { cloudGate } : undefined,
   );
-  return execution.id;
+  return { executionId: execution.id };
 }
 
 /** The post-submit dispatch core, free of any request context. */

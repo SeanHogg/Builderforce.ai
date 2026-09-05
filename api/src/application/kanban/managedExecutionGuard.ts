@@ -10,6 +10,31 @@ import { loadStageProducerSlots, resolveManagedLaneAuthority, slotAuthorizesRole
 export interface ManagedExecutionDecision { allowed: boolean; managed: boolean; reason?: string }
 
 /**
+ * Is this ticket governed by a lifecycle-managed board?
+ *
+ * Exported because "managed" changes what a caller may do to the ticket, not only
+ * whether a run is authorized. On a managed board the Assignee is the COORDINATOR, never
+ * the per-stage executor (PRD 5.5), and `TicketParticipantsService.syncOwnerAssignee`
+ * treats the task assignment as authoritative — so reassigning the ticket to "the agent
+ * that should run this" rewrites the owner slot and INVALIDATES the evidence recorded
+ * against the previous owner, while doing nothing whatsoever to who executes.
+ *
+ * `chats.dispatch_agent` did exactly that on every managed board. One predicate, owned by
+ * the module that owns the managed-board question, so a caller cannot answer it privately
+ * and drift from the guard.
+ */
+export async function isLifecycleManagedTask(db: Db, tenantId: number, taskId: number): Promise<boolean> {
+  const [task] = await db.select({ projectId: tasks.projectId })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .where(and(eq(projects.tenantId, tenantId), eq(tasks.id, taskId)))
+    .limit(1);
+  if (!task) return false;
+  const board = await findCanonicalBoard(db, task.projectId, tenantId).catch(() => null);
+  return board?.lifecycleManaged === true;
+}
+
+/**
  * Managed boards accept only Coordinator-issued, role-attributed executions.
  *
  * The authorized role set comes from {@link resolveManagedLaneAuthority} — the SAME

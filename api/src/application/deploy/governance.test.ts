@@ -39,7 +39,7 @@ describe('deployAndDispatch', () => {
     let seen: { taskId: number; payload?: string } | null = null;
     const dispatchCloudRun: CloudRunDispatcher = async (p) => {
       seen = { taskId: p.taskId, payload: p.payload };
-      return 4242;
+      return { executionId: 4242 };
     };
     const res = await deployAndDispatch(cloudSpec, 'cloud-durable', {
       db: fakeDb, tenantId: 7, taskId: 99, cloudAgentRef: 'agent:1', dispatchCloudRun,

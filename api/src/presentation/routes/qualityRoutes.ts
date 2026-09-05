@@ -725,7 +725,7 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
 
     // Context-free dispatch (the CI auto-fix path): resolves a default cloud agent
     // + surface and starts the run; the PR is opened on completion by the engine.
-    const executionId = await dispatchCloudRunForTask(
+    const { executionId, refusal } = await dispatchCloudRunForTask(
       c.env as Env, db, runtimeService,
       (p) => c.executionCtx.waitUntil(p),
       // `force`: this IS the human's "fix with agent" click — deliberately gate-blind,
@@ -746,7 +746,10 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
       submittedBy: `quality:${userId ?? 'system'}`,
     }));
 
-    return c.json({ taskId: task.id, executionId }, 202);
+    // The ticket is real either way — this route's job is "open a fix ticket and run
+    // it". When the run did not start, say which guard declined instead of returning a
+    // null id the UI renders as though an agent were working.
+    return c.json({ taskId: task.id, executionId, ...(executionId == null && refusal ? { dispatch: refusal } : {}) }, 202);
   });
 
   return router;
