@@ -85,7 +85,7 @@ falling back to the static line this replaced.
 `frontend/src/i18n/useLiveActivityLabels.ts`. Changed: `brainTriage.ts`, `brainRunStore.ts`,
 `useBrainConversation.ts`, `BrainTimeline.tsx`, `brain-ui/styles.css`, the VSIX
 `transcript.ts` / `App.tsx` / `brainWebview.ts`, `BrainPanel.tsx`, `BrainDock.tsx`, 10 locale
-catalogs. Shipped as VSIX **2026.8.142** (brain-embedded 2026.8.21, brain-ui 2026.8.18).
+catalogs. Shipped as VSIX **2026.8.143** (brain-embedded 2026.8.21, brain-ui 2026.8.18).
 415 + 82 + 181 tests green; all four packages typecheck.
 
 ## ✅ RESOLVED 2026-09-05 — Two Neon databases growing unbounded: retention covered 8 tables, none of them the expensive ones
