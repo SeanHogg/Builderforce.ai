@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { activityTarget, shortenTarget, toolActivity } from './runActivity';
+import { activityTarget, shortenTarget, toolActivity, describeLiveStep, midRunNotice } from './runActivity';
 
 describe('activityTarget', () => {
   it('names the file a read is aimed at', () => {
@@ -57,5 +57,46 @@ describe('toolActivity', () => {
 
   it('omits the subject entirely when the call has none', () => {
     expect(toolActivity('list_files', {}, 1, 0).detail).toBeUndefined();
+  });
+});
+
+describe('describeLiveStep', () => {
+  it('says which tool, on what, and for how long', () => {
+    const step = toolActivity('search_code', { query: 'Board one-pager' }, 4, 0);
+    const line = describeLiveStep(step, 67_000);
+    expect(line).toContain('running `search_code`');
+    expect(line).toContain('on Board one-pager');
+    expect(line).toContain('1m 7s so far');
+    expect(line).toContain('loop step 4');
+  });
+
+  it('makes a paused confirm read as the USER blocking, not the agent working', () => {
+    const step = { phase: 'awaiting' as const, label: 'edit_file', startedAt: 0, step: 2 };
+    expect(describeLiveStep(step, 5_000)).toContain('PAUSED waiting for the user');
+  });
+
+  it('has a distinct description for every phase', () => {
+    const phases = ['starting', 'thinking', 'writing', 'tool', 'awaiting', 'finishing'] as const;
+    const lines = phases.map((phase) => describeLiveStep({ phase, label: 'x', startedAt: 0, step: 1 }, 1_000));
+    expect(new Set(lines).size).toBe(phases.length);
+  });
+
+  it('never renders a negative clock from a skewed timestamp', () => {
+    expect(describeLiveStep({ phase: 'thinking', startedAt: 10_000, step: 1 }, 0)).toContain('0s so far');
+  });
+});
+
+describe('midRunNotice', () => {
+  it('warns that the run was UNFINISHED, and says what it was doing', () => {
+    const notice = midRunNotice(toolActivity('read_file', { path: 'a.css' }, 3, 0), 12_000);
+    expect(notice).toContain('CAPTURED MID-RUN');
+    expect(notice).toContain('STILL EXECUTING');
+    expect(notice).toContain('read_file');
+    // The reason it exists: stopping a reader concluding "it never wrote the file".
+    expect(notice).toContain('work it had not reached yet');
+  });
+
+  it('is still honest when no step was recorded', () => {
+    expect(midRunNotice(null, 0)).toContain('No in-flight step was recorded');
   });
 });

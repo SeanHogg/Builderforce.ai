@@ -44,7 +44,8 @@ import { selectToolsForTurn } from './selectTools';
 import { routerToolSpecs, isRouterTool, handleRouterCall } from './toolRouter';
 import { setLastResolvedModel } from './lastResolvedModel';
 import { isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, isReadOnlyPlatformTool } from './chatWorkLinking';
-import { toolActivity, type BrainRunActivity } from './runActivity';
+import { toolActivity, activityTarget, type BrainRunActivity } from './runActivity';
+import { ReadCoverage, revisitAdvisory, withAdvisory } from './readCoverage';
 import { chatModeDirective, normalizeChatMode, type ChatMode } from './chatMode';
 import { routingQueryForTurn, turnOptimizationDirective } from './turnOptimization';
 import {
@@ -1386,6 +1387,11 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // a write/edit/delete (or any side-effecting call) can change what a re-read would
   // see, so a read after a mutation is never suppressed. Only successful reads cache.
   const readDedupe = new Set<string>();
+  // Which TARGETS this run has read, and how often. The dedupe set above catches an
+  // exact repeat; this catches the far more common (and far more expensive) pattern
+  // of the same file re-read at shifting offsets until the budget is gone. See
+  // `readCoverage.ts`.
+  const readCoverage = new ReadCoverage();
   // Bounded counter for the announced-but-never-made tool call recovery below, so a
   // model that keeps narrating instead of acting cannot spin the loop. Not one-shot:
   // a model that stalls once frequently stalls again on the very next turn, and
@@ -1720,6 +1726,10 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           }
         } else {
           readDedupe.clear();
+          // A possibly-mutating call invalidates the coverage picture too: a read
+          // AFTER a change is new information, and nagging the model for taking it
+          // would punish exactly the right behaviour.
+          readCoverage.reset();
         }
         const toolStart = nowMs();
         // Name the tool AND what it is working on, before it runs. This is the
@@ -1758,7 +1768,29 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         // flood the context window; the TRACE keeps the full result (bounded by
         // MAX_TRACE_EVENTS) for the timeline + triage copy, plus the pre-trim byte
         // size and a truncation flag the diagnostics block reads.
-        const trimmedOut = trimToolResult(out ?? null);
+        // LOOP GUARD. A read that keeps circling the same target gets an advisory
+        // attached to the copy the MODEL sees — the only moment it can act on the
+        // fact that it is going round. The trace keeps the untouched result (the
+        // timeline must show what the tool actually returned), and the intervention
+        // is recorded as its own step so triage can see the loop was fought rather
+        // than inferring it from the repetition alone.
+        let modelOut = out;
+        if (isReadTool && !isFailedToolResult(out)) {
+          const visit = readCoverage.record(tc.name, args);
+          const target = visit ? activityTarget(args) : undefined;
+          const advisory = visit && target ? revisitAdvisory(tc.name, target, visit) : null;
+          if (advisory) {
+            modelOut = withAdvisory(out, advisory);
+            pushTrace(c, {
+              ts: nowIso(),
+              category: 'message',
+              label: 'tools.revisit_guard',
+              args: { step: iter, tool: tc.name, target, visits: visit!.count },
+              result: advisory,
+            });
+          }
+        }
+        const trimmedOut = trimToolResult(modelOut ?? null);
         convo.push({ role: 'tool', tool_call_id: tc.id, content: trimmedOut.content });
         pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),

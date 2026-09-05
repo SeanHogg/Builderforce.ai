@@ -1529,6 +1529,86 @@ declare function formatRunProgress(p: RunProgress): string[];
 declare function runProgressVerdict(p: RunProgress): string | null;
 
 /**
+ * What the run is doing RIGHT NOW — the live activity value.
+ *
+ * The trace records steps once they have COMPLETED, which is exactly the wrong
+ * moment for a progress indicator: a `search_code` that takes 67 seconds emits
+ * nothing at all until it is over, so the user sits in front of a static
+ * "Thinking…" line for a minute with no way to tell a working agent from a hung
+ * one. This module is the other half — the in-flight phase, published as it is
+ * entered and cleared when the run ends, so a surface can render the CURRENT
+ * step (which tool, on what, for how long) instead of only the settled past.
+ *
+ * Pure data + pure derivation: no React, no DOM, no clock of its own (callers
+ * pass `startedAt`), so the web app, the VS Code webview and any future surface
+ * render the same activity from the same value.
+ */
+/**
+ * The phase a run is in. Ordered roughly as a turn moves through them, though a
+ * run loops back to `thinking` for every iteration of the agent loop.
+ *
+ * - `starting`  — the run was accepted; the first completion hasn't opened yet.
+ * - `thinking`  — a completion is open and no token has arrived (this is the
+ *                 phase that used to look identical to a hang).
+ * - `writing`   — tokens are streaming; the reply is visibly forming.
+ * - `tool`      — a tool call is executing. Carries which one and on what.
+ * - `awaiting`  — paused on a human-in-the-loop confirm; the loop cannot advance
+ *                 until the user answers, so this must NOT read as "busy".
+ * - `finishing` — the answer is delivered and the run is doing its post-run work
+ *                 (minting the ticket for a code change, advancing linked tickets).
+ *                 Real calls that take real time, and previously showed nothing.
+ */
+type BrainRunPhase = 'starting' | 'thinking' | 'writing' | 'tool' | 'awaiting' | 'finishing';
+/** A live, in-flight step. `null` on the snapshot means the run is idle. */
+interface BrainRunActivity {
+    phase: BrainRunPhase;
+    /** The tool being executed (`tool` / `awaiting` phases only). */
+    label?: string;
+    /**
+     * The concrete THING being worked on, derived from the call's arguments — a
+     * file path, a search query, a record id. "Reading LandingCanvasHero.module.css"
+     * tells a user the agent is making progress; "Running a tool" does not.
+     */
+    detail?: string;
+    /** Epoch ms when this phase began. The renderer ticks its own elapsed clock off it. */
+    startedAt: number;
+    /** 1-based agent-loop iteration, so a long run shows it is still advancing. */
+    step: number;
+}
+/**
+ * Shorten a target for a one-line indicator. A path elides from the LEFT (the
+ * basename is what identifies it); anything else elides from the right.
+ */
+declare function shortenTarget(value: string, max?: number): string;
+/**
+ * Derive the human "on what" for a live tool step from its arguments. Returns
+ * undefined when the call has no recognizable target — the indicator then names
+ * the tool alone rather than inventing a subject for it.
+ */
+declare function activityTarget(args: unknown): string | undefined;
+/** Build the live activity for a tool step about to execute. */
+declare function toolActivity(label: string, args: unknown, step: number, startedAt: number): BrainRunActivity;
+/**
+ * One English clause describing an in-flight step, for a copied triage report —
+ * "running `search_code` on frontend/src (67s so far, loop step 4)".
+ *
+ * Report prose, deliberately NOT localized: a triage capture is pasted into an issue
+ * or handed to an engineer, and it is a single artifact in one language by design —
+ * the same reason every other line in that report is English. The LIVE indicator, which
+ * a user reads in their own editor, is fully localized; see `LiveActivity.tsx`.
+ *
+ * Shared by both copy surfaces (the web triage report and the VS Code transcript) so a
+ * mid-run capture describes itself identically wherever it was taken.
+ */
+declare function describeLiveStep(step: BrainRunActivity, capturedAtMs: number): string;
+/**
+ * The mid-run banner both copy surfaces emit. One sentence, one place: the fact that a
+ * report was taken mid-flight has to be stated identically everywhere, or a reader who
+ * learns to look for it on one surface will not find it on the other.
+ */
+declare function midRunNotice(activity: BrainRunActivity | null | undefined, capturedAtMs: number): string;
+
+/**
  * Brain execution triage — capture the Brain's run (LLM steps, tool chain,
  * intermediate assistant messages, and errors) as a single paste-able report.
  *
@@ -1919,73 +1999,20 @@ interface BuildBrainTriageOptions {
     surface?: string;
     /** The current top-level error surfaced to the user, if any. */
     error?: string;
+    /**
+     * True when the run was STILL EXECUTING at capture time. The trace cannot know it,
+     * and it changes how every "and then nothing happened" signal reads: a report taken
+     * mid-flight describes an UNFINISHED run, not a failed one.
+     */
+    running?: boolean;
+    /** The in-flight step at capture time (which tool, on what, since when). */
+    activity?: BrainRunActivity | null;
 }
 /**
  * Assemble the Brain triage report. Same shape as the host/cloud report:
  * header → errors-first → full event log → derived log lines → transcript.
  */
 declare function buildBrainTriageReport(opts: BuildBrainTriageOptions): string;
-
-/**
- * What the run is doing RIGHT NOW — the live activity value.
- *
- * The trace records steps once they have COMPLETED, which is exactly the wrong
- * moment for a progress indicator: a `search_code` that takes 67 seconds emits
- * nothing at all until it is over, so the user sits in front of a static
- * "Thinking…" line for a minute with no way to tell a working agent from a hung
- * one. This module is the other half — the in-flight phase, published as it is
- * entered and cleared when the run ends, so a surface can render the CURRENT
- * step (which tool, on what, for how long) instead of only the settled past.
- *
- * Pure data + pure derivation: no React, no DOM, no clock of its own (callers
- * pass `startedAt`), so the web app, the VS Code webview and any future surface
- * render the same activity from the same value.
- */
-/**
- * The phase a run is in. Ordered roughly as a turn moves through them, though a
- * run loops back to `thinking` for every iteration of the agent loop.
- *
- * - `starting`  — the run was accepted; the first completion hasn't opened yet.
- * - `thinking`  — a completion is open and no token has arrived (this is the
- *                 phase that used to look identical to a hang).
- * - `writing`   — tokens are streaming; the reply is visibly forming.
- * - `tool`      — a tool call is executing. Carries which one and on what.
- * - `awaiting`  — paused on a human-in-the-loop confirm; the loop cannot advance
- *                 until the user answers, so this must NOT read as "busy".
- * - `finishing` — the answer is delivered and the run is doing its post-run work
- *                 (minting the ticket for a code change, advancing linked tickets).
- *                 Real calls that take real time, and previously showed nothing.
- */
-type BrainRunPhase = 'starting' | 'thinking' | 'writing' | 'tool' | 'awaiting' | 'finishing';
-/** A live, in-flight step. `null` on the snapshot means the run is idle. */
-interface BrainRunActivity {
-    phase: BrainRunPhase;
-    /** The tool being executed (`tool` / `awaiting` phases only). */
-    label?: string;
-    /**
-     * The concrete THING being worked on, derived from the call's arguments — a
-     * file path, a search query, a record id. "Reading LandingCanvasHero.module.css"
-     * tells a user the agent is making progress; "Running a tool" does not.
-     */
-    detail?: string;
-    /** Epoch ms when this phase began. The renderer ticks its own elapsed clock off it. */
-    startedAt: number;
-    /** 1-based agent-loop iteration, so a long run shows it is still advancing. */
-    step: number;
-}
-/**
- * Shorten a target for a one-line indicator. A path elides from the LEFT (the
- * basename is what identifies it); anything else elides from the right.
- */
-declare function shortenTarget(value: string, max?: number): string;
-/**
- * Derive the human "on what" for a live tool step from its arguments. Returns
- * undefined when the call has no recognizable target — the indicator then names
- * the tool alone rather than inventing a subject for it.
- */
-declare function activityTarget(args: unknown): string | undefined;
-/** Build the live activity for a tool step about to execute. */
-declare function toolActivity(label: string, args: unknown, step: number, startedAt: number): BrainRunActivity;
 
 interface UseBrainConversationOptions {
     chatId: number | null;
@@ -2509,6 +2536,95 @@ interface PayloadBudget {
  * order, charging each payload as it goes.
  */
 declare function createPayloadBudget(opts: PayloadBudgetOptions): PayloadBudget;
+
+/**
+ * The loop-breaker for re-reading.
+ *
+ * The run loop already suppresses an EXACT repeat of a read — same tool, same
+ * arguments — and returns a stub telling the model to reuse the earlier result.
+ * That catches a model that asks the identical question twice. It does not catch
+ * the failure that actually burns runs:
+ *
+ *     read_file(LandingCanvasHero.module.css, offset 1)
+ *     read_file(LandingCanvasHero.module.css, offset 140)
+ *     read_file(LandingCanvasHero.module.css, offset 141)   ← one line later
+ *     read_file(LandingCanvasHero.module.css, offset 208)
+ *     read_file(LandingCanvasHero.module.css, offset 240)
+ *     read_file(LandingCanvasHero.module.css, offset 340)
+ *     read_file(LandingCanvasHero.module.css, offset 440)
+ *
+ * Seven DIFFERENT calls, so the exact-repeat guard stays silent for all of them,
+ * while the model shuffles a window up and down one 566-line file until the tool
+ * budget is gone and the user's actual request — a one-line CSS change — is never
+ * made. Every existing signal scores that run clean.
+ *
+ * The fix is not to block the read: a legitimate second pass over a large file is
+ * normal, and refusing it would break real work. The fix is to make the model AWARE
+ * that it is circling, at the only moment it can act on that — inside the tool
+ * result it is about to read — and to tell it exactly what it has already been
+ * shown, so "I'll just look again" stops being the cheapest next move.
+ *
+ * Pure and self-contained: a small tally with one method to record a visit and one
+ * to describe it. No clock, no I/O.
+ */
+/**
+ * Visits to one target before the model is told it is circling. Two reads of a
+ * long file is ordinary (read the top, jump to the section); the THIRD is the
+ * point where a pass stops being navigation and starts being a loop.
+ */
+declare const REVISIT_NUDGE_AT = 3;
+/**
+ * Visits after which the advisory escalates from a reminder to an instruction.
+ * By the fifth read of one file the gentle version has demonstrably not worked.
+ */
+declare const REVISIT_HARD_AT = 5;
+interface ReadVisit {
+    /** How many times this target has now been read, including this call. */
+    count: number;
+    /** The distinct argument sets already used against it, oldest first, capped. */
+    priorArgs: string[];
+}
+/**
+ * Per-run tally of which targets have been read and how. One instance per run;
+ * the run loop owns it and drops it when the run ends.
+ */
+declare class ReadCoverage {
+    private readonly visits;
+    /**
+     * Record a read and return the resulting visit, or null when the call names no
+     * target (nothing to be circling around). `args` is the parsed argument object.
+     */
+    record(tool: string, args: unknown): ReadVisit | null;
+    /**
+     * A mutation invalidates the picture: a file read AFTER a change is genuinely new
+     * information, and carrying the old tally forward would nag the model for doing
+     * exactly the right thing. Mirrors how the run loop clears its read-dedupe cache.
+     */
+    reset(): void;
+    /** Targets read more than once, most-revisited first — for the run's own reporting. */
+    repeated(): {
+        target: string;
+        count: number;
+    }[];
+}
+/**
+ * The advisory to attach to a read result once a target has been visited enough
+ * times to look like circling. Null below the threshold — the overwhelming majority
+ * of reads carry nothing extra.
+ *
+ * Written as a diagnosis plus a next move, not a scolding: a model told only "you
+ * are repeating yourself" tends to repeat itself apologetically. It is told what it
+ * has already been given, why looking again will not help, and which of the two
+ * things it should do instead — read the file WHOLE, or act on what it has.
+ */
+declare function revisitAdvisory(tool: string, target: string, visit: ReadVisit): string | null;
+/**
+ * Attach an advisory to a tool result without disturbing its shape. Object results
+ * gain a `note` field (the same channel the run loop's dedupe stub already uses, so
+ * the model meets one convention rather than two); anything else is wrapped so the
+ * original value survives intact under `result`.
+ */
+declare function withAdvisory(result: unknown, advisory: string): unknown;
 
 /**
  * CHAT ACTIVITY — the structured contract behind a run milestone / agent dispatch line.
@@ -4000,4 +4116,4 @@ declare function pmoFocusDomId(kind: string, id: string): string;
  */
 declare function artifactRoutePath(kind: string, ref: string | null | undefined, projectId?: number | null): string;
 
-export { ADDRESSED_TO_META_KEY, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArtifactKind, type AssembledToolCall, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunActivity, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type CompletionMetadata, type ComposerDirectiveOptions, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MentionToken, type MessageProvenance, type ModelCategory, type ModelChoiceLabels, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, PMO_FOCUS_PARAM, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PersistedStep, type PreparedImage, type ProvenanceAccount, RESTING_CHAT_MODE, type RatableMessage, type RatedTurnContext, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RepeatedTarget, type RoutedProduct, type RunMilestoneActivity, type RunMilestonePhase, type RunProgress, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, type TurnInterruption, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, activeModelKey, activityIcon, activityTarget, activityTone, allowanceState, announcesUntakenAction, artifactRoutePath, attachEvermindLearn, buildBrainTriageReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, computeRunProgress, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, createPayloadBudget, deriveChatTitle, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, displayModelName, effortProfile, extractXmlToolCalls, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, findTools, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, formatRunProgress, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, isActivityMessage, isChatMode, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isMalformedToolCall, isMutationTool, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, isTruncatedTurn, isUserConfiguredModelRef, lastConsolidationIndex, linkedTicketsToAdvance, localStorageConfirmationPersistence, mcpActionsFrom, mentionRecipient, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, parseByoUnresolved, parseChatActivity, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, perMillionUsd, pmoFocusDomId, pmoFocusValue, premiumCostLabel, prepareImageDataUrl, productForPlan, productModelName, progressDuration, ratedTurnContext, ratedTurnTool, reasoningForRun, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, revealsModelId, routerToolSpecs, routingQueryForTurn, startRun as runBrainLoop, runProgressVerdict, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, shortenTarget, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolActivity, toolExposureInTrace, toolNamesMentionedIn, toolSpecsFor, traceWithPersistedSteps, turnInterruption, turnOptimizationDirective, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, useToolConfirmationGate, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArtifactKind, type AssembledToolCall, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunActivity, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type CompletionMetadata, type ComposerDirectiveOptions, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MentionToken, type MessageProvenance, type ModelCategory, type ModelChoiceLabels, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, PMO_FOCUS_PARAM, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PersistedStep, type PreparedImage, type ProvenanceAccount, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RepeatedTarget, type RoutedProduct, type RunMilestoneActivity, type RunMilestonePhase, type RunProgress, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, type TurnInterruption, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, activeModelKey, activityIcon, activityTarget, activityTone, allowanceState, announcesUntakenAction, artifactRoutePath, attachEvermindLearn, buildBrainTriageReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, computeRunProgress, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, createPayloadBudget, deriveChatTitle, describeLiveStep, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, displayModelName, effortProfile, extractXmlToolCalls, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, findTools, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, formatRunProgress, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, isActivityMessage, isChatMode, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isMalformedToolCall, isMutationTool, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, isTruncatedTurn, isUserConfiguredModelRef, lastConsolidationIndex, linkedTicketsToAdvance, localStorageConfirmationPersistence, mcpActionsFrom, mentionRecipient, midRunNotice, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, parseByoUnresolved, parseChatActivity, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, perMillionUsd, pmoFocusDomId, pmoFocusValue, premiumCostLabel, prepareImageDataUrl, productForPlan, productModelName, progressDuration, ratedTurnContext, ratedTurnTool, reasoningForRun, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, revealsModelId, revisitAdvisory, routerToolSpecs, routingQueryForTurn, startRun as runBrainLoop, runProgressVerdict, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, shortenTarget, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolActivity, toolExposureInTrace, toolNamesMentionedIn, toolSpecsFor, traceWithPersistedSteps, turnInterruption, turnOptimizationDirective, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, useToolConfirmationGate, withAdvisory, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };

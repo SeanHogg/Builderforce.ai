@@ -6,6 +6,7 @@ import {
   getGlobalRunState,
   getRunStoreSize,
   resetBrainRunStore,
+  getRunSnapshot,
   windowed,
   compactTailStart,
   compactMiddleRange,
@@ -212,5 +213,138 @@ describe('the host-injected tool-iteration ceiling (BrainRunRequest.maxIteration
     });
     // Falls back to the shared default, so the run still produces a turn.
     expect(gateway.turns()).toBeGreaterThan(0);
+  });
+});
+
+describe('the re-read loop guard', () => {
+  const persistence = { sendMessages: async () => [] };
+  const READ_TOOL = [{ type: 'function' as const, function: { name: 'read_file', description: 'read', parameters: {} } }];
+
+  /**
+   * A model that keeps reading ONE file at shifting offsets — the pattern the
+   * exact-repeat dedupe cannot see, and the one that burns a run's whole budget
+   * without producing a change.
+   */
+  const rereadsOneFile = (path: string): BrainStreamFn => {
+    let turn = 0;
+    return async (opts) => {
+      turn += 1;
+      if (opts.tools === undefined) return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
+      return {
+        text: '',
+        toolCalls: [{ id: `c${turn}`, name: 'read_file', args: JSON.stringify({ path, offset: turn * 100 }) }],
+        finishReason: 'tool_calls',
+      };
+    };
+  };
+
+  it('warns the model inside the tool result once it starts circling one file', async () => {
+    const seen: string[] = [];
+    // ONE closure for the whole run: rebuilding it per call would reset its offset
+    // counter, turning the reads into EXACT repeats that the older dedupe already
+    // catches — and so testing the wrong guard entirely.
+    const model = rereadsOneFile('a.css');
+    await startRun(4301, {
+      resolvedSystemPrompt: 'sys',
+      tools: READ_TOOL,
+      runTool: async () => ({ ok: true, content: 'body' }),
+      stream: async (opts, cb) => {
+        // Capture what the model is actually handed back for each tool call.
+        for (const m of opts.messages) if (m.role === 'tool') seen.push(String(m.content));
+        return model(opts, cb);
+      },
+      persistence,
+      userTurn: 'reduce the height',
+      maxIterations: 6,
+    });
+    const advised = seen.filter((c) => c.includes('read') && c.includes('times in this run'));
+    expect(advised.length).toBeGreaterThan(0);
+    expect(seen.some((c) => c.includes('STOP RE-READING'))).toBe(true);
+  });
+
+  it('leaves a run that reads DIFFERENT files alone', async () => {
+    const seen: string[] = [];
+    let turn = 0;
+    await startRun(4302, {
+      resolvedSystemPrompt: 'sys',
+      tools: READ_TOOL,
+      runTool: async () => ({ ok: true, content: 'body' }),
+      stream: async (opts) => {
+        for (const m of opts.messages) if (m.role === 'tool') seen.push(String(m.content));
+        turn += 1;
+        if (opts.tools === undefined) return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
+        return {
+          text: '',
+          toolCalls: [{ id: `c${turn}`, name: 'read_file', args: JSON.stringify({ path: `file-${turn}.css` }) }],
+          finishReason: 'tool_calls',
+        };
+      },
+      persistence,
+      userTurn: 'survey the styles',
+      maxIterations: 6,
+    });
+    expect(seen.some((c) => c.includes('times in this run'))).toBe(false);
+    expect(seen.some((c) => c.includes('STOP RE-READING'))).toBe(false);
+  });
+});
+
+describe('live run activity (the animated in-flight indicator)', () => {
+  const persistence = { sendMessages: async () => [] };
+
+  it('publishes the tool step WHILE it runs, and clears it when the run ends', async () => {
+    const phases: string[] = [];
+    const unsubscribe = subscribeRun(4401, () => {
+      const a = getRunSnapshot(4401).activity;
+      const key = a ? `${a.phase}:${a.label ?? ''}` : 'idle';
+      if (phases[phases.length - 1] !== key) phases.push(key);
+    });
+
+    let turn = 0;
+    await startRun(4401, {
+      resolvedSystemPrompt: 'sys',
+      tools: [{ type: 'function', function: { name: 'search_code', description: 's', parameters: {} } }],
+      runTool: async () => {
+        // Observed from INSIDE the call: the whole point is that the step is visible
+        // while it is executing, not once it has settled into the trace.
+        const live = getRunSnapshot(4401).activity;
+        expect(live?.phase).toBe('tool');
+        expect(live?.label).toBe('search_code');
+        expect(live?.detail).toBe('Board one-pager');
+        return { ok: true };
+      },
+      stream: async (opts) => {
+        turn += 1;
+        if (opts.tools === undefined || turn > 1) return { text: 'Found it.', toolCalls: [], finishReason: 'stop' };
+        return {
+          text: '',
+          toolCalls: [{ id: 'c1', name: 'search_code', args: JSON.stringify({ query: 'Board one-pager' }) }],
+          finishReason: 'tool_calls',
+        };
+      },
+      persistence,
+      userTurn: 'find the board card',
+    });
+    unsubscribe();
+
+    expect(phases).toContain('thinking:');
+    expect(phases).toContain('tool:search_code');
+    // A finished run must never leave an indicator claiming work is in flight.
+    expect(phases[phases.length - 1]).toBe('idle');
+    expect(getRunSnapshot(4401).activity).toBeNull();
+  });
+
+  it('flips to `writing` on the first streamed token', async () => {
+    let sawWriting = false;
+    await startRun(4402, {
+      resolvedSystemPrompt: 'sys',
+      stream: async (_opts, cb) => {
+        cb?.onTextDelta?.('Hel');
+        sawWriting = getRunSnapshot(4402).activity?.phase === 'writing';
+        return { text: 'Hello', toolCalls: [], finishReason: 'stop' };
+      },
+      persistence,
+      userTurn: 'hi',
+    });
+    expect(sawWriting).toBe(true);
   });
 });

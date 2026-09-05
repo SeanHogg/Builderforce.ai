@@ -18,6 +18,7 @@ import {
   formatChatDiagnostics,
   traceWithPersistedSteps,
   createPayloadBudget,
+  midRunNotice,
 } from '@seanhogg/builderforce-brain-embedded';
 import type {
   BrainMessage,
@@ -86,23 +87,6 @@ function fenced(label: string, payload: string, budget: PayloadBudget, lines: st
   lines.push(`${label}:`, '```', budget.cap(payload, label), '```');
 }
 
-/**
- * One clause describing the in-flight step for the mid-run header — "running
- * `search_code` on Builderforce.ai/frontend/src (67s so far, loop step 4)". The
- * elapsed figure is what makes a mid-run capture diagnosable at all: it separates
- * a step that just started from one that has been going for two minutes.
- */
-function describeActivity(step: BrainRunActivity): string {
-  const elapsed = formatDuration(Math.max(0, Date.now() - step.startedAt));
-  const what =
-    step.phase === 'tool' ? `running \`${step.label}\`${step.detail ? ` on ${step.detail}` : ''}`
-      : step.phase === 'awaiting' ? `PAUSED waiting for the user to approve \`${step.label}\` — nothing advances until they answer`
-        : step.phase === 'thinking' ? 'waiting on the model (no token received yet)'
-          : step.phase === 'writing' ? 'streaming the reply'
-            : step.phase === 'finishing' ? 'doing post-run work (ticket capture / status reconciliation)'
-              : 'starting up';
-  return `${what} (${elapsed} so far${step.step > 0 ? `, loop step ${step.step}` : ''})`;
-}
 
 /** Serialize the live conversation into a Markdown transcript. */
 export function buildTranscript(input: TranscriptInput): string {
@@ -161,16 +145,7 @@ export function buildTranscript(input: TranscriptInput): string {
   // unfinished run, and every downward-looking signal in it ("no file was written",
   // "no ticket was linked") is premature rather than damning. Saying so once, up
   // front, is the difference between a useful mid-run capture and a misleading one.
-  if (input.running) {
-    const step = input.activity;
-    const doing = step
-      ? `At capture it was ${describeActivity(step)}.`
-      : 'No in-flight step was recorded at capture.';
-    lines.push(
-      `⚠ CAPTURED MID-RUN — the agent was STILL EXECUTING when this report was taken. ${doing} Anything below that reads as "it never did X" may simply be work it had not reached yet; re-copy once the run settles to get a verdict on a finished run.`,
-      '',
-    );
-  }
+  if (input.running) lines.push(midRunNotice(input.activity, Date.now()), '');
 
   // Structural honesty flags — an assistant turn that CLAIMED a file write or a
   // filed/linked ticket while no such tool call succeeded. Web parity: these ran only

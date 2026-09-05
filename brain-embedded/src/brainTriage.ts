@@ -14,6 +14,7 @@ import { turnInterruption } from './finishReason';
 import type { BrainMessage } from './types';
 import { traceWithPersistedSteps } from './persistedSteps';
 import { computeRunProgress, formatRunProgress, runProgressVerdict, type RunProgress } from './runProgress';
+import { midRunNotice, type BrainRunActivity } from './runActivity';
 
 /** One step of the Brain agent loop, recorded as it runs. */
 export interface BrainTraceEvent {
@@ -880,6 +881,14 @@ export interface BuildBrainTriageOptions {
   surface?: string;
   /** The current top-level error surfaced to the user, if any. */
   error?: string;
+  /**
+   * True when the run was STILL EXECUTING at capture time. The trace cannot know it,
+   * and it changes how every "and then nothing happened" signal reads: a report taken
+   * mid-flight describes an UNFINISHED run, not a failed one.
+   */
+  running?: boolean;
+  /** The in-flight step at capture time (which tool, on what, since when). */
+  activity?: BrainRunActivity | null;
 }
 
 /**
@@ -887,7 +896,7 @@ export interface BuildBrainTriageOptions {
  * header → errors-first → full event log → derived log lines → transcript.
  */
 export function buildBrainTriageReport(opts: BuildBrainTriageOptions): string {
-  const { capturedAt, messages = [], chatId, chatTitle, agentLabel, configuredModel, surface, error } = opts;
+  const { capturedAt, messages = [], chatId, chatTitle, agentLabel, configuredModel, surface, error, running, activity } = opts;
   // The caller's `events` are the LIVE trace, which only covers the current
   // session — a reopened or resumed chat holds none of the earlier run's steps in
   // memory, only their durable `role:'tool'` rows. Merging them back in is what
@@ -906,10 +915,14 @@ export function buildBrainTriageReport(opts: BuildBrainTriageOptions): string {
   lines.push(...formatBrainProvenance(events, { configuredModel, surface }));
   lines.push(`Steps: ${events.length} · Errors: ${errors.length} · Messages: ${messages.length}`);
   if (error) lines.push(`Last error: ${error}`);
+  // CAPTURE STATE, stated once and up front. Without it every downward-looking signal
+  // below ("no file was written") reads as a verdict on a run that had simply not got
+  // there yet.
+  if (running) lines.push(midRunNotice(activity, Date.parse(capturedAt)));
 
   // Diagnostics block — the A-vs-B verdict + the token/tool-payload/downgrade
   // numbers behind it. Same builder the VS Code transcript uses.
-  lines.push('', ...formatBrainDiagnostics(computeBrainDiagnostics(events, configuredModel, messages)));
+  lines.push('', ...formatBrainDiagnostics(computeBrainDiagnostics(events, configuredModel, messages, { running })));
 
   // Structural honesty flag — a "saved the file" claim with no successful file-write
   // tool call this run (the "it said it updated the file but didn't" failure mode).

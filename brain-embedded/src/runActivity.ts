@@ -91,3 +91,46 @@ export function toolActivity(label: string, args: unknown, step: number, started
   const detail = activityTarget(args);
   return { phase: 'tool', label, startedAt, step, ...(detail ? { detail } : {}) };
 }
+
+/** Compact elapsed for a REPORT line (not the live UI, which has its own ticker). */
+function elapsedText(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return '0s';
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+  return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
+}
+
+/**
+ * One English clause describing an in-flight step, for a copied triage report —
+ * "running `search_code` on frontend/src (67s so far, loop step 4)".
+ *
+ * Report prose, deliberately NOT localized: a triage capture is pasted into an issue
+ * or handed to an engineer, and it is a single artifact in one language by design —
+ * the same reason every other line in that report is English. The LIVE indicator, which
+ * a user reads in their own editor, is fully localized; see `LiveActivity.tsx`.
+ *
+ * Shared by both copy surfaces (the web triage report and the VS Code transcript) so a
+ * mid-run capture describes itself identically wherever it was taken.
+ */
+export function describeLiveStep(step: BrainRunActivity, capturedAtMs: number): string {
+  const elapsed = elapsedText(Number.isFinite(capturedAtMs) ? capturedAtMs - step.startedAt : 0);
+  const what =
+    step.phase === 'tool' ? `running \`${step.label}\`${step.detail ? ` on ${step.detail}` : ''}`
+      : step.phase === 'awaiting' ? `PAUSED waiting for the user to approve \`${step.label}\` — nothing advances until they answer`
+        : step.phase === 'thinking' ? 'waiting on the model (no token received yet)'
+          : step.phase === 'writing' ? 'streaming the reply'
+            : step.phase === 'finishing' ? 'doing post-run work (ticket capture / status reconciliation)'
+              : 'starting up';
+  return `${what} (${elapsed} so far${step.step > 0 ? `, loop step ${step.step}` : ''})`;
+}
+
+/**
+ * The mid-run banner both copy surfaces emit. One sentence, one place: the fact that a
+ * report was taken mid-flight has to be stated identically everywhere, or a reader who
+ * learns to look for it on one surface will not find it on the other.
+ */
+export function midRunNotice(activity: BrainRunActivity | null | undefined, capturedAtMs: number): string {
+  const doing = activity
+    ? ` At capture it was ${describeLiveStep(activity, capturedAtMs)}.`
+    : ' No in-flight step was recorded at capture.';
+  return `⚠ CAPTURED MID-RUN — the agent was STILL EXECUTING when this report was taken.${doing} Anything below that reads as "it never did X" may simply be work it had not reached yet; re-copy once the run settles to get a verdict on a finished run.`;
+}

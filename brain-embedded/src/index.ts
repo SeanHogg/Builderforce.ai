@@ -182,11 +182,17 @@ export type { RunProgress, RepeatedTarget } from './runProgress';
 
 // Live, in-flight activity — what the run is doing RIGHT NOW, so a surface can animate
 // the CURRENT step instead of only rendering settled ones.
-export { activityTarget, toolActivity, shortenTarget } from './runActivity';
+export { activityTarget, toolActivity, shortenTarget, describeLiveStep, midRunNotice } from './runActivity';
 export type { BrainRunActivity, BrainRunPhase } from './runActivity';
 
 // Size budget for a copied triage report, so its END survives pasting.
 export { createPayloadBudget } from './transcriptBudget';
+
+// Loop guard: the per-run tally of which targets have been read, and the advisory the
+// run loop attaches once a read starts circling. Exported for tests and for any surface
+// that wants to report the same coverage picture.
+export { ReadCoverage, revisitAdvisory, withAdvisory, REVISIT_NUDGE_AT, REVISIT_HARD_AT } from './readCoverage';
+export type { ReadVisit } from './readCoverage';
 export type { PayloadBudget, PayloadBudgetOptions, PayloadBudgetStats } from './transcriptBudget';
 
 // Durable tool/memory STEP rows — the reader for what the run loop persisted, so a

@@ -1676,6 +1676,20 @@ function toolActivity(label, args, step, startedAt) {
   const detail = activityTarget(args);
   return { phase: "tool", label, startedAt, step, ...detail ? { detail } : {} };
 }
+function elapsedText(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return "0s";
+  if (ms < 6e4) return `${Math.round(ms / 1e3)}s`;
+  return `${Math.floor(ms / 6e4)}m ${Math.round(ms % 6e4 / 1e3)}s`;
+}
+function describeLiveStep(step, capturedAtMs) {
+  const elapsed = elapsedText(Number.isFinite(capturedAtMs) ? capturedAtMs - step.startedAt : 0);
+  const what = step.phase === "tool" ? `running \`${step.label}\`${step.detail ? ` on ${step.detail}` : ""}` : step.phase === "awaiting" ? `PAUSED waiting for the user to approve \`${step.label}\` \u2014 nothing advances until they answer` : step.phase === "thinking" ? "waiting on the model (no token received yet)" : step.phase === "writing" ? "streaming the reply" : step.phase === "finishing" ? "doing post-run work (ticket capture / status reconciliation)" : "starting up";
+  return `${what} (${elapsed} so far${step.step > 0 ? `, loop step ${step.step}` : ""})`;
+}
+function midRunNotice(activity, capturedAtMs) {
+  const doing = activity ? ` At capture it was ${describeLiveStep(activity, capturedAtMs)}.` : " No in-flight step was recorded at capture.";
+  return `\u26A0 CAPTURED MID-RUN \u2014 the agent was STILL EXECUTING when this report was taken.${doing} Anything below that reads as "it never did X" may simply be work it had not reached yet; re-copy once the run settles to get a verdict on a finished run.`;
+}
 
 // src/runProgress.ts
 var MUTATION_TOOL = /(^|_)(write|edit|save|create|update|delete|apply|patch|publish|send|dispatch|run_command|assign|link|move|set)(_|$)/i;
@@ -2130,7 +2144,7 @@ function formatBrainDiagnostics(d) {
   return lines;
 }
 function buildBrainTriageReport(opts) {
-  const { capturedAt, messages = [], chatId, chatTitle, agentLabel, configuredModel, surface, error } = opts;
+  const { capturedAt, messages = [], chatId, chatTitle, agentLabel, configuredModel, surface, error, running, activity } = opts;
   const events = traceWithPersistedSteps(messages, opts.events);
   const errors = events.filter((e) => e.isError || e.category === "error");
   const lines = [];
@@ -2141,7 +2155,8 @@ function buildBrainTriageReport(opts) {
   lines.push(...formatBrainProvenance(events, { configuredModel, surface }));
   lines.push(`Steps: ${events.length} \xB7 Errors: ${errors.length} \xB7 Messages: ${messages.length}`);
   if (error) lines.push(`Last error: ${error}`);
-  lines.push("", ...formatBrainDiagnostics(computeBrainDiagnostics(events, configuredModel, messages)));
+  if (running) lines.push(midRunNotice(activity, Date.parse(capturedAt)));
+  lines.push("", ...formatBrainDiagnostics(computeBrainDiagnostics(events, configuredModel, messages, { running })));
   if (detectUnbackedWriteClaim(events, messages)) {
     lines.push("", "\u26A0 UNBACKED WRITE CLAIM \u2014 an assistant turn claimed it saved/updated a file, but no file-write tool (attachments.write / project_files.save) succeeded in this run. The file was NOT modified.");
   }
@@ -2446,6 +2461,70 @@ function handleRouterCall(catalog, name, args) {
     return { result: { error: `Unknown tool "${target}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` } };
   }
   return { dispatch: { name: target, args: a.args ?? {} } };
+}
+
+// src/readCoverage.ts
+var REVISIT_NUDGE_AT = 3;
+var REVISIT_HARD_AT = 5;
+var MAX_REMEMBERED_ARGS = 8;
+var ReadCoverage = class {
+  visits = /* @__PURE__ */ new Map();
+  /**
+   * Record a read and return the resulting visit, or null when the call names no
+   * target (nothing to be circling around). `args` is the parsed argument object.
+   */
+  record(tool, args) {
+    const target = activityTarget(args);
+    if (!target) return null;
+    const key = `${tool}:${target}`;
+    const existing = this.visits.get(key);
+    let argText;
+    try {
+      argText = JSON.stringify(args ?? {});
+    } catch {
+      argText = String(args ?? "");
+    }
+    if (!existing) {
+      const fresh = { count: 1, priorArgs: [argText] };
+      this.visits.set(key, fresh);
+      return fresh;
+    }
+    existing.count += 1;
+    if (!existing.priorArgs.includes(argText) && existing.priorArgs.length < MAX_REMEMBERED_ARGS) {
+      existing.priorArgs.push(argText);
+    }
+    return existing;
+  }
+  /**
+   * A mutation invalidates the picture: a file read AFTER a change is genuinely new
+   * information, and carrying the old tally forward would nag the model for doing
+   * exactly the right thing. Mirrors how the run loop clears its read-dedupe cache.
+   */
+  reset() {
+    this.visits.clear();
+  }
+  /** Targets read more than once, most-revisited first — for the run's own reporting. */
+  repeated() {
+    return [...this.visits.entries()].filter(([, v]) => v.count > 1).map(([target, v]) => ({ target, count: v.count })).sort((a, b) => b.count - a.count);
+  }
+};
+function revisitAdvisory(tool, target, visit) {
+  if (visit.count < REVISIT_NUDGE_AT) return null;
+  const shape = visit.priorArgs.length > 1 ? ` The argument sets you have already used on it: ${visit.priorArgs.map((a) => `\`${a}\``).join(", ")}.` : "";
+  if (visit.count >= REVISIT_HARD_AT) {
+    return `STOP RE-READING. This is call ${visit.count} of \`${tool}\` against ${target} in this run, and the previous ${visit.count - 1} results are all still above you in this conversation.${shape} Re-reading it again will return content you already have and will not move the task forward \u2014 this pattern is how a run exhausts its tool budget without producing a single change. Do ONE of these now: (a) if you still need more of the file, request it WHOLE in a single call instead of another window; (b) otherwise stop reading and make the edit, or state plainly what is blocking you. Do not issue another partial read of this target.`;
+  }
+  return `You have now read ${target} ${visit.count} times in this run with \`${tool}\`, and every earlier result is still above you in this conversation.${shape} If you are looking for something you have not found, another window over the same file is unlikely to surface it \u2014 read the file whole in one call, or search for the specific symbol. If you already have what you need, act on it rather than re-reading.`;
+}
+function withAdvisory(result, advisory) {
+  if (result && typeof result === "object" && !Array.isArray(result)) {
+    const existing = result.note;
+    const note = typeof existing === "string" && existing ? `${existing}
+
+${advisory}` : advisory;
+    return { ...result, note };
+  }
+  return { result, note: advisory };
 }
 
 // src/turnOptimization.ts
@@ -3071,6 +3150,7 @@ ${chatModeDirective(runMode, chatId)}
 
 ${turnOptimizationDirective()}`;
   const readDedupe = /* @__PURE__ */ new Set();
+  const readCoverage = new ReadCoverage();
   let announcementRecoveries = 0;
   let activeModel = model;
   const triedModels = [];
@@ -3304,6 +3384,7 @@ ${turnOptimizationDirective()}`;
           }
         } else {
           readDedupe.clear();
+          readCoverage.reset();
         }
         const toolStart = nowMs2();
         setActivity(c, toolActivity(tc.name, args, iter, Date.now()));
@@ -3324,7 +3405,23 @@ ${turnOptimizationDirective()}`;
         }
         if (isTicketRecordingTool(tc.name)) c.ticketRecorded = true;
         if (runTool) await autoLinkCreatedItem(chatId, c, persistence, runTool, tc.name, out);
-        const trimmedOut = trimToolResult(out ?? null);
+        let modelOut = out;
+        if (isReadTool && !isFailedToolResult(out)) {
+          const visit = readCoverage.record(tc.name, args);
+          const target = visit ? activityTarget(args) : void 0;
+          const advisory = visit && target ? revisitAdvisory(tc.name, target, visit) : null;
+          if (advisory) {
+            modelOut = withAdvisory(out, advisory);
+            pushTrace(c, {
+              ts: nowIso(),
+              category: "message",
+              label: "tools.revisit_guard",
+              args: { step: iter, tool: tc.name, target, visits: visit.count },
+              result: advisory
+            });
+          }
+        }
+        const trimmedOut = trimToolResult(modelOut ?? null);
         convo.push({ role: "tool", tool_call_id: tc.id, content: trimmedOut.content });
         pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
@@ -4617,6 +4714,9 @@ export {
   PROJECT_EVERMIND_MODEL_PREFIX,
   PROVENANCE_META_KEY,
   RESTING_CHAT_MODE,
+  REVISIT_HARD_AT,
+  REVISIT_NUDGE_AT,
+  ReadCoverage,
   STEP_MESSAGE_ROLE,
   TICKET_RECORDING_TOOLS,
   TOOL_ROUTER_DESCRIBE,
@@ -4660,6 +4760,7 @@ export {
   countReconciledMemories,
   createPayloadBudget,
   deriveChatTitle,
+  describeLiveStep,
   describeTool,
   detectAnnouncedButUnmadeToolCall,
   detectUnbackedTicketClaim,
@@ -4708,6 +4809,7 @@ export {
   localStorageConfirmationPersistence,
   mcpActionsFrom,
   mentionRecipient,
+  midRunNotice,
   modelCategoryLabel,
   modelFailoversInTrace,
   modelInUse,
@@ -4738,6 +4840,7 @@ export {
   resolveRecipient,
   resolveRunConfirm,
   revealsModelId,
+  revisitAdvisory,
   routerToolSpecs,
   routingQueryForTurn,
   startRun as runBrainLoop,
@@ -4774,6 +4877,7 @@ export {
   useOptionalBrainContext,
   useRegisterBrainActions,
   useToolConfirmationGate,
+  withAdvisory,
   withDirectedMetadata,
   withProvenanceMetadata,
   workItemLinkFromCreate
