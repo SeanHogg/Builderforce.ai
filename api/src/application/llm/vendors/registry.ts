@@ -36,6 +36,7 @@ import {
   type AiModelTier,
   type VendorCallParams,
   type VendorCallResult,
+  type VendorEgress,
   type VendorEnv,
   type VendorId,
   type VendorModelEntry,
@@ -197,6 +198,16 @@ export function vendorForModel(modelId: string): VendorId {
  */
 export function vendorKeyBound(env: VendorEnv, vendor: VendorId): boolean {
   return !!MODULES_BY_ID[vendor].apiKeyFrom(env);
+}
+
+/**
+ * Whether this vendor can only be reached from the tenant's own connected runtime —
+ * the ONE declaration ({@link VendorModule.requiresLocalEgress}), read here so a caller
+ * that must PRE-FLIGHT the question (a strict pin, which has no second candidate to
+ * fall through to) asks it in the same place `dispatchInternal` does.
+ */
+export function vendorRequiresLocalEgress(vendor: VendorId): boolean {
+  return MODULES_BY_ID[vendor]?.requiresLocalEgress === true;
 }
 
 export function tierForModel(modelId: string): AiModelTier {
@@ -391,6 +402,7 @@ export class CascadeExhaustedError extends Error {
   public readonly skippedNoKey: ReadonlyArray<string>;
   public readonly skippedNoStream: ReadonlyArray<string>;
   public readonly skippedCooled: ReadonlyArray<string>;
+  public readonly skippedNoEgress: ReadonlyArray<string>;
   constructor(
     kind: 'json' | 'stream',
     attempts: ReadonlyArray<DispatchAttempt>,
@@ -399,18 +411,24 @@ export class CascadeExhaustedError extends Error {
     /** Candidates skipped by the mid-cascade cooldown re-check. Named in the message
      *  because "0 attempts" with nothing else said reads as a bug in the composer. */
     skippedCooled: ReadonlyArray<string> = [],
+    /** Candidates whose vendor declares `requiresLocalEgress` while this tenant has no
+     *  runtime online. Named separately because the remedy is "connect a runtime", not
+     *  "reconnect the account" — the credential was never even presented. */
+    skippedNoEgress: ReadonlyArray<string> = [],
   ) {
     const summary = attempts.map((a) => `${a.vendor}/${a.model}=${a.status}`).join(', ');
     const noKey = skippedNoKey.length    > 0 ? ` (skipped no-key: ${skippedNoKey.join(', ')})` : '';
     const noStr = skippedNoStream.length > 0 ? ` (skipped no-stream: ${skippedNoStream.join(', ')})` : '';
     const cooled = skippedCooled.length  > 0 ? ` (skipped cooled: ${skippedCooled.join(', ')})` : '';
+    const noEgr = skippedNoEgress.length > 0 ? ` (skipped no-local-egress: ${skippedNoEgress.join(', ')})` : '';
     const head  = kind === 'stream' ? 'AI streaming vendor cascade exhausted' : 'AI vendor cascade exhausted';
-    super(`${head} (${attempts.length} attempts: ${summary})${noKey}${noStr}${cooled}`);
+    super(`${head} (${attempts.length} attempts: ${summary})${noKey}${noStr}${cooled}${noEgr}`);
     this.name = 'CascadeExhaustedError';
     this.attempts = attempts;
     this.skippedNoKey = skippedNoKey;
     this.skippedNoStream = skippedNoStream;
     this.skippedCooled = skippedCooled;
+    this.skippedNoEgress = skippedNoEgress;
   }
 }
 
@@ -503,6 +521,14 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
   const skippedNoStream: string[] = [];
 
   const skippedCooled: string[] = [];
+  const skippedNoEgress: string[] = [];
+
+  // A tenant's own runtime is an egress of LAST resort, not a general route: only a
+  // vendor whose upstream the Worker cannot reach — Kimi Code's edge 403, or the
+  // private address a self-hosted Ollama/FreeToken engine lives at — declares
+  // `requiresLocalEgress`, and only that vendor is handed the transport. Loop-invariant,
+  // so it is resolved once rather than per candidate.
+  const { egress, ...restNoEgress } = rest as typeof rest & { egress?: VendorEgress };
 
   for (const model of modelChain) {
     const { vendorId, vendorModel } = resolveVendorAndModel(model);
@@ -515,6 +541,20 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
     // failure must never block a dispatch, so an error degrades to "not cooled".
     if (isCooled && attempts.length > 0 && await isCooled(vendorId, model).catch(() => false)) {
       skippedCooled.push(`${vendorId}:${model}`);
+      continue;
+    }
+    // No runtime online and this vendor cannot be reached from the Worker: skip it the
+    // way a missing key is skipped, rather than spending a subrequest on a call whose
+    // outcome is already known. Trying anyway is not "optimistic" — the direct path is
+    // ALWAYS the Worker's own egress (this registry never runs on the tenant's machine),
+    // so the answer never varies by tenant: Kimi's edge returns an HTML 403 before the
+    // key is read, and a private Ollama/FreeToken address is unroutable by definition.
+    // The cost of pretending otherwise was not just a wasted round-trip: 403 classifies
+    // as `not_entitled`, so routine traffic painted a VALID connected account red and
+    // mailed its owners "your integration stopped working" — advice they cannot act on,
+    // when the real remedy is to connect a runtime.
+    if (mod.requiresLocalEgress && !egress) {
+      skippedNoEgress.push(`${vendorId}:${model}`);
       continue;
     }
     const apiKey = vendorId === 'openrouter'
@@ -535,12 +575,9 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
       ? reasoningParamsForModel(model, reasoningIntent.execParams, { isFirstTurn: reasoningIntent.isFirstTurn })
       : undefined;
 
-    // A tenant's own runtime is an egress of LAST resort, not a general route: only a
-    // vendor whose upstream refuses the Worker (Kimi Code's edge 403) declares
-    // `requiresLocalEgress`, and only that vendor is handed the transport. Without this
-    // gate every candidate in every cascade would be tunnelled through someone's laptop.
-    const { egress, ...restNoEgress } = rest as typeof rest & { egress?: unknown };
-    const egressForVendor = mod.requiresLocalEgress && egress ? { egress } : {};
+    // Without this gate every candidate in every cascade would be tunnelled through
+    // someone's laptop. The `!egress` half is already settled by the skip above.
+    const egressForVendor = mod.requiresLocalEgress ? { egress } : {};
 
     const startedAt = Date.now();
     try {
@@ -604,7 +641,7 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
     }
   }
 
-  throw new CascadeExhaustedError(cfg.kind, attempts, skippedNoKey, skippedNoStream, skippedCooled);
+  throw new CascadeExhaustedError(cfg.kind, attempts, skippedNoKey, skippedNoStream, skippedCooled, skippedNoEgress);
 }
 
 /** Walk a model chain non-streaming. Throws if every model in the chain fails. */

@@ -16,6 +16,7 @@
  * connect THEIR OWN subscription — it is never resold or shared across tenants.
  */
 import { sha256Base64Url } from '../../infrastructure/crypto/digest';
+import { throwTokenExchangeFailure } from './subscriptionOAuthCode';
 
 // The public Claude Code OAuth client id (base64 of the uuid, matching
 // agent-runtime's encoding so the two never drift on a copy-paste).
@@ -92,15 +93,6 @@ export function buildAuthorizeUrl(params: { state: string; challenge: string }):
   return url.toString();
 }
 
-/** The consent page hands back `code#state` (or sometimes just `code`). Split it
- *  so the caller can both exchange the code and verify state. */
-export function parsePastedCode(pasted: string): { code: string; state: string | null } {
-  const trimmed = pasted.trim();
-  const hash = trimmed.indexOf('#');
-  if (hash === -1) return { code: trimmed, state: null };
-  return { code: trimmed.slice(0, hash), state: trimmed.slice(hash + 1) || null };
-}
-
 function toTokens(data: { access_token: string; refresh_token: string; expires_in: number }): AnthropicOAuthTokens {
   return {
     access: data.access_token,
@@ -129,7 +121,11 @@ export async function exchangeAnthropicCode(params: {
     }),
   });
   if (!resp.ok) {
-    throw new Error(`Anthropic OAuth code exchange failed (${resp.status}): ${(await resp.text()).slice(0, 240)}`);
+    // A dead code is the ordinary failure here, not an outage: the consent page
+    // is on a domain we do not own, so there is always a gap between approving
+    // and pasting. `throwTokenExchangeFailure` gives it a 400 and an instruction
+    // instead of a 502 with Anthropic's raw JSON. See subscriptionOAuthCode.
+    throwTokenExchangeFailure({ status: resp.status, body: await resp.text(), label: 'Anthropic' });
   }
   return toTokens((await resp.json()) as { access_token: string; refresh_token: string; expires_in: number });
 }

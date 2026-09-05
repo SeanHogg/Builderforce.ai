@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildXaiAuthorizeUrl, exchangeXaiCode, parseXaiCallback } from './xaiOAuth';
+import { buildXaiAuthorizeUrl, exchangeXaiCode } from './xaiOAuth';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -26,9 +26,5 @@ describe('xAI OAuth', () => {
     vi.stubGlobal('fetch', fetchMock);
     const tokens = await exchangeXaiCode({ code: 'code', verifier: 'verifier', challenge: 'challenge' });
     expect(tokens).toMatchObject({ access: 'A', refresh: 'R' });
-  });
-
-  it('parses the loopback callback URL', () => {
-    expect(parseXaiCallback('http://127.0.0.1:56121/callback?code=a&state=b')).toEqual({ code: 'a', state: 'b' });
   });
 });

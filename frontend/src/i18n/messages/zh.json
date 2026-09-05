@@ -13567,8 +13567,6 @@
     "connect": "连接 {subscription}",
     "reconnect": "重新连接 {subscription}",
     "working": "处理中…",
-    "pastePrompt": "已在 Claude 标签页中批准？请在下方粘贴它显示的代码（完整的 <code>code#state</code> 值）。",
-    "pastePlaceholder": "粘贴来自 Claude 的代码…",
     "finish": "完成",
     "connecting": "连接中…",
     "cancel": "取消",
@@ -13583,6 +13581,7 @@
     "errSaveKey": "保存密钥失败",
     "errStartConnect": "启动连接失败",
     "errConnectSubscription": "连接订阅失败",
+    "errCodeExpired": "该代码已被使用或已失效——代码仅可使用一次，且仅在几分钟内有效。请重新开始连接，并立即粘贴新代码。",
     "errRemove": "移除凭据失败",
     "precedence": {
       "title": "提供商优先级",
@@ -13598,13 +13597,13 @@
       "anthropic": {
         "blurb": "连接您的 Claude Pro/Max 订阅（无需按令牌计费），或粘贴 Anthropic API 密钥。",
         "subscription": "Claude 订阅",
-        "pastePrompt": "在 Claude 标签页批准后，粘贴完整的 <code>code#state</code> 值。",
+        "pastePrompt": "已在 Claude 标签页中批准？请将其显示的内容——完整的 <code>code#state</code> 值，或整个回调 URL——粘贴到下方。请尽快操作：该代码仅可使用一次，且几分钟内即会失效。",
         "pastePlaceholder": "粘贴 Claude 代码…"
       },
       "openai": {
         "blurb": "连接您的 ChatGPT/Codex 订阅，或粘贴 OpenAI API 密钥。",
         "subscription": "ChatGPT/Codex 订阅",
-        "pastePrompt": "登录后，浏览器可能会显示 localhost 错误——这是正常的。请从地址栏复制完整的 <code>http://localhost:1455/auth/callback?code=…&state=…</code> 网址并粘贴到下方。请先退出正在运行的 <code>codex login</code>：CLI 占用该端口，会在你粘贴之前消耗掉该授权码。",
+        "pastePrompt": "登录后，浏览器可能显示 localhost 错误——这是正常的。请从地址栏复制完整的 <code>http://localhost:1455/auth/callback?code=…&state=…</code> URL 并尽快粘贴到下方：该代码仅可使用一次，且几分钟内即会失效。请先退出正在运行的 <code>codex login</code>：该 CLI 占用此端口，会在你粘贴之前消耗掉代码。",
         "pastePlaceholder": "粘贴 OpenAI 重定向 URL…"
       },
       "google": {
@@ -13628,7 +13627,7 @@
       "xai": {
         "blurb": "连接符合条件的 SuperGrok 订阅或粘贴 xAI API 密钥。",
         "subscription": "SuperGrok 订阅",
-        "pastePrompt": "批准访问后，复制 xAI 页面显示的代码并粘贴到这里。",
+        "pastePrompt": "批准访问后，复制 xAI 页面上显示的代码（或整个回调 URL）并粘贴到下方。请尽快操作：该代码仅可使用一次，且几分钟内即会失效。",
         "pastePlaceholder": "粘贴 xAI 登录代码…"
       },
       "ollama": {

@@ -3,6 +3,7 @@ import { freetokenModule } from './freetoken';
 import { ollamaLocalModule } from './ollamaLocal';
 import { VendorFatalError, VendorRetryableError, type VendorEgress, type VendorEnv } from './types';
 import { dispatchVendor, parseVendorPrefix, vendorForModel } from './registry';
+import { passthroughEgress } from './__fixtures__/localEgress';
 
 const originalFetch = globalThis.fetch;
 afterEach(() => {
@@ -47,6 +48,9 @@ describe('freetokenModule.call', () => {
       env: { FREETOKEN_CONFIG: '::http://127.0.0.1:1919::gpt-oss-20b' } as VendorEnv,
       modelChain: ['direct/freetoken/default'],
       messages: [{ role: 'user', content: 'hi' }],
+      // A self-hosted engine is only reachable through the tenant's runtime, so the
+      // cascade skips it outright without one — supply the transport to reach the module.
+      egress: passthroughEgress,
     });
 
     expect(result.vendorUsed).toBe('freetoken');

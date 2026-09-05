@@ -1,5 +1,5 @@
-import { reportCaughtError } from '../observability/caughtErrorReporter';
 /** xAI SuperGrok OAuth (OIDC discovery + authorization-code PKCE). */
+import { throwTokenExchangeFailure } from './subscriptionOAuthCode';
 
 const DISCOVERY_URL = 'https://auth.x.ai/.well-known/openid-configuration';
 const CLIENT_ID = 'b1a00492-073a-47ea-816f-4c329264a828';
@@ -35,25 +35,11 @@ export async function buildXaiAuthorizeUrl(params: { state: string; challenge: s
   return url.toString();
 }
 
-export function parseXaiCallback(input: string): { code: string; state: string | null } {
-  const value = input.trim();
-  try {
-    const url = new URL(value);
-    return { code: url.searchParams.get('code') ?? '', state: url.searchParams.get('state') };
-  } catch (error) { /* code#state fallback */ 
-    reportCaughtError(error, { source: "application/llm/xaiOAuth.ts", operation: "parseXaiCallback" });
-  }
-  const [code, state] = value.split('#', 2);
-  return { code: code ?? '', state: state || null };
-}
-
 async function tokenRequest(body: URLSearchParams): Promise<XaiOAuthTokens> {
   const { token_endpoint } = await discoverXaiOAuth();
   const response = await fetch(token_endpoint, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' }, body });
   if (!response.ok) {
-    const err = new Error(`xAI OAuth token request failed (${response.status}): ${(await response.text()).slice(0, 240)}`) as Error & { status?: number };
-    err.status = response.status;
-    throw err;
+    throwTokenExchangeFailure({ status: response.status, body: await response.text(), label: 'xAI' });
   }
   const data = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number };
   if (!data.access_token || !data.refresh_token) throw new Error('xAI OAuth token response was incomplete');

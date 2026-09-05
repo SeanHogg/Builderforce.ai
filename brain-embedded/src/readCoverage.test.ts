@@ -43,12 +43,56 @@ describe('ReadCoverage', () => {
     expect(v.priorArgs).toHaveLength(2);
   });
 
-  it('forgets after a mutation — a read AFTER a change is new information', () => {
+  it('forgets the MUTATED target — a read after a change is new information', () => {
     const cov = new ReadCoverage();
     cov.record('read_file', { path: CSS });
     cov.record('read_file', { path: CSS });
-    cov.reset();
+    cov.invalidate('edit_file', { path: CSS });
     expect(cov.record('read_file', { path: CSS })!.count).toBe(1);
+  });
+
+  /**
+   * The reason this guard was almost inert. Clearing the WHOLE tally on every non-read
+   * call meant one edit, ticket write or failed dispatch erased the history of every
+   * other file in the run — and in a run that interleaves reads with platform writes
+   * the counter never reached the nudge. Measured: one CSS file read 14 times and its
+   * component 13, across 78 calls, with the advisory firing on neither.
+   */
+  it('keeps the tally for every target the mutation did NOT touch', () => {
+    const cov = new ReadCoverage();
+    cov.record('read_file', { path: CSS });
+    cov.record('read_file', { path: 'other.tsx' });
+    cov.record('read_file', { path: 'other.tsx' });
+    cov.invalidate('edit_file', { path: CSS });
+    expect(cov.record('read_file', { path: 'other.tsx' })!.count).toBe(3);
+  });
+
+  it('invalidates a target across every tool that reads it', () => {
+    const cov = new ReadCoverage();
+    cov.record('search_code', { path: CSS });
+    cov.record('read_file', { path: CSS });
+    cov.invalidate('write_file', { path: CSS });
+    expect(cov.record('search_code', { path: CSS })!.count).toBe(1);
+    expect(cov.record('read_file', { path: CSS })!.count).toBe(1);
+  });
+
+  it('invalidates NOTHING for a write that touched no file', () => {
+    // A ticket write, a sign-off, a refused dispatch: none of them changed anything on
+    // disk that this tally describes, so none of them earns the model a clean slate.
+    const cov = new ReadCoverage();
+    cov.record('read_file', { path: CSS });
+    cov.record('read_file', { path: CSS });
+    cov.invalidate('builtin_tickets_from_delta', { chatId: 99, summary: 'x' });
+    expect(cov.record('read_file', { path: CSS })!.count).toBe(3);
+  });
+
+  it('invalidates EVERYTHING after a shell command — its blast radius is unknown', () => {
+    const cov = new ReadCoverage();
+    cov.record('read_file', { path: CSS });
+    cov.record('read_file', { path: 'other.tsx' });
+    cov.invalidate('run_command', { command: 'npx prettier --write .' });
+    expect(cov.record('read_file', { path: CSS })!.count).toBe(1);
+    expect(cov.record('read_file', { path: 'other.tsx' })!.count).toBe(1);
   });
 });
 

@@ -13567,8 +13567,6 @@
     "connect": "Connecter {subscription}",
     "reconnect": "Reconnecter {subscription}",
     "working": "En cours…",
-    "pastePrompt": "Approuvé dans l'onglet Claude ? Collez le code qu'il affiche (la valeur complète <code>code#state</code>) ci-dessous.",
-    "pastePlaceholder": "Collez le code de Claude…",
     "finish": "Terminer",
     "connecting": "Connexion…",
     "cancel": "Annuler",
@@ -13583,6 +13581,7 @@
     "errSaveKey": "Échec de l'enregistrement de la clé",
     "errStartConnect": "Échec du démarrage de la connexion",
     "errConnectSubscription": "Échec de la connexion de l'abonnement",
+    "errCodeExpired": "Ce code a déjà été utilisé ou a expiré — les codes sont à usage unique et ne durent que quelques minutes. Relancez la connexion et collez le nouveau code immédiatement.",
     "errRemove": "Échec de la suppression de l'identifiant",
     "precedence": {
       "title": "Priorité des fournisseurs",
@@ -13598,13 +13597,13 @@
       "anthropic": {
         "blurb": "Connectez votre abonnement Claude Pro/Max (sans facturation par token) ou collez une clé d'API Anthropic.",
         "subscription": "abonnement Claude",
-        "pastePrompt": "Après approbation dans l’onglet Claude, collez la valeur complète <code>code#state</code>.",
+        "pastePrompt": "Approuvé dans l’onglet Claude ? Collez ci-dessous ce qu’il affiche — la valeur complète <code>code#state</code>, ou l’URL de retour entière. Faites-le sans tarder : le code est à usage unique et expire en quelques minutes.",
         "pastePlaceholder": "Collez le code Claude…"
       },
       "openai": {
         "blurb": "Connectez votre abonnement ChatGPT/Codex ou collez une clé API OpenAI.",
         "subscription": "abonnement ChatGPT/Codex",
-        "pastePrompt": "Après la connexion, votre navigateur peut afficher une erreur localhost — c'est normal. Copiez l'URL complète <code>http://localhost:1455/auth/callback?code=…&state=…</code> depuis la barre d'adresse et collez-la ci-dessous. Quittez d'abord tout <code>codex login</code> en cours : la CLI occupe ce port et consommera le code avant que vous puissiez le coller.",
+        "pastePrompt": "Après la connexion, votre navigateur peut afficher une erreur localhost — c'est normal. Copiez l'URL complète <code>http://localhost:1455/auth/callback?code=…&state=…</code> depuis la barre d'adresse et collez-la ci-dessous sans tarder : le code est à usage unique et expire en quelques minutes. Quittez d'abord tout <code>codex login</code> en cours : la CLI occupe ce port et consommera le code avant que vous puissiez le coller.",
         "pastePlaceholder": "Collez l’URL de redirection OpenAI…"
       },
       "google": {
@@ -13628,7 +13627,7 @@
       "xai": {
         "blurb": "Connectez un abonnement SuperGrok éligible ou une clé API xAI.",
         "subscription": "abonnement SuperGrok",
-        "pastePrompt": "Après approbation, copiez le code affiché sur la page xAI et collez-le ici.",
+        "pastePrompt": "Après approbation, copiez le code affiché sur la page xAI (ou l’URL de retour entière) et collez-le ici. Faites-le sans tarder : le code est à usage unique et expire en quelques minutes.",
         "pastePlaceholder": "Collez le code de connexion xAI…"
       },
       "ollama": {

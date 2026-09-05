@@ -12,6 +12,7 @@ import { ConsumptionMeterCard } from '@/components/UsageMeter';
 import { CopyButton } from '@/components/CopyButton';
 import { useDragReorder } from '@/lib/useDragReorder';
 import {
+  isDeadConnectCode,
   openRouterConnectionsApi,
   providerKeysApi,
   type ByoPrecedenceEntry,
@@ -665,7 +666,17 @@ function ProviderConnectionCard({
       setPastedCode('');
       setOauthState('');
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errConnectSubscription'));
+      // A code that can never be redeemed (single-use, and short-lived on every
+      // provider) leaves nothing to retry — keeping the box open invited the
+      // operator to press Finish on the same dead code until they gave up. Drop
+      // back to Connect so the next click actually starts a new consent, and say
+      // so in the user's own language rather than relaying the API's English.
+      if (isDeadConnectCode(e)) {
+        setError(t('errCodeExpired'));
+        setConnecting(false); setPastedCode(''); setOauthState('');
+      } else {
+        setError(e instanceof Error ? e.message : t('errConnectSubscription'));
+      }
     } finally {
       setBusy(false);
     }

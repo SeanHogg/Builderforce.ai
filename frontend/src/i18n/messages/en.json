@@ -13567,8 +13567,6 @@
     "connect": "Connect {subscription}",
     "reconnect": "Reconnect {subscription}",
     "working": "Working…",
-    "pastePrompt": "Approved in the Claude tab? Paste the code it shows you (the full <code>code#state</code> value) below.",
-    "pastePlaceholder": "Paste code from Claude…",
     "finish": "Finish",
     "connecting": "Connecting…",
     "cancel": "Cancel",
@@ -13583,6 +13581,7 @@
     "errSaveKey": "Failed to save key",
     "errStartConnect": "Failed to start connect",
     "errConnectSubscription": "Failed to connect subscription",
+    "errCodeExpired": "That code has already been used or has expired — codes are single-use and last only a few minutes. Start the connect again and paste the new one right away.",
     "errRemove": "Failed to remove credential",
     "precedence": {
       "title": "Provider priority",
@@ -13598,13 +13597,13 @@
       "anthropic": {
         "blurb": "Connect your Claude Pro/Max subscription (no per-token billing) or paste an Anthropic API key.",
         "subscription": "Claude subscription",
-        "pastePrompt": "Approved in the Claude tab? Paste the code it shows you (the full <code>code#state</code> value) below.",
+        "pastePrompt": "Approved in the Claude tab? Paste what it shows you — the full <code>code#state</code> value, or the whole callback URL — below. Do it promptly: the code is single-use and expires within minutes.",
         "pastePlaceholder": "Paste code from Claude…"
       },
       "openai": {
         "blurb": "Connect your ChatGPT/Codex subscription or paste an OpenAI API key to run GPT models on your own account.",
         "subscription": "ChatGPT/Codex subscription",
-        "pastePrompt": "After signing in, your browser may show a localhost error — that is expected. Copy the full <code>http://localhost:1455/auth/callback?code=…&state=…</code> URL from the address bar and paste it below. Quit any running <code>codex login</code> first: the CLI owns that port and will consume the code before you can paste it.",
+        "pastePrompt": "After signing in, your browser may show a localhost error — that is expected. Copy the full <code>http://localhost:1455/auth/callback?code=…&state=…</code> URL from the address bar and paste it below, promptly: the code is single-use and expires within minutes. Quit any running <code>codex login</code> first: the CLI owns that port and will consume the code before you can paste it.",
         "pastePlaceholder": "Paste the full OpenAI redirect URL…"
       },
       "google": {
@@ -13628,7 +13627,7 @@
       "xai": {
         "blurb": "Connect an eligible SuperGrok subscription or paste an xAI API key to run Grok models on your own account.",
         "subscription": "SuperGrok subscription",
-        "pastePrompt": "After approving access, copy the code shown on the xAI page and paste it below.",
+        "pastePrompt": "After approving access, copy the code shown on the xAI page (or the whole callback URL) and paste it below. Do it promptly: the code is single-use and expires within minutes.",
         "pastePlaceholder": "Paste the xAI sign-in code…"
       },
       "ollama": {

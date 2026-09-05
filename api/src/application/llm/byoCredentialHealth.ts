@@ -104,8 +104,11 @@ export interface ByoProbeResult {
   ok: boolean;
   /** `ready` on success, else a short machine status the UI localizes: the unresolved
    *  reason, `not_connected`, `no_test_model`, `upstream_error` (the credential was
-   *  accepted and the model provider broke — NOT the owner's problem to fix), or `failed`. */
-  status: 'ready' | 'not_connected' | 'no_test_model' | 'upstream_error' | 'failed' | ByoUnresolvedReason;
+   *  accepted and the model provider broke — NOT the owner's problem to fix),
+   *  `local_egress_required` (this provider is only reachable from the tenant's OWN
+   *  machine and none is connected — the credential was never even presented, so it is
+   *  emphatically NOT a verdict on the key), or `failed`. */
+  status: 'ready' | 'not_connected' | 'no_test_model' | 'upstream_error' | 'local_egress_required' | 'failed' | ByoUnresolvedReason;
   /** The model the probe pinned (absent when it never got that far). */
   model?: string;
   /** Upstream HTTP status, when a request was actually made. */
@@ -185,6 +188,25 @@ interface ProbeDispatch<A> {
   /** The owner-actionable alert this failure classifies to, when it is one. `undefined` for
    *  a transient blip, which must never paint a card red or mail anyone. */
   alert?: A;
+  /** The GATEWAY's own reason for refusing to dispatch, when it never reached an upstream
+   *  ({@link strictUnavailableReason}). A different class of answer entirely: nothing was
+   *  sent, so no alert is owed against the credential and a retry cannot change it. */
+  gatewayReason?: string;
+}
+
+/**
+ * The `details.reason` of a strict-pin `model_unavailable` envelope, or null for any other
+ * body. Read rather than pattern-matched on prose because the reason is the machine-readable
+ * half the gateway put there for exactly this: a probe must not tell an owner their key was
+ * refused by a provider that was never contacted.
+ */
+function strictUnavailableReason(payload: string): string | null {
+  try {
+    const parsed = JSON.parse(payload) as { code?: string; details?: { reason?: string } };
+    return parsed.code === 'model_unavailable' ? parsed.details?.reason ?? null : null;
+  } catch {
+    return null;
+  }
 }
 
 /** How a caller turns one failed attempt into its own alert shape — a provider alert or a
@@ -234,6 +256,15 @@ async function attemptProbe<A>(
 
   const payload = await result.response.clone().text();
   const message = upstreamMessage(payload);
+
+  // The gateway refused to dispatch because this vendor is only reachable from the
+  // tenant's own runtime and none is connected. No request was made, so there is no
+  // upstream verdict to report, nothing to alert on, and nothing a retry could change —
+  // returning early is what keeps a valid key off the "your integration broke" path.
+  const gatewayReason = strictUnavailableReason(payload);
+  if (gatewayReason === 'local_egress_required') {
+    return { ok: false, resolvedModel: result.resolvedModel, upstreamStatus: 0, error: message, retryable: false, gatewayReason };
+  }
   // The ATTEMPT is the source of truth, not the envelope. A retryable failure collapses into
   // the gateway's cascade summary ("AI vendor cascade exhausted (1 attempts: …)") — which
   // states our routing internals at an operator who needed the provider's own status, and
@@ -362,6 +393,13 @@ export async function probeByoProvider(
   if (outcome.ok) {
     await clearProviderAuthAlert(env, tenantId, provider);
     return { provider, ok: true, status: 'ready', model: outcome.resolvedModel, upstreamStatus: outcome.upstreamStatus, checkedAt };
+  }
+
+  // Unreachable-from-here, not broken. Leave any existing alert exactly as it was: this
+  // probe learned nothing about the credential, so neither raising nor clearing would be
+  // honest, and the status carries the real remedy (connect a runtime).
+  if (outcome.gatewayReason === 'local_egress_required') {
+    return { provider, ok: false, status: 'local_egress_required', model, checkedAt };
   }
 
   // Raise (not just record): a probe is often the FIRST observation of a breakage, and

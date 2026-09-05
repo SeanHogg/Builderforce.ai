@@ -209,11 +209,18 @@ export async function setTenantProviderKey(
 }
 
 /** Store (or replace) a tenant's OAuth subscription tokens, encrypted at rest. */
+/**
+ * What any subscription connect stores. Named because the connect flow, the
+ * storage call and the resolvers all need to agree on it, and an inline union
+ * repeated at three call sites is how a fourth provider gets forgotten at one.
+ */
+export type SubscriptionOAuthTokens = AnthropicOAuthTokens | OpenAICodexOAuthTokens | XaiOAuthTokens;
+
 export async function setTenantProviderOAuth(
   env: Env,
   tenantId: number,
   provider: LlmProvider,
-  tokens: AnthropicOAuthTokens | OpenAICodexOAuthTokens | XaiOAuthTokens,
+  tokens: SubscriptionOAuthTokens,
   userId: string | null,
 ): Promise<void> {
   const keyEnc = await encryptSecretForStorage(JSON.stringify(tokens), credentialSecret(env), { tenantId });

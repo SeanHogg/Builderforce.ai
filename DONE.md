@@ -1,3 +1,141 @@
+## ✅ RESOLVED 2026-09-05 — The agent could not dispatch a remote agent, could not commit, and hired one for work it was already holding
+
+One 44-minute chat, 78 tool calls, 71 turns, and nothing shipped. Four independent
+defects, each of which alone would have produced a failed run.
+
+### 1. `run_command` was never advertised, so the commit was impossible
+
+The persona says, verbatim: *"Use run_command for git/gh too — to commit, push, and open
+a PR when the user wants to ship."* The model searched its tool list, could not find it,
+and said so in its own reasoning.
+
+The per-turn selector (`selectTools.ts`) trims ~440 tools to ~64 by LEXICAL relevance,
+and pins two things: tools the run has already called, and tools the system prompt
+NAMES. The second is resolved by `toolNamesMentionedIn`, whose `TOOL_IDENT` pattern
+matches only `builtin_*` / `mcp__*`. Every LOCAL workspace tool — `run_command`,
+`read_file`, `edit_file`, `search_code`, … — is named in the persona in plain prose and
+matched none of it. `run_command` shares no word stem with *"commit the change and push
+to main"*, so it scored zero and was dropped from the very turn that needed it.
+
+These tools are not one domain among many a query can be relevant to; they are what the
+surface IS. New `brain-embedded/src/localWorkspaceTools.ts` owns the set, and the run
+loop pins the intersection of it with the run's own catalog — relevance can no longer
+decide whether the agent may touch the workspace it is sitting in. Nothing is pinned
+that the host did not offer, so the web Brain's selection is byte-identical to before.
+`CODE_CHANGE_TOOLS` / `isCodeChangeTool` moved into that module with it (one owner for
+"which tools are the local ones"), and every importer was migrated — no re-export shim.
+
+`clients/vscode/src/localToolsAdvertised.test.ts` closes the loop from the client side:
+every pinned name must exist in the shared `CORE_TOOLS`, and every local tool the
+persona names must be in the pin set. Both directions of the drift are assertions now.
+
+### 2. The revisit guard was reset by any write, so it never fired
+
+`LandingCanvasHero.module.css` was read **14 times** and its component **13**, with the
+loop-breaker built for exactly that silent throughout.
+
+`ReadCoverage.reset()` cleared the WHOLE tally on every non-read call, on the reasoning
+that a read after a change is new information. True of the file that changed; false of
+every other file in the run. This run interleaved reads with `edit_file`,
+`tickets.from_delta`, `chats.link_ticket`, `git_status` and two failed dispatches — each
+one wiped the history of every target, so a counter with a threshold of three never
+reached two.
+
+`reset()` is replaced by `invalidate(tool, args)`: it drops the tally for the target
+that was actually mutated (across every tool that reads it), keeps every other target,
+and invalidates NOTHING for a write that touched no file — a ticket write or a refused
+dispatch changed nothing on disk this tally describes. `run_command` is the one honest
+exception and still clears everything, because the answer to "what did that touch?" is
+unknown.
+
+### 3. Dispatch was structurally impossible on a lifecycle-managed board
+
+`builtin_chats_dispatch_agent` failed twice with
+`402 {"reason":"cloud_run_limit"}` on a workspace whose own diagnostics read
+**"Cloud runs: 0 used (unlimited)"**. Both halves of that were wrong.
+
+`authorizeManagedTaskExecution` refuses any dispatch on a managed board whose payload
+carries no `actAsRole`. `/api/tasks/:id/run-now` built its payload by hand — agent ref,
+lane key, chat id, no role — so Run now, and `chats.dispatch_agent` which replays it,
+could NEVER start a run on a managed board. The evaluator had already resolved the
+stage's authorized role and agent together (`evaln.managedRole`), from the same
+authority the guard enforces; the route just dropped it. It now dispatches through
+`requestRoleRun` — the one primitive that owns a role-attributed run — which builds the
+payload the guard accepts, marks the manifest slot `in_progress` (without which the
+sign-off round-trip never proceeds) and emits `ticket.role.dispatched`.
+
+`RoleRunRequest` gained `chatId` (so a run dispatched FROM a conversation narrates back
+into it and can be steered there with `executions.post_message` — the point of
+dispatching from chat at all) and `agentHostId`. The second closed a separate live bug:
+the lane trigger resolved its lane's backplane and then dropped it on the role-run
+branch, so a managed board with an on-prem lane sent every role run to the cloud.
+
+The web surface had the same hole from the other side: `ChatTicketsPanel` called
+`tasksApi.runNow(id)` with no chat id, so an agent dispatched from the web chat ran
+invisibly. `runNow` now takes one.
+
+And `chats.dispatch_agent` no longer reassigns the ticket on a managed board. There the
+Assignee is the COORDINATOR, never the executor, so the assignment changed nothing about
+who runs — but `syncOwnerAssignee` treats the task assignment as authoritative, so
+overwriting it discarded the evidence recorded against the previous owner. New
+`isLifecycleManagedTask` (owned by the guard module that owns the question) gates it.
+
+### 4. A refusal reported a reason nobody could act on
+
+`dispatchCloudRunForTask` answered every refusal with a bare `null`, and its four
+callers each guessed which one they had hit. `/run-now` guessed `cloud_run_limit` and
+put it in the response body — so a governance refusal was reported to the user, and to
+the agent driving it, as an exhausted monthly allowance.
+
+It now returns `CloudDispatchOutcome`: an execution id, or a `refusal` carrying the
+reason in the shared triage vocabulary plus the sentence from `AUTO_RUN_REASON_TEXT`
+extended with what the refusing guard specifically knows. All eleven call sites were
+migrated, and five of them were lying in their own way:
+
+- `/run-now` reports the true reason, and 402 is now reserved for the entitlement
+  refusals a payment actually clears (everything else is 409).
+- `deployAndDispatch` answered `ok: true, executionId: null` — "deployed and running"
+  for a run that never started. It returns the refusal.
+- `securityDispatch` left the audit `running` with nothing running it, forever.
+- `incidentDispatch` returned `true` — "triaged" — for a refused dispatch.
+- The CI auto-fix recorded nothing at all; a red build whose fix never started was
+  indistinguishable from a lost webhook. The reason is now written under its OWN event
+  name, `AUTOFIX_REFUSED_EVENT`, never the dispatch name the loop-guard counts, so a
+  refusal cannot spend the build's fix budget.
+- `triageStage`'s remedy note said "quota" for whatever the guard actually said.
+
+### 5. "Finish by dispatching" was the wrong instruction in the editor
+
+Asked to fix a small UI defect in the workspace it already had open, the agent opened a
+ticket and tried to hire a remote builder for it.
+
+That is what it was told to do. `chatWorkDirective`'s closing obligation is FINISH BY
+DISPATCHING — correct on the web Brain, which has no file tools and can only get code
+changed by asking someone else. On the IDE surface it sends the agent to spend a whole
+cloud run doing less than it could do in three tool calls. The directive now states the
+precedence where the surface actually differs, driven by whether the run was given
+code-change tools (`canChangeCodeHere`, reading the same set as the ticket backstop):
+do it here when you can, dispatch what you cannot, record either way.
+
+`DISPATCH_STRATEGY_DIRECTIVE` gained the same complement — it said only "know when to
+hand off", which reads as a preference for handing off — and both now tell the agent to
+READ a refusal rather than retry the identical dispatch, which this run did twice.
+
+**Files.** New: `brain-embedded/src/localWorkspaceTools.ts`,
+`api/src/application/kanban/managedDispatchPayload.test.ts`,
+`clients/vscode/src/localToolsAdvertised.test.ts` (+ tests for each).
+Changed: `brain-embedded/src/{brainRunStore,readCoverage,chatMode,chatWorkLinking,runProgress,index}.ts`,
+`api/src/presentation/routes/{taskRoutes,runtimeRoutes,approvalRoutes,qualityRoutes}.ts`,
+`api/src/application/kanban/{requestRoleRun,signoffRequest,managedExecutionGuard,driveSignoffs}.ts`,
+`api/src/application/swimlane/{laneEntryTrigger,laneRequirementGate}.ts`,
+`api/src/application/{ci/handleCiEventOutcome,ci/ingestRepoCiEvent,deploy/dispatch,manager/triageStage,security/securityDispatch,incident/incidentDispatch,validation/validationDispatch,llm/builtinMcpService}.ts`,
+`clients/vscode/src/idePersona.ts`, `frontend/src/lib/builderforceApi.ts`,
+`frontend/src/components/brain/ChatTicketsPanel.tsx`.
+
+Shipped as VSIX **2026.8.147** (brain-embedded 2026.8.24, api 2026.8.40,
+frontend 2026.8.82). Green: 448 (brain-embedded) + 201 (VSIX) + 8992 (api) +
+2547 (frontend); every project typechecks.
+
 ## ✅ RESOLVED 2026-09-05 — Every `tickets.from_delta` ticket ever minted was stranded at 50%
 
 The run worked this time: the edit landed, the delta ticket was recorded and linked,

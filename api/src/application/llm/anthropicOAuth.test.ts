@@ -3,7 +3,6 @@ import {
   generatePkce,
   generateState,
   buildAuthorizeUrl,
-  parsePastedCode,
   withClaudeCodeSystemPrompt,
   CLAUDE_CODE_SYSTEM_PROMPT,
 } from './anthropicOAuth';
@@ -41,15 +40,6 @@ describe('buildAuthorizeUrl', () => {
     expect(url.searchParams.get('scope')).toContain('user:inference');
     // The public Claude Code client id (uuid) — not a secret, but pinned.
     expect(url.searchParams.get('client_id')).toBe('9d1c250a-e61b-44d9-88ed-5944d1962f5e');
-  });
-});
-
-describe('parsePastedCode', () => {
-  it('splits the code#state form the consent page renders', () => {
-    expect(parsePastedCode('  abc123#xyz789 ')).toEqual({ code: 'abc123', state: 'xyz789' });
-  });
-  it('returns a null state when only a bare code is pasted', () => {
-    expect(parsePastedCode('justacode')).toEqual({ code: 'justacode', state: null });
   });
 });
 

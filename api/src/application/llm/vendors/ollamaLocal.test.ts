@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ollamaLocalModule } from './ollamaLocal';
 import { VendorFatalError, VendorRetryableError, type VendorEgress, type VendorEnv } from './types';
 import { dispatchVendor, parseVendorPrefix, vendorForModel } from './registry';
+import { passthroughEgress } from './__fixtures__/localEgress';
 
 const originalFetch = globalThis.fetch;
 afterEach(() => {
@@ -41,6 +42,9 @@ describe('ollamaLocalModule.call', () => {
       env: { OLLAMA_LOCAL_CONFIG: '::http://127.0.0.1:11434::llama3.1:8b' } as VendorEnv,
       modelChain: ['direct/ollama-local/default'],
       messages: [{ role: 'user', content: 'hi' }],
+      // A self-hosted instance is only reachable through the tenant's runtime, so the
+      // cascade skips it outright without one — supply the transport to reach the module.
+      egress: passthroughEgress,
     });
 
     expect(result.vendorUsed).toBe('ollama-local');

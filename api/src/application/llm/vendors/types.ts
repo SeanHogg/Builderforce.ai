@@ -411,9 +411,15 @@ export interface VendorModule {
    *
    * The flag is what stops a tenant's laptop becoming the route for all LLM traffic:
    * `dispatchInternal` attaches the egress transport ONLY to a module that declares
-   * this, so every other vendor keeps calling `fetch` from the Worker. A declaring
-   * vendor still falls back to direct egress when no runtime is online — that path is
-   * likely to fail, but it is strictly better than refusing to try.
+   * this, so every other vendor keeps calling `fetch` from the Worker.
+   *
+   * With no runtime online, a declaring vendor is SKIPPED (`skippedNoEgress`) rather
+   * than attempted directly. There is nothing optimistic about trying: this registry
+   * only ever runs in the Worker, so the direct path is always the same egress the
+   * provider already refuses — Kimi's edge 403s before reading the key, and a private
+   * Ollama/FreeToken address is unroutable by definition. Attempting it spent a
+   * subrequest to learn nothing and, because 403 classifies as `not_entitled`, painted
+   * a VALID connected account as broken and mailed its owners about it.
    */
   requiresLocalEgress?: boolean;
 }

@@ -123,8 +123,10 @@ export async function invalidateOnlineAgentHost(env: Env, tenantId: number): Pro
 
 /**
  * Build a {@link VendorEgress} that routes through a connected host, or `null` when the
- * tenant has none online (the caller then leaves `egress` unset and the vendor calls
- * `fetch` directly, exactly as before).
+ * tenant has none online (the caller then leaves `egress` unset, and `dispatchInternal`
+ * SKIPS every vendor that declares `requiresLocalEgress` — the direct path is the same
+ * Worker egress those upstreams refuse, so attempting it only spends a subrequest and
+ * mislabels a valid account as broken).
  *
  * Returning `null` rather than a transport that always fails is deliberate: "no local
  * egress available" is a routing fact the dispatcher should act on once, not an error

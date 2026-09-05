@@ -80,7 +80,6 @@ import {
 } from '../../application/llm/cloudByoPolicy';
 import {
   setTenantProviderKey,
-  setTenantProviderOAuth,
   resolveAnthropicResolution,
   resolveOpenAICodexResolution,
   resolveTenantVendorKeys,
@@ -121,24 +120,13 @@ import {
 } from '../../application/llm/providerAuthAlerts';
 import { raiseProviderAuthAlertsFromFailovers } from '../../application/llm/byoCredentialAlerting';
 import { probeByoProvider, probeOpenRouterConnection } from '../../application/llm/byoCredentialHealth';
-import { buildHostEgress, onlineAgentHostId } from '../../application/llm/hostEgress';
+import { buildHostEgress } from '../../application/llm/hostEgress';
 import { byoModelsFor } from '../../application/llm/byoModelRouting';
 import {
-  generatePkce,
-  generateState,
-  buildAuthorizeUrl,
-  parsePastedCode,
-  exchangeAnthropicCode,
   withClaudeCodeSystemPrompt,
   ANTHROPIC_OAUTH_BETA,
 } from '../../application/llm/anthropicOAuth';
-import {
-  buildOpenAICodexAuthorizeUrl,
-  parseOpenAICodexCallback,
-  exchangeOpenAICodexCode,
-  OPENAI_CODEX_CODE_CONSUMED,
-} from '../../application/llm/openaiCodexOAuth';
-import { buildXaiAuthorizeUrl, parseXaiCallback, exchangeXaiCode } from '../../application/llm/xaiOAuth';
+import { mountSubscriptionOAuthRoutes } from './subscriptionOAuthRoutes';
 import { parseAnthropicSseUsage } from '../../application/llm/anthropicSseUsage';
 import {
   anthropicToOpenAiRequest,
@@ -1546,17 +1534,17 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     if (probe.ok) {
       return c.json({ ok: true, status: probe.status, model: probe.model, testedAt: probe.checkedAt });
     }
-    // Kimi's edge refuses our cloud egress, so the remedy depends on whether this tenant
-    // has a runtime that could have made the call from their own machine. Telling someone
-    // who is already running one to "use Kimi locally" is not an instruction they can act
-    // on — and telling someone who is not that the route exists is the whole point.
-    const kimiRuntimeOnline = provider === 'kimi' && probe.diagnostic?.edgeBlocked
-      ? (await onlineAgentHostId(c.env, access.tenantId)) != null
-      : false;
     return c.json({
       ok: false,
       status: probe.status,
-      error: probe.status === 'upstream_error'
+      // Nothing was ever sent: this provider is only reachable from the tenant's own
+      // machine (Kimi's edge refuses our cloud egress outright) and none is connected, so
+      // the gateway skipped the candidate instead of spending a doomed call. That makes it
+      // the ONE branch that is not a verdict on the credential — say so, and give the
+      // remedy the owner can actually act on.
+      error: probe.status === 'local_egress_required'
+        ? `${provider} is reachable only from a machine of your own: Kimi Code subscription keys are licensed for personal interactive clients, and Kimi's edge blocks the hosted Builderforce gateway before it can present a key. Nothing was sent, so this says nothing about your key. Connect a Builderforce runtime (Settings ▸ Agent hosts) and this account routes through YOUR machine — the client the subscription is for. A Moonshot Open Platform key is the alternative if you would rather not run one.`
+        : probe.status === 'upstream_error'
         ? `Your ${provider} credential worked — it was accepted and the request was routed. ${probe.model ?? 'The model'} then returned HTTP ${probe.upstreamStatus}, twice. That is an upstream outage on that model, not a problem with this account: retry shortly.`
         : probe.error
         ? probe.alert?.reason === 'capacity'
@@ -1568,10 +1556,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           // no longer depends on an HTML tag surviving into a 240-char truncated detail
           // string — the regex silently missed the case it existed for whenever the edge
           // page led with a comment, a BOM, or a long `<meta>` block.
+          // An edge block that got THIS far was made from the tenant's connected runtime —
+          // with none online the candidate never dispatches (`local_egress_required`
+          // above), so "you have no runtime" is no longer a reachable reading of a 403.
           ? provider === 'kimi' && probe.diagnostic?.edgeBlocked
-            ? kimiRuntimeOnline
-              ? `Kimi's edge refused this request even though it was made from your connected Builderforce runtime, not from our cloud. That points at the runtime machine's own network rather than at this key — check whether it can reach api.kimi.com directly. A Moonshot Open Platform key works from anywhere if you need a route now.`
-              : `Kimi's edge blocked the hosted Builderforce gateway before the API could validate this key — Kimi Code subscription keys are for personal interactive clients, not a hosted reverse proxy. Connect a Builderforce runtime (Settings ▸ Agent hosts) and this key routes through your OWN machine instead, which is exactly the client the subscription is licensed for. A Moonshot Open Platform key is the alternative if you would rather not run one.`
+            ? `Kimi's edge refused this request even though it was made from your connected Builderforce runtime, not from our cloud. That points at the runtime machine's own network rather than at this key — check whether it can reach api.kimi.com directly. A Moonshot Open Platform key works from anywhere if you need a route now.`
             : provider === 'xai'
             ? `xAI connection test failed: this account cannot use ${probe.model ?? 'the selected model'} (HTTP ${probe.alert.status}). Check the account's SuperGrok/API access, or use an xAI API key.`
             : provider === 'kimi'
@@ -1649,154 +1638,10 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     return c.json({ ok: true, provider });
   });
 
-  // KV key for a pending PKCE verifier, scoped to tenant+state so concurrent
-  // connect attempts (or tenants) never collide. Short TTL — the consent flow
-  // is interactive but bounded.
-  const oauthPkceKey = (tenantId: number, state: string): string => `anthropic_oauth:${tenantId}:${state}`;
-  const OAUTH_PKCE_TTL_SECONDS = 900; // 15 min to complete the consent + paste.
-
-  // Begin the Claude subscription connect: mint PKCE + state, stash the verifier
-  // server-side (KV), and hand the browser the authorize URL to open. The verifier
-  // never leaves the server — only the S256 challenge travels in the URL.
-  router.post('/provider-keys/anthropic/oauth/start', async (c) => {
-    let access: TenantAccess;
-    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
-    const kv = (c.env as { AUTH_CACHE_KV?: KVNamespace }).AUTH_CACHE_KV;
-    if (!kv) return c.json({ error: 'OAuth connect unavailable (AUTH_CACHE_KV unbound)', code: 'oauth_unconfigured' }, 503);
-
-    const { verifier, challenge } = await generatePkce();
-    const state = generateState();
-    await kv.put(oauthPkceKey(access.tenantId, state), verifier, { expirationTtl: OAUTH_PKCE_TTL_SECONDS });
-    return c.json({ authorizeUrl: buildAuthorizeUrl({ state, challenge }), state });
-  });
-
-  // Finish the connect: take the pasted `code#state`, recover the verifier by
-  // state (CSRF-checked), exchange for subscription tokens, and store them
-  // encrypted. The `state` may ride inside the pasted code or be sent explicitly.
-  router.post('/provider-keys/anthropic/oauth/complete', async (c) => {
-    let access: TenantAccess;
-    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
-    const kv = (c.env as { AUTH_CACHE_KV?: KVNamespace }).AUTH_CACHE_KV;
-    if (!kv) return c.json({ error: 'OAuth connect unavailable (AUTH_CACHE_KV unbound)', code: 'oauth_unconfigured' }, 503);
-
-    const body = await c.req.json<{ code?: string; state?: string }>().catch(() => ({} as { code?: string; state?: string }));
-    const rawCode = body.code?.trim();
-    if (!rawCode) return c.json({ error: 'code is required' }, 400);
-    const parsed = parsePastedCode(rawCode);
-    const state = (parsed.state ?? body.state ?? '').trim();
-    if (!state) return c.json({ error: 'state is required (paste the full code shown by Claude)', code: 'oauth_missing_state' }, 400);
-
-    const pkceKvKey = oauthPkceKey(access.tenantId, state);
-    const verifier = await kv.get(pkceKvKey);
-    if (!verifier) {
-      return c.json({ error: 'Connect session expired or invalid — start again.', code: 'oauth_state_expired' }, 400);
-    }
-
-    let tokens;
-    try {
-      tokens = await exchangeAnthropicCode({ code: parsed.code, state, verifier });
-    } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : 'OAuth exchange failed', code: 'oauth_exchange_failed' }, 502);
-    }
-    // Single-use verifier — drop it whether or not the store succeeds.
-    await kv.delete(pkceKvKey).catch((error) => { /* best effort */ 
-      reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "createLlmRoutes" });
-    });
-    await setTenantProviderOAuth(c.env, access.tenantId, 'anthropic', tokens, access.userId);
-    await clearProviderAuthAlert(c.env, access.tenantId, 'anthropic');
-    return c.json({ ok: true, provider: 'anthropic', authType: 'oauth' });
-  });
-
-  const openAiOauthPkceKey = (tenantId: number, state: string): string => `openai_codex_oauth:${tenantId}:${state}`;
-
-  router.post('/provider-keys/openai/oauth/start', async (c) => {
-    let access: TenantAccess;
-    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
-    const kv = (c.env as { AUTH_CACHE_KV?: KVNamespace }).AUTH_CACHE_KV;
-    if (!kv) return c.json({ error: 'OAuth connect unavailable (AUTH_CACHE_KV unbound)', code: 'oauth_unconfigured' }, 503);
-    const { verifier, challenge } = await generatePkce();
-    const state = generateState();
-    await kv.put(openAiOauthPkceKey(access.tenantId, state), verifier, { expirationTtl: OAUTH_PKCE_TTL_SECONDS });
-    return c.json({ authorizeUrl: buildOpenAICodexAuthorizeUrl({ state, challenge }), state });
-  });
-
-  router.post('/provider-keys/openai/oauth/complete', async (c) => {
-    let access: TenantAccess;
-    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
-    const kv = (c.env as { AUTH_CACHE_KV?: KVNamespace }).AUTH_CACHE_KV;
-    if (!kv) return c.json({ error: 'OAuth connect unavailable (AUTH_CACHE_KV unbound)', code: 'oauth_unconfigured' }, 503);
-    const body = await c.req.json<{ code?: string; state?: string }>().catch(() => ({} as { code?: string; state?: string }));
-    const parsed = parseOpenAICodexCallback(body.code?.trim() ?? '');
-    const state = (parsed.state ?? body.state ?? '').trim();
-    if (!parsed.code || !state) return c.json({ error: 'Paste the full OpenAI redirect URL so code and state can be verified', code: 'oauth_missing_code_or_state' }, 400);
-    const key = openAiOauthPkceKey(access.tenantId, state);
-    const verifier = await kv.get(key);
-    if (!verifier) return c.json({ error: 'Connect session expired or invalid — start again.', code: 'oauth_state_expired' }, 400);
-    try {
-      const tokens = await exchangeOpenAICodexCode({ code: parsed.code, verifier });
-      await setTenantProviderOAuth(c.env, access.tenantId, 'openai', tokens, access.userId);
-      // A fresh consent may well have landed on an entitled account — retire the
-      // "reconnect your ChatGPT account" prompt the previous 403 raised.
-      await clearProviderAuthAlert(c.env, access.tenantId, 'openai');
-      await kv.delete(key).catch((error) => {
-        reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "createLlmRoutes" });
-      });
-      return c.json({ ok: true, provider: 'openai', authType: 'oauth' });
-    } catch (e) {
-      // A code the local Codex CLI already redeemed is the user's problem to fix
-      // (quit the CLI, reconnect) — a 400 with its own code, not a 502 that reads
-      // like our gateway or OpenAI is down. See OPENAI_CODEX_CODE_CONSUMED.
-      const spent = (e as { code?: string } | null)?.code === OPENAI_CODEX_CODE_CONSUMED;
-      return c.json(
-        { error: e instanceof Error ? e.message : 'OAuth exchange failed', code: spent ? OPENAI_CODEX_CODE_CONSUMED : 'oauth_exchange_failed' },
-        spent ? 400 : 502,
-      );
-    }
-  });
-
-  const xaiOauthPkceKey = (tenantId: number, state: string): string => `xai_oauth:${tenantId}:${state}`;
-
-  router.post('/provider-keys/xai/oauth/start', async (c) => {
-    let access: TenantAccess;
-    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
-    const kv = (c.env as { AUTH_CACHE_KV?: KVNamespace }).AUTH_CACHE_KV;
-    if (!kv) return c.json({ error: 'OAuth connect unavailable (AUTH_CACHE_KV unbound)', code: 'oauth_unconfigured' }, 503);
-    const { verifier, challenge } = await generatePkce();
-    const state = generateState();
-    await kv.put(xaiOauthPkceKey(access.tenantId, state), JSON.stringify({ verifier, challenge }), { expirationTtl: OAUTH_PKCE_TTL_SECONDS });
-    try {
-      return c.json({ authorizeUrl: await buildXaiAuthorizeUrl({ state, challenge }), state });
-    } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : 'xAI OAuth discovery failed', code: 'oauth_discovery_failed' }, 502);
-    }
-  });
-
-  router.post('/provider-keys/xai/oauth/complete', async (c) => {
-    let access: TenantAccess;
-    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
-    const kv = (c.env as { AUTH_CACHE_KV?: KVNamespace }).AUTH_CACHE_KV;
-    if (!kv) return c.json({ error: 'OAuth connect unavailable (AUTH_CACHE_KV unbound)', code: 'oauth_unconfigured' }, 503);
-    const body = await c.req.json<{ code?: string; state?: string }>().catch(() => ({} as { code?: string; state?: string }));
-    const parsed = parseXaiCallback(body.code?.trim() ?? '');
-    const state = (parsed.state ?? body.state ?? '').trim();
-    if (!parsed.code || !state) return c.json({ error: 'Paste the full xAI redirect URL so code and state can be verified', code: 'oauth_missing_code_or_state' }, 400);
-    const key = xaiOauthPkceKey(access.tenantId, state);
-    const pendingRaw = await kv.get(key);
-    if (!pendingRaw) return c.json({ error: 'Connect session expired or invalid — start again.', code: 'oauth_state_expired' }, 400);
-    try {
-      const pending = JSON.parse(pendingRaw) as { verifier: string; challenge: string };
-      const tokens = await exchangeXaiCode({ code: parsed.code, verifier: pending.verifier, challenge: pending.challenge });
-      await setTenantProviderOAuth(c.env, access.tenantId, 'xai', tokens, access.userId);
-      await clearProviderAuthAlert(c.env, access.tenantId, 'xai');
-      await kv.delete(key).catch((error) => {
-        reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "createLlmRoutes" });
-      });
-      return c.json({ ok: true, provider: 'xai', authType: 'oauth' });
-    } catch (e) {
-      const status = (e as { status?: number }).status;
-      return c.json({ error: e instanceof Error ? e.message : 'xAI OAuth exchange failed', code: status === 403 ? 'oauth_subscription_not_entitled' : 'oauth_exchange_failed' }, status === 403 ? 403 : 502);
-    }
-  });
+  // The three subscription connects (Anthropic / OpenAI / xAI) are ONE flow that
+  // differs only by provider data — it lives in its own module rather than as
+  // three near-identical handler pairs here. See subscriptionOAuthRoutes.
+  mountSubscriptionOAuthRoutes(router, { requireTenantAccess, respondToAccessError });
 
   router.delete('/provider-keys/:provider', async (c) => {
     let access: TenantAccess;

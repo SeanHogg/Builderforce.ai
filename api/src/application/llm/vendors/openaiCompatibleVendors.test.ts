@@ -18,6 +18,7 @@ import {
   passthroughVendorKeys,
 } from './openaiCompatibleVendors';
 import { BYO_FRONTIER_CODERS } from '../modelPool';
+import { passthroughEgress } from './__fixtures__/localEgress';
 
 // ---------------------------------------------------------------------------
 // "30+ model providers" must be LITERALLY TRUE at the gateway: the vendor
@@ -164,6 +165,9 @@ describe('a factory vendor builds a correct OpenAI-compatible request', () => {
       env: { KIMI_CODE_API_KEY: 'sk-kimi-code' } as VendorEnv,
       modelChain: ['direct/kimi-code/kimi-for-coding'],
       messages: [{ role: 'user', content: 'hi' }],
+      // Kimi only dispatches when a runtime is online — this test is about the request
+      // it builds, so it says so rather than asserting against a skipped candidate.
+      egress: passthroughEgress,
     });
 
     expect(result.vendorUsed).toBe('kimi-code');
@@ -398,6 +402,7 @@ describe('upstream diagnostic capture', () => {
         env: { KIMI_CODE_API_KEY: 'sk-kimi-code' } as VendorEnv,
         modelChain: ['direct/kimi-code/kimi-for-coding'],
         messages: [{ role: 'user', content: 'hi' }],
+        egress: passthroughEgress,
       });
     } catch (error) {
       attempts = (error as { attempts: ReadonlyArray<{ diagnostic?: UpstreamDiagnostic }> }).attempts;
@@ -472,12 +477,34 @@ describe('local egress routing', () => {
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to direct egress when no runtime is online', async () => {
-    // Likely to fail against Kimi's edge — but refusing to try would strand any tenant
-    // whose network Kimi does not happen to block.
+  it('SKIPS the vendor when no runtime is online instead of calling the Worker egress', async () => {
+    // The direct path is never "some other tenant's network" — this registry only runs
+    // in the Worker, which is precisely the egress Kimi's edge refuses. So the call is
+    // not a gamble worth taking: it costs a subrequest and returns a 403 that classifies
+    // as `not_entitled`, painting a VALID account red and mailing its owners.
+    let thrown: unknown;
+    try {
+      await dispatchVendor({
+        env: { KIMI_CODE_API_KEY: 'sk-kimi-code' } as VendorEnv,
+        modelChain: ['direct/kimi-code/kimi-for-coding'],
+        messages: [{ role: 'user', content: 'hi' }],
+      });
+    } catch (error) { thrown = error; }
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    const err = thrown as { attempts: ReadonlyArray<unknown>; skippedNoEgress: ReadonlyArray<string>; message: string };
+    // No ATTEMPT was recorded, so nothing downstream can read a 403 off this cascade.
+    expect(err.attempts).toEqual([]);
+    expect(err.skippedNoEgress).toEqual(['kimi-code:direct/kimi-code/kimi-for-coding']);
+    expect(err.message).toContain('skipped no-local-egress');
+  });
+
+  it('still reaches a vendor that does NOT require local egress when none is online', async () => {
+    // The skip must be scoped to the declaring vendor: a cascade with no runtime online
+    // has to keep working for everyone else.
     await dispatchVendor({
-      env: { KIMI_CODE_API_KEY: 'sk-kimi-code' } as VendorEnv,
-      modelChain: ['direct/kimi-code/kimi-for-coding'],
+      env: { DEEPSEEK_API_KEY: 'sk-deepseek' } as VendorEnv,
+      modelChain: ['direct/deepseek/deepseek-chat'],
       messages: [{ role: 'user', content: 'hi' }],
     });
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);

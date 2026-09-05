@@ -567,6 +567,53 @@ describe('POST /provider-keys/:provider/test', () => {
   // before the API validates the key. Telling the operator to replace a working key is the
   // wrong instruction, so the copy branches on the transport's structured `edgeBlocked`
   // verdict — not on an HTML tag surviving into a truncated 240-char detail string.
+  //
+  // With no runtime connected the gateway no longer MAKES that doomed call: the candidate
+  // is skipped and the strict pin answers `local_egress_required`. Nothing was sent, so
+  // the verdict must say so — and must not raise an alert against a key never presented.
+  it('answers a Kimi test with the connect-a-runtime remedy when nothing is online, without alerting the key', async () => {
+    mocks.resolveTenantLlmCredentials.mockResolvedValue({
+      anthropicOAuthToken: null,
+      openaiCodexAuth: null,
+      xaiOAuthToken: null,
+      vendorKeys: { kimi: 'sk-kimi-code' },
+      configuredProviders: ['kimi'],
+      unresolvedReasons: {},
+      vendorPriority: ['kimi'],
+    });
+    mocks.llmProxyForPlan.mockReturnValue({
+      complete: vi.fn(async () => ({
+        response: new Response(JSON.stringify({
+          error: "Strict-pin: model 'direct/kimi-code/kimi-for-coding' is unavailable (local_egress_required).",
+          code: 'model_unavailable',
+          vendor: 'kimi-code',
+          model: 'direct/kimi-code/kimi-for-coding',
+          details: { requestedModel: 'direct/kimi-code/kimi-for-coding', reason: 'local_egress_required' },
+        }), { status: 503, headers: { 'content-type': 'application/json' } }),
+        resolvedModel: 'direct/kimi-code/kimi-for-coding',
+        resolvedVendor: 'kimi-code',
+        failovers: [],
+      })),
+    });
+
+    const req = new Request('http://test.local/provider-keys/kimi/test', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_test' },
+    });
+    const res = await buildApp().request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as { ok: boolean; status: string; error: string; authAlert?: unknown };
+    expect(body.ok).toBe(false);
+    expect(body.status).toBe('local_egress_required');
+    // The remedy that actually works, and an explicit acquittal of the credential.
+    expect(body.error).toContain('Connect a Builderforce runtime');
+    expect(body.error).toContain('says nothing about your key');
+    // Nothing reached Kimi, so nothing may paint the card red: the route echoes the alert
+    // the probe persisted, and there must be none to echo.
+    expect(body.authAlert).toBeUndefined();
+  });
+
   it('names the EDGE as the blocker on a Kimi hosted 403, and returns the redacted trace', async () => {
     mocks.resolveTenantLlmCredentials.mockResolvedValue({
       anthropicOAuthToken: null,
@@ -614,10 +661,11 @@ describe('POST /provider-keys/:provider/test', () => {
     // The evidence an operator attaches to the partnership submission.
     expect(body.diagnostic).toMatchObject({ ...diagnostic, model: 'direct/kimi-code/kimi-for-coding' });
     expect(body.diagnostic?.traceId).toMatch(/^llm-/);
-    // No runtime connected → the remedy is to connect one, since that is the route
-    // that actually works. Telling this operator to "use Kimi Code locally" is not an
-    // instruction about the product they are standing in.
-    expect(body.error).toContain('Connect a Builderforce runtime');
+    // A 403 can now only come from a call that WAS made — i.e. from the tenant's runtime,
+    // since the Worker never dispatches this vendor without one. So the remedy points at
+    // that machine's network, and must never send them to connect a runtime they run.
+    expect(body.error).toContain('your connected Builderforce runtime');
+    expect(body.error).not.toContain('Connect a Builderforce runtime');
   });
 
   it('does NOT tell a tenant who already runs a runtime to connect one', async () => {

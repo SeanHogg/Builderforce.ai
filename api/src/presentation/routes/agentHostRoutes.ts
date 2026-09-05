@@ -62,6 +62,7 @@ import {
 import { agentDispatches } from '../../infrastructure/database/schema';
 import { taskInTenant } from '../../infrastructure/database/tenantScope';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
+import { invalidateOnlineAgentHost } from '../../application/llm/hostEgress';
 import { normalizeRequestKind } from '../../domain/approval/requestKind';
 import type { HonoEnv, Env } from '../../env';
 import { invalidateProjectGovernance } from '../../application/runtime/runContextSource';
@@ -452,12 +453,14 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const updated = await agentHostService.setStatus(agentHostId, tenantId, body.status, c.env);
     if (!updated) return c.json({ error: 'AgentHost not found' }, 404);
 
-    // Non-active agentHosts should not appear as connected.
+    // Non-active agentHosts should not appear as connected — including to the cached
+    // egress-host lookup, which would otherwise keep routing to a host just suspended.
     if (body.status !== 'active') {
       await db
         .update(agentHosts)
         .set({ connectedAt: null })
         .where(and(eq(agentHosts.id, agentHostId), eq(agentHosts.tenantId, tenantId)));
+      await invalidateOnlineAgentHost(c.env, tenantId);
     }
 
     return c.json({
@@ -1356,11 +1359,16 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHost = await verifyAgentHostApiKey(id, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
-    // Mark as connected
+    // Mark as connected, and drop the cached "which host is online" answer for this
+    // tenant. Without the invalidation a freshly connected runtime stayed invisible to
+    // LLM routing for the cache TTL — and for a vendor that can ONLY be reached through
+    // it (Kimi Code, self-hosted Ollama/FreeToken), invisible means skipped: the user
+    // starts their runtime, retries, and is still told to connect one.
     await db
       .update(agentHosts)
       .set({ connectedAt: new Date(), lastSeenAt: new Date() })
       .where(eq(agentHosts.id, id));
+    await invalidateOnlineAgentHost(env, Number(agentHost.tenantId));
 
     const stub = env.AGENT_HOST_RELAY.get(env.AGENT_HOST_RELAY.idFromName(String(id)));
     const url  = new URL(c.req.url);
@@ -1378,6 +1386,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
         .update(agentHosts)
         .set({ connectedAt: null })
         .where(eq(agentHosts.id, id));
+      await invalidateOnlineAgentHost(env, Number(agentHost.tenantId));
     });
 
     return response;

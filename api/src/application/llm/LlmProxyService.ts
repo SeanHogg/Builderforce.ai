@@ -33,6 +33,7 @@ import {
   tierForModel,
   vendorForModel,
   vendorKeyBound,
+  vendorRequiresLocalEgress,
   passthroughVendorKeys,
   MAX_VENDOR_CALL_TIMEOUT_MS,
   SCHEMA_TOO_COMPLEX_REASON,
@@ -1222,6 +1223,17 @@ export class LlmProxyService {
     }
     if (!vendorKeyBound(this.vendorEnv(), vendor) && !this.isOwnerServedModel(model)) {
       return strictUnavailableResult(model, 'vendor_key_unconfigured');
+    }
+
+    // This vendor's upstream cannot be reached from the Worker at all (Kimi Code's edge
+    // 403, a private Ollama/FreeToken address) and no runtime is online to make the call
+    // from the tenant's own machine. A cascade would just skip the candidate; a strict
+    // pin has nothing to skip TO, so say why instead of letting `dispatchInternal` throw
+    // an exhausted-cascade 429 that reads as "the provider is rate limiting you".
+    // Naming the reason is what lets the credential probe tell an owner to connect a
+    // runtime rather than accusing their working key.
+    if (vendorRequiresLocalEgress(vendor) && !this.hostEgress) {
+      return strictUnavailableResult(model, 'local_egress_required');
     }
 
     // A vendor the tenant serves from their OWN account is exempt from the global
@@ -2551,7 +2563,7 @@ export function adminPoolProxy(
  */
 function strictUnavailableResult(
   model: string,
-  reason: 'cooldown' | 'vendor_key_unconfigured' | 'plan_tier' | 'vendor_outage' | 'byo_provider_required',
+  reason: 'cooldown' | 'vendor_key_unconfigured' | 'plan_tier' | 'vendor_outage' | 'byo_provider_required' | 'local_egress_required',
   byo?: {
     requiredVendor: string;
     connectedVendors: readonly string[];

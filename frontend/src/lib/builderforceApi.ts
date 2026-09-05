@@ -3918,14 +3918,26 @@ export const providerKeysApi = {
       method: 'POST',
     }),
 
-  /** Finish connecting a Claude subscription with the `code#state` the user
-   *  pasted from Claude.ai's consent page. */
+  /** Finish connecting a subscription with the code the user pasted from the
+   *  provider's consent page — a `code#state` pair, or the whole callback URL. */
   oauthComplete: (provider: LlmProvider, code: string, state?: string): Promise<{ ok: true; provider: LlmProvider; authType: ProviderAuthType }> =>
     request<{ ok: true; provider: LlmProvider; authType: ProviderAuthType }>(
       `/llm/provider-keys/${provider}/oauth/complete`,
       { method: 'POST', body: JSON.stringify({ code, ...(state ? { state } : {}) }) },
     ),
 };
+
+/**
+ * True when a failed connect can never succeed by pressing Finish again: the
+ * authorization code is spent or expired, or the pending consent session is
+ * gone. Both are recovered the same way — start the connect over — and the
+ * distinction from a transient upstream failure is the API's to make, so the
+ * wire codes are read here rather than spelled out in each connect surface.
+ */
+export function isDeadConnectCode(error: unknown): boolean {
+  const code = (error as { code?: string } | null)?.code;
+  return code === 'oauth_code_spent' || code === 'oauth_state_expired';
+}
 
 // ---------------------------------------------------------------------------
 // Human-in-the-loop requests — approvals, questions, and feedback an agent

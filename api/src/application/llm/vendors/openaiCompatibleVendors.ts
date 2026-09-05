@@ -121,7 +121,8 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     // API reads the key — the same request from an ordinary machine gets a clean
     // JSON answer. So this vendor runs from the tenant's own connected runtime when
     // one is online: the personal interactive client the subscription is licensed
-    // for. See `hostEgress.ts`; falls back to direct egress when nothing is online.
+    // for. See `hostEgress.ts`. With no runtime online the candidate is SKIPPED, not
+    // attempted directly — the direct path is the very egress Kimi refuses.
     requiresLocalEgress: true,
     // The relay is request/response, so an SSE body arrives whole regardless. Serve
     // streamed callers through the shared pseudo-stream adapter rather than marking the

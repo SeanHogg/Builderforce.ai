@@ -972,14 +972,6 @@ var TICKET_RECORDING_TOOLS = /* @__PURE__ */ new Set([
   "builtin_chats_link_ticket",
   "builtin_reviews_record"
 ]);
-var CODE_CHANGE_TOOLS = /* @__PURE__ */ new Set([
-  "write_file",
-  "edit_file",
-  "delete_file"
-]);
-function isCodeChangeTool(name) {
-  return CODE_CHANGE_TOOLS.has(name);
-}
 var CREATE_TOOL_KIND = {
   builtin_objectives_create: "objective",
   builtin_specs_create: "spec",
@@ -1128,14 +1120,16 @@ function normalizeChatMode(value) {
 function chatConversationDirective() {
   return "MODE: CHAT. This conversation is a conversation. Your job is to understand the question and answer it.\n\u2022 Read, search, inspect and reason as much as the question needs \u2014 every read-only tool is available to you and using them is encouraged. Ground the answer in what you actually looked up.\n\u2022 Do NOT create, staff, re-status, or dispatch board work as a side effect of answering. Identifying that something ought to be done is part of a good answer; opening a ticket about it is not.\n\u2022 If the work plainly ought to be tracked, END the answer with one short line naming it and telling the user they can switch this conversation to Work mode to have it opened and run. Offer it once; do not repeat the offer on later turns.\n\u2022 The single exception: if the user explicitly asks you to create, assign, schedule or run something in THIS message, do it. An explicit instruction outranks the mode.";
 }
-function chatWorkDirective(chatId) {
-  return `MODE: WORK. This conversation exists to get something DONE, not to describe it. Take the work all the way to a running agent.
+function chatWorkDirective(chatId, opts) {
+  const doItHere = opts?.canEditHere ? `\u2022 DO IT HERE WHEN YOU CAN. This session has the workspace file tools, so anything you could change yourself in a handful of tool calls \u2014 a bug fix, a small refactor, a CSS or copy change, anything you have already located in the code \u2014 you MAKE, now. Dispatching a cloud agent for work you are already holding costs a whole run to do less than you can, and leaves the user waiting for it. Then record the change against this chat. Dispatch is for work this session genuinely cannot do: a long-horizon or repetitive batch, or work that must run somewhere you are not.
+` : "";
+  return `MODE: WORK. This conversation exists to get something DONE, not to describe it. Take the work all the way to a finished change or a running agent.
 ${chatWorkLinkingDirective(chatId)}
-\u2022 FINISH BY DISPATCHING. A ticket that no agent is running has not started. Every create/update tool returns an \`autoRun\` verdict \u2014 read it. When \`autoRun.dispatched\` is true, say which agent picked the work up. When it is false, do not stop there: pick a capable agent (builtin_cloud_agents_list_mine, or builtin_tasks_assignees for the accountable roster) and start the run yourself with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the agent>, taskId=<the ticket>).
-\u2022 If dispatch is genuinely refused \u2014 no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane \u2014 report the EXACT reason the tool returned and what would clear it. Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.`;
+` + doItHere + `\u2022 FINISH BY DISPATCHING what you did not do yourself. A ticket that no agent is running has not started. Every create/update tool returns an \`autoRun\` verdict \u2014 read it. When \`autoRun.dispatched\` is true, say which agent picked the work up. When it is false, do not stop there: pick a capable agent (builtin_cloud_agents_list_mine, or builtin_tasks_assignees for the accountable roster) and start the run yourself with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the agent>, taskId=<the ticket>). A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.
+\u2022 If dispatch is genuinely refused \u2014 no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane, a lifecycle-managed stage with no bound role \u2014 the refusal names the reason and what would clear it. Report THAT reason, do not retry the same dispatch hoping for a different answer, and if the work is something you could do here, do it instead. Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.`;
 }
-function chatModeDirective(mode, chatId) {
-  return mode === "work" ? chatWorkDirective(chatId) : chatConversationDirective();
+function chatModeDirective(mode, chatId, opts) {
+  return mode === "work" ? chatWorkDirective(chatId, opts) : chatConversationDirective();
 }
 
 // src/useBrainChats.ts
@@ -1687,6 +1681,38 @@ function traceWithPersistedSteps(messages, trace) {
   }
   if (fromMessages.length === 0) return trace;
   return [...trace, ...fromMessages].sort((a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
+}
+
+// src/localWorkspaceTools.ts
+var LOCAL_WORKSPACE_TOOLS = /* @__PURE__ */ new Set([
+  "read_file",
+  "list_files",
+  "search_code",
+  "write_file",
+  "edit_file",
+  "delete_file",
+  "run_command"
+]);
+var CODE_CHANGE_TOOLS = /* @__PURE__ */ new Set([
+  "write_file",
+  "edit_file",
+  "delete_file"
+]);
+var UNSCOPED_MUTATION_TOOLS = /* @__PURE__ */ new Set(["run_command"]);
+function isLocalWorkspaceTool(name) {
+  return LOCAL_WORKSPACE_TOOLS.has(name);
+}
+function isCodeChangeTool(name) {
+  return CODE_CHANGE_TOOLS.has(name);
+}
+function isUnscopedMutationTool(name) {
+  return UNSCOPED_MUTATION_TOOLS.has(name);
+}
+function canChangeCodeHere(toolNames) {
+  return toolNames.some(isCodeChangeTool);
+}
+function localToolsIn(toolNames) {
+  return toolNames.filter(isLocalWorkspaceTool);
 }
 
 // src/runActivity.ts
@@ -2607,12 +2633,32 @@ var ReadCoverage = class {
     return existing;
   }
   /**
-   * A mutation invalidates the picture: a file read AFTER a change is genuinely new
-   * information, and carrying the old tally forward would nag the model for doing
-   * exactly the right thing. Mirrors how the run loop clears its read-dedupe cache.
+   * A mutation makes a re-read of WHAT IT CHANGED legitimate — that read returns
+   * genuinely new information, and nagging about it would punish exactly the right
+   * behaviour. So the tally for that target is dropped.
+   *
+   * It says nothing about any OTHER target, and treating it as if it did is what made
+   * this guard almost inert. Clearing the whole map on every non-read call meant a
+   * single `edit_file`, ticket write, git status or failed dispatch wiped the history
+   * of every file in the run — and in a run that interleaves reads with platform
+   * writes, the counter never reached three. Measured on the run this was built for:
+   * one CSS file read 14 times and its component 13, across 78 calls, with the
+   * advisory firing on neither.
+   *
+   * A tool that can touch arbitrary files (`run_command` — a codemod, a formatter, a
+   * checkout) is the one honest exception: the answer to "what did that change?" is
+   * unknown, so everything is invalidated.
    */
-  reset() {
-    this.visits.clear();
+  invalidate(tool, args) {
+    if (isUnscopedMutationTool(tool)) {
+      this.visits.clear();
+      return;
+    }
+    const target = activityTarget(args);
+    if (!target) return;
+    for (const key of [...this.visits.keys()]) {
+      if (key.slice(key.indexOf(":") + 1) === target) this.visits.delete(key);
+    }
   }
   /** Targets read more than once, most-revisited first — for the run's own reporting. */
   repeated() {
@@ -3297,9 +3343,11 @@ ${extra}`;
     } catch {
     }
   }
+  const catalogToolNames = (req.tools ?? []).map((t) => t.function.name);
+  const canEditHere = canChangeCodeHere(catalogToolNames);
   systemPrompt = `${systemPrompt}
 
-${chatModeDirective(runMode, chatId)}
+${chatModeDirective(runMode, chatId, { canEditHere })}
 
 ${turnOptimizationDirective()}`;
   if (isContinuationDirective(latestUserText(convo)) && promisesUnfinishedWork(lastAssistantText(convo))) {
@@ -3320,7 +3368,10 @@ ${continuationDirective()}`;
   const triedModels = [];
   let modelFailovers = 0;
   const requestQuery = routingQueryForTurn(convo);
-  const promptNamedTools = toolNamesMentionedIn(systemPrompt);
+  const alwaysAdvertised = [
+    ...toolNamesMentionedIn(systemPrompt),
+    ...localToolsIn(catalogToolNames)
+  ];
   const emitEvermindLearnReconcile = (assistantMsg, finalText) => {
     const learn = assistantMsg?.evermindLearn;
     if (learn?.learned) {
@@ -3382,8 +3433,9 @@ ${continuationDirective()}`;
       // directive names `builtin_chats_list_tickets`) are never optional: telling a
       // model to call a tool we then decline to advertise is the exact contradiction
       // that produces a narrated call. Derived from the prompt text, so a directive
-      // edit can never silently desync from this list.
-      required: promptNamedTools
+      // edit can never silently desync from this list — plus the local workspace
+      // tools, which the prompt names in prose the pattern cannot see.
+      required: alwaysAdvertised
     });
     const advertised = selection.trimmed ? [...selection.tools, ...routerToolSpecs(allTools?.length ?? 0)] : selection.tools;
     const tools = advertised.length > 0 ? advertised : void 0;
@@ -3548,7 +3600,7 @@ ${continuationDirective()}`;
           }
         } else {
           readDedupe.clear();
-          readCoverage.reset();
+          readCoverage.invalidate(tc.name, args);
         }
         const toolStart = nowMs2();
         setActivity(c, toolActivity(tc.name, args, iter, Date.now()));
@@ -4872,6 +4924,7 @@ export {
   DEFAULT_MODEL_IDENTITY,
   DEFAULT_TOOL_LIMIT,
   EVERMIND_LEARN_MIN_CHARS,
+  LOCAL_WORKSPACE_TOOLS,
   MODEL_CATEGORIES,
   NEW_CHAT_MODE,
   NOT_STARTED_TASK_STATUSES,
@@ -4887,6 +4940,7 @@ export {
   TOOL_ROUTER_DESCRIBE,
   TOOL_ROUTER_FIND,
   TOOL_ROUTER_INVOKE,
+  UNSCOPED_MUTATION_TOOLS,
   WEB_FETCH_TOOL_NAME,
   XmlToolCallFilter,
   accountUsedInTrace,
@@ -4907,6 +4961,7 @@ export {
   byoUnresolvedInTrace,
   byoUnresolvedSummary,
   byoVendorLabel,
+  canChangeCodeHere,
   catalogToolNamesMentionedIn,
   chatActivityText,
   chatConversationDirective,
@@ -4961,6 +5016,7 @@ export {
   isEffort,
   isEvermindModel,
   isFailedToolResult,
+  isLocalWorkspaceTool,
   isMalformedToolCall,
   isMutationTool,
   isRouterTool,
@@ -4968,11 +5024,13 @@ export {
   isStepMessage,
   isTicketRecordingTool,
   isTruncatedTurn,
+  isUnscopedMutationTool,
   isUserConfiguredModelRef,
   lastConsolidationIndex,
   linkedTicketsToAdvance,
   linkedTicketsToComplete,
   localStorageConfirmationPersistence,
+  localToolsIn,
   mcpActionsFrom,
   mentionRecipient,
   midRunNotice,
