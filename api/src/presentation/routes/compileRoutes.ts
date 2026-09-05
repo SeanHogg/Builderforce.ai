@@ -29,6 +29,7 @@ import { recallSops } from '../../application/knowledge/recallSops';
 import { deploy, DEPLOY_SURFACES } from '../../application/deploy';
 import { deployAndDispatch, type CloudRunDispatcher } from '../../application/deploy/dispatch';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
+import { stampExecutionAuthority, humanDirected } from '../../application/runtime/executionAuthority';
 import { gatewayExtractor } from '../../application/llm/gatewayExtractor';
 import { completeForTenant } from '../../application/llm/tenantProxy';
 import { MODALITIES } from '../../application/compile';
@@ -96,6 +97,13 @@ export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hon
     const dispatchCloudRun: CloudRunDispatcher = (params) =>
       dispatchCloudRunForTask(c.env as Env, db, runtimeService, (p) => c.executionCtx.waitUntil(p), {
         ...params,
+        // A compile/deploy performs no lifecycle role, so a managed board would refuse it
+        // outright. The person who clicked IS the authority: it is declared, recorded, and
+        // the run is admitted lifecycle-neutral — it deploys, it cannot advance the lane.
+        payload: stampExecutionAuthority(
+          params.payload,
+          humanDirected(c.get('userId'), 'Compile/deploy started from the compile surface.'),
+        ),
         submittedBy: `user:${c.get('userId') ?? 'compile'}`,
         // A person clicked Compile/Deploy — the same explicit override Run-now uses,
         // so the failure breaker and re-run cooldown do not apply.

@@ -34,6 +34,18 @@ export interface PastedAuthorizationCode {
   state: string | null;
 }
 
+/** The pasted value as a URL, or null when it is not one. */
+function asRedirectUrl(value: string): URL | null {
+  // Screened by prefix first so that "not a URL" — the EXPECTED shape for two of
+  // the three accepted pastes — is decided without raising an exception at all.
+  if (!/^https?:\/\//i.test(value)) return null;
+  try {
+    return new URL(value);
+  } catch {
+    return null; // Looked like a URL, is not one — read it as a code instead.
+  }
+}
+
 /**
  * Read the authorization code out of whatever the user pasted.
  *
@@ -45,15 +57,8 @@ export interface PastedAuthorizationCode {
  */
 export function parsePastedAuthorizationCode(input: string): PastedAuthorizationCode {
   const value = input.trim();
-  // A URL is the only shape that can be recognised positively, so try it first
-  // and fall through on the parse failure rather than sniffing for "http".
-  try {
-    const url = new URL(value);
-    return { code: url.searchParams.get('code') ?? '', state: url.searchParams.get('state') };
-  } catch {
-    // Not a URL — `code#state` or a bare code. Nothing to report: this is the
-    // expected path for two of the three accepted shapes, not a failure.
-  }
+  const url = asRedirectUrl(value);
+  if (url) return { code: url.searchParams.get('code') ?? '', state: url.searchParams.get('state') };
   const hash = value.indexOf('#');
   if (hash === -1) return { code: value, state: null };
   return { code: value.slice(0, hash), state: value.slice(hash + 1) || null };

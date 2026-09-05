@@ -30,6 +30,7 @@ import { qualityGroupsVersionKey, qualityGroupsTenantVersionKey, ingestErrorEven
 import type { CollectorRef, MappingRule } from '../../application/quality/errorMapping';
 import type { NormalizedErrorEvent } from '../../application/quality/errorSpec';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
+import { stampExecutionAuthority, humanDirected } from '../../application/runtime/executionAuthority';
 import { onTaskLandedInLane } from '../../application/swimlane/laneEntryTrigger';
 import { TaskPriority } from '../../domain/shared/types';
 import type { TaskService } from '../../application/task/TaskService';
@@ -729,8 +730,20 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
       c.env as Env, db, runtimeService,
       (p) => c.executionCtx.waitUntil(p),
       // `force`: this IS the human's "fix with agent" click — deliberately gate-blind,
-      // like Run-now — so the failure breaker and re-run cooldown do not apply.
-      { taskId: task.id as unknown as number, tenantId, submittedBy: `quality:${userId ?? 'system'}`, force: true },
+      // like Run-now — so the failure breaker and re-run cooldown do not apply. The same
+      // click is also the AUTHORITY that lets the run start on a lifecycle-managed board,
+      // where an error-group fix matches no stage role; it is recorded, and the run is
+      // admitted lifecycle-neutral so it cannot advance the new ticket by itself.
+      {
+        taskId: task.id as unknown as number,
+        tenantId,
+        payload: stampExecutionAuthority(
+          undefined,
+          humanDirected(userId, `Fix-with-agent on error group ${id}.`),
+        ),
+        submittedBy: `quality:${userId ?? 'system'}`,
+        force: true,
+      },
     );
 
     // Funnel the new ticket through the ONE lane-entry helper as well. The explicit

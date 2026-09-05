@@ -13681,7 +13681,8 @@
         "upstream_error": "error del proveedor del modelo",
         "not_found": "conexión no encontrada",
         "no_test_model": "no hay ningún modelo seleccionado para probar",
-        "key_unresolved": "no se pudo usar la clave guardada"
+        "key_unresolved": "no se pudo usar la clave guardada",
+        "local_egress_required": "necesita un runtime propio: no se envió nada"
       },
       "tokensUsed": "Tokens de IA usados",
       "builderforceTokens": "Tokens BYO de BuilderForce",

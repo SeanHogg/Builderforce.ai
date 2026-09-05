@@ -657,7 +657,7 @@ describe('POST /provider-keys/:provider/test', () => {
     expect(res.status).toBe(200);
     const body = await res.json() as { ok: boolean; error: string; diagnostic?: typeof diagnostic & { traceId: string } };
     expect(body.ok).toBe(false);
-    expect(body.error).toContain("Kimi's edge blocked the hosted Builderforce gateway");
+    expect(body.error).toContain("Kimi's edge refused this request");
     // The evidence an operator attaches to the partnership submission.
     expect(body.diagnostic).toMatchObject({ ...diagnostic, model: 'direct/kimi-code/kimi-for-coding' });
     expect(body.diagnostic?.traceId).toMatch(/^llm-/);

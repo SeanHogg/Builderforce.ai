@@ -13681,7 +13681,8 @@
         "upstream_error": "Fehler des Modellanbieters",
         "not_found": "Verbindung nicht gefunden",
         "no_test_model": "kein Modell zum Testen ausgewählt",
-        "key_unresolved": "gespeicherter Schlüssel konnte nicht verwendet werden"
+        "key_unresolved": "gespeicherter Schlüssel konnte nicht verwendet werden",
+        "local_egress_required": "erfordert eine eigene Laufzeitumgebung – es wurde nichts gesendet"
       },
       "tokensUsed": "Verbrauchte KI-Token",
       "builderforceTokens": "BuilderForce-BYO-Token",

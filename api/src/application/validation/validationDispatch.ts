@@ -17,6 +17,7 @@ import { and, eq, isNull, lt, or, sql, ne, inArray } from 'drizzle-orm';
 import { tasks, projects, ideAgents, executions } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
+import { stampExecutionAuthority, systemInitiated } from '../runtime/executionAuthority';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { TaskStatus, TaskType } from '../../domain/shared/types';
@@ -76,7 +77,13 @@ export async function dispatchValidatorReview(
   if (await hasLiveRun(db, params.taskId)) return null;
 
   const runtimeService = buildRuntimeService(env, db);
-  const payload = JSON.stringify({ cloudAgentRef: validatorRef, laneKey: REVIEW_LANE_KEY, validatorReview: true });
+  // An acceptance review runs AGAINST an already-Done ticket and holds its lane
+  // regardless (`validatorReviewMarker`). It performs no lifecycle role either, so a
+  // managed board admits it on a declared system authority rather than refusing it.
+  const payload = stampExecutionAuthority(
+    JSON.stringify({ cloudAgentRef: validatorRef, laneKey: REVIEW_LANE_KEY, validatorReview: true }),
+    systemInitiated('validator-review', `Acceptance review of ticket #${params.taskId}.`),
+  );
   const deferred: Promise<unknown>[] = [];
   try {
     const { executionId: execId } = await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {

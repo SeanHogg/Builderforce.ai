@@ -367,8 +367,12 @@ function probeVerdict(
     };
   }
   return {
-    // An upstream outage is not this account's fault and not this operator's job to fix.
-    tone: result.status === 'upstream_error' ? 'warn' : 'error',
+    // Amber, not red, for the two failures that are not a verdict on the credential: an
+    // upstream outage (the key WORKED and the model provider broke), and a provider that
+    // is only reachable from a machine of the operator's own with none connected — there
+    // the key was never even presented. Red in either case sends someone to re-enter a
+    // credential that is fine.
+    tone: result.status === 'upstream_error' || result.status === 'local_egress_required' ? 'warn' : 'error',
     // Server responses carry machine status codes; compose all operator-facing prose
     // here so every supported locale sees the same diagnostic contract.
     message: t('diagnostic.failedFallback', { status: stateLabel(t, result.status) }),

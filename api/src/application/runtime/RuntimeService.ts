@@ -17,6 +17,7 @@ import {
   PAUSED_DEADLINE_MS, PAUSED_ORPHAN_REASON,
 } from './orphanReasons';
 import { parseExecutor, parseActAsRole, parseCloudAgentRef, isRoleAttributedRun } from './cloudDispatch';
+import { isLifecycleNeutralRun } from './executionAuthority';
 import type { PolicyGate } from '@builderforce/agent-tools';
 import { ticketKindForTaskType, type RunMilestonePhase } from '../brain/ChatTicketService';
 import { notifyExecutionSubscribers } from './executionEvents';
@@ -674,8 +675,17 @@ export class RuntimeService {
         // Coordinator rewind). The manifest attribution below still runs, so the run's
         // evidence lands on its slot exactly as before.
         const isRoleRun = isRoleAttributedRun(execution.payload);
-        // All three classes run against an already-open ticket and hold its lane.
-        const holdsLane = isReviewRun || isIncidentTriageRun || isRoleRun;
+        // A run a MANAGED board admitted on an AUTHORITY rather than a role — a person
+        // directing execution from a surface that cannot see the board type, or platform
+        // machinery (compile, security audit, validation, CI auto-fix) that performs no
+        // role at all. Letting those run is the point; letting them ADVANCE the ticket
+        // would be the hole, because a managed stage may only move on a recorded verdict
+        // from a role accountable for it. The dispatcher stamps the marker at the single
+        // point that knows the board is managed (`markLifecycleNeutral`), so this hold
+        // costs nothing on an unmanaged board — no run there is ever marked.
+        const isNeutralRun = isLifecycleNeutralRun(execution.payload);
+        // All four classes run against an already-open ticket and hold its lane.
+        const holdsLane = isReviewRun || isIncidentTriageRun || isRoleRun || isNeutralRun;
         const effectContext = {
           tenantId, taskId: Number(execution.taskId), projectId, executionId: Number(saved.id),
         };
@@ -686,7 +696,12 @@ export class RuntimeService {
         // immediately evaluates whether the stage can advance. Suppressing it here
         // left completed role work waiting for the periodic manager sweep (observed as
         // a 108-minute developer→reviewer hand-off gap on task 1377).
-        const mayCoordinateManagedLifecycle = !isReviewRun && !isIncidentTriageRun;
+        // A neutral run is excluded here too, and for the same reason it holds the lane:
+        // it carries no role evidence for the coordinator to persist, so the only thing
+        // its terminal event could do there is trigger a stage transition it has no
+        // standing to cause. A ROLE run still reaches the coordinator — that is what
+        // stops completed role work waiting for the periodic sweep.
+        const mayCoordinateManagedLifecycle = !isReviewRun && !isIncidentTriageRun && !isNeutralRun;
         const managedResult = mayCoordinateManagedLifecycle && this.onManagedRunStatus
           && (dto.status === ExecutionStatus.RUNNING || terminal)
           ? await this.runEffect('managed_run_status', effectContext, () => this.onManagedRunStatus!({

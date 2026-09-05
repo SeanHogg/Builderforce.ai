@@ -1,3 +1,179 @@
+## ✅ RESOLVED 2026-09-05 — A lifecycle-managed board refused every run that was not stage work
+
+`authorizeManagedTaskExecution` required every dispatch payload to name an `actAsRole`
+the stage authorizes. Applied to everything, that refused two whole classes of run that
+are not stage production and never could be:
+
+1. **A person directing execution.** From the VS Code client the user cannot see whether
+   a board is lifecycle-managed and cannot edit its configuration — the board type is not
+   a concept that surface exposes. They clicked Run, and the platform answered with a
+   remedy ("staff the lane, pin the role") naming something they had no way to reach.
+2. **Platform machinery.** Compile/deploy, security audit, validation, incident triage,
+   CI auto-fix. Asking which stage role a SOC 2 audit performs is a category error, so
+   all six callers built role-less payloads and all six were refused on a managed board.
+
+The operator's decision, given directly: in the VS Code client the user IS directing the
+execution and is in control, so their direction is the authority.
+
+### The shape of the override — and why it costs no governance
+
+An override that simply let these through would be a hole. What the managed guard
+actually defends is that a stage advances only on a recorded verdict from a role
+accountable for it — not that runs may not happen. So an admitted run is
+**lifecycle-neutral**: it executes and reports, and it may not move the ticket's lane or
+satisfy a manifest slot. The sign-off gate is exactly as closed after it as before.
+
+New `api/src/application/runtime/executionAuthority.ts` owns the vocabulary (following
+the `incidentTriageMarker` / `validatorReviewMarker` convention — pure JSON in/out, no
+IO): `humanDirected(userId, why)` and `systemInitiated(service, why)` stamp a
+`runAuthority` onto the payload, naming WHO and WHY. An override is never anonymous — an
+absent user id degrades to a named placeholder rather than an empty string that would
+read, in an audit row, as though nobody authorized it.
+
+Three seams enforce the rest:
+
+- **The guard** admits a role-less payload only when it carries a parseable authority,
+  and returns that authority on its decision. An authority is an escape from the ROLE
+  requirement alone: a run that DOES name a role is still measured against the stage, so
+  nobody can stamp an authority and dispatch as a role the stage never authorized.
+- **The dispatcher** — the single point that knows both "this board is managed" and
+  "this run carries no attribution" — marks the run lifecycle-neutral and writes a
+  `managed.gate_override` audit row naming who overrode the gate and why. A caller
+  cannot set the marker itself (that would be a caller deciding its own governance), and
+  a run on an unmanaged board is never marked, so nothing that worked before changes.
+- **`RuntimeService`** holds the lane for a neutral run, alongside the reviewer /
+  incident-triage / role-run holds it already applied, and does not hand it to the
+  Coordinator — it carries no role evidence to persist, so the only thing its terminal
+  event could do there is trigger a transition it has no standing to cause.
+
+### What now runs
+
+- `/api/tasks/:id/run-now` (and `chats.dispatch_agent`, which replays it): when the
+  stage has a role bound, it still dispatches through `requestRoleRun` with full
+  attribution. When it does not — `managed_no_role` / `lane_unconfigured` — it no longer
+  returns a 400 naming a remedy the user cannot reach; it dispatches under a recorded
+  human authority. Nothing is pinned as the agent (a managed board's assignee is the
+  Coordinator, never an executor), so the dispatcher resolves the workspace default, and
+  the response says `managedOverride: true` with `agentRef: null` rather than implying
+  the run satisfied the stage.
+- `compileRoutes` and `qualityRoutes` — both already a human's click — stamp that click
+  as the authority.
+- `securityDispatch`, `validationDispatch`, `incidentDispatch` and the CI auto-fix loop
+  stamp a system authority naming the service.
+
+**Files.** New: `api/src/application/runtime/executionAuthority.ts` (+ tests). Changed:
+`api/src/application/kanban/managedExecutionGuard.ts`,
+`api/src/application/runtime/RuntimeService.ts`,
+`api/src/presentation/routes/{runtimeRoutes,taskRoutes,compileRoutes,qualityRoutes}.ts`,
+`api/src/application/{security/securityDispatch,validation/validationDispatch,incident/incidentDispatch,ci/ingestRepoCiEvent}.ts`.
+Tests pin both halves: the guard admits an authority and refuses a bare payload, and a
+lifecycle-neutral run does not advance the lane, does not take the RUNNING→in_progress
+move, and does not reach the Coordinator.
+
+## ✅ RESOLVED 2026-09-05 — A dead Claude authorization code was reported as a 502 outage, so the operator retried it forever
+
+Connecting a Claude Pro/Max subscription failed with
+`502 oauth_exchange_failed — Anthropic OAuth code exchange failed (400): {"error":
+"invalid_grant", "error_description": "Invalid 'code' in request."}`, rendered verbatim in
+the Integrations drawer.
+
+The exchange itself is correct — the PKCE derivation is now pinned against the RFC 7636
+Appendix B vector *and* re-derived from the generated verifier in
+`anthropicOAuth.test.ts`, so a challenge that merely looked url-safe can no longer pass —
+and the `state` in the paste resolved to our own pending record, so the consent round trip
+was ours. `invalid_grant` on a correct client means one thing: **the authorization code was
+already redeemed or had expired.** Codes in this flow are single-use and short-lived, and
+the consent page lives on a domain we do not own, so the gap between approving and pasting
+is the ordinary failure of the whole design — not an outage.
+
+Everything the product did with that fact was wrong:
+
+- **The status was a 502.** That is the code for "our gateway or Anthropic is broken",
+  which is neither true nor actionable. It is a 400 the operator clears by consenting
+  again.
+- **The upstream JSON was the error message.** The operator read Anthropic's raw body and
+  had nothing to do with it.
+- **The paste box stayed open.** With a code that can never be redeemed still in it, so
+  every Finish press re-failed identically until they gave up.
+- **Only OpenAI knew any of this.** `openaiCodexOAuth.ts` had classified a spent code since
+  the Codex-CLI race; Anthropic and xAI had not. Three copies of one flow, three verdicts.
+
+**One flow, not three.** The `start`/`complete` pair was written out three times in
+`llmRoutes.ts` (~120 lines) and had drifted at every point an operator could feel:
+
+- `application/llm/subscriptionOAuthCode.ts` (new) owns the two shared judgements —
+  `parsePastedAuthorizationCode` (a full redirect URL, a `code#state` pair, or a bare code;
+  Anthropic previously accepted only the middle one, so copying the address bar failed
+  confusingly) and the spent-code classification behind the `oauth_code_spent` wire code.
+  Provider-specific ADVICE stays with the provider: the Codex-CLI-owns-port-1455 hint is
+  passed in, not baked in.
+- `presentation/routes/subscriptionOAuthRoutes.ts` (new) mounts both endpoints for every
+  provider off a registry where Anthropic, OpenAI and xAI differ only in DATA — authorize
+  URL, exchange call, paste instruction. A fourth provider is a row, not another handler
+  pair. It takes the tenant-access gate as a parameter rather than importing `llmRoutes`,
+  so the seam does not close an import cycle back into the 3,600-line router.
+- KV key prefixes are unchanged and the pending record reads both the old bare-verifier and
+  the new JSON shape, so a connect started before the deploy still completes after it.
+- The three per-provider `parse*Callback` copies, `OPENAI_CODEX_CODE_CONSUMED` and its
+  private `isSpentCode` are deleted, along with two dead i18n keys
+  (`providerKeys.pastePrompt` / `pastePlaceholder`, superseded by the per-provider ones).
+
+**The UI now recovers instead of looping.** `isDeadConnectCode` (in `builderforceApi.ts`,
+where the wire codes live — not spelled out per surface) covers `oauth_code_spent` and
+`oauth_state_expired`; on either, the card clears the paste box and drops back to
+**Connect**, showing a localized "that code was already used or expired — start again and
+paste the new one right away" rather than relaying the API's English. All three connect
+prompts now say the code is single-use and expires within minutes, and that the whole
+callback URL is accepted — translated in all five catalogs.
+
+A 403 from any token endpoint now answers `oauth_subscription_not_entitled` (it was
+xAI-only), and only genuine upstream failures remain 502. api/frontend bumped to 2026.9.6.
+
+## ✅ RESOLVED 2026-09-05 — Kimi Code was dispatched from the one machine its edge refuses, and the resulting 403 was blamed on the tenant's key
+
+`kimi-code` (and self-hosted `ollama-local` / `freetoken`) declare `requiresLocalEgress`:
+their upstream cannot be reached from the Worker at all — Kimi's CDN answers the
+Cloudflare Workers egress with an HTML 403 *before* the API reads the key, and a private
+`127.0.0.1` engine address is unroutable by definition. `dispatchInternal` attached the
+tenant-runtime transport when one was online and, when none was, **fell back to calling
+`fetch` directly anyway**, on the stated rationale that refusing to try "would strand any
+tenant whose network Kimi does not happen to block".
+
+That rationale was wrong: the vendor registry only ever runs inside the Worker, so the
+direct path is never a tenant's network — it is always the same egress the provider
+already refuses. Every such call was a known-loss subrequest, and the cost was not only
+the round trip. A 403 classifies as `auth` → `not_entitled` (`providerAuthAlerts`), so
+ordinary chat traffic from a workspace with a **valid** Kimi key and no runtime connected
+painted the Integrations card red, demoted the vendor out of the BYO seed lead, and mailed
+the workspace owners "your integration stopped working" — with the one remedy they could
+act on (connect a runtime) nowhere in it.
+
+- **Skip, don't guess.** `dispatchInternal` now skips a `requiresLocalEgress` candidate
+  when no egress transport was supplied, recording it as `skippedNoEgress` on
+  `CascadeExhaustedError` alongside the existing no-key / no-stream / cooled lists. No
+  attempt is recorded, so nothing downstream can read a 403 off a call never made.
+- **A strict pin says why.** A pin has nothing to skip *to*, so `dispatchStrict`
+  pre-flights the same question (`vendorRequiresLocalEgress`, the one declaration read
+  from the registry) and answers `model_unavailable` / `local_egress_required` instead of
+  letting an exhausted-cascade 429 read as "the provider is rate limiting you".
+- **The probe stops accusing the key.** `attemptProbe` reads the envelope's machine-readable
+  `details.reason` (never prose) and returns early: no alert raised, no alert cleared —
+  nothing was learned about the credential — and `probeByoProvider` reports
+  `local_egress_required`, which the Test button renders amber with the connect-a-runtime
+  remedy and an explicit "this says nothing about your key".
+- **The dead branch went with it.** An `edgeBlocked` 403 can now only come from a call that
+  *was* made, i.e. from a connected runtime, so the "you have no runtime" reading of a 403
+  is unreachable — the branch and its per-failure `onlineAgentHostId` lookup are deleted.
+- **`invalidateOnlineAgentHost` was never called.** It has existed since the egress seam
+  landed, documented as "call when a host connects or disconnects", with zero callers — so
+  a freshly started runtime stayed invisible to routing for the 30s cache TTL. For a vendor
+  that can *only* be reached through it, invisible now means skipped: the user starts their
+  runtime, retries, and is still told to connect one. Wired at all three write sites in
+  `agentHostRoutes.ts` (upstream connect, WS close, status→non-active).
+
+`local_egress_required` is registered in `PROVIDER_PROBE_STATES` and labelled in all five
+message catalogs. api/frontend bumped to 2026.9.5.
+
 ## ✅ RESOLVED 2026-09-05 — The agent could not dispatch a remote agent, could not commit, and hired one for work it was already holding
 
 One 44-minute chat, 78 tool calls, 71 turns, and nothing shipped. Four independent

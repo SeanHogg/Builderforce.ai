@@ -13681,7 +13681,8 @@
         "upstream_error": "erreur du fournisseur du modèle",
         "not_found": "connexion introuvable",
         "no_test_model": "aucun modèle sélectionné à tester",
-        "key_unresolved": "la clé enregistrée n'a pas pu être utilisée"
+        "key_unresolved": "la clé enregistrée n'a pas pu être utilisée",
+        "local_egress_required": "nécessite votre propre runtime — rien n'a été envoyé"
       },
       "tokensUsed": "Jetons IA utilisés",
       "builderforceTokens": "Jetons BYO BuilderForce",

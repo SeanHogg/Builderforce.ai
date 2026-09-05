@@ -13681,7 +13681,8 @@
         "upstream_error": "模型提供方出错",
         "not_found": "未找到该连接",
         "no_test_model": "未选择可测试的模型",
-        "key_unresolved": "无法使用已保存的密钥"
+        "key_unresolved": "无法使用已保存的密钥",
+        "local_egress_required": "需要你自己的运行时 — 未发送任何请求"
       },
       "tokensUsed": "已使用的 AI 令牌",
       "builderforceTokens": "BuilderForce BYO 令牌",

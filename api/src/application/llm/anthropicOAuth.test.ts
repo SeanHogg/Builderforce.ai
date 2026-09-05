@@ -18,6 +18,30 @@ describe('generatePkce', () => {
     const again = await generatePkce();
     expect(again.verifier).not.toBe(verifier);
   });
+
+  /**
+   * The assertion above only says the challenge LOOKS url-safe. A challenge that
+   * is well-formed but not actually S256(verifier) would pass it, ship, and be
+   * rejected only by Anthropic — as `400 invalid_grant / "Invalid 'code' in
+   * request."`, indistinguishable from the far more common expired code. This
+   * pins the derivation itself so that reading is never in doubt again.
+   */
+  it('derives the challenge as RFC 7636 S256 of the verifier', async () => {
+    const { verifier, challenge } = await generatePkce();
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+    let binary = '';
+    for (const byte of new Uint8Array(digest)) binary += String.fromCharCode(byte);
+    const expected = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    expect(challenge).toBe(expected);
+  });
+
+  it('matches the RFC 7636 Appendix B worked example', async () => {
+    // The published vector, so a change to the base64url encoding is caught here
+    // rather than by a failed connect against a live provider.
+    const { sha256Base64Url } = await import('../../infrastructure/crypto/digest');
+    expect(await sha256Base64Url('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk'))
+      .toBe('E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM');
+  });
 });
 
 describe('generateState', () => {

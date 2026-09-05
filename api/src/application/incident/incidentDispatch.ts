@@ -13,6 +13,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, eq } from 'drizzle-orm';
 import { ideAgents } from '../../infrastructure/database/schema';
 import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
+import { stampExecutionAuthority, systemInitiated } from '../runtime/executionAuthority';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { INCIDENT_TRIAGE_LANE_KEY } from './incidentTriageMarker';
 import type { Db } from '../../infrastructure/database/connection';
@@ -57,7 +58,14 @@ export async function dispatchIncidentTriage(
   const active = await runtimeService.listActiveByTasks([params.boardTaskId]).catch(() => []);
   if (active.length > 0) return false;
 
-  const payload = JSON.stringify({ cloudAgentRef: incidentRef, laneKey: INCIDENT_TRIAGE_LANE_KEY, incidentTriage: true, incidentId: params.incidentId });
+  // Triage is platform machinery, not a stage deliverable — it performs no lifecycle
+  // role, so a lifecycle-managed board would refuse it outright. The authority says so
+  // explicitly; the guard admits it, records the override, and marks the run
+  // lifecycle-neutral (which this run already was — see `incidentTriageMarker`).
+  const payload = stampExecutionAuthority(
+    JSON.stringify({ cloudAgentRef: incidentRef, laneKey: INCIDENT_TRIAGE_LANE_KEY, incidentTriage: true, incidentId: params.incidentId }),
+    systemInitiated('incident-triage', `Triage of incident ${params.incidentId}.`),
+  );
   const deferred: Promise<unknown>[] = [];
   try {
     const { executionId, refusal } = await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {

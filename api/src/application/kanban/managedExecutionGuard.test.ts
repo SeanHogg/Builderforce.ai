@@ -4,6 +4,7 @@ import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { loadStageProducerSlots, resolveManagedLaneAuthority, slotAuthorizesRole } from './managedLaneRoles';
 import { isAgentRefRoleCapable } from './roleCapability';
 import { buildRoleRunPayload } from './requestRoleRun';
+import { stampExecutionAuthority, humanDirected, systemInitiated } from '../runtime/executionAuthority';
 import type { Db } from '../../infrastructure/database/connection';
 
 /**
@@ -82,6 +83,62 @@ describe('authorizeManagedTaskExecution', () => {
     expect(d.allowed).toBe(false);
     expect(d.managed).toBe(true);
     expect(d.reason).toContain('lifecycle-managed');
+  });
+
+  /**
+   * A ROLE is the right requirement for a stage's deliverable and the wrong one for
+   * everything else. From the VS Code client the user cannot see that a board is
+   * lifecycle-managed and cannot edit its configuration, so this refusal named a remedy
+   * they had no way to reach; and platform machinery (compile, security audit,
+   * validation, CI auto-fix) performs no role at all, so the question is a category
+   * error. Both are admitted on a DECLARED authority — and the dispatcher then marks
+   * them lifecycle-neutral, so the sign-off gate is exactly as closed as before.
+   */
+  describe('an authority admits a run that names no role', () => {
+    const bare = JSON.stringify({ cloudAgentRef: 'agent-1', laneKey: 'todo' });
+
+    it('admits a person directing the run, and hands back WHO', async () => {
+      const payload = stampExecutionAuthority(bare, humanDirected('u-1', 'Run now on an unbound stage.'));
+      const d = await authorizeManagedTaskExecution(stubDb(rows()), 1, 1032, payload);
+
+      expect(d.allowed).toBe(true);
+      expect(d.managed).toBe(true);
+      // The dispatcher reads this to record the override and to neutralise the run.
+      // Without it on the decision, an admitted run would be indistinguishable from an
+      // ordinary one — which is the difference between an override and a hole.
+      expect(d.authority).toEqual({ kind: 'human', by: 'u-1', reason: 'Run now on an unbound stage.' });
+    });
+
+    it('admits platform machinery the same way', async () => {
+      const payload = stampExecutionAuthority(bare, systemInitiated('security-audit', 'SOC 2 audit 4.'));
+      const d = await authorizeManagedTaskExecution(stubDb(rows()), 1, 1032, payload);
+
+      expect(d.allowed).toBe(true);
+      expect(d.authority).toMatchObject({ kind: 'system', by: 'security-audit' });
+    });
+
+    it('still refuses a payload with neither a role NOR an authority', async () => {
+      // The override has to be DECLARED. Absence of a role is not itself permission.
+      const d = await authorizeManagedTaskExecution(stubDb(rows()), 1, 1032, bare);
+      expect(d.allowed).toBe(false);
+      expect(d.authority).toBeUndefined();
+    });
+
+    /**
+     * An authority is an escape from the ROLE requirement only. A run that DOES name a
+     * role is still measured against the stage — otherwise anyone could stamp an
+     * authority and dispatch as a role the stage never authorized, which is worse than
+     * the role-less case it was meant to solve.
+     */
+    it('does NOT let an authority launder an unauthorized role', async () => {
+      mockAuthority.mockResolvedValue({ roleKeys: ['architect'], approvers: [], tier: 'requirements' });
+      const payload = stampExecutionAuthority(payloadWithRole('developer', 'bob-dev'), humanDirected('u-1', 'x'));
+
+      const d = await authorizeManagedTaskExecution(stubDb(rows()), 1, 1032, payload);
+
+      expect(d.allowed).toBe(false);
+      expect(d.reason).toContain("Role 'developer' is not required");
+    });
   });
 
   it('refuses a role the stage does not authorise', async () => {

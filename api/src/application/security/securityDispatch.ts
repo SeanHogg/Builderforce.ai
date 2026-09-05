@@ -18,6 +18,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, desc, eq } from 'drizzle-orm';
 import { ideAgents, projects, projectRepositories, securityAudits } from '../../infrastructure/database/schema';
 import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
+import { stampExecutionAuthority, systemInitiated } from '../runtime/executionAuthority';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { TaskService } from '../task/TaskService';
@@ -123,7 +124,13 @@ export async function dispatchSecurityAudit(
   await db.update(securityAudits).set({ anchorTaskId }).where(eq(securityAudits.id, auditId));
 
   const runtimeService = buildRuntimeService(env, db);
-  const payload = JSON.stringify({ cloudAgentRef: securityRef, laneKey: AUDIT_LANE_KEY, securityAudit: true, auditId });
+  // A SOC 2 audit performs no lifecycle role — asking which stage role it acts as is a
+  // category error — so on a managed board it is admitted on a declared system
+  // authority and cannot advance the anchor ticket. See `executionAuthority`.
+  const payload = stampExecutionAuthority(
+    JSON.stringify({ cloudAgentRef: securityRef, laneKey: AUDIT_LANE_KEY, securityAudit: true, auditId }),
+    systemInitiated('security-audit', `SOC 2 audit ${auditId}.`),
+  );
   const deferred: Promise<unknown>[] = [];
   try {
     const { executionId, refusal } = await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {

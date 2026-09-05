@@ -60,6 +60,7 @@ import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelay
 import { resolveProjectInferenceModel } from '../../application/llm/projectEvermind';
 import { executionTokenGate } from './executionTokenGate';
 import { authorizeManagedTaskExecution } from '../../application/kanban/managedExecutionGuard';
+import { markLifecycleNeutral, describeAuthority, MANAGED_OVERRIDE_EVENT } from '../../application/runtime/executionAuthority';
 import { getTicketCoordination } from '../../application/coordination/coordinationCapability';
 import { executeGitProxy } from '../../application/repos/gitProxy';
 import { authorizeExecutionPrincipal } from '../../application/agentIdentity/agentRunIdentity';
@@ -427,6 +428,36 @@ export async function dispatchCloudRunForTask(
   // and here is why" — so it is recorded and returned the same way: through the
   // state-gated skip ledger, with a real `AutoRunReason` the lifecycle ledger can resolve.
   const authorization = await authorizeManagedTaskExecution(db, params.tenantId, params.taskId, params.payload);
+  // A MANAGED board admitted a run that names no stage role, on a declared authority —
+  // a person directing execution, or platform machinery. Two things are owed for that,
+  // and both are owed HERE, at the one point that knows the board is managed AND that
+  // this run carries no attribution (the caller knows neither):
+  //
+  //  1. The run is made LIFECYCLE-NEUTRAL. It executes and reports, but it may not move
+  //     the lane or satisfy a manifest slot — so the sign-off gate it stepped around
+  //     cannot also be stepped over, and the control the guard exists to enforce is
+  //     exactly as intact after the override as before it.
+  //  2. The override is RECORDED against the ticket, naming who authorized it and why.
+  //     An override nobody can see afterwards is indistinguishable from a hole.
+  let payload = params.payload;
+  if (authorization.allowed && authorization.authority) {
+    payload = markLifecycleNeutral(payload);
+    await recordCloudToolEvent(db, {
+      tenantId:      params.tenantId,
+      cloudAgentRef: taskRow.assignedAgentRef ?? submittedBy,
+      executionId:   null,
+      sessionKey:    `task:${params.taskId}`,
+      toolName:      MANAGED_OVERRIDE_EVENT,
+      category:      'planning',
+      detail:        { taskId: params.taskId, lane: taskRow.status, authority: authorization.authority, submittedBy },
+      result:        `Managed-board gate overridden by ${describeAuthority(authorization.authority)}. The run cannot advance the lane or satisfy a sign-off slot.`.slice(0, 300),
+    }).catch((error) => {
+      // The run is authorized either way — telemetry must never block it. But an
+      // override whose audit row failed to write is exactly the case an operator needs
+      // to hear about, so it is REPORTED rather than swallowed.
+      reportCaughtError(error, { source: 'presentation/routes/runtimeRoutes.ts', operation: 'managed_gate_override_audit', context: { logMessage: '[managed-override] audit row failed to write', details: { tenantId: params.tenantId, taskId: params.taskId } } });
+    });
+  }
   if (!authorization.allowed) {
     await recordAutoRunSkip(env, db, {
       tenantId: params.tenantId,
@@ -518,7 +549,9 @@ export async function dispatchCloudRunForTask(
     agentHostId: effectiveTaskRow.assignedAgentHostId ?? undefined,
     tenantId: params.tenantId,
     submittedBy,
-    payload: params.payload,
+    // `payload`, not `params.payload`: an override was re-stamped above and the run must
+    // carry the neutrality marker it was admitted under.
+    payload,
   });
   // A run is starting — drop the skip-suppression marker so a stall AFTER this run is
   // recorded in full rather than swallowed as a repeat of the pre-run state.
@@ -528,7 +561,7 @@ export async function dispatchCloudRunForTask(
   // host-pinned dispatch, so a host that fails delivery still gets capped down there.
   await startDispatchedExecution(
     env, db, runtimeService, waitUntil, params.tenantId,
-    execution as SubmittedExecution, effectiveTaskRow, params.payload,
+    execution as SubmittedExecution, effectiveTaskRow, payload,
     cloudGate ? { cloudGate } : undefined,
   );
   return { executionId: execution.id };

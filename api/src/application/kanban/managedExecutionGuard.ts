@@ -3,11 +3,23 @@ import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { projects, swimlanes, tasks } from '../../infrastructure/database/schema';
 import { parseActAsRole, parseCloudAgentRef, parseLaneKey } from '../runtime/cloudDispatch';
+import { parseExecutionAuthority, type ExecutionAuthority } from '../runtime/executionAuthority';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { EMPTY_ROLE_ROSTER, isAgentRefRoleCapable } from './roleCapability';
 import { loadStageProducerSlots, resolveManagedLaneAuthority, slotAuthorizesRole } from './managedLaneRoles';
 
-export interface ManagedExecutionDecision { allowed: boolean; managed: boolean; reason?: string }
+export interface ManagedExecutionDecision {
+  allowed: boolean;
+  managed: boolean;
+  reason?: string;
+  /**
+   * Set when a MANAGED board admitted a run that carried no stage role, on the strength
+   * of a declared authority instead. The dispatcher reads it to do the two things an
+   * override owes: record who authorized it, and make the run lifecycle-neutral so the
+   * sign-off gate it stepped around cannot also be stepped over.
+   */
+  authority?: ExecutionAuthority;
+}
 
 /**
  * Is this ticket governed by a lifecycle-managed board?
@@ -59,7 +71,21 @@ export async function authorizeManagedTaskExecution(
   const roleKey = parseActAsRole(payload);
   const agentRef = parseCloudAgentRef(payload);
   if (!roleKey || !agentRef) {
-    return { allowed: false, managed: true, reason: 'This ticket is lifecycle-managed. Use the Coordinator to dispatch a required role; the assignee is not an executor.' };
+    // ── NOT EVERY RUN IS STAGE WORK ──────────────────────────────────────────────
+    // A role is the right requirement for a stage's DELIVERABLE. It is the wrong one
+    // for a person directing execution — from the VS Code client the board type is not
+    // visible and its configuration is not editable, so a refusal citing a role
+    // vocabulary asks the user for something they have no way to give — and the wrong
+    // one for platform machinery (a compile, a security audit, a validation pass, a CI
+    // auto-fix), which performs no role at all.
+    //
+    // Both classes may run, on a DECLARED authority naming who and why. What the guard
+    // exists to protect is untouched: the dispatcher marks such a run lifecycle-neutral,
+    // so it cannot move the lane or satisfy a slot, and the stage still advances only on
+    // a recorded verdict from a role accountable for it.
+    const authority = parseExecutionAuthority(payload);
+    if (authority) return { allowed: true, managed: true, authority };
+    return { allowed: false, managed: true, reason: 'This ticket is lifecycle-managed, so a run must either be attributed to a role the stage authorizes or carry an explicit authority (a person directing it, or a platform service). Use the Coordinator to dispatch a required role; the assignee is not an executor.' };
   }
   // THE STAGE BEING SERVED IS THE PAYLOAD'S, NOT THE TICKET'S CURRENT STATUS. A role run
   // is dispatched against one accountability slot, and an outstanding slot routinely

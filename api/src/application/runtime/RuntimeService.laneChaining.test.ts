@@ -281,6 +281,61 @@ describe('RuntimeService lane chaining', () => {
     errorSpy.mockRestore();
   });
 
+  /**
+   * THE OTHER HALF OF THE MANAGED OVERRIDE. A lifecycle-managed board now admits a run
+   * that names no stage role when it carries a declared authority — a person directing
+   * execution from a surface that cannot see the board type, or platform machinery that
+   * performs no role. Letting those RUN is the point. Letting them ADVANCE the ticket
+   * would be the hole: a managed stage may move only on a recorded verdict from a role
+   * accountable for it, and an override that also skipped the sign-off gate would be a
+   * bypass wearing an audit trail.
+   *
+   * The dispatcher stamps `lifecycleNeutral` at the single point that knows the board is
+   * managed AND that the run carries no attribution, so these assertions are what make
+   * the marker mean something rather than being inert metadata.
+   */
+  it('a lifecycle-neutral run does NOT advance the lane on completion', async () => {
+    const { svc, getStored, getCaptured } = makeService({
+      taskStatus: TaskStatus.IN_PROGRESS,
+      payload: JSON.stringify({ laneKey: 'in_progress', lifecycleNeutral: true, runAuthority: { kind: 'human', by: 'u-1', reason: 'Run now.' } }),
+    });
+
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'deployed' });
+
+    // The ticket is exactly where it was. Compare with the first test in this file,
+    // whose identical run advances IN_PROGRESS → IN_REVIEW.
+    expect(getStored().status).toBe(TaskStatus.IN_PROGRESS);
+    // `null` is the harness's untouched initial value: onLaneEntry never fired.
+    expect(getCaptured()).toBeNull();
+  });
+
+  it('a lifecycle-neutral run does not take the RUNNING→in_progress move either', async () => {
+    // Holding the lane means holding it in both directions: a compile run must not drag
+    // a ticket out of `todo` just by starting.
+    const { svc, getStored } = makeService({
+      taskStatus: TaskStatus.TODO,
+      payload: JSON.stringify({ laneKey: 'todo', lifecycleNeutral: true, runAuthority: { kind: 'system', by: 'ci-autofix', reason: 'x' } }),
+    });
+
+    await svc.update(EXEC_ID, { status: ExecutionStatus.RUNNING });
+
+    expect(getStored().status).toBe(TaskStatus.TODO);
+  });
+
+  it('does not hand a neutral run to the Coordinator — it has no role evidence to record', async () => {
+    // Its terminal event could only trigger a stage transition it has no standing to
+    // cause. A ROLE run still reaches the Coordinator; that is asserted above.
+    const { svc, getManagedRunStatusCalls } = makeService({
+      taskStatus: 'ready',
+      payload: JSON.stringify({ laneKey: 'ready', lifecycleNeutral: true, runAuthority: { kind: 'system', by: 'security-audit', reason: 'x' } }),
+      managedToStatus: 'in_progress',
+    });
+
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'audited' });
+
+    expect(getManagedRunStatusCalls()).toBe(0);
+  });
+
   it('retries lane dispatch with the same idempotent transition context', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { svc, getCaptured, getLaneEntryCalls } = makeService({

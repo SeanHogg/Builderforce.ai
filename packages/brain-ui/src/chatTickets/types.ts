@@ -124,9 +124,18 @@ export interface ChatTicketsAdapter {
    *  title/name/goal/key matches `query` (empty = newest first). Replaces the old
    *  "load EVERY ticket then filter in the DOM" — fast AND complete on a huge tenant. */
   searchTickets(kind: TicketKind, query: string, projectId: number | null): Promise<TicketOptionVM[]>;
-  /** Tag an agent to execute a runnable (task/epic) ticket. Returns whether a run
-   *  actually started + the agent's display name for the toast. */
-  runTicket(kind: TicketKind, ref: string, agentRef: string): Promise<{ started: boolean; agentName: string }>;
+  /**
+   * Tag an agent to execute a runnable (task/epic) ticket. Returns whether a run
+   * actually started + the agent's display name for the toast.
+   *
+   * `agentName` is null when the platform, not the caller, decided who runs — a
+   * lifecycle-managed ticket dispatched on the operator's authority pins no agent,
+   * because on such a board the assignee is the Coordinator and never an executor. The
+   * toast already falls back to the requested agent's pool name, so a null is a display
+   * decision, not a missing value; naming the requested agent as the RUNNER would be
+   * the only wrong answer.
+   */
+  runTicket(kind: TicketKind, ref: string, agentRef: string): Promise<{ started: boolean; agentName: string | null }>;
   /**
    * Whether this host currently permits DISPATCHING a run, and if not, why.
    *

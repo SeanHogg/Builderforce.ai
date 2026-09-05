@@ -127,15 +127,16 @@ const pendingKey = (adapter: SubscriptionOAuthAdapter, tenantId: number, state: 
  * before this consolidation shipped must be completable after it.
  */
 function readPending(raw: string): PendingConnect {
-  try {
-    const parsed = JSON.parse(raw) as Partial<PendingConnect>;
-    if (parsed && typeof parsed.verifier === 'string') {
-      return { verifier: parsed.verifier, challenge: typeof parsed.challenge === 'string' ? parsed.challenge : '' };
-    }
-  } catch {
-    // Not JSON — the legacy shape, where the whole value was the verifier.
-  }
-  return { verifier: raw, challenge: '' };
+  // The legacy value was the bare verifier — base64url, which can never begin
+  // with `{`. That makes the format decidable without attempting a parse that
+  // is EXPECTED to fail, so a genuinely malformed record still surfaces as an
+  // error instead of being swallowed into a wrong verifier.
+  if (!raw.startsWith('{')) return { verifier: raw, challenge: '' };
+  const parsed = JSON.parse(raw) as Partial<PendingConnect>;
+  return {
+    verifier: typeof parsed.verifier === 'string' ? parsed.verifier : raw,
+    challenge: typeof parsed.challenge === 'string' ? parsed.challenge : '',
+  };
 }
 
 /**

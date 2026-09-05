@@ -43,6 +43,7 @@ import { coordinateTicket } from '../../application/manager/coordinateTicket';
 import { TicketParticipantsService } from '../../application/kanban/ticketParticipants';
 import { requestRoleRun } from '../../application/kanban/requestRoleRun';
 import { roleDisplayName } from '../../application/kanban/roleCatalog';
+import { stampExecutionAuthority, humanDirected } from '../../application/runtime/executionAuthority';
 import { SecurityTicketAccessService } from '../../application/security/SecurityTicketAccessService';
 import { ChatTicketService } from '../../application/brain/ChatTicketService';
 import { BrainService } from '../../application/brain/BrainService';
@@ -585,7 +586,55 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // make progress; the gateway would 429 the spend anyway.
     const tokenBlock = await executionTokenGate(c, db);
     if (tokenBlock) return tokenBlock;
+    const tenantId = c.get('tenantId');
+    const submittedBy = (c as { get(k: 'userId'): string | undefined }).get('userId') ?? 'system:run-now';
     if (!evaln.candidate) {
+      // ── A MANAGED BOARD WITH NO BOUND ROLE IS NOT "NOTHING TO RUN AS" ────────────
+      //
+      // `managed_no_role` / `lane_unconfigured` mean the STAGE has no role bound to an
+      // agent — a fact about the board's configuration, not about this ticket being
+      // unrunnable. Answering a person's explicit Run now with "staff the lane, pin the
+      // role" is a dead end from the VS Code client: that surface does not show whether
+      // a board is lifecycle-managed and offers no way to edit its configuration, so the
+      // remedy names something the user cannot reach.
+      //
+      // A person with `task:assign` directing a run IS the authority. Dispatch it under
+      // an explicit, recorded human authority instead of refusing. No agent is pinned —
+      // the ticket's assignee on a managed board is the Coordinator, never an executor —
+      // so the dispatcher resolves the workspace's default cloud agent, exactly as it
+      // does for any other unpinned run. The guard admits it, records WHO overrode it,
+      // and marks the run lifecycle-neutral, so it can do the work but cannot move the
+      // ticket past a sign-off it did not earn.
+      if (evaln.reason === 'managed_no_role' || evaln.reason === 'lane_unconfigured') {
+        const overridden = await dispatchCloudRunForTask(
+          c.env as Env, db, runtimeService, (p) => c.executionCtx.waitUntil(p),
+          {
+            taskId: id,
+            tenantId,
+            payload: stampExecutionAuthority(
+              JSON.stringify({ laneKey: row.status, ...(chatId != null ? { chatId } : {}) }),
+              humanDirected(
+                (c as { get(k: 'userId'): string | undefined }).get('userId'),
+                `Run now on a lifecycle-managed ticket whose stage has no role bound to an agent (${evaln.reason}).`,
+              ),
+            ),
+            submittedBy,
+            force: true,
+          },
+        );
+        if (overridden.executionId == null) {
+          const reason = overridden.refusal?.reason ?? ('no_agent' satisfies AutoRunReason);
+          const entitlement = reason === 'cloud_run_limit' || reason === 'tenant_token_limit';
+          return c.json({
+            error: overridden.refusal?.message ?? 'The run could not be started and the dispatcher gave no reason.',
+            reason,
+          }, entitlement ? 402 : 409);
+        }
+        // `agentRef: null` is the honest answer: nothing was pinned, so the dispatcher
+        // resolved the default. `managedOverride` lets a caller say the run went ahead
+        // WITHOUT stage attribution rather than implying it satisfied the stage.
+        return c.json({ ok: true, executionId: overridden.executionId, agentRef: null, managedOverride: true }, 202);
+      }
       // Nothing to run as — surface the precise reason so the UI can prompt the fix
       // (assign an agent, staff the lane, or relax the capability requirement).
       const reason: AutoRunReason = evaln.reason === 'will_run' ? 'no_agent' : evaln.reason;
@@ -604,8 +653,6 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const runNowHostId = await resolveLaneAgentHostId(
       db, c.get('tenantId'), evaln.candidate.runtime, evaln.candidate.target,
     ).catch(() => null);
-    const tenantId = c.get('tenantId');
-    const submittedBy = (c as { get(k: 'userId'): string | undefined }).get('userId') ?? 'system:run-now';
     // -- A MANAGED BOARD REFUSES A ROLE-LESS PAYLOAD --------------------------------
     //
     // `authorizeManagedTaskExecution` declines any dispatch on a lifecycle-managed board

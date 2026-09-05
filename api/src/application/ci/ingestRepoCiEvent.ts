@@ -29,6 +29,7 @@ import { completeTaskOnMerge } from '../task/taskLifecycle';
 import { fetchBuildError } from './fetchBuildError';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { stampExecutionAuthority, systemInitiated } from '../runtime/executionAuthority';
 
 export interface RepoCiEvent {
   /** GitHub event name, e.g. 'check_suite' | 'deployment_status' | 'workflow_run' | 'status'. */
@@ -266,9 +267,16 @@ async function applyBuildOutcome(
   }
 
   const attempt = priorAttempts + 1;
-  const payload = JSON.stringify({
-    remediation: { kind: 'build_failure', phase, attempt, maxAttempts: MAX_AUTOFIX_ATTEMPTS, buildError, runUrl: evt.targetUrl },
-  });
+  // Fixing a red build is platform machinery, not a stage deliverable, so it names no
+  // lifecycle role and a managed board would refuse it outright. Declared as a system
+  // authority instead: the guard admits it, records the override, and marks the run
+  // lifecycle-neutral — it can push the fix, it cannot advance the ticket's stage.
+  const payload = stampExecutionAuthority(
+    JSON.stringify({
+      remediation: { kind: 'build_failure', phase, attempt, maxAttempts: MAX_AUTOFIX_ATTEMPTS, buildError, runUrl: evt.targetUrl },
+    }),
+    systemInitiated('ci-autofix', `Auto-fix attempt ${attempt} for a failing ${phase} build.`),
+  );
   // Claim this build BEFORE returning the intent, so a sibling status key that
   // arrives while the dispatch is still in flight sees the claim above.
   if (evt.sha) {

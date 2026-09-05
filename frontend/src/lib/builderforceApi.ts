@@ -1596,6 +1596,22 @@ export type AutoRunReason =
   /** The lane owes a role sign-off, so its normal agent is suppressed. */
   | 'lane_requirement_gate';
 
+/**
+ * What a successful "Run now" started.
+ *
+ * `agentRef` is null and `managedOverride` true when a LIFECYCLE-MANAGED ticket was
+ * dispatched on the operator's authority rather than a stage role — the stage had no
+ * role bound to an agent, so nothing was pinned and the platform resolved its default.
+ * A caller must not report that run as having satisfied the stage: it is deliberately
+ * lifecycle-neutral and cannot advance the ticket on its own.
+ */
+export interface RunNowResult {
+  ok: true;
+  executionId: number;
+  agentRef: string | null;
+  managedOverride?: boolean;
+}
+
 export interface AutoRunDiagnostic {
   status: string;
   assignedAgentRef: string | null;
@@ -2066,8 +2082,8 @@ export const tasksApi = {
    *  `chatId` binds the run to the Brain conversation that asked for it, so the agent
    *  narrates its lifecycle back there and can be steered from it. Omit for a board
    *  dispatch, which belongs to no conversation. */
-  runNow: (id: number, opts?: { chatId?: number }): Promise<{ ok: true; executionId: number; agentRef: string }> =>
-    request<{ ok: true; executionId: number; agentRef: string }>(`/api/tasks/${id}/run-now`, {
+  runNow: (id: number, opts?: { chatId?: number }): Promise<RunNowResult> =>
+    request<RunNowResult>(`/api/tasks/${id}/run-now`, {
       method: 'POST',
       ...(opts?.chatId != null ? { body: JSON.stringify({ chatId: opts.chatId }) } : {}),
     }),
@@ -3704,6 +3720,11 @@ export const PROVIDER_PROBE_STATES = [
   'ready', 'capacity', 'unavailable', 'upstream_error',
   // Nothing to judge
   'not_connected', 'not_found', 'no_test_model',
+  /** The provider is reachable only from a machine of the operator's own (Kimi Code's
+   *  edge refuses the hosted gateway; a self-hosted engine lives at a private address)
+   *  and no runtime is connected, so the gateway never dispatched. Emphatically NOT a
+   *  verdict on the credential — nothing was presented to judge. */
+  'local_egress_required',
   // A credential row exists but could not be resolved — mirrors the API's
   // `ByoUnresolvedReason`. Each sends the owner somewhere different.
   'revoked', 'expired', 'undecryptable', 'unsupported-auth', 'other-workspace',
