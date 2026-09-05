@@ -30,7 +30,7 @@
  */
 
 import { asksForChange } from '@builderforce/agent-stall';
-import { isCodeChangeTool } from './chatWorkLinking';
+import { isCodeChangeTool } from './localWorkspaceTools';
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 import { activityTarget } from './runActivity';
 import type { BrainMessage } from './types';

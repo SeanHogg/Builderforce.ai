@@ -43,7 +43,8 @@ import { withProvenanceMetadata, type ProvenanceAccount } from './provenance';
 import { selectToolsForTurn } from './selectTools';
 import { routerToolSpecs, isRouterTool, handleRouterCall } from './toolRouter';
 import { setLastResolvedModel } from './lastResolvedModel';
-import { isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, linkedTicketsToComplete, isReadOnlyPlatformTool, canChangeCodeHere } from './chatWorkLinking';
+import { isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, linkedTicketsToComplete, isReadOnlyPlatformTool } from './chatWorkLinking';
+import { isCodeChangeTool, canChangeCodeHere, localToolsIn } from './localWorkspaceTools';
 import { shippedToBaseBranch } from './shipVerification';
 import { toolActivity, activityTarget, type BrainRunActivity } from './runActivity';
 import { ReadCoverage, revisitAdvisory, withAdvisory } from './readCoverage';
@@ -1450,13 +1451,17 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // the VS Code webview Brain, mirroring the server-side @agent reply loop
   // (BrainService.agentReply). `chatMode` is optional and defaults to WORK so any host
   // that has not adopted the mode yet keeps the behaviour it shipped with.
+  // The tools this host advertised for the run, by name. Resolved once: it answers both
+  // "may this session change code itself" (below) and "which local tools must never be
+  // trimmed away" (the selection pin further down), and those two must see one catalog.
+  const catalogToolNames = (req.tools ?? []).map((t) => t.function.name);
   // WORK mode's ordering depends on what THIS surface can do: an IDE run holding the
   // workspace tools should make a small change itself rather than hire a cloud agent to
   // make it, while a web run (no file tools) can only ever get code changed by
   // dispatching. Derived from the run's own advertised tools, so no host declares its
   // capability separately — and a host that gains or loses the file tools stays
   // consistent with the post-run backstop, which reads the same set.
-  const canEditHere = canChangeCodeHere((req.tools ?? []).map((t) => t.function.name));
+  const canEditHere = canChangeCodeHere(catalogToolNames);
   systemPrompt = `${systemPrompt}\n\n${chatModeDirective(runMode, chatId, { canEditHere })}\n\n${turnOptimizationDirective()}`;
 
   // A bare "Fix" / "do it" / "go ahead" has no subject of its own — it points at the
@@ -1509,7 +1514,24 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // selection scores against this and nothing else — see the `query` note below.
   const requestQuery = routingQueryForTurn(convo);
   // Tool names the resolved system prompt tells the model to call. Always advertised.
-  const promptNamedTools = toolNamesMentionedIn(systemPrompt);
+  //
+  // This only catches `builtin_*` / `mcp__*` identifiers, which is the right pattern
+  // for a catalog tool named in prose but blind to the LOCAL workspace tools —
+  // `run_command`, `read_file`, `edit_file` and the rest carry no such prefix. The IDE
+  // persona names every one of them ("use run_command for git … to commit, push, and
+  // open a PR") and pinned none, so on the turn that asked for a commit `run_command`
+  // scored zero against "commit the change and push to main", missed the 64-tool cut,
+  // and the agent reported that the tool its own prompt had promised did not exist —
+  // then burned 78 calls and 44 minutes looking for it.
+  //
+  // Those tools are not one domain among many that a query may be relevant to; they are
+  // what this surface IS. Every one the host advertised is pinned, so relevance can
+  // never decide whether the agent may touch the workspace it is sitting in. On a
+  // surface without them (the web Brain) the intersection is empty and nothing changes.
+  const alwaysAdvertised = [
+    ...toolNamesMentionedIn(systemPrompt),
+    ...localToolsIn(catalogToolNames),
+  ];
 
   // Evermind learning + reconciliation provenance for a completed turn. Extracted so
   // BOTH the normal final-answer branch AND the tool-budget-exhausted forced-final
@@ -1600,8 +1622,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       // directive names `builtin_chats_list_tickets`) are never optional: telling a
       // model to call a tool we then decline to advertise is the exact contradiction
       // that produces a narrated call. Derived from the prompt text, so a directive
-      // edit can never silently desync from this list.
-      required: promptNamedTools,
+      // edit can never silently desync from this list — plus the local workspace
+      // tools, which the prompt names in prose the pattern cannot see.
+      required: alwaysAdvertised,
     });
     // The ROUTER rides along whenever selection actually trimmed something, so the
     // tools that missed the cut stay REACHABLE instead of silently ceasing to exist.
@@ -1826,10 +1849,13 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           }
         } else {
           readDedupe.clear();
-          // A possibly-mutating call invalidates the coverage picture too: a read
-          // AFTER a change is new information, and nagging the model for taking it
-          // would punish exactly the right behaviour.
-          readCoverage.reset();
+          // A possibly-mutating call invalidates the coverage picture for WHAT IT
+          // TOUCHED — a read after a change is new information, and nagging the model
+          // for taking it would punish exactly the right behaviour. Only for what it
+          // touched, though: clearing the whole tally on every non-read call let a
+          // ticket write or a failed dispatch erase the history of unrelated files,
+          // which is why the guard never fired through 14 reads of one CSS file.
+          readCoverage.invalidate(tc.name, args);
         }
         const toolStart = nowMs();
         // Name the tool AND what it is working on, before it runs. This is the

@@ -30,6 +30,7 @@
  */
 
 import { activityTarget } from './runActivity';
+import { isUnscopedMutationTool } from './localWorkspaceTools';
 
 /**
  * Visits to one target before the model is told it is circling. Two reads of a
@@ -89,12 +90,37 @@ export class ReadCoverage {
   }
 
   /**
-   * A mutation invalidates the picture: a file read AFTER a change is genuinely new
-   * information, and carrying the old tally forward would nag the model for doing
-   * exactly the right thing. Mirrors how the run loop clears its read-dedupe cache.
+   * A mutation makes a re-read of WHAT IT CHANGED legitimate — that read returns
+   * genuinely new information, and nagging about it would punish exactly the right
+   * behaviour. So the tally for that target is dropped.
+   *
+   * It says nothing about any OTHER target, and treating it as if it did is what made
+   * this guard almost inert. Clearing the whole map on every non-read call meant a
+   * single `edit_file`, ticket write, git status or failed dispatch wiped the history
+   * of every file in the run — and in a run that interleaves reads with platform
+   * writes, the counter never reached three. Measured on the run this was built for:
+   * one CSS file read 14 times and its component 13, across 78 calls, with the
+   * advisory firing on neither.
+   *
+   * A tool that can touch arbitrary files (`run_command` — a codemod, a formatter, a
+   * checkout) is the one honest exception: the answer to "what did that change?" is
+   * unknown, so everything is invalidated.
    */
-  reset(): void {
-    this.visits.clear();
+  invalidate(tool: string, args: unknown): void {
+    if (isUnscopedMutationTool(tool)) {
+      this.visits.clear();
+      return;
+    }
+    const target = activityTarget(args);
+    // A mutation with no resolvable target changed nothing ON DISK that this tally
+    // describes (a ticket write, a dispatch, a sign-off), so it invalidates nothing.
+    if (!target) return;
+    // Keyed `${tool}:${target}`, and the edit invalidates the target across every
+    // tool that reads it — `read_file` and `search_code` on one path are the same
+    // stale picture.
+    for (const key of [...this.visits.keys()]) {
+      if (key.slice(key.indexOf(':') + 1) === target) this.visits.delete(key);
+    }
   }
 
   /** Targets read more than once, most-revisited first — for the run's own reporting. */

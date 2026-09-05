@@ -247,17 +247,29 @@ export type { ModelFallbackSurface } from '@builderforce/agent-stall';
 // a ticket" backstop (reused by non-React hosts driving the run loop directly).
 export {
   chatWorkLinkingDirective,
-  isCodeChangeTool,
   isTicketRecordingTool,
   codeChangeFile,
   workItemLinkFromCreate,
   linkedTicketsToAdvance,
   linkedTicketsToComplete,
-  CODE_CHANGE_TOOLS,
   TICKET_RECORDING_TOOLS,
   NOT_STARTED_TASK_STATUSES,
 } from './chatWorkLinking';
 export type { CreatedWorkItemLink, LinkedTicketToAdvance } from './chatWorkLinking';
+
+// The LOCAL WORKSPACE TOOLSET — what a surface can do because it sits beside the
+// user's files. Owns both "can this run change code" and the always-advertise list
+// that stops relevance trimming from hiding the surface's own tools from it.
+export {
+  LOCAL_WORKSPACE_TOOLS,
+  CODE_CHANGE_TOOLS,
+  UNSCOPED_MUTATION_TOOLS,
+  isLocalWorkspaceTool,
+  isCodeChangeTool,
+  isUnscopedMutationTool,
+  canChangeCodeHere,
+  localToolsIn,
+} from './localWorkspaceTools';
 
 // Chat MODE — conversation (`chat`) vs execution (`work`). The single source for what
 // a mode MEANS to the model, shared by the web Brain, the VS Code webview and the

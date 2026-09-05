@@ -124,7 +124,7 @@ export function chatConversationDirective(): string {
  * fighting a dispatch with the file untouched at the end of it.
  *
  * So the ordering is stated where the surface actually differs, driven by whether this
- * run was given code-change tools ({@link ./chatWorkLinking}'s `CODE_CHANGE_TOOLS`,
+ * run was given code-change tools ({@link ./localWorkspaceTools}'s `CODE_CHANGE_TOOLS`,
  * which is the same set the "a code change is always tied to a ticket" backstop reads).
  * Doing the work still ends in a ticket — recording is not optional, it is just not a
  * substitute for doing.

@@ -18,6 +18,10 @@
  * mints one via `builtin_tickets_from_delta` tied to the chat — so an IDE edit is
  * never left invisible or unlinked.
  *
+ * WHICH TOOLS those are is NOT decided here: the local workspace toolset belongs to
+ * `localWorkspaceTools.ts`, which the run loop also reads to keep those tools
+ * advertised. One owner, so "what can change code" cannot mean two things.
+ *
  * Kept framework-free (pure strings + Sets) so it is safe in every bundle.
  */
 
@@ -31,36 +35,6 @@ export const TICKET_RECORDING_TOOLS: ReadonlySet<string> = new Set([
   'builtin_chats_link_ticket',
   'builtin_reviews_record',
 ]);
-
-/**
- * Local workspace tools whose success means the agent CHANGED code on disk — the
- * surface-specific signal that a ticket must exist. Only the VS Code (IDE) surface
- * exposes these; the web Brain has no file tools, so a web run never trips the
- * backstop. `run_command` is intentionally excluded: it usually runs tests / build /
- * lint, not a durable code change, so treating it as one would mint spurious tickets.
- */
-export const CODE_CHANGE_TOOLS: ReadonlySet<string> = new Set([
-  'write_file',
-  'edit_file',
-  'delete_file',
-]);
-
-export function isCodeChangeTool(name: string): boolean {
-  return CODE_CHANGE_TOOLS.has(name);
-}
-
-/**
- * Whether THIS run can change code itself — i.e. the host advertised the local
- * workspace tools. The IDE surface does; the web Brain does not.
- *
- * Read by the WORK-mode directive, so "do it yourself rather than dispatching a cloud
- * agent for it" is stated only where it is true. Derived from the same set the
- * post-run ticket backstop uses, so the two can never disagree about what "this
- * session can change code" means.
- */
-export function canChangeCodeHere(toolNames: readonly string[]): boolean {
-  return toolNames.some(isCodeChangeTool);
-}
 
 /**
  * Advertised (gateway `builtin_*`) names of the platform tools that CREATE a
