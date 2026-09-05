@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useToast } from '@/components/ToastProvider';
@@ -50,6 +50,16 @@ interface ProviderConfig {
   keyPlaceholder: string;
   /** Provider supports connecting a consumer subscription via OAuth. */
   supportsOauth: boolean;
+  /**
+   * How that OAuth connect FINISHES. `paste` (the default) ends with the operator copying
+   * a code back from the provider's page; `device` has nothing to copy — the code rides in
+   * the URL — and is completed by polling.
+   *
+   * Declared here rather than read off the start response so the card renders the right
+   * affordance deterministically: a device provider ships no paste copy, so falling into
+   * that branch would render raw translation keys at the operator.
+   */
+  oauthGrant?: 'paste' | 'device';
 }
 
 const PROVIDERS: ProviderConfig[] = [
@@ -57,13 +67,24 @@ const PROVIDERS: ProviderConfig[] = [
   { id: 'openai',    label: 'OpenAI',             keyPlaceholder: 'sk-…',     supportsOauth: true },
   { id: 'google',    label: 'Google (Gemini)',    keyPlaceholder: 'AIza…',   supportsOauth: false },
   { id: 'meta',      label: 'Meta AI (MUSE)',     keyPlaceholder: 'meta-…',  supportsOauth: false },
-  { id: 'kimi',      label: 'Kimi',                keyPlaceholder: 'sk-…',    supportsOauth: false },
+  // Kimi Code issues no API key at all — its own config leaves `api_key` empty beside an
+  // OAuth record — so this connects by device-code redirect, never by paste.
+  { id: 'kimi',      label: 'Kimi',                keyPlaceholder: 'sk-…',    supportsOauth: true, oauthGrant: 'device' },
   { id: 'moonshot',  label: 'Moonshot AI',         keyPlaceholder: 'sk-…',    supportsOauth: false },
   { id: 'qwen',      label: 'Qwen',                keyPlaceholder: 'sk-…',    supportsOauth: false },
   { id: 'minimax',   label: 'MiniMax',             keyPlaceholder: 'sk-…',    supportsOauth: false },
   { id: 'xai',       label: 'xAI (Grok)',           keyPlaceholder: 'xai-…',   supportsOauth: true },
   { id: 'ollama',    label: 'Ollama Cloud',         keyPlaceholder: 'sk-…',    supportsOauth: false },
 ];
+
+/**
+ * How long the card waits for a device approval before giving up.
+ *
+ * Matched to the server's pending-record TTL (`OAUTH_PKCE_TTL_SECONDS`, 15 minutes): once
+ * that record expires the poll can only ever answer "start again", so continuing past it
+ * would spin against an endpoint that has nothing left to say.
+ */
+const OAUTH_DEVICE_WINDOW_MS = 15 * 60 * 1000;
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20,
@@ -595,6 +616,15 @@ function ProviderConnectionCard({
   const [connecting, setConnecting] = useState(false);
   const [pastedCode, setPastedCode] = useState('');
   const [oauthState, setOauthState] = useState('');
+  /** Set when the provider uses a DEVICE grant (Kimi): there is nothing to paste, so the
+   *  card shows the code the provider's page will display and waits for the approval. */
+  const [deviceCode, setDeviceCode] = useState<{ userCode: string; intervalSeconds: number } | null>(null);
+  /** Gates the poll loop. A ref, not state, because the loop reads it BETWEEN awaits —
+   *  a state value captured in the closure would still be `true` after a cancel. */
+  const pollingRef = useRef(false);
+  // Stop polling if the card unmounts mid-connect, so an abandoned tab does not leave a
+  // loop running against the API until the page is closed.
+  useEffect(() => () => { pollingRef.current = false; }, []);
   const [diagnostic, setDiagnostic] = useState<ProviderDiagnostic | null>(null);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<ProbeVerdict | null>(null);
@@ -648,15 +678,65 @@ function ProviderConnectionCard({
   const startConnect = async () => {
     setBusy(true); setError(null);
     try {
-      const { authorizeUrl, state } = await providerKeysApi.oauthStart(config.id);
-      setOauthState(state);
-      window.open(authorizeUrl, '_blank', 'noopener,noreferrer');
+      const started = await providerKeysApi.oauthStart(config.id);
+      setOauthState(started.state);
+      window.open(started.authorizeUrl, '_blank', 'noopener,noreferrer');
       setConnecting(true);
+      if (started.grant === 'device' && started.userCode) {
+        // Nothing to paste — the code is already in the URL we just opened. Show it so
+        // the operator can verify the page they landed on, and wait for the approval.
+        const device = { userCode: started.userCode, intervalSeconds: started.pollIntervalSeconds ?? 5 };
+        setDeviceCode(device);
+        pollingRef.current = true;
+        void pollForApproval(started.state, device.intervalSeconds);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : t('errStartConnect'));
     } finally {
       setBusy(false);
     }
+  };
+
+  /**
+   * Poll until the user approves the device request in the provider's tab.
+   *
+   * Bounded by the same window the server holds the pending record for, so a tab the
+   * operator abandoned stops polling instead of running until the page is closed. A
+   * `slow_down` widens the interval, which is the provider telling us it is being asked
+   * too often — ignoring it is how a poll starts getting rejected outright.
+   */
+  const pollForApproval = async (state: string, intervalSeconds: number) => {
+    const deadline = Date.now() + OAUTH_DEVICE_WINDOW_MS;
+    let waitMs = Math.max(1, intervalSeconds) * 1000;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      // The operator cancelled, or the component moved on — stop rather than completing
+      // a connect nobody is waiting for.
+      if (!pollingRef.current) return;
+      try {
+        const result = await providerKeysApi.oauthComplete(config.id, '', state);
+        if (result.status === 'slow_down') { waitMs += 2000; continue; }
+        if (result.status === 'pending') continue;
+        onChange('oauth');
+        stopDeviceConnect();
+        return;
+      } catch (e) {
+        setError(e instanceof Error ? e.message : t('errConnectSubscription'));
+        stopDeviceConnect();
+        return;
+      }
+    }
+    setError(t('errCodeExpired'));
+    stopDeviceConnect();
+  };
+
+  /** Tear down a device connect — the ONE place that clears it, so a cancel, a success,
+   *  a failure and a timeout can never leave different halves of the state behind. */
+  const stopDeviceConnect = () => {
+    pollingRef.current = false;
+    setConnecting(false);
+    setDeviceCode(null);
+    setOauthState('');
   };
 
   const finishConnect = async () => {
@@ -753,6 +833,32 @@ function ProviderConnectionCard({
             <button type="button" onClick={startConnect} disabled={busy} style={{ ...buttonPrimary, opacity: busy ? 0.5 : 1 }}>
               {busy ? t('working') : authType === 'oauth' ? t('reconnect', { subscription }) : t('connect', { subscription })}
             </button>
+          ) : config.oauthGrant === 'device' ? (
+            /* Device grant: the code already travelled in the URL, so there is nothing to
+               paste. Show it so the operator can check the page they landed on shows the
+               same one, and wait — the poll finishes the connect on its own. */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: 0 }}>
+                {t('deviceApprovePrompt', { subscription })}
+              </p>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <code
+                  style={{
+                    fontSize: 'var(--font-size-body)', letterSpacing: '0.12em', padding: '6px 10px',
+                    background: 'var(--bg-subtle)', border: '1px solid var(--border-subtle)',
+                    borderRadius: 'var(--radius-md)', color: 'var(--text-primary)',
+                  }}
+                >
+                  {deviceCode?.userCode ?? '…'}
+                </code>
+                <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }} role="status">
+                  {t('deviceWaiting')}
+                </span>
+                <button type="button" onClick={stopDeviceConnect} disabled={busy} style={{ ...buttonDanger, flexShrink: 0 }}>
+                  {t('cancel')}
+                </button>
+              </div>
+            </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: 0 }}>

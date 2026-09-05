@@ -1,3 +1,51 @@
+## ✅ RESOLVED 2026-09-05 — Kimi connects by redirect everywhere, on one OAuth credential, and refreshes itself
+
+Read out of the shipped `moonshot-ai.kimi-code` client, so none of it is guessed: Kimi
+runs a public OAuth client at `auth.kimi.com` (id `17e5f671-…`, a public identifier, not a
+secret) with `/api/oauth/device_authorization` and `/api/oauth/token`. Access tokens carry
+`expires_in: 900` — fifteen minutes — and every grant ROTATES the refresh token.
+
+That last fact is what made the previous state untenable. The web card asked for an
+`sk-…` key that a Kimi Code subscription never issues (its own `config.toml` leaves
+`api_key` empty beside an OAuth record), and the VS Code path read the stored access token
+without being able to renew it, so it worked only in the minutes after Kimi Code last ran.
+
+**One credential concept, two surfaces.**
+
+- **VS Code** — `kimiCodeCredentials.ts` owns the on-disk record in Kimi's exact wire
+  format and write protocol (temp file → fsync → rename, mode 0600); `kimiCodeAuth.ts`
+  owns the refresh grant. The refresh threshold is Kimi's own `max(300s, expires_in/2)`,
+  copied rather than invented — two clients refreshing a rotating credential on different
+  schedules is how one ends up holding a retired token. Rotation is PERSISTED, because
+  taking a new access token without writing the new refresh token would break the user's
+  own Kimi Code install.
+- **Rotation races are resolved, not locked.** Kimi's cross-process lock is disabled on
+  win32 (`resolveLockTarget` returns undefined there), so two refreshers already race by
+  design. Rather than reimplement `proper-lockfile`, a lost race comes back as
+  `invalid_grant` — and the winner has by then written a good credential to the very file
+  we read, so we re-read and succeed. Concurrent turns collapse onto one in-flight grant.
+- **Web** — `kimiOAuth.ts` runs the device flow, and Kimi joins
+  `SUBSCRIPTION_OAUTH_PROVIDERS` as a fourth row. The shared connect flow grew a
+  `SubscriptionGrant` union (`paste` | `device`) rather than a second router: both styles
+  share the tenant-scoped pending record, its TTL, the CSRF role of `state` and the
+  storage call. `pending`/`slow_down` resolve as successful polls, never errors.
+- **Nothing new to thread.** A connected Kimi subscription resolves into the `kimi` VENDOR
+  KEY, because its access token is an ordinary Bearer for the same `kimi-code` endpoint an
+  API key would have used — so dispatch, the local-egress relay and the health probe treat
+  the two connection styles identically, with zero new wiring.
+- **The credential never reaches a renderer.** The webview fence became
+  `resolveLocalChatEndpoint`, returning the endpoint rather than a boolean, so one lookup
+  answers both "may this be called?" and "with what?" — and the HOST attaches the bearer
+  last, after stripping any caller-supplied one.
+
+A misclassification the tests caught and fixed: a credential file with no `access_token`
+key at all was being read as Kimi's signed-out tombstone (which is the key PRESENT and
+EMPTY). Those have opposite remedies, and the wrong one sends a signed-in user to redo a
+login that was never broken.
+
+api/frontend 2026.9.7 · VSIX 2026.9.6 packaged. 1,622 API tests, 242 extension tests and
+the frontend i18n/provider suites pass; both typechecks clean.
+
 ## ✅ RESOLVED 2026-09-05 — Kimi Code now runs from the VS Code extension host, using the login Kimi Code already performed
 
 The cloud fix earlier today made the gateway stop pretending it could reach Kimi. It did

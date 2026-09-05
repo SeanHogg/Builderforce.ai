@@ -13613,7 +13613,8 @@
         "blurb": "Paste a Meta AI API key to run MUSE models (muse-spark-1.1) on your own Meta AI account."
       },
       "kimi": {
-        "blurb": "Kimi Code subscription keys are for personal interactive clients, so Kimi’s edge refuses our cloud gateway. Connect a Builderforce runtime and Kimi runs through your own machine; otherwise use a Moonshot Open Platform key."
+        "blurb": "Connect your Kimi Code subscription — it signs in by redirect, with no API key to paste (Kimi Code does not issue one). Kimi only accepts calls from a machine of your own, so turns route through your connected Builderforce runtime. A Moonshot Open Platform key is the alternative.",
+        "subscription": "Kimi Code subscription"
       },
       "moonshot": {
         "blurb": "Paste a Moonshot Open Platform API key to run Moonshot models on your own account."
@@ -13699,7 +13700,9 @@
       "capacity": "The credential works, but the provider has temporarily refused usage ({status}) — this may be a rolling/session limit, spend cap, or empty credit balance. BuilderForce retries automatically after the cooldown; check the provider console for its reset time. There is no need to reconnect.",
       "minimaxCapacity": "Your MiniMax usage window is exhausted ({status}). BuilderForce will retry this key automatically as the window resets; check the MiniMax Console for the exact reset time. The key is valid and does not need to be replaced.",
       "unresolved": "The stored credential could not be used at all — it has been revoked, has expired, or was saved in a different workspace. Reconnect it here."
-    }
+    },
+    "deviceApprovePrompt": "Approve the request in the {subscription} tab that just opened. It should show this code:",
+    "deviceWaiting": "Waiting for approval…"
   },
   "modelSelect": {
     "yourLlms": "Your LLMs",

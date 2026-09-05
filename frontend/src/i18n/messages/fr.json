@@ -13613,7 +13613,8 @@
         "blurb": "Collez une clé d'API Meta AI pour exécuter des modèles MUSE (muse-spark-1.1) sur votre propre compte Meta AI."
       },
       "kimi": {
-        "blurb": "Les clés d’abonnement Kimi Code sont destinées aux clients interactifs personnels : la périphérie de Kimi refuse donc notre passerelle cloud. Connectez un runtime Builderforce et Kimi s’exécutera depuis votre propre machine ; sinon, utilisez une clé Moonshot Open Platform."
+        "blurb": "Connectez votre abonnement Kimi Code : la connexion se fait par redirection, sans clé d’API à coller (Kimi Code n’en délivre pas). Kimi n’accepte que les appels venant d’une machine qui vous appartient, donc les tours passent par votre runtime Builderforce connecté. Une clé Moonshot Open Platform est l’alternative.",
+        "subscription": "abonnement Kimi Code"
       },
       "moonshot": {
         "blurb": "Collez une clé API Moonshot Open Platform pour utiliser les modèles Moonshot."
@@ -13699,7 +13700,9 @@
       "capacity": "L’identifiant fonctionne, mais le fournisseur refuse temporairement l’utilisation ({status}) — limite de session, plafond de dépense ou solde épuisé. BuilderForce réessaie automatiquement après le délai ; consultez la console du fournisseur pour l’heure de réinitialisation. Inutile de reconnecter.",
       "minimaxCapacity": "Votre fenêtre d’utilisation MiniMax est épuisée ({status}). BuilderForce réessaiera automatiquement après sa réinitialisation ; consultez la console MiniMax pour l’heure exacte. La clé reste valide.",
       "unresolved": "L’identifiant enregistré n’a pas pu être utilisé du tout : il a été révoqué, a expiré, ou a été enregistré dans un autre espace de travail. Reconnectez-le ici."
-    }
+    },
+    "deviceApprovePrompt": "Approuvez la demande dans l’onglet {subscription} qui vient de s’ouvrir. Il doit afficher ce code :",
+    "deviceWaiting": "En attente de l’approbation…"
   },
   "modelSelect": {
     "yourLlms": "Vos LLM",

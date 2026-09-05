@@ -35,6 +35,7 @@ import { credentialSecret } from '../integrations/credentialCrypto';
 import { refreshAnthropicToken, OAUTH_SAFETY_MARGIN_MS, type AnthropicOAuthTokens } from './anthropicOAuth';
 import { refreshOpenAICodexToken, type OpenAICodexOAuthTokens } from './openaiCodexOAuth';
 import { refreshXaiToken, type XaiOAuthTokens } from './xaiOAuth';
+import { refreshKimiOAuth, type KimiOAuthTokens } from './kimiOAuth';
 import {
   listOpenRouterConnections,
   resolveOpenRouterConnectionKeys,
@@ -214,7 +215,7 @@ export async function setTenantProviderKey(
  * storage call and the resolvers all need to agree on it, and an inline union
  * repeated at three call sites is how a fourth provider gets forgotten at one.
  */
-export type SubscriptionOAuthTokens = AnthropicOAuthTokens | OpenAICodexOAuthTokens | XaiOAuthTokens;
+export type SubscriptionOAuthTokens = AnthropicOAuthTokens | OpenAICodexOAuthTokens | XaiOAuthTokens | KimiOAuthTokens;
 
 export async function setTenantProviderOAuth(
   env: Env,
@@ -282,6 +283,45 @@ export async function resolveXaiOAuthResolution(env: Env, tenantId: number): Pro
   } catch (e) {
     const status = (e as { status?: number }).status;
     if (status === 400 || status === 401 || status === 403) return { token: null, reason: 'revoked' };
+    if (Date.now() < tokens.expires + OAUTH_SAFETY_MARGIN_MS) return { token: tokens.access };
+    return { token: null, reason: 'expired' };
+  }
+}
+
+export interface KimiOAuthResolution { token: string | null; reason?: ByoUnresolvedReason }
+
+/**
+ * Resolve and rotate a tenant's Kimi Code subscription credential.
+ *
+ * Deliberately the same shape as {@link resolveXaiOAuthResolution}, with one difference
+ * that matters downstream: the resolved token is delivered as the `kimi` VENDOR KEY
+ * rather than threaded as its own field. Kimi's access token is an ordinary Bearer for
+ * the same `kimi-code` endpoint an API key would have used, so dispatch, the local-egress
+ * relay and the credential probe all keep working with no new wiring — an OAuth Kimi and
+ * an api-key Kimi are indistinguishable by the time they reach a vendor.
+ *
+ * Refresh is not an edge case here. Kimi's access tokens live FIFTEEN minutes, so this
+ * rotates on nearly every resolution, and the rotated refresh token must be stored or the
+ * next call presents one the server has already retired.
+ */
+export async function resolveKimiOAuthResolution(env: Env, tenantId: number): Promise<KimiOAuthResolution> {
+  const row = await loadProviderRow(env, tenantId, 'kimi');
+  if (row?.lookup_failed) return { token: null, reason: 'lookup_failed' };
+  if (!row?.key_enc || (row.auth_type ?? 'api_key') !== 'oauth') return { token: null };
+  let tokens: KimiOAuthTokens;
+  try { tokens = JSON.parse(await decryptSecretFromStorage(row.key_enc, credentialSecret(env), { tenantId, legacySecret: env.JWT_SECRET })) as KimiOAuthTokens; }
+  catch { return { token: null, reason: 'undecryptable' }; }
+  if (!tokens.access || !tokens.refresh) return { token: null, reason: 'undecryptable' };
+  if (Date.now() < tokens.expires) return { token: tokens.access };
+  try {
+    const refreshed = await refreshKimiOAuth(tokens.refresh);
+    await setTenantProviderOAuth(env, tenantId, 'kimi', refreshed, null);
+    return { token: refreshed.access };
+  } catch (e) {
+    const status = (e as { status?: number }).status;
+    if (status === 400 || status === 401 || status === 403) return { token: null, reason: 'revoked' };
+    // A refresh that failed for a transient reason must not disconnect a working account:
+    // inside the safety margin the existing token is still worth trying.
     if (Date.now() < tokens.expires + OAUTH_SAFETY_MARGIN_MS) return { token: tokens.access };
     return { token: null, reason: 'expired' };
   }
@@ -543,14 +583,22 @@ export interface TenantLlmCredentials {
  * WHY in `unresolvedReasons`) so the degrade to the shared pool is never silent.
  */
 export async function resolveTenantLlmCredentials(env: Env, tenantId: number): Promise<TenantLlmCredentials> {
-  const [anthropicRes, openaiRes, xaiRes, vendorKeys, configured, openRouterConnections] = await Promise.all([
+  const [anthropicRes, openaiRes, xaiRes, kimiRes, vendorKeys, configured, openRouterConnections] = await Promise.all([
     resolveAnthropicResolution(env, tenantId).catch(() => ({ auth: null }) as AnthropicResolution),
     resolveOpenAICodexResolution(env, tenantId).catch(() => ({ auth: null }) as OpenAICodexResolution),
     resolveXaiOAuthResolution(env, tenantId).catch(() => ({ token: null }) as XaiOAuthResolution),
+    resolveKimiOAuthResolution(env, tenantId).catch(() => ({ token: null }) as KimiOAuthResolution),
     resolveTenantVendorKeys(env, tenantId),
     listTenantProviderKeys(env, tenantId),
     listOpenRouterConnections(env, tenantId).catch(() => [] as OpenRouterConnection[]),
   ]);
+  // A connected Kimi SUBSCRIPTION becomes the `kimi` vendor key. Kimi's OAuth access
+  // token is a plain Bearer against the same endpoint an api key would have used, so
+  // delivering it here — rather than as another threaded field — is what lets every
+  // downstream consumer (dispatch, the local-egress relay, the health probe) treat the
+  // two connection styles identically. `resolveTenantVendorKeys` only reads api-key rows,
+  // so there is nothing to overwrite: a tenant has one or the other, never both.
+  if (kimiRes.token) vendorKeys.kimi = kimiRes.token;
   // Decrypt the connections' OWN OpenRouter keys only when the (cached) metadata says at least
   // one exists — a tenant with no keyed connection never pays for that read, and neither does
   // one with no connections at all.

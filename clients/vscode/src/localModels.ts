@@ -162,11 +162,16 @@ export function localModelsUrl(baseUrl: string): string {
 export function resolveLocalChatEndpoint(
   config: LocalModelsConfig,
   url: string,
-): LocalEndpoint | null {
+): { provider: LocalProviderId; endpoint: LocalEndpoint } | null {
   for (const provider of LOCAL_PROVIDER_IDS) {
     const endpoint = config.endpoints[provider];
     const base = endpoint?.baseUrl ?? "";
-    if (base.trim().length > 0 && localChatCompletionsUrl(base) === url) return endpoint!;
+    if (base.trim().length > 0 && localChatCompletionsUrl(base) === url) {
+      // The PROVIDER rides along because the credential is resolved per provider and
+      // asynchronously — the caller needs to know which one it matched, not just that
+      // something did.
+      return { provider, endpoint: endpoint! };
+    }
   }
   return null;
 }

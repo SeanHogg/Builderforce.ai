@@ -26,7 +26,7 @@
 
 import type * as vscode from "vscode";
 import type { BrainStreamFn } from "@seanhogg/builderforce-brain-embedded";
-import { complete, getBaseUrl, getLocalModelsConfig, type ChatMessage } from "./gateway";
+import { authorizeLocalEndpoint, complete, getBaseUrl, getLocalModelsConfig, type ChatMessage } from "./gateway";
 import {
   completeLocal,
   createLocalStream,
@@ -65,7 +65,13 @@ export async function resolveModelRoute(secrets: vscode.SecretStorage): Promise<
   // route, so the turn falls back to the gateway rather than dispatching at `undefined`.
   const endpoint = getLocalModelsConfig().endpoints[pin.provider];
   if (!endpoint) return choice;
-  return { ...choice, local: { ...pin, endpoint } };
+  // Credential resolved HERE, once per turn, because it is the last async moment before
+  // the transport is built — `routeStream` is synchronous by design and a fifteen-minute
+  // Kimi token cannot be refreshed from inside it. A provider that cannot authorize falls
+  // back to the gateway rather than dispatching a request that is certain to 401.
+  const authorized = await authorizeLocalEndpoint(pin.provider, endpoint);
+  if (!authorized.ok) return choice;
+  return { ...choice, local: { ...pin, endpoint: authorized.endpoint } };
 }
 
 /**

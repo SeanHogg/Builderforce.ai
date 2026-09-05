@@ -315,7 +315,10 @@ describe("kimi-code as a locally-served provider", () => {
 
   it("fences the Kimi endpoint and hands back the credential it takes", () => {
     const resolved = resolveLocalChatEndpoint(kimiConfig, "https://api.kimi.com/coding/v1/chat/completions");
-    expect(resolved).toEqual({ baseUrl: "https://api.kimi.com/coding/v1", token: "kc-secret-token-value" });
+    expect(resolved).toEqual({
+      provider: "kimi-code",
+      endpoint: { baseUrl: "https://api.kimi.com/coding/v1", token: "kc-secret-token-value" },
+    });
     // One lookup answers both "may this be called?" and "with what?" — a fence and a
     // separate credential lookup could disagree, and either answer would be a defect.
     expect(resolveLocalChatEndpoint(kimiConfig, "https://api.kimi.com/coding/v1/models")).toBeNull();
@@ -324,7 +327,8 @@ describe("kimi-code as a locally-served provider", () => {
 
   it("returns NO token for an on-device engine, so it stays usable signed out", () => {
     const resolved = resolveLocalChatEndpoint(kimiConfig, "http://127.0.0.1:1919/v1/chat/completions");
-    expect(resolved?.token).toBeUndefined();
+    expect(resolved?.provider).toBe("freetoken");
+    expect(resolved?.endpoint.token).toBeUndefined();
   });
 
   it("sends the bearer on a Kimi turn and omits it entirely for an on-device one", async () => {

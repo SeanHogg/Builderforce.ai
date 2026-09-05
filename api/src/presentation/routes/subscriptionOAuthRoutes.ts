@@ -39,6 +39,7 @@ import {
   exchangeOpenAICodexCode,
 } from '../../application/llm/openaiCodexOAuth';
 import { buildXaiAuthorizeUrl, exchangeXaiCode } from '../../application/llm/xaiOAuth';
+import { pollKimiDeviceToken, startKimiDeviceAuthorization } from '../../application/llm/kimiOAuth';
 import {
   setTenantProviderOAuth,
   type LlmProvider,
@@ -67,6 +68,46 @@ interface PendingConnect {
   challenge: string;
 }
 
+/**
+ * How a provider's grant is completed. A discriminated union rather than optional fields
+ * so each style carries exactly its own inputs and neither can be half-configured.
+ *
+ * `paste` is the authorization-code dance the first three providers use: the user consents
+ * and copies something back. `device` is RFC 8628, which Kimi's public client uses: there
+ * is nothing to copy because the code travels in the URL, and `complete` POLLS for the
+ * approval instead of redeeming a paste. The two share everything else — the tenant-scoped
+ * pending record, its TTL, the CSRF role of `state`, and the storage call — which is why
+ * they belong in one flow with two strategies rather than in two routers.
+ */
+type SubscriptionGrant =
+  | {
+      kind: 'paste';
+      /** Where the user consents. May throw (xAI resolves its endpoint by OIDC discovery). */
+      buildAuthorizeUrl(params: PendingConnect & { state: string }): string | Promise<string>;
+      /** Redeem the code the user pasted. */
+      exchange(params: PendingConnect & { code: string; state: string }): Promise<SubscriptionOAuthTokens>;
+      /** What to say when the paste carried no code, or no `state` to look up. */
+      missingPaste: string;
+    }
+  | {
+      kind: 'device';
+      /** Ask the provider for a device code and the page to send the user to. */
+      begin(): Promise<{
+        deviceCode: string;
+        userCode: string;
+        verificationUriComplete: string;
+        interval: number;
+      }>;
+      /** One poll. `pending` keeps the client waiting; the rest are terminal. */
+      poll(deviceCode: string): Promise<
+        | { kind: 'tokens'; tokens: SubscriptionOAuthTokens }
+        | { kind: 'pending' }
+        | { kind: 'slow_down' }
+        | { kind: 'expired' }
+        | { kind: 'denied' }
+      >;
+    };
+
 /** One provider's differences from the shared dance — data, not behaviour. */
 interface SubscriptionOAuthAdapter {
   provider: LlmProvider;
@@ -77,34 +118,59 @@ interface SubscriptionOAuthAdapter {
    */
   kvPrefix: string;
   /** Where the user consents. May throw (xAI resolves its endpoint by OIDC discovery). */
-  buildAuthorizeUrl(params: PendingConnect & { state: string }): string | Promise<string>;
-  /** Redeem the code the user pasted. */
-  exchange(params: PendingConnect & { code: string; state: string }): Promise<SubscriptionOAuthTokens>;
-  /** What to say when the paste carried no code, or no `state` to look up. */
-  missingPaste: string;
+  grant: SubscriptionGrant;
 }
 
 const SUBSCRIPTION_OAUTH_PROVIDERS: readonly SubscriptionOAuthAdapter[] = [
   {
     provider: 'anthropic',
     kvPrefix: 'anthropic_oauth',
-    buildAuthorizeUrl,
-    exchange: ({ code, state, verifier }) => exchangeAnthropicCode({ code, state, verifier }),
-    missingPaste: 'Paste the full value Claude showed you (the `code#state` pair, or the whole callback URL) so the code and state can both be verified.',
+    grant: {
+      kind: 'paste',
+      buildAuthorizeUrl,
+      exchange: ({ code, state, verifier }) => exchangeAnthropicCode({ code, state, verifier }),
+      missingPaste: 'Paste the full value Claude showed you (the `code#state` pair, or the whole callback URL) so the code and state can both be verified.',
+    },
   },
   {
     provider: 'openai',
     kvPrefix: 'openai_codex_oauth',
-    buildAuthorizeUrl: buildOpenAICodexAuthorizeUrl,
-    exchange: ({ code, verifier }) => exchangeOpenAICodexCode({ code, verifier }),
-    missingPaste: 'Paste the full OpenAI redirect URL so the code and state can both be verified.',
+    grant: {
+      kind: 'paste',
+      buildAuthorizeUrl: buildOpenAICodexAuthorizeUrl,
+      exchange: ({ code, verifier }) => exchangeOpenAICodexCode({ code, verifier }),
+      missingPaste: 'Paste the full OpenAI redirect URL so the code and state can both be verified.',
+    },
   },
   {
     provider: 'xai',
     kvPrefix: 'xai_oauth',
-    buildAuthorizeUrl: buildXaiAuthorizeUrl,
-    exchange: ({ code, verifier, challenge }) => exchangeXaiCode({ code, verifier, challenge }),
-    missingPaste: 'Paste the full xAI redirect URL so the code and state can both be verified.',
+    grant: {
+      kind: 'paste',
+      buildAuthorizeUrl: buildXaiAuthorizeUrl,
+      exchange: ({ code, verifier, challenge }) => exchangeXaiCode({ code, verifier, challenge }),
+      missingPaste: 'Paste the full xAI redirect URL so the code and state can both be verified.',
+    },
+  },
+  {
+    // Kimi Code. A subscription here issues no API key at all — Kimi's own config leaves
+    // `api_key` empty beside an OAuth record — so the card that used to ask for an `sk-…`
+    // was asking for a credential that does not exist.
+    provider: 'kimi',
+    kvPrefix: 'kimi_device_oauth',
+    grant: {
+      kind: 'device',
+      begin: async () => {
+        const authorization = await startKimiDeviceAuthorization();
+        return {
+          deviceCode: authorization.deviceCode,
+          userCode: authorization.userCode,
+          verificationUriComplete: authorization.verificationUriComplete,
+          interval: authorization.interval,
+        };
+      },
+      poll: (deviceCode) => pollKimiDeviceToken(deviceCode),
+    },
   },
 ];
 
@@ -172,18 +238,44 @@ export function mountSubscriptionOAuthRoutes(router: Hono<HonoEnv>, gate: Subscr
       const kv = (c.env as { AUTH_CACHE_KV?: KVNamespace }).AUTH_CACHE_KV;
       if (!kv) return c.json({ error: 'OAuth connect unavailable (AUTH_CACHE_KV unbound)', code: 'oauth_unconfigured' }, 503);
 
-      const { verifier, challenge } = await generatePkce();
       const state = generateState();
+
+      if (adapter.grant.kind === 'device') {
+        // No PKCE: a device grant carries its secret in the device code, which never
+        // reaches the browser — only the short user code and the page URL do.
+        let authorization: Awaited<ReturnType<typeof adapter.grant.begin>>;
+        try {
+          authorization = await adapter.grant.begin();
+        } catch (e) {
+          return c.json({ error: e instanceof Error ? e.message : 'Device authorization failed', code: 'oauth_discovery_failed' }, 502);
+        }
+        await kv.put(
+          pendingKey(adapter, access.tenantId, state),
+          JSON.stringify({ deviceCode: authorization.deviceCode }),
+          { expirationTtl: OAUTH_PKCE_TTL_SECONDS },
+        );
+        return c.json({
+          authorizeUrl: authorization.verificationUriComplete,
+          state,
+          // The client polls `complete` rather than collecting a paste. `userCode` is
+          // shown so the operator can confirm the page they land on is the right one.
+          grant: 'device',
+          userCode: authorization.userCode,
+          pollIntervalSeconds: authorization.interval,
+        });
+      }
+
+      const { verifier, challenge } = await generatePkce();
       let authorizeUrl: string;
       try {
         // Built BEFORE the record is written: a discovery failure should leave
         // no pending state behind for a connect that never started.
-        authorizeUrl = await adapter.buildAuthorizeUrl({ state, verifier, challenge });
+        authorizeUrl = await adapter.grant.buildAuthorizeUrl({ state, verifier, challenge });
       } catch (e) {
         return c.json({ error: e instanceof Error ? e.message : 'OAuth discovery failed', code: 'oauth_discovery_failed' }, 502);
       }
       await kv.put(pendingKey(adapter, access.tenantId, state), JSON.stringify({ verifier, challenge }), { expirationTtl: OAUTH_PKCE_TTL_SECONDS });
-      return c.json({ authorizeUrl, state });
+      return c.json({ authorizeUrl, state, grant: 'paste' });
     });
 
     // Finish: recover the verifier by `state` (which is also the CSRF check),
@@ -197,20 +289,57 @@ export function mountSubscriptionOAuthRoutes(router: Hono<HonoEnv>, gate: Subscr
       const body = await c.req.json<{ code?: string; state?: string }>().catch(() => ({} as { code?: string; state?: string }));
       const parsed = parsePastedAuthorizationCode(body.code ?? '');
       // `state` may ride inside the paste or be sent explicitly by a client that
-      // still holds the one `start` returned.
+      // still holds the one `start` returned. A device grant always sends it explicitly —
+      // there is no paste for it to hide in.
       const state = (parsed.state ?? body.state ?? '').trim();
-      if (!parsed.code || !state) return c.json({ error: adapter.missingPaste, code: 'oauth_missing_code_or_state' }, 400);
+      const needsPaste = adapter.grant.kind === 'paste';
+      if (!state || (needsPaste && !parsed.code)) {
+        return c.json({
+          error: adapter.grant.kind === 'paste'
+            ? adapter.grant.missingPaste
+            : 'Connect session missing — start again.',
+          code: 'oauth_missing_code_or_state',
+        }, 400);
+      }
 
       const key = pendingKey(adapter, access.tenantId, state);
       const raw = await kv.get(key);
       if (!raw) return c.json({ error: 'Connect session expired or invalid — start again.', code: 'oauth_state_expired' }, 400);
 
       let tokens: SubscriptionOAuthTokens;
-      try {
-        tokens = await adapter.exchange({ code: parsed.code, state, ...readPending(raw) });
-      } catch (e) {
-        const { body: failure, status } = exchangeFailureResponse(e, adapter.provider);
-        return c.json(failure, status);
+      if (adapter.grant.kind === 'device') {
+        const deviceCode = (JSON.parse(raw) as { deviceCode?: string }).deviceCode ?? '';
+        if (!deviceCode) return c.json({ error: 'Connect session expired or invalid — start again.', code: 'oauth_state_expired' }, 400);
+        let outcome: Awaited<ReturnType<typeof adapter.grant.poll>>;
+        try {
+          outcome = await adapter.grant.poll(deviceCode);
+        } catch (e) {
+          const { body: failure, status } = exchangeFailureResponse(e, adapter.provider);
+          return c.json(failure, status);
+        }
+        // Still waiting is a SUCCESSFUL poll, not an error — the client is meant to call
+        // again. Reporting it as a failure would make a normal wait look like a breakage.
+        if (outcome.kind === 'pending' || outcome.kind === 'slow_down') {
+          return c.json({ ok: false, status: outcome.kind, provider: adapter.provider });
+        }
+        if (outcome.kind !== 'tokens') {
+          // Terminal, and the pending record is spent — drop it so a retry starts clean.
+          await kv.delete(key).catch(() => {});
+          return c.json({
+            error: outcome.kind === 'denied'
+              ? 'The connection request was declined in Kimi.'
+              : 'The connection request expired before it was approved — start again.',
+            code: outcome.kind === 'denied' ? 'oauth_denied' : 'oauth_state_expired',
+          }, 400);
+        }
+        tokens = outcome.tokens;
+      } else {
+        try {
+          tokens = await adapter.grant.exchange({ code: parsed.code, state, ...readPending(raw) });
+        } catch (e) {
+          const { body: failure, status } = exchangeFailureResponse(e, adapter.provider);
+          return c.json(failure, status);
+        }
       }
       await setTenantProviderOAuth(c.env, access.tenantId, adapter.provider, tokens, access.userId);
       // A fresh consent may well have landed on a working account — retire the

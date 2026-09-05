@@ -45,7 +45,11 @@ export const PROVIDER_VENDOR_MAP: Record<LlmProvider, {
   openai:    { vendorId: 'openai',    envKey: 'OPENAI_API_KEY', oauth: true },
   google:    { vendorId: 'googleai',  envKey: 'GOOGLE_API_KEY', oauth: false },
   meta:      { vendorId: 'meta',      envKey: 'META_API_KEY',   oauth: false },
-  kimi:      { vendorId: 'kimi-code', envKey: 'KIMI_CODE_API_KEY', oauth: false },
+  // OAuth, not an API key: a Kimi Code subscription issues no `sk-` key at all — its own
+  // config leaves `api_key` empty beside an OAuth record — so the card connects by
+  // device-code redirect (`kimiOAuth.ts`). The vendor id is unchanged because the access
+  // token is a Bearer for the SAME endpoint, so nothing downstream has to know.
+  kimi:      { vendorId: 'kimi-code', envKey: 'KIMI_CODE_API_KEY', oauth: true },
   moonshot:  { vendorId: 'moonshot',  envKey: 'MOONSHOT_API_KEY', oauth: false },
   qwen:      { vendorId: 'qwen',      envKey: 'QWEN_API_KEY', oauth: false },
   minimax:   { vendorId: 'minimax',   envKey: 'MINIMAX_API_KEY', oauth: false },

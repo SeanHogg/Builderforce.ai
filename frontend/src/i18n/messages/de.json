@@ -13613,7 +13613,8 @@
         "blurb": "Fügen Sie einen Meta-AI-API-Schlüssel ein, um MUSE-Modelle (muse-spark-1.1) mit Ihrem eigenen Meta-AI-Konto auszuführen."
       },
       "kimi": {
-        "blurb": "Kimi-Code-Aboschlüssel sind für persönliche interaktive Clients gedacht, daher weist Kimis Edge unser Cloud-Gateway ab. Verbinden Sie eine Builderforce-Runtime, dann läuft Kimi über Ihre eigene Maschine; andernfalls verwenden Sie einen Moonshot-Open-Platform-Schlüssel."
+        "blurb": "Verbinde dein Kimi-Code-Abo — die Anmeldung läuft per Weiterleitung, ganz ohne einzufügenden API-Schlüssel (Kimi Code stellt keinen aus). Kimi akzeptiert nur Aufrufe von einem eigenen Rechner, daher laufen Turns über deine verbundene Builderforce-Laufzeit. Alternativ geht ein Moonshot-Open-Platform-Schlüssel.",
+        "subscription": "Kimi-Code-Abo"
       },
       "moonshot": {
         "blurb": "Fügen Sie einen API-Schlüssel der Moonshot Open Platform ein."
@@ -13699,7 +13700,9 @@
       "capacity": "Die Zugangsdaten funktionieren, aber der Anbieter lehnt die Nutzung vorübergehend ab ({status}) – möglich sind ein Sitzungs-, Ausgaben- oder Guthabenlimit. BuilderForce versucht es nach der Abkühlzeit automatisch erneut; die Rücksetzzeit steht in der Anbieter-Konsole. Ein Neuverbinden ist nicht nötig.",
       "minimaxCapacity": "Ihr MiniMax-Nutzungsfenster ist ausgeschöpft ({status}). BuilderForce versucht den Schlüssel nach dem Zurücksetzen automatisch erneut; die genaue Zeit steht in der MiniMax-Konsole. Der Schlüssel bleibt gültig.",
       "unresolved": "Die gespeicherten Zugangsdaten waren überhaupt nicht nutzbar – widerrufen, abgelaufen oder in einem anderen Workspace gespeichert. Bitte hier neu verbinden."
-    }
+    },
+    "deviceApprovePrompt": "Bestätige die Anfrage im gerade geöffneten {subscription}-Tab. Dort sollte dieser Code stehen:",
+    "deviceWaiting": "Warte auf die Bestätigung…"
   },
   "modelSelect": {
     "yourLlms": "Ihre LLMs",

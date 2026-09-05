@@ -161,11 +161,17 @@ export function loadCredential(
       continue;
     }
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) continue;
-    const record = fromWire(parsed as Record<string, unknown>);
-    // An empty access token is the tombstone, and it is decisive — reporting it as an
-    // unknown shape would send the user to debug a file that is doing exactly its job.
-    if (record.accessToken.length === 0) return { kind: "revoked" };
-    if (record.refreshToken.length === 0 && record.expiresAt === 0) {
+    const wire = parsed as Record<string, unknown>;
+    const record = fromWire(wire);
+    // The tombstone is an access_token PRESENT AND EMPTY — Kimi writes the key with an
+    // empty string on sign-out. A document with no such key at all is a shape this reader
+    // does not understand, which is a different problem with a different remedy: telling
+    // someone they are signed out of Kimi Code when they are signed in sends them to redo
+    // a login that was never broken.
+    if (typeof wire.access_token === "string" && record.accessToken.length === 0) {
+      return { kind: "revoked" };
+    }
+    if (record.accessToken.length === 0 || (record.refreshToken.length === 0 && record.expiresAt === 0)) {
       // Neither usable nor refreshable: name the fields so an unfamiliar format is
       // diagnosable from the picker without anyone opening a credential file.
       lastDetail = `Unrecognized Kimi Code credential shape in ${name}. Fields: ${

@@ -5,7 +5,7 @@ import { artifactRoutePath } from "@seanhogg/builderforce-brain-embedded";
 import { BUILD_ID, BUILT_AT } from "./buildInfo";
 import { getTenantJwt, getCurrentUserId } from "./bfApi";
 import { TOOL_DEFS } from "./fileTools";
-import { getBaseUrl, getWebBaseUrl, getLocalModelsConfig, SECRET_KEY, fetchPersonalityBlock, fetchLimbicBlock, getSessionTabMode, type SessionTabMode } from "./gateway";
+import { authorizeLocalEndpoint, getBaseUrl, getWebBaseUrl, getLocalModelsConfig, SECRET_KEY, fetchPersonalityBlock, fetchLimbicBlock, getSessionTabMode, type SessionTabMode } from "./gateway";
 import { attentionFor, sessionTabIcon, sessionTabPrefix } from "./attention";
 import { getGroundingWithHistory } from "./grounding";
 import { appendSessionNote, readRecentSessionNotes, SessionNotes } from "./sessionNotes";
@@ -549,11 +549,20 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
       void this.panel.webview.postMessage({ type, id, ...payload });
     };
 
-    const endpoint = resolveLocalChatEndpoint(getLocalModelsConfig(), url);
-    if (!endpoint) {
+    const match = resolveLocalChatEndpoint(getLocalModelsConfig(), url);
+    if (!match) {
       send("llm.error", { error: `refused: ${url} is not a configured local model endpoint` });
       return;
     }
+    // Resolved here, per request, rather than carried in the panel's init payload: a Kimi
+    // token read fifteen minutes ago is no longer valid, and a credential the webview was
+    // handed once would be exactly that.
+    const authorized = await authorizeLocalEndpoint(match.provider, match.endpoint);
+    if (!authorized.ok) {
+      send("llm.error", { error: authorized.detail });
+      return;
+    }
+    const endpoint = authorized.endpoint;
 
     const controller = new AbortController();
     this.localFetches.set(id, controller);

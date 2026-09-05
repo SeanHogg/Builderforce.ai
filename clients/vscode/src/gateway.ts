@@ -1,8 +1,9 @@
 import * as vscode from "vscode";
 import nodeFs from "node:fs";
 import { productForPlan, type ModelIdentityContext } from "@seanhogg/builderforce-brain-embedded";
-import { type LocalModelsConfig } from "./localModels";
+import { type LocalEndpoint, type LocalModelsConfig, type LocalProviderId } from "./localModels";
 import { isKimiCodeInstall, loadKimiCodeInstall } from "./kimiCodeInstall";
+import { ensureFreshKimiToken } from "./kimiCodeAuth";
 
 /** Single source of truth for the SecretStorage key (DRY). */
 export const SECRET_KEY = "builderforce.apiKey";
@@ -57,10 +58,38 @@ export function getLocalModelsConfig(): LocalModelsConfig {
     endpoints: {
       ollama: { baseUrl: cfg.get<string>("localModels.ollamaUrl") || "http://127.0.0.1:11434" },
       freetoken: { baseUrl: cfg.get<string>("localModels.freetokenUrl") || "http://127.0.0.1:1919" },
-      ...(isKimiCodeInstall(kimi) ? { "kimi-code": { baseUrl: kimi.baseUrl, token: kimi.token } } : {}),
+      // Endpoint only — deliberately NO token. Kimi's access tokens last fifteen minutes,
+      // so a credential captured into this synchronous config would routinely be stale by
+      // the time it was sent; it is resolved instead at the moment of the request by
+      // {@link authorizeLocalEndpoint}. The happy side effect is that the credential never
+      // sits inside a config object that gets passed around and logged.
+      ...(isKimiCodeInstall(kimi) ? { "kimi-code": { baseUrl: kimi.baseUrl } } : {}),
     },
     ...(isKimiCodeInstall(kimi) ? { kimiCodeModels: kimi.models } : {}),
   };
+}
+
+/**
+ * Attach the credential a local endpoint needs, immediately before the call.
+ *
+ * The ONE place that decides this, because two surfaces make local requests — the chat
+ * route (`modelRouting`) and the panel's host-performed fetch (`brainWebview`) — and a
+ * second copy of "does this provider need a bearer, and where does a fresh one come
+ * from?" is how one of them ends up sending a stale token or none at all.
+ *
+ * An on-device engine passes straight through unauthenticated, which is what keeps a
+ * signed-out editor able to run a local turn.
+ */
+export async function authorizeLocalEndpoint(
+  provider: LocalProviderId,
+  endpoint: LocalEndpoint,
+): Promise<{ ok: true; endpoint: LocalEndpoint } | { ok: false; detail: string }> {
+  if (provider !== "kimi-code") return { ok: true, endpoint };
+  const install = loadKimiCodeInstall(nodeFs);
+  if (!isKimiCodeInstall(install)) return { ok: false, detail: install.detail };
+  const resolved = await ensureFreshKimiToken(nodeFs, install.home);
+  if (resolved.kind !== "token") return { ok: false, detail: resolved.detail };
+  return { ok: true, endpoint: { ...endpoint, token: resolved.accessToken } };
 }
 
 /**

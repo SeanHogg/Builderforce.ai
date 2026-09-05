@@ -13613,7 +13613,8 @@
         "blurb": "Pega una clave de API de Meta AI para ejecutar modelos MUSE (muse-spark-1.1) en tu propia cuenta de Meta AI."
       },
       "kimi": {
-        "blurb": "Las claves de suscripción de Kimi Code son para clientes interactivos personales, por lo que el perímetro de Kimi rechaza nuestra pasarela en la nube. Conecta un runtime de Builderforce y Kimi se ejecutará desde tu propia máquina; si no, usa una clave de Moonshot Open Platform."
+        "blurb": "Conecta tu suscripción de Kimi Code: inicia sesión por redirección, sin ninguna clave de API que pegar (Kimi Code no emite ninguna). Kimi solo acepta llamadas desde una máquina propia, así que los turnos pasan por tu runtime de Builderforce conectado. La alternativa es una clave de Moonshot Open Platform.",
+        "subscription": "suscripción de Kimi Code"
       },
       "moonshot": {
         "blurb": "Pega una clave API de Moonshot Open Platform para usar modelos de Moonshot."
@@ -13699,7 +13700,9 @@
       "capacity": "La credencial funciona, pero el proveedor ha rechazado temporalmente el uso ({status}): puede ser un límite de sesión, un tope de gasto o saldo agotado. BuilderForce reintenta automáticamente tras la espera; consulta la consola del proveedor para ver el reinicio. No hace falta reconectar.",
       "minimaxCapacity": "Tu ventana de uso de MiniMax está agotada ({status}). BuilderForce reintentará la clave automáticamente cuando se reinicie; consulta la consola de MiniMax para ver la hora exacta. La clave sigue siendo válida.",
       "unresolved": "La credencial guardada no se pudo usar en absoluto: ha sido revocada, ha caducado o se guardó en otro espacio de trabajo. Vuelve a conectarla aquí."
-    }
+    },
+    "deviceApprovePrompt": "Aprueba la solicitud en la pestaña de {subscription} que acaba de abrirse. Debería mostrar este código:",
+    "deviceWaiting": "Esperando la aprobación…"
   },
   "modelSelect": {
     "yourLlms": "Tus LLM",

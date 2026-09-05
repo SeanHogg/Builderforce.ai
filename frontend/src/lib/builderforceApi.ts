@@ -3932,17 +3932,40 @@ export const providerKeysApi = {
       body: JSON.stringify({ order }),
     }),
 
-  /** Begin connecting a Claude subscription — returns the Claude.ai authorize URL
-   *  the user opens to grant access (PKCE verifier is held server-side). */
-  oauthStart: (provider: LlmProvider): Promise<{ authorizeUrl: string; state: string }> =>
-    request<{ authorizeUrl: string; state: string }>(`/llm/provider-keys/${provider}/oauth/start`, {
-      method: 'POST',
-    }),
+  /**
+   * Begin connecting a subscription — returns the provider's authorize URL to open.
+   *
+   * `grant` says how it FINISHES, because the two styles need different UI: `paste` ends
+   * with the operator copying a code back (Anthropic / OpenAI / xAI), while `device`
+   * (Kimi) has nothing to copy — the code rides in the URL, and the client polls
+   * {@link oauthComplete} until the approval lands. `userCode` is shown so the operator
+   * can confirm the page they reached is the one this request opened.
+   */
+  oauthStart: (provider: LlmProvider): Promise<{
+    authorizeUrl: string;
+    state: string;
+    grant?: 'paste' | 'device';
+    userCode?: string;
+    pollIntervalSeconds?: number;
+  }> =>
+    request(`/llm/provider-keys/${provider}/oauth/start`, { method: 'POST' }),
 
-  /** Finish connecting a subscription with the code the user pasted from the
-   *  provider's consent page — a `code#state` pair, or the whole callback URL. */
-  oauthComplete: (provider: LlmProvider, code: string, state?: string): Promise<{ ok: true; provider: LlmProvider; authType: ProviderAuthType }> =>
-    request<{ ok: true; provider: LlmProvider; authType: ProviderAuthType }>(
+  /**
+   * Finish connecting a subscription.
+   *
+   * For a `paste` grant, `code` is what the provider's consent page showed (a
+   * `code#state` pair, or the whole callback URL). For a `device` grant there is no code
+   * and this POLLS: `status` comes back `pending` while the operator has not approved yet
+   * and `slow_down` when the provider wants a wider interval — neither is an error, so
+   * they resolve rather than throw, and the caller simply calls again.
+   */
+  oauthComplete: (provider: LlmProvider, code: string, state?: string): Promise<{
+    ok: boolean;
+    provider: LlmProvider;
+    authType?: ProviderAuthType;
+    status?: 'pending' | 'slow_down';
+  }> =>
+    request(
       `/llm/provider-keys/${provider}/oauth/complete`,
       { method: 'POST', body: JSON.stringify({ code, ...(state ? { state } : {}) }) },
     ),

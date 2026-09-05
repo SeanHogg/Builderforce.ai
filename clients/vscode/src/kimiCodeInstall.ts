@@ -27,12 +27,11 @@
 import os from "node:os";
 import path from "node:path";
 
-/** The filesystem reads this module performs. Injected so the parsers are testable. */
-export interface KimiCodeFs {
-  existsSync(target: string): boolean;
-  readFileSync(target: string, encoding: "utf8"): string;
-  readdirSync(target: string): string[];
-}
+import { loadCredential, type KimiCredentialFs, type KimiCredentialState } from "./kimiCodeCredentials";
+
+/** The reads this module performs. Structurally the credential store's port, so ONE
+ *  `node:fs` satisfies both and no caller assembles two filesystem objects. */
+export type KimiCodeFs = KimiCredentialFs;
 
 /** One model the local install declares, from its `[models."kimi-code/<id>"]` table. */
 export interface KimiCodeModel {
@@ -50,10 +49,11 @@ export interface KimiCodeInstall {
   home: string;
   /** OpenAI-compatible base, e.g. `https://api.kimi.com/coding/v1`. */
   baseUrl: string;
-  /** Bearer token from the install's own login. */
-  token: string;
   /** Models the install declares, in file order (Kimi lists its default first). */
   models: readonly KimiCodeModel[];
+  /** The stored credential's lifecycle at read time — `fresh` (send it) or `stale`
+   *  (one refresh grant away). Never a raw token: see {@link loadKimiCodeInstall}. */
+  credential: Extract<KimiCredentialState, { kind: "fresh" | "stale" }>;
 }
 
 /**
@@ -63,7 +63,7 @@ export interface KimiCodeInstall {
  * only symptom is a Kimi group silently missing from the model picker.
  */
 export interface KimiCodeUnavailable {
-  reason: "no_install" | "no_endpoint" | "no_credential" | "expired";
+  reason: "no_install" | "no_endpoint" | "no_credential" | "signed_out";
   /** Operator-facing detail. Never contains a credential VALUE — only key names. */
   detail: string;
 }
@@ -168,133 +168,17 @@ export function parseKimiCodeConfig(text: string): KimiCodeConfig {
 }
 
 // ---------------------------------------------------------------------------
-// credentials/
-// ---------------------------------------------------------------------------
-
-/**
- * Field names an OAuth credential store uses for the bearer token, most specific first.
- *
- * A LIST rather than one name because the store is Kimi's private format, not a contract
- * they publish — and the failure mode of assuming a single name is the worst one
- * available: the Kimi group vanishes from the picker with no explanation. Trying the
- * conventional set and REPORTING what was actually present ({@link resolveKimiToken})
- * turns an invisible failure into one sentence the user can act on. The same
- * try-in-order shape the runtime already uses for other providers' local credentials
- * (`agent-runtime/src/infra/provider-usage.auth.ts`).
- */
-const TOKEN_FIELDS = ["access_token", "accessToken", "api_key", "apiKey", "token", "id_token"] as const;
-
-/** Field names carrying the absolute expiry, in epoch seconds or milliseconds. */
-const EXPIRY_FIELDS = ["expires_at", "expiresAt", "expiry", "expires"] as const;
-
-/** A string long enough to be a credential rather than an enum like `"Bearer"`. */
-const MIN_TOKEN_LENGTH = 16;
-
-/**
- * Treat a token as spent this long BEFORE its stated expiry.
- *
- * Not defensive padding — it is load-bearing here. Kimi issues access tokens with
- * `expires_in: 900`, i.e. FIFTEEN MINUTES, so a credential read off disk is routinely
- * close to the end of its life. Starting a completion with four seconds left produces a
- * mid-stream 401 that reads to the user as "Kimi is broken", where declining to start
- * produces the one sentence that actually helps. The window is small enough that it never
- * rejects a token with useful life left.
- */
-const EXPIRY_SKEW_MS = 30_000;
-
-interface TokenSearch {
-  token?: string;
-  /** The field the token came from — logged, never the value. */
-  field?: string;
-  expiresAt?: number;
-  /** Every string-valued key seen, so a miss can name the shape it found. */
-  keysSeen: string[];
-}
-
-/** Walk the parsed credential document for the first plausible token. Recursive because
- *  a store commonly nests the record under a provider or profile key. */
-function searchToken(node: unknown, out: TokenSearch, depth = 0): void {
-  if (depth > 6 || node === null || typeof node !== "object") return;
-  for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
-    if (typeof value === "string") {
-      out.keysSeen.push(key);
-      if (!out.token && (TOKEN_FIELDS as readonly string[]).includes(key) && value.length >= MIN_TOKEN_LENGTH) {
-        out.token = value;
-        out.field = key;
-      }
-    } else if (typeof value === "number") {
-      out.keysSeen.push(key);
-      if (out.expiresAt === undefined && (EXPIRY_FIELDS as readonly string[]).includes(key)) {
-        // Seconds vs milliseconds: anything below this threshold cannot be a plausible
-        // millisecond timestamp, so it is seconds. Guessing wrong in the safe direction
-        // (treating ms as ms) is what keeps a valid token from being called expired.
-        out.expiresAt = value < 1e11 ? value * 1000 : value;
-      }
-    } else if (value && typeof value === "object") {
-      searchToken(value, out, depth + 1);
-    }
-  }
-}
-
-/**
- * The bearer token from a credential document, or a reason naming what was found.
- *
- * `now` is injected so the expiry branch is testable without freezing the clock.
- */
-export function resolveKimiToken(raw: string, now: number = Date.now()): { token: string } | KimiCodeUnavailable {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return { reason: "no_credential", detail: "The Kimi Code credential file is not valid JSON." };
-  }
-  const found: TokenSearch = { keysSeen: [] };
-  searchToken(parsed, found);
-  if (!found.token) {
-    // Name the keys, never the values — this string reaches a notification and a log.
-    const seen = [...new Set(found.keysSeen)].sort().join(", ") || "(none)";
-    return {
-      reason: "no_credential",
-      detail: `No bearer token found in the Kimi Code credential store. Fields present: ${seen}.`,
-    };
-  }
-  if (found.expiresAt !== undefined && found.expiresAt - EXPIRY_SKEW_MS <= now) {
-    // Kimi's access tokens last 15 minutes and are refreshed by Kimi Code ITSELF, on
-    // disk, whenever it runs. So this is not "your account lapsed" — it is "nothing has
-    // refreshed the file lately", and the remedy is to use Kimi Code once, not to
-    // re-authenticate anything. Saying the wrong one sends the user to redo a login that
-    // is perfectly valid.
-    return {
-      reason: "expired",
-      detail: "The Kimi Code access token on disk has expired (they last 15 minutes). "
-        + "Open Kimi Code once and it refreshes the file.",
-    };
-  }
-  return { token: found.token };
-}
-
-// ---------------------------------------------------------------------------
 // Assembly
 // ---------------------------------------------------------------------------
 
-/** Credential filenames are read in sorted order so a multi-profile store is at least
- *  deterministic rather than dependent on directory iteration order. */
-function credentialFiles(fs: KimiCodeFs, home: string): string[] {
-  const dir = path.join(home, "credentials");
-  if (!fs.existsSync(dir)) return [];
-  try {
-    return fs
-      .readdirSync(dir)
-      .filter((name) => name.toLowerCase().endsWith(".json"))
-      .sort()
-      .map((name) => path.join(dir, name));
-  } catch {
-    return [];
-  }
-}
-
 /**
  * Load the machine's Kimi Code install, or say why it is unusable.
+ *
+ * Reports the credential's LIFECYCLE rather than a token, because a token cannot be
+ * produced synchronously: Kimi's access tokens last fifteen minutes, so the usable
+ * answer routinely requires a refresh grant over the network. Callers that only need to
+ * know whether to OFFER Kimi (the model picker) read the state; the one caller about to
+ * make a request awaits `ensureFreshKimiToken`.
  *
  * Never throws: a developer with no Kimi Code installed is the NORMAL case (the picker
  * simply shows no Kimi rows), so every filesystem failure degrades to a reason rather
@@ -325,33 +209,14 @@ export function loadKimiCodeInstall(
     };
   }
 
-  const files = credentialFiles(fs, home);
-  if (files.length === 0) {
-    return {
-      reason: "no_credential",
-      detail: "Kimi Code is installed but not signed in — no credential file on disk.",
-    };
+  const credential = loadCredential(fs, home, now);
+  if (credential.kind === "revoked") {
+    return { reason: "signed_out", detail: "You are signed out of Kimi Code. Sign in there to use it here." };
   }
-
-  // First file that yields a token wins; the last failure is what gets reported, so a
-  // single-profile store (the overwhelmingly common case) reports ITS reason, not a
-  // generic one.
-  let lastFailure: KimiCodeUnavailable = {
-    reason: "no_credential",
-    detail: "Kimi Code is installed but no credential file could be read.",
-  };
-  for (const file of files) {
-    let raw: string;
-    try {
-      raw = fs.readFileSync(file, "utf8");
-    } catch {
-      continue;
-    }
-    const resolved = resolveKimiToken(raw, now);
-    if ("token" in resolved) {
-      return { home, baseUrl: config.baseUrl, token: resolved.token, models: config.models };
-    }
-    lastFailure = resolved;
+  if (credential.kind === "unreadable") {
+    return { reason: "no_credential", detail: credential.detail };
   }
-  return lastFailure;
+  // `stale` is offered exactly like `fresh`: it is refreshable, and refusing to list a
+  // model that one grant away is usable would put the user back to poking another app.
+  return { home, baseUrl: config.baseUrl, models: config.models, credential };
 }

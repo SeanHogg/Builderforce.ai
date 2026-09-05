@@ -13613,7 +13613,8 @@
         "blurb": "粘贴 Meta AI API 密钥，在您自己的 Meta AI 账户上运行 MUSE 模型（muse-spark-1.1）。"
       },
       "kimi": {
-        "blurb": "Kimi Code 订阅密钥面向个人交互式客户端，因此 Kimi 的边缘会拒绝我们的云网关。连接一个 Builderforce 运行时即可让 Kimi 通过您自己的机器运行；否则请使用 Moonshot 开放平台密钥。"
+        "blurb": "连接你的 Kimi Code 订阅 —— 通过重定向登录，无需粘贴 API 密钥（Kimi Code 并不签发密钥）。Kimi 只接受来自你自己机器的调用，因此请求会通过你已连接的 Builderforce 运行时。另一种方式是使用 Moonshot 开放平台密钥。",
+        "subscription": "Kimi Code 订阅"
       },
       "moonshot": {
         "blurb": "粘贴 Moonshot 开放平台 API 密钥以使用 Moonshot 模型。"
@@ -13699,7 +13700,9 @@
       "capacity": "凭据有效，但提供商暂时拒绝使用（{status}）——可能是会话/滚动限额、消费上限或余额不足。BuilderForce 会在冷却后自动重试；请在提供商控制台查看重置时间。无需重新连接。",
       "minimaxCapacity": "您的 MiniMax 使用窗口已耗尽（{status}）。窗口重置后 BuilderForce 会自动重试此密钥；确切时间请查看 MiniMax 控制台。密钥仍然有效，无需更换。",
       "unresolved": "存储的凭据完全无法使用——它已被吊销、已过期，或保存在其他工作区。请在此重新连接。"
-    }
+    },
+    "deviceApprovePrompt": "请在刚打开的 {subscription} 标签页中批准该请求。页面上应显示以下代码：",
+    "deviceWaiting": "等待批准…"
   },
   "modelSelect": {
     "yourLlms": "您的 LLM",
