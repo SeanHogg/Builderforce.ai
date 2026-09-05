@@ -27486,7 +27486,8 @@
         "invite": "Inicia sesión para invitar a alguien.",
         "pay": "Inicia sesión para completar un pago.",
         "save": "Inicia sesión para guardar este trabajo.",
-        "account": "Crea una cuenta para desbloquear esto."
+        "account": "Crea una cuenta para desbloquear esto.",
+        "installTemplate": "Inicia sesión para configurar esta plantilla en un espacio de trabajo."
       }
     }
   },

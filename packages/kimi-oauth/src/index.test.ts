@@ -9,6 +9,7 @@ import {
   kimiOAuthHost,
   kimiRefreshTokenRequest,
   parseKimiDeviceAuthorization,
+  parseKimiResponseBody,
   parseKimiTokenResponse,
 } from './index';
 
@@ -20,6 +21,11 @@ import {
 
 function form(body: string): URLSearchParams {
   return new URLSearchParams(body);
+}
+
+/** A JSON body, as the response reader would hand it to a parser. */
+function json(data: Record<string, unknown>) {
+  return parseKimiResponseBody(JSON.stringify(data));
 }
 
 describe('host resolution', () => {
@@ -67,9 +73,9 @@ describe('token responses', () => {
   it('reads a grant and keeps the ROTATED refresh token', () => {
     // Kimi retires the presented token on every grant; keeping the old one would leave the
     // caller holding a credential the server has already invalidated.
-    const outcome = parseKimiTokenResponse(200, {
+    const outcome = parseKimiTokenResponse(200, json({
       access_token: 'a2', refresh_token: 'r2', expires_in: 900, scope: 's', token_type: 'Bearer',
-    }, 'r1');
+    }), 'r1');
     expect(outcome).toEqual({
       kind: 'tokens',
       tokens: { accessToken: 'a2', refreshToken: 'r2', expiresInSeconds: 900, scope: 's', tokenType: 'Bearer' },
@@ -77,14 +83,14 @@ describe('token responses', () => {
   });
 
   it('falls back to the presented refresh token when the server rotates nothing', () => {
-    const outcome = parseKimiTokenResponse(200, { access_token: 'a2', expires_in: 900 }, 'r1');
+    const outcome = parseKimiTokenResponse(200, json({ access_token: 'a2', expires_in: 900 }), 'r1');
     expect(outcome.kind === 'tokens' && outcome.tokens.refreshToken).toBe('r1');
   });
 
   it('reports a missing expires_in as null and lets ONE policy fill it', () => {
     // Divergence here is exactly what this package removes: the Worker used to assume
     // fifteen minutes while the extension refused to continue.
-    const outcome = parseKimiTokenResponse(200, { access_token: 'a' });
+    const outcome = parseKimiTokenResponse(200, json({ access_token: 'a' }));
     expect(outcome.kind === 'tokens' && outcome.tokens.expiresInSeconds).toBeNull();
     expect(kimiExpiresInSeconds(null)).toBe(KIMI_DEFAULT_EXPIRES_IN_SECONDS);
     expect(kimiExpiresInSeconds(60)).toBe(60);
@@ -99,7 +105,7 @@ describe('token responses', () => {
       ['expired_token', 'expired'],
       ['access_denied', 'denied'],
     ] as const) {
-      expect(parseKimiTokenResponse(400, { error }).kind, error).toBe(kind);
+      expect(parseKimiTokenResponse(400, json({ error })).kind, error).toBe(kind);
     }
   });
 
@@ -111,18 +117,18 @@ describe('token responses', () => {
       { status: 401, data: {} },
       { status: 403, data: {} },
     ]) {
-      expect(parseKimiTokenResponse(response.status, response.data).kind).toBe('unauthorized');
+      expect(parseKimiTokenResponse(response.status, json(response.data)).kind).toBe('unauthorized');
     }
-    expect(parseKimiTokenResponse(503, {})).toMatchObject({ kind: 'failed', retryable: true });
-    expect(parseKimiTokenResponse(418, {})).toMatchObject({ kind: 'failed', retryable: false });
+    expect(parseKimiTokenResponse(503, json({}))).toMatchObject({ kind: 'failed', retryable: true });
+    expect(parseKimiTokenResponse(418, json({}))).toMatchObject({ kind: 'failed', retryable: false });
   });
 
   it('treats a 200 with no access token as a failure, not a grant', () => {
-    expect(parseKimiTokenResponse(200, { token_type: 'Bearer' }).kind).toBe('failed');
+    expect(parseKimiTokenResponse(200, json({ token_type: 'Bearer' })).kind).toBe('failed');
   });
 
   it('prefers the provider’s own description over its error code', () => {
-    const outcome = parseKimiTokenResponse(400, { error: 'invalid_client', error_description: 'client disabled' });
+    const outcome = parseKimiTokenResponse(400, json({ error: 'invalid_client', error_description: 'client disabled' }));
     expect(outcome).toMatchObject({ kind: 'failed', detail: 'client disabled' });
   });
 });
@@ -136,7 +142,7 @@ describe('device authorization responses', () => {
   };
 
   it('reads the completed URL that makes this a redirect-and-approve flow', () => {
-    const outcome = parseKimiDeviceAuthorization(200, complete);
+    const outcome = parseKimiDeviceAuthorization(200, json(complete));
     expect(outcome.kind === 'authorization' && outcome.authorization.verificationUriComplete).toContain('ABCD-EFGH');
     expect(outcome.kind === 'authorization' && outcome.authorization.interval).toBe(5);
   });
@@ -144,19 +150,55 @@ describe('device authorization responses', () => {
   it('refuses an incomplete response rather than opening a broken tab', () => {
     for (const missing of ['device_code', 'user_code', 'verification_uri_complete'] as const) {
       const { [missing]: _dropped, ...partial } = complete;
-      expect(parseKimiDeviceAuthorization(200, partial)).toMatchObject({ kind: 'failed', detail: expect.stringContaining(missing) });
+      expect(parseKimiDeviceAuthorization(200, json(partial))).toMatchObject({ kind: 'failed', detail: expect.stringContaining(missing) });
     }
   });
 
   it('defaults a missing or nonsense interval to five seconds', () => {
     // Polling with NaN would either spin hot or never fire.
     const { interval: _dropped, ...noInterval } = complete;
-    const outcome = parseKimiDeviceAuthorization(200, { ...noInterval, interval: 'soon' });
+    const outcome = parseKimiDeviceAuthorization(200, json({ ...noInterval, interval: 'soon' }));
     expect(outcome.kind === 'authorization' && outcome.authorization.interval).toBe(5);
   });
 
   it('surfaces a non-200 with the provider’s detail', () => {
-    expect(parseKimiDeviceAuthorization(400, { error_description: 'client disabled' }))
+    expect(parseKimiDeviceAuthorization(400, json({ error_description: 'client disabled' })))
       .toMatchObject({ kind: 'failed', status: 400, detail: 'client disabled' });
+  });
+});
+
+describe('response bodies', () => {
+  it('reads a JSON object and reports nothing unparsed', () => {
+    expect(parseKimiResponseBody('{"error":"slow_down"}')).toEqual({
+      data: { error: 'slow_down' }, nonJsonBody: null,
+    });
+  });
+
+  it('keeps a non-JSON body instead of discarding the parse failure', () => {
+    // This is the Kimi case exactly: an HTML page means something IN FRONT OF Kimi
+    // answered, before any credential was read. Swallowing it reports "unknown error"
+    // and sends the reader looking at the credential.
+    const parsed = parseKimiResponseBody('<html><body>403 Forbidden</body></html>');
+    expect(parsed.data).toEqual({});
+    expect(parsed.nonJsonBody).toContain('403 Forbidden');
+  });
+
+  it('surfaces that body as the outcome detail', () => {
+    const outcome = parseKimiTokenResponse(403, parseKimiResponseBody('<html>blocked</html>'));
+    expect(outcome).toMatchObject({ kind: 'unauthorized' });
+    expect(outcome.kind === 'unauthorized' && outcome.detail).toContain('blocked');
+  });
+
+  it('truncates a long body rather than pasting a document into an error', () => {
+    const parsed = parseKimiResponseBody('<html>' + 'x'.repeat(5_000) + '</html>');
+    expect(parsed.nonJsonBody!.length).toBeLessThan(400);
+  });
+
+  it('treats an empty body as simply absent', () => {
+    expect(parseKimiResponseBody('   ')).toEqual({ data: {}, nonJsonBody: null });
+  });
+
+  it('treats valid-but-scalar JSON as opaque, not as fields', () => {
+    expect(parseKimiResponseBody('"just a string"')).toMatchObject({ data: {} });
   });
 });

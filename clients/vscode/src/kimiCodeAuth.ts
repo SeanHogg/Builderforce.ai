@@ -33,9 +33,9 @@
 import {
   kimiExpiresInSeconds,
   kimiRefreshTokenRequest,
+  parseKimiResponseBody,
   parseKimiTokenResponse,
   type KimiOAuthEnv,
-  type KimiResponseBody,
 } from "@builderforce/kimi-oauth";
 
 import {
@@ -81,17 +81,14 @@ export async function refreshKimiAccessToken(
     return { kind: "unavailable", detail: `Could not reach ${request.url}: ${(error as Error).message}` };
   }
 
-  let data: KimiResponseBody = {};
-  try {
-    const parsed = (await response.json()) as unknown;
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      data = parsed as KimiResponseBody;
-    }
-  } catch {
-    // A non-JSON body is handled by the parsed outcome below.
-  }
-
-  const outcome = parseKimiTokenResponse(response.status, data, refreshToken);
+  // Read as TEXT, then parse. A body that is not JSON is itself the diagnosis — an HTML
+  // page means something in front of Kimi answered, not Kimi — and `response.json()`
+  // would discard exactly that.
+  const outcome = parseKimiTokenResponse(
+    response.status,
+    parseKimiResponseBody(await response.text()),
+    refreshToken,
+  );
   if (outcome.kind === "tokens") {
     const expiresIn = kimiExpiresInSeconds(outcome.tokens.expiresInSeconds);
     const nowMs = deps.nowMs ?? Date.now();

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { needsPosixShell, findBash, bashCandidates, resetBashCache } from "./posixShell";
+import { needsPosixShell, findBash, bashCandidates, posixShellReport, posixShellStatus, resetBashCache } from "./posixShell";
 import { buildGitCommand } from "@builderforce/agent-tools";
 
 beforeEach(resetBashCache);
@@ -64,5 +64,51 @@ describe("bashCandidates", () => {
     const list = bashCandidates({ ProgramFiles: "C:\\PF" } as NodeJS.ProcessEnv);
     expect(list[0]).toContain("Git");
     expect(list).toContain("/bin/bash");
+  });
+});
+
+/**
+ * A GUARD WHOSE PRESENCE CANNOT BE OBSERVED IS INDISTINGUISHABLE FROM A BROKEN ONE.
+ *
+ * The routing above is correct, and a real run still reported the raw `cmd.exe` error
+ * it exists to prevent — on a build whose version was AHEAD of the one it shipped in.
+ * Two explanations fitted equally (an install older than the version it reported, or a
+ * hole in the detection) and nothing available to the reporter could separate them,
+ * because whether THIS machine had a POSIX shell at all was stated nowhere. So the
+ * status reports itself, into both the connection diagnostics and every copied chat
+ * diagnostics report.
+ */
+describe("posixShellStatus / posixShellReport", () => {
+  it("reports no routing off Windows, where the default shell is already POSIX", () => {
+    // The suite runs on the host platform; only assert the branch that platform takes.
+    const status = posixShellStatus({});
+    if (process.platform === "win32") {
+      expect(status.routingRequired).toBe(true);
+      expect(status.candidates.length).toBeGreaterThan(0);
+    } else {
+      expect(status.routingRequired).toBe(false);
+      expect(status.shellPath).toBeNull();
+      expect(posixShellReport({})).toContain("not routed");
+    }
+  });
+
+  it("names the shell it found, or every path it probed when it found none", () => {
+    const report = posixShellReport({});
+    if (process.platform !== "win32") return; // covered above
+    if (findBash({})) {
+      expect(report).toContain("routed to");
+      expect(report).toContain("git_sync_latest");
+    } else {
+      expect(report).toContain("NO POSIX SHELL FOUND");
+      // The probe list is the actionable part: a machine with bash somewhere else is
+      // otherwise told only that it has none.
+      for (const candidate of bashCandidates({})) expect(report).toContain(candidate);
+    }
+  });
+
+  it("carries the tool names, so a report of one failing is matched to this line", () => {
+    const report = posixShellReport({});
+    if (process.platform === "win32") expect(report).toMatch(/git_sync_latest|POSIX/);
+    else expect(report).toContain("POSIX scripts");
   });
 });

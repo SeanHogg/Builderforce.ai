@@ -27486,7 +27486,8 @@
         "invite": "Connectez-vous pour inviter quelqu’un.",
         "pay": "Connectez-vous pour effectuer un paiement.",
         "save": "Connectez-vous pour enregistrer ce travail.",
-        "account": "Créez un compte pour débloquer ceci."
+        "account": "Créez un compte pour débloquer ceci.",
+        "installTemplate": "Connectez-vous pour configurer ce modèle dans un espace de travail."
       }
     }
   },

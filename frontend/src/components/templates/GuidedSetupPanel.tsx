@@ -294,7 +294,7 @@ export function GuidedSetupPanel({ templateKey, templateName, open, onClose }: {
       width="sheet"
       widthStorageKey="guided-setup"
     >
-      <SessionGate action="save" variant="block">
+      <SessionGate action="installTemplate" variant="block">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18, padding: 4 }}>
         {error && (
           <div className="ui-text-small" style={{ padding: 12, color: 'var(--coral-bright)', background: 'var(--surface-coral-soft, rgba(244,114,94,0.12))', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>

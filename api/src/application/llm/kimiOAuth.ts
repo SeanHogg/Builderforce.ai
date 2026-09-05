@@ -29,12 +29,13 @@ import {
   kimiExpiresInSeconds,
   kimiRefreshTokenRequest,
   parseKimiDeviceAuthorization,
+  parseKimiResponseBody,
   parseKimiTokenResponse,
   type KimiDeviceAuthorizationFields,
   type KimiGrantTokens,
   type KimiOAuthEnv,
   type KimiOAuthRequest,
-  type KimiResponseBody,
+  type KimiParsedBody,
 } from '@builderforce/kimi-oauth';
 
 
@@ -59,20 +60,16 @@ export type KimiDevicePoll =
   | { kind: 'denied' };
 
 /** Perform a request the shared protocol module shaped, and hand back the parsed body. */
-async function send(request: KimiOAuthRequest): Promise<{ status: number; data: KimiResponseBody }> {
+async function send(request: KimiOAuthRequest): Promise<{ status: number; body: KimiParsedBody }> {
   const response = await fetch(request.url, {
     method: request.method,
     headers: request.headers,
     body: request.body,
   });
-  let data: KimiResponseBody = {};
-  try {
-    const parsed = await response.json() as unknown;
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) data = parsed as KimiResponseBody;
-  } catch {
-    // Status alone decides below; a non-JSON body is not separately interesting.
-  }
-  return { status: response.status, data };
+  // Read as TEXT, then parse: a body that is not JSON is itself the diagnosis here, and
+  // `response.json()` would throw it away. Kimi answers a refused request with an HTML
+  // page, which is how "the edge blocked us" is told apart from "the API said no".
+  return { status: response.status, body: parseKimiResponseBody(await response.text()) };
 }
 
 /** Absolute-ms expiry from the wire's `expires_in`, under the shared lifetime policy. */
@@ -86,8 +83,8 @@ function toStoredTokens(tokens: KimiGrantTokens, nowMs: number): KimiOAuthTokens
 
 /** Begin the device flow: ask Kimi for a code and the page to send the user to. */
 export async function startKimiDeviceAuthorization(env?: KimiOAuthEnv): Promise<KimiDeviceAuthorization> {
-  const { status, data } = await send(kimiDeviceAuthorizationRequest(env));
-  const outcome = parseKimiDeviceAuthorization(status, data);
+  const { status, body } = await send(kimiDeviceAuthorizationRequest(env));
+  const outcome = parseKimiDeviceAuthorization(status, body);
   if (outcome.kind === 'failed') {
     throw new Error(`Kimi device authorization failed (HTTP ${status}): ${outcome.detail}`);
   }
@@ -106,8 +103,8 @@ export async function pollKimiDeviceToken(
   deviceCode: string,
   opts: { nowMs?: number; env?: KimiOAuthEnv } = {},
 ): Promise<KimiDevicePoll> {
-  const { status, data } = await send(kimiDeviceTokenRequest(deviceCode, opts.env));
-  const outcome = parseKimiTokenResponse(status, data);
+  const { status, body } = await send(kimiDeviceTokenRequest(deviceCode, opts.env));
+  const outcome = parseKimiTokenResponse(status, body);
   switch (outcome.kind) {
     case 'tokens':
       return { kind: 'tokens', tokens: toStoredTokens(outcome.tokens, opts.nowMs ?? Date.now()) };
@@ -137,8 +134,8 @@ export async function refreshKimiOAuth(
   refreshToken: string,
   opts: { nowMs?: number; env?: KimiOAuthEnv } = {},
 ): Promise<KimiOAuthTokens> {
-  const { status, data } = await send(kimiRefreshTokenRequest(refreshToken, opts.env));
-  const outcome = parseKimiTokenResponse(status, data, refreshToken);
+  const { status, body } = await send(kimiRefreshTokenRequest(refreshToken, opts.env));
+  const outcome = parseKimiTokenResponse(status, body, refreshToken);
   if (outcome.kind === 'tokens') return toStoredTokens(outcome.tokens, opts.nowMs ?? Date.now());
 
   const detail = outcome.kind === 'unauthorized' || outcome.kind === 'failed'

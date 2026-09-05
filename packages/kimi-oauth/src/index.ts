@@ -148,13 +148,49 @@ export type KimiGrantOutcome =
   | { kind: 'unauthorized'; detail: string }
   | { kind: 'failed'; status: number; detail: string; retryable: boolean };
 
-/** A JSON body as either surface managed to parse it — `{}` when the body was not JSON. */
+/** A JSON object body. `{}` when the response carried none. */
 export type KimiResponseBody = Record<string, unknown>;
 
-function detailOf(data: KimiResponseBody): string {
-  const description = typeof data.error_description === 'string' ? data.error_description : '';
-  const code = typeof data.error === 'string' ? data.error : '';
-  return description || code;
+/** How much of a non-JSON body is worth quoting back. Enough to recognise an HTML block
+ *  page or a proxy banner; short enough not to paste a document into an error message. */
+const NON_JSON_BODY_EXCERPT = 200;
+
+/**
+ * A response body, and — when it was not a JSON object — the body itself.
+ *
+ * The second field is the whole point. Kimi's edge answers a request it refuses with an
+ * HTML page rather than an API envelope, and that is the single most diagnostic thing
+ * about such a response: it says the refusal happened in front of the API, before any
+ * credential was read. Discarding the parse failure turns that into "unknown error".
+ */
+export interface KimiParsedBody {
+  data: KimiResponseBody;
+  nonJsonBody: string | null;
+}
+
+/** Read a raw response body. The ONE place either surface parses one. */
+export function parseKimiResponseBody(raw: string): KimiParsedBody {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return { data: {}, nonJsonBody: null };
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return { data: parsed as KimiResponseBody, nonJsonBody: null };
+    }
+    // Valid JSON, but a scalar or array — no error fields to read, so treat it as opaque.
+    return { data: {}, nonJsonBody: trimmed.slice(0, NON_JSON_BODY_EXCERPT) };
+  } catch (error) {
+    return {
+      data: {},
+      nonJsonBody: `${trimmed.slice(0, NON_JSON_BODY_EXCERPT)} (${(error as Error).message})`,
+    };
+  }
+}
+
+function detailOf(body: KimiParsedBody): string {
+  const description = typeof body.data.error_description === 'string' ? body.data.error_description : '';
+  const code = typeof body.data.error === 'string' ? body.data.error : '';
+  return description || code || body.nonJsonBody || '';
 }
 
 function stringField(data: KimiResponseBody, key: string): string {
@@ -172,9 +208,10 @@ function stringField(data: KimiResponseBody, key: string): string {
  */
 export function parseKimiTokenResponse(
   status: number,
-  data: KimiResponseBody,
+  body: KimiParsedBody,
   presentedRefreshToken = '',
 ): KimiGrantOutcome {
+  const { data } = body;
   const accessToken = stringField(data, 'access_token');
   if (status === 200 && accessToken.length > 0) {
     const expiresIn = Number(data.expires_in);
@@ -200,7 +237,7 @@ export function parseKimiTokenResponse(
     default: break;
   }
 
-  const detail = detailOf(data);
+  const detail = detailOf(body);
   if (status === 401 || status === 403 || error === 'invalid_grant') {
     return { kind: 'unauthorized', detail: detail || `Refresh rejected (HTTP ${status}).` };
   }
@@ -238,13 +275,14 @@ export type KimiDeviceAuthorizationOutcome =
  */
 export function parseKimiDeviceAuthorization(
   status: number,
-  data: KimiResponseBody,
+  body: KimiParsedBody,
 ): KimiDeviceAuthorizationOutcome {
+  const { data } = body;
   if (status !== 200) {
     return {
       kind: 'failed',
       status,
-      detail: detailOf(data) || `Kimi returned HTTP ${status}.`,
+      detail: detailOf(body) || `Kimi returned HTTP ${status}.`,
       retryable: RETRYABLE_STATUSES.has(status),
     };
   }

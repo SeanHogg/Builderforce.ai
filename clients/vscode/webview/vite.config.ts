@@ -1,7 +1,8 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
-// @ts-expect-error -- plain .mjs helper shared with esbuild.mjs; no type declarations.
+// The SAME hash the extension host stamps (see esbuild.mjs), so the two ids are
+// comparable rather than merely both present.
 import { computeBuildId } from '../buildId.mjs';
 
 /**

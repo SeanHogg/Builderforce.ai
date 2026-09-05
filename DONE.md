@@ -1,3 +1,81 @@
+## ✅ RESOLVED 2026-09-05 — The template catalogue answers a signed-out visitor
+
+`GET /api/templates` returned **401** to anyone without a session, because
+`templateRoutes` opened with a blanket `authMiddleware`. The gallery at `/templates`,
+the starting-point picker under every prompt bar and the marketplace's Templates chip all
+read that one endpoint, so a visitor saw an empty grid on the surface that exists to tell
+them what the product can do. Showing the menu is not a private read.
+
+The catalogue reads are now guest-readable, on the shape `/api/domains/roster/team`
+already set:
+
+- **`GET /` and `GET /:key` carry `optionalAuthMiddleware`** and are registered ABOVE the
+  blanket gate, so Hono answers them before it is reached; everything below — authoring,
+  publishing, resolving a setup, installing — keeps the full gate, which is also what lets
+  `requireRole` read a role that is actually there.
+- **`tenantId` is `number | null` through the registry.** A guest gets the built-ins plus
+  the platform-owned public listings; no tenant-owned scan is issued and no cross-tenant
+  widening happens (`loadPublishedTemplates` narrows to `tenant_id IS NULL`), and
+  `connectedConnectorKeys` answers an empty set rather than running a query with no tenant
+  to scope it. The public answer has its own cache slot (`templates:catalog:public`), and
+  a publish invalidates it alongside the workspace's — otherwise a newly listed template
+  stayed invisible to every visitor for five minutes.
+- **Installing is where the wall lands.** `GuidedSetupPanel` wraps its form in
+  `SessionGate action="installTemplate"` and skips the setup request entirely when signed
+  out, instead of rendering an "Unauthorized" banner over an empty wizard. The action is a
+  new member of the closed `GatedAction` union, translated in all five catalogs.
+- **The hook's ad-hoc module cache is gone.** `useTemplateCatalog` now goes through
+  `getOrSetClientCached` keyed by tenant — the shape `usePsychometricCatalog` uses — so a
+  visitor who signs in stops seeing the guest catalogue they were served moments earlier.
+
+`api` 2026.9.7 → 2026.9.8.
+
+## ✅ RESOLVED 2026-09-05 — The local agent can ship work: commit, pull request, and a guarded push
+
+Asked to "commit the change and push to main", the editor's agent reported it had no git
+tool, searched the catalog, found `run_command`, and shelled out
+`git add -A && git commit && git push`. Three separate things were wrong with that and
+none of them was the model's fault: there was no commit verb to find, the persona had
+told it to use `run_command` for git (advice with no tool behind it), and `git add -A` in
+a working tree shared with a human sweeps up their unrelated in-flight work.
+
+`git_commit`, `git_push` and `open_pull_request` now exist, and the SAFE path is the
+reachable one:
+
+- **`git_commit` requires `paths`.** Not a convenience — an agent that cannot say which
+  files it changed must not be committing in someone else's working tree. The run that
+  prompted this had three modified files and the agent had touched one. Committing on the
+  base branch is refused; `branch` names the ticket branch and creates it.
+- **`git_push` refuses the base branch** unless the caller passes `allowBaseBranch`, which
+  is a DECLARED act: every one of these tools is `mutating`, so the surface's existing
+  approval gate prompts, and `describeTool` renders that case as "push to the BASE BRANCH
+  (main) — skips pull-request review" rather than the useless "git_push".
+- **`open_pull_request`** pushes the branch first if it has no upstream, opens the PR via
+  the user's own `gh` auth (no token plumbed through the agent), and takes `reviewers`.
+  When `gh` is missing it says the branch is committed and pushed and hands over the
+  branch name, instead of losing the work behind a tool error.
+
+Gated on a NEW `git.write` capability, not `shell`. The cloud surfaces deliberately do not
+back it: they already publish by a different mechanism (a durable-surface write IS a
+commit, and `cloudAgentEngine` opens the PR at finish), and because the container derives
+its advertised schema from its capabilities, a tool its image has no handler for would
+400 mid-run. `git.write` is also in the VSIX's `MUTATING_CAPS`, so these can never slip
+past the approval prompt — that prompt is the only thing between "the human asked me to
+push to main" and it happening.
+
+Both remaining halves of the original failure are closed too. The persona now routes
+shipping through these tools and says to offer a pull request even when asked to push
+directly. And all nine git tools joined `LOCAL_WORKSPACE_TOOLS`, the pin set that survives
+the per-turn relevance trim — the same trim that dropped `run_command` on the very turn
+that asked for a commit, which is how an agent came to spend a run hunting for a tool its
+own prompt had just named.
+
+Free-text arguments (commit messages, PR bodies) are shell-quoted rather than validated —
+`safeGitArg` rejects spaces, so it cannot police prose — and there is a test for
+`it's $(rm -rf /)` surviving as literal text. `safeRepoArg`, `repoScopedScript`,
+`notARepoResult` and the base-branch resolution are now declared once and shared by every
+git tool rather than copied per action.
+
 ## ✅ RESOLVED 2026-09-05 — The VSIX says when an agent has left code on disk, and lets you review it
 
 An agent turn in the editor edits the workspace through the local tools (`write_file` /

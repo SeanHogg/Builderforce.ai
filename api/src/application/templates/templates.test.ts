@@ -8,7 +8,10 @@
  *   2. an output kind a manifest may declare and nothing can install — the
  *      wizard completes, the install reports success, nothing is created;
  *   3. a binding an output uses that no step collects — the workflow installs
- *      with a silently empty field and quietly does nothing.
+ *      with a silently empty field and quietly does nothing;
+ *   4. the catalogue answering only signed-in callers — the menu of the product
+ *      hidden behind a 401, which is what made `/api/templates` unreadable to
+ *      every visitor who had not signed in yet.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -18,6 +21,8 @@ import {
   normalizeBuiltinTemplate,
 } from './defaults';
 import { registeredOutputKinds } from './outputKinds';
+import { listTemplatesForTenant } from './templateRegistry';
+import type { Db } from '../../infrastructure/database/connection';
 import {
   parseTemplateManifest,
   validateTemplateManifest,
@@ -151,5 +156,35 @@ describe('manifest validation', () => {
       }],
     });
     expect(result.ok).toBe(false);
+  });
+});
+
+
+describe('the catalogue a signed-out visitor sees', () => {
+  /** A query builder that records what it was asked for and answers nothing.
+   *  Enough to prove which reads happen — which is the whole question here. */
+  function recordingDb() {
+    const selects: number[] = [];
+    const chain = {
+      from: () => chain,
+      where: () => chain,
+      orderBy: () => chain,
+      limit: () => Promise.resolve([]),
+      then: (resolve: (rows: unknown[]) => unknown) => resolve([]),
+    };
+    return {
+      selects,
+      db: { select: () => { selects.push(1); return chain; } } as unknown as Db,
+    };
+  }
+
+  it('is the built-ins, with no workspace query', async () => {
+    const { db, selects } = recordingDb();
+    const entries = await listTemplatesForTenant(db, null);
+    expect(entries.length).toBe(BUILTIN_TEMPLATE_LIST.length);
+    expect(entries.every((e) => e.origin === 'builtin')).toBe(true);
+    // ONE read — the public listings. A second would be the tenant-owned scan,
+    // which has no tenant to scope it and must never be issued.
+    expect(selects.length).toBe(1);
   });
 });

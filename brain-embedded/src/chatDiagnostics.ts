@@ -186,6 +186,14 @@ export interface ChatDiagnosticsData {
     uiBuildId?: string | null;
     /** When the client artifact was built, so two builds of the same source are orderable. */
     uiBuiltAt?: string | null;
+    /** The WEBVIEW bundle's own source hash, where the surface has one. See below. */
+    webviewBuildId?: string | null;
+    webviewBuiltAt?: string | null;
+    /** One line on whether this machine can run POSIX shell scripts — the fact that
+     *  decides whether the `git_sync_latest` / `git_undo` / `git_redo` tools work at
+     *  all, and which used to surface only as a raw `cmd.exe` error inside one tool
+     *  result that named neither the cause nor anything to check. */
+    posixShell?: string | null;
   } | null;
 }
 
@@ -400,18 +408,38 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
     // The build id rides the UI version, never a separate line: they answer one
     // question ("which client produced this?") and split lines get quoted apart.
     const buildId = d.versions.uiBuildId;
-    const ui = `${d.versions.ui ?? 'unknown'}${buildId ? `+${buildId}` : ''}`
+    // Named CLIENT, not "UI". The version and hash are the EXTENSION HOST's — the half
+    // that runs the tools — and calling it "UI" invited the reading that it described
+    // the panel instead, which is exactly how a report of a tool failure could not be
+    // matched against the build that fixed it.
+    const client = `${d.versions.ui ?? 'unknown'}${buildId ? `+${buildId}` : ''}`
       + (d.versions.uiBuiltAt && d.versions.uiBuiltAt !== 'dev' ? ` (built ${d.versions.uiBuiltAt})` : '');
-    lines.push(`- Versions: UI ${ui} · API ${d.versions.api ?? 'unknown'}`);
+    lines.push(`- Versions: client ${client} · API ${d.versions.api ?? 'unknown'}`);
     if (buildId === 'dev') {
       lines.push(
-        '  - ⚠️ UI build id is "dev" — this capture did NOT come from a packaged build, so its behaviour may not match any released artifact.',
+        '  - ⚠️ Client build id is "dev" — this capture did NOT come from a packaged build, so its behaviour may not match any released artifact.',
       );
     } else if (d.versions.ui && !buildId) {
       lines.push(
-        '  - ⚠️ No UI build id — this client does not stamp one, so a rebuild carrying the SAME version is indistinguishable from the build it replaced. "Is the fix in?" cannot be answered from this report.',
+        '  - ⚠️ No client build id — this client does not stamp one, so a rebuild carrying the SAME version is indistinguishable from the build it replaced. "Is the fix in?" cannot be answered from this report.',
       );
     }
+    // The two halves, stated separately. A surface that bundles its panel with its host
+    // ships them at one age — but only SAYING so makes "the reported version describes
+    // the half that was not running the code" a claim a reader can check.
+    const webviewId = d.versions.webviewBuildId;
+    if (webviewId) {
+      const built = d.versions.webviewBuiltAt && d.versions.webviewBuiltAt !== 'dev'
+        ? ` (built ${d.versions.webviewBuiltAt})`
+        : '';
+      lines.push(`  - Webview bundle: ${webviewId}${built}`);
+      if (buildId && buildId !== 'dev' && webviewId !== buildId) {
+        lines.push(
+          '  - ⚠️ The extension host and the webview were built from DIFFERENT source — this install is not one artifact, so a fix present in one half may be absent from the other. Reinstall the packaged extension before trusting either version above.',
+        );
+      }
+    }
+    if (d.versions.posixShell) lines.push(`  - ${d.versions.posixShell}`);
   }
   lines.push(`- Chat: ${d.chatTitle?.trim() ? `"${d.chatTitle.trim()}"` : 'Untitled'}${d.chatId != null ? ` (#${d.chatId})` : ''}${d.chatVisibility ? ` · ${d.chatVisibility}` : ''}`);
   lines.push(`- Chat's project: ${fmtProject(d.projectId, d.projectName)}`);

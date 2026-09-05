@@ -27486,7 +27486,8 @@
         "invite": "Sign in to invite someone.",
         "pay": "Sign in to complete a payment.",
         "save": "Sign in to save this work.",
-        "account": "Create an account to unlock this."
+        "account": "Create an account to unlock this.",
+        "installTemplate": "Sign in to set this template up in a workspace."
       }
     }
   },

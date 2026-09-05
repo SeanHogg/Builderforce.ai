@@ -135,6 +135,10 @@ export interface InitData {
    *  field a "did you get the fix?" question is actually answerable from. `"dev"` when
    *  the host is running unbundled. See `src/buildInfo.ts`. */
   buildId?: string;
+  /** One line on whether this MACHINE can run the POSIX git scripts (`git_sync_latest` /
+   *  `git_undo` / `git_redo`), resolved host-side. Carried into the chat diagnostics so
+   *  a report of one of those tools failing says whether the guard was even live. */
+  posixShell?: string;
   /** ISO timestamp the installed artifact was bundled, or `"dev"` when unbundled. */
   builtAt?: string;
 }

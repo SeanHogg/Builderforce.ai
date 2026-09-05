@@ -4998,17 +4998,28 @@ function formatChatDiagnostics(d) {
   if (d.surface) lines.push(`- Surface: ${d.surface}`);
   if (d.versions && (d.versions.ui || d.versions.api || d.versions.uiBuildId)) {
     const buildId = d.versions.uiBuildId;
-    const ui = `${d.versions.ui ?? "unknown"}${buildId ? `+${buildId}` : ""}` + (d.versions.uiBuiltAt && d.versions.uiBuiltAt !== "dev" ? ` (built ${d.versions.uiBuiltAt})` : "");
-    lines.push(`- Versions: UI ${ui} \xB7 API ${d.versions.api ?? "unknown"}`);
+    const client = `${d.versions.ui ?? "unknown"}${buildId ? `+${buildId}` : ""}` + (d.versions.uiBuiltAt && d.versions.uiBuiltAt !== "dev" ? ` (built ${d.versions.uiBuiltAt})` : "");
+    lines.push(`- Versions: client ${client} \xB7 API ${d.versions.api ?? "unknown"}`);
     if (buildId === "dev") {
       lines.push(
-        '  - \u26A0\uFE0F UI build id is "dev" \u2014 this capture did NOT come from a packaged build, so its behaviour may not match any released artifact.'
+        '  - \u26A0\uFE0F Client build id is "dev" \u2014 this capture did NOT come from a packaged build, so its behaviour may not match any released artifact.'
       );
     } else if (d.versions.ui && !buildId) {
       lines.push(
-        '  - \u26A0\uFE0F No UI build id \u2014 this client does not stamp one, so a rebuild carrying the SAME version is indistinguishable from the build it replaced. "Is the fix in?" cannot be answered from this report.'
+        '  - \u26A0\uFE0F No client build id \u2014 this client does not stamp one, so a rebuild carrying the SAME version is indistinguishable from the build it replaced. "Is the fix in?" cannot be answered from this report.'
       );
     }
+    const webviewId = d.versions.webviewBuildId;
+    if (webviewId) {
+      const built = d.versions.webviewBuiltAt && d.versions.webviewBuiltAt !== "dev" ? ` (built ${d.versions.webviewBuiltAt})` : "";
+      lines.push(`  - Webview bundle: ${webviewId}${built}`);
+      if (buildId && buildId !== "dev" && webviewId !== buildId) {
+        lines.push(
+          "  - \u26A0\uFE0F The extension host and the webview were built from DIFFERENT source \u2014 this install is not one artifact, so a fix present in one half may be absent from the other. Reinstall the packaged extension before trusting either version above."
+        );
+      }
+    }
+    if (d.versions.posixShell) lines.push(`  - ${d.versions.posixShell}`);
   }
   lines.push(`- Chat: ${d.chatTitle?.trim() ? `"${d.chatTitle.trim()}"` : "Untitled"}${d.chatId != null ? ` (#${d.chatId})` : ""}${d.chatVisibility ? ` \xB7 ${d.chatVisibility}` : ""}`);
   lines.push(`- Chat's project: ${fmtProject(d.projectId, d.projectName)}`);
@@ -5162,7 +5173,10 @@ async function gatherChatDiagnostics(src) {
       ui: src.uiVersion ?? null,
       api: apiVersion,
       uiBuildId: src.uiBuildId ?? null,
-      uiBuiltAt: src.uiBuiltAt ?? null
+      uiBuiltAt: src.uiBuiltAt ?? null,
+      webviewBuildId: src.webviewBuildId ?? null,
+      webviewBuiltAt: src.webviewBuiltAt ?? null,
+      posixShell: src.posixShell ?? null
     }
   };
 }

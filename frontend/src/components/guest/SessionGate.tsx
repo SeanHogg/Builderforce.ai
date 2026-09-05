@@ -57,7 +57,10 @@ export type GatedAction =
   /** Anything that spends money. */
   | 'pay'
   /** Persist this work so it is still here tomorrow. */
-  | 'save';
+  | 'save'
+  /** Set a template up: it creates workflows and arms triggers in a workspace,
+   *  which is why reading the catalogue is open and this is not. */
+  | 'installTemplate';
 
 export interface SessionGateProps {
   action: GatedAction;

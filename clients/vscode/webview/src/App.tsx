@@ -60,6 +60,7 @@ import { createChatTicketsAdapter } from './chatTicketsAdapter';
 import { adoptChatProject } from './adoptChatProject';
 import { EvermindStatusBadge } from './EvermindStatusBadge';
 import { PendingChangesPanel } from './PendingChangesPanel';
+import { WEBVIEW_BUILD_ID, WEBVIEW_BUILT_AT } from './webviewBuildInfo';
 import { PlanBadge, fetchPlanSnapshot, invalidatePlanSnapshot, openUpgrade } from './accountPlan';
 import {
   getToken,
@@ -1482,6 +1483,13 @@ function Chat({ init }: { init: InitData }) {
         uiVersion: init.extensionVersion ?? null,
         uiBuildId: init.buildId ?? null,
         uiBuiltAt: init.builtAt ?? null,
+        // THIS bundle's own stamp, beside the host's above. Equal ids mean one packaged
+        // artifact; different ids name which half is stale — the case a report carrying
+        // a single version could never distinguish.
+        webviewBuildId: WEBVIEW_BUILD_ID,
+        webviewBuiltAt: WEBVIEW_BUILT_AT,
+        // Whether this machine can run the POSIX git scripts, resolved by the host.
+        posixShell: init.posixShell ?? null,
         baseUrl: init.baseUrl ?? null,
         readAgents: () => (chatId != null ? ticketAdapter.listAgents(chatId) : Promise.resolve([])),
         readTickets: () => (chatId != null ? ticketAdapter.listTickets(chatId) : Promise.resolve([])),
@@ -1534,7 +1542,7 @@ function Chat({ init }: { init: InitData }) {
       );
       window.setTimeout(() => setCopyState('idle'), 3000);
     }
-  }, [conv, init.model, init.extensionVersion, init.buildId, init.builtAt, init.baseUrl, modelSurface, toolSpecs, associatedProject, associatedProjectId, activeChat?.title, chatVisibility, chatId, ticketAdapter, apiReq, init.project?.id, init.project?.name, t]);
+  }, [conv, init.model, init.extensionVersion, init.buildId, init.builtAt, init.posixShell, init.baseUrl, modelSurface, toolSpecs, associatedProject, associatedProjectId, activeChat?.title, chatVisibility, chatId, ticketAdapter, apiReq, init.project?.id, init.project?.name, t]);
 
   // Consolidate: summarize the whole chat into ONE compact assistant message tagged
   // as a consolidation marker. It's shown back to the user (the "flag"), and the

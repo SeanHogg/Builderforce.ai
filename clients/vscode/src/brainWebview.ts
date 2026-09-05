@@ -3,6 +3,7 @@ import { autoApproveDefault } from "./permissionMode";
 import { listLocalModels, localModelOptions } from "./localModels";
 import { artifactRoutePath } from "@seanhogg/builderforce-brain-embedded";
 import { BUILD_ID, BUILT_AT } from "./buildInfo";
+import { posixShellReport } from "./posixShell";
 import { getTenantJwt, getCurrentUserId } from "./bfApi";
 import { TOOL_DEFS } from "./fileTools";
 import { authorizeLocalEndpoint, getBaseUrl, getWebBaseUrl, getLocalModelsConfig, SECRET_KEY, fetchPersonalityBlock, fetchLimbicBlock, getSessionTabMode, type SessionTabMode } from "./gateway";
@@ -833,6 +834,12 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
       // "did you get the fix?". See `buildInfo.ts`.
       buildId: BUILD_ID,
       builtAt: BUILT_AT,
+      // Whether THIS machine routes POSIX scripts to a real shell. The `git_sync_latest`
+      // / `git_undo` / `git_redo` tools are sh scripts; without a POSIX shell they reach
+      // `cmd.exe` and fail with a message naming neither the cause nor a remedy, and a
+      // report of that failure could not say whether the guard against it was even
+      // present. Now it travels with every copied diagnostics report.
+      posixShell: posixShellReport(),
       token,
       // Manual pick > active project's Evermind pin > configured default. Sending the
       // `project_evermind:<id>` pin lets the gateway serve the project's CURRENT learned

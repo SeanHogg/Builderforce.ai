@@ -103,6 +103,15 @@ export interface ChatDiagnosticsSources {
   uiBuildId?: string | null;
   /** ISO timestamp the client artifact was built. */
   uiBuiltAt?: string | null;
+  /** Source hash of the WEBVIEW bundle, when the surface ships one separately from its
+   *  host. Both halves of the VS Code extension travel in one `.vsix`, so these match in
+   *  a released install — a MISMATCH is the case that used to be invisible, and the one
+   *  that made "is the host older than the version it reports?" unanswerable. */
+  webviewBuildId?: string | null;
+  webviewBuiltAt?: string | null;
+  /** Whether this machine can run the POSIX git scripts (`git_sync_latest` / `undo` /
+   *  `redo`). Absent on a surface with no local shell. */
+  posixShell?: string | null;
   /** The gateway this surface is talking to. */
   baseUrl?: string | null;
 
@@ -220,6 +229,9 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
       api: apiVersion,
       uiBuildId: src.uiBuildId ?? null,
       uiBuiltAt: src.uiBuiltAt ?? null,
+      webviewBuildId: src.webviewBuildId ?? null,
+      webviewBuiltAt: src.webviewBuiltAt ?? null,
+      posixShell: src.posixShell ?? null,
     },
   };
 }

@@ -3767,6 +3767,14 @@ interface ChatDiagnosticsData {
         uiBuildId?: string | null;
         /** When the client artifact was built, so two builds of the same source are orderable. */
         uiBuiltAt?: string | null;
+        /** The WEBVIEW bundle's own source hash, where the surface has one. See below. */
+        webviewBuildId?: string | null;
+        webviewBuiltAt?: string | null;
+        /** One line on whether this machine can run POSIX shell scripts — the fact that
+         *  decides whether the `git_sync_latest` / `git_undo` / `git_redo` tools work at
+         *  all, and which used to surface only as a raw `cmd.exe` error inside one tool
+         *  result that named neither the cause nor anything to check. */
+        posixShell?: string | null;
     } | null;
 }
 /** How close a metered allowance is to stopping turns. */
@@ -3914,6 +3922,15 @@ interface ChatDiagnosticsSources {
     uiBuildId?: string | null;
     /** ISO timestamp the client artifact was built. */
     uiBuiltAt?: string | null;
+    /** Source hash of the WEBVIEW bundle, when the surface ships one separately from its
+     *  host. Both halves of the VS Code extension travel in one `.vsix`, so these match in
+     *  a released install — a MISMATCH is the case that used to be invisible, and the one
+     *  that made "is the host older than the version it reports?" unanswerable. */
+    webviewBuildId?: string | null;
+    webviewBuiltAt?: string | null;
+    /** Whether this machine can run the POSIX git scripts (`git_sync_latest` / `undo` /
+     *  `redo`). Absent on a surface with no local shell. */
+    posixShell?: string | null;
     /** The gateway this surface is talking to. */
     baseUrl?: string | null;
     /** Resolve the chat project's NAME when the host does not already hold it (the two

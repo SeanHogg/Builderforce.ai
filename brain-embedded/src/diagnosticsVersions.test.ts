@@ -11,9 +11,9 @@ const base: ChatDiagnosticsData = { surface: 'Web', chatId: 71 };
 const render = (d: ChatDiagnosticsData) => formatChatDiagnostics(d).join('\n');
 
 describe('version stamp in chat diagnostics', () => {
-  it('reports both UI and API versions', () => {
+  it('reports both the client and API versions', () => {
     expect(render({ ...base, versions: { ui: '2026.7.84', api: '2026.7.114' } }))
-      .toContain('- Versions: UI 2026.7.84 · API 2026.7.114');
+      .toContain('- Versions: client 2026.7.84 · API 2026.7.114');
   });
 
   it('is the FIRST fact after the surface — everything else depends on it', () => {
@@ -24,9 +24,66 @@ describe('version stamp in chat diagnostics', () => {
   });
 
   it('names the half it could not determine rather than omitting the line', () => {
-    // /health unreachable must not silently drop the UI version too.
+    // /health unreachable must not silently drop the client version too.
     expect(render({ ...base, versions: { ui: '2026.7.84', api: null } }))
-      .toContain('UI 2026.7.84 · API unknown');
+      .toContain('client 2026.7.84 · API unknown');
+  });
+
+  /**
+   * THE AMBIGUITY THIS BLOCK EXISTS FOR.
+   *
+   * A run reported the raw `cmd.exe` error `Environment variable -e not defined` from
+   * `git_sync_latest` on a build whose version was AHEAD of the one the POSIX-shell
+   * guard shipped in. Two explanations fitted equally — an extension host older than
+   * the version it reported, or a live hole in the guard — and nothing in the report
+   * could separate them: the single version line was labelled "UI" while carrying the
+   * HOST's number, the webview half was never identified at all, and whether the
+   * machine even had a POSIX shell was not stated anywhere.
+   *
+   * All three are now facts in the report rather than inferences about it.
+   */
+  it('names the extension host, not "UI" — the number is the half that runs the tools', () => {
+    const out = render({ ...base, versions: { ui: '2026.9.5', api: '2026.9.5', uiBuildId: 'aaaaaaaaaaaa' } });
+    expect(out).toContain('- Versions: client 2026.9.5+aaaaaaaaaaaa');
+    expect(out).not.toContain('Versions: UI');
+  });
+
+  it('prints the webview bundle stamp beside the host one', () => {
+    const out = render({
+      ...base,
+      versions: { ui: '2026.9.5', api: null, uiBuildId: 'aaaaaaaaaaaa', webviewBuildId: 'aaaaaaaaaaaa' },
+    });
+    expect(out).toContain('Webview bundle: aaaaaaaaaaaa');
+    // Matching ids are ONE artifact — no warning to give.
+    expect(out).not.toContain('DIFFERENT source');
+  });
+
+  it('warns when the two halves were built from different source', () => {
+    // The `watch:webview` case: the panel is rebuilt, the host keeps its old stamp, and
+    // the version line describes whichever half the reader assumed.
+    const out = render({
+      ...base,
+      versions: { ui: '2026.9.5', api: null, uiBuildId: 'aaaaaaaaaaaa', webviewBuildId: 'bbbbbbbbbbbb' },
+    });
+    expect(out).toContain('DIFFERENT source');
+    expect(out).toContain('Reinstall the packaged extension');
+  });
+
+  it('does not cry mismatch against an unpackaged host', () => {
+    // "dev" is not a source hash, so comparing it to one proves nothing.
+    const out = render({
+      ...base,
+      versions: { ui: '2026.9.5', api: null, uiBuildId: 'dev', webviewBuildId: 'bbbbbbbbbbbb' },
+    });
+    expect(out).not.toContain('DIFFERENT source');
+  });
+
+  it('states whether this machine can run the POSIX git scripts', () => {
+    const out = render({
+      ...base,
+      versions: { ui: '2026.9.5', api: null, posixShell: 'POSIX scripts: routed to C:/Git/bin/bash.exe' },
+    });
+    expect(out).toContain('POSIX scripts: routed to C:/Git/bin/bash.exe');
   });
 
   it('says nothing when the host gathered no versions at all', () => {
@@ -86,9 +143,9 @@ describe('build identity — a version names a release, not an artifact', () => 
    * user who hit that exact bug filed a report reading `UI 2026.7.104` — true of both
    * builds, useful for neither. The build id is what separates them.
    */
-  it('rides the UI version rather than taking its own line', () => {
+  it('rides the client version rather than taking its own line', () => {
     const out = render({ ...base, versions: { ui: '2026.7.104', api: '2026.7.114', uiBuildId: 'a1b2c3d4e5f6' } });
-    expect(out).toContain('- Versions: UI 2026.7.104+a1b2c3d4e5f6 · API 2026.7.114');
+    expect(out).toContain('- Versions: client 2026.7.104+a1b2c3d4e5f6 · API 2026.7.114');
   });
 
   it('states when the artifact was built, so same-source rebuilds stay orderable', () => {
@@ -96,12 +153,12 @@ describe('build identity — a version names a release, not an artifact', () => 
       ...base,
       versions: { ui: '2026.7.104', api: null, uiBuildId: 'a1b2c3d4e5f6', uiBuiltAt: '2026-07-25T22:09:00.000Z' },
     });
-    expect(out).toContain('UI 2026.7.104+a1b2c3d4e5f6 (built 2026-07-25T22:09:00.000Z)');
+    expect(out).toContain('client 2026.7.104+a1b2c3d4e5f6 (built 2026-07-25T22:09:00.000Z)');
   });
 
   it('warns when a client reports a version but no build id at all', () => {
     const out = render({ ...base, versions: { ui: '2026.7.104', api: null } });
-    expect(out).toContain('No UI build id');
+    expect(out).toContain('No client build id');
     expect(out).toContain('indistinguishable from the build it replaced');
   });
 
@@ -112,7 +169,7 @@ describe('build identity — a version names a release, not an artifact', () => 
 
   it('still renders the line when only a build id was gathered', () => {
     expect(render({ ...base, versions: { ui: null, api: null, uiBuildId: 'a1b2c3d4e5f6' } }))
-      .toContain('- Versions: UI unknown+a1b2c3d4e5f6');
+      .toContain('- Versions: client unknown+a1b2c3d4e5f6');
   });
 });
 

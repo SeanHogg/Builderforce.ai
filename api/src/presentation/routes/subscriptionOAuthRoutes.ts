@@ -188,6 +188,25 @@ const pendingKey = (adapter: SubscriptionOAuthAdapter, tenantId: number, state: 
   `${adapter.kvPrefix}:${tenantId}:${state}`;
 
 /**
+ * Retire a spent pending record — after a successful connect, and after a terminal
+ * device outcome that can never approve.
+ *
+ * Both callers want the SAME thing: the record is single-use, so leaving it would let a
+ * replayed `state` reach the exchange a second time, and neither caller can do anything
+ * useful about a KV failure once the tokens are already stored. That is why the deletion
+ * is awaited but its failure is not fatal — and why the failure still has to REACH
+ * somewhere. Dropping it silently would leave a stale record with no record of why.
+ */
+async function dropPendingRecord(kv: KVNamespace, key: string): Promise<void> {
+  await kv.delete(key).catch((error: unknown) => {
+    reportCaughtError(error, {
+      source: 'presentation/routes/subscriptionOAuthRoutes.ts',
+      operation: 'dropPendingRecord',
+    });
+  });
+}
+
+/**
  * Read a pending record. Historically two providers stored the bare verifier
  * and one stored JSON, so a plain string is still accepted: a connect started
  * before this consolidation shipped must be completable after it.
@@ -324,7 +343,7 @@ export function mountSubscriptionOAuthRoutes(router: Hono<HonoEnv>, gate: Subscr
         }
         if (outcome.kind !== 'tokens') {
           // Terminal, and the pending record is spent — drop it so a retry starts clean.
-          await kv.delete(key).catch(() => {});
+          await dropPendingRecord(kv, key);
           return c.json({
             error: outcome.kind === 'denied'
               ? 'The connection request was declined in Kimi.'
@@ -347,9 +366,7 @@ export function mountSubscriptionOAuthRoutes(router: Hono<HonoEnv>, gate: Subscr
       // card keeps telling the operator to fix what they just fixed.
       await clearProviderAuthAlert(c.env, access.tenantId, adapter.provider);
       // Single-use verifier — drop it once it has done its job.
-      await kv.delete(key).catch((error) => {
-        reportCaughtError(error, { source: 'presentation/routes/subscriptionOAuthRoutes.ts', operation: 'completeSubscriptionOAuth' });
-      });
+      await dropPendingRecord(kv, key);
       return c.json({ ok: true, provider: adapter.provider, authType: 'oauth' });
     });
   }

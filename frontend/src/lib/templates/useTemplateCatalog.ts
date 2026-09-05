@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * The one hook every starting-point surface reads.
  *
@@ -6,14 +8,19 @@
  * labels. They now share this: the merge, the ordering and the localization are
  * decided once, and a surface differs only by which entries it chooses to show.
  *
- * The workspace half is fetched lazily and never blocks a render. A signed-out
- * visitor on the landing canvas has no workspace to install into, so the fetch
- * is skipped entirely rather than allowed to 401 — and everything else is
- * available synchronously from the message catalogs and the pack registry.
+ * The installable half is fetched lazily and never blocks a render; everything
+ * else is available synchronously from the message catalogs and the pack
+ * registry. The fetch runs for a SIGNED-OUT visitor too: `GET /api/templates`
+ * answers a guest with the public catalogue (built-ins plus what publishers
+ * listed), because what you can start from is the menu of the product and a
+ * visitor who is 401'd out of it cannot tell what this is. Installing is what
+ * needs an account, and `GuidedSetupPanel` is where that wall lands.
  */
 
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { useAuth } from '@/lib/AuthContext';
+import { getOrSetClientCached } from '@/infrastructure/http/readThrough';
 import { templatesApi, type TemplateSummary } from './api';
 import { mergeTemplates, orderTemplates, packEntries, promptEntries, workspaceEntries } from './catalog';
 import type { TemplateEntry } from './contract';
@@ -25,32 +32,40 @@ export interface TemplateCatalogOptions {
   workspaceOnly?: boolean;
 }
 
-/** Module-level cache so opening the picker a second time is instant and does
- *  not re-hit the API. Reset only by a reload, which is the same lifetime the
- *  server's own five-minute catalogue cache assumes. */
-let workspaceCache: TemplateSummary[] | null = null;
+/**
+ * Cached through the shared client read-through, KEYED BY TENANT — the same
+ * shape `usePsychometricCatalog` uses, and for the same reason. The answer is
+ * per-workspace (a workspace's own saved templates, and how much of each is
+ * connected), so a module-level `let` shared across tenants would have shown a
+ * visitor who just signed in the catalogue they saw as a guest until the next
+ * hard reload.
+ */
+const CACHE_PREFIX = 'template-catalog:';
+
+/** The installable half for one workspace ('none' for a signed-out visitor). */
+export function loadTemplateCatalog(tenantKey: string): Promise<TemplateSummary[]> {
+  return getOrSetClientCached(`${CACHE_PREFIX}${tenantKey}`, async () => (await templatesApi.list()).templates);
+}
 
 export function useTemplateCatalog(options: TemplateCatalogOptions = {}): TemplateEntry[] {
   const { includeWorkspace = true, workspaceOnly = false } = options;
   const t = useTranslations('promptUseCases');
   const tCanvas = useTranslations('creationCanvas');
   const tTemplates = useTranslations('templates');
-  const [workspace, setWorkspace] = useState<TemplateSummary[]>(workspaceCache ?? []);
+  const { tenant } = useAuth();
+  const tenantKey = tenant?.id ?? 'none';
+  const [workspace, setWorkspace] = useState<TemplateSummary[]>([]);
 
   useEffect(() => {
-    if (!includeWorkspace || workspaceCache) return;
+    if (!includeWorkspace) return;
     let cancelled = false;
-    templatesApi
-      .list()
-      .then((res) => {
-        workspaceCache = res.templates;
-        if (!cancelled) setWorkspace(res.templates);
-      })
-      // A workspace the visitor does not have is not an error worth surfacing —
-      // the rest of the catalogue is still the answer to "what can I make?".
+    loadTemplateCatalog(tenantKey)
+      .then((templates) => { if (!cancelled) setWorkspace(templates); })
+      // A catalogue that could not be fetched is not an error worth surfacing —
+      // the rest of the list is still the answer to "what can I make?".
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [includeWorkspace]);
+  }, [includeWorkspace, tenantKey]);
 
   return useMemo(() => {
     const installable = workspaceEntries(workspace, tTemplates as unknown as (k: string) => string);
