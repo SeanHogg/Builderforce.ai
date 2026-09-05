@@ -17,8 +17,18 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * per-client copy of this logic.
  *
  * The minted ticket is opened in the `in_review` lane: the code exists (it was just
- * written) but is not yet merged/deployed. The merge/deploy → ticket-complete wiring
- * (githubWebhookRoutes / repoRoutes finalize) flips it to Done once it ships.
+ * written) but is not yet merged/deployed.
+ *
+ * WHAT COMPLETES IT. For a long time this docblock claimed the merge/deploy wiring
+ * "(githubWebhookRoutes / repoRoutes finalize) flips it to Done once it ships" — and
+ * that wiring did not exist. Nothing anywhere moved a delta ticket out of `in_review`,
+ * so every ticket this service ever minted sat at 50% on the board permanently, and
+ * the tool description told the model (and so the user) otherwise. Today ONE completer
+ * is real: a Brain run that pushes the change straight to the base branch and verifies
+ * it landed closes its own linked ticket (`shippedToBaseBranch` →
+ * `completeShippedTickets` in brainRunStore). The pull-request path — a delta whose
+ * change is merged later, by a PR this run did not make — is still uncovered; see the
+ * Consolidated Gap Register entry.
  */
 import { and, eq, sql } from 'drizzle-orm';
 import { workDeltas, tasks as tasksTable, projects as projectsTable } from '../../infrastructure/database/schema';
@@ -44,7 +54,7 @@ export type DeltaKind = (typeof DELTA_KINDS)[number];
  * shared gateway MCP catalog). Kept here as the single source so surfaces don't drift.
  */
 export const DELTA_DIRECTIVE =
-  'Work visibility: when your turn ADDS or CHANGES code that is not already tracked by an existing ticket, record it before you finish — call the `tickets.from_delta` tool (advertised as `builtin_tickets_from_delta`) with a one-line summary, the kind (improvement | fix | bug), and the files you touched. This opens a ticket so the change is visible on the board and completes automatically once merged and deployed. Record one delta per meaningful change; skip trivial no-op edits.';
+  'Work visibility: when your turn ADDS or CHANGES code that is not already tracked by an existing ticket, record it before you finish — call the `tickets.from_delta` tool (advertised as `builtin_tickets_from_delta`) with a one-line summary, the kind (improvement | fix | bug), and the files you touched. This opens a ticket in the review lane so the change is visible on the board. If you then MERGE that change to the base branch yourself (commit and push to main), the ticket is completed for you — you do not need to update its status by hand. If you leave the change on a branch or in a pull request, the ticket stays in review until that lands, which is correct. Record one delta per meaningful change; skip trivial no-op edits.';
 
 export interface RecordDeltaInput {
   projectId: number;

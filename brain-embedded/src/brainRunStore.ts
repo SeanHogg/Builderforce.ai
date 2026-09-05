@@ -43,7 +43,8 @@ import { withProvenanceMetadata, type ProvenanceAccount } from './provenance';
 import { selectToolsForTurn } from './selectTools';
 import { routerToolSpecs, isRouterTool, handleRouterCall } from './toolRouter';
 import { setLastResolvedModel } from './lastResolvedModel';
-import { isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, isReadOnlyPlatformTool } from './chatWorkLinking';
+import { isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, linkedTicketsToComplete, isReadOnlyPlatformTool } from './chatWorkLinking';
+import { shippedToBaseBranch } from './shipVerification';
 import { toolActivity, activityTarget, type BrainRunActivity } from './runActivity';
 import { ReadCoverage, revisitAdvisory, withAdvisory } from './readCoverage';
 import { chatModeDirective, normalizeChatMode, type ChatMode } from './chatMode';
@@ -1122,6 +1123,13 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
     if (!aborted && c.codeChanged && req.projectId != null && req.runTool) {
       await advanceLinkedTickets(chatId, c, req).catch(() => { /* never fail the run on the backstop */ });
     }
+    // And if the run MERGED its change to the base branch, the review lane is moot —
+    // the code is live. Runs last, after the mint above, so a ticket this run created
+    // and then shipped is completed rather than left at 50% forever. Gated on real
+    // evidence of a push that landed, not on the run merely having touched files.
+    if (!aborted && c.codeChanged && req.projectId != null && req.runTool && shippedToBaseBranch(c.trace)) {
+      await completeShippedTickets(chatId, c, req).catch(() => { /* never fail the run on the backstop */ });
+    }
     // The run is over: nothing is in flight, so no indicator may claim otherwise.
     // Cleared LAST, after the backstops above, so `finishing` stays visible for them.
     c.activity = null;
@@ -1203,6 +1211,52 @@ async function advanceLinkedTickets(chatId: number, c: RunCell, req: BrainRunReq
       label: 'builtin_tasks_update',
       durationMs: nowMs() - toolStart,
       args: { id, status: 'in_progress', auto: true, reason: 'worked-ticket-off-backlog' },
+      result: out ?? null,
+      isError: isFailedToolResult(out),
+    });
+  }
+}
+
+/**
+ * Close the loop `tickets.from_delta` has always promised and never delivered.
+ *
+ * A delta ticket opens in `in_review` — "the code exists but has not landed yet" —
+ * and its tool description tells the model it "completes automatically once merged
+ * and deployed". Nothing completed it. The intended completer was a GitHub merge
+ * webhook, which cannot fire for a change pushed straight to the base branch with no
+ * pull request, so those tickets sat at 50% on the board permanently.
+ *
+ * When THIS run pushed to a base branch and verified it landed
+ * ({@link shippedToBaseBranch}), the run holds first-hand evidence the work shipped,
+ * and is the only thing that ever will. Best-effort and fail-closed: an ambiguous
+ * trace leaves the ticket exactly where it was.
+ */
+async function completeShippedTickets(chatId: number, c: RunCell, req: BrainRunRequest): Promise<void> {
+  if (!req.runTool) return;
+  let listed: unknown;
+  try {
+    listed = await req.runTool('builtin_chats_list_tickets', { chatId });
+  } catch {
+    return; // can't read the links — nothing to complete
+  }
+  for (const t of linkedTicketsToComplete(listed)) {
+    const id = Number(t.ref);
+    if (!Number.isInteger(id)) continue;
+    const toolStart = nowMs();
+    let out: unknown;
+    try {
+      out = await req.runTool('builtin_tasks_update', { id, status: 'done' });
+    } catch (e) {
+      out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+    pushDurableStep(c, chatId, req.persistence, {
+      ts: nowIso(),
+      category: 'tool',
+      label: 'builtin_tasks_update',
+      durationMs: nowMs() - toolStart,
+      // The REASON rides on the step: a ticket that closed itself must say what
+      // closed it, or the board's history reads as an unexplained status change.
+      args: { id, status: 'done', auto: true, reason: 'shipped-to-base-branch' },
       result: out ?? null,
       isError: isFailedToolResult(out),
     });

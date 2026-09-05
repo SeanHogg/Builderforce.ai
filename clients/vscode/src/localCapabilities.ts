@@ -34,6 +34,8 @@ import type {
   ShellResult,
 } from "@builderforce/agent-tools";
 
+import { needsPosixShell, findBash, posixShellOption } from "./posixShell";
+
 const execAsync = promisify(exec);
 
 // Bound the bytes pulled off disk per read. The shared `read_file` tool paginates the
@@ -260,12 +262,25 @@ export function buildLocalCapabilityProvider(root: string): CapabilityProvider {
 
   const shell = {
     async run(command: string): Promise<ShellResult> {
+      // A POSIX script with no POSIX shell to run it must say so. Letting it through
+      // hands the script to `cmd.exe`, which parses `set -e` as its own builtin and
+      // fails with "Environment variable -e not defined" — a message that names
+      // neither the cause nor anything the agent could do about it.
+      if (needsPosixShell(command) && !findBash()) {
+        return {
+          ok: false,
+          error:
+            "this command is a POSIX shell script (it uses set -e / $(…) / [ … ]) and no POSIX shell was found on this Windows machine. "
+            + "Install Git for Windows (which ships bash), or re-run the work as plain single-line commands instead.",
+        };
+      }
       try {
         const { stdout, stderr } = await execAsync(command, {
           cwd: rootResolved,
           timeout: RUN_TIMEOUT_MS,
           maxBuffer: RUN_MAX_BUFFER,
           windowsHide: true,
+          ...posixShellOption(command),
         });
         const out = [stdout, stderr].filter((s) => s && s.trim()).join("\n").trim();
         return { ok: true, exitCode: 0, stdout: clamp(out || "(no output)", RUN_MAX_OUTPUT) };

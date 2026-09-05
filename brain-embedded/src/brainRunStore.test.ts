@@ -7,6 +7,7 @@ import {
   getRunStoreSize,
   resetBrainRunStore,
   getRunSnapshot,
+  getRunTrace,
   windowed,
   compactTailStart,
   compactMiddleRange,
@@ -404,5 +405,81 @@ describe('a bare "Fix" after an unfinished proposal', () => {
       userTurn: 'Fix',
     });
     expect(seen[0]).not.toMatch(/bare directive/i);
+  });
+});
+
+describe('a run that ships its change closes its own ticket', () => {
+  const persistence = { sendMessages: async () => [] };
+  const TICKET = [{ kind: 'task', ref: '2394', status: 'in_review', exists: true }];
+
+  /** A run that edits a file, then commits + pushes, then checks git status. */
+  function shippingRun(statusOutput: string) {
+    const calls: { name: string; args: unknown }[] = [];
+    let turn = 0;
+    const stream: BrainStreamFn = async (opts) => {
+      turn += 1;
+      if (opts.tools === undefined) return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
+      const plan = [
+        { name: 'edit_file', args: { path: 'a.css', old_string: 'x', new_string: 'y' } },
+        { name: 'run_command', args: { command: 'git add -A && git commit -m "x" && git push' } },
+        { name: 'git_status', args: {} },
+      ][turn - 1];
+      if (!plan) return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
+      return { text: '', toolCalls: [{ id: `c${turn}`, name: plan.name, args: JSON.stringify(plan.args) }], finishReason: 'tool_calls' };
+    };
+    const runTool = async (name: string, args: unknown) => {
+      calls.push({ name, args });
+      if (name === 'builtin_chats_list_tickets') return TICKET;
+      if (name === 'git_status') return { ok: true, action: 'status', output: statusOutput };
+      return { ok: true };
+    };
+    return { stream, runTool, calls };
+  }
+
+  it('moves the linked in_review ticket to done, with the reason on the step', async () => {
+    const { stream, runTool, calls } = shippingRun('## main...origin/main');
+    await startRun(4601, {
+      resolvedSystemPrompt: 'sys',
+      projectId: 11,
+      tools: [
+        { type: 'function', function: { name: 'edit_file', description: 'e', parameters: {} } },
+        { type: 'function', function: { name: 'run_command', description: 'r', parameters: {} } },
+        { type: 'function', function: { name: 'git_status', description: 'g', parameters: {} } },
+      ],
+      runTool,
+      stream,
+      persistence,
+      userTurn: 'reduce the height and push to main',
+      maxIterations: 6,
+    });
+    // The TOOL receives only the status change...
+    const done = calls.find((c) => c.name === 'builtin_tasks_update' && (c.args as { status?: string }).status === 'done');
+    expect(done).toBeDefined();
+    expect(done!.args).toMatchObject({ id: 2394, status: 'done' });
+    // ...while the recorded STEP carries why, so a ticket that closed itself is never
+    // an unexplained status change in the board's history.
+    const step = getRunTrace(4601).find(
+      (e) => e.label === 'builtin_tasks_update' && (e.args as { status?: string })?.status === 'done',
+    );
+    expect(step?.args).toMatchObject({ id: 2394, status: 'done', auto: true, reason: 'shipped-to-base-branch' });
+  });
+
+  it('leaves the ticket in review when the work stayed on a branch', async () => {
+    const { stream, runTool, calls } = shippingRun('## feature/x...origin/feature/x');
+    await startRun(4602, {
+      resolvedSystemPrompt: 'sys',
+      projectId: 11,
+      tools: [
+        { type: 'function', function: { name: 'edit_file', description: 'e', parameters: {} } },
+        { type: 'function', function: { name: 'run_command', description: 'r', parameters: {} } },
+        { type: 'function', function: { name: 'git_status', description: 'g', parameters: {} } },
+      ],
+      runTool,
+      stream,
+      persistence,
+      userTurn: 'reduce the height and push the branch',
+      maxIterations: 6,
+    });
+    expect(calls.some((c) => c.name === 'builtin_tasks_update' && (c.args as { status?: string }).status === 'done')).toBe(false);
   });
 });

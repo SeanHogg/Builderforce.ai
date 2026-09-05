@@ -170,6 +170,17 @@ export interface LinkedTicketToAdvance {
  * [] for anything unusable), and skips deleted/unresolved links.
  */
 export function linkedTicketsToAdvance(listResult: unknown): LinkedTicketToAdvance[] {
+  return selectLinkedTasks(listResult, NOT_STARTED_TASK_STATUSES);
+}
+
+/**
+ * The shared row filter behind {@link linkedTicketsToAdvance} and
+ * {@link linkedTicketsToComplete}: task-tier, still existing, with a resolvable ref
+ * and a status in `statuses`. Extracted so the two selectors differ ONLY in which
+ * lane they act on — a second hand-rolled copy is exactly how one of them would
+ * quietly stop tolerating a JSON-string result or start acting on deleted links.
+ */
+function selectLinkedTasks(listResult: unknown, statuses: ReadonlySet<string>): LinkedTicketToAdvance[] {
   let rows: unknown = listResult;
   if (typeof rows === 'string') {
     try {
@@ -187,10 +198,34 @@ export function linkedTicketsToAdvance(listResult: unknown): LinkedTicketToAdvan
     if (row.exists === false) continue;
     const ref = typeof row.ref === 'number' ? String(row.ref) : typeof row.ref === 'string' && row.ref.trim() ? row.ref : null;
     if (!ref) continue;
-    if (typeof row.status !== 'string' || !NOT_STARTED_TASK_STATUSES.has(row.status.toLowerCase())) continue;
+    if (typeof row.status !== 'string' || !statuses.has(row.status.toLowerCase())) continue;
     out.push({ kind: row.kind, ref });
   }
   return out;
+}
+
+/**
+ * Statuses a SHIPPED run may close. Only `in_review` — the lane `tickets.from_delta`
+ * opens its ticket in, meaning "the code exists but has not landed yet".
+ *
+ * Everything else is excluded on purpose. `blocked` has a reason a merge does not
+ * answer. `backlog`/`todo`/`ready` were never started, so a push in the same chat is
+ * not evidence they were done. `in_progress` is ambiguous — a run can push one part
+ * of a larger ticket — and closing it would hide work the user still expects.
+ */
+const SHIPPABLE_TASK_STATUSES: ReadonlySet<string> = new Set(['in_review']);
+
+/**
+ * From a `builtin_chats_list_tickets` result, the task-tier tickets sitting in
+ * `in_review` — the ones a run that MERGED its change to the base branch has finished.
+ *
+ * This closes the loop `tickets.from_delta` promises in its own tool description
+ * ("completes automatically once merged and deployed") and never delivered: nothing
+ * moved a delta ticket out of `in_review`, so each one sat at 50% on the board
+ * permanently. Same tolerant parsing as {@link linkedTicketsToAdvance}.
+ */
+export function linkedTicketsToComplete(listResult: unknown): LinkedTicketToAdvance[] {
+  return selectLinkedTasks(listResult, SHIPPABLE_TASK_STATUSES);
 }
 
 /** The workspace-relative path a code-change tool touched (for delta provenance),

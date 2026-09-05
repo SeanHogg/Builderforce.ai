@@ -188,6 +188,11 @@ export type { BrainRunActivity, BrainRunPhase } from './runActivity';
 // Size budget for a copied triage report, so its END survives pasting.
 export { createPayloadBudget } from './transcriptBudget';
 
+// Did the run's change actually SHIP? The evidence a run holds first-hand when it
+// pushed straight to the base branch — the case no merge webhook can ever see.
+export { shippedToBaseBranch, parseGitShortStatus, BASE_BRANCHES } from './shipVerification';
+export type { GitShortStatus } from './shipVerification';
+
 // Loop guard: the per-run tally of which targets have been read, and the advisory the
 // run loop attaches once a read starts circling. Exported for tests and for any surface
 // that wants to report the same coverage picture.
@@ -247,6 +252,7 @@ export {
   codeChangeFile,
   workItemLinkFromCreate,
   linkedTicketsToAdvance,
+  linkedTicketsToComplete,
   CODE_CHANGE_TOOLS,
   TICKET_RECORDING_TOOLS,
   NOT_STARTED_TASK_STATUSES,
