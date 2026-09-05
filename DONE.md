@@ -1,3 +1,128 @@
+## ✅ RESOLVED 2026-09-05 — Two Neon databases growing unbounded: retention covered 8 tables, none of them the expensive ones
+
+`builderforce-primary` had reached **2,777 MB** and `builderforce-transactional` **372 MB**. The
+`SWEPT_TABLES` registry + purge + vacuum machinery was sound, but it named 8 relations and the
+two that dominated were not among them.
+
+**What was actually consuming the space.**
+
+- `pr_reconciliation_items` — **1.84 GB, 66% of primary**. 1,421,229 rows covering only **758
+  distinct PRs**: the reconciler writes a full snapshot of every open PR on every run, and the
+  sweep re-runs a repo every ~4 minutes (868 runs/day × ~725 rows). No retention policy of any
+  kind. Its read surface is far narrower — items are fetched for ONE run id, and the run list
+  returns the 25 most recent (100 max), a few hours of history.
+- `activity_log` on transactional — **295 MB, 80% of that DB**, of which 510,632 of 531,153 rows
+  are `ticket.role.dispatched` residue (see the open Gap Register entry; these rows were NOT
+  deleted, because the loop that produced them is not confirmed fixed).
+
+**Registry coverage.** Seven new entries: `pr_reconciliation_items`/`_errors`/`_runs` at 14d
+(purged child-first so the cascade never pre-empts a measured delete), `execution_lifecycle_outbox`
+at 30d restricted to `status='done'` (it is a delivery outbox — age alone must never drop an
+undelivered event), and `activity_signals`/`brain_chat_trace`/`integration_sync_logs` at 90d.
+`tool_audit_events` was deliberately left at 90d: the SOC 2 evidence export reads up to 90 days.
+
+**`connection` → `connections[]`.** `llm_traces`, `llm_failover_log`, `llm_health_probes` and
+`api_error_log` still EXIST on primary, left behind when their writers moved to the transactional
+endpoint on 2026-07-13 (their last primary rows are dated 2026-07-12/13). The registry could name
+only one endpoint per table, so those copies had no sweep and no autovacuum tuning. Declaring the
+endpoints as a list means purge and vacuum both iterate it, and a dual-resident relation can no
+longer be swept on one endpoint and forgotten on the other. `check-swept-tables.mjs` now verifies
+tuning **per endpoint** — it caught all 11 missing overrides, added by `migrations/1125`.
+
+## ✅ RESOLVED 2026-09-05 — `activity_log` was written to BOTH databases, so a large part of the audit trail was invisible to the reader
+
+`recordActivity`/`recordActivityBatch` route to the transactional endpoint and `listActivityLog`
+reads from there — but four writers bypassed that choice and inserted onto the caller's `db`,
+i.e. PRIMARY, where no activity surface looks. 85,359 rows had accumulated there, still growing.
+
+The worst of the four was **`drainExecutionLifecycleOutbox`**, which projects durable execution
+lifecycle events into the activity log: primary's top verbs were exactly its output —
+`execution.submitted` (24,428), `execution.running` (24,285), `execution.completed` (18,294),
+`execution.failed` (9,796). Every execution lifecycle event the platform recorded was landing on
+a database nothing reads. The others: `EntityService` (which also re-derived by hand the row
+projection `toActivityRow` owns), `demoSeedService` (an insert per event, inside a loop), and the
+LRS (which correctly wanted strict error semantics, and had simply picked the wrong database).
+
+**Fix.** The endpoint choice is extracted to one exported `activityDatabase(env, db)` — it had
+been an inline ternary repeated three times inside the port and absent at all four bypass sites.
+Every writer and reader now calls it. `EntityService` goes through `recordActivity`; the demo seed
+goes through `recordActivityBatch` (one insert instead of N); the LRS keeps its own strict insert
+and only takes the endpoint. `wipeTenantContent` had the mirror bug — it cleared the unused primary
+copies of `activity_log` and `llm_usage_log` and left the rows a reseeded tenant actually reads,
+so demo activity accumulated across every reseed; both now go through their own resolver.
+
+## ✅ RESOLVED 2026-09-05 — The execution-lifecycle outbox had no sweep, only a lazy per-execution drain
+
+`AuditRepository.save()` drains the outbox for the ONE execution it is handed, and its comment
+already asserted that "Direct SQL writers are drained by the frequent sweep" — but no such sweep
+was ever registered. A row written by a direct SQL writer therefore only projected if something
+later happened to read that execution's audit trail. **7,741 `pending` + 3 `processing` rows had
+been sitting undelivered since 2026-08-04.** Added the `execution-lifecycle-outbox` frequent cron
+sweep the repository already assumed, draining up to 500 rows per tick.
+
+## ✅ RESOLVED 2026-09-05 — Autonomy had no backpressure against a ticket whose runs keep SUCCEEDING
+
+Every re-dispatch guard was keyed on a TRAILING FAILURE STREAK, and a run that completes resets the
+streak to zero — so `trailingUnproductiveStreak` returned 0, the cooldown derived from it returned
+0, `blockedBy` was null, and the next sweep could dispatch again, every tick, forever. The breaker
+was built for the ticket that fails repeatedly; nothing watched the ticket that succeeds repeatedly
+and is simply re-picked. Measured: 20,190 of 31,362 runs COMPLETED, and 49 tickets (6% of the 788
+that ever ran) hold 18,294 of those runs.
+
+**Fix.** `MAX_AUTONOMOUS_RUNS_PER_TASK = 50` in `assessRerunBackoff`, enforced at the single
+dispatch choke point so no dispatch path can opt out. A lifetime count rather than a rate is
+deliberate: the loop ran at only ~28 runs/day, low enough that any per-hour limit permissive enough
+to be safe would have let it run indefinitely — what is abnormal is the total, not the tempo. 91%
+of tickets finish inside 49 runs, so it cannot fire on work that is progressing. It reports as the
+existing `run_cap_exhausted` verdict rather than a new reason (same meaning: autonomy stops, a
+human "Run now" still overrides), and `classifyResolvedAutoRun` + `stallCensus` take the same count
+so triage and the manager's stall ranking cannot contradict the dispatcher. This is a backstop, not
+the root-cause fix — see the open Gap Register entry on what re-opens the role slot.
+
+## ✅ RESOLVED 2026-09-05 — /dashboard on a phone rendered a header, a tab strip and no content, under a width control that could not change anything
+
+Two defects in the same panel chrome, both visible the moment a signed-in user landed on
+`/dashboard` from a phone.
+
+**1. The body was laid out 0px wide.** `.slide-panel-body-row` declared
+`container-name: slide-panel` on ITSELF and then `@container slide-panel (max-width: 560px)`
+tried to flip that same element to `flex-direction: column`. A container query only ever styles
+its container's DESCENDANTS, so that one rule silently never matched — while the rules beside it
+targeting `.slide-panel-index` (a real descendant) DID. The row therefore stayed horizontal with
+an index that had just been told to take `width: 100%` and is `flex-shrink: 0`, leaving
+`.ui-panel-body` 0px wide with every panel still in the DOM. Measured on the live phone layout:
+index 412×719, body 0×719, first panel 2px wide.
+
+**Fix** (`frontend/src/app/globals.css`): the `slide-panel` container moves to
+`.slide-panel-drawer`, which is what the breakpoint was always asking about ("how wide is the
+panel, before the index has claimed its share"). `.slide-panel-body-row` is the only user of
+these rules and is always inside that drawer. Re-measured with the fix applied to the live page:
+row `flex-direction: column`, index 412×72 (a one-line scrolling strip), body 412×647, first
+panel 348px — the dashboard renders.
+
+**2. The three-way panel-width control on a phone.** At ≤900px
+`--panel-width-sheet/wide/full` all resolve to the same `96vw` and the drawer is forced
+full-bleed, so the control was three buttons that changed nothing while crowding the header
+(142px of a 412px row, truncating the page title next to the project switcher).
+
+**Fix** (`frontend/src/components/panelWidthControl.tsx`): the module decides this itself — one
+private `useWidthChoiceExists()` (a `min-width: 901px` media query, asked as `min-width` so the
+control stays hidden for the first frame on a phone rather than flashing) gates both
+`usePanelWidth`'s `showControl` and `PanelWidthControl`, which returns null. All four call sites
+(`SlideOutPanel`, `AgentHostSlideOutPanel`, `CloudAgentSlideOutPanel`, `TaskMgmtContent`) inherit
+it with zero edits.
+
+**Guard.** `frontend/scripts/check-container-queries.mjs` (new, wired into `checks.manifest.mjs`
+and `npm run check:container-queries`) fails any `@container <name>` rule whose subject selector
+is the selector that declares `container-name: <name>`. Verified both ways: green on the fixed
+tree, and it reproduces the exact failure when the container is moved back onto the row. This
+class of bug is worth a guard because the half that works is what hides it — the broken selector
+sits three lines above a working one and neither is invalid CSS.
+
+**Verification.** Reproduced and A/B-measured against the live phone layout with Playwright
+(Pixel 7 viewport) before and after; `tsgo --noEmit` clean; new guard green. Frontend bumped to
+2026.8.81.
+
 ## ✅ RESOLVED 2026-08-29 — A knowledge listing could only be priced in USD
 
 `marketplace_knowledge` had no `currency` column (unlike `catalog_items`, which already carries

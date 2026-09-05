@@ -9946,6 +9946,18 @@
   "brain": {
     "timeline": {
       "thinking": "Thinking…",
+      "live": {
+        "starting": "Starting…",
+        "thinking": "Thinking…",
+        "writing": "Writing the reply…",
+        "tool": "Running {tool}",
+        "awaiting": "Waiting for you to approve {tool}",
+        "finishing": "Wrapping up…",
+        "on": " on {target}",
+        "step": "step {step}",
+        "slow": "Still working — {elapsed} elapsed",
+        "ariaLabel": "Current activity"
+      },
       "thoughtFor": "Thought for {duration}",
       "you": "You",
       "assistant": "BuilderForce",

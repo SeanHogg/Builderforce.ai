@@ -108,6 +108,19 @@ function buildLabels(): Record<string, string> {
   return {
     // <BrainTimeline> (shared transcript UI)
     "tl.thinking": t("Thinking…"),
+    // The ANIMATED in-flight row (<LiveActivity>) — the ONLY thing on screen while a
+    // long tool call runs, so every phase line is localized like any other visible
+    // string. `{tool}` / `{target}` / `{step}` / `{elapsed}` are substituted by the
+    // renderer, not by l10n.
+    "tl.liveStarting": t("Starting…"),
+    "tl.liveWriting": t("Writing the reply…"),
+    "tl.liveTool": t("Running {tool}"),
+    "tl.liveAwaiting": t("Waiting for you to approve {tool}"),
+    "tl.liveFinishing": t("Wrapping up…"),
+    "tl.liveOn": t(" on {target}"),
+    "tl.liveStep": t("step {step}"),
+    "tl.liveSlow": t("Still working — {elapsed} elapsed"),
+    "tl.liveAria": t("Current activity"),
     "tl.thoughtFor": t("Thought for {duration}"),
     "tl.you": t("You"),
     "tl.assistant": "BuilderForce",

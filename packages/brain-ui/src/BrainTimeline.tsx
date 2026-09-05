@@ -14,15 +14,23 @@ import {
   type BrainTraceEvent,
   type MessageProvenance,
   type ModelIdentityContext,
+  type BrainRunActivity,
 } from '@seanhogg/builderforce-brain-embedded';
 import { Markdown } from './Markdown';
 import { Avatar } from './ParticipantBadge';
 import { parseAskUser, stripAskUser, QuestionCard, askUserAnchorId, DEFAULT_ASK_USER_LABELS } from './askUser';
 import { buildSettledTimeline, formatDuration, formatPayload, streamingNode, type TimelineNode } from './timelineModel';
+import { LiveActivity, DEFAULT_LIVE_ACTIVITY_LABELS, type LiveActivityLabels } from './LiveActivity';
 
 export interface BrainTimelineLabels {
   /** Shown on the live thinking node while a turn streams. */
   thinking: string;
+  /**
+   * Copy for the ANIMATED in-flight indicator (<LiveActivity>) — which tool is
+   * running, on what, and for how long. Carried in this bundle so a host passes
+   * ONE set of labels for the whole transcript rather than two.
+   */
+  live: LiveActivityLabels;
   /** "Thought for {duration}" — must contain the literal `{duration}` token. */
   thoughtFor: string;
   you: string;
@@ -95,6 +103,7 @@ export interface BrainTimelineLabels {
 
 export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
   thinking: 'Thinking…',
+  live: DEFAULT_LIVE_ACTIVITY_LABELS,
   thoughtFor: 'Thought for {duration}',
   you: 'You',
   assistant: 'BuilderForce',
@@ -196,6 +205,13 @@ export interface BrainTimelineProps {
   trace: BrainTraceEvent[];
   streamingText: string;
   isRunning: boolean;
+  /**
+   * What the run is doing RIGHT NOW, from the run store's snapshot. Drives the
+   * animated in-flight row. Omitted ⇒ the row still animates off `isRunning`
+   * alone, it just cannot name the step — so an older host degrades rather than
+   * regressing to the static line this replaced.
+   */
+  activity?: BrainRunActivity | null;
   loading?: boolean;
   labels?: Partial<BrainTimelineLabels>;
   /** Who is reading — decides whether a reply's provenance chip may name the upstream
@@ -498,6 +514,7 @@ function BrainTimelineInner({
   trace,
   streamingText,
   isRunning,
+  activity,
   loading,
   labels: labelOverrides,
   modelIdentity = DEFAULT_MODEL_IDENTITY,
@@ -828,15 +845,13 @@ function BrainTimelineInner({
             </li>
           );
         })}
-        {isRunning && !streamingText.trim() && (
-          <li className="bf-tl__item bf-tl__item--thinking" aria-live="polite">
-            <span className="bf-tl__gutter">
-              <span className="bf-tl__dot bf-tl__dot--pulse">{dotIcon('thinking')}</span>
-            </span>
-            <div className="bf-tl__body">
-              <span className="bf-tl__thinking bf-tl__thinking--live">{labels.thinking}</span>
-            </div>
-          </li>
+        {/* The in-flight step. Shown whenever the run is live — INCLUDING while text
+            is streaming, because a streaming turn still has a phase (and the next
+            tool call after it is exactly the stretch that used to look like a hang).
+            Suppressed only for `writing`, where the arriving text is itself the
+            indicator and a second one would just compete with it. */}
+        {isRunning && !(streamingText.trim() && activity?.phase === 'writing') && (
+          <LiveActivity activity={activity} isRunning={isRunning} labels={labels.live} />
         )}
       </ol>
     </div>

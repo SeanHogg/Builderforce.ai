@@ -44,8 +44,13 @@ const failures = [];
 // --- 1. Parse the registry --------------------------------------------------
 const registry = readFileSync(registryFile, 'utf8');
 const entries = [];
-for (const match of registry.matchAll(/relation:\s*'([a-z0-9_]+)',\s*\n\s*connection:\s*'(primary|transactional)'/g)) {
-  entries.push({ relation: match[1], connection: match[2] });
+for (const match of registry.matchAll(/relation:\s*'([a-z0-9_]+)',\s*\n\s*connections:\s*\[([^\]]*)\]/g)) {
+  const connections = [...match[2].matchAll(/'(primary|transactional)'/g)].map((m) => m[1]);
+  if (connections.length === 0) {
+    failures.push(`SWEPT_TABLES entry '${match[1]}' declares no connections — it would never be purged or vacuumed.`);
+    continue;
+  }
+  entries.push({ relation: match[1], connections });
 }
 if (entries.length === 0) {
   failures.push(`Could not parse any SWEPT_TABLES entries out of ${registryFile} — has the shape changed?`);
@@ -64,7 +69,7 @@ for (const entry of entries) {
 }
 
 // --- 3. Every relation is tuned, on the matching endpoint -------------------
-const tunedBy = new Map(); // relation -> 'primary' | 'transactional'
+const tunedBy = new Map(); // relation -> Set of endpoints it is tuned on
 const readTuning = (file, connection) => {
   let text;
   try {
@@ -76,7 +81,8 @@ const readTuning = (file, connection) => {
   for (const match of text.matchAll(/ALTER TABLE\s+([a-z0-9_]+)\s+SET\s*\(([^)]*)\)/gi)) {
     const [, relation, params] = match;
     if (!/autovacuum_vacuum_scale_factor/i.test(params)) continue;
-    tunedBy.set(relation, connection);
+    if (!tunedBy.has(relation)) tunedBy.set(relation, new Set());
+    tunedBy.get(relation).add(connection);
   }
 };
 /** Every other .sql on one endpoint, in filename order, after its base tuning file. */
@@ -97,17 +103,18 @@ readLaterTuning(resolve(here, '../migrations'), primaryTuning, 'primary');
 readLaterTuning(resolve(here, '../transactional-migrations'), operationalTuning, 'transactional');
 
 for (const entry of entries) {
-  const tuned = tunedBy.get(entry.relation);
-  if (!tuned) {
+  const tuned = tunedBy.get(entry.relation) ?? new Set();
+  // Checked PER ENDPOINT, not once per relation: a table swept on both databases has to
+  // carry the tuning on both, and a single-endpoint check would pass on the strength of
+  // the other one's migration while the second copy silently kept the 0.2 default.
+  for (const connection of entry.connections) {
+    if (tuned.has(connection)) continue;
     failures.push(
-      `'${entry.relation}' is retention-swept but has no autovacuum_vacuum_scale_factor override. `
-      + `Add an ALTER TABLE ... SET (...) to ${entry.connection === 'primary' ? 'migrations/1104_swept_table_autovacuum.sql' : 'transactional-migrations/0009_swept_table_autovacuum.sql'}, `
+      `'${entry.relation}' is retention-swept on the ${connection} endpoint but has no `
+      + 'autovacuum_vacuum_scale_factor override there. Add an ALTER TABLE ... SET (...) to '
+      + `${connection === 'primary' ? 'migrations/' : 'transactional-migrations/'}`
+      + `${connection === 'primary' ? '1104_swept_table_autovacuum.sql' : '0009_swept_table_autovacuum.sql'}, `
       + 'or to the migration that creates or renames it.',
-    );
-  } else if (tuned !== entry.connection) {
-    failures.push(
-      `'${entry.relation}' is declared on the ${entry.connection} connection but tuned in the ${tuned} migration — `
-      + 'the two endpoints are separate databases, so one of them is wrong.',
     );
   }
 }

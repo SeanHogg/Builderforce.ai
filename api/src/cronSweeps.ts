@@ -76,6 +76,7 @@ import { dueSnapshots } from './application/reports/lensSnapshots';
 import { runDueCeremonies, runCeremonyReaper } from './application/ceremony/runDueCeremonies';
 import { buildScheduledReport } from './presentation/routes/reportRoutes';
 import { runPrReconciliationSweep } from './application/reconciliation/runPrReconciliationSweep';
+import { drainExecutionLifecycleOutbox } from './application/runtime/executionLifecycleOutbox';
 import { cronSweepEnabled } from './application/runtime/cronControls';
 import { runStakeholderDigestSweep, runStakeholderReminderSweep } from './application/stakeholderAlignment/StakeholderMapService';
 import { runTriggerSweep } from './application/canvas/runTriggerSweep';
@@ -408,6 +409,22 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       const r = await runPrReconciliationSweep(env);
       return r.due > 0 || r.failed > 0
         ? `due=${r.due} completed=${r.completed} failed=${r.failed} prs=${r.prs} findings=${r.findings}`
+        : null;
+    },
+  },
+  {
+    key: 'execution-lifecycle-outbox',
+    cadence: 'frequent',
+    description: 'Project durable execution lifecycle events (submitted/running/completed/failed) into the tenant activity log.',
+    // THE SWEEP AuditRepository ALREADY ASSUMES. Its `save()` drains the outbox for the
+    // ONE execution it was handed and says "Direct SQL writers are drained by the frequent
+    // sweep" — but no such sweep was ever registered, so a row written by a direct SQL
+    // writer only projected if something later happened to read that execution's audit
+    // trail. 7,741 `pending` rows had been sitting undelivered since 2026-08-04.
+    run: async ({ env }) => {
+      const r = await drainExecutionLifecycleOutbox(env, buildDatabase(env), { limit: 500 });
+      return r.projected > 0 || r.dead > 0
+        ? `claimed=${r.claimed} projected=${r.projected} retried=${r.retried} dead=${r.dead}`
         : null;
     },
   },

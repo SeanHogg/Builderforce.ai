@@ -78,17 +78,19 @@ export interface TableVacuumResult {
 export async function runTableVacuum(env: Env): Promise<TableVacuumResult> {
   const result: TableVacuumResult = { vacuumed: [], failed: [] };
   for (const entry of SWEPT_TABLES) {
-    try {
-      await vacuumRelation(dbFor(env, entry.connection), entry.relation);
-      result.vacuumed.push(entry.relation);
-    } catch (error) {
-      result.failed.push({ relation: entry.relation, error: error instanceof Error ? error.message : 'VACUUM failed' });
-      reportCaughtError(error, {
-        source: 'application/maintenance/tableMaintenance.ts',
-        operation: 'runTableVacuum',
-        level: 'warning',
-        context: { logMessage: `[cron:db-vacuum] VACUUM (ANALYZE) ${entry.relation} failed`, details: { relation: entry.relation } },
-      });
+    for (const connection of entry.connections) {
+      try {
+        await vacuumRelation(dbFor(env, connection), entry.relation);
+        result.vacuumed.push(entry.relation);
+      } catch (error) {
+        result.failed.push({ relation: entry.relation, error: error instanceof Error ? error.message : 'VACUUM failed' });
+        reportCaughtError(error, {
+          source: 'application/maintenance/tableMaintenance.ts',
+          operation: 'runTableVacuum',
+          level: 'warning',
+          context: { logMessage: `[cron:db-vacuum] VACUUM (ANALYZE) ${entry.relation} failed on ${connection}`, details: { relation: entry.relation, connection } },
+        });
+      }
     }
   }
   return result;

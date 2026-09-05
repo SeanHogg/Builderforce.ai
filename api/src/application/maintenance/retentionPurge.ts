@@ -34,10 +34,12 @@ export async function runRetentionPurge(env: Env, now: number = Date.now()): Pro
   const dbFor = (connection: 'primary' | 'transactional'): Db => (connection === 'primary' ? db : transactionalDb);
 
   const targets: Array<{ name: string; run: () => Promise<unknown> }> = [
-    ...SWEPT_TABLES.map((table) => ({
-      name: table.relation,
-      run: () => table.purge(dbFor(table.connection), cutoff(now, table.retentionDays)),
-    })),
+    // One target per (table, endpoint): a relation that exists on both databases is
+    // purged on both, or the copy on the endpoint that lost its writer is never swept.
+    ...SWEPT_TABLES.flatMap((table) => table.connections.map((connection) => ({
+      name: `${table.relation}@${connection}`,
+      run: () => table.purge(dbFor(connection), cutoff(now, table.retentionDays)),
+    }))),
     // Lapsed agent memories (0371). NOT an age-based purge like the rest, and
     // deliberately NOT in SWEPT_TABLES: a fact expires when its own author said it
     // would, so the policy lives on the row, this only reclaims what recall already

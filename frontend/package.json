@@ -1,6 +1,6 @@
 {
   "name": "builderforce-frontend",
-  "version": "2026.8.80",
+  "version": "2026.8.81",
   "private": true,
   "scripts": {
     "postinstall": "node ../scripts/ensure-linked-deps.mjs",
@@ -29,6 +29,7 @@
     "typecheck:native": "tsgo --noEmit",
     "type-check": "node ../scripts/run-checks.mjs scripts/typecheck.manifest.mjs",
     "check:design-scale": "node scripts/check-design-scale.mjs",
+    "check:container-queries": "node scripts/check-container-queries.mjs",
     "check:destinations": "node scripts/check-destinations.mjs",
     "check:methodology": "node scripts/check-methodology.mjs",
     "check:primitives": "node scripts/check-primitive-duplication.mjs",

@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { useMediaQuery } from '@/lib/useMediaQuery';
 
 /**
  * The three widths, and only three (PRD 21 §2.4 / §3.4).
@@ -34,6 +35,25 @@ export const isNamedPanelWidth = (width: PanelWidth | string): width is PanelWid
 export const resolvePanelWidth = (width: PanelWidth | string): string =>
   (isNamedPanelWidth(width) ? PANEL_WIDTH_TOKEN[width] : width);
 
+/**
+ * The width control is a choice between three widths — so it only exists where
+ * there ARE three. At or below 900px `--panel-width-sheet/wide/full` all resolve
+ * to the same 96vw and the drawer is forced full-bleed (globals.css), so on a
+ * phone the three buttons are three ways to change nothing; they read as broken
+ * chrome crowding a header that has no room for them either. Asked as
+ * `min-width` rather than `max-width` deliberately: `useMediaQuery` reports
+ * `false` until it has mounted, so the control stays HIDDEN for the first frame
+ * and appears on a desktop, instead of flashing onto every phone.
+ *
+ * One rule, one place — the hook and the control below both ask it, so a caller
+ * never has to know the breakpoint (or that there is one).
+ */
+const MULTI_WIDTH_MIN = 901;
+
+function useWidthChoiceExists(): boolean {
+  return useMediaQuery(`(min-width: ${MULTI_WIDTH_MIN}px)`);
+}
+
 const widthKey = (storageKey: string) => `bf-panel-width:${storageKey}`;
 
 function readStoredWidth(storageKey: string | undefined): PanelWidth | null {
@@ -53,6 +73,7 @@ function readStoredWidth(storageKey: string | undefined): PanelWidth | null {
  */
 export function usePanelWidth(storageKey: string | undefined, defaultWidth: PanelWidth | string) {
   const [chosenWidth, setChosenWidth] = useState<PanelWidth | null>(null);
+  const choiceExists = useWidthChoiceExists();
   useEffect(() => {
     setChosenWidth(readStoredWidth(storageKey));
   }, [storageKey]);
@@ -68,7 +89,7 @@ export function usePanelWidth(storageKey: string | undefined, defaultWidth: Pane
   };
 
   const effectiveWidth = chosenWidth ?? defaultWidth;
-  const showControl = Boolean(storageKey) && isNamedPanelWidth(effectiveWidth);
+  const showControl = choiceExists && Boolean(storageKey) && isNamedPanelWidth(effectiveWidth);
   return { effectiveWidth, showControl, chooseWidth };
 }
 
@@ -81,6 +102,9 @@ export function PanelWidthControl({
   onChange: (next: PanelWidth) => void;
 }) {
   const tCommon = useTranslations('common');
+  // Decides its own visibility rather than making four call sites ask.
+  const choiceExists = useWidthChoiceExists();
+  if (!choiceExists) return null;
   return (
     <div className="ui-panel-width" role="group" aria-label={tCommon('panelWidth.label')}>
       {WIDTH_ORDER.map((option) => (

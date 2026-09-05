@@ -187,8 +187,13 @@ describe('classifyTicketAutonomy', () => {
     });
     expect(v.stallReason).toBe('run_cap_exhausted');
     // The breaker's streak is no longer failure-only (0385) — it counts a run that
-    // COMPLETED and shipped nothing too — so the ledger's copy names both.
-    expect(v.stallText).toContain('either failed or finished without producing anything');
+    // COMPLETED and shipped nothing too — so the ledger's copy names both…
+    expect(v.stallText).toContain('finished without producing anything');
+    // …and `run_cap_exhausted` now covers a SECOND trigger: the lifetime run ceiling,
+    // which halts a ticket being re-dispatched forever on runs that all succeed. A
+    // reader who only ever hears "your runs are failing" would go looking for failures
+    // that are not there, so the text has to name that case too.
+    expect(v.stallText).toContain('even though each run SUCCEEDS');
   });
 
   it('reports a stall with no recorded reason as an unexplained stall, not a false pass', () => {

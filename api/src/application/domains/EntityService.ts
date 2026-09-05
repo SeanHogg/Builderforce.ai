@@ -40,7 +40,7 @@ import {
   getOrSetCached,
   invalidateCached,
 } from '../../infrastructure/cache/readThroughCache';
-import { activityLog } from '../../infrastructure/database/schema/kernel';
+import { recordActivity } from '../activity/activityLog';
 import type { Env } from '../../env';
 import { invalidateDomain } from '../kernel/DomainService';
 import { isDomain, registerObject } from '../kernel/ObjectRegistry';
@@ -417,11 +417,16 @@ async function afterWrite(
     objectId = registered.id;
   }
 
-  await db.insert(activityLog).values({
+  // Through the port, not a hand-built row: this used to insert straight into `db`,
+  // which both re-derived the projection `toActivityRow` owns AND wrote to primary
+  // while the audit timeline reads the transactional endpoint.
+  await recordActivity(env, db, {
     tenantId,
-    actorType: actor.machine ? 'host_agent' : actor.userId ? 'human' : 'system',
-    actorRef: actor.userId ?? null,
-    actorName: actor.name ?? null,
+    actor: {
+      type: actor.machine ? 'host_agent' : actor.userId ? 'human' : 'system',
+      ref: actor.userId ?? null,
+      name: actor.name ?? 'System',
+    },
     verb: `${def.kind}.${verb}`,
     targetType: def.name,
     targetId: id || null,

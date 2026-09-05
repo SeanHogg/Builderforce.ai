@@ -9946,6 +9946,18 @@
   "brain": {
     "timeline": {
       "thinking": "思考中…",
+      "live": {
+        "starting": "正在启动…",
+        "thinking": "思考中…",
+        "writing": "正在撰写回复…",
+        "tool": "正在运行 {tool}",
+        "awaiting": "等待你批准 {tool}",
+        "finishing": "正在收尾…",
+        "on": "，目标 {target}",
+        "step": "第 {step} 步",
+        "slow": "仍在处理 — 已用时 {elapsed}",
+        "ariaLabel": "当前活动"
+      },
       "thoughtFor": "思考了 {duration}",
       "you": "你",
       "assistant": "BuilderForce",

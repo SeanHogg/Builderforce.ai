@@ -15,6 +15,7 @@ import { useTranslations } from 'next-intl';
 import type { Formatter } from '@/i18n/format';
 import { useFormat } from '@/i18n/useFormat';
 import { useChatActivityLabels } from '@/i18n/useChatActivityLabels';
+import { useLiveActivityLabels } from '@/i18n/useLiveActivityLabels';
 import Link from 'next/link';
 import { BrainTimeline, Avatar, PendingQuestionBanner, selectPendingAskUser, askUserAnchorId } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
@@ -205,6 +206,7 @@ export function BrainPanel({
   const isPage = variant === 'page';
   const tTimeline = useTranslations('brain.timeline');
   const activityLabels = useChatActivityLabels();
+  const liveLabels = useLiveActivityLabels();
   const tCommon = useTranslations('common');
   const tRepo = useTranslations('repoContext');
   const tBrain = useTranslations('brain');
@@ -911,6 +913,10 @@ export function BrainPanel({
   // every keystroke/streaming token (mirrors the VS Code webview App.tsx).
   const timelineLabels = useMemo(() => ({
     thinking: tTimeline('thinking'),
+    // Copy for the ANIMATED in-flight row — the only thing on screen while a long
+    // tool call runs. From the SHARED hook, so the panel and the canvas dock can
+    // never word the same running step differently.
+    live: liveLabels,
     thoughtFor: tTimeline('thoughtFor'),
     you: tTimeline('you'),
     assistant: tTimeline('assistant'),
@@ -952,7 +958,7 @@ export function BrainPanel({
     // message's structured metadata — see useChatActivityLabels for why these are
     // templates rather than sentences.
     activity: activityLabels,
-  }), [tTimeline, activityLabels]);
+  }), [tTimeline, activityLabels, liveLabels]);
 
   const timelineApplyCode = useMemo(
     () => (hasTool('apply_code_to_active_file')
@@ -1604,6 +1610,7 @@ export function BrainPanel({
               trace={timelineTrace}
               streamingText={conv.sending ? conv.streamingText : ''}
               isRunning={conv.sending}
+              activity={conv.activity}
               loading={conv.loadingMessages}
               labels={timelineLabels}
               modelIdentity={modelIdentity}

@@ -4,7 +4,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { activityLog, executionLifecycleOutbox } from '../../infrastructure/database/schema';
 import type { Env } from '../../env';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
-import { activityLogVersionKey, type ActorIdentity } from '../activity/activityLog';
+import { activityDatabase, activityLogVersionKey, type ActorIdentity } from '../activity/activityLog';
 import { submittingUserId } from './dispatcherLabel';
 
 const MAX_ATTEMPTS = 8;
@@ -108,7 +108,14 @@ export async function drainExecutionLifecycleOutbox(
 
     try {
       const actor = actorFor(row);
-      await db.insert(activityLog).values({
+      // The OUTBOX lives on primary (it foreign-keys executions/tasks); `activity_log`
+      // lives on the transactional endpoint. Projecting with the caller's `db` put every
+      // execution.submitted/running/completed/failed event on primary, where no activity
+      // surface reads — 85k lifecycle rows accumulated there unseen. The two-endpoint
+      // write is safe for the reason the docblock already gives: the insert is idempotent
+      // on `event_key`, so a projection that commits before its acknowledgement fails is
+      // re-attempted without duplicating.
+      await activityDatabase(env, db).insert(activityLog).values({
         eventKey: row.eventKey,
         tenantId: row.tenantId,
         projectId: row.projectId,

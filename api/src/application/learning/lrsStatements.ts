@@ -42,7 +42,7 @@ import type { Env } from '../../env';
 import { activityLog, courses } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { sha256Hex } from '../../infrastructure/crypto/digest';
-import { activityLogVersionKey, toActivityRow, type ActivityInput } from '../activity/activityLog';
+import { activityDatabase, activityLogVersionKey, toActivityRow, type ActivityInput } from '../activity/activityLog';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { actorKey, type XapiStatement } from '../../domain/learning/xapiStatement';
 
@@ -105,7 +105,10 @@ export async function storeStatements(
   const objectIds = await resolveActivityObjects(db, tenantId, statements.map((s) => s.objectId));
   const inputs = await Promise.all(statements.map((s) => toActivityInput(tenantId, s, objectIds.get(s.objectId))));
 
-  await db.insert(activityLog).values(inputs.map(toActivityRow)).onConflictDoNothing({
+  // Own insert (strict errors, see above) but NOT its own endpoint: `activity_log` lives
+  // on the transactional database, and inserting into the caller's `db` put accepted
+  // statements on primary where no reader looks.
+  await activityDatabase(env, db).insert(activityLog).values(inputs.map(toActivityRow)).onConflictDoNothing({
     target: activityLog.eventKey,
   });
   await bumpCacheVersion(env, activityLogVersionKey(tenantId));

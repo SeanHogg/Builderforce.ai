@@ -1,11 +1,81 @@
 import * as React from 'react';
 import React__default, { HTMLAttributes, ReactNode } from 'react';
-import { BrainMessage, BrainTraceEvent, ChatActivityLabels, ModelIdentityContext, ChatErrorAction, ModelChoiceLabels, Effort, ChatModelSelection, ChatModelOptions, DirectedRecipient, ChatActivity, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
+import { BrainRunActivity, BrainMessage, BrainTraceEvent, ChatActivityLabels, ModelIdentityContext, ChatErrorAction, ModelChoiceLabels, Effort, ChatModelSelection, ChatModelOptions, DirectedRecipient, ChatActivity, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
 export { BUILDERFORCE_PRODUCT_NAME, ChatModelOptions, ChatModelSelection, DEFAULT_MODEL_IDENTITY, MODEL_CATEGORIES, ModelCategory, ModelChoiceLabels, ModelIdentityContext, ModelItem, PROJECT_EVERMIND_MODEL_PREFIX, RoutedProduct, activeModelKey, buildModelItems, byoVendorLabel, displayModelName, filterModelItems, modelCategoryLabel, modelInUse, perMillionUsd, premiumCostLabel, productForPlan, productModelName, revealsModelId } from '@seanhogg/builderforce-brain-embedded';
+
+/**
+ * The in-flight step, animated.
+ *
+ * The timeline renders SETTLED steps: a tool appears once it has finished, with
+ * its duration attached. That leaves the whole time a step is actually running
+ * with nothing to show but a static "Thinking…" line — so a `search_code` that
+ * takes 67 seconds and a wedged extension host look exactly alike, and the only
+ * honest thing a user can conclude is that the product hung.
+ *
+ * This component is the missing half. It renders the CURRENT phase from
+ * `BrainRunActivity` (published on entry by the run store, not on completion),
+ * with three things a static label cannot carry:
+ *
+ *  1. **Motion** — a rotating ring, a travelling shimmer on the label, and an
+ *     indeterminate progress bar. Motion is the signal; the words are the detail.
+ *  2. **Subject** — WHICH tool, on WHAT file or query. "Reading
+ *     LandingCanvasHero.module.css" is progress; "Thinking…" is not.
+ *  3. **Elapsed** — a live counter, ticking here rather than in the parent, plus
+ *     an explicit reassurance once a step passes {@link SLOW_AFTER_MS}. A user
+ *     who can see 1m 07s and climbing knows the difference between slow and stuck.
+ *
+ * Self-contained by design: it owns its own timer, decides its own visibility
+ * (returns null when nothing is in flight), and takes a narrow prop contract, so
+ * it drops into the web panel, the VS Code webview or the canvas dock unchanged.
+ * The `awaiting` phase deliberately does NOT animate — nothing is progressing
+ * while the run waits on a human, and pretending otherwise is a lie in motion.
+ */
+/** Past this, a step gets an explicit "still working" reassurance. */
+declare const SLOW_AFTER_MS = 12000;
+interface LiveActivityLabels {
+    /** Phase lines. `tool` / `awaiting` must contain `{tool}`. */
+    starting: string;
+    thinking: string;
+    writing: string;
+    tool: string;
+    awaiting: string;
+    finishing: string;
+    /** Appended when the step names a subject — must contain `{target}`. */
+    on: string;
+    /** Loop iteration chip — must contain `{step}`. */
+    step: string;
+    /** Shown once a step passes {@link SLOW_AFTER_MS} — must contain `{elapsed}`. */
+    slow: string;
+    /** Accessible name for the whole indicator. */
+    ariaLabel: string;
+}
+declare const DEFAULT_LIVE_ACTIVITY_LABELS: LiveActivityLabels;
+/** Elapsed, formatted for a live counter (0s → 59s → 1m 07s). */
+declare function formatElapsed(ms: number): string;
+interface LiveActivityProps {
+    /** The in-flight step, or null when the run is idle. */
+    activity: BrainRunActivity | null | undefined;
+    /** True while the run is executing. A run can be running with no phase yet. */
+    isRunning: boolean;
+    labels?: Partial<LiveActivityLabels>;
+}
+declare function LiveActivityInner({ activity, isRunning, labels: partial }: LiveActivityProps): React__default.JSX.Element | null;
+/**
+ * Memoized: this component re-renders once a second on its own timer, and it sits
+ * inside a transcript that re-renders on every streamed token. Without the memo the
+ * two multiply.
+ */
+declare const LiveActivity: React__default.MemoExoticComponent<typeof LiveActivityInner>;
 
 interface BrainTimelineLabels {
     /** Shown on the live thinking node while a turn streams. */
     thinking: string;
+    /**
+     * Copy for the ANIMATED in-flight indicator (<LiveActivity>) — which tool is
+     * running, on what, and for how long. Carried in this bundle so a host passes
+     * ONE set of labels for the whole transcript rather than two.
+     */
+    live: LiveActivityLabels;
     /** "Thought for {duration}" — must contain the literal `{duration}` token. */
     thoughtFor: string;
     you: string;
@@ -87,6 +157,13 @@ interface BrainTimelineProps {
     trace: BrainTraceEvent[];
     streamingText: string;
     isRunning: boolean;
+    /**
+     * What the run is doing RIGHT NOW, from the run store's snapshot. Drives the
+     * animated in-flight row. Omitted ⇒ the row still animates off `isRunning`
+     * alone, it just cannot name the step — so an older host degrades rather than
+     * regressing to the static line this replaced.
+     */
+    activity?: BrainRunActivity | null;
     loading?: boolean;
     labels?: Partial<BrainTimelineLabels>;
     /** Who is reading — decides whether a reply's provenance chip may name the upstream
@@ -137,7 +214,7 @@ interface BrainTimelineProps {
  * Input/Output, or an error. Presentational and theme-driven (CSS variables), so
  * it renders identically in the web app and a VS Code webview.
  */
-declare function BrainTimelineInner({ messages, trace, streamingText, isRunning, loading, labels: labelOverrides, modelIdentity, assistantName, emptyState, renderMessage, renderStreaming, renderAssistantActions, onReplayMessage, onRateMessage, ratings, onInternalLink, onApplyCode, onCreateFile, onAnswerQuestion, autoScroll, }: BrainTimelineProps): React__default.JSX.Element;
+declare function BrainTimelineInner({ messages, trace, streamingText, isRunning, activity, loading, labels: labelOverrides, modelIdentity, assistantName, emptyState, renderMessage, renderStreaming, renderAssistantActions, onReplayMessage, onRateMessage, ratings, onInternalLink, onApplyCode, onCreateFile, onAnswerQuestion, autoScroll, }: BrainTimelineProps): React__default.JSX.Element;
 /**
  * Memoized so an unrelated re-render of the host (e.g. every keystroke in the
  * composer, which lives in the same component tree) does not re-render the whole
@@ -1988,4 +2065,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, type MessageRating, ParticipantBadge, type PendingAskUser, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type ThinkSegment, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, evermindLearnedStatus, evermindNextAction, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, promptOptionsLabels, selectPendingAskUser, serializeAskUser, splitThinkSegments, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };
+export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, type MessageRating, ParticipantBadge, type PendingAskUser, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, SLOW_AFTER_MS, Sunburst, type SunburstProps, TICKET_KINDS, type ThinkSegment, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, evermindLearnedStatus, evermindNextAction, formatDuration, formatElapsed, formatPayload, healthRingColor, initialsOf, parseAskUser, promptOptionsLabels, selectPendingAskUser, serializeAskUser, splitThinkSegments, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };

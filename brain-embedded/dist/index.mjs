@@ -2,7 +2,7 @@ import {
   BrainRequestError,
   brainRequestError,
   chatErrorAction
-} from "./chunk-P2QWNA6W.mjs";
+} from "./chunk-XMWB5HDP.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useMemo } from "react";
@@ -1653,6 +1653,161 @@ function traceWithPersistedSteps(messages, trace) {
   return [...trace, ...fromMessages].sort((a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
 }
 
+// src/runActivity.ts
+var TARGET_KEYS = ["path", "file", "filePath", "glob", "query", "q", "search", "url", "name", "title", "id"];
+var MAX_DETAIL = 72;
+function shortenTarget(value, max = MAX_DETAIL) {
+  const v = value.replace(/\s+/g, " ").trim();
+  if (v.length <= max) return v;
+  if (v.includes("/") || v.includes("\\")) return `\u2026${v.slice(v.length - (max - 1))}`;
+  return `${v.slice(0, max - 1)}\u2026`;
+}
+function activityTarget(args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return void 0;
+  const record = args;
+  for (const key of TARGET_KEYS) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return shortenTarget(value);
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+  return void 0;
+}
+function toolActivity(label, args, step, startedAt) {
+  const detail = activityTarget(args);
+  return { phase: "tool", label, startedAt, step, ...detail ? { detail } : {} };
+}
+
+// src/runProgress.ts
+var MUTATION_TOOL = /(^|_)(write|edit|save|create|update|delete|apply|patch|publish|send|dispatch|run_command|assign|link|move|set)(_|$)/i;
+function isMutationTool(name) {
+  return isCodeChangeTool(name) || MUTATION_TOOL.test(name);
+}
+var EDIT_INTENT = /\b(add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show)\b/i;
+var QUESTION_INTENT = /^\s*(what|why|how|where|when|which|who|is|are|does|do|did|can|could|should|would|explain|describe|tell me|show me|list)\b|\?\s*$/i;
+function hasEditIntent(messages) {
+  const asks = messages.filter((m) => m.role === "user").map((m) => (m.content ?? "").slice(0, 600));
+  return asks.some((text) => !QUESTION_INTENT.test(text) && EDIT_INTENT.test(text));
+}
+function callSignature(ev) {
+  let args = "";
+  try {
+    args = JSON.stringify(ev.args ?? null);
+  } catch {
+    args = String(ev.args ?? "");
+  }
+  return `${ev.label}(${args})`;
+}
+function targetSignature(ev) {
+  const target = activityTarget(ev.args);
+  return target ? `${ev.label}:${target}` : null;
+}
+function computeRunProgress(events, messages = []) {
+  const tools = events.filter((e) => e.category === "tool");
+  const seenCalls = /* @__PURE__ */ new Set();
+  let duplicateCalls = 0;
+  const targetCounts = /* @__PURE__ */ new Map();
+  let targetedCalls = 0;
+  let mutationsAttempted = 0;
+  let mutationsSucceeded = 0;
+  for (const ev of tools) {
+    const sig = callSignature(ev);
+    if (seenCalls.has(sig)) duplicateCalls += 1;
+    else seenCalls.add(sig);
+    const target = targetSignature(ev);
+    if (target) {
+      targetedCalls += 1;
+      targetCounts.set(target, (targetCounts.get(target) ?? 0) + 1);
+    }
+    if (isMutationTool(ev.label)) {
+      mutationsAttempted += 1;
+      if (!ev.isError && !isFailedToolResult(ev.result)) mutationsSucceeded += 1;
+    }
+  }
+  const repeatedTargets = [...targetCounts.entries()].filter(([, count]) => count > 1).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
+  const distinctTargets = targetCounts.size;
+  const revisits = repeatedTargets.reduce((sum, t) => sum + (t.count - 1), 0);
+  const revisitRatio = targetedCalls > 0 ? revisits / targetedCalls : 0;
+  let modelMs = 0;
+  let toolMs = 0;
+  let slowestStep = null;
+  let first = Number.POSITIVE_INFINITY;
+  let last = Number.NEGATIVE_INFINITY;
+  for (const ev of events) {
+    const t = Date.parse(ev.ts);
+    if (Number.isFinite(t)) {
+      first = Math.min(first, t);
+      last = Math.max(last, t);
+    }
+    const ms = typeof ev.durationMs === "number" && Number.isFinite(ev.durationMs) ? ev.durationMs : 0;
+    if (ev.category === "llm") modelMs += ms;
+    else if (ev.category === "tool") toolMs += ms;
+    if (ms > 0 && (!slowestStep || ms > slowestStep.ms)) slowestStep = { label: ev.label, ms };
+  }
+  const wallClockMs = Number.isFinite(first) && Number.isFinite(last) && last > first ? last - first : 0;
+  const editIntent = hasEditIntent(messages);
+  const didWork = tools.length > 0;
+  const noEffect = editIntent && didWork && mutationsSucceeded === 0;
+  const spinning = targetedCalls >= 6 && revisitRatio >= 0.4;
+  return {
+    duplicateCalls,
+    repeatedTargets,
+    distinctTargets,
+    targetedCalls,
+    revisitRatio,
+    mutationsAttempted,
+    mutationsSucceeded,
+    editIntent,
+    noEffect,
+    spinning,
+    wallClockMs,
+    modelMs,
+    toolMs,
+    slowestStep
+  };
+}
+function progressDuration(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return "0s";
+  if (ms < 1e3) return `${ms}ms`;
+  if (ms < 6e4) return `${(ms / 1e3).toFixed(ms < 1e4 ? 1 : 0)}s`;
+  const m = Math.floor(ms / 6e4);
+  const s = Math.round(ms % 6e4 / 1e3);
+  return s ? `${m}m ${s}s` : `${m}m`;
+}
+var MAX_NAMED_TARGETS = 4;
+function formatRunProgress(p) {
+  const lines = [];
+  const reach = p.targetedCalls > 0 ? `${p.distinctTargets} distinct target(s) over ${p.targetedCalls} targeted call(s)` : "no targeted calls";
+  lines.push(
+    `Progress: ${reach}${p.repeatedTargets.length ? ` \xB7 ${Math.round(p.revisitRatio * 100)}% of calls revisited ground already covered` : " \xB7 no repeats"}${p.duplicateCalls ? ` \xB7 ${p.duplicateCalls} EXACT duplicate call(s)` : ""}`
+  );
+  if (p.repeatedTargets.length) {
+    const named = p.repeatedTargets.slice(0, MAX_NAMED_TARGETS).map((t) => `${t.label} \xD7${t.count}`).join(" \xB7 ");
+    const rest = p.repeatedTargets.length - MAX_NAMED_TARGETS;
+    lines.push(`Revisited: ${named}${rest > 0 ? ` (+${rest} more)` : ""}`);
+  }
+  if (p.editIntent) {
+    lines.push(
+      `Effect: the request asked for a CHANGE \xB7 ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded${p.noEffect ? " \xB7 \u26A0 NOTHING WAS CHANGED" : ""}`
+    );
+  } else if (p.mutationsAttempted > 0) {
+    lines.push(`Effect: ${p.mutationsAttempted} mutating call(s) attempted, ${p.mutationsSucceeded} succeeded.`);
+  }
+  if (p.wallClockMs > 0) {
+    lines.push(
+      `Time: ${progressDuration(p.wallClockMs)} wall clock \xB7 ${progressDuration(p.modelMs)} in the model \xB7 ${progressDuration(p.toolMs)} in tools${p.slowestStep ? ` \xB7 slowest ${p.slowestStep.label} (${progressDuration(p.slowestStep.ms)})` : ""}`
+    );
+  }
+  return lines;
+}
+function runProgressVerdict(p) {
+  if (!p.spinning && !p.noEffect) return null;
+  const worst = p.repeatedTargets[0];
+  const loop = p.spinning ? `NO PROGRESS \u2014 the run kept going back over ground it had already covered: ${Math.round(p.revisitRatio * 100)}% of its targeted calls revisited a target it had already read${worst ? `, worst \`${worst.label}\` \xD7${worst.count}` : ""}${p.duplicateCalls ? `, and ${p.duplicateCalls} call(s) repeated earlier arguments EXACTLY` : ""}. ` : "NO EFFECT \u2014 ";
+  const effect = p.noEffect ? `The request asked for a change and the run finished with ZERO successful mutating calls${p.mutationsAttempted ? ` (${p.mutationsAttempted} attempted, all failed)` : " \u2014 it never attempted one"}, so nothing was actually modified. ` : "";
+  const remedy = p.spinning ? `This is a LOOP, not context pressure and not a model that "won't call tools" \u2014 the numbers on those signals are a consequence of the re-reading, not its cause. Look at the repeated targets above: the agent is not retaining what it already read (the result was truncated, or the read was too narrow to answer the question). Widen the read, or cache the file in the transcript, rather than shrinking context or switching models.` : "Check whether the agent was ever offered a mutating tool this run (see the tools-advertised line) before concluding the model refused to act.";
+  return `${loop}${effect}${remedy}`;
+}
+
 // src/brainTriage.ts
 function isFailedToolResult(result) {
   if (result == null) return false;
@@ -1832,7 +1987,7 @@ function byteLen(v) {
   const s = typeof v === "string" ? v : JSON.stringify(v ?? "");
   return s.length;
 }
-function computeBrainDiagnostics(events, requestedModel, messages = []) {
+function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}) {
   const llm = events.filter((e) => e.category === "llm");
   const toolEvents = events.filter((e) => e.category === "tool");
   const errors = events.filter((e) => e.isError || e.category === "error");
@@ -1889,8 +2044,10 @@ function computeBrainDiagnostics(events, requestedModel, messages = []) {
   const narratedUnadvertisedTools = narratedUnadvertisedInTrace(events);
   const noToolsAdvertised = exposure.min === 0 && toolEvents.length === 0;
   const memoryOnlyRun = memoryAnswers.length > 0 && llm.length === 0;
-  const healthy = errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal && !announcedUnmadeToolCall && didWork;
-  const likelyCause = memoryOnlyRun ? "memory-answered" : noToolsAdvertised ? "no-tools-advertised" : narratedUnadvertisedTools.length > 0 ? "tool-not-advertised" : announcedUnmadeToolCall ? "tool-calls-not-emitted" : contextSignal && !degradationSignal ? "context-exhaustion" : degradationSignal && !contextSignal ? "model-degradation" : healthy ? "healthy" : "inconclusive";
+  const progress = computeRunProgress(events, messages);
+  const noProgress = progress.spinning || progress.noEffect && !ctx.running;
+  const healthy = errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal && !announcedUnmadeToolCall && !noProgress && didWork;
+  const likelyCause = memoryOnlyRun ? "memory-answered" : noToolsAdvertised ? "no-tools-advertised" : narratedUnadvertisedTools.length > 0 ? "tool-not-advertised" : announcedUnmadeToolCall ? "tool-calls-not-emitted" : noProgress ? "no-progress" : contextSignal && !degradationSignal ? "context-exhaustion" : degradationSignal && !contextSignal ? "model-degradation" : healthy ? "healthy" : "inconclusive";
   return {
     turns: llm.length,
     toolCalls: toolEvents.length,
@@ -1917,6 +2074,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = []) {
     narratedUnadvertisedTools,
     memoryAnswers,
     turnCoveragePartial,
+    progress,
     likelyCause
   };
 }
@@ -1925,7 +2083,7 @@ function kb(bytes) {
 }
 function formatBrainDiagnostics(d) {
   const evermindAnswers = d.memoryAnswers?.filter((m) => m.source === "evermind") ?? [];
-  const verdict = d.likelyCause === "memory-answered" ? `ANSWERED FROM MEMORY \u2014 no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === "evermind" ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ""}${m.version != null ? ` v${m.version}` : ""}` : "the Q&A cache").join(", ")}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? "The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work \u2014 if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head." : "The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model."} Switching models changes nothing here.` : d.likelyCause === "no-tools-advertised" ? 'NO TOOLS ADVERTISED \u2014 at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.' : d.likelyCause === "tool-not-advertised" ? `TOOL NOT ADVERTISED \u2014 a turn wrote out ${d.narratedUnadvertisedTools.map((n) => `\`${n}\``).join(", ")} as prose while that tool was NOT among the ones it was offered that turn. No model can emit a call for a function it was never given, so this is OUR per-turn tool selection dropping a tool the prompt asked for \u2014 not a model that "won't call tools". Fix the selection (pin the tool, or name it in the system prompt so it is force-included) rather than switching models.` : d.likelyCause === "tool-calls-not-emitted" ? 'TOOL CALLS NOT EMITTED \u2014 a turn NARRATED a tool call in prose ("I\'ll call the tool\u2026", a bare `builtin_\u2026` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The tools WERE advertised and the agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Try a different model.' : d.likelyCause === "context-exhaustion" ? "Likely CONTEXT EXHAUSTION (case A) \u2014 the transcript outgrew the model window." : d.likelyCause === "model-degradation" ? "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low." : d.likelyCause === "healthy" ? "No failure signal \u2014 no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging." : "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
+  const verdict = d.likelyCause === "memory-answered" ? `ANSWERED FROM MEMORY \u2014 no model ran this turn. The reply was served by the memory-first short-circuit (${(d.memoryAnswers ?? []).map((m) => m.source === "evermind" ? `the project Evermind SSM${m.projectId != null ? ` of project #${m.projectId}` : ""}${m.version != null ? ` v${m.version}` : ""}` : "the Q&A cache").join(", ")}), so zero turns, zero tokens and zero tool calls is EXPECTED, not a fault. ${evermindAnswers.length ? "The Evermind SSM cannot call tools and answers only from what it has learned, so it can neither fetch live data nor do work \u2014 if the reply was wrong, garbled or stale, that is the cause. Turn Memory off for this chat, or disable inference on that head." : "The reply is a replay of an earlier answer to the same question; ask a differently-worded question to reach the model."} Switching models changes nothing here.` : d.likelyCause === "no-tools-advertised" ? 'NO TOOLS ADVERTISED \u2014 at least one turn was handed ZERO tool definitions, so it could not have emitted a call whatever it wanted to do. This is a catalog/config failure on our side, not a model fault: the gateway MCP catalog (`/llm/v1/mcp/tools`) failed to load, or no actions were registered for this surface. See the "Tools available to the model" line in the Chat diagnostics block for the fetch error. Switching models will not help.' : d.likelyCause === "tool-not-advertised" ? `TOOL NOT ADVERTISED \u2014 a turn wrote out ${d.narratedUnadvertisedTools.map((n) => `\`${n}\``).join(", ")} as prose while that tool was NOT among the ones it was offered that turn. No model can emit a call for a function it was never given, so this is OUR per-turn tool selection dropping a tool the prompt asked for \u2014 not a model that "won't call tools". Fix the selection (pin the tool, or name it in the system prompt so it is force-included) rather than switching models.` : d.likelyCause === "tool-calls-not-emitted" ? 'TOOL CALLS NOT EMITTED \u2014 a turn NARRATED a tool call in prose ("I\'ll call the tool\u2026", a bare `builtin_\u2026` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The tools WERE advertised and the agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Try a different model.' : d.likelyCause === "no-progress" ? (d.progress && runProgressVerdict(d.progress)) ?? "NO PROGRESS \u2014 the run repeated work without advancing." : d.likelyCause === "context-exhaustion" ? "Likely CONTEXT EXHAUSTION (case A) \u2014 the transcript outgrew the model window." : d.likelyCause === "model-degradation" ? "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low." : d.likelyCause === "healthy" ? "No failure signal \u2014 no errors, no truncated or empty turns, and no context pressure. Nothing here needs triaging." : "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
   const lines = ["--- Diagnostics ---", `Likely cause: ${verdict}`];
   const scope = d.turnCoveragePartial ? " (this session)" : "";
   lines.push(`Turns${scope}: ${d.turns} \xB7 Tool calls: ${d.toolCalls} \xB7 Errors: ${d.errors}${d.loopExhausted ? " \xB7 LOOP EXHAUSTED" : ""}`);
@@ -1944,6 +2102,7 @@ function formatBrainDiagnostics(d) {
   lines.push(
     `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` \xB7 largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ""}${d.truncatedToolResults ? ` \xB7 ${d.truncatedToolResults} truncated before the model saw them` : ""}`
   );
+  lines.push(...d.progress ? formatRunProgress(d.progress) : []);
   if (d.advertisedToolsLastTurn != null) {
     const range = d.advertisedToolsMin != null && d.advertisedToolsMin !== d.advertisedToolsLastTurn ? `${d.advertisedToolsMin}\u2013${d.advertisedToolsLastTurn}` : `${d.advertisedToolsLastTurn}`;
     lines.push(
@@ -2379,6 +2538,7 @@ var EMPTY_SNAPSHOT = {
   appended: [],
   hasTrace: false,
   trace: [],
+  activity: null,
   byoUnresolved: [],
   providerCap: []
 };
@@ -2396,6 +2556,7 @@ function makeCell() {
     messagesEpoch: 0,
     listeners: /* @__PURE__ */ new Set(),
     abort: null,
+    activity: null,
     byoUnresolved: [],
     providerCap: [],
     codeChanged: false,
@@ -2436,11 +2597,16 @@ function emit(c) {
     appended: c.appended,
     hasTrace: c.trace.length > 0,
     trace: c.trace,
+    activity: c.activity,
     byoUnresolved: c.byoUnresolved,
     providerCap: c.providerCap
   };
   for (const l of c.listeners) l();
   for (const l of storeListeners) l();
+}
+function setActivity(c, activity) {
+  c.activity = activity;
+  emit(c);
 }
 function pushTrace(c, ev) {
   c.trace.push(ev);
@@ -2661,6 +2827,7 @@ function stopRun(chatId) {
     resolve(false);
   }
   c.streamingText = "";
+  c.activity = null;
   pushTrace(c, { ts: nowIso(), category: "message", label: "agent.stopped", result: "Stopped by user." });
 }
 function clearRunError(chatId) {
@@ -2693,6 +2860,7 @@ async function startRun(chatId, req) {
   c.ticketRecorded = false;
   c.touchedFiles = [];
   c.abort = new AbortController();
+  c.activity = { phase: "starting", startedAt: Date.now(), step: 0 };
   if (req.seed && c.transcript.length === 0) c.transcript = req.seed.slice();
   if (req.userTurn !== void 0) c.transcript.push({ role: "user", content: req.userTurn });
   emit(c);
@@ -2708,6 +2876,10 @@ async function startRun(chatId, req) {
     c.running = false;
     c.streamingText = "";
     c.abort = null;
+    if (!aborted && c.codeChanged && req.projectId != null && req.runTool) {
+      c.activity = { phase: "finishing", startedAt: Date.now(), step: 0 };
+      emit(c);
+    }
     if (!aborted && c.codeChanged && !c.ticketRecorded && req.projectId != null && req.runTool) {
       await recordCodeChangeTicket(chatId, c, req).catch(() => {
       });
@@ -2716,6 +2888,7 @@ async function startRun(chatId, req) {
       await advanceLinkedTickets(chatId, c, req).catch(() => {
       });
     }
+    c.activity = null;
     emit(c);
   }
 }
@@ -2980,14 +3153,20 @@ ${turnOptimizationDirective()}`;
         result: `${selection.tools.length} of ${selection.available} tools advertised this turn (relevance-selected; ${usedTools.size} pinned from earlier calls)`
       });
     }
+    setActivity(c, { phase: "thinking", startedAt: Date.now(), step: iter });
     try {
       result = await stream(
         { messages: working, tools, tool_choice: tools ? "auto" : void 0, model: activeModel, modelStrict: !!activeModel && modelStrict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
-        { onTextDelta: (d) => {
-          if (firstTokenAt === void 0) firstTokenAt = nowMs2();
-          c.streamingText += d;
-          emit(c);
-        } }
+        {
+          onTextDelta: (d) => {
+            if (firstTokenAt === void 0) {
+              firstTokenAt = nowMs2();
+              c.activity = { phase: "writing", startedAt: Date.now(), step: iter };
+            }
+            c.streamingText += d;
+            emit(c);
+          }
+        }
       );
     } catch (e) {
       if (c.abort?.signal.aborted) return;
@@ -3103,6 +3282,7 @@ ${turnOptimizationDirective()}`;
           const ok = await new Promise((resolve) => {
             c.pendingConfirm = { name: tc.name, args };
             c.confirmResolver = resolve;
+            c.activity = { ...toolActivity(tc.name, args, iter, Date.now()), phase: "awaiting" };
             emit(c);
           });
           if (!ok) {
@@ -3126,6 +3306,7 @@ ${turnOptimizationDirective()}`;
           readDedupe.clear();
         }
         const toolStart = nowMs2();
+        setActivity(c, toolActivity(tc.name, args, iter, Date.now()));
         let out;
         try {
           out = await runTool(tc.name, args);
@@ -3589,6 +3770,7 @@ ${refs}`;
      *  (e.g. a failed rename) has no gateway verdict behind it. */
     errorAction: localError ? null : snapshot.errorAction,
     streamingText: snapshot.streamingText,
+    activity: snapshot.activity,
     ratings,
     pendingAttachments,
     uploading,
@@ -3659,6 +3841,75 @@ function subscribeToChatMessages(baseUrl, getToken, chatId, onChanged) {
     socket?.close();
     socket = null;
   };
+}
+
+// src/transcriptBudget.ts
+var DEFAULT_MIN_PAYLOAD = 240;
+function createPayloadBudget(opts) {
+  const minPayload = opts.minPayload ?? DEFAULT_MIN_PAYLOAD;
+  let remaining = Math.max(0, opts.total);
+  let spent = 0;
+  let trimmed = 0;
+  let deduped = 0;
+  let dedupedChars = 0;
+  const seen = /* @__PURE__ */ new Map();
+  let ordinal = 0;
+  return {
+    cap(payload, label) {
+      if (!payload) return payload;
+      ordinal += 1;
+      const prior = seen.get(payload);
+      if (prior) {
+        deduped += 1;
+        dedupedChars += payload.length;
+        return `\u2026(identical to the ${ordinalWord(prior.ordinal)} payload in this report \u2014 ${prior.label}, ${payload.length.toLocaleString()} chars. Repeated verbatim; not reprinted.)`;
+      }
+      seen.set(payload, { ordinal, label });
+      const cap2 = Math.max(minPayload, Math.min(opts.perPayload, remaining));
+      if (payload.length <= cap2) {
+        remaining -= payload.length;
+        spent += payload.length;
+        return payload;
+      }
+      if (remaining < minPayload) {
+        trimmed += 1;
+        return `\u2026(${payload.length.toLocaleString()} chars omitted \u2014 the report hit its size budget. The full result is on the live timeline.)`;
+      }
+      trimmed += 1;
+      remaining -= cap2;
+      spent += cap2;
+      return `${payload.slice(0, cap2)}
+\u2026(+${(payload.length - cap2).toLocaleString()} chars truncated \u2014 full result is on the live timeline)`;
+    },
+    stats() {
+      return { spent, trimmed, deduped, dedupedChars };
+    },
+    note() {
+      if (trimmed === 0 && deduped === 0) return null;
+      const parts = [];
+      if (trimmed) parts.push(`${trimmed} oversized payload(s) shortened`);
+      if (deduped) {
+        parts.push(
+          `${deduped} payload(s) were byte-identical repeats and are shown as back references (${(dedupedChars / 1024).toFixed(1)} KB of repetition \u2014 itself a signal, see the Progress lines)`
+        );
+      }
+      return `Note: this report is size-budgeted so its END survives pasting \u2014 ${parts.join("; ")}. Every turn, tool call and error is still present.`;
+    }
+  };
+}
+function ordinalWord(n) {
+  const rem100 = n % 100;
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
 }
 
 // src/chatActivity.ts
@@ -4377,6 +4628,7 @@ export {
   activeMentionToken,
   activeModelKey,
   activityIcon,
+  activityTarget,
   activityTone,
   allowanceState,
   announcesUntakenAction,
@@ -4402,9 +4654,11 @@ export {
   clearRunError,
   codeChangeFile,
   computeBrainDiagnostics,
+  computeRunProgress,
   consolidationMarkerContent,
   consolidationMetadata,
   countReconciledMemories,
+  createPayloadBudget,
   deriveChatTitle,
   describeTool,
   detectAnnouncedButUnmadeToolCall,
@@ -4423,6 +4677,7 @@ export {
   formatChatDiagnostics,
   formatEvermindLearnStep,
   formatEvermindMemoryBlock,
+  formatRunProgress,
   gatherChatDiagnostics,
   getGlobalRunState,
   getLastResolvedModel,
@@ -4430,6 +4685,7 @@ export {
   getRunSnapshot,
   getRunTrace,
   handleRouterCall,
+  hasEditIntent,
   isActivityMessage,
   isChatMode,
   isCodeChangeTool,
@@ -4440,6 +4696,7 @@ export {
   isEvermindModel,
   isFailedToolResult,
   isMalformedToolCall,
+  isMutationTool,
   isRouterTool,
   isRunning,
   isStepMessage,
@@ -4472,6 +4729,7 @@ export {
   prepareImageDataUrl,
   productForPlan,
   productModelName,
+  progressDuration,
   ratedTurnContext,
   ratedTurnTool,
   reasoningForRun,
@@ -4483,11 +4741,13 @@ export {
   routerToolSpecs,
   routingQueryForTurn,
   startRun as runBrainLoop,
+  runProgressVerdict,
   savePendingPrompt,
   scopeToConsolidation,
   selectToolsForTurn,
   setLastResolvedModel,
   setMcpToolStatus,
+  shortenTarget,
   stallRecoveriesInTrace,
   stallUnrecoveredInTrace,
   startRun,
@@ -4498,6 +4758,7 @@ export {
   subscribeRunStore,
   subscribeToChatMessages,
   takePendingPrompt,
+  toolActivity,
   toolExposureInTrace,
   toolNamesMentionedIn,
   toolSpecsFor,

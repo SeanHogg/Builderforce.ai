@@ -37,6 +37,8 @@ import {
   users,
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { activityDatabase, recordActivityBatch } from '../activity/activityLog';
+import { resolveUsageDatabase } from '../llm/usageLedger';
 import { provisionBuiltinAgents } from '../agent/provisionBuiltinAgents';
 import { membershipChanged } from '../tenant/membershipChanged';
 import { getActiveTermsVersion } from '../legal/termsAcceptance';
@@ -237,9 +239,13 @@ async function ensureAgents(db: Db, bp: DemoBlueprint, tenantId: number): Promis
 }
 
 /** Delete all reseedable content for the tenant (leads and auth data survive). */
-async function wipeTenantContent(db: Db, tenantId: number, keepProjectKeys: string[]): Promise<void> {
-  await db.delete(llmUsageLog).where(eq(llmUsageLog.tenantId, tenantId));
-  await db.delete(activityLog).where(eq(activityLog.tenantId, tenantId));
+async function wipeTenantContent(env: Env, db: Db, tenantId: number, keepProjectKeys: string[]): Promise<void> {
+  // `llm_usage_log` and `activity_log` are the two relations here that live on the
+  // TRANSACTIONAL endpoint. Wiping them off `db` cleared the unused primary copies and
+  // left the rows a reseeded tenant actually reads, so demo activity accumulated across
+  // every reseed. Each goes through its own endpoint resolver, the same one its writer uses.
+  await resolveUsageDatabase(env, db).delete(llmUsageLog).where(eq(llmUsageLog.tenantId, tenantId));
+  await activityDatabase(env, db).delete(activityLog).where(eq(activityLog.tenantId, tenantId));
   await db.delete(errorEvents).where(eq(errorEvents.tenantId, tenantId));
   await db.delete(errorGroups).where(eq(errorGroups.tenantId, tenantId));
   await db.delete(keyResults).where(eq(keyResults.tenantId, tenantId));
@@ -260,7 +266,7 @@ async function seedPersona(env: Env, db: Db, bp: DemoBlueprint): Promise<DemoPer
   const tenant = await ensureDemoTenant(env, db, bp, user.id);
   const tenantId = tenant.id;
   const agents = await ensureAgents(db, bp, tenantId);
-  await wipeTenantContent(db, tenantId, bp.projects.map((p) => p.key));
+  await wipeTenantContent(env, db, tenantId, bp.projects.map((p) => p.key));
 
   const now = Date.now();
   const projectIds = new Map<string, number>();
@@ -430,21 +436,25 @@ async function seedPersona(env: Env, db: Db, bp: DemoBlueprint): Promise<DemoPer
     }
   }
 
-  // Activity trail.
+  // Activity trail. Through the batch port: one insert on the endpoint the timeline
+  // actually reads, instead of an insert per event straight onto primary — a seeded
+  // demo whose activity landed on the wrong database showed an empty audit trail.
   const defaultProjectId = projectIds.values().next().value as number | undefined;
-  for (const a of bp.activity ?? []) {
+  await recordActivityBatch(env, db, (bp.activity ?? []).map((a) => {
     const agent = a.actor ? agents.get(a.actor) : undefined;
-    await db.insert(activityLog).values({
+    return {
       tenantId,
       projectId: defaultProjectId ?? null,
-      actorType: a.actorType,
-      actorRef: a.actorType === 'cloud_agent' ? agent?.id ?? null : a.actorType === 'human' ? user.id : null,
-      actorName: a.actorType === 'cloud_agent' ? agent?.name ?? 'Agent' : a.actorType === 'human' ? bp.user.displayName : 'System',
+      actor: {
+        type: a.actorType,
+        ref: a.actorType === 'cloud_agent' ? agent?.id ?? null : a.actorType === 'human' ? user.id : null,
+        name: a.actorType === 'cloud_agent' ? agent?.name ?? 'Agent' : a.actorType === 'human' ? bp.user.displayName : 'System',
+      },
       verb: a.verb,
       summary: a.summary,
       occurredAt: new Date(now - a.daysAgo * DAY_MS),
-    });
-  }
+    };
+  }));
 
   // LLM usage spread over the trailing 14 days — stable pseudo-variation, real
   // millicent costs so the FinOps/AI-impact lenses have honest-looking data.

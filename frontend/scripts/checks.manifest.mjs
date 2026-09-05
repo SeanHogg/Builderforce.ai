@@ -12,6 +12,7 @@ export default [
   ['check:design-tokens', 'check-design-tokens.mjs'],
   ['check:destinations', 'check-destinations.mjs'],
   ['check:design-scale', 'check-design-scale.mjs'],
+  ['check:container-queries', 'check-container-queries.mjs'],
   ['check:edge-runtime', 'check-edge-runtime.mjs'],
   ['check:i18n-keys', 'check-i18n-keys.mjs'],
   ['check:route-exports', 'check-route-exports.mjs'],

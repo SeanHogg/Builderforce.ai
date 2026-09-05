@@ -92,7 +92,7 @@ export const AUTO_RUN_REASON_TEXT: Record<AutoRunReason, string> = {
   capability_mismatch: 'No run: every candidate agent lacks the capabilities this lane requires.',
   already_running: 'No new run: this ticket already has a live execution. If that run is PAUSED it is waiting on an answer to an agent question — it holds the ticket until answered (or until the 72-hour paused deadline releases it), so answering it is what unblocks the ticket.',
   same_lane_reentry: 'No new run: the run that just finished already served this lane, so the loop guard suppressed an immediate re-dispatch into the same lane. Nothing is executing right now.',
-  run_cap_exhausted: 'No run: the ticket\'s last consecutive runs each either failed or finished without producing anything — no commit, no pull request, no lane move — so autonomy has stopped re-dispatching it rather than burning the workspace\'s run budget on a loop. A human Run now overrides.',
+  run_cap_exhausted: 'No run: autonomy has stopped re-dispatching this ticket rather than burning the workspace\'s run budget on a loop — either its last consecutive runs each failed or finished without producing anything (no commit, no pull request, no lane move), or it has reached the ceiling on how many runs one ticket may ever be given, which catches a ticket being re-dispatched over and over even though each run SUCCEEDS. A human Run now overrides.',
   cloud_run_limit: 'No run: this workspace has used its monthly cloud-run allowance. Retrying will NOT clear this — upgrade the plan, or wait for the allowance to reset. On-prem and VS Code runs stay unlimited.',
   tenant_token_limit: 'No run: this workspace has used its token allowance, so autonomy is paused for EVERY ticket it owns — not just this one. It resumes on its own when the allowance resets, or immediately on an upgrade.',
   cooldown_active: 'No run yet: the ticket\'s last run failed or finished with nothing to show for it, so it is in its back-off window before the next autonomous attempt.',
@@ -171,6 +171,40 @@ export function autoRunReasonEvaluationText(reason: AutoRunReason): string {
  * is no longer failure-only — see {@link trailingUnproductiveStreak}.
  */
 export const MAX_CONSECUTIVE_AUTORUN_FAILURES = 3;
+
+/**
+ * How many runs autonomy may EVER start on one ticket, however well they go.
+ *
+ * ── THE HOLE THIS CLOSES ─────────────────────────────────────────────────────────
+ * Every guard above this one is keyed on a TRAILING FAILURE STREAK, and a run that
+ * completes resets the streak to zero. So a ticket whose runs keep SUCCEEDING has no
+ * backpressure at all: `trailingUnproductiveStreak` returns 0, the cooldown derived from
+ * it returns 0, `blockedBy` is null, and the next sweep may dispatch again — every tick,
+ * forever. The breaker was built for the ticket that fails repeatedly; nothing was
+ * watching the ticket that succeeds repeatedly and is simply re-picked.
+ *
+ * Measured: 766 tickets accumulated 510,632 role dispatches between 2026-07-14 and
+ * 2026-08-04. Ticket #147 alone ran 647 times — 624 of them COMPLETED — and then closed
+ * as `done`; #674 ran 655 times with 639 completions; #142 ran 769 times before being
+ * cancelled. The breaker never tripped on any of them, correctly by its own definition,
+ * because they were not failing. 49 tickets (6% of the 788 that ever ran) hold 18,294 of
+ * the 31,362 runs on record.
+ *
+ * ── WHY 50, AND WHY A LIFETIME COUNT ─────────────────────────────────────────────
+ * From that same population, 91% of tickets finish inside 49 runs, so this cannot fire on
+ * work that is progressing normally — it is a ceiling on pathology, not a budget. A
+ * lifetime count rather than a rate is deliberate: the loop ran at only ~28 runs/day, low
+ * enough that any per-hour rate limit permissive enough to be safe would have let it run
+ * indefinitely. What is abnormal is the TOTAL, not the tempo.
+ *
+ * This is defence in depth, not the root-cause fix. Whatever re-opens the role slot to be
+ * re-picked is still unidentified (the subsystem has been idle since 2026-08-04, so it
+ * cannot be reproduced) — but that mechanism can only spend runs THROUGH this choke
+ * point, so bounding it here bounds the damage regardless of the cause. It reports as
+ * `run_cap_exhausted`, the existing "autonomy has stopped, a human may override" verdict,
+ * because that is exactly what it means; a human "Run now" (`force`) still dispatches.
+ */
+export const MAX_AUTONOMOUS_RUNS_PER_TASK = 50;
 
 /** A finished run, as far as the breaker cares. */
 export interface RunOutcomeRow {
@@ -347,11 +381,15 @@ export interface RerunBackoff {
 export function assessRerunBackoff(execs: readonly ExecTiming[], nowMs: number): RerunBackoff {
   const consecutiveFailures = trailingUnproductiveStreak(execs);
   const cooldownRemainingMs = autoRunCooldownRemainingMs(execs, nowMs);
-  // Breaker before cooldown: a halted ticket reports the stronger reason (the cooldown
-  // would expire on its own; the breaker will not without intervention).
-  const blockedBy = consecutiveFailures >= MAX_CONSECUTIVE_AUTORUN_FAILURES
+  // Ceiling first, then breaker, then cooldown — strongest reason wins, and this is the
+  // only one of the three that NOTHING clears on its own: a streak breaks on the next
+  // productive run and a cooldown expires with time, but a lifetime count only grows.
+  // It is also the only one that can see a ticket whose runs all SUCCEED.
+  const blockedBy = execs.length >= MAX_AUTONOMOUS_RUNS_PER_TASK
     ? 'run_cap_exhausted' as const
-    : cooldownRemainingMs > 0 ? 'cooldown_active' as const : null;
+    : consecutiveFailures >= MAX_CONSECUTIVE_AUTORUN_FAILURES
+      ? 'run_cap_exhausted' as const
+      : cooldownRemainingMs > 0 ? 'cooldown_active' as const : null;
   return { consecutiveFailures, cooldownRemainingMs, blockedBy };
 }
 
@@ -537,6 +575,12 @@ export function classifyResolvedAutoRun(input: {
   consecutiveFailures?: number;
   /** Cooldown still owed since the last unproductive run (see {@link autoRunCooldownRemainingMs}). */
   cooldownRemainingMs?: number;
+  /** TOTAL runs the ticket has ever had, for the {@link MAX_AUTONOMOUS_RUNS_PER_TASK}
+   *  ceiling. Reported here as well as enforced at the dispatcher because a triage view
+   *  that answers `will_run` for a ticket the dispatcher then refuses is the exact
+   *  two-readings-of-one-rule bug this evaluator exists to prevent. Omitted = unknown,
+   *  which never blocks. */
+  totalRuns?: number;
 }): { reason: AutoRunReason; canRunNow: boolean } {
   if (input.gate === 'human') return { reason: 'human_gate', canRunNow: false };
   // The more specific reading first: "there is no role here" outranks "no role bound".
@@ -553,6 +597,10 @@ export function classifyResolvedAutoRun(input: {
   // Circuit-breaker: a ticket that would otherwise auto-run but whose last N runs all
   // failed is halted so autonomy stops re-dispatching an identically-failing run. A
   // human Run-now still overrides (it dispatches off `candidate`, not `canRunNow`).
+  // Lifetime ceiling before the streak breaker, matching `assessRerunBackoff`'s ordering:
+  // it is the reason that never clears, and the only one that sees a ticket whose runs
+  // all succeed and is simply being re-picked forever.
+  if ((input.totalRuns ?? 0) >= MAX_AUTONOMOUS_RUNS_PER_TASK) return { reason: 'run_cap_exhausted', canRunNow: false };
   if ((input.consecutiveFailures ?? 0) >= MAX_CONSECUTIVE_AUTORUN_FAILURES) return { reason: 'run_cap_exhausted', canRunNow: false };
   // Per-ticket re-run cooldown: a ticket whose last run failed backs off (doubling
   // per consecutive failure) before autonomy re-dispatches it, so a transient cause
@@ -911,6 +959,8 @@ async function finishEvaluation(input: {
     hasLiveExecution: !!liveExecution,
     consecutiveFailures,
     cooldownRemainingMs,
+    // Same list, so the ceiling is counted off exactly the rows the dispatcher counts.
+    totalRuns: plainExecs.length,
     managedNoRole: input.managedNoRole,
     managedLaneUnconfigured: input.managedLaneUnconfigured ?? false,
   });

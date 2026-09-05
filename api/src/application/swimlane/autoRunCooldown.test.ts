@@ -17,6 +17,7 @@ import {
   classifyResolvedAutoRun,
   AUTORUN_COOLDOWN_BASE_MS,
   AUTORUN_COOLDOWN_MAX_MS,
+  MAX_AUTONOMOUS_RUNS_PER_TASK,
   MAX_CONSECUTIVE_AUTORUN_FAILURES,
 } from './evaluateAutoRun';
 
@@ -182,5 +183,53 @@ describe('assessRerunBackoff', () => {
 
   it('never blocks a ticket that has never run', () => {
     expect(assessRerunBackoff([], now).blockedBy).toBeNull();
+  });
+});
+
+/**
+ * The gap every test above shares: they all describe a FAILING ticket. The measured
+ * incident was the opposite — 766 tickets took 510,632 dispatches while their runs
+ * SUCCEEDED (ticket #147: 647 runs, 624 completed, then closed as done), so the streak
+ * was 0, the cooldown was 0, and nothing refused the next dispatch. These pin the
+ * lifetime ceiling that closes it.
+ */
+describe('MAX_AUTONOMOUS_RUNS_PER_TASK — the ceiling on a ticket that keeps SUCCEEDING', () => {
+  const completed = () => ({ status: 'completed', produced: true, completedAt: new Date(NOW - 60_000) });
+
+  it('blocks once the ticket reaches the ceiling, though every run succeeded', () => {
+    const execs = Array.from({ length: MAX_AUTONOMOUS_RUNS_PER_TASK }, completed);
+    const v = assessRerunBackoff(execs, NOW);
+    // The point of the test: no failure streak and no cooldown, yet autonomy is stopped.
+    expect(v.consecutiveFailures).toBe(0);
+    expect(v.cooldownRemainingMs).toBe(0);
+    expect(v.blockedBy).toBe('run_cap_exhausted');
+  });
+
+  it('does not block one run below the ceiling', () => {
+    const execs = Array.from({ length: MAX_AUTONOMOUS_RUNS_PER_TASK - 1 }, completed);
+    expect(assessRerunBackoff(execs, NOW).blockedBy).toBeNull();
+  });
+
+  it('would have stopped ticket #147 (647 successful runs) instead of letting it run on', () => {
+    const execs = Array.from({ length: 647 }, completed);
+    expect(assessRerunBackoff(execs, NOW).blockedBy).toBe('run_cap_exhausted');
+  });
+
+  it('reports the same verdict through the triage classifier, so neither can contradict the dispatcher', () => {
+    const base = {
+      gate: 'auto' as const,
+      decisionAutoRun: true,
+      hasCapabilityMismatch: false,
+      sameLaneReentry: false,
+      hasLiveExecution: false,
+      consecutiveFailures: 0,
+      cooldownRemainingMs: 0,
+    };
+    expect(classifyResolvedAutoRun({ ...base, totalRuns: MAX_AUTONOMOUS_RUNS_PER_TASK }))
+      .toEqual({ reason: 'run_cap_exhausted', canRunNow: false });
+    expect(classifyResolvedAutoRun({ ...base, totalRuns: MAX_AUTONOMOUS_RUNS_PER_TASK - 1 }))
+      .toEqual({ reason: 'will_run', canRunNow: true });
+    // Unknown count must never block — the field is optional for callers without the list.
+    expect(classifyResolvedAutoRun(base)).toEqual({ reason: 'will_run', canRunNow: true });
   });
 });

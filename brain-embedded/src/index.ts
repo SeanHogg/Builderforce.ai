@@ -171,7 +171,23 @@ export {
   toolExposureInTrace,
   narratedUnadvertisedInTrace,
 } from './brainTriage';
-export type { BrainTraceEvent, BuildBrainTriageOptions, BrainDiagnostics, ByoUnresolvedEntry, ToolExposure } from './brainTriage';
+export type { BrainTraceEvent, BuildBrainTriageOptions, BrainDiagnostics, BrainDiagnosticsContext, ByoUnresolvedEntry, ToolExposure } from './brainTriage';
+
+// Did the run GET ANYWHERE? Repetition / reach / effect / timing — the signals that
+// separate "every turn succeeded and nothing got done" from a real context or model
+// failure. Folded into the diagnostics verdict; exported for surfaces that show them
+// on their own.
+export { computeRunProgress, formatRunProgress, runProgressVerdict, hasEditIntent, isMutationTool, progressDuration } from './runProgress';
+export type { RunProgress, RepeatedTarget } from './runProgress';
+
+// Live, in-flight activity — what the run is doing RIGHT NOW, so a surface can animate
+// the CURRENT step instead of only rendering settled ones.
+export { activityTarget, toolActivity, shortenTarget } from './runActivity';
+export type { BrainRunActivity, BrainRunPhase } from './runActivity';
+
+// Size budget for a copied triage report, so its END survives pasting.
+export { createPayloadBudget } from './transcriptBudget';
+export type { PayloadBudget, PayloadBudgetOptions, PayloadBudgetStats } from './transcriptBudget';
 
 // Durable tool/memory STEP rows — the reader for what the run loop persisted, so a
 // reopened chat's timeline AND its triage diagnostics both see the steps the live

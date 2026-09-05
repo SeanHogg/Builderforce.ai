@@ -117,12 +117,22 @@ describe('vacuumRelation', () => {
 });
 
 describe('runTableVacuum', () => {
-  it('vacuums every registered log table on its own connection', async () => {
+  /** Vacuum operations per sweep = one per (table, endpoint), NOT one per table: four
+   *  relations live on both databases and are vacuumed on each. */
+  const sweepOperations = SWEPT_TABLES.reduce((n, t) => n + t.connections.length, 0);
+
+  it('vacuums every registered log table on EVERY endpoint it lives on', async () => {
     const result = await runTableVacuum(env);
-    expect(result.vacuumed).toEqual(SWEPT_TABLES.map((t) => t.relation));
+    // Once per (table, endpoint): a dual-resident relation is vacuumed on both, so it
+    // appears twice. Asserting the flattened pairs is what would catch a regression to
+    // "first connection wins", which would silently leave one copy unswept.
+    expect(result.vacuumed).toEqual(SWEPT_TABLES.flatMap((t) => t.connections.map(() => t.relation)));
+    expect(result.vacuumed).toHaveLength(sweepOperations);
     expect(result.failed).toEqual([]);
     for (const table of SWEPT_TABLES) {
-      expect(issued).toContainEqual({ connection: table.connection, sql: `VACUUM (ANALYZE) "${table.relation}"` });
+      for (const connection of table.connections) {
+        expect(issued).toContainEqual({ connection, sql: `VACUUM (ANALYZE) "${table.relation}"` });
+      }
     }
   });
 
@@ -131,7 +141,7 @@ describe('runTableVacuum', () => {
     failing.add('manager_actions');
     const result = await runTableVacuum(env);
     expect(result.failed).toEqual([{ relation: 'manager_actions', error: 'lock timeout on manager_actions' }]);
-    expect(result.vacuumed).toHaveLength(SWEPT_TABLES.length - 1);
+    expect(result.vacuumed).toHaveLength(sweepOperations - 1);
     expect(reported).toContain('runTableVacuum');
   });
 });

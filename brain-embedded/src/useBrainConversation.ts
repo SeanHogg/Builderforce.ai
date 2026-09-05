@@ -33,6 +33,7 @@ import { prepareImageDataUrl } from './imagePrep';
 import { scopeToConsolidation } from './consolidation';
 import { withDirectedMetadata, isDirectedToParticipant, type DirectedRecipient } from './directedMessage';
 import { buildBrainTriageReport, type BrainTraceEvent } from './brainTriage';
+import type { BrainRunActivity } from './runActivity';
 import { ratedTurnContext } from './turnRating';
 import type { ChatErrorAction } from './chatError';
 import type { ChatMode } from './chatMode';
@@ -151,6 +152,13 @@ export interface UseBrainConversation {
   errorAction: ChatErrorAction | null;
   /** Live assistant delta buffer (rendered as a trailing bubble while streaming). */
   streamingText: string;
+  /**
+   * What the run is doing RIGHT NOW — the in-flight step (which tool, on what,
+   * since when), published on ENTRY rather than on completion. Hand it straight
+   * to the transcript's `activity` prop to get the animated progress row. Null
+   * while idle. See `runActivity.ts`.
+   */
+  activity: BrainRunActivity | null;
   /** This viewer's thumb per message id (+1 up, -1 down). Hand straight to the
    *  shared transcript's `ratings` prop. */
   ratings: Record<number, 1 | -1>;
@@ -608,6 +616,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
      *  (e.g. a failed rename) has no gateway verdict behind it. */
     errorAction: localError ? null : snapshot.errorAction,
     streamingText: snapshot.streamingText,
+    activity: snapshot.activity,
     ratings,
     pendingAttachments,
     uploading,

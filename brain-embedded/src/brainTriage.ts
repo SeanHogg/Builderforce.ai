@@ -13,6 +13,7 @@ import { announcesUntakenAction } from '@builderforce/agent-stall';
 import { turnInterruption } from './finishReason';
 import type { BrainMessage } from './types';
 import { traceWithPersistedSteps } from './persistedSteps';
+import { computeRunProgress, formatRunProgress, runProgressVerdict, type RunProgress } from './runProgress';
 
 /** One step of the Brain agent loop, recorded as it runs. */
 export interface BrainTraceEvent {
@@ -534,6 +535,13 @@ export interface BrainDiagnostics {
    */
   turnCoveragePartial: boolean;
   /**
+   * Repetition / reach / effect / timing for the run — see `runProgress.ts`. This
+   * is what separates "every turn succeeded and nothing got done" from a genuine
+   * context or model failure, and it is the only signal that fires on the most
+   * common real-world stall: an agent re-reading one file until its budget is gone.
+   */
+  progress: RunProgress;
+  /**
    * Best-effort verdict — the header a triager reads first. `healthy` is distinct
    * from `inconclusive`: the former means there is no failure to explain, the
    * latter that there IS one but the signals don't separate A from B. Collapsing
@@ -545,12 +553,19 @@ export interface BrainDiagnostics {
    * `no-tools-advertised` and `tool-not-advertised` outrank even that, because they are
    * OUR fault rather than the model's, and the remedy ("pick a different model") that
    * `tool-calls-not-emitted` prescribes is actively wrong for them.
+   *
+   * `no-progress` sits above `context-exhaustion` and `model-degradation` for the same
+   * reason: a run that re-read one file until its budget was gone will ALSO show a high
+   * prompt peak and truncated tool results, so the context signals fire — but they are a
+   * CONSEQUENCE of the loop, and acting on them (shrink the transcript, swap the model)
+   * changes nothing. The loop has to be named first or it is never seen.
    */
   likelyCause:
     | 'memory-answered'
     | 'no-tools-advertised'
     | 'tool-not-advertised'
     | 'tool-calls-not-emitted'
+    | 'no-progress'
     | 'context-exhaustion'
     | 'model-degradation'
     | 'inconclusive'
@@ -572,10 +587,23 @@ function byteLen(v: unknown): number {
  * compiling; without it the narrated-tool-call verdict can't be reached, so every
  * surface should pass it.
  */
+export interface BrainDiagnosticsContext {
+  /**
+   * True when the run was STILL EXECUTING at the moment the report was captured.
+   * The trace cannot know this — it only holds settled steps — yet it changes how
+   * every "and then nothing happened" signal should be read: a run captured
+   * mid-flight has not failed to write the file, it has not reached the write yet.
+   * Without it, copying a report while the agent is working reports the agent as
+   * broken.
+   */
+  running?: boolean;
+}
+
 export function computeBrainDiagnostics(
   events: BrainTraceEvent[],
   requestedModel?: string,
   messages: BrainMessage[] = [],
+  ctx: BrainDiagnosticsContext = {},
 ): BrainDiagnostics {
   const llm = events.filter((e) => e.category === 'llm');
   const toolEvents = events.filter((e) => e.category === 'tool');
@@ -681,14 +709,21 @@ export function computeBrainDiagnostics(
   // llm turn ran, so a run that answered from memory once and used the model for the
   // rest still gets triaged on its real turns.
   const memoryOnlyRun = memoryAnswers.length > 0 && llm.length === 0;
+  // Repetition / reach / effect / timing. A run can clear every signal above and
+  // still have accomplished nothing by re-reading the same file until its budget
+  // was gone — see `runProgress.ts`. A run captured mid-flight is exempt from the
+  // "no effect" half: it has not declined to act, it is still acting.
+  const progress = computeRunProgress(events, messages);
+  const noProgress = progress.spinning || (progress.noEffect && !ctx.running);
   const healthy =
     errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal
-    && !announcedUnmadeToolCall && didWork;
+    && !announcedUnmadeToolCall && !noProgress && didWork;
   const likelyCause: BrainDiagnostics['likelyCause'] =
     memoryOnlyRun ? 'memory-answered'
       : noToolsAdvertised ? 'no-tools-advertised'
         : narratedUnadvertisedTools.length > 0 ? 'tool-not-advertised'
           : announcedUnmadeToolCall ? 'tool-calls-not-emitted'
+            : noProgress ? 'no-progress'
             : contextSignal && !degradationSignal ? 'context-exhaustion'
               : degradationSignal && !contextSignal ? 'model-degradation'
                 : healthy ? 'healthy'
@@ -720,6 +755,7 @@ export function computeBrainDiagnostics(
     narratedUnadvertisedTools,
     memoryAnswers,
     turnCoveragePartial,
+    progress,
     likelyCause,
   };
 }
@@ -745,6 +781,8 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
         ? `TOOL NOT ADVERTISED — a turn wrote out ${d.narratedUnadvertisedTools.map((n) => `\`${n}\``).join(', ')} as prose while that tool was NOT among the ones it was offered that turn. No model can emit a call for a function it was never given, so this is OUR per-turn tool selection dropping a tool the prompt asked for — not a model that "won't call tools". Fix the selection (pin the tool, or name it in the system prompt so it is force-included) rather than switching models.`
         : d.likelyCause === 'tool-calls-not-emitted'
           ? 'TOOL CALLS NOT EMITTED — a turn NARRATED a tool call in prose ("I\'ll call the tool…", a bare `builtin_…` name) but the run recorded ZERO tool steps, so nothing executed and the answer never got its data. The tools WERE advertised and the agent loop only runs structured `tool_calls`, so this is a model/provider fault: the model is describing calls instead of emitting them. Try a different model.'
+          : d.likelyCause === 'no-progress'
+            ? ((d.progress && runProgressVerdict(d.progress)) ?? 'NO PROGRESS — the run repeated work without advancing.')
           : d.likelyCause === 'context-exhaustion'
             ? 'Likely CONTEXT EXHAUSTION (case A) — the transcript outgrew the model window.'
             : d.likelyCause === 'model-degradation'
@@ -774,6 +812,10 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
   lines.push(
     `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` · largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ''}${d.truncatedToolResults ? ` · ${d.truncatedToolResults} truncated before the model saw them` : ''}`,
   );
+  // Repetition / reach / effect / timing. Placed directly under the tool-result
+  // sizes because they answer the question those sizes raise: 102 KB of tool output
+  // across 26 calls is either research or a loop, and only these lines say which.
+  lines.push(...(d.progress ? formatRunProgress(d.progress) : []));
   // What the model could actually CALL, per turn — not the registry-wide total. A run
   // whose turns saw 0 tools and a run whose turns saw 64 and ignored them used to render
   // identically, which is how "try a different model" became the standing advice for a

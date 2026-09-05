@@ -10,6 +10,12 @@
 export { BrainTimeline, DEFAULT_TIMELINE_LABELS } from './BrainTimeline';
 export type { BrainTimelineProps, BrainTimelineLabels, MessageRating } from './BrainTimeline';
 
+// The ANIMATED in-flight row — what the run is doing right now. Rendered by the
+// timeline; exported for surfaces (a status bar, a dock header) that want the same
+// indicator without the transcript around it.
+export { LiveActivity, DEFAULT_LIVE_ACTIVITY_LABELS, formatElapsed, SLOW_AFTER_MS } from './LiveActivity';
+export type { LiveActivityProps, LiveActivityLabels } from './LiveActivity';
+
 export { Markdown } from './Markdown';
 export type { MarkdownProps, MarkdownLabels } from './Markdown';
 export { splitThinkSegments } from './thinkBlocks';

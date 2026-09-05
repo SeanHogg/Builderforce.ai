@@ -101,6 +101,174 @@
   }
 }
 
+/* ---- live, in-flight step ----------------------------------------------
+ * The row that renders WHILE a step runs (see LiveActivity.tsx). Everything
+ * here is motion whose only job is to answer "is this thing alive?" — a
+ * question a static label cannot answer, and the reason a 67-second tool call
+ * read as a hang.
+ *
+ * Every colour is a token with a literal fallback so the row is legible in a
+ * VS Code dark theme, a VS Code light theme and the web app alike; nothing here
+ * assumes a ground colour.
+ */
+
+/* The working dot: a conic sweep rotating inside the ring, so the dot itself
+   reads as machinery turning rather than a blinking light. */
+.bf-tl__dot--working {
+  position: relative;
+  border-color: var(--bf-accent, #4f80ff);
+  color: var(--bf-accent, #4f80ff);
+  overflow: hidden;
+}
+.bf-tl__dot--working::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: conic-gradient(from 0deg, transparent 0turn, var(--bf-accent-soft, rgba(79, 128, 255, 0.45)) 0.75turn, transparent 1turn);
+  animation: bf-tl-sweep 1.4s linear infinite;
+}
+/* The glyph rides above the sweep. */
+.bf-tl__dot--working > * ,
+.bf-tl__item--live .bf-tl__dot--working {
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes bf-tl-sweep {
+  to { transform: rotate(1turn); }
+}
+
+.bf-tl__live-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.bf-tl__live-line {
+  font-size: 0.82rem;
+  color: var(--bf-text-muted, #8a8a8a);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A highlight travelling left-to-right across the label. Painted with
+   background-clip so it needs no extra element and cannot shift layout. */
+.bf-tl__live-line--shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--bf-text-muted, #8a8a8a) 0%,
+    var(--bf-text-muted, #8a8a8a) 35%,
+    var(--bf-text, #e6e6e6) 50%,
+    var(--bf-text-muted, #8a8a8a) 65%,
+    var(--bf-text-muted, #8a8a8a) 100%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: bf-tl-shimmer 2.1s linear infinite;
+}
+
+@keyframes bf-tl-shimmer {
+  from { background-position: 150% 0; }
+  to   { background-position: -50% 0; }
+}
+
+/* The elapsed clock. Tabular figures so a ticking number never reflows the row. */
+.bf-tl__live-elapsed {
+  flex: 0 0 auto;
+  font-family: var(--bf-font-mono, ui-monospace, monospace);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--bf-accent, #4f80ff);
+}
+
+.bf-tl__live-step {
+  flex: 0 0 auto;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--bf-text-muted, #8a8a8a);
+  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.25));
+  border-radius: 999px;
+  padding: 0 6px;
+}
+
+/* Indeterminate progress bar. Deliberately indeterminate: we do not know how
+   long a tool will take, and a fake percentage would be a fabricated claim. */
+.bf-tl__live-bar {
+  display: block;
+  position: relative;
+  height: 2px;
+  margin-top: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--bf-border, rgba(128, 128, 128, 0.25));
+}
+.bf-tl__live-bar-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 38%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, var(--bf-accent, #4f80ff), transparent);
+  animation: bf-tl-indeterminate 1.5s ease-in-out infinite;
+}
+
+@keyframes bf-tl-indeterminate {
+  from { left: -40%; }
+  to   { left: 100%; }
+}
+
+/* Shown once a step passes the slow threshold — the reassurance that makes a
+   long-but-healthy step distinguishable from a wedged one. */
+.bf-tl__live-slow {
+  display: block;
+  margin-top: 5px;
+  font-size: 0.72rem;
+  color: var(--bf-text-muted, #8a8a8a);
+  font-style: italic;
+}
+
+/* Waiting on a HUMAN is not progress: no sweep, no shimmer, no bar (the bar is
+   not rendered at all), and a warning tint so the row reads as "your move". */
+.bf-tl__item--live-awaiting .bf-tl__live-line {
+  color: var(--bf-warning, #d29922);
+  font-style: normal;
+}
+
+/*
+ * Reduced motion: the INFORMATION stays, the movement goes. The elapsed counter
+ * keeps ticking (it is content, not animation), the ring holds a static accent
+ * arc, and the bar becomes a steady accent line — so a user who suppresses
+ * animation still gets a positive "something is running" signal rather than
+ * being dropped back to the static label this whole row replaced.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .bf-tl__dot--working::before {
+    animation: none;
+    background: var(--bf-accent-soft, rgba(79, 128, 255, 0.45));
+    inset: auto 0 0 0;
+    height: 3px;
+    border-radius: 0;
+  }
+  .bf-tl__live-line--shimmer {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentColor;
+    color: var(--bf-text, #e6e6e6);
+  }
+  .bf-tl__live-bar-fill {
+    animation: none;
+    left: 0;
+    width: 100%;
+    background: var(--bf-accent, #4f80ff);
+    opacity: 0.5;
+  }
+}
+
 .bf-tl__body {
   flex: 1 1 auto;
   min-width: 0;

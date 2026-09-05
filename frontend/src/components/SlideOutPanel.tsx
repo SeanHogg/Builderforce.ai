@@ -270,9 +270,9 @@ export function SlideOutPanel({
             fit down the left edge; a horizontal bar cannot hold them. That holds
             at `wide`/`full`, but `sheet` (or any width on a phone) narrows this
             row below the point a fixed-width column and a body can coexist —
-            `.slide-panel-body-row` measures itself (not the viewport, same
-            reasoning as `.ui-panel-body`) and flips to a top strip the index
-            scrolls horizontally instead, in globals.css. */}
+            the row measures the DRAWER's `slide-panel` container (not the
+            viewport, same reasoning as `.ui-panel-body`) and flips to a top
+            strip the index scrolls horizontally instead, in globals.css. */}
         <div className="slide-panel-body-row">
           {index != null && (
             <div className="slide-panel-index">

@@ -22,6 +22,7 @@ const facts = (over: Partial<CensusTicketFacts> = {}): CensusTicketFacts => ({
   everRan: false,
   hasLiveRun: false,
   consecutiveFailures: 0,
+  totalRuns: 0,
   lane: { gate: 'auto', isTerminal: false, staffed: false },
   managedProducerResolvable: null,
   managedLaneAuthorityTier: null,

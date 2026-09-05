@@ -154,14 +154,33 @@ export function activityLogVersionKey(tenantId: number | null): string {
 }
 
 /**
+ * WHICH DATABASE HOLDS `activity_log` — the single answer, for every reader and
+ * every writer.
+ *
+ * The relation exists on both Neon endpoints, and the audit trail is whichever one
+ * `NEON_TRANSACTIONAL_DATABASE_URL` names, falling back to the caller's `db` when the
+ * split is not configured (local, tests, a pre-split deployment).
+ *
+ * WHY THIS IS A FUNCTION AND NOT A TERNARY AT EACH SITE. It used to be the latter, and
+ * three writers that build their rows correctly never got one: `EntityService`,
+ * `demoSeedService` and the LRS all inserted into the caller's `db`, i.e. PRIMARY, while
+ * {@link listActivityLog} read from the transactional endpoint. 85k audit rows landed on
+ * a database no activity surface queries — invisible, and growing. A write that reaches
+ * a different database than the read is not a degraded log line, it is a silently
+ * incomplete audit trail, so the choice belongs in ONE place that every site calls.
+ */
+export function activityDatabase(env: Env | undefined, db: Db): Db {
+  return env?.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : db;
+}
+
+/**
  * Emit one activity/audit event. Best-effort: never throws — a mutation must not
  * fail because its audit write did. Bumps the read cache so the timeline reflects
  * the new event on the next read.
  */
 export async function recordActivity(env: Env | undefined, db: Db, input: ActivityInput): Promise<void> {
   try {
-    const activityDb = env?.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : db;
-    await activityDb.insert(activityLog).values(toActivityRow(input));
+    await activityDatabase(env, db).insert(activityLog).values(toActivityRow(input));
     await bumpCacheVersion(env as Env, activityLogVersionKey(input.tenantId));
   } catch (error) {
     // Best-effort — audit failures must not break the mutation, but they must be
@@ -223,8 +242,7 @@ export function toActivityRow(input: ActivityInput): typeof activityLog.$inferIn
 export async function recordActivityBatch(env: Env | undefined, db: Db, inputs: ActivityInput[]): Promise<void> {
   if (inputs.length === 0) return;
   try {
-    const activityDb = env?.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : db;
-    await activityDb.insert(activityLog).values(inputs.map(toActivityRow));
+    await activityDatabase(env, db).insert(activityLog).values(inputs.map(toActivityRow));
     const tenants = new Set(inputs.map((i) => i.tenantId ?? null));
     await Promise.all([...tenants].map((t) => bumpCacheVersion(env as Env, activityLogVersionKey(t))));
   } catch (error) {
@@ -407,6 +425,5 @@ export async function getActivityLog(env: Env, db: Db, tenantId: number, filter:
   const limit = Math.min(100, Math.max(1, filter.limit ?? 50));
   const version = await getCacheVersion(env, activityLogVersionKey(tenantId));
   const key = `activity-log:list:tenant:${tenantId}:v:${version}:${JSON.stringify({ ...filter, limit })}`;
-  const activityDb = env.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : db;
-  return getOrSetCached(env, key, () => queryActivityLog(activityDb, tenantId, filter, limit), { kvTtlSeconds: 120 });
+  return getOrSetCached(env, key, () => queryActivityLog(activityDatabase(env, db), tenantId, filter, limit), { kvTtlSeconds: 120 });
 }

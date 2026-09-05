@@ -44,6 +44,7 @@ import { selectToolsForTurn } from './selectTools';
 import { routerToolSpecs, isRouterTool, handleRouterCall } from './toolRouter';
 import { setLastResolvedModel } from './lastResolvedModel';
 import { isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, isReadOnlyPlatformTool } from './chatWorkLinking';
+import { toolActivity, type BrainRunActivity } from './runActivity';
 import { chatModeDirective, normalizeChatMode, type ChatMode } from './chatMode';
 import { routingQueryForTurn, turnOptimizationDirective } from './turnOptimization';
 import {
@@ -360,6 +361,14 @@ export interface BrainRunSnapshot {
    */
   trace: BrainTraceEvent[];
   /**
+   * What the run is doing RIGHT NOW — the in-flight step, published as it is
+   * ENTERED rather than when it settles. The `trace` records a step only once it
+   * has completed, which is the wrong moment for a progress indicator: a search
+   * that takes a minute emits nothing at all until it is over, so a working agent
+   * and a hung one look identical. Null while idle. See `runActivity.ts`.
+   */
+  activity: BrainRunActivity | null;
+  /**
    * Providers the tenant CONNECTED but the gateway could NOT resolve on any turn of
    * this run (from `x-builderforce-byo-unresolved`) — e.g. a connected Claude
    * subscription whose token expired, so the run silently used the shared pool
@@ -399,6 +408,8 @@ interface RunCell {
    * means a stale aborted one never bleeds into the next run.
    */
   abort: AbortController | null;
+  /** The in-flight step (see BrainRunSnapshot.activity). Null while idle. */
+  activity: BrainRunActivity | null;
   /** Connected-but-unresolved BYO providers accumulated across this run's turns. */
   byoUnresolved: string[];
   /** BYO providers that hit a capacity/usage cap accumulated across this run's turns. */
@@ -455,6 +466,7 @@ const EMPTY_SNAPSHOT: BrainRunSnapshot = {
   appended: [],
   hasTrace: false,
   trace: [],
+  activity: null,
   byoUnresolved: [],
   providerCap: [],
 };
@@ -473,6 +485,7 @@ function makeCell(): RunCell {
     messagesEpoch: 0,
     listeners: new Set(),
     abort: null,
+    activity: null,
     byoUnresolved: [],
     providerCap: [],
     codeChanged: false,
@@ -527,6 +540,7 @@ function emit(c: RunCell): void {
     appended: c.appended,
     hasTrace: c.trace.length > 0,
     trace: c.trace,
+    activity: c.activity,
     byoUnresolved: c.byoUnresolved,
     providerCap: c.providerCap,
   };
@@ -535,6 +549,17 @@ function emit(c: RunCell): void {
   // change too, so a run starting/finishing/pausing in a NON-mounted chat still
   // updates the "which chats are live" view.
   for (const l of storeListeners) l();
+}
+
+/**
+ * Publish the in-flight step. Called on ENTRY to each phase — the whole point is
+ * that the user sees the step while it runs, not after. Emits so every mounted
+ * surface repaints; the value is small and phase changes are rare relative to
+ * token deltas, so this costs nothing measurable.
+ */
+function setActivity(c: RunCell, activity: BrainRunActivity | null): void {
+  c.activity = activity;
+  emit(c);
 }
 
 function pushTrace(c: RunCell, ev: BrainTraceEvent): void {
@@ -965,6 +990,10 @@ export function stopRun(chatId: number): void {
     resolve(false);
   }
   c.streamingText = '';
+  // Nothing is in flight any more. Cleared here as well as in startRun's finally
+  // so the indicator disappears the instant Stop is pressed, rather than when the
+  // aborted loop finally unwinds.
+  c.activity = null;
   // pushTrace emits, so subscribers see both the trace step and the cleared
   // streaming buffer in one go.
   pushTrace(c, { ts: nowIso(), category: 'message', label: 'agent.stopped', result: 'Stopped by user.' });
@@ -1018,6 +1047,9 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
   // Fresh abort handle for this run, so Stop can cancel the LLM stream and unwind
   // the loop (a stale, already-aborted controller never bleeds into a new run).
   c.abort = new AbortController();
+  // Show something the instant the run is accepted. Between here and the first
+  // token the surface would otherwise have nothing at all to render.
+  c.activity = { phase: 'starting', startedAt: Date.now(), step: 0 };
 
   // Seed the rich transcript from prior persisted history the FIRST time we
   // touch this chat this session, then append the triggering user turn — done
@@ -1051,6 +1083,12 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
     // Best-effort and IDE-only (the web Brain has no file tools → codeChanged stays
     // false). Skipped on a user Stop. Runs before the final emit so the auto-recorded
     // step is part of the settled run.
+    // Post-run work is still work: minting and advancing tickets are real calls that
+    // take real time. Announce the phase so the surface doesn't go blank-but-busy.
+    if (!aborted && c.codeChanged && req.projectId != null && req.runTool) {
+      c.activity = { phase: 'finishing', startedAt: Date.now(), step: 0 };
+      emit(c);
+    }
     if (!aborted && c.codeChanged && !c.ticketRecorded && req.projectId != null && req.runTool) {
       await recordCodeChangeTicket(chatId, c, req).catch(() => { /* never fail the run on the backstop */ });
     }
@@ -1065,6 +1103,9 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
     if (!aborted && c.codeChanged && req.projectId != null && req.runTool) {
       await advanceLinkedTickets(chatId, c, req).catch(() => { /* never fail the run on the backstop */ });
     }
+    // The run is over: nothing is in flight, so no indicator may claim otherwise.
+    // Cleared LAST, after the backstops above, so `finishing` stays visible for them.
+    c.activity = null;
     emit(c);
   }
 }
@@ -1476,10 +1517,26 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         result: `${selection.tools.length} of ${selection.available} tools advertised this turn (relevance-selected; ${usedTools.size} pinned from earlier calls)`,
       });
     }
+    // The completion is open and no token has arrived yet — the phase that used to
+    // be indistinguishable from a hang. It flips to `writing` on the first delta.
+    setActivity(c, { phase: 'thinking', startedAt: Date.now(), step: iter });
     try {
       result = await stream(
         { messages: working, tools, tool_choice: tools ? 'auto' : undefined, model: activeModel, modelStrict: !!activeModel && modelStrict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
-        { onTextDelta: (d) => { if (firstTokenAt === undefined) firstTokenAt = nowMs(); c.streamingText += d; emit(c); } },
+        {
+          onTextDelta: (d) => {
+            if (firstTokenAt === undefined) {
+              firstTokenAt = nowMs();
+              // First token: the reply is visibly forming, so the indicator stops
+              // claiming the model is still thinking. Set directly (not via
+              // setActivity) because the delta below emits anyway — one repaint,
+              // not two, on the hottest path in the loop.
+              c.activity = { phase: 'writing', startedAt: Date.now(), step: iter };
+            }
+            c.streamingText += d;
+            emit(c);
+          },
+        },
       );
     } catch (e) {
       // Aborting the fetch rejects the stream — that's a user Stop, exit quietly
@@ -1636,6 +1693,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           const ok = await new Promise<boolean>((resolve) => {
             c.pendingConfirm = { name: tc.name, args };
             c.confirmResolver = resolve;
+            // Waiting on a HUMAN, not on us. The indicator must stop animating as
+            // though work is happening — nothing advances until the user answers.
+            c.activity = { ...toolActivity(tc.name, args, iter, Date.now()), phase: 'awaiting' };
             emit(c);
           });
           if (!ok) {
@@ -1662,6 +1722,10 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           readDedupe.clear();
         }
         const toolStart = nowMs();
+        // Name the tool AND what it is working on, before it runs. This is the
+        // step that most often takes tens of seconds, and the one the trace could
+        // never show until it was already over.
+        setActivity(c, toolActivity(tc.name, args, iter, Date.now()));
         let out: unknown;
         try {
           out = await runTool(tc.name, args);

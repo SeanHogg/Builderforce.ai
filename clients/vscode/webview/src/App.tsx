@@ -133,6 +133,21 @@ function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels> {
   const t = makeT(labels);
   return {
     thinking: t('tl.thinking', 'Thinking…'),
+    // The ANIMATED in-flight row: which tool is running, on what, for how long.
+    // Localized here like every other visible string — the phase lines are the
+    // only thing on screen during a long tool call.
+    live: {
+      starting: t('tl.liveStarting', 'Starting…'),
+      thinking: t('tl.thinking', 'Thinking…'),
+      writing: t('tl.liveWriting', 'Writing the reply…'),
+      tool: t('tl.liveTool', 'Running {tool}'),
+      awaiting: t('tl.liveAwaiting', 'Waiting for you to approve {tool}'),
+      finishing: t('tl.liveFinishing', 'Wrapping up…'),
+      on: t('tl.liveOn', ' on {target}'),
+      step: t('tl.liveStep', 'step {step}'),
+      slow: t('tl.liveSlow', 'Still working — {elapsed} elapsed'),
+      ariaLabel: t('tl.liveAria', 'Current activity'),
+    },
     thoughtFor: t('tl.thoughtFor', 'Thought for {duration}'),
     you: t('tl.you', 'You'),
     assistant: t('tl.assistant', 'BuilderForce'),
@@ -1483,6 +1498,14 @@ function Chat({ init }: { init: InitData }) {
           chatTitle: activeChat?.title,
           chatId,
           diagnostics,
+          // Whether the run was STILL EXECUTING when the button was pressed. The trace
+          // cannot know it, and it changes how the report must be read: a chat copied
+          // mid-run has not failed to finish the work, it has not finished it YET.
+          running: conv.sending,
+          // The live in-flight step, so a report captured mid-run names WHAT the agent
+          // was doing at that instant — the single most useful fact when the complaint
+          // is "it has been sitting there for a minute".
+          activity: conv.activity,
         }),
       });
       setCopyState('copied');
@@ -1676,6 +1699,7 @@ function Chat({ init }: { init: InitData }) {
           trace={displayTrace}
           streamingText={conv.sending ? conv.streamingText : ''}
           isRunning={conv.sending}
+          activity={conv.activity}
           loading={conv.loadingMessages}
           assistantName="BuilderForce"
           labels={tlLabels}

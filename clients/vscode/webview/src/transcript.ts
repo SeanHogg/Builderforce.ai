@@ -17,8 +17,15 @@ import {
   formatBrainProvenance,
   formatChatDiagnostics,
   traceWithPersistedSteps,
+  createPayloadBudget,
 } from '@seanhogg/builderforce-brain-embedded';
-import type { BrainMessage, BrainTraceEvent, ChatDiagnosticsData } from '@seanhogg/builderforce-brain-embedded';
+import type {
+  BrainMessage,
+  BrainRunActivity,
+  BrainTraceEvent,
+  ChatDiagnosticsData,
+  PayloadBudget,
+} from '@seanhogg/builderforce-brain-embedded';
 
 export interface TranscriptInput {
   messages: BrainMessage[];
@@ -36,6 +43,19 @@ export interface TranscriptInput {
    *  (plan + billing + month-to-date quota + model entitlement, project, tenant, Evermind
    *  head, learn-gate outcome, agents, linked tickets), not just the turns. */
   diagnostics?: ChatDiagnosticsData;
+  /**
+   * True when the run was STILL EXECUTING at capture time. The trace cannot know
+   * this, and it changes how every "and then nothing happened" signal must be read:
+   * a chat copied mid-run has not declined to finish the work, it has not finished
+   * it YET. Stated in the header AND fed to the diagnostics verdict.
+   */
+  running?: boolean;
+  /**
+   * The in-flight step at capture time — which tool, on what, since when. The single
+   * most useful fact when the complaint is "it has been sitting there for a minute",
+   * and one the settled trace can never carry.
+   */
+  activity?: BrainRunActivity | null;
 }
 
 /** True when there is something worth copying (any turn, trace step, or error). */
@@ -44,25 +64,44 @@ export function hasTranscriptContent(input: { messages: unknown[]; trace: unknow
 }
 
 /**
- * Per-payload cap for a tool Input/Output block. Without it a single verbose tool
- * result (e.g. `builtin_llm_health` dumps ~40 models of JSON, ~15 KB) bloats the copied
- * transcript so far that the downstream paste target hard-truncates the WHOLE report at
- * a fixed size — cutting off the END, which is exactly where the failure being triaged
- * lives. Capping each payload instead keeps every turn, tool call, and error present
- * end-to-end, trimming only the oversized dumps (with an explicit marker). Generous
- * (4 KB) so real content survives; the full result is still on the live timeline.
+ * Ceiling for any ONE tool Input/Output block while the budget is healthy. A single
+ * verbose result (`builtin_llm_health` dumps ~40 models of JSON, ~15 KB) would
+ * otherwise crowd out everything after it. Generous, so real content survives; the
+ * full result is on the live timeline either way.
  */
 const MAX_PAYLOAD_CHARS = 4_000;
 
-function capPayload(payload: string): string {
-  return payload.length <= MAX_PAYLOAD_CHARS
-    ? payload
-    : `${payload.slice(0, MAX_PAYLOAD_CHARS)}\n…(+${payload.length - MAX_PAYLOAD_CHARS} chars truncated — full result is on the live timeline)`;
+/**
+ * Ceiling for ALL payloads TOGETHER. Per-payload capping alone was not enough: a
+ * 26-call run stayed inside the 4 KB cap on every single block and still assembled a
+ * report the paste target cut off at 50,000 characters — from the END, which is exactly
+ * where the failure being triaged lives. The shared budget decays the per-payload cap
+ * as the pool drains, and charges nothing for a byte-identical repeat, so the tail of
+ * the report survives. See `transcriptBudget.ts`.
+ */
+const MAX_TOTAL_PAYLOAD_CHARS = 34_000;
+
+function fenced(label: string, payload: string, budget: PayloadBudget, lines: string[]): void {
+  if (!payload) return;
+  lines.push(`${label}:`, '```', budget.cap(payload, label), '```');
 }
 
-function fenced(label: string, payload: string, lines: string[]): void {
-  if (!payload) return;
-  lines.push(`${label}:`, '```', capPayload(payload), '```');
+/**
+ * One clause describing the in-flight step for the mid-run header — "running
+ * `search_code` on Builderforce.ai/frontend/src (67s so far, loop step 4)". The
+ * elapsed figure is what makes a mid-run capture diagnosable at all: it separates
+ * a step that just started from one that has been going for two minutes.
+ */
+function describeActivity(step: BrainRunActivity): string {
+  const elapsed = formatDuration(Math.max(0, Date.now() - step.startedAt));
+  const what =
+    step.phase === 'tool' ? `running \`${step.label}\`${step.detail ? ` on ${step.detail}` : ''}`
+      : step.phase === 'awaiting' ? `PAUSED waiting for the user to approve \`${step.label}\` — nothing advances until they answer`
+        : step.phase === 'thinking' ? 'waiting on the model (no token received yet)'
+          : step.phase === 'writing' ? 'streaming the reply'
+            : step.phase === 'finishing' ? 'doing post-run work (ticket capture / status reconciliation)'
+              : 'starting up';
+  return `${what} (${elapsed} so far${step.step > 0 ? `, loop step ${step.step}` : ''})`;
 }
 
 /** Serialize the live conversation into a Markdown transcript. */
@@ -74,6 +113,9 @@ export function buildTranscript(input: TranscriptInput): string {
   // bare trace and so reported `Tool calls: 0` under a transcript listing twenty of
   // them. Both now read the same merged event list.
   const events = traceWithPersistedSteps(input.messages, input.trace);
+  // ONE budget for the whole report, spent as the turns are walked, so an early
+  // verbose tool dump cannot starve the tail. See `transcriptBudget.ts`.
+  const budget = createPayloadBudget({ total: MAX_TOTAL_PAYLOAD_CHARS, perPayload: MAX_PAYLOAD_CHARS });
   const lines: string[] = ['# BuilderForce chat transcript'];
 
   // Chat + project provenance — a pasted transcript should say WHICH conversation
@@ -107,7 +149,27 @@ export function buildTranscript(input: TranscriptInput): string {
   // MESSAGES go in too: the "narrated a tool call, made none" verdict is only
   // reachable by reading the turns against the trace.
   if (events.length) {
-    lines.push(...formatBrainDiagnostics(computeBrainDiagnostics(events, input.model, input.messages)), '');
+    lines.push(
+      ...formatBrainDiagnostics(
+        computeBrainDiagnostics(events, input.model, input.messages, { running: input.running }),
+      ),
+      '',
+    );
+  }
+
+  // CAPTURE STATE. A report copied while the agent is still working describes an
+  // unfinished run, and every downward-looking signal in it ("no file was written",
+  // "no ticket was linked") is premature rather than damning. Saying so once, up
+  // front, is the difference between a useful mid-run capture and a misleading one.
+  if (input.running) {
+    const step = input.activity;
+    const doing = step
+      ? `At capture it was ${describeActivity(step)}.`
+      : 'No in-flight step was recorded at capture.';
+    lines.push(
+      `⚠ CAPTURED MID-RUN — the agent was STILL EXECUTING when this report was taken. ${doing} Anything below that reads as "it never did X" may simply be work it had not reached yet; re-copy once the run settles to get a verdict on a finished run.`,
+      '',
+    );
   }
 
   // Structural honesty flags — an assistant turn that CLAIMED a file write or a
@@ -135,9 +197,14 @@ export function buildTranscript(input: TranscriptInput): string {
         lines.push(`_thought for ${formatDuration(node.durationMs)}_`);
         break;
       case 'tool':
-        lines.push(`### Tool: ${node.label}${node.isError ? ' — ERROR' : ''}`);
-        fenced('Input', formatPayload(node.args), lines);
-        fenced('Output', formatPayload(node.result), lines);
+        // The DURATION rides on the heading. A reader scanning the transcript for
+        // "where did the time go" should not have to cross-reference the diagnostics
+        // block to find the one step that took a minute.
+        lines.push(
+          `### Tool: ${node.label}${node.durationMs != null ? ` (${formatDuration(node.durationMs)})` : ''}${node.isError ? ' — ERROR' : ''}`,
+        );
+        fenced('Input', formatPayload(node.args), budget, lines);
+        fenced('Output', formatPayload(node.result), budget, lines);
         break;
       case 'error':
         lines.push(`### Error: ${node.label}`, node.message);
@@ -147,6 +214,11 @@ export function buildTranscript(input: TranscriptInput): string {
   }
 
   if (input.error) lines.push('### Conversation error', input.error, '');
+
+  // What the budget cost, stated where a reader meets it — so a back reference or an
+  // elision is never mistaken for missing data.
+  const budgetNote = budget.note();
+  if (budgetNote) lines.push(budgetNote, '');
 
   return `${lines.join('\n').trim()}\n`;
 }

@@ -2349,10 +2349,11 @@ html[data-theme='light'] .nebula {
   container-name: panel;
 }
 
-/* The row that holds the panel's index column beside its body (`SlideOutPanel`).
-   Named separately from `.ui-panel-body` above it (nested named containers don't
-   collide) because this one has to measure the DRAWER, before the index has
-   claimed its share — the body's own container only ever sees what's left over.
+/* The row that holds the panel's index column beside its body (`SlideOutPanel`),
+   laid out against the `slide-panel` container declared on the drawer below.
+   Named separately from `.ui-panel-body` (nested named containers don't collide)
+   because this one has to measure the DRAWER, before the index has claimed its
+   share — the body's own container only ever sees what's left over.
    ---------------------------------------------------------------------------
    Below `slide-panel` this narrow, a fixed-width column and a body can no longer
    share the row — that's `sheet` on an ordinary monitor as much as it's a phone,
@@ -2365,13 +2366,25 @@ html[data-theme='light'] .nebula {
    chosen by the index's own `orientation` prop, since a caller picks
    `orientation="vertical"` for the column it expects to have room for, not for
    the width the reader happens to have chosen. */
+/* The DRAWER is the `slide-panel` container, not the row. A container query
+   only ever styles a container's DESCENDANTS, so while `.slide-panel-body-row`
+   named itself the row's own `flex-direction: column` flip below could never
+   match: the row stayed horizontal on a phone while the index — a descendant,
+   so its rules DID apply — took `width: 100%` next to it and, being
+   `flex-shrink: 0`, left the body 0px wide. That is the phone dashboard with a
+   header, a tab strip and no content at all. Measuring the drawer is what the
+   rules always meant anyway: "how wide is the panel, before the index has
+   claimed its share". */
+.slide-panel-drawer {
+  container-type: inline-size;
+  container-name: slide-panel;
+}
+
 .slide-panel-body-row {
   flex: 1;
   display: flex;
   min-height: 0;
   align-items: stretch;
-  container-type: inline-size;
-  container-name: slide-panel;
 }
 
 .slide-panel-index {

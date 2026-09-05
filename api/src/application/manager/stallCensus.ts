@@ -57,7 +57,7 @@ import {
   decideManagedLaneAuthority, loadBoardLaneAuthorities, pickManagedProducer,
   type LaneAuthorityInputs, type ManagedProducerSlot,
 } from '../kanban/managedLaneRoles';
-import { MAX_CONSECUTIVE_AUTORUN_FAILURES, type AutoRunReason } from '../swimlane/evaluateAutoRun';
+import { MAX_AUTONOMOUS_RUNS_PER_TASK, MAX_CONSECUTIVE_AUTORUN_FAILURES, type AutoRunReason } from '../swimlane/evaluateAutoRun';
 import { diagnoseStall, STALL_AFTER_MS, type StallCause } from './stallTriage';
 import { getEffectiveManagerPolicy } from './managerPolicyStore';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
@@ -80,6 +80,8 @@ export interface CensusTicketFacts {
   hasLiveRun: boolean;
   /** Most-recent consecutive FAILED runs (the breaker's input). */
   consecutiveFailures: number;
+  /** Every run the ticket has ever had (the lifetime-ceiling input). */
+  totalRuns: number;
   /** This ticket's lane, when its status matches one on the board. */
   lane: { gate: string; isTerminal: boolean; staffed: boolean } | null;
   /**
@@ -196,6 +198,11 @@ export function classifyBulkAutoRunReason(f: CensusTicketFacts): AutoRunReason {
   const ownerCanRun = !!f.assignedAgentRef && !isReviewLane(f.status);
   if (!f.lane.staffed && !ownerCanRun) return 'no_agent';
   if (f.hasLiveRun) return 'already_running';
+  // Lifetime ceiling before the streak breaker, the order `classifyResolvedAutoRun` uses.
+  // Without it the census would rank a ticket `will_run` while the dispatcher refuses it —
+  // and this is precisely the cohort that needs a human to look: a ticket re-dispatched to
+  // the ceiling on runs that all SUCCEEDED never appears in a failure-keyed census at all.
+  if (f.totalRuns >= MAX_AUTONOMOUS_RUNS_PER_TASK) return 'run_cap_exhausted';
   if (f.consecutiveFailures >= MAX_CONSECUTIVE_AUTORUN_FAILURES) return 'run_cap_exhausted';
   return 'will_run';
 }
@@ -347,7 +354,10 @@ export async function loadCensusFacts(
         WHERE task_id IN (${sql.join(taskIds.map((id) => sql`${id}`), sql`, `)})
       )
       SELECT task_id,
-             COALESCE(MIN(rn) FILTER (WHERE status <> ${ExecutionStatus.FAILED}) - 1, COUNT(*)) AS streak
+             COALESCE(MIN(rn) FILTER (WHERE status <> ${ExecutionStatus.FAILED}) - 1, COUNT(*)) AS streak,
+             -- Lifetime run count for the MAX_AUTONOMOUS_RUNS_PER_TASK ceiling. Taken off
+             -- the aggregate this query already computes rather than a second scan.
+             COUNT(*) AS total_runs
       FROM ranked GROUP BY task_id
     `).catch(() => ({ rows: [] as Array<Record<string, unknown>> })),
     // Not merely unused when the project does not require sign-off — NOT ASKED FOR. This
@@ -393,9 +403,12 @@ export async function loadCensusFacts(
   }
 
   const streakByTask = new Map<number, number>();
+  const runCountByTask = new Map<number, number>();
   for (const r of (streakRows as { rows?: Array<Record<string, unknown>> }).rows ?? []) {
     const id = Number(r.task_id);
-    if (Number.isFinite(id)) streakByTask.set(id, Number(r.streak) || 0);
+    if (!Number.isFinite(id)) continue;
+    streakByTask.set(id, Number(r.streak) || 0);
+    runCountByTask.set(id, Number(r.total_runs) || 0);
   }
 
   const managed = !!board?.lifecycleManaged;
@@ -443,6 +456,7 @@ export async function loadCensusFacts(
       everRan: shared.everRan.has(t.id),
       hasLiveRun: shared.liveTaskIds.has(t.id),
       consecutiveFailures: streakByTask.get(t.id) ?? 0,
+      totalRuns: runCountByTask.get(t.id) ?? 0,
       lane: lane ? { gate: lane.gate, isTerminal: lane.isTerminal, staffed: lane.staffed } : null,
       managedProducerResolvable,
       managedLaneAuthorityTier,

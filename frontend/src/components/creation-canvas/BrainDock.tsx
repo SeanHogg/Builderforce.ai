@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { usePointerResize } from '@/lib/usePointerResize';
 import { Avatar, BrainTimeline } from '@seanhogg/builderforce-brain-ui';
 import { useChatActivityLabels } from '@/i18n/useChatActivityLabels';
+import { useLiveActivityLabels } from '@/i18n/useLiveActivityLabels';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
@@ -139,11 +140,23 @@ export function BrainSurfaceBody({
   const activity = useBrainActivity(running, trace, runStartedAt);
   const activityLabels = useChatActivityLabels();
   const liveLine = brainActivityLine(activity.live);
+  // The dock derives its own phase line off the canvas run trace, so it OVERRIDES the
+  // two phases the shared indicator would otherwise word generically — and keeps
+  // everything else (the elapsed clock, the tool subject, the slow-step reassurance)
+  // from the one shared bundle. Without the override the dock would have lost the
+  // line it already showed; without the bundle it would have kept the line and lost
+  // the animation.
+  const liveOverrides = useMemo(
+    () => (liveLine ? { starting: liveLine, thinking: liveLine } : undefined),
+    [liveLine],
+  );
+  const liveLabels = useLiveActivityLabels(liveOverrides);
   const timelineLabels = useMemo(() => ({
     you: t('you'),
     assistant: t('brain'),
     empty: t('brainEmpty'),
     thinking: liveLine ?? t('brainPhase.thinking'),
+    live: liveLabels,
     thoughtFor: t('thoughtFor', { duration: '{duration}' }),
     // The per-message copy / send-again actions are part of the shared transcript, so
     // the dock has to name them too — otherwise they fall back to the package's
@@ -156,7 +169,7 @@ export function BrainSurfaceBody({
     // Same activity templates as the Brain panel — one hook, so a milestone can never be
     // worded one way on the board and another in the panel.
     activity: activityLabels,
-  }), [liveLine, t, activityLabels]);
+  }), [liveLine, t, activityLabels, liveLabels]);
   const typingCollaborators = collaborators.filter((member) => member.typing);
   const showPresence = joinedCollaborator != null || typingCollaborators.length > 0;
 

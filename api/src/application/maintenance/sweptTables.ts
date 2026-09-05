@@ -26,16 +26,23 @@
  * ADDING A LOG TABLE: append an entry. Retention, vacuum and the per-table
  * autovacuum tuning guard (`npm run check:swept-tables`) all pick it up.
  */
-import { lt } from 'drizzle-orm';
+import { and, eq, lt } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import {
+  activitySignals,
   apiErrorLog,
+  brainChatTrace,
   errorEvents,
+  executionLifecycleOutbox,
+  integrationSyncLogs,
   llmFailoverLog,
   llmHealthProbes,
   llmTraces,
   managerActions,
+  prReconciliationErrors,
+  prReconciliationItems,
+  prReconciliationRuns,
   qaJourneyEvents,
   toolAuditEvents,
 } from '../../infrastructure/database/schema';
@@ -47,7 +54,17 @@ export interface SweptTable {
   /** Physical relation name. This is the identifier `VACUUM` and `pg_class` use, so
    *  it must match the table's `pgTable(...)` name, not the Drizzle export. */
   relation: string;
-  connection: SweptConnection;
+  /** Every endpoint the relation physically exists on.
+   *
+   *  USUALLY ONE. Four of these tables are the exception: `llm_*` and `api_error_log`
+   *  were born on the primary database and their writers moved to the transactional
+   *  endpoint when it was split out (2026-07-13). The relations were never dropped from
+   *  primary, so a copy went on sitting there with no writer AND no sweep — 35 MB of
+   *  rows frozen at the date of the split, invisible to a registry that could name only
+   *  one endpoint per table. Declaring the endpoints as a LIST is what closes that hole:
+   *  purge and vacuum both iterate it, so a dual-resident relation cannot be swept on
+   *  one endpoint and forgotten on the other. */
+  connections: readonly SweptConnection[];
   /** Days of history kept before older rows are purged. */
   retentionDays: number;
   /** Why this window and not another — the reasoning that used to live inline. */
@@ -59,7 +76,7 @@ export interface SweptTable {
 export const SWEPT_TABLES: readonly SweptTable[] = [
   {
     relation: 'llm_traces',
-    connection: 'transactional',
+    connections: ['transactional', 'primary'],
     retentionDays: 30,
     // The one relation here that is UPDATEd after insert (a stream finalises its row),
     // which is why migration 1104 gives it a fillfactor and the others none.
@@ -68,21 +85,21 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   },
   {
     relation: 'llm_failover_log',
-    connection: 'transactional',
+    connections: ['transactional', 'primary'],
     retentionDays: 30,
     rationale: 'Routing failover events, read only while diagnosing a live routing incident.',
     purge: (db, cutoff) => db.delete(llmFailoverLog).where(acrossTenants(llmFailoverLog, 'scheduled_sweep', lt(llmFailoverLog.createdAt, cutoff))),
   },
   {
     relation: 'llm_health_probes',
-    connection: 'transactional',
+    connections: ['transactional', 'primary'],
     retentionDays: 180,
     rationale: 'Vendor health history — the long window is the point; it is what makes a vendor trend readable.',
     purge: (db, cutoff) => db.delete(llmHealthProbes).where(lt(llmHealthProbes.createdAt, cutoff)),
   },
   {
     relation: 'api_error_log',
-    connection: 'transactional',
+    connections: ['transactional', 'primary'],
     retentionDays: 30,
     rationale:
       "The platform's OWN caught/unhandled exception stream (persistCaughtError). Its write rate rose "
@@ -92,14 +109,14 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   },
   {
     relation: 'qa_journey_events',
-    connection: 'primary',
+    connections: ['primary'],
     retentionDays: 90,
     rationale: 'QA journey telemetry, swept on the same window as the other event streams.',
     purge: (db, cutoff) => db.delete(qaJourneyEvents).where(acrossTenants(qaJourneyEvents, 'scheduled_sweep', lt(qaJourneyEvents.ts, cutoff))),
   },
   {
     relation: 'error_events',
-    connection: 'primary',
+    connections: ['primary'],
     retentionDays: 90,
     rationale:
       'Raw Quality error events — group aggregates (error_groups) are kept forever, only the raw stream is '
@@ -109,7 +126,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   },
   {
     relation: 'manager_actions',
-    connection: 'primary',
+    connections: ['primary'],
     retentionDays: 30,
     rationale:
       'The manager-decision FEED (cron + "Run manager now" telemetry) — the platform\'s highest-write '
@@ -119,14 +136,87 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   },
   {
     relation: 'tool_audit_events',
-    connection: 'primary',
+    connections: ['primary'],
     retentionDays: 90,
     rationale: 'Agent tool-audit timeline, on the same window as the other agent/telemetry streams.',
     purge: (db, cutoff) => db.delete(toolAuditEvents).where(acrossTenants(toolAuditEvents, 'scheduled_sweep', lt(toolAuditEvents.createdAt, cutoff))),
+  },
+  {
+    relation: 'pr_reconciliation_items',
+    connections: ['primary'],
+    retentionDays: 14,
+    rationale:
+      'The PR reconciler stores a FULL snapshot of every open PR on every run, and the sweep '
+      + 're-runs a repo every ~4 minutes — 868 runs/day, ~725 rows each. That wrote 1.42M rows '
+      + 'covering only 758 distinct PRs and made this the largest object in the database at '
+      + '1.84 GB (66% of it) with no retention policy at all. The read surface is far narrower '
+      + 'than the window: items are only ever fetched for ONE run id, and the run list itself '
+      + 'returns the 25 most recent (100 max) — a few hours of history. 14d is therefore ~50x '
+      + 'what any consumer can reach, and still bounds the table at roughly 180k rows.',
+    purge: (db, cutoff) => db.delete(prReconciliationItems).where(acrossTenants(prReconciliationItems, 'scheduled_sweep', lt(prReconciliationItems.createdAt, cutoff))),
+  },
+  {
+    relation: 'pr_reconciliation_errors',
+    connections: ['primary'],
+    retentionDays: 14,
+    rationale: 'Per-run reconciliation failures, read from the same run-scoped diagnostics view as the items above — same window.',
+    purge: (db, cutoff) => db.delete(prReconciliationErrors).where(acrossTenants(prReconciliationErrors, 'scheduled_sweep', lt(prReconciliationErrors.createdAt, cutoff))),
+  },
+  {
+    relation: 'pr_reconciliation_runs',
+    connections: ['primary'],
+    retentionDays: 14,
+    // Purged LAST of the three: items and errors both cascade from this row, so deleting
+    // the parent first would make the two sweeps above no-ops and hide a growing child
+    // table behind a run count that looks healthy.
+    rationale: 'The run header for the two relations above. Same window, so a run and its findings expire together.',
+    purge: (db, cutoff) => db.delete(prReconciliationRuns).where(acrossTenants(prReconciliationRuns, 'scheduled_sweep', lt(prReconciliationRuns.startedAt, cutoff))),
+  },
+  {
+    relation: 'execution_lifecycle_outbox',
+    connections: ['primary'],
+    retentionDays: 30,
+    // The ONE entry here whose purge is not purely age-based, and it must stay that way:
+    // this is a delivery outbox, not a pure log. A `pending` or `processing` row is work
+    // that has not happened yet, so age alone must never delete it — only a row the
+    // dispatcher already marked `done` is spent and safe to drop.
+    rationale:
+      'Spent execution-lifecycle events. 72k of its 80k rows are `done` and hold 49 MB that '
+      + 'nothing reads once delivered; the undelivered remainder is deliberately never swept.',
+    purge: (db, cutoff) => db.delete(executionLifecycleOutbox).where(acrossTenants(
+      executionLifecycleOutbox, 'scheduled_sweep',
+      and(eq(executionLifecycleOutbox.status, 'done'), lt(executionLifecycleOutbox.createdAt, cutoff)),
+    )),
+  },
+  {
+    relation: 'activity_signals',
+    connections: ['primary'],
+    retentionDays: 90,
+    rationale:
+      'Raw presence/engagement telemetry — 90% of it `heartbeat`. The contributor rollups that '
+      + 'consume it are materialised elsewhere, so only the raw stream is swept, on the same 90d '
+      + 'window as the other event feeds.',
+    purge: (db, cutoff) => db.delete(activitySignals).where(acrossTenants(activitySignals, 'scheduled_sweep', lt(activitySignals.createdAt, cutoff))),
+  },
+  {
+    relation: 'brain_chat_trace',
+    connections: ['primary'],
+    retentionDays: 90,
+    // No tenant predicate to declare: this table is keyed by chat, not tenant, so there is
+    // no tenantId column for acrossTenants() to be scoped against in the first place.
+    rationale: 'Per-turn Brain reasoning trace (llm/tool/recall/learn steps). Backs the expandable trace on a chat turn, which nobody opens on a chat older than a quarter.',
+    purge: (db, cutoff) => db.delete(brainChatTrace).where(lt(brainChatTrace.createdAt, cutoff)),
+  },
+  {
+    relation: 'integration_sync_logs',
+    connections: ['primary'],
+    retentionDays: 90,
+    rationale: 'Per-sync connector run log, read only while diagnosing a failing integration. Aged by `started_at` — the row is written when the sync begins.',
+    purge: (db, cutoff) => db.delete(integrationSyncLogs).where(acrossTenants(integrationSyncLogs, 'scheduled_sweep', lt(integrationSyncLogs.startedAt, cutoff))),
   },
 ];
 
 /** The relation names on one connection — what the maintenance sweep vacuums. */
 export function sweptRelations(connection: SweptConnection): string[] {
-  return SWEPT_TABLES.filter((t) => t.connection === connection).map((t) => t.relation);
+  return SWEPT_TABLES.filter((t) => t.connections.includes(connection)).map((t) => t.relation);
 }
