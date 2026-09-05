@@ -617,7 +617,7 @@ export interface BrainChatTraceRow {
   isError: boolean;
   durationMs: number | null;
   ttftMs: number | null;
-  /** When the event HAPPENED. Null on rows written before migration 1127 — fall back
+  /** When the event HAPPENED. Null on rows written before migration 1128 — fall back
    *  to `createdAt` there. Prefer this for ordering: `createdAt` is the batch write. */
   occurredAt: string | null;
   createdAt: string;

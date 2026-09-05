@@ -207,7 +207,7 @@ interface PersistedTraceRow {
   isError: boolean;
   durationMs: number | null;
   ttftMs: number | null;
-  /** When the event HAPPENED. Null on rows written before migration 1127 — fall back
+  /** When the event HAPPENED. Null on rows written before migration 1128 — fall back
    *  to `createdAt` there. Prefer this for ordering: `createdAt` is the batch write. */
   occurredAt: string | null;
   createdAt: string;
@@ -225,7 +225,7 @@ function persistedToTraceEvent(row: PersistedTraceRow): BrainTraceEvent {
     // `occurredAt` is when it HAPPENED; `createdAt` is when the batch was written — a
     // run persists its whole trace in ONE insert, so `createdAt` is identical across
     // every event of that run and cannot order them. Fallback is for rows that predate
-    // migration 1127, whose real instants were never recorded.
+    // migration 1128, whose real instants were never recorded.
     ts: row.occurredAt ?? row.createdAt,
     category: row.kind as BrainTraceEvent['category'],
     label: row.label ?? '',

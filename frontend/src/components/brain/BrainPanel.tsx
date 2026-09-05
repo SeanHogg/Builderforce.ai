@@ -146,7 +146,7 @@ function traceEventToInput(ev: BrainTraceEvent) {
 function traceRowToEvent(r: BrainChatTraceRow): BrainTraceEvent {
   return {
     // `occurredAt` is when it HAPPENED; `createdAt` is when the batch was written, and
-    // is the fallback only for rows that predate migration 1127.
+    // is the fallback only for rows that predate migration 1128.
     ts: r.occurredAt ?? r.createdAt ?? new Date().toISOString(),
     category: r.kind as BrainTraceEvent['category'],
     label: r.label ?? '',

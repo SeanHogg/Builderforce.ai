@@ -149,7 +149,7 @@ stamps — which is exactly why one new message looked like a fix.
 
 Three changes, because the loss, the render and the recovery are different problems:
 
-- **The loss.** `occurred_at` (migration 1127, nullable, no backfill) records when the
+- **The loss.** `occurred_at` (migration 1128, nullable, no backfill) records when the
   event HAPPENED, distinct from when the batch was written. The clients send it, the
   service stores it, both readers prefer it and fall back to `created_at` only for rows
   that predate the column — whose real instants were never recorded and cannot be guessed.
@@ -221,7 +221,26 @@ and both surfaces' re-exports of `KIMI_OAUTH_CLIENT_ID`, which by then existed o
 their own tests could import them. Header casing unified to lowercase, which is what the
 Fetch standard normalizes to anyway — spelling them two ways is what invited the drift.
 
-16 tests on the new package pin the shapes both surfaces now depend on, so a change here is
+The extraction also had to answer for itself at the `check:silent-catches` guard, which
+the API deploy runs and which I had not run locally — it is `npm run check`, separate from
+the typecheck and test scripts. Two sites failed, and both were worth fixing rather than
+baselining:
+
+- **`kv.delete(key).catch(() => {})`** in `subscriptionOAuthRoutes.ts`. Twelve lines below
+  it, the same call already reported through `reportCaughtError` — the device branch was a
+  copy that dropped the reporting. Both are now one `dropPendingRecord()`: the record is
+  single-use, so a failure to delete it leaves a `state` that could be replayed, and that
+  has to reach somewhere even though it cannot be fatal.
+- **An empty `catch` around `response.json()`**, present in BOTH surfaces. Reading the body
+  as JSON and discarding the parse failure is precisely wrong for this provider: Kimi's
+  edge answers a refused request with an HTML page, and that page is the single most
+  diagnostic thing about the response — it says the refusal happened in FRONT of the API,
+  before any credential was read. Swallowed, it reported "unknown error" and sent the
+  reader to inspect a credential that was never the problem. Both surfaces now read the
+  body as text through one `parseKimiResponseBody()`, which keeps a non-JSON body (bounded
+  to 200 characters) and surfaces it as the outcome detail.
+
+22 tests on the new package pin the shapes both surfaces now depend on, so a change here is
 visibly a change to BOTH. 9,023 API tests and 241 extension tests pass; both typechecks
 clean.
 

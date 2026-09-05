@@ -153,7 +153,7 @@ export function traceWithPersistedSteps(messages: BrainMessage[], trace: BrainTr
  *
  * Dedup is by {@link stepSig}, the same identity the timeline already uses: category +
  * label + the instant the event happened. That works because the event's own timestamp
- * is now stored (`occurred_at`, migration 1127) and round-trips unchanged. Rows written
+ * is now stored (`occurred_at`, migration 1128) and round-trips unchanged. Rows written
  * before it have no recorded instant and fall back to their batch write time, so a
  * legacy row and its live twin do not match — they render twice in that one narrow
  * case (same session, chat revisited) rather than silently erasing the conversation's

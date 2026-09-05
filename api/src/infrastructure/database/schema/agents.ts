@@ -2052,7 +2052,7 @@ export const brainChatTrace = pgTable('brain_chat_trace', {
    * When the event HAPPENED, as the run observed it. Distinct from `createdAt`,
    * which is when the batch was written: a run posts its whole trace in one insert
    * when it settles, so `createdAt` is identical across every event of that run and
-   * cannot order them. Null on rows written before migration 1127 — readers fall
+   * cannot order them. Null on rows written before migration 1128 — readers fall
    * back to `createdAt` there rather than inventing an instant.
    */
   occurredAt: timestamp('occurred_at'),

@@ -1,4 +1,4 @@
--- 1128 · -- brain_chat_trace: record WHEN the event happened, not when the batch was written.
+-- 1128 · brain_chat_trace: record WHEN the event happened, not when the batch was written.
 --
 -- A Brain run streams its trace to the client and persists it in ONE batch insert
 -- when the run settles. The row's only timestamp was `created_at`, a `defaultNow()`
