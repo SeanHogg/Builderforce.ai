@@ -1,12 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { aggregateTicketHealth } from './aggregateTicketHealth';
-import type { TicketHealthInput } from './aggregateTicketHealth';
 
 describe('aggregateTicketHealth', () => {
   it('aggregates leaf ticket progressPct correctly (the VSIX bug)', () => {
     // The exact case from the bug report: 3 leaf tickets at 75/50/75
     // Expected: ~67% (weighted mean), NOT 0% (which the old Σdone/Σtotal gave)
-    const tickets: TicketHealthInput[] = [
+    const tickets = [
       { id: '2394', title: 'Mobile board height', status: 'in_review', progressPct: 75, done: 0, total: 1 },
       { id: '2395', title: 'Deep-link bug', status: 'in_progress', progressPct: 50, done: 0, total: 1 },
       { id: '2396', title: 'Code delta', status: 'in_review', progressPct: 75, done: 0, total: 1 },
@@ -22,7 +21,7 @@ describe('aggregateTicketHealth', () => {
 
   it('weights containers by their total (sub-items)', () => {
     // Container with 4 sub-items at 50% should outweigh 2 leaf tickets at 100%
-    const tickets: TicketHealthInput[] = [
+    const tickets = [
       { id: '1', title: 'Container', status: 'in_progress', progressPct: 50, done: 2, total: 4 },
       { id: '2', title: 'Leaf A', status: 'done', progressPct: 100, done: 1, total: 1 },
       { id: '3', title: 'Leaf B', done: 1, total: 1, progressPct: 100 },
@@ -37,7 +36,7 @@ describe('aggregateTicketHealth', () => {
   });
 
   it('falls back to unweighted mean when no ticket has sub-items', () => {
-    const tickets: TicketHealthInput[] = [
+    const tickets = [
       { id: '1', title: 'Task', progressPct: 50, done: 0, total: 1 },
       { id: '2', title: 'Task', progressPct: 100, done: 1, total: 1 },
     ];
