@@ -1,4 +1,4 @@
-import { and, desc, eq, gte } from 'drizzle-orm';
+import { and, asc, desc, eq, gte } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import {
   stakeholderAlignmentResponses,
@@ -10,9 +10,8 @@ import {
   stakeholderPrioritySubmissions,
   activityLog,
   projects,
-  tenants,
 } from '../../infrastructure/database/schema';
-import { scopedToSegment, scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { acrossTenants, scopedToSegment, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   STAKEHOLDER_ALIGNMENT_QUESTIONS,
   type DetectedStakeholderConflict,
@@ -387,67 +386,84 @@ export class StakeholderMapService {
   }
 }
 
+/**
+ * Per-tick ceilings for the two sweeps below. Both used to begin with
+ * `SELECT id FROM tenants` and then run one query PER WORKSPACE — on the
+ * five-minute cadence, whether or not a single escalation existed. The unit of
+ * work is the escalation (or the digest recipient), and the row already carries
+ * its tenant, so the workspace loop bought nothing but round-trips. One declared
+ * cross-tenant read, bounded, replaces `1 + tenantCount` queries per tick; a
+ * backlog beyond the ceiling is picked up on the next tick, oldest deadline
+ * first.
+ */
+const REMINDER_SWEEP_LIMIT = 500;
+const DIGEST_SWEEP_LIMIT = 2000;
+const ACTIVITY_INSERT_CHUNK = 200;
+
 export async function runStakeholderReminderSweep(db: Db, now = new Date()) {
-  const workspaces = await db.select({ id: tenants.id }).from(tenants);
-  let reminderCount = 0;
-  let breached = 0;
-  for (const workspace of workspaces) {
-    const rows = await db.select().from(stakeholderEscalations)
-      .where(scopedToTenant(stakeholderEscalations, workspace.id, eq(stakeholderEscalations.status, 'open')));
-    const reminders = dueEscalationReminders(rows, now);
-    reminderCount += reminders.length;
-    breached += reminders.filter((item) => item.kind === 'breached').length;
-    for (const reminder of reminders) {
-      const row = rows.find((candidate) => candidate.id === reminder.escalationId);
-      if (!row) continue;
-      await db.update(stakeholderEscalations).set(
-        reminder.kind === '24h' ? { reminder24hAt: now }
-          : reminder.kind === '4h' ? { reminder4hAt: now }
-            : { status: 'breached' },
-      ).where(scopedToTenant(stakeholderEscalations, workspace.id, eq(stakeholderEscalations.id, row.id), eq(stakeholderEscalations.status, 'open')));
-      await db.insert(activityLog).values({
-        eventKey: `stakeholder:escalation:${row.id}:${reminder.kind}`,
-        tenantId: row.tenantId,
-        segmentId: row.segmentId,
-        projectId: row.projectId,
-        actorType: 'system',
-        actorRef: 'stakeholder-alignment',
-        actorName: 'Stakeholder Alignment',
-        verb: reminder.kind === 'breached' ? 'stakeholder.escalation_breached' : 'stakeholder.escalation_reminder',
-        targetType: 'stakeholder_review',
-        targetId: row.reviewId,
-        summary: reminder.kind === 'breached'
-          ? `Stakeholder escalation level ${row.level} missed its resolution deadline.`
-          : `Stakeholder escalation level ${row.level} is due within ${reminder.kind}.`,
-        metadata: { escalationId: row.id, reminder: reminder.kind, deadlineAt: row.deadlineAt.toISOString() },
-        occurredAt: now,
-      }).onConflictDoNothing({ target: activityLog.eventKey });
-    }
+  const rows = await db.select().from(stakeholderEscalations)
+    .where(acrossTenants(stakeholderEscalations, 'scheduled_sweep', eq(stakeholderEscalations.status, 'open')))
+    .orderBy(asc(stakeholderEscalations.deadlineAt))
+    .limit(REMINDER_SWEEP_LIMIT);
+  const byId = new Map(rows.map((row) => [row.id, row] as const));
+  const reminders = dueEscalationReminders(rows, now);
+  const breached = reminders.filter((item) => item.kind === 'breached').length;
+  const events: Array<typeof activityLog.$inferInsert> = [];
+  for (const reminder of reminders) {
+    const row = byId.get(reminder.escalationId);
+    if (!row) continue;
+    await db.update(stakeholderEscalations).set(
+      reminder.kind === '24h' ? { reminder24hAt: now }
+        : reminder.kind === '4h' ? { reminder4hAt: now }
+          : { status: 'breached' },
+    ).where(scopedToTenant(stakeholderEscalations, row.tenantId, eq(stakeholderEscalations.id, row.id), eq(stakeholderEscalations.status, 'open')));
+    events.push({
+      eventKey: `stakeholder:escalation:${row.id}:${reminder.kind}`,
+      tenantId: row.tenantId,
+      segmentId: row.segmentId,
+      projectId: row.projectId,
+      actorType: 'system',
+      actorRef: 'stakeholder-alignment',
+      actorName: 'Stakeholder Alignment',
+      verb: reminder.kind === 'breached' ? 'stakeholder.escalation_breached' : 'stakeholder.escalation_reminder',
+      targetType: 'stakeholder_review',
+      targetId: row.reviewId,
+      summary: reminder.kind === 'breached'
+        ? `Stakeholder escalation level ${row.level} missed its resolution deadline.`
+        : `Stakeholder escalation level ${row.level} is due within ${reminder.kind}.`,
+      metadata: { escalationId: row.id, reminder: reminder.kind, deadlineAt: row.deadlineAt.toISOString() },
+      occurredAt: now,
+    });
   }
-  return { reminders: reminderCount, breached };
+  await insertActivityEvents(db, events);
+  return { reminders: reminders.length, breached };
+}
+
+/** One multi-row insert per chunk instead of one round-trip per event. */
+async function insertActivityEvents(db: Db, events: Array<typeof activityLog.$inferInsert>): Promise<void> {
+  for (let i = 0; i < events.length; i += ACTIVITY_INSERT_CHUNK) {
+    await db.insert(activityLog).values(events.slice(i, i + ACTIVITY_INSERT_CHUNK)).onConflictDoNothing({ target: activityLog.eventKey });
+  }
 }
 
 export async function runStakeholderDigestSweep(db: Db, now = new Date()) {
-  const workspaces = await db.select({ id: tenants.id }).from(tenants);
-  const recipients: Array<typeof stakeholderMapEntries.$inferSelect> = [];
-  for (const workspace of workspaces) {
-    recipients.push(...await db.select().from(stakeholderMapEntries)
-      .where(scopedToTenant(stakeholderMapEntries, workspace.id, eq(stakeholderMapEntries.active, true))));
-  }
+  const recipients = await db.select().from(stakeholderMapEntries)
+    .where(acrossTenants(stakeholderMapEntries, 'scheduled_sweep', eq(stakeholderMapEntries.active, true)))
+    .limit(DIGEST_SWEEP_LIMIT);
   const projectKeys = new Map<string, { tenantId: number; segmentId: string; projectId: number }>();
   for (const recipient of recipients) {
     projectKeys.set(`${recipient.tenantId}:${recipient.segmentId}:${recipient.projectId}`, recipient);
   }
   const day = now.toISOString().slice(0, 10);
-  let distributed = 0;
+  const service = new StakeholderMapService(db);
+  const events: Array<typeof activityLog.$inferInsert> = [];
   for (const project of projectKeys.values()) {
-    const service = new StakeholderMapService(db);
     const dashboard = await service.dashboard(project.tenantId, project.segmentId, project.projectId, now);
     const projectRecipients = recipients.filter((entry) =>
       entry.tenantId === project.tenantId && entry.segmentId === project.segmentId && entry.projectId === project.projectId,
     );
     for (const recipient of projectRecipients) {
-      await db.insert(activityLog).values({
+      events.push({
         eventKey: `stakeholder:digest:${day}:${project.projectId}:${recipient.stakeholderRef}`.slice(0, 160),
         tenantId: project.tenantId,
         segmentId: project.segmentId,
@@ -462,9 +478,9 @@ export async function runStakeholderDigestSweep(db: Db, now = new Date()) {
         summary: dashboard.digest,
         metadata: { role: recipient.role, projectId: project.projectId },
         occurredAt: now,
-      }).onConflictDoNothing({ target: activityLog.eventKey });
-      distributed += 1;
+      });
     }
   }
-  return { projects: projectKeys.size, distributed };
+  await insertActivityEvents(db, events);
+  return { projects: projectKeys.size, distributed: events.length };
 }

@@ -17,7 +17,7 @@ import { Hono } from 'hono';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
-import { verifyWebJwt } from '../../infrastructure/auth/JwtService';
+import { optionalWebUserId } from '../middleware/webAuthMiddleware';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import {
@@ -89,12 +89,6 @@ import type { Env, HonoEnv } from '../../env';
 
 function parseSkills(raw: unknown): string[] {
   return parseJsonArray<string>(raw);
-}
-
-async function optionalUserId(c: { req: { header(n: string): string | undefined }; env: HonoEnv['Bindings'] }): Promise<string | null> {
-  const h = c.req.header('Authorization') ?? '';
-  if (!h.startsWith('Bearer ')) return null;
-  try { const p = await verifyWebJwt(h.slice(7), c.env.JWT_SECRET); return p.sub ?? null; } catch { return null; }
 }
 
 /** `job_postings.*` — snake_case keys so `mapJob` keeps reading the same row shape. */
@@ -1245,7 +1239,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
   router.get('/:id', async (c) => {
     const db = buildDatabase(c.env);
     const id = c.req.param('id');
-    const viewer = await optionalUserId(c);
+    const viewer = await optionalWebUserId(c);
     const [job] = await db
       .select({
         ...jobColumns,
@@ -1305,7 +1299,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
       .where(acrossTenants(jobPostings, 'public_catalogue', eq(jobPostings.id, id)))
       .limit(1);
     if (!job) return c.json({ error: 'Not found' }, 404);
-    if (job.visibility === 'private' && !(await optionalUserId(c))) {
+    if (job.visibility === 'private' && !(await optionalWebUserId(c))) {
       return c.json({ error: 'Sign in to view this job', code: 'AUTH_REQUIRED' }, 401);
     }
     return serveAttachment(c.env as Env, normalizeAttachments(job.attachments), c.req.param('attachmentId'));

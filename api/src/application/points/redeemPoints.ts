@@ -25,11 +25,11 @@
  * would be a text search.
  */
 
-import { eq } from 'drizzle-orm';
+import { and, asc, eq, lt } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { pointRedemptions } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { grantAiCredits } from './aiCredits';
 import { pointsBalance, writePointsEntry } from './pointsLedger';
@@ -160,6 +160,36 @@ async function fulfil(db: Db, env: Env, ctx: FulfilContext): Promise<boolean> {
     });
     return false;
   }
+}
+
+/**
+ * How long a redemption may sit `pending` before the sweep retries it. Long
+ * enough that the in-request fulfilment (which runs immediately after the debit)
+ * has had every chance to land; short enough that a person notices the reward,
+ * not its absence.
+ */
+const PENDING_RETRY_AFTER_MS = 10 * 60_000;
+const PENDING_SWEEP_LIMIT = 200;
+
+/**
+ * The cron half of {@link retryPendingRedemption}. Until this existed the retry
+ * had NO caller: points were debited, the reward grant could fail after the
+ * debit, and the row sat `pending` forever with nothing to finish it — a
+ * customer paid and never received. One declared cross-tenant read of the stale
+ * pending rows, oldest first, bounded per tick.
+ */
+export async function runPendingRedemptionSweep(db: Db, env: Env, now = new Date()): Promise<{ scanned: number; fulfilled: number }> {
+  const cutoff = new Date(now.getTime() - PENDING_RETRY_AFTER_MS);
+  const rows = await db.select({ id: pointRedemptions.id, tenantId: pointRedemptions.tenantId })
+    .from(pointRedemptions)
+    .where(acrossTenants(pointRedemptions, 'scheduled_sweep', and(eq(pointRedemptions.status, 'pending'), lt(pointRedemptions.createdAt, cutoff))))
+    .orderBy(asc(pointRedemptions.createdAt))
+    .limit(PENDING_SWEEP_LIMIT);
+  let fulfilled = 0;
+  for (const row of rows) {
+    if (await retryPendingRedemption(db, env, row.tenantId, row.id)) fulfilled += 1;
+  }
+  return { scanned: rows.length, fulfilled };
 }
 
 /** Finish a redemption whose points were taken but whose reward never landed.

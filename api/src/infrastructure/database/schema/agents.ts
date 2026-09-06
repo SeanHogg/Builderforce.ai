@@ -1105,6 +1105,56 @@ export const toolAuditEvents = pgTable('tool_audit_events', {
   createdAt:   timestamp('created_at').notNull().defaultNow(),
 });
 
+/**
+ * DAILY ROLLUP of {@link toolAuditEvents} — the compliance record after the raw
+ * events age out.
+ *
+ * WHY IT EXISTS. The raw trail is written per tool CALL, which is the right grain
+ * while a run is live and the wrong grain forever: 665k rows / 176 MB, 97% of them
+ * a single fortnight of auto-run sweeps, held only because the SOC 2 evidence
+ * export reads 90 days back. Folding a day of calls into one row per
+ * (tenant, day, tool, category, agent) is a 170:1 compression that keeps every
+ * number the compliance lens and the evidence pack actually compute — volume,
+ * sensitive-action count, per-tool/per-agent breakdown, duration — because those
+ * are all sums over exactly these dimensions. What it drops is the ability to
+ * point at ONE call, which past the redaction boundary is already a row with no
+ * payload in it.
+ *
+ * NO FOREIGN KEY ON `agent_host_id`. The raw table cascades its events away when a
+ * host row is deleted; an audit record that a deregistered host's activity erases
+ * is not an audit record. The rollup deliberately keeps the id as a plain value —
+ * the same call `cloud_agent_ref` already makes on the raw table.
+ *
+ * The grain is UNIQUE (`uq_tool_audit_daily_grain`, declared `NULLS NOT DISTINCT`
+ * in SQL — drizzle 0.36 cannot express that qualifier) so a re-fold of a day
+ * already folded ADDS to the tally instead of duplicating it.
+ */
+export const toolAuditDaily = pgTable('tool_audit_daily', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  /** The UTC calendar day the folded events fall on. Whole days only — a partial
+   *  day is never folded, so the boundary can never double-count. */
+  day:         date('day').notNull(),
+  toolName:    varchar('tool_name', { length: 255 }).notNull(),
+  category:    varchar('category', { length: 100 }),
+  agentHostId: integer('agent_host_id'),
+  cloudAgentRef: varchar('cloud_agent_ref', { length: 64 }),
+  /** Tool calls folded into this row. */
+  events:      integer('events').notNull(),
+  /** Distinct executions WITHIN THE DAY. Summing across days is an upper bound —
+   *  a run spanning midnight counts in both. Stated here so readers do not treat
+   *  the sum as exact. */
+  distinctExecutions: integer('distinct_executions').notNull(),
+  durationMsTotal: bigint('duration_ms_total', { mode: 'number' }),
+  firstTs:     timestamp('first_ts').notNull(),
+  lastTs:      timestamp('last_ts').notNull(),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenantDay: index('idx_tool_audit_daily_tenant_day').on(t.tenantId, t.day),
+  grain: uniqueIndex('uq_tool_audit_daily_grain')
+    .on(t.tenantId, t.day, t.toolName, t.category, t.agentHostId, t.cloudAgentRef),
+}));
+
 /** An agent assertion whose support is structural rather than inferred from prose. */
 export const executionClaims = pgTable('execution_claims', {
   id:          uuid('id').primaryKey().defaultRandom(),

@@ -1,4 +1,4 @@
-import { MiddlewareHandler } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
 import type { HonoEnv } from '../../env';
 import { UnauthorizedError } from '../../domain/shared/errors';
 import { verifyWebJwt } from '../../infrastructure/auth/JwtService';
@@ -87,3 +87,35 @@ export const webAuthMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => 
   if (payload.sid) c.set('sessionId', payload.sid);
   await next();
 };
+
+/**
+ * Non-throwing web-token probe — the user id when a VALID, UNREVOKED web token is
+ * present, `null` otherwise. For a public read whose answer is narrower without a
+ * signed-in person (a job's private visibility, a like's own-state), never for an
+ * action.
+ *
+ * Five route files used to re-implement only the signature half of this check,
+ * so a token the person had already signed out of still identified them on the
+ * freelancer, job, marketplace and messaging surfaces. This is the middleware's
+ * own contract minus the terms gate: an optional identity narrows a read, it
+ * never unlocks something the terms gate would have withheld.
+ */
+export async function optionalWebUserId(c: Context<HonoEnv>): Promise<string | null> {
+  const authHeader = c.req.header('Authorization') ?? '';
+  if (!authHeader.startsWith('Bearer ')) return null;
+  let payload: Awaited<ReturnType<typeof verifyWebJwt>>;
+  try {
+    payload = await verifyWebJwt(authHeader.slice(7), c.env.JWT_SECRET);
+  } catch {
+    return null;
+  }
+  if (payload.jti) {
+    try {
+      assertActiveToken(await findActiveToken(buildDatabase(c.env), payload.sub, payload.jti));
+    } catch (err) {
+      if (err instanceof UnauthorizedError) return null;
+      throw err;
+    }
+  }
+  return payload.sub ?? null;
+}

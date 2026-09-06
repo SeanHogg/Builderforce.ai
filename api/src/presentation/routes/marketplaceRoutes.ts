@@ -9,11 +9,11 @@
  * by the orchestration API). Marketplace JWTs carry { sub, tid: 0 }.
  */
 import { Hono } from 'hono';
-import type { MiddlewareHandler } from 'hono';
 import { eq, and, sql, desc } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import * as schema from '../../infrastructure/database/schema';
-import { signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
+import { signWebJwt } from '../../infrastructure/auth/JwtService';
+import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { hashPassword, verifyPassword } from '../../infrastructure/auth/HashService';
 import { invalidateCapabilityCache } from '../../application/artifact/capabilityContext';
 import { ensureStarterWorkspace } from '../../application/tenant/starterWorkspace';
@@ -43,25 +43,6 @@ async function invalidateSkillsList(env: Env): Promise<void> {
 // Password hashing (PBKDF2 via Web Crypto) uses the canonical HashService — the
 // SAME salt:hash format + params as every other web/marketplace user hash, so the
 // two must never drift. `hashPassword` / `verifyPassword` are imported above.
-
-// ---------------------------------------------------------------------------
-// Marketplace-specific auth middleware
-// ---------------------------------------------------------------------------
-
-const requireMarketplaceAuth: MiddlewareHandler<HonoEnv> = async (c, next) => {
-  const authHeader = c.req.header('Authorization') ?? '';
-  if (!authHeader.startsWith('Bearer ')) {
-    return c.json({ error: 'Missing or malformed Authorization header' }, 401);
-  }
-  const token = authHeader.slice(7);
-  try {
-    const payload = await verifyWebJwt(token, c.env.JWT_SECRET);
-    c.set('userId', payload.sub);
-  } catch {
-    return c.json({ error: 'Invalid or expired token' }, 401);
-  }
-  await next();
-};
 
 // ---------------------------------------------------------------------------
 // Factory
@@ -230,7 +211,7 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
   /**
    * GET /marketplace/auth/me – return current user profile (auth required)
    */
-  router.get('/auth/me', requireMarketplaceAuth, async (c) => {
+  router.get('/auth/me', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const [user] = await db
       .select({
@@ -295,7 +276,7 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
   /**
    * PUT /marketplace/users/me – update own profile (auth required)
    */
-  router.put('/users/me', requireMarketplaceAuth, async (c) => {
+  router.put('/users/me', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const body = await c.req.json<{
       display_name?: string;
@@ -473,7 +454,7 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
   /**
    * POST /marketplace/skills – create a new skill (auth required)
    */
-  router.post('/skills', requireMarketplaceAuth, async (c) => {
+  router.post('/skills', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const body = await c.req.json<{
       name: string;
@@ -528,7 +509,7 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
   /**
    * PUT /marketplace/skills/:slug – update own skill (auth required)
    */
-  router.put('/skills/:slug', requireMarketplaceAuth, async (c) => {
+  router.put('/skills/:slug', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const slug   = c.req.param('slug');
 
@@ -577,7 +558,7 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
   /**
    * POST /marketplace/skills/:slug/like – toggle like (auth required)
    */
-  router.post('/skills/:slug/like', requireMarketplaceAuth, async (c) => {
+  router.post('/skills/:slug/like', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const slug   = c.req.param('slug');
 
@@ -632,7 +613,7 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
    * POST /api/workforce/agents/:id/checkout, which settles against the processor
    * before it writes the row this route would have written for nothing.
    */
-  router.post('/purchase', requireMarketplaceAuth, async (c) => {
+  router.post('/purchase', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const body = await c.req.json<{
       artifactType: 'skill' | 'persona';
@@ -685,7 +666,7 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
   /**
    * GET /marketplace/purchases – list own purchases (auth required)
    */
-  router.get('/purchases', requireMarketplaceAuth, async (c) => {
+  router.get('/purchases', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     // USER-scoped by design, and `userId` is the access predicate: this is "what
     // I have bought", across every workspace I belong to and the marketing

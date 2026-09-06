@@ -30,7 +30,7 @@ import {
 } from '@builderforce/creation-canvas-contract';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
-import { verifyWebJwt } from '../../infrastructure/auth/JwtService';
+import { optionalWebUserId } from '../middleware/webAuthMiddleware';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { extractResumeText } from '../../application/career/resumeExtract';
 import { resumeDocumentFromText } from '@builderforce/creation-canvas-contract';
@@ -445,18 +445,6 @@ function applyTalentFilters(
   return { items: out.slice(start, start + f.pageSize), total };
 }
 
-/** Non-throwing web-JWT probe: returns the userId when a valid web token is present. */
-async function optionalUserId(c: { req: { header(n: string): string | undefined }; env: HonoEnv['Bindings'] }): Promise<string | null> {
-  const h = c.req.header('Authorization') ?? '';
-  if (!h.startsWith('Bearer ')) return null;
-  try {
-    const payload = await verifyWebJwt(h.slice(7), c.env.JWT_SECRET);
-    return payload.sub ?? null;
-  } catch {
-    return null;
-  }
-}
-
 export function createFreelancerRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
@@ -840,7 +828,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // never explodes the cache keyspace. Review aggregate (rating) is joined in.
   router.get('/', async (c) => {
     const db = buildDatabase(c.env);
-    const viewer = await optionalUserId(c);
+    const viewer = await optionalWebUserId(c);
     const q = c.req.query();
     const filters = {
       q: q.q, discipline: q.discipline, skill: q.skill,
@@ -935,7 +923,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   router.get('/:id', async (c) => {
     const db = buildDatabase(c.env);
     const id = c.req.param('id');
-    const viewer = await optionalUserId(c);
+    const viewer = await optionalWebUserId(c);
     const [row] = await db.select({ ...profileWithUserColumns, ...ratingColumns })
       .from(freelancerProfiles)
       .innerJoin(users, eq(users.id, freelancerProfiles.userId))

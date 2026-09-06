@@ -1,4 +1,3 @@
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * In-platform messaging for the freelance marketplace — /api/conversations/*.
  *
@@ -24,9 +23,9 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  */
 import { Hono } from 'hono';
 import { and, asc, eq, getTableColumns, isNull, sql } from 'drizzle-orm';
-import { authMiddleware } from '../middleware/authMiddleware';
+import { authMiddleware, optionalAuthMiddleware } from '../middleware/authMiddleware';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
-import { verifyWebJwt, verifyJwt } from '../../infrastructure/auth/JwtService';
+import { optionalWebUserId } from '../middleware/webAuthMiddleware';
 import { notify } from '../../application/notifications/notify';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import {
@@ -193,8 +192,6 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
   router.get('/attachment/:messageId', async (c) => {
     const db = buildDatabase(c.env);
     const messageId = c.req.param('messageId');
-    const h = c.req.header('Authorization') ?? '';
-    const token = h.startsWith('Bearer ') ? h.slice(7) : '';
     if (!c.env.UPLOADS) return c.json({ error: 'Not found' }, 404);
     const [row] = await db.select({
       attachmentKey: freelancerMessages.attachmentKey,
@@ -211,19 +208,12 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
     // (tenant token tid = tenant_id). The two sides carry different token kinds, so try
     // the web verifier first, then the tenant verifier.
     let authorized = false;
-    try {
-      const p = await verifyWebJwt(token, c.env.JWT_SECRET);
-      if (p.sub && p.sub === row.freelancerUserId) authorized = true;
-    } catch (error) { /* not a web token */ 
-      reportCaughtError(error, { source: "presentation/routes/freelancerMessagingRoutes.ts", operation: "createFreelancerMessagingRoutes" });
-    }
+    const webUserId = await optionalWebUserId(c);
+    if (webUserId && webUserId === row.freelancerUserId) authorized = true;
     if (!authorized) {
-      try {
-        const p = await verifyJwt(token, c.env.JWT_SECRET);
-        if (p.tid != null && Number(p.tid) === Number(row.tenantId)) authorized = true;
-      } catch (error) { /* not a tenant token */ 
-        reportCaughtError(error, { source: "presentation/routes/freelancerMessagingRoutes.ts", operation: "createFreelancerMessagingRoutes" });
-      }
+      await optionalAuthMiddleware(c, async () => {});
+      const tenantId = c.get('tenantId');
+      if (tenantId != null && Number(tenantId) === Number(row.tenantId)) authorized = true;
     }
     if (!authorized) return c.json({ error: 'Forbidden' }, 403);
     const obj = await c.env.UPLOADS.get(row.attachmentKey);

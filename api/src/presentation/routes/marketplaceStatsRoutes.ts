@@ -8,8 +8,8 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { eq, and, sql, inArray } from 'drizzle-orm';
-import { authMiddleware } from '../middleware/authMiddleware';
-import { verifyJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
+import { authMiddleware, optionalAuthMiddleware } from '../middleware/authMiddleware';
+import { optionalWebUserId } from '../middleware/webAuthMiddleware';
 import { artifactLikes, artifactAssignments } from '../../infrastructure/database/schema';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -21,25 +21,16 @@ const VALID_ARTIFACT_TYPES = new Set(['skill', 'persona', 'agent'] as const);
 type ArtifactType = 'skill' | 'persona' | 'agent';
 
 /**
- * Soft-auth: extract userId from a bearer token if present and valid.
- * Accepts either tenant-scoped or web JWTs. Returns null if no token, bad
- * signature, or expired. Never throws.
+ * Soft-auth: the caller's user id when a valid, unrevoked tenant OR web token is
+ * present; `null` otherwise. Both halves come from the shared middleware so
+ * revocation applies here exactly as it does on every other route — this used to
+ * re-verify signatures by hand and accepted signed-out tokens.
  */
 async function softAuthUserId(c: Context<HonoEnv>): Promise<string | null> {
-  const header = c.req.header('Authorization') ?? '';
-  if (!header.startsWith('Bearer ')) return null;
-  const token = header.slice(7);
-  try {
-    const payload = await verifyJwt(token, c.env.JWT_SECRET);
-    return payload.sub ?? null;
-  } catch {
-    try {
-      const webPayload = await verifyWebJwt(token, c.env.JWT_SECRET);
-      return webPayload.sub ?? null;
-    } catch {
-      return null;
-    }
-  }
+  await optionalAuthMiddleware(c, async () => {});
+  const tenantUser = c.get('userId');
+  if (tenantUser) return tenantUser;
+  return optionalWebUserId(c);
 }
 
 export function createMarketplaceStatsRoutes(db: Db): Hono<HonoEnv> {

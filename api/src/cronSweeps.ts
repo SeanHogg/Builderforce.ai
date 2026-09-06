@@ -47,6 +47,9 @@ import { runAdInsightsSweep } from './application/advertising/adInsightsSync';
 import { runLedgerSyncSweep } from './application/finance/ledgerSync';
 import { runSocialCampaignSweep } from './application/social/socialCampaignService';
 import { runMailboxAutomationSweep } from './application/mailbox/mailboxAutomationService';
+import { runMailboxPushSweep } from './application/mailbox/mailboxWatch';
+import { reapStaleStageSandboxRuns } from './application/marketplace/stageSandboxRuns';
+import { runPendingRedemptionSweep } from './application/points/redeemPoints';
 import { runCustomDomainSweep } from './application/ide/customDomain';
 import { runSsoDomainSweep } from './application/auth/enterpriseSso';
 import { purgeExpiredPasskeyChallenges } from './application/auth/PasskeyService';
@@ -530,6 +533,19 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     },
   },
   {
+    key: 'points-redemption-retry',
+    cadence: 'frequent',
+    // Finishes redemptions whose points were debited but whose reward never
+    // landed. `retryPendingRedemption` existed for exactly this and had no caller,
+    // so a fulfilment failure after the debit left a customer paid-and-unrewarded
+    // forever. Frequent: a reward is something a person is waiting for.
+    description: 'Retry point redemptions stuck `pending` past ten minutes so a debited reward always lands.',
+    run: async ({ env }) => {
+      const r = await runPendingRedemptionSweep(buildDatabase(env), env);
+      return r.scanned > 0 ? `scanned=${r.scanned} fulfilled=${r.fulfilled}` : null;
+    },
+  },
+  {
     key: 'job-sourcing-sync',
     cadence: 'daily',
     // Every connected job feed, fetched and written into the tenant's catalogue.
@@ -591,6 +607,34 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       return result.matched > 0 || result.failed > 0
         ? `rules=${result.rules} matched=${result.matched} drafted=${result.drafted} approvals=${result.approvals} sent=${result.sent} failed=${result.failed}`
         : null;
+    },
+  },
+  {
+    key: 'mailbox-push',
+    cadence: 'frequent',
+    // The push-subscription machine for connected mailboxes: arm what is unarmed,
+    // renew what is expiring, drain what nobody can notify. Written as "the cron
+    // entry point" and then never registered — so Graph subscriptions (~70h TTL)
+    // expired and push silently degraded to nothing, while the docs said renewal
+    // shipped. Frequent, because a renewal window missed by a day is a dead watch.
+    description: 'Arm, renew and drain connected-mailbox push subscriptions so inbound mail keeps arriving by push rather than expiring silently.',
+    run: async ({ env }) => {
+      const r = await runMailboxPushSweep(env);
+      return r.armed > 0 || r.renewed > 0 || r.rearmed > 0 || r.polled > 0 || r.failed > 0 || r.pruned > 0
+        ? `armed=${r.armed} renewed=${r.renewed} rearmed=${r.rearmed} polled=${r.polled} fresh=${r.fresh} failed=${r.failed} pruned=${r.pruned}`
+        : null;
+    },
+  },
+  {
+    key: 'stage-sandbox-reap',
+    cadence: 'frequent',
+    // Its own docblock named "a future cron sweep" as the consumer; the lazy reap
+    // on read kept callers correct, so this is cost and latency, not correctness —
+    // a dead `running` row is now retired on schedule instead of on the next read.
+    description: 'Retire stage-sandbox runs left `running` past their heartbeat so their capacity is released on schedule, not on the next read.',
+    run: async ({ env }) => {
+      const reaped = await reapStaleStageSandboxRuns(buildDatabase(env));
+      return reaped > 0 ? `reaped=${reaped}` : null;
     },
   },
   {

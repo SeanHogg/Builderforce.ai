@@ -209,6 +209,20 @@ Free-text arguments (commit messages, PR bodies) are shell-quoted rather than va
 `notARepoResult` and the base-branch resolution are now declared once and shared by every
 git tool rather than copied per action.
 
+Shipped with its product update and marketing, per the new-capability rule: a
+`category=new` release note (migration 1129, replay-safe, `emailed_at` NULL so the digest
+announces it once) and the blog post *Ship from the editor — commit, branch, pull request*,
+built on the Idea → Make → Run → Measure arc. It argues the Make → Run handoff: the
+previous release made that handoff VISIBLE (you could read every diff) but you still had
+to leave the tool to move the work, so the reviewed route now costs exactly one step more
+than pushing to `main` and that step is a human reading the change.
+
+The preceding post, *See what the agent changed — before you commit it*, closed on "one
+thing this deliberately does not do: give the agent a commit or push verb of its own …
+the review path came first on purpose." That is no longer true, so the paragraph now says
+the decision was made, states what it was, and links forward. Shipped marketing that
+describes a limitation the product no longer has is a defect like any other.
+
 ## ✅ RESOLVED 2026-09-05 — The VSIX says when an agent has left code on disk, and lets you review it
 
 An agent turn in the editor edits the workspace through the local tools (`write_file` /
