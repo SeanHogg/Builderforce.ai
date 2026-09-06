@@ -386,22 +386,19 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     const projectId = pid(c);
     if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
     const env = c.env as Env;
-    if (!env.UPLOADS) return c.json({ error: 'R2 artifact storage not configured' }, 503);
 
     const body = (await c.req.json<{ slug?: unknown; name?: unknown }>().catch(() => ({}))) as { slug?: unknown; name?: unknown };
     const slug = typeof body.slug === 'string' ? body.slug.trim() : '';
     if (!slug) return c.json({ error: 'slug (a published Evermind model) is required' }, 400);
 
     // Shared server-side R2 copy → project base (same path the create-time recipe uses).
-    const seeded = await seedProjectEvermindFromPublished(
+    // A refusal (unknown slug, broken artifact, unconfigured store) is a
+    // `SeedFromPublishedError` carrying its own status; `app.onError` renders it
+    // through `statusOf` — no handler here catches anything.
+    await seedProjectEvermindFromPublished(
       env, db, tenantId, projectId, slug,
       typeof body.name === 'string' ? body.name : undefined,
     );
-    if (!seeded.ok) {
-      // "no published model with that slug" is a 404; malformed artifacts are 400.
-      const status = /no published/i.test(seeded.error ?? '') ? 404 : 400;
-      return c.json({ error: seeded.error ?? 'could not seed from model' }, status);
-    }
     const head = await getProjectEvermindHead(env, db, tenantId, projectId);
     return c.json({ seeded: true, version: head.version, ref: head.ref, mode: head.mode, inferenceEnabled: head.inferenceEnabled }, 201);
   });
@@ -582,11 +579,9 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     const name = typeof body.name === 'string' ? body.name : undefined;
 
     if (slug) {
-      const seeded = await seedProjectEvermindFromPublished(env, db, tenantId, projectId, slug, name, { replace: true });
-      if (!seeded.ok) {
-        const status = /no published/i.test(seeded.error ?? '') ? 404 : 400;
-        return c.json({ error: seeded.error ?? 'could not re-seed from that model' }, status);
-      }
+      // Refusals carry their own status (`SeedFromPublishedError`); the global
+      // handler renders them through `statusOf` — nothing is caught here.
+      await seedProjectEvermindFromPublished(env, db, tenantId, projectId, slug, name, { replace: true });
     } else {
       // No slug → a fresh STARTER base. Deliberately allowed: a project whose model is
       // unusable is better off back at a clean learnable substrate than stuck on it.

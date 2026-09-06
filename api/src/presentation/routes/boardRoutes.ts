@@ -932,7 +932,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
 
     // A bare POST (no body at all) has always meant "completed"; a body that IS
     // sent must name a known status.
-    const body = await parseBody(c, AdvanceBody).catch((e: unknown) => {
+    const body: z.infer<typeof AdvanceBody> = await parseBody(c, AdvanceBody).catch((e: unknown) => {
       if (e instanceof RequestValidationError && e.issues[0]?.path === '') return {};
       throw e;
     });
