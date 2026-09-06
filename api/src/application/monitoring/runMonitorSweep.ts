@@ -6,7 +6,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * on-call via MonitoringService.applyResult. Best-effort per monitor.
  */
 import { and, eq, inArray } from 'drizzle-orm';
-import { buildDatabase } from '../../infrastructure/database/connection';
+import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { monitors } from '../../infrastructure/database/schema';
 import { MonitoringService } from './MonitoringService';
 import { runBoundedPool } from '../runtime/boundedPool';
@@ -27,8 +27,7 @@ export interface MonitorSweepResult {
   recovered: number;
 }
 
-export async function runMonitorSweep(env: Env): Promise<MonitorSweepResult> {
-  const db = buildDatabase(env);
+export async function runMonitorSweep(env: Env, db: Db = buildDatabase(env)): Promise<MonitorSweepResult> {
   const svc = new MonitoringService(db);
   const active = await db.select().from(monitors)
     .where(and(eq(monitors.active, true), inArray(monitors.monitorType, SWEEP_TYPES)))

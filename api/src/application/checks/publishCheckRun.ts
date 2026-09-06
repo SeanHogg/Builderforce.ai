@@ -132,23 +132,22 @@ export async function publishCheckRun(
   }
 
   return auth.authKind === 'app_installation'
-    ? publishAsCheckRun(auth.coords, auth.token, input, fetchFn)
-    : publishAsCommitStatus(auth.coords, auth.token, input, fetchFn);
+    ? publishAsCheckRun(auth, input, fetchFn)
+    : publishAsCommitStatus(auth, input, fetchFn);
 }
 
 async function publishAsCheckRun(
-  coords: GitHubCoords,
-  token: string,
+  auth: ResolvedRepoAuth,
   input: CheckRunInput,
   fetchFn: typeof fetch,
 ): Promise<PublishCheckResult> {
+  const { coords } = auth;
   const all = input.annotations ?? [];
   const first = all.slice(0, MAX_ANNOTATIONS_PER_REQUEST);
   const rest = all.slice(MAX_ANNOTATIONS_PER_REQUEST);
 
   const created = await githubRequest<{ id: number }>({
-    coords,
-    token,
+    auth,
     path: repoPath(coords, '/check-runs'),
     method: 'POST',
     fetchFn,
@@ -176,8 +175,7 @@ async function publishAsCheckRun(
   for (let i = 0; i < rest.length; i += MAX_ANNOTATIONS_PER_REQUEST) {
     const batch = rest.slice(i, i + MAX_ANNOTATIONS_PER_REQUEST);
     const updated = await githubRequest({
-      coords,
-      token,
+      auth,
       path: repoPath(coords, `/check-runs/${created.data.id}`),
       method: 'PATCH',
       fetchFn,
@@ -199,18 +197,17 @@ async function publishAsCheckRun(
 }
 
 async function publishAsCommitStatus(
-  coords: GitHubCoords,
-  token: string,
+  auth: ResolvedRepoAuth,
   input: CheckRunInput,
   fetchFn: typeof fetch,
 ): Promise<PublishCheckResult> {
+  const { coords } = auth;
   // A queued/in-progress check maps to `pending`; only a completed one carries a
   // real conclusion.
   const state = input.status === 'completed' ? conclusionToStatusState(input.conclusion) : 'pending';
 
   const res = await githubRequest<{ id: number }>({
-    coords,
-    token,
+    auth,
     path: repoPath(coords, `/statuses/${encodeURIComponent(input.headSha)}`),
     method: 'POST',
     fetchFn,

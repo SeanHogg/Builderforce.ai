@@ -16,7 +16,7 @@
  *
  * Employer routes use the tenant JWT (authMiddleware); freelancer routes use the web
  * JWT (webAuthMiddleware) + the engagement grant. All data access goes through Drizzle
- * (`buildDatabase(c.env)`) — no raw neon client lives here.
+ * (`requestDb(c)`) — no raw neon client lives here.
  */
 import { Hono } from 'hono';
 import { and, desc, eq, getTableColumns, inArray, isNotNull, sql } from 'drizzle-orm';
@@ -39,7 +39,7 @@ import {
   upsertJobPosting,
 } from '../../application/marketplace/jobPostings';
 import { readSavedTalent, readTalentLists, saveTalent, unsaveTalent } from '../../application/marketplace/savedTalent';
-import { buildDatabase } from '../../infrastructure/database/connection';
+import { requestDb } from '../../application/shared/dbHandle';
 import {
   deliverableProposals,
   freelancerEngagements,
@@ -96,7 +96,7 @@ export function createGigMarketplaceRoutes(): Hono<HonoEnv> {
   router.post('/publish', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const b = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
     const ticketId = typeof b.ticketId === 'number' ? Math.round(b.ticketId) : Number(b.ticketId);
     if (!Number.isFinite(ticketId)) return c.json({ error: 'ticketId required' }, 400);
@@ -129,7 +129,7 @@ export function createGigMarketplaceRoutes(): Hono<HonoEnv> {
   // POST /unpublish — pull a ticket's gig from the marketplace.
   router.post('/unpublish', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const b = await c.req.json<{ ticketId?: number }>().catch((): { ticketId?: number } => ({}));
     const ticketId = typeof b.ticketId === 'number' ? Math.round(b.ticketId) : Number(b.ticketId);
     if (!Number.isFinite(ticketId)) return c.json({ error: 'ticketId required' }, 400);
@@ -144,7 +144,7 @@ export function createGigMarketplaceRoutes(): Hono<HonoEnv> {
     const taskId = Number(c.req.param('taskId'));
     if (!Number.isFinite(taskId)) return c.json({ error: 'invalid taskId' }, 400);
     const posting = await getOrSetCached(c.env as Env, ticketPostingKey(tenantId, taskId), async () => {
-      const db = buildDatabase(c.env);
+      const db = requestDb(c);
       const row = await readOpenTicketPosting(db, tenantId, taskId);
       return row ? mapPosting(row) : null;
     });
@@ -159,7 +159,7 @@ export function createGigMarketplaceRoutes(): Hono<HonoEnv> {
 
   // GET /saved-talent?list= — the shortlist, newest first.
   router.get('/saved-talent', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const [items, lists] = await Promise.all([
       readSavedTalent(db, {
         tenantId: c.get('tenantId') as number,
@@ -173,7 +173,7 @@ export function createGigMarketplaceRoutes(): Hono<HonoEnv> {
 
   // POST /saved-talent — shortlist somebody (idempotent; a second save edits the note).
   router.post('/saved-talent', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const b = await c.req.json<{ freelancerUserId?: string; list?: string; note?: string }>()
       .catch((): { freelancerUserId?: string; list?: string; note?: string } => ({}));
     const freelancerUserId = String(b.freelancerUserId ?? '').trim();
@@ -192,7 +192,7 @@ export function createGigMarketplaceRoutes(): Hono<HonoEnv> {
   // DELETE /saved-talent/:freelancerUserId?list= — un-shortlist. Without `list`, from
   // every list: "remove this person" is what the button says.
   router.delete('/saved-talent/:freelancerUserId', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     await unsaveTalent(db, {
       tenantId: c.get('tenantId') as number,
       ownerUserId: c.get('userId') as string,
@@ -232,7 +232,7 @@ export function createEngagementBoardRoutes(accessDb: Db): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     const grants = await access.activeForUser(userId);
     if (grants.length === 0) return c.json({ engagements: [] });
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const ids = grants.map((g) => g.engagementId);
     const rows = await db
       .select({
@@ -268,7 +268,7 @@ export function createEngagementBoardRoutes(accessDb: Db): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     const grant = await access.getForUser(userId, c.req.param('engagementId'));
     if (!grant || grant.projectId == null) return c.json({ error: 'No access' }, 403);
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const rows = await db
       .select(engagementTaskColumns)
       .from(tasks)
@@ -283,7 +283,7 @@ export function createEngagementBoardRoutes(accessDb: Db): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     const grant = await access.getForUser(userId, c.req.param('engagementId'));
     if (!grant || grant.projectId == null) return c.json({ error: 'No access' }, 403);
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const [row] = await db
       .select(engagementTaskColumns)
       .from(tasks)
@@ -299,7 +299,7 @@ export function createEngagementBoardRoutes(accessDb: Db): Hono<HonoEnv> {
     const grant = await access.getForUser(userId, c.req.param('engagementId'));
     if (!grant || grant.projectId == null) return c.json({ error: 'No access' }, 403);
     if (!access.canWrite(grant)) return c.json({ error: 'Read-only access' }, 403);
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const taskId = Number(c.req.param('taskId'));
     const rows = await db
       .update(tasks)
@@ -391,7 +391,7 @@ export function createDeliverableRoutes(accessDb: Db): Hono<HonoEnv> {
     if (!grant) return c.json({ error: 'No access' }, 403);
     const title = (b.title ?? '').trim().slice(0, 200);
     if (!title) return c.json({ error: 'title required' }, 400);
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     // Link the engaged project's open posting when there is one (for eval grounding).
     const [posting] = grant.projectId != null
       ? await db
@@ -438,7 +438,7 @@ export function createDeliverableRoutes(accessDb: Db): Hono<HonoEnv> {
   router.get('/mine', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const engagementId = c.req.query('engagementId');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const rows = await db
       .select(deliverableColumns)
       .from(deliverableProposals)
@@ -462,7 +462,7 @@ export function createDeliverableRoutes(accessDb: Db): Hono<HonoEnv> {
   router.get('/for-job/:jobId', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const jobId = c.req.param('jobId');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const rows = await db
       .select(deliverableColumns)
       .from(deliverableProposals)
@@ -477,7 +477,7 @@ export function createDeliverableRoutes(accessDb: Db): Hono<HonoEnv> {
   router.get('/for-engagement/:engagementId', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const engagementId = c.req.param('engagementId');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const rows = await db
       .select(deliverableColumns)
       .from(deliverableProposals)
@@ -497,7 +497,7 @@ export function createDeliverableRoutes(accessDb: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
     const id = c.req.param('id');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const [d] = await db
       .select({
         id: deliverableProposals.id,
@@ -551,7 +551,7 @@ export function createDeliverableRoutes(accessDb: Db): Hono<HonoEnv> {
     const b = await c.req.json<{ status?: string }>().catch((): { status?: string } => ({}));
     const status = ['accepted', 'changes_requested'].includes(b.status ?? '') ? (b.status as string) : null;
     if (!status) return c.json({ error: 'status must be accepted|changes_requested' }, 400);
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const rows = await db
       .update(deliverableProposals)
       .set({ status, updatedAt: sql`NOW()` })

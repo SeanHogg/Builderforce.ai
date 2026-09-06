@@ -24,7 +24,7 @@
  * the platform — the same rule every other sweep on a Neon Free budget follows.
  */
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { ledgerEntries, tenants } from '../../infrastructure/database/schema';
@@ -33,7 +33,8 @@ import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { resolveTokenLimits } from '../../domain/tenant/PlanLimits';
 import { AI_CREDITS } from '../kernel/denominations';
 import { sumTenantTextTokensDayAndMonth } from '../llm/tokenUsage';
-import { reconcileAiCreditMonth, unsettledCreditMonths } from './aiCredits';
+import { aiCreditReconcileReference, reconcileAiCreditMonth, unsettledMonthsSince } from './aiCredits';
+import { acrossTenants } from '../../infrastructure/database/tenantScope';
 
 export interface CreditReconcileResult {
   tenantsChecked: number;
@@ -41,38 +42,68 @@ export interface CreditReconcileResult {
   tokensDebited: number;
 }
 
-/** Tenants holding at least one credit grant. The sweep's entire universe. */
-async function tenantsWithCredits(db: Db): Promise<number[]> {
+/** The credit-account predicate WITHOUT a tenant: the sweep's reads are grouped
+ *  over every tenant at once and declared as such. */
+function creditLedger() {
+  return and(
+    eq(ledgerEntries.accountKind, 'tenant'),
+    eq(ledgerEntries.denomination, AI_CREDITS),
+  );
+}
+
+/** Every tenant holding a credit grant, with when its first grant landed — the
+ *  sweep's entire universe in ONE grouped read (it was a DISTINCT followed by a
+ *  per-tenant `min()`). */
+async function firstGrantByTenant(db: Db): Promise<Map<number, string>> {
   const rows = await db
-    .selectDistinct({ tenantId: ledgerEntries.tenantId })
+    .select({ tenantId: ledgerEntries.tenantId, firstAt: sql<string>`min(${ledgerEntries.occurredAt})` })
     .from(ledgerEntries)
-    .where(and(
-      eq(ledgerEntries.denomination, AI_CREDITS),
-      eq(ledgerEntries.entryKind, 'grant'),
-    ));
-  return rows.map((row) => row.tenantId);
+    .where(acrossTenants(ledgerEntries, 'scheduled_sweep', creditLedger(), eq(ledgerEntries.entryKind, 'grant')))
+    .groupBy(ledgerEntries.tenantId);
+  return new Map(rows.map((row) => [row.tenantId, row.firstAt]));
+}
+
+/** Every month already settled, platform-wide. The reconcile reference embeds the
+ *  tenant id, so one Set answers "is (tenant, month) done" for every tenant. */
+async function settledReferences(db: Db): Promise<Set<string>> {
+  const rows = await db
+    .select({ reference: ledgerEntries.reference })
+    .from(ledgerEntries)
+    .where(acrossTenants(ledgerEntries, 'scheduled_sweep', creditLedger(), eq(ledgerEntries.entryKind, 'spend')));
+  return new Set(rows.map((row) => row.reference ?? ''));
 }
 
 export async function runAiCreditReconcileSweep(db: Db, env: Env): Promise<CreditReconcileResult> {
   const thisMonth = new Date().toISOString().slice(0, 7);
   const result: CreditReconcileResult = { tenantsChecked: 0, monthsSettled: 0, tokensDebited: 0 };
 
-  for (const tenantId of await tenantsWithCredits(db)) {
-    result.tenantsChecked += 1;
+  // Three reads for the whole platform, then work only where a month is owed.
+  const [firstGrants, settled] = await Promise.all([firstGrantByTenant(db), settledReferences(db)]);
+  result.tenantsChecked = firstGrants.size;
 
-    const months = await unsettledCreditMonths(db, tenantId, thisMonth);
-    if (months.length === 0) continue;
+  const owed = new Map<number, string[]>();
+  for (const [tenantId, firstAt] of firstGrants) {
+    const months = unsettledMonthsSince(firstAt, thisMonth)
+      .filter((key) => !settled.has(aiCreditReconcileReference(tenantId, key)));
+    if (months.length) owed.set(tenantId, months);
+  }
+  if (owed.size === 0) return result;
 
-    const [row] = await db
-      .select({
-        plan: tenants.plan,
-        billingStatus: tenants.billingStatus,
-        trialEndsAt: tenants.trialEndsAt,
-        tokenDailyLimitOverride: tenants.tokenDailyLimitOverride,
-      })
-      .from(tenants)
-      .where(eq(tenants.id, tenantId))
-      .limit(1);
+  const planRows = await db
+    .select({
+      id: tenants.id,
+      plan: tenants.plan,
+      billingStatus: tenants.billingStatus,
+      trialEndsAt: tenants.trialEndsAt,
+      tokenDailyLimitOverride: tenants.tokenDailyLimitOverride,
+    })
+    .from(tenants)
+    // `tenants` is the root of tenancy, not a tenant-owned table — the id list IS the scope.
+    .where(inArray(tenants.id, [...owed.keys()]));
+  const planById = new Map(planRows.map((row) => [row.id, row]));
+
+  for (const [tenantId, months] of owed) {
+    const row = planById.get(tenantId);
     if (!row) continue;
 
     // The PLAN limit, with no credit lift — the ceiling the overage is measured

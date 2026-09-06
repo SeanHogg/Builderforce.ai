@@ -51,6 +51,7 @@ import {
   type ImageGenerationRequest,
 } from '../../application/llm/ImageProxyService';
 import { buildDatabase, buildTransactionalDatabase } from '../../infrastructure/database/connection';
+import { requestDb } from '../../application/shared/dbHandle';
 import { resolveTenantModel, TENANT_MODEL_REF_PREFIX } from '../../application/llm/tenantModelService';
 import { resolveProjectEvermindModelPin, PROJECT_EVERMIND_MODEL_PREFIX } from '../../application/llm/projectEvermind';
 import { recordClientRunOutcome } from '../../application/runtime/scoreRunOutcome';
@@ -400,7 +401,7 @@ async function enforceTokenCaps(
   c: Context<HonoEnv>,
   access: TenantAccess,
 ): Promise<{ blocked: Response } | TokenCapUsage> {
-  const db = buildDatabase(c.env);
+  const db = requestDb(c);
 
   // Plan-level caps + the superadmin(-owned-account) bypass come from the ONE shared
   // entry — the SAME `getTenantTokenAvailability` the cron manager sweep, autonomous
@@ -771,7 +772,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
     }
 
     c.executionCtx.waitUntil(
-      buildDatabase(c.env)
+      requestDb(c)
         .update(tenantApiKeys)
         .set({ lastUsedAt: new Date() })
         .where(eq(tenantApiKeys.id, keyId))
@@ -822,7 +823,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
       'jwt',
       jwtMembershipHash(payload.tid, payload.sub),
       async () => {
-        const db = buildDatabase(c.env);
+        const db = requestDb(c);
         const [membership] = await db
           .select({
             userId: tenantMembers.userId,
@@ -993,7 +994,7 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
   }
 
   const ip = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null;
-  const guest = new GuestChatService(buildDatabase(c.env));
+  const guest = new GuestChatService(requestDb(c));
   const metadata = (body as unknown as { metadata?: Record<string, unknown> }).metadata;
   const suppliedTurnId = typeof metadata?.guestTurnId === 'string' && /^[A-Za-z0-9:_-]{1,128}$/.test(metadata.guestTurnId)
     ? metadata.guestTurnId
@@ -1080,7 +1081,7 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
   // ceiling, which is why the same service owns both entry points.
   if (originalUserInput) {
     c.executionCtx.waitUntil(
-      new GuestPromptService(buildDatabase(c.env))
+      new GuestPromptService(requestDb(c))
         .record(c.env as Env, {
           visitorId,
           prompt: originalUserInput,
@@ -1855,7 +1856,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     } catch (err) {
       return respondToAccessError(c, err);
     }
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     // THREE sources, one list — built by the shared gateway module so this REST
     // transport and the spec JSON-RPC transport (`POST /mcp`) can never drift.
     // `?surface=` narrows the catalog (see application/llm/toolSurfaces); absent
@@ -1910,7 +1911,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     if (!body.extensionId || !body.tool) {
       return c.json({ error: 'extensionId and tool are required' }, 400);
     }
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     try {
       const result = await callGatewayMcpTool(
         { db, env: c.env as Env, tenantId: access.tenantId, keyMaterial: c.env.JWT_SECRET },
@@ -1983,11 +1984,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // Evermind version (evermind/<ref>) at call time — the cloud/IDE replica
     // pulling the latest learned model on each run (pull-on-boundary).
     if (typeof bodyAny.model === 'string' && bodyAny.model.startsWith(PROJECT_EVERMIND_MODEL_PREFIX)) {
-      const expanded = await resolveProjectEvermindModelPin(c.env as Env, buildDatabase(c.env), access.tenantId, bodyAny.model);
+      const expanded = await resolveProjectEvermindModelPin(c.env as Env, requestDb(c), access.tenantId, bodyAny.model);
       bodyAny.model = expanded.model; // undefined when unseeded → plan default
     }
     if (typeof bodyAny.model === 'string' && bodyAny.model.startsWith(TENANT_MODEL_REF_PREFIX)) {
-      const tm = await resolveTenantModel(c.env as Env, buildDatabase(c.env), access.tenantId, bodyAny.model);
+      const tm = await resolveTenantModel(c.env as Env, requestDb(c), access.tenantId, bodyAny.model);
       // null base → let the plan default resolve; unknown ref → drop the bad id too.
       bodyAny.model = tm?.baseModel ?? undefined;
       if (tm?.directives) {
@@ -2340,7 +2341,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       const agentName = typeof meta.agentName === 'string' && meta.agentName ? meta.agentName : 'Brain';
       const projectId = typeof meta.projectId === 'number' ? meta.projectId : null;
       const byoFunded = result.byoFunded ?? false;
-      const promise = recordActivity(c.env, buildDatabase(c.env), {
+      const promise = recordActivity(c.env, requestDb(c), {
         tenantId: access.tenantId,
         projectId,
         actor: cloudAgentActor(agentRef, agentName),
@@ -2728,7 +2729,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       : parseScopeToken(rawScope);
     if (!scope) return c.json({ error: `invalid scope '${rawScope}' (use project:<id> | tenant | global)` }, 400);
 
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     // Ownership guard: a project scope must belong to the caller's tenant (the blob
     // is low-sensitivity aggregate model stats, but routing data still stays tenant-scoped).
     if (scope.kind === 'project') {
@@ -2782,7 +2783,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       return respondToAccessError(c, err);
     }
     const limit = limitParam(c.req.query('limit'), 50, 200);
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const seed = await getOrSetCached(
       c.env,
       `recallseed:${access.tenantId}:${limit}`,
@@ -2839,7 +2840,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const parsed = parseRunOutcomeRequest(body);
     if (!parsed.ok) return c.json({ error: parsed.error }, 400);
 
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     await recordClientRunOutcome(c.env, db, access.tenantId, parsed.outcome);
     return c.json({ ok: true });
   });
@@ -2857,7 +2858,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     }
 
     const days = daysParam(c.req.query('days'), 30, 90);
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
 
     // ── Detail mode — row-level pageable per-call ledger for reconciliation
     // against the caller's own usage table. Same auth, same tenant scoping.
@@ -3348,7 +3349,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     } catch (err) {
       return respondToAccessError(c, err);
     }
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const snapshot = await getCachedBuilderInsightsSnapshot(db, c.env, {
       tenantId: access.tenantId,
       userId: access.userId,
@@ -3373,7 +3374,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       return respondToAccessError(c, err);
     }
 
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const scope = {
       tenantId: access.tenantId,
       userId: access.userId,

@@ -17,7 +17,8 @@
  */
 import { Hono } from 'hono';
 import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
-import { buildDatabase, type Db } from '../../infrastructure/database/connection';
+import { type Db } from '../../infrastructure/database/connection';
+import { requestDb } from '../../application/shared/dbHandle';
 import {
   agentFeedback,
   agentPurchases,
@@ -331,7 +332,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   // ----- Authenticated: the tenant's own agents --------------------------
   // Registered BEFORE GET /agents/:id so "mine" isn't swallowed by the :id route.
   router.get('/agents/mine', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     // active_hires = tenants CURRENTLY holding the agent (owner-only "in use"
     // metric). Distinct from the cumulative hire_count. Owner-scoped, so it ships
@@ -359,7 +360,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   // (distinct from /agents/mine, which is the tenant's OWN created agents).
   // Read-through cached; invalidated on hire.
   router.get('/agents/purchased', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const rows = await getOrSetCached(c.env as Env, purchasedCacheKey(tenantId), () =>
       db
@@ -387,7 +388,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   // never read: an owner could list an agent at $99 and every hire was free.
   // Free agents (price_cents = 0) are unaffected and hire exactly as before.
   router.post('/agents/:id/hire', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
     const id = c.req.param('id');
@@ -472,7 +473,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   // nothing to pay, `{ purchased: true }` when this workspace already bought it,
   // otherwise a processor URL. Records nothing — see agentCommerce.ts.
   router.post('/agents/:id/checkout', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
     // The same predicate the public listing is built on — you may only pay for
@@ -513,7 +514,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   // The session is re-read FROM the processor before the purchase is recorded;
   // the id in the body is untrusted until agentCommerce has verified it.
   router.post('/agents/:id/checkout/complete', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const body = await c.req.json<{ checkoutSessionId?: string }>().catch(() => ({ checkoutSessionId: undefined }));
     if (!body.checkoutSessionId) return c.json({ error: 'checkoutSessionId is required' }, 400);
@@ -537,7 +538,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   // hire_count is CUMULATIVE ("times hired") — unhiring does NOT decrement it.
   // Idempotent: unhiring something not actively held is a no-op success.
   router.delete('/agents/:id/hire', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
     const removed = await db
@@ -561,7 +562,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   });
 
   router.post('/agents', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
     const body = await c.req.json<{
@@ -626,7 +627,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   });
 
   router.patch('/agents/:id', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
     const id = c.req.param('id');
@@ -700,7 +701,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   });
 
   router.delete('/agents/:id', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
 
@@ -747,7 +748,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   // they follow the agent everywhere (IDE / Workflow / on-prem / cloud) rather
   // than being tied to any one project (swimlane).
   router.post('/agents/:id/bridge', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
@@ -776,7 +777,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   // cross-tenant telemetry never leaks. Read-heavy → read-through cached on
   // agent_id; invalidated when a buyer posts feedback (short TTL covers run drift).
   router.get('/agents/:id/perf', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
     const [owned] = await db
@@ -796,7 +797,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   // POST /agents/:id/feedback — a BUYER (a tenant holding an active hire) rates
   // the agent. One row per hire (UPSERT), invalidates the owner's perf cache.
   router.post('/agents/:id/feedback', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
     const body = await c.req.json<{ rating?: number; comment?: string | null }>();
@@ -833,7 +834,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   // Read-heavy + world-readable → served through the read-through cache; the
   // listing is invalidated by every write below that can change a listed row.
   router.get('/agents', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const rows = await getOrSetCached(
       c.env as Env,
       PUBLIC_LIST_CACHE_KEY,
@@ -854,7 +855,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
 
   // GET /api/workforce/agents/:id — public agent detail (with evalScore).
   router.get('/agents/:id', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const [row] = await db
       .select(agentRowColumns)
       .from(ideAgents)

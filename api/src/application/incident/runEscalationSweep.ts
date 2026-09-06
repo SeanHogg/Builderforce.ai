@@ -8,7 +8,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * (acknowledging an incident is what stops the pages). No-op when nothing is open.
  */
 import { eq } from 'drizzle-orm';
-import { buildDatabase } from '../../infrastructure/database/connection';
+import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { prodIncidents } from '../../infrastructure/database/schema';
 import { EscalationService } from './EscalationService';
 import type { Env } from '../../env';
@@ -18,8 +18,7 @@ export interface EscalationSweepResult {
   escalated: number;
 }
 
-export async function runEscalationSweep(env: Env): Promise<EscalationSweepResult> {
-  const db = buildDatabase(env);
+export async function runEscalationSweep(env: Env, db: Db = buildDatabase(env)): Promise<EscalationSweepResult> {
   const svc = new EscalationService(db);
   const open = await db.select().from(prodIncidents).where(eq(prodIncidents.status, 'open')).limit(500);
   let escalated = 0;

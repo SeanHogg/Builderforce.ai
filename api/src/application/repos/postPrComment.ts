@@ -104,8 +104,7 @@ export async function prCommentExists(
 ): Promise<boolean> {
   for (let page = 1; page <= DEDUPE_MAX_PAGES; page++) {
     const res = await githubRequest<IssueComment[]>({
-      coords: auth.coords,
-      token: auth.token,
+      auth,
       path: repoPath(auth.coords, `/issues/${prNumber}/comments?per_page=${DEDUPE_PAGE_SIZE}&page=${page}`),
       fetchFn,
     });
@@ -146,8 +145,7 @@ export async function postPrIssueComment(
   }
 
   const res = await githubRequest<{ id: number }>({
-    coords: auth.coords,
-    token: auth.token,
+    auth,
     // PRs ARE issues for this endpoint — there is no `/pulls/{n}/comments`
     // equivalent that accepts an unanchored comment.
     path: repoPath(auth.coords, `/issues/${prNumber}/comments`),
@@ -207,8 +205,7 @@ export async function postPrReviewComments(
   if (comments.length === 0 && !opts?.body) return { ok: true, id: null, skipped: true };
 
   const res = await githubRequest<{ id: number }>({
-    coords: auth.coords,
-    token: auth.token,
+    auth,
     path: repoPath(auth.coords, `/pulls/${prNumber}/reviews`),
     method: 'POST',
     fetchFn,

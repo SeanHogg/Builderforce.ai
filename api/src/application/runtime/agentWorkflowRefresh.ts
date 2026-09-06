@@ -95,8 +95,8 @@ interface QueuedRepo {
 export async function runAgentWorkflowRefreshSweep(
   env: Env,
   nowMs = Date.now(),
+  db: Db = buildDatabase(env),
 ): Promise<AgentWorkflowRefreshResult> {
-  const db = buildDatabase(env);
   const result: AgentWorkflowRefreshResult = { checked: 0, refreshed: 0, skipped: 0, deferred: 0, dropped: 0 };
 
   const queued = await loadQueuedRepos(db, nowMs);

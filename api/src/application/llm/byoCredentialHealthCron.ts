@@ -35,7 +35,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 
 import { sql } from 'drizzle-orm';
-import { buildDatabase } from '../../infrastructure/database/connection';
+import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { notifyBrokenProviders } from './byoCredentialAlerting';
 import type { ByoCredentialAlertRow } from '../../infrastructure/email/EmailService';
@@ -147,8 +147,7 @@ export async function runByoCredentialHealthForTenant(
  * Run one full sweep across every tenant with connected providers. Never throws: a single
  * tenant's failure is logged and skipped so the rest of the platform still gets checked.
  */
-export async function runByoCredentialHealthCron(env: Env): Promise<ByoHealthSweepSummary> {
-  const db = buildDatabase(env);
+export async function runByoCredentialHealthCron(env: Env, db: Db = buildDatabase(env)): Promise<ByoHealthSweepSummary> {
   const all = await tenantsWithConnectedAccounts(db);
   const truncated = all.length > MAX_TENANTS_PER_SWEEP;
   const tenantIds = truncated ? all.slice(0, MAX_TENANTS_PER_SWEEP) : all;

@@ -10,7 +10,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * Worker-facing endpoints use the WEB JWT (a freelancer may have no tenant);
  * employer approval uses the TENANT JWT.
  *
- * Data access is Drizzle only (`buildDatabase(c.env)` per handler). Client-visible
+ * Data access is Drizzle only (`requestDb(c)` per handler). Client-visible
  * rows are selected with explicit snake_case aliases so the `mapCard`/`mapEntry`/
  * `mapInvoice` shapes are byte-identical to the raw-SQL implementation they replace.
  */
@@ -25,7 +25,8 @@ import { getActivityLog } from '../../application/activity/activityLog';
 import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { freelancerStatsCacheKey } from './freelancerRoutes';
 import { TenantRole } from '../../domain/shared/types';
-import { buildDatabase, type Db } from '../../infrastructure/database/connection';
+import { type Db } from '../../infrastructure/database/connection';
+import { requestDb } from '../../application/shared/dbHandle';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   activitySignals,
@@ -165,7 +166,7 @@ export function createActivityRoutes(db: Db): Hono<HonoEnv> {
     const body = await c.req.json<{ signals?: unknown[] }>();
     const list = Array.isArray(body.signals) ? body.signals.slice(0, MAX_BATCH) : [];
     if (list.length === 0) return c.json({ ok: true, ingested: 0 });
-    const ingested = await ingestSignals(buildDatabase(c.env), userId, list, 'portal', null);
+    const ingested = await ingestSignals(requestDb(c), userId, list, 'portal', null);
     return c.json({ ok: true, ingested });
   });
 
@@ -177,7 +178,7 @@ export function createActivityRoutes(db: Db): Hono<HonoEnv> {
     const body = await c.req.json<{ signals?: unknown[] }>();
     const list = Array.isArray(body.signals) ? body.signals.slice(0, MAX_BATCH) : [];
     if (list.length === 0) return c.json({ ok: true, ingested: 0 });
-    const ingested = await ingestSignals(buildDatabase(c.env), userId, list, 'vscode', tenantId);
+    const ingested = await ingestSignals(requestDb(c), userId, list, 'vscode', tenantId);
     return c.json({ ok: true, ingested });
   });
 
@@ -188,7 +189,7 @@ export function createActivityRoutes(db: Db): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     const b = await c.req.json<{ engagementId?: string; occurredAt?: string; durationMinutes?: number; note?: string }>();
     if (!b.engagementId || !b.durationMinutes || b.durationMinutes <= 0) return c.json({ error: 'engagementId and durationMinutes required' }, 400);
-    const ingested = await ingestSignals(buildDatabase(c.env), userId, [{
+    const ingested = await ingestSignals(requestDb(c), userId, [{
       source: 'meeting', kind: 'meeting', engagementId: b.engagementId,
       durationSeconds: Math.round(b.durationMinutes * 60),
       occurredAt: b.occurredAt, ref: 'meeting', metadata: b.note ? { note: b.note } : undefined,
@@ -200,7 +201,7 @@ export function createActivityRoutes(db: Db): Hono<HonoEnv> {
   // active-minutes estimate for the signed-in worker (today, UTC).
   router.get('/today', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const rows = await buildDatabase(c.env)
+    const rows = await requestDb(c)
       .select({
         id: activitySignals.id,
         occurredAt: activitySignals.occurredAt,
@@ -302,7 +303,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     const engagementId = b.engagementId;
     const periodStart = b.periodStart;
     const periodEnd = b.periodEnd;
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const [eng] = await db
       .select({
         id: freelancerEngagements.id,
@@ -392,7 +393,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
   // GET /mine — worker's timecards (web JWT).
   router.get('/mine', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const rows = await buildDatabase(c.env)
+    const rows = await requestDb(c)
       .select({ ...cardColumns, tenant_name: tenants.name })
       .from(timecards)
       .innerJoin(tenants, eq(tenants.id, timecards.tenantId))
@@ -405,7 +406,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
   // GET / — employer's timecards for approval (tenant JWT).
   router.get('/', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const rows = await buildDatabase(c.env)
+    const rows = await requestDb(c)
       .select({ ...cardColumns, freelancer_name: users.displayName })
       .from(timecards)
       .innerJoin(users, eq(users.id, timecards.userId))
@@ -424,7 +425,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
   router.get('/:id/entries', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
-    const rows = await buildDatabase(c.env)
+    const rows = await requestDb(c)
       .select(entryColumns)
       .from(timecardEntries)
       .innerJoin(timecards, eq(timecards.id, timecardEntries.timecardId))
@@ -438,7 +439,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
   router.get('/:id/review', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const [cardRow] = await db
       .select({ ...cardColumns, freelancer_name: users.displayName })
       .from(timecards)
@@ -458,7 +459,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
     const b = await c.req.json<{ workDate?: string; minutes?: number; description?: string; billable?: boolean }>();
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const [card] = await db
       .select({ id: timecards.id, engagementId: timecards.engagementId, tenantId: timecards.tenantId })
       .from(timecards)
@@ -489,7 +490,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     const id = c.req.param('id');
     const entryId = c.req.param('entryId');
     const b = await c.req.json<{ minutes?: number; billable?: boolean; description?: string }>();
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const [card] = await db
       .select({ id: timecards.id })
       .from(timecards)
@@ -516,7 +517,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
     const entryId = c.req.param('entryId');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const [card] = await db
       .select({ id: timecards.id })
       .from(timecards)
@@ -532,7 +533,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
   router.post('/:id/submit', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const rows = await db
       .update(timecards)
       .set({ status: 'submitted', submittedAt: sql`NOW()`, updatedAt: sql`NOW()` })
@@ -562,7 +563,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
     const id = c.req.param('id');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const rows = await db
       .update(timecards)
       .set({ status: 'approved', approvedAt: sql`NOW()`, approvedByUserId: actor, updatedAt: sql`NOW()` })
@@ -605,7 +606,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     try { const b = await c.req.json<{ reason?: string }>(); reason = b.reason ?? null; } catch (error) { /* optional */ 
       reportCaughtError(error, { source: "presentation/routes/activityRoutes.ts", operation: "createTimecardRoutes" });
     }
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const rows = await db
       .update(timecards)
       .set({ status: 'draft', rejectReason: reason, submittedAt: null, updatedAt: sql`NOW()` })
@@ -620,7 +621,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
   // GET /invoices — employer's invoices (tenant JWT).
   router.get('/invoices', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const rows = await buildDatabase(c.env)
+    const rows = await requestDb(c)
       .select({ ...invoiceColumns, freelancer_name: users.displayName })
       .from(freelancerInvoices)
       .innerJoin(users, eq(users.id, freelancerInvoices.freelancerUserId))
@@ -633,7 +634,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
   // GET /invoices/mine — worker's invoices (web JWT).
   router.get('/invoices/mine', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const rows = await buildDatabase(c.env)
+    const rows = await requestDb(c)
       .select({ ...invoiceColumns, tenant_name: tenants.name })
       .from(freelancerInvoices)
       .innerJoin(tenants, eq(tenants.id, freelancerInvoices.tenantId))
@@ -648,7 +649,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
   router.post('/invoices/:invId/pay', authMiddleware, requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const invId = c.req.param('invId');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const [inv] = await db
       .select({
         id: freelancerInvoices.id,
@@ -675,7 +676,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
   router.post('/invoices/:invId/mark-paid', authMiddleware, requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const invId = c.req.param('invId');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const [inv] = await db
       .select({ id: freelancerInvoices.id })
       .from(freelancerInvoices)

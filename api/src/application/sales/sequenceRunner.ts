@@ -184,8 +184,7 @@ async function dispatch(
  * of every object on every board — the same argument `idx_question_sets_reminders` makes
  * for the form sweep.
  */
-export async function runSequenceSweep(env: Env, now = new Date()): Promise<SequenceSweepResult> {
-  const db = buildDatabase(env);
+export async function runSequenceSweep(env: Env, now = new Date(), db: Db = buildDatabase(env)): Promise<SequenceSweepResult> {
   const rows = await db.select({
     id: creationSessionObjects.id,
     content: creationSessionObjects.content,

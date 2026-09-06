@@ -18,6 +18,7 @@ import {
 } from '../../application/tenant/cardValidationService';
 import { markDiscountRedeemed } from '../../application/tenant/discountCodeService';
 import { buildDatabase } from '../../infrastructure/database/connection';
+import { requestDb } from '../../application/shared/dbHandle';
 import type { Db } from '../../infrastructure/database/connection';
 import { recordReferralConversion } from '../../application/sales/recordReferralConversion';
 import { recordBusinessPhoneEvent } from '../../application/tenant/businessPhoneSubscription';
@@ -124,7 +125,7 @@ export function createWebhookRoutes(
     // fail the provider's delivery. `processed` still reflects OUR handling, not the
     // fan-out.
     if (event.tenantId) {
-      await fireEventTriggers(buildDatabase(c.env as Env), {
+      await fireEventTriggers(requestDb(c), {
         tenantId: event.tenantId,
         env: c.env as Env,
         eventType: 'integration',
@@ -248,7 +249,7 @@ export function createWebhookRoutes(
         : event.type === 'extension.subscription.past_due' ? 'past_due'
           : 'cancelled';
       try {
-        const matched = await setSubscriptionState(buildDatabase(c.env), c.env as Env, {
+        const matched = await setSubscriptionState(requestDb(c), c.env as Env, {
           subscriptionRef: event.externalSubscriptionId,
           state,
         });
@@ -333,14 +334,14 @@ export function createWebhookRoutes(
 
     try {
       if (event.purchaseKind === 'business_phone') {
-        await recordBusinessPhoneEvent(buildDatabase(c.env as Env), event);
+        await recordBusinessPhoneEvent(requestDb(c), event);
         return c.json({ received: true, processed: true });
       }
       await tenantService.handleWebhookEvent(event);
-      await recordReferralConversion(buildDatabase(c.env as Env), c.env as Env, event);
+      await recordReferralConversion(requestDb(c), c.env as Env, event);
       if (event.type === 'subscription.activated' && event.discountRedemptionId) {
         if (!event.tenantId) throw new Error('Discount activation webhook is missing signed tenant metadata');
-        await markDiscountRedeemed(buildDatabase(c.env as Env), event.tenantId, event.discountRedemptionId);
+        await markDiscountRedeemed(requestDb(c), event.tenantId, event.discountRedemptionId);
       }
     } catch (err) {
       reportCaughtError(err, { source: "presentation/routes/webhookRoutes.ts", operation: "createWebhookRoutes", context: { logMessage: '[webhook] handleWebhookEvent failed:', details: err } });

@@ -24,7 +24,7 @@
  *   `token <pat>` scheme is not used anywhere in this codebase.
  */
 import { buildGitApiBaseUrl } from './gitProxy';
-import { getInstallationToken, isGitHubAppConfigured } from './githubApp';
+import { getInstallationAuth, invalidateInstallationToken, isGitHubAppConfigured } from './githubApp';
 import { isResolveError, resolveRepoCredential } from './resolveRepoCredential';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -78,9 +78,7 @@ function classify(status: number): GitHubErrorCode {
  * so this stays a thin transport — but callers MUST encodeURIComponent their
  * segments; see `repoPath` below for the safe helper.
  */
-export async function githubRequest<T>(args: {
-  coords: GitHubCoords;
-  token: string;
+export type GithubRequestArgs = {
   path: string;
   method?: string;
   body?: unknown;
@@ -88,8 +86,18 @@ export async function githubRequest<T>(args: {
   fetchFn?: typeof fetch;
   /** Rate-limit / 403 responses carry a JSON message worth surfacing. */
   extraHeaders?: Record<string, string>;
-}): Promise<GitHubResponse<T>> {
-  const { coords, token, path, method = 'GET', body, fetchFn = fetch, extraHeaders } = args;
+} & (
+  /** A resolved repo credential. When it is an App installation token, a 401 is
+   *  recovered ONCE here: the cached token is dropped, a fresh one minted, and the
+   *  call repeated — see {@link ResolvedRepoAuth.refresh}. */
+  | { auth: ResolvedRepoAuth; coords?: undefined; token?: undefined }
+  /** A bare token (a user PAT, or a provider-agnostic probe). No recovery. */
+  | { coords: GitHubCoords; token: string; auth?: undefined }
+);
+
+export async function githubRequest<T>(args: GithubRequestArgs): Promise<GitHubResponse<T>> {
+  const { path, method = 'GET', body, fetchFn = fetch, extraHeaders } = args;
+  const coords = args.auth ? args.auth.coords : args.coords;
 
   let base: string;
   try {
@@ -98,18 +106,36 @@ export async function githubRequest<T>(args: {
     return { ok: false, status: 0, code: 'unsupported', reason: (e as Error).message };
   }
 
-  let res: Response;
-  try {
-    res = await fetchFn(`${base}${path}`, {
-      method,
-      headers: githubHeaders(token, {
-        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-        ...extraHeaders,
-      }),
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    });
-  } catch (e) {
-    return { ok: false, status: 0, code: 'provider_error', reason: (e as Error).message };
+  const attempt = async (token: string): Promise<Response | GitHubResponse<T>> => {
+    try {
+      return await fetchFn(`${base}${path}`, {
+        method,
+        headers: githubHeaders(token, {
+          ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+          ...extraHeaders,
+        }),
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      });
+    } catch (e) {
+      return { ok: false, status: 0, code: 'provider_error', reason: (e as Error).message };
+    }
+  };
+
+  let first = await attempt(args.auth ? args.auth.token : args.token);
+  if (!(first instanceof Response)) return first;
+  let res: Response = first;
+
+  // A 401 on an installation token is the one failure worth a second attempt:
+  // the token was revoked or its key rotated inside the cache TTL. Anything else
+  // — a PAT, a 403, a 404 — is the caller's verdict to interpret.
+  if (res.status === 401 && args.auth?.refresh) {
+    const fresh = await args.auth.refresh();
+    if (fresh) {
+      args.auth.token = fresh;
+      first = await attempt(fresh);
+      if (!(first instanceof Response)) return first;
+      res = first;
+    }
   }
 
   if (!res.ok) {
@@ -153,6 +179,14 @@ export interface ResolvedRepoAuth {
   /** Which credential actually authenticated the call — surfaced in telemetry so
    *  the App rollout can be measured rather than assumed. */
   authKind: 'app_installation' | 'user_token';
+  /**
+   * Re-mint the credential after GitHub rejected it. Present ONLY for an App
+   * installation token — it drops the cached token and mints a fresh one, or
+   * returns null when the mint itself fails (the install is gone, not just the
+   * token). A user PAT has nothing to re-mint. {@link githubRequest} calls this
+   * on a 401 and repeats the call once with the result.
+   */
+  refresh?: () => Promise<string | null>;
   repo: {
     id: string;
     provider: string;
@@ -213,9 +247,15 @@ export async function resolveRepoAuth(
   };
 
   if (resolved.repo.provider === 'github' && isGitHubAppConfigured(env)) {
-    const appToken = await getInstallationToken(env, coords);
+    const appToken = await getInstallationAuth(env, coords);
     if (appToken.ok) {
-      return { ok: true, auth: { coords, token: appToken.value, authKind: 'app_installation', repo } };
+      const { appId, installationId } = appToken.value;
+      const refresh = async (): Promise<string | null> => {
+        await invalidateInstallationToken(env, appId, installationId);
+        const again = await getInstallationAuth(env, coords);
+        return again.ok ? again.value.token : null;
+      };
+      return { ok: true, auth: { coords, token: appToken.value.token, authKind: 'app_installation', refresh, repo } };
     }
     // `no_installation` is the expected steady state during rollout; anything
     // else is worth a breadcrumb but still falls back rather than failing the

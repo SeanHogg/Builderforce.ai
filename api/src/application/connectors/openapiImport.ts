@@ -23,7 +23,6 @@ import {
   MAX_ACTIONS_PER_CONNECTOR,
   parseConnectorManifest,
   type ConnectorAuth,
-  type ConnectorAuthKind,
   type ConnectorManifest,
   type ConnectorMethod,
   type ConnectorParam,
@@ -416,5 +415,3 @@ export function manifestFromOpenApi(
   return { manifest, warnings, totalOperations };
 }
 
-/** Auth kinds an imported spec can produce — used by the builder to label the result. */
-export const IMPORTABLE_AUTH_KINDS: readonly ConnectorAuthKind[] = ['none', 'api_key', 'bearer', 'basic', 'oauth2'];

@@ -82,8 +82,7 @@ const REAPED_RETURNING = {
   task_id: executions.taskId,
 } as const;
 
-export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise<ReapResult> {
-  const db = buildDatabase(env);
+export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db = buildDatabase(env)): Promise<ReapResult> {
   const runningCutoff = new Date(nowMs - RUNNING_DEADLINE_MS).toISOString();
   const cloudRunningCutoff = new Date(nowMs - CLOUD_RUNNING_DEADLINE_MS).toISOString();
   const queuedCutoff = new Date(nowMs - QUEUED_DEADLINE_MS).toISOString();

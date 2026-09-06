@@ -76,8 +76,7 @@ async function changedPaths(env: Env, target: TaskPrTarget): Promise<Set<string>
         // pagination. A PR larger than that is not one anybody reviews line by
         // line, and the demote-to-body path below keeps its findings anyway.
         const res = await githubRequest<Array<{ filename: string }>>({
-          coords: target.auth.coords,
-          token: target.auth.token,
+          auth: target.auth,
           path: repoPath(target.auth.coords, `/pulls/${target.prNumber}/files?per_page=300`),
         });
         if (!res.ok) throw new Error(res.reason);

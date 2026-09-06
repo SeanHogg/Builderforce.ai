@@ -59,8 +59,7 @@ export async function githubActionsAvailable(
       if (!auth.ok || auth.auth.repo.provider !== 'github') return false;
 
       const res = await githubRequest<{ path: string }>({
-        coords: auth.auth.coords,
-        token: auth.auth.token,
+        auth: auth.auth,
         path: repoPath(auth.auth.coords, `/contents/${AGENT_WORKFLOW_PATH}`),
       });
       return res.ok;
@@ -101,14 +100,12 @@ export async function ensureAgentWorkflow(
   // Fetch the existing file's blob SHA — the contents API needs it to update
   // rather than reject with a 409. Absence simply means "create".
   const existing = await githubRequest<{ sha: string; content: string }>({
-    coords: auth.auth.coords,
-    token: auth.auth.token,
+    auth: auth.auth,
     path: repoPath(auth.auth.coords, `/contents/${AGENT_WORKFLOW_PATH}`),
   });
 
   const put = await githubRequest<{ content: unknown }>({
-    coords: auth.auth.coords,
-    token: auth.auth.token,
+    auth: auth.auth,
     path: repoPath(auth.auth.coords, `/contents/${AGENT_WORKFLOW_PATH}`),
     method: 'PUT',
     body: {
@@ -171,8 +168,7 @@ export async function dispatchGithubActionsRun(
   const ref = args.ref ?? auth.auth.repo.defaultBranch ?? 'main';
 
   const res = await githubRequest<undefined>({
-    coords: auth.auth.coords,
-    token: auth.auth.token,
+    auth: auth.auth,
     path: repoPath(auth.auth.coords, `/actions/workflows/${WORKFLOW_FILE}/dispatches`),
     method: 'POST',
     body: {

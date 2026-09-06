@@ -23,6 +23,11 @@ import { enforceErrorEventsCap } from './errorEventsLedger';
 import { resolveEventProjectId, type CollectorRef, type MappingRule } from './errorMapping';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 
+/** Groups per upsert statement. Neon HTTP carries one statement per request, and
+ *  a few hundred rows of sample payloads is the size that stays comfortably
+ *  under its body limit. */
+const GROUP_UPSERT_CHUNK = 200;
+
 /** Version key for a project's cached error-group lists (folded into list cache keys). */
 export function qualityGroupsVersionKey(projectId: number): string {
   return `quality-groups-version:project:${projectId}`;
@@ -86,79 +91,120 @@ export async function ingestErrorEvents(
   // Dropped BECAUSE nothing routes it, as opposed to dropped because it threw.
   let unmapped = 0;
 
+  // Phase 1 — route and fingerprint every event. Best-effort per event: one that
+  // throws is dropped, the batch continues.
+  type Routed = { e: NormalizedErrorEvent; projectId: number; fingerprint: string; seenAt: Date };
+  const routed: Routed[] = [];
   for (const e of events) {
     try {
       const projectId = resolveEventProjectId(e, collector, rules);
       if (projectId == null) { dropped++; unmapped++; continue; } // unmappable tenant-level event
       const fingerprint = await computeFingerprint(e);
-      const seenAt = parseTs(e.timestamp) ?? now;
-      const level = e.level;
+      routed.push({ e, projectId, fingerprint, seenAt: parseTs(e.timestamp) ?? now });
+    } catch {
+      dropped++;
+    }
+  }
 
-      const [grp] = await db
+  // Phase 2 — fold the batch by group. A burst that hits one group a hundred
+  // times is ONE upsert row carrying `count`, not a hundred `+ 1` statements; the
+  // newest event in the fold supplies the sample and the level, as the last of a
+  // hundred sequential upserts did before.
+  const groupKey = (projectId: number, fingerprint: string) => `${projectId} ${fingerprint}`;
+  const folded = new Map<string, { projectId: number; fingerprint: string; count: number; firstSeen: Date; lastSeen: Date; latest: Routed }>();
+  for (const r of routed) {
+    const k = groupKey(r.projectId, r.fingerprint);
+    const cur = folded.get(k);
+    if (!cur) {
+      folded.set(k, { projectId: r.projectId, fingerprint: r.fingerprint, count: 1, firstSeen: r.seenAt, lastSeen: r.seenAt, latest: r });
+      continue;
+    }
+    cur.count += 1;
+    if (r.seenAt < cur.firstSeen) cur.firstSeen = r.seenAt;
+    if (r.seenAt >= cur.lastSeen) { cur.lastSeen = r.seenAt; cur.latest = r; }
+  }
+
+  // Phase 3 — ONE multi-row upsert per chunk of groups. `excluded.*` is the row
+  // this statement proposed for the conflict, so the count and the newest
+  // timestamp come from the fold rather than from one statement per event.
+  const groupIds = new Map<string, string>();
+  const groups = [...folded.values()];
+  for (let i = 0; i < groups.length; i += GROUP_UPSERT_CHUNK) {
+    const chunk = groups.slice(i, i + GROUP_UPSERT_CHUNK);
+    try {
+      const rows = await db
         .insert(errorGroups)
-        .values({
+        .values(chunk.map((g) => ({
           tenantId: collector.tenantId,
-          projectId,
+          projectId: g.projectId,
           collectorId: collector.id,
-          fingerprint,
-          title: eventTitle(e),
-          type: e.type ?? null,
-          culprit: e.url ?? null,
-          level,
+          fingerprint: g.fingerprint,
+          title: eventTitle(g.latest.e),
+          type: g.latest.e.type ?? null,
+          culprit: g.latest.e.url ?? null,
+          level: g.latest.e.level,
           status: 'unresolved',
-          eventCount: 1,
+          eventCount: g.count,
           // user_count is owned by the error_group_users set below (exact distinct);
           // never incremented here, or repeat users would inflate it.
           userCount: 0,
-          firstSeen: seenAt,
-          lastSeen: seenAt,
-          release: e.release ?? null,
-          environment: e.environment ?? null,
-          samplePayload: e as unknown as Record<string, unknown>,
-        })
+          firstSeen: g.firstSeen,
+          lastSeen: g.lastSeen,
+          release: g.latest.e.release ?? null,
+          environment: g.latest.e.environment ?? null,
+          samplePayload: g.latest.e as unknown as Record<string, unknown>,
+        })))
         .onConflictDoUpdate({
           target: [errorGroups.tenantId, errorGroups.projectId, errorGroups.fingerprint],
           set: {
-            eventCount: sql`${errorGroups.eventCount} + 1`,
-            lastSeen: sql`GREATEST(${errorGroups.lastSeen}, ${seenAt})`,
+            eventCount: sql`${errorGroups.eventCount} + excluded.event_count`,
+            lastSeen: sql`GREATEST(${errorGroups.lastSeen}, excluded.last_seen)`,
             // A resolved bug that recurs is a regression — reopen it; ignored stays ignored.
             status: sql`CASE WHEN ${errorGroups.status} = 'resolved' THEN 'unresolved' ELSE ${errorGroups.status} END`,
-            level,
-            release: e.release ?? null,
-            environment: e.environment ?? null,
-            samplePayload: e as unknown as Record<string, unknown>,
+            level: sql`excluded.level`,
+            release: sql`excluded.release`,
+            environment: sql`excluded.environment`,
+            samplePayload: sql`excluded.sample_payload`,
             updatedAt: now,
           },
         })
-        .returning({ id: errorGroups.id });
+        .returning({ id: errorGroups.id, projectId: errorGroups.projectId, fingerprint: errorGroups.fingerprint });
+      for (const row of rows) groupIds.set(groupKey(row.projectId, row.fingerprint), row.id);
+    } catch (error) {
+      // The chunk's events are dropped (counted in phase 4); the batch continues.
+      reportCaughtError(error, { source: 'application/quality/ingestEngine.ts', operation: 'ingestErrorEvents', context: { logMessage: '[quality-ingest] group upsert failed', details: { groups: chunk.length } } });
+    }
+  }
 
-      if (!grp) { dropped++; continue; }
-      touchedProjects.add(projectId);
+  // Phase 4 — the raw event rows and the (group, user) pairs, keyed back to the
+  // group ids the upsert returned.
+  for (const r of routed) {
+    const groupId = groupIds.get(groupKey(r.projectId, r.fingerprint));
+    if (!groupId) { dropped++; continue; }
+    touchedProjects.add(r.projectId);
+    const e = r.e;
 
-      eventRows.push({
-        groupId: grp.id,
-        tenantId: collector.tenantId,
-        ts: seenAt,
-        release: e.release ?? null,
-        environment: e.environment ?? null,
-        userKey: e.userKey ?? null,
-        // Which adapter produced this event — drives the by-source stats breakdown.
-        source: e.source ?? null,
-        payload: e as unknown as Record<string, unknown>,
-        createdAt: now,
-      });
+    eventRows.push({
+      groupId,
+      tenantId: collector.tenantId,
+      ts: r.seenAt,
+      release: e.release ?? null,
+      environment: e.environment ?? null,
+      userKey: e.userKey ?? null,
+      // Which adapter produced this event — drives the by-source stats breakdown.
+      source: e.source ?? null,
+      payload: e as unknown as Record<string, unknown>,
+      createdAt: now,
+    });
 
-      if (e.userKey) {
-        // Dedupe key for this batch. The separator is a plain space: `grp.id` is a
-        // fixed-format uuid that cannot contain one, so the first space is always
-        // the delimiter and no two distinct pairs can collide. (It was a raw NUL
-        // byte, which worked but made this whole FILE test as binary — ripgrep
-        // skips such files, so nothing in here was findable by code search.)
-        const k = `${grp.id} ${e.userKey}`;
-        if (!userPairKeys.has(k)) { userPairKeys.add(k); userPairs.push({ groupId: grp.id, userKey: e.userKey }); }
-      }
-    } catch {
-      dropped++;
+    if (e.userKey) {
+      // Dedupe key for this batch. The separator is a plain space: `groupId` is a
+      // fixed-format uuid that cannot contain one, so the first space is always
+      // the delimiter and no two distinct pairs can collide. (It was a raw NUL
+      // byte, which worked but made this whole FILE test as binary — ripgrep
+      // skips such files, so nothing in here was findable by code search.)
+      const k = `${groupId} ${e.userKey}`;
+      if (!userPairKeys.has(k)) { userPairKeys.add(k); userPairs.push({ groupId, userKey: e.userKey }); }
     }
   }
 

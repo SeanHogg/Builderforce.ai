@@ -305,8 +305,7 @@ export interface CeremonySweepResult {
 }
 
 /** Process all due ceremony schedules. Safe to call on every cron tick. */
-export async function runDueCeremonies(env: Env): Promise<CeremonySweepResult> {
-  const db = buildDatabase(env);
+export async function runDueCeremonies(env: Env, db: Db = buildDatabase(env)): Promise<CeremonySweepResult> {
   const now = new Date();
 
   const due = await db

@@ -31,7 +31,7 @@
  * migration 0410 makes for every other vendor.
  */
 
-import { and, asc, eq, gt, isNull, lt, lte, ne, notInArray, or } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNull, lt, lte, ne, notInArray, or } from 'drizzle-orm';
 import {
   SIGNATURE_PARTY_STATUSES,
   isAgreedPartyStatus,
@@ -551,22 +551,45 @@ export async function signatureRemindersDue(db: Db, now = new Date()): Promise<R
     .orderBy(asc(signatureRequests.updatedAt))
     .limit(REMINDER_BATCH);
 
-  const due: ReminderDue[] = [];
-  for (const row of rows) {
+  // Decide which requests are due first, then read every pending party in ONE
+  // statement grouped by request. This used to be one parties read per due
+  // request — the N+1 the batch cap above merely bounded.
+  const dueRows = rows.filter((row) => {
     const since = (row.lastRemindedAt ?? row.sentAt)?.getTime();
-    if (since == null) continue;
-    if (now.getTime() - since < row.remindAfterDays * 86_400_000) continue;
+    return since != null && now.getTime() - since >= row.remindAfterDays * 86_400_000;
+  });
+  if (!dueRows.length) return [];
 
-    const parties = await db
-      .select({ id: signatureParties.id, name: signatureParties.name, email: signatureParties.email, status: signatureParties.status })
-      .from(signatureParties)
-      .where(scopedToTenant(signatureParties, row.tenantId, eq(signatureParties.requestId, row.id)))
-      .orderBy(asc(signatureParties.position));
+  const parties = await db
+    .select({
+      id: signatureParties.id,
+      requestId: signatureParties.requestId,
+      name: signatureParties.name,
+      email: signatureParties.email,
+      status: signatureParties.status,
+    })
+    .from(signatureParties)
+    // Cross-tenant by the same declaration as the request read above: the
+    // parties belong to the requests this sweep just selected.
+    .where(acrossTenants(
+      signatureParties,
+      'scheduled_sweep',
+      inArray(signatureParties.requestId, dueRows.map((row) => row.id)),
+    ))
+    .orderBy(asc(signatureParties.requestId), asc(signatureParties.position));
 
-    const pending = parties
-      .filter((p) => !isTerminalPartyStatus(asPartyStatus(p.status)))
-      .map((p) => ({ partyId: p.id, name: p.name, email: p.email }));
-    if (!pending.length) continue;
+  const pendingByRequest = new Map<number, ReminderDue['pending']>();
+  for (const p of parties) {
+    if (isTerminalPartyStatus(asPartyStatus(p.status))) continue;
+    const list = pendingByRequest.get(p.requestId) ?? [];
+    list.push({ partyId: p.id, name: p.name, email: p.email });
+    pendingByRequest.set(p.requestId, list);
+  }
+
+  const due: ReminderDue[] = [];
+  for (const row of dueRows) {
+    const pending = pendingByRequest.get(row.id);
+    if (!pending?.length) continue;
 
     due.push({
       tenantId: row.tenantId,

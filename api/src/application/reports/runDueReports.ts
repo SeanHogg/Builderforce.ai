@@ -74,8 +74,7 @@ export function computeNextRun(schedule: string, deliveryHour: number | null, no
 }
 
 /** Select due schedules, generate + email each, advance their watermark. */
-export async function runDueReports(env: Env, generate: ScheduledReportGenerator): Promise<{ processed: number }> {
-  const db = buildDatabase(env);
+export async function runDueReports(env: Env, generate: ScheduledReportGenerator, db: Db = buildDatabase(env)): Promise<{ processed: number }> {
   const now = new Date();
 
   const due = await db

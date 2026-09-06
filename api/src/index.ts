@@ -1274,7 +1274,7 @@ export default {
       // that can start a billable run. Each sweep used to enforce its own private
       // 25/tenant, so the ceilings never composed and a tenant could take 25 from
       // the executor plus more from the manager in the same five minutes.
-      dispatchCronSweeps(sweeps, { env, budget: createTickDispatchBudget(), controls }, (p) => ctx.waitUntil(p));
+      dispatchCronSweeps(sweeps, { env, db: buildDatabase(env), budget: createTickDispatchBudget(), controls }, (p) => ctx.waitUntil(p));
     });
   },
 

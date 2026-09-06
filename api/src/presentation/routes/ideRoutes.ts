@@ -5,7 +5,8 @@
 import { Hono } from 'hono';
 import { and, asc, desc, eq, gt, isNotNull, sql } from 'drizzle-orm';
 import type { Env, HonoEnv } from '../../env';
-import { buildDatabase, type Db } from '../../infrastructure/database/connection';
+import { type Db } from '../../infrastructure/database/connection';
+import { requestDb } from '../../application/shared/dbHandle';
 import {
   agentInferenceLogs,
   ideAgents,
@@ -139,6 +140,12 @@ const trainingJobRow = {
   updated_at: ideTrainingJobs.updatedAt,
 };
 
+/** Training-log tail bounds — see the `/training/:id/logs/stream` route. */
+const TRAINING_LOG_PAGE = 500;
+const TRAINING_LOG_POLL_MIN_MS = 1_000;
+const TRAINING_LOG_POLL_MAX_MS = 8_000;
+const TRAINING_LOG_STREAM_MAX_MS = 15 * 60_000;
+
 const trainingLogRow = {
   id: ideTrainingLogs.id,
   job_id: ideTrainingLogs.jobId,
@@ -269,7 +276,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   // tested contract for keys, path validation, missing-vs-empty, and the
   // structural content guard. Routes only do auth/lookup + HTTP mapping.
   router.get('/projects/:projectId/files', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
     const bucket = r2(c);
@@ -324,7 +331,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.get('/projects/:projectId/files/*', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
     const path = wildcardPath(c);
@@ -340,7 +347,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.put('/projects/:projectId/files/*', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
     const path = wildcardPath(c);
@@ -364,7 +371,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.delete('/projects/:projectId/files/*', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
     const path = wildcardPath(c);
@@ -383,7 +390,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   // the restore is itself archived and an unwanted revert is not a one-way door.
 
   router.get('/projects/:projectId/history', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
     const bucket = r2(c);
@@ -394,7 +401,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.post('/projects/:projectId/history/restore', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
     const bucket = r2(c);
@@ -413,7 +420,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   // ---------- Site releases (roll a published site back) ----------
 
   router.get('/projects/:projectId/site/releases', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
@@ -421,7 +428,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.post('/projects/:projectId/site/releases/:versionToken/restore', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
@@ -439,7 +446,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   // GET status — the linked default repo + import baseline (cached; invalidated on
   // any import/commit/create below).
   router.get('/projects/:projectId/repo-status', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
@@ -454,7 +461,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   // POST import — pull a repo's files into the R2 workspace so it opens in the IDE.
   router.post('/projects/:projectId/import', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
@@ -468,7 +475,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   // POST commit — push R2 workspace edits back to the repo as a branch + PR.
   router.post('/projects/:projectId/commit', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
@@ -482,7 +489,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   // POST create-repo — make a clean remote repo, bind it, push the workspace.
   router.post('/projects/:projectId/create-repo', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
@@ -502,7 +509,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   // builds every push and deploys". Returns the committed workflow so the UI can
   // show exactly what was added.
   router.post('/projects/:projectId/enable-deploys', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
@@ -539,7 +546,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   // adapters — see `application/ide/packageApp.ts` for why that is reuse rather
   // than a category error.
   router.post('/projects/:projectId/package', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
     const bucket = r2(c);
@@ -590,7 +597,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   // GET /projects/:projectId/site — current published-site record (or null).
   router.get('/projects/:projectId/site', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
@@ -633,7 +640,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   // Body: multipart/form-data — optional `subdomain` field + one file part per
   // asset, the part NAME being the dist-relative path (e.g. `assets/app.4f3a.js`).
   router.post('/projects/:projectId/publish', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
     const bucket = r2(c);
@@ -670,7 +677,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   // ---------- Datasets (project_id = API project id, integer) ----------
   router.get('/datasets', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const raw = c.req.query('projectId');
     if (!raw) return c.json({ error: 'projectId query parameter is required' }, 400);
@@ -685,7 +692,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.get('/datasets/:id', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const [row] = await db.select(datasetRow).from(ideDatasets).where(eq(ideDatasets.id, c.req.param('id')));
     if (!row || !(await projectInTenant(db, tenantId, Number(row.project_id)))) return c.json({ error: 'Dataset not found' }, 404);
@@ -693,7 +700,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.get('/datasets/:id/download', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const [row] = await db
       .select({ r2Key: ideDatasets.r2Key, status: ideDatasets.status, projectId: ideDatasets.projectId })
@@ -729,7 +736,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
    * permission.
    */
   router.post('/datasets/import', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const body = await c.req.json<{
       projectId: string | number;
@@ -783,7 +790,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.post('/datasets/generate', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const body = await c.req.json<{
       projectId: string | number;
@@ -879,7 +886,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   // ---------- Training (project_id = API project id, integer) ----------
   router.get('/training', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const raw = c.req.query('projectId');
     if (!raw) return c.json({ error: 'projectId query parameter is required' }, 400);
@@ -894,7 +901,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.post('/training', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const body = await c.req.json<{
       projectId: string | number;
@@ -933,7 +940,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.get('/training/:id', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const [row] = await db.select(trainingJobRow).from(ideTrainingJobs).where(eq(ideTrainingJobs.id, c.req.param('id')));
     if (!row || !(await projectInTenant(db, tenantId, Number(row.project_id)))) return c.json({ error: 'Training job not found' }, 404);
@@ -949,7 +956,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       errorMessage?: string;
     }>();
     const id = c.req.param('id');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     if (!(await trainingJobInTenant(db, tenantId, id))) return c.json({ error: 'Training job not found' }, 404);
     // COALESCE(<param>, <column>) === "leave the column alone when the field was
@@ -971,7 +978,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.get('/training/:id/logs', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     if (!(await trainingJobInTenant(db, tenantId, c.req.param('id')))) return c.json({ error: 'Training job not found' }, 404);
     const rows = await db
@@ -986,7 +993,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const body = await c.req.json<{ epoch?: number; step?: number; loss?: number; message: string }>();
     if (!body.message) return c.json({ error: 'message is required' }, 400);
     const jobId = c.req.param('id');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     if (!(await trainingJobInTenant(db, tenantId, jobId))) return c.json({ error: 'Training job not found' }, 404);
     const [row] = await db
@@ -1003,19 +1010,30 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     return c.json(row!, 201);
   });
 
+  // A tail over a training job's log rows. Bounded three ways, because a job that
+  // never reaches a terminal status used to keep this loop — two queries a second,
+  // an unlimited log read — alive for as long as the client held the socket, and
+  // that stuck job presented in the browser as "CORS error on every endpoint":
+  //   • the client going away ends it (the request signal);
+  //   • a hard ceiling ends it, after which the client reconnects and resumes from
+  //     its own watermark;
+  //   • the idle wait backs off while nothing new lands, and every read is paged,
+  //     a full page going straight back for the next one.
   router.get('/training/:id/logs/stream', async (c) => {
     const jobId = c.req.param('id');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     if (!(await trainingJobInTenant(db, tenantId, jobId))) return c.json({ error: 'Training job not found' }, 404);
+    const signal = c.req.raw.signal;
     const stream = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder();
         let afterTimestamp = new Date(0);
         let complete = false;
-        while (!complete) {
+        let idleMs = TRAINING_LOG_POLL_MIN_MS;
+        const startedAt = Date.now();
+        while (!complete && !signal.aborted && Date.now() - startedAt < TRAINING_LOG_STREAM_MAX_MS) {
           const jobRows = await db.select({ status: ideTrainingJobs.status }).from(ideTrainingJobs).where(eq(ideTrainingJobs.id, jobId));
-          if (jobRows.length === 0) break;
           const currentJob = jobRows[0];
           if (!currentJob) break;
           complete = currentJob.status === 'completed' || currentJob.status === 'failed';
@@ -1025,12 +1043,16 @@ export function createIdeRoutes(): Hono<HonoEnv> {
             .select(trainingLogRow)
             .from(ideTrainingLogs)
             .where(and(eq(ideTrainingLogs.jobId, jobId), gt(ideTrainingLogs.createdAt, afterTimestamp)))
-            .orderBy(asc(ideTrainingLogs.createdAt));
+            .orderBy(asc(ideTrainingLogs.createdAt))
+            .limit(TRAINING_LOG_PAGE);
           for (const row of logRows) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(row)}\n\n`));
             afterTimestamp = row.created_at;
           }
-          if (!complete) await new Promise(r => setTimeout(r, 1000));
+          if (complete) break;
+          if (logRows.length === TRAINING_LOG_PAGE) continue;
+          await new Promise((r) => setTimeout(r, idleMs));
+          idleMs = logRows.length > 0 ? TRAINING_LOG_POLL_MIN_MS : Math.min(idleMs * 2, TRAINING_LOG_POLL_MAX_MS);
         }
         controller.enqueue(encoder.encode('data: [DONE]\n\n'));
         controller.close();
@@ -1043,7 +1065,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   router.post('/training/:id/artifact', async (c) => {
     const jobId = c.req.param('id');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const [job] = await db.select({ projectId: ideTrainingJobs.projectId }).from(ideTrainingJobs).where(eq(ideTrainingJobs.id, jobId));
     if (!job || !(await projectInTenant(db, tenantId, Number(job.projectId)))) return c.json({ error: 'Training job not found' }, 404);
@@ -1086,7 +1108,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   router.post('/training/:id/evaluate', async (c) => {
     const jobId = c.req.param('id');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const [job] = await db.select(trainingJobRow).from(ideTrainingJobs).where(eq(ideTrainingJobs.id, jobId));
     if (!job || !(await projectInTenant(db, tenantId, Number(job.project_id)))) return c.json({ error: 'Training job not found' }, 404);
@@ -1151,7 +1173,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   // ---------- Agents (workforce registry) ----------
   router.get('/agents', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const rows = await db.select(agentRow).from(ideAgents)
       // The SAME registry `GET /api/workforce/agents` serves — one predicate, so
       // the two listings cannot disagree about what "published" means.
@@ -1161,7 +1183,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.post('/agents', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const body = await c.req.json<{
       project_id: string | number;
@@ -1206,7 +1228,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.get('/agents/:id', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const [row] = await db.select(agentRow).from(ideAgents)
       .where(publicAgentScope(eq(ideAgents.id, c.req.param('id')), isNotNull(ideAgents.tenantId)))
       .limit(1);
@@ -1216,7 +1238,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   router.get('/agents/:id/package', async (c) => {
     const agentId = c.req.param('id');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const [agent] = await db.select(agentRow).from(ideAgents)
       .where(publicAgentScope(eq(ideAgents.id, agentId), isNotNull(ideAgents.tenantId)))
       .limit(1);
@@ -1250,7 +1272,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.get('/agents/:id/mamba-state', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const [agent] = await db.select({ mamba_state: ideAgents.mambaState, package_version: ideAgents.packageVersion })
       .from(ideAgents)
       .where(publicAgentScope(eq(ideAgents.id, c.req.param('id')), isNotNull(ideAgents.tenantId)))
@@ -1262,7 +1284,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   router.put('/agents/:id/mamba-state', async (c) => {
     const agentId = c.req.param('id');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     // Owner-only write: an agent's brain state may only be overwritten by the tenant
     // whose project owns it (reads stay marketplace-public for hiring/inference).
@@ -1293,7 +1315,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   router.post('/agents/:id/chat', async (c) => {
     const agentId = c.req.param('id');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const body = await c.req.json<{ messages: Array<{ role: string; content: string }>; stream?: boolean }>();
     if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
@@ -1414,7 +1436,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   // supersedes the agent's prior knowledge set. Body: { text?, documents?[] }.
   router.post('/agents/:id/ingest', async (c) => {
     const agentId = c.req.param('id');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const [agent] = await db
       .select({ projectId: ideAgents.projectId })

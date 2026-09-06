@@ -40,7 +40,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { projectRepositories, repoDeliveryStatus } from '../../infrastructure/database/schema';
-import { githubRequest, repoPath, resolveRepoAuth } from './githubClient';
+import { githubRequest, repoPath, resolveRepoAuth, type ResolvedRepoAuth } from './githubClient';
 import { makeRepoFetch } from './sources/RepoSource';
 import { resolveRepoCredential, isResolveError } from './resolveRepoCredential';
 import type { Env } from '../../env';
@@ -85,6 +85,10 @@ interface ProbeContext {
   owner: string;
   repo: string;
   token: string;
+  /** The resolved credential when the provider is GitHub — carries the App
+   *  token's refresh so a revoked installation re-mints rather than reading as
+   *  `unauthorized` for the rest of the cache TTL. */
+  auth?: ResolvedRepoAuth;
   branch: string | null;
 }
 
@@ -137,10 +141,11 @@ export function totalFromLinkHeader(headers: Headers, itemsOnPage: number): numb
 
 async function probeGithub(ctx: ProbeContext): Promise<RepoDeliveryProbe> {
   const coords = { host: ctx.host, owner: ctx.owner, repo: ctx.repo };
+  const credential = ctx.auth ? { auth: ctx.auth } : { coords, token: ctx.token };
   const [pulls, runs] = await Promise.all([
-    githubRequest<Array<unknown>>({ coords, token: ctx.token, path: repoPath(coords, '/pulls?state=open&per_page=1') }),
+    githubRequest<Array<unknown>>({ ...credential, path: repoPath(coords, '/pulls?state=open&per_page=1') }),
     githubRequest<{ workflow_runs?: GithubRun[] }>({
-      coords, token: ctx.token,
+      ...credential,
       path: repoPath(coords, `/actions/runs?per_page=1&exclude_pull_requests=true${ctx.branch ? `&branch=${encodeURIComponent(ctx.branch)}` : ''}`),
     }),
   ]);
@@ -330,6 +335,7 @@ export async function probeRepoDelivery(
     owner: auth.auth.coords.owner,
     repo: auth.auth.coords.repo,
     token: auth.auth.token,
+    auth: auth.auth,
     branch: auth.auth.repo.defaultBranch?.trim() || null,
   });
 }

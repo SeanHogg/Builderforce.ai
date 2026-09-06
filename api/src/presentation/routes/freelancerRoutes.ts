@@ -70,7 +70,7 @@ import {
 } from '../../application/media/imageVariants';
 import { invalidateEarnings } from '../../application/finance/earningsLedger';
 import { hireShape } from '../../application/marketplace/engagementShape';
-import { buildDatabase } from '../../infrastructure/database/connection';
+import { requestDb } from '../../application/shared/dbHandle';
 import {
   freelancerEngagements,
   freelancerProfiles,
@@ -477,7 +477,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // GET /me — the signed-in freelancer's own full profile (creates a stub row on
   // first read so the edit form always has something to bind to).
   router.get('/me', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const userId = c.get('userId') as string;
     const [row] = await loadOwnProfile(db, userId);
     if (!row) {
@@ -513,7 +513,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // PATCH /me — update editable fields. Also owns the freelancer's display name
   // (users.display_name, since a freelancer is a global account) and vanity slug.
   router.patch('/me', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const userId = c.get('userId') as string;
     const b = await c.req.json<Record<string, unknown>>();
     const headline = typeof b.headline === 'string' ? b.headline.slice(0, 200) : null;
@@ -601,7 +601,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // GET /me/slug-check?slug= — is this alias available? Returns validity + suggestions
   // so the editor can guide the user to a free one before they save.
   router.get('/me/slug-check', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const userId = c.get('userId') as string;
     const raw = c.req.query('slug') ?? '';
     const norm = normalizeSlug(raw);
@@ -632,7 +632,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // A second upload never overwrites the first: it lands as a new revision, because the
   // variants someone tailored from an earlier version must survive a re-upload.
   router.post('/me/resume', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const userId = c.get('userId') as string;
     const form = await c.req.formData();
     const entry = form.get('file');
@@ -690,7 +690,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // GET /me/resume — the full révision family, for the profile's own résumé viewer
   // and editor. Owner-only: this is the one projection that includes every variant.
   router.get('/me/resume', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const resume = await readProfileResume(db, c.get('userId') as string);
     if (!resume) return c.json({ resume: null });
     return c.json({
@@ -706,7 +706,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // PATCH /me/resume — the person choosing how their résumé looks and who may see it:
   // its template (style), which revision is master, and its privacy.
   router.patch('/me/resume', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const userId = c.get('userId') as string;
     const body = await c.req.json<{ templateId?: unknown; privacy?: unknown; masterRevisionId?: unknown }>();
     const resume = await readProfileResume(db, userId);
@@ -740,7 +740,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // GET /me/resume/suggestions — {headline, summary, skills, discipline} the editor
   // uses to prefill profile fields. Never writes — the user reviews + saves.
   router.get('/me/resume/suggestions', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const resume = await readProfileResume(db, c.get('userId') as string);
     const empty: ResumeSuggestions = { available: false, headline: null, summary: null, skills: [], discipline: null };
     if (!resume) return c.json(empty);
@@ -751,7 +751,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // (GET /:id/avatar) is mirrored onto users.avatar_url so every talent surface that
   // joins users renders it. Freelancer profiles are public, so the served object is too.
   router.post('/me/avatar', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const userId = c.get('userId') as string;
     const form = await c.req.formData();
     const entry = form.get('file');
@@ -799,7 +799,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   //  - opt OUT → clear the flag + UNPUBLISH the profile so they drop out of the talent
   //              marketplace and the hire gate (the profile row is kept, just hidden).
   router.post('/me/availability', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const userId = c.get('userId') as string;
     const b = await c.req.json<{ available?: boolean }>().catch(() => ({} as { available?: boolean }));
     const available = b.available === true;
@@ -827,7 +827,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // all-public slice is CACHED under one key and filtered in memory, so search
   // never explodes the cache keyspace. Review aggregate (rating) is joined in.
   router.get('/', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const viewer = await optionalWebUserId(c);
     const q = c.req.query();
     const filters = {
@@ -870,7 +870,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // A browse page of twenty-four 40px cards was pulling up to 24 × 5 MB to draw about a
   // thousand pixels of image; `?w=64` makes that a few kilobytes.
   router.get('/:id/avatar', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const id = c.req.param('id');
     if (!c.env.UPLOADS) return c.json({ error: 'Not found' }, 404);
 
@@ -921,7 +921,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // GET /:id — one freelancer's public detail (+ rating + recent reviews). `:id` is
   // EITHER the raw user guid OR the vanity slug. Private profiles require auth.
   router.get('/:id', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const id = c.req.param('id');
     const viewer = await optionalWebUserId(c);
     const [row] = await db.select({ ...profileWithUserColumns, ...ratingColumns })
@@ -1014,7 +1014,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // GET /engagements — as EMPLOYER: this tenant's engagements. (Worker view is
   // GET /engagements/mine below.)
   router.get('/', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const rows = await db.select({ ...engagementColumns, freelancer_name: users.displayName })
       .from(freelancerEngagements)
@@ -1027,7 +1027,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
 
   // GET /engagements/mine — as WORKER (web JWT): every tenant I'm engaged with.
   router.get('/mine', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const userId = c.get('userId') as string;
     const rows = await db.select({ ...engagementColumns, tenant_name: tenants.name })
       .from(freelancerEngagements)
@@ -1042,7 +1042,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // a project). status 'active' hires immediately; 'interviewing'/'invited' opens
   // an interview first. Idempotent-ish: reuses the active engagement if one exists.
   router.post('/', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
     const b = await c.req.json<{ freelancerUserId?: string; projectId?: number; rateCents?: number; title?: string; note?: string; status?: string; engagementType?: string }>();
@@ -1129,7 +1129,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // PATCH /engagements/:id — move an engagement's status (interview → active, or
   // decline). Tenant-scoped so an employer can only touch its own engagements.
   router.patch('/:id', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
     const b = await c.req.json<{ status?: string; rateCents?: number; title?: string }>();
@@ -1160,7 +1160,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // so hours/timecards keep their provenance; the engagement drops out of active
   // lists. Idempotent.
   router.delete('/:id', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
     let reason: string | null = null;
@@ -1189,7 +1189,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // Accept → 'active' (sets hired_at); decline → 'declined'. Only the engaged
   // freelancer may respond; notifies the employer who created it.
   router.post('/:id/respond', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
     const b = await c.req.json<{ accept?: boolean }>();
@@ -1225,7 +1225,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // (1..5 + comment + optional "would work again"). One review per engagement PER
   // DIRECTION; feeds the freelancer's rating + Job Success Score.
   router.post('/:id/review', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
     const id = c.req.param('id');
@@ -1258,7 +1258,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // engagement (the reverse direction). Builds the client's two-way reputation shown
   // on job postings so other freelancers can vet who they bid with.
   router.post('/:id/review-client', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
     const b = await c.req.json<{ rating?: number; comment?: string; wouldWorkAgain?: boolean }>();
@@ -1322,7 +1322,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // GET /mine/milestones — WORKER: every milestone I am engaged on, with the money
   // rolled up. The "what am I owed" view.
   router.get('/mine/milestones', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const milestones = await readFreelancerMilestones(db, c.get('userId') as string);
     return c.json({ milestones, summary: summariseEscrow(milestones) });
   });
@@ -1332,7 +1332,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // has funded — which is the funded-before-work gate, enforced by the machine rather
   // than by asking the surface to hide a button.
   router.post('/mine/milestones/:milestoneId/submit', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const userId = c.get('userId') as string;
     const milestoneId = c.req.param('milestoneId');
     // Scoped BY the acting user, so the tenant comes from the row rather than from the
@@ -1360,7 +1360,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // hired me. Includes disputes the CLIENT raised: those are the ones I most need to
   // answer, and filtering on who raised it would hide exactly them.
   router.get('/mine/disputes', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const disputes = await listFreelancerDisputes(db, c.env as Env, c.get('userId') as string);
     return c.json({ disputes });
   });
@@ -1368,7 +1368,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // POST /mine/milestones/:milestoneId/dispute — WORKER: raise a dispute. The money
   // stays held; nothing moves until somebody rules.
   router.post('/mine/milestones/:milestoneId/dispute', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const userId = c.get('userId') as string;
     const milestoneId = c.req.param('milestoneId');
     const tenantId = await milestoneTenantForFreelancer(db, milestoneId, userId);
@@ -1387,7 +1387,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // POST /mine/disputes/:disputeId/statement — WORKER: file (or revise) my position and
   // the evidence behind it.
   router.post('/mine/disputes/:disputeId/statement', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const userId = c.get('userId') as string;
     const disputeId = Number(c.req.param('disputeId'));
     if (!Number.isInteger(disputeId)) return c.json({ error: 'not_found' }, 404);
@@ -1410,7 +1410,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // POST /mine/disputes/:disputeId/withdraw — WORKER: call off a dispute I raised. The
   // module refuses one raised by the other side, in the predicate rather than after it.
   router.post('/mine/disputes/:disputeId/withdraw', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const userId = c.get('userId') as string;
     const disputeId = Number(c.req.param('disputeId'));
     if (!Number.isInteger(disputeId)) return c.json({ error: 'not_found' }, 404);
@@ -1425,7 +1425,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // GET /:id/milestones — CLIENT: one engagement's schedule, its escrow summary, and
   // whether work is authorised.
   router.get('/:id/milestones', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const view = await readEngagementSchedule(db, c.get('tenantId') as number, c.req.param('id'));
     return c.json(view);
   });
@@ -1433,7 +1433,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // POST /:id/milestones — CLIENT: add a deliverable. Always lands in `draft`; writing
   // a milestone down never funds it.
   router.post('/:id/milestones', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const engagementId = c.req.param('id');
     const b = await c.req.json<{ title?: string; description?: string; amountCents?: number; currency?: string; sequence?: number; dueAt?: string }>();
@@ -1470,7 +1470,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // state machine already understands — five endpoints would be five places to forget
   // the gate.
   router.post('/milestones/:milestoneId/:action', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const action = c.req.param('action');
     if (!CLIENT_ESCROW_ACTIONS.includes(action as MilestoneAction)) {
       return c.json({ error: 'unknown_action' }, 400);
@@ -1507,7 +1507,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // that list that `evaluateEscrow` cannot judge would put an unjudged verb through the
   // gate the list exists to be.
   router.post('/milestones/:milestoneId/dispute', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const b = await c.req.json<{ reason?: string; detail?: string }>().catch(() => ({} as { reason?: string; detail?: string }));
     const reason = String(b.reason ?? '').trim();
     if (!reason) return c.json({ error: 'reason is required' }, 400);
@@ -1527,7 +1527,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // DELETE /milestones/:milestoneId — CLIENT: drop a draft. Refuses anything further
   // along, because a milestone that has held money is a financial record.
   router.delete('/milestones/:milestoneId', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const deleted = await deleteDraftMilestone(db, c.get('tenantId') as number, c.req.param('milestoneId'));
     return deleted ? c.json({ ok: true }) : c.json({ error: 'wrong_status' }, 409);
   });

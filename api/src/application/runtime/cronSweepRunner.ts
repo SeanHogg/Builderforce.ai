@@ -28,6 +28,7 @@
  * "aborted".
  */
 import type { Env } from '../../env';
+import type { Db } from '../../infrastructure/database/connection';
 import type { TickDispatchBudget } from './tickDispatchBudget';
 
 /**
@@ -57,6 +58,9 @@ export function cadenceForCron(expr: string | undefined | null): CronCadence {
 
 export interface CronSweepContext {
   env: Env;
+  /** The ONE database client for this tick. Every sweep that talks to Neon takes
+   *  it from here — a tick used to open twenty-two clients of its own. */
+  db: Db;
   /** Persisted platform switches read once by the caller for this invocation. */
   controls?: Readonly<Record<string, boolean>>;
   /**

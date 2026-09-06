@@ -298,8 +298,7 @@ async function stopPreviewContainer(env: Env, executionId: number): Promise<void
  *
  * Returns what it reclaimed so the cron summary is honest.
  */
-export async function sweepIdlePreviews(env: Env): Promise<{ evicted: number }> {
-  const db = buildDatabase(env);
+export async function sweepIdlePreviews(env: Env, db: Db = buildDatabase(env)): Promise<{ evicted: number }> {
   const cutoff = new Date(Date.now() - PREVIEW_IDLE_EVICTION_MS);
   const stale = await db
     .select({

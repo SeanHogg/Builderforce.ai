@@ -148,25 +148,19 @@ export function aiCreditReconcileReference(tenantId: number, monthKey: string): 
 /** Months this tenant has been granted credits in but never settled — the
  *  reconcile sweep's work list. Bounded by the number of months since the first
  *  redemption, so a sweep that has not run for a year still terminates. */
-export async function unsettledCreditMonths(db: Db, tenantId: number, before: string): Promise<string[]> {
-  const [first] = await db
-    .select({ at: sql<string>`min(${ledgerEntries.occurredAt})` })
-    .from(ledgerEntries)
-    .where(and(creditAccount(tenantId), eq(ledgerEntries.entryKind, 'grant')));
-  if (!first?.at) return [];
-
-  const settled = await db
-    .select({ reference: ledgerEntries.reference })
-    .from(ledgerEntries)
-    .where(and(creditAccount(tenantId), eq(ledgerEntries.entryKind, 'spend')));
-  const done = new Set(settled.map((row) => row.reference ?? ''));
-
+/**
+ * Every `YYYY-MM` from the month of `firstGrantAt` up to (not including) `before`.
+ * Pure: the sweep reads its ledger ONCE for every tenant and filters this list
+ * against the settled references it already holds, rather than re-reading the
+ * ledger per tenant.
+ */
+export function unsettledMonthsSince(firstGrantAt: string, before: string): string[] {
   const months: string[] = [];
-  const cursor = new Date(`${String(first.at).slice(0, 7)}-01T00:00:00Z`);
+  const cursor = new Date(`${String(firstGrantAt).slice(0, 7)}-01T00:00:00Z`);
   while (Number.isFinite(cursor.getTime())) {
     const key = cursor.toISOString().slice(0, 7);
     if (key >= before) break;
-    if (!done.has(aiCreditReconcileReference(tenantId, key))) months.push(key);
+    months.push(key);
     cursor.setUTCMonth(cursor.getUTCMonth() + 1);
   }
   return months;

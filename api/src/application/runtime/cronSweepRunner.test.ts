@@ -13,9 +13,11 @@ import {
 } from './cronSweepRunner';
 import { createTickDispatchBudget } from './tickDispatchBudget';
 import type { Env } from '../../env';
+import type { Db } from '../../infrastructure/database/connection';
 
 const ctx = (env: Partial<Env> = {}): CronSweepContext => ({
   env: env as Env,
+  db: {} as Db,
   budget: createTickDispatchBudget(),
 });
 

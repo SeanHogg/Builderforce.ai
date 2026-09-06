@@ -33,7 +33,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 import { openTaskMarkers } from './findingMarkers';
 import { SecurityAuditService, type FindingSeverity } from './SecurityAuditService';
-import { githubRequest, repoPath, resolveRepoAuth, type GitHubCoords } from '../repos/githubClient';
+import { githubRequest, repoPath, resolveRepoAuth, type GitHubCoords, type ResolvedRepoAuth } from '../repos/githubClient';
 import { resolveRepoLink } from '../contributors/activityIngest';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -354,14 +354,16 @@ export async function ingestOpenAlertsForRepo(
   const auth = await resolveRepoAuth(env, db, secret, tenantId, repoId);
   if (!auth.ok) return { ok: false, code: 'auth', reason: auth.error };
 
-  const { coords, token, repo } = auth.auth;
+  const { coords, repo } = auth.auth;
   if (repo.provider !== 'github') {
     return { ok: false, code: 'unsupported_event', reason: `alerts are GitHub-only; repo is '${repo.provider}'` };
   }
   const repoFullName = `${coords.owner}/${coords.repo}`;
 
-  const cs = await listAlerts(coords, token, '/code-scanning/alerts?state=open&per_page=100', opts.fetchFn);
-  const db_ = await listAlerts(coords, token, '/dependabot/alerts?state=open&per_page=100', opts.fetchFn);
+  const [cs, db_] = await Promise.all([
+    listAlerts(auth.auth, '/code-scanning/alerts?state=open&per_page=100', opts.fetchFn),
+    listAlerts(auth.auth, '/dependabot/alerts?state=open&per_page=100', opts.fetchFn),
+  ]);
 
   // Forbidden on BOTH surfaces means the credential genuinely lacks the scope —
   // worth telling the caller. Forbidden on one is reported through the other's
@@ -390,12 +392,11 @@ export async function ingestOpenAlertsForRepo(
 type ListOutcome = { alerts: unknown[]; code: 'ok' | 'forbidden' | 'absent' | 'error'; reason?: string };
 
 async function listAlerts(
-  coords: GitHubCoords,
-  token: string,
+  auth: ResolvedRepoAuth,
   suffix: string,
   fetchFn?: typeof fetch,
 ): Promise<ListOutcome> {
-  const res = await githubRequest<unknown[]>({ coords, token, path: repoPath(coords, suffix), fetchFn });
+  const res = await githubRequest<unknown[]>({ auth, path: repoPath(auth.coords, suffix), fetchFn });
   if (res.ok) return { alerts: Array.isArray(res.data) ? res.data : [], code: 'ok' };
   if (res.status === 403) return { alerts: [], code: 'forbidden', reason: res.reason };
   // 404 = the feature is off for this repo (or advanced security isn't enabled).

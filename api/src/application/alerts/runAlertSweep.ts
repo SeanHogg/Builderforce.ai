@@ -113,8 +113,7 @@ export async function notifyAlert(
  * Evaluate every enabled alert rule across all tenants and fire the ones that
  * trip. Called from the daily cron branch in index.ts.
  */
-export async function runAlertSweep(env: Env): Promise<void> {
-  const db = buildDatabase(env);
+export async function runAlertSweep(env: Env, db: Db = buildDatabase(env)): Promise<void> {
   const now = Date.now();
 
   const rules = await db.select().from(alerts).where(eq(alerts.enabled, true));

@@ -136,8 +136,7 @@ export interface ValidatorSweepResult {
  * accumulating multiple passes. GAP tasks themselves are excluded (they are the
  * output of review, not its input). Bounded per tenant.
  */
-export async function runValidatorReviewSweep(env: Env): Promise<ValidatorSweepResult> {
-  const db = buildDatabase(env);
+export async function runValidatorReviewSweep(env: Env, db: Db = buildDatabase(env)): Promise<ValidatorSweepResult> {
   const out: ValidatorSweepResult = { tenantsWithValidator: 0, dispatched: 0 };
 
   // Tenants that own a Validator agent (the natural opt-in).

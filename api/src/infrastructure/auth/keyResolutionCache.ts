@@ -1,16 +1,15 @@
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
- * Optional KV-backed cache for API-key → tenant resolution.
+ * API-key → tenant resolution cache, expressed on the ONE read-through helper.
  *
- * Hit path: ~1ms (KV read). Miss path: ~30-80ms (Neon round-trip from a
- * Worker). After the first call for any given key, every subsequent call
- * for the next year is a cache hit.
+ * Hit path: L1 (in-isolate) then KV. Miss path: ~30-80ms (Neon round-trip from a
+ * Worker). After the first call for any given key, every subsequent call for the
+ * next year is a cache hit.
  *
  * Cache key format:  `auth:<keyType>:<sha256(rawKey)>` for `bfk`/`clk`;
  *                    `auth:jwt:<sha256(tenantId:userId)>` for the JWT path.
- * Cached value:      JSON-encoded ResolvedKey envelope, or `{revoked: true}`
- *                    tombstone written by mutation handlers to invalidate
- *                    a still-cached entry.
+ * Cached value:      the ResolvedKey envelope — a rejection is cached too, so a
+ *                    stranger hammering a dead key costs one DB read, not one per
+ *                    request.
  *
  * Two TTL regimes: `bfk`/`clk` keys use the 365-day TTL and rely on explicit
  * `invalidateKeyCache` calls from every auth-affecting mutation. The `jwt`
@@ -31,17 +30,18 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * `invalidateKeyCache` from that handler — otherwise the change won't take
  * effect for up to a year.
  *
- * The KV binding (`AUTH_CACHE_KV`) is *optional* — when not bound, every
- * call falls through to the loader (DB). Single helper so caching is opt-in
- * via wrangler.toml without touching call sites.
+ * This used to be a second, hand-rolled KV cache beside `readThroughCache` — no
+ * L1, no rate-limit retry on invalidation, a tombstone protocol of its own. It
+ * is now a key scheme over `getOrSetCached` / `invalidateCached`, so the one
+ * helper owns every cache: the L1 hit that saves a KV read per request on a hot
+ * key, the KV-unbound fallthrough, and the retry that makes an invalidation hold.
  */
 
 import type { Env } from '../../env';
+import { getOrSetCached, invalidateCached } from '../cache/readThroughCache';
 
 /** 365 days. Long-lived because mutations invalidate explicitly. */
 const TTL_SECONDS = 365 * 24 * 60 * 60;
-/** Tombstone TTL — long enough that any in-flight cached entry is dead, then auto-cleans. */
-const TOMBSTONE_TTL_SECONDS = 60 * 60;
 /**
  * Short TTL for the JWT membership path. Unlike `bfk_*`/`clk_*` keys (whose every
  * auth-affecting mutation calls `invalidateKeyCache`), tenant_members rows are
@@ -50,77 +50,50 @@ const TOMBSTONE_TTL_SECONDS = 60 * 60;
  * hook to invalidate from, so this path self-heals via a short TTL instead:
  * a removed/demoted member keeps cached access for at most this window.
  */
-const JWT_TTL_SECONDS = 60;
+export const JWT_TTL_SECONDS = 60;
+/** In-isolate freshness. The JWT path's L1 is shorter than its KV TTL so a
+ *  membership change never outlives the self-heal window by an L1 hit. */
+const L1_TTL_MS = 30_000;
+const JWT_L1_TTL_MS = 15_000;
+
+export type KeyCacheType = 'bfk' | 'clk' | 'jwt';
 
 /** What the loader returns; gateway auth uses this to populate TenantAccess. */
 export type ResolvedKey =
   | { ok: true;  payload: Record<string, unknown> }
   | { ok: false; reason: string };
 
+/** The ONE spelling of a key-resolution cache key. */
+export function keyCacheKey(keyType: KeyCacheType, hash: string): string {
+  return `auth:${keyType}:${hash}`;
+}
+
 /**
- * Look up a key, consulting the KV cache first when available.
- * `loader` is called on cache miss (or when cache is unbound) and its result
- * is written back to the cache with a 60s TTL.
+ * Look up a key, consulting the cache first. `loader` is called on a miss (or
+ * when no KV is bound and the L1 has aged out) and its result is cached under
+ * the regime for `keyType`.
  */
 export async function resolveKeyCached(
   env: Env,
-  keyType: 'bfk' | 'clk' | 'jwt',
+  keyType: KeyCacheType,
   hash: string,
   loader: () => Promise<ResolvedKey>,
 ): Promise<ResolvedKey> {
-  const kv = env.AUTH_CACHE_KV;
-  if (!kv) return loader();
-
-  // JWT membership self-heals via a short TTL (no single invalidation hook);
-  // key paths use the long TTL backed by explicit invalidation.
-  const ttl = keyType === 'jwt' ? JWT_TTL_SECONDS : TTL_SECONDS;
-  const cacheKey = `auth:${keyType}:${hash}`;
-  try {
-    const cached = await kv.get(cacheKey, 'json') as ResolvedKey | { revoked: true } | null;
-    if (cached) {
-      // Tombstone written by `invalidateKeyCache` when a key is revoked
-      // mid-TTL. Treat as a miss and re-load (the loader will return a
-      // not-found / revoked envelope from the DB).
-      if ('revoked' in cached) return loader().then(async (fresh) => {
-        await writeCache(kv, cacheKey, fresh, ttl).catch(() => undefined);
-        return fresh;
-      });
-      return cached as ResolvedKey;
-    }
-  } catch (error) {
-    // KV read errors should never fail the request — fall through to DB.
-  
-    reportCaughtError(error, { source: "infrastructure/auth/keyResolutionCache.ts", operation: "resolveKeyCached" });
-  }
-
-  const fresh = await loader();
-  await writeCache(kv, cacheKey, fresh, ttl).catch(() => undefined);
-  return fresh;
+  const jwt = keyType === 'jwt';
+  return getOrSetCached(env, keyCacheKey(keyType, hash), loader, {
+    kvTtlSeconds: jwt ? JWT_TTL_SECONDS : TTL_SECONDS,
+    l1TtlMs: jwt ? JWT_L1_TTL_MS : L1_TTL_MS,
+  });
 }
 
 /**
- * Invalidate a key's cache entry. Call after revocation so the next request
- * doesn't honour a stale "valid" cache for up to TTL_SECONDS.
- *
- * Writes a short-lived tombstone so the *next* request misses the cache and
- * re-loads from the DB (which will then see the `revoked_at` timestamp and
- * cache the correct "rejected" state).
+ * Invalidate a key's cache entry — both layers. Call after revocation so the next
+ * request re-loads from the DB (which then sees the `revoked_at` timestamp and
+ * caches the correct "rejected" state) instead of honouring a stale "valid"
+ * entry for up to TTL_SECONDS.
  */
-export async function invalidateKeyCache(env: Env, keyType: 'bfk' | 'clk' | 'jwt', hash: string): Promise<void> {
-  const kv = env.AUTH_CACHE_KV;
-  if (!kv) return;
-  const cacheKey = `auth:${keyType}:${hash}`;
-  try {
-    await kv.put(cacheKey, JSON.stringify({ revoked: true }), { expirationTtl: TOMBSTONE_TTL_SECONDS });
-  } catch (error) {
-    // Cache invalidation failures degrade to "wait for the existing TTL to expire" — acceptable.
-  
-    reportCaughtError(error, { source: "infrastructure/auth/keyResolutionCache.ts", operation: "invalidateKeyCache" });
-  }
-}
-
-async function writeCache(kv: KVNamespace, key: string, value: ResolvedKey, ttlSeconds: number): Promise<void> {
-  await kv.put(key, JSON.stringify(value), { expirationTtl: ttlSeconds });
+export async function invalidateKeyCache(env: Env, keyType: KeyCacheType, hash: string): Promise<void> {
+  await invalidateCached(env, keyCacheKey(keyType, hash));
 }
 
 /**

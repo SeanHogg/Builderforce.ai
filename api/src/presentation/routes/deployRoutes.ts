@@ -16,7 +16,7 @@
 import { Hono } from 'hono';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
-import { buildDatabase } from '../../infrastructure/database/connection';
+import { requestDb } from '../../application/shared/dbHandle';
 import { projectRepositories, projects } from '../../infrastructure/database/schema';
 import { verifyGitHubOidcToken } from '../../application/ide/githubOidc';
 import { publishStaticSite, assetsFromFormData } from '../../application/ide/publishStaticSite';
@@ -39,7 +39,7 @@ export function createDeployRoutes(): Hono<HonoEnv> {
     if (!verified.ok) return c.json({ error: verified.error }, 401);
 
     const [owner, repo] = verified.claims.repository.split('/');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
 
     // The repo↔project binding IS the authorization. Prefer the default binding
     // when a repo somehow backs more than one project.
@@ -111,7 +111,7 @@ export function createDeployRoutes(): Hono<HonoEnv> {
     }
 
     const [owner, repo] = verified.claims.repository.split('/');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const [binding] = await db
       .select({ projectId: projectRepositories.projectId, tenantId: projectRepositories.tenantId })
       .from(projectRepositories)

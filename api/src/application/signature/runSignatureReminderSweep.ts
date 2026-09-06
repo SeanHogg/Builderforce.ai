@@ -41,7 +41,7 @@
  */
 
 import type { Env } from '../../env';
-import { buildDatabase } from '../../infrastructure/database/connection';
+import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { deliverSignatureReminders } from './signatureInvitations';
 import type { ShareInvitation } from '../security/shareInvitationMailer';
 import {
@@ -57,8 +57,7 @@ export interface SignatureSweepResult {
   failed: number;
 }
 
-export async function runSignatureReminderSweep(env: Env, now = new Date()): Promise<SignatureSweepResult> {
-  const db = buildDatabase(env);
+export async function runSignatureReminderSweep(env: Env, now = new Date(), db: Db = buildDatabase(env)): Promise<SignatureSweepResult> {
   const expired = await expireSignatureRequests(db, now);
   const due = await signatureRemindersDue(db, now);
 

@@ -264,8 +264,7 @@ export interface WebScanSweepResult {
  * anyone clicking Run. Best-effort per project; findings dedupe + resolved findings
  * auto-close through the same {@link runWebScan} path as a manual scan.
  */
-export async function runWebScanSweep(env: Env): Promise<WebScanSweepResult> {
-  const db = buildDatabase(env);
+export async function runWebScanSweep(env: Env, db: Db = buildDatabase(env)): Promise<WebScanSweepResult> {
   const out: WebScanSweepResult = { projectsWithTarget: 0, scanned: 0, findingsFiled: 0, skippedOverCap: 0 };
 
   // Count and pick in SQL, least-recently web-scanned FIRST. This used to load every

@@ -23,7 +23,6 @@
  * the cron handler and the operator control both pick it up.
  */
 import type { Env } from './env';
-import { buildDatabase } from './infrastructure/database/connection';
 import type { CronSweepDef } from './application/runtime/cronSweepRunner';
 
 import { projectRegistry } from './application/kernel/registryProjection';
@@ -135,8 +134,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       + 'commerce, identity, people, platform, governance, investor, support, canvas and '
       + 'integrations — into metric_facts. The WRITER for the 45 keys DOMAIN_MANIFEST declares '
       + 'and that, for fourteen of the seventeen domains, nothing populated.',
-    run: async ({ env }) => {
-      const results = await runRollups(buildDatabase(env), METRIC_ROLLUPS);
+    run: async ({ env, db }) => {
+      const results = await runRollups(db, METRIC_ROLLUPS);
       const facts = results.reduce((sum, r) => sum + r.facts, 0);
       const skipped = results.reduce((sum, r) => sum + r.skipped.length, 0);
       const extra = results.flatMap((r) => Object.entries(r.extra)).filter(([, n]) => n > 0);
@@ -162,8 +161,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       + 'deadlines (contract renewals, invoice/bill due dates, statutory obligations, policy '
       + 'reviews, offer expiries) — and log the state TRANSITIONS. The half that makes a '
       + 'trigger fire without someone opening the board first.',
-    run: async ({ env }) => {
-      const r = await runTriggerSweep(env, buildDatabase(env));
+    run: async ({ env, db }) => {
+      const r = await runTriggerSweep(env, db);
       if (!r.changed && !r.skipped) return null;
       return [
         `boards=${r.boards}`, `evaluated=${r.evaluated}`, `changed=${r.changed}`,
@@ -186,8 +185,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       + 'an answer on one that has gone quiet for longer than it declared. The half that '
       + 'makes an unsigned contract chase itself instead of waiting for somebody to open '
       + 'the board it is sitting on.',
-    run: async ({ env }) => {
-      const r = await runSignatureReminderSweep(env);
+    run: async ({ env, db }) => {
+      const r = await runSignatureReminderSweep(env, new Date(), db);
       return r.expired || r.reminded || r.failed
         ? `expired=${r.expired} reminded=${r.reminded}${r.failed ? ` failed=${r.failed}` : ''}`
         : null;
@@ -207,8 +206,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       + '`ageingDays` on every canvas invoice card from its own due date. The rung is '
       + 'recorded before it is sent and the (tenant, invoice, step) index is unique, so '
       + 'a re-run cannot chase the same customer twice for the same rung.',
-    run: async ({ env }) => {
-      const r = await runCollectionsSweep(env, buildDatabase(env));
+    run: async ({ env, db }) => {
+      const r = await runCollectionsSweep(env, db);
       return r.sent || r.queued || r.failed || r.aged
         ? `sent=${r.sent} queued=${r.queued} aged=${r.aged}${r.failed ? ` failed=${r.failed}` : ''}${r.skipped ? ` skipped=${r.skipped}` : ''}`
         : null;
@@ -226,8 +225,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       + 'cadence the form declared. Each reminder RE-ISSUES the recipient credential '
       + 'so the message can carry a link that opens — only the hash is ever stored, so '
       + 'the old link is the price of a working one.',
-    run: async ({ env }) => {
-      const r = await runFormReminderSweep(env);
+    run: async ({ env, db }) => {
+      const r = await runFormReminderSweep(env, new Date(), db);
       return r.chased || r.reminded || r.failed
         ? `chased=${r.chased} reminded=${r.reminded}${r.failed ? ` failed=${r.failed}` : ''}`
         : null;
@@ -246,8 +245,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       + 'postings created since it last ran, and notify the seeker. The half that was '
       + 'missing: the alerts were stored and managed but nothing ever ran them, so '
       + '`last_run_at`/`result_count` were always null.',
-    run: async ({ env }) => {
-      const r = await runJobAlertSweep(env, buildDatabase(env));
+    run: async ({ env, db }) => {
+      const r = await runJobAlertSweep(env, db);
       return r.matched > 0 || r.failed > 0
         ? `alerts=${r.evaluated} matched=${r.matched} notified=${r.notified}${r.failed ? ` failed=${r.failed}` : ''}`
         : null;
@@ -257,8 +256,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'retention',
     cadence: 'daily',
     description: 'Purge the unbounded diagnostic/telemetry log tables past their retention window.',
-    run: async ({ env }) => {
-      await runRetentionPurge(env);
+    run: async ({ env, db }) => {
+      await runRetentionPurge(env, Date.now(), db);
       return null;
     },
   },
@@ -271,7 +270,7 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     // becomes reusable once vacuumed — which is how manager_actions ended up holding
     // 46k live rows inside a 593 MB relation despite retention already being in force.
     description: 'VACUUM (ANALYZE) every retention-swept log table so the pages the purge freed are reused instead of the relation extending.',
-    run: async ({ env }) => {
+    run: async ({ env, db }) => {
       const r = await runTableVacuum(env);
       return r.failed.length > 0 ? `vacuumed=${r.vacuumed.length} failed=${r.failed.length}` : null;
     },
@@ -280,8 +279,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'byo-health',
     cadence: 'daily',
     description: "Probe each tenant's connected model providers on their own credential; email admins on breakage.",
-    run: async ({ env }) => {
-      const r = await runByoCredentialHealthCron(env);
+    run: async ({ env, db }) => {
+      const r = await runByoCredentialHealthCron(env, db);
       return r.newlyBroken > 0 || r.recovered > 0
         ? `newlyBroken=${r.newlyBroken} recovered=${r.recovered} emailed=${r.emailed}`
         : null;
@@ -291,8 +290,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'stakeholder-digest',
     cadence: 'daily',
     description: 'Generate the stakeholder alignment digest for required approvers and informed parties.',
-    run: async ({ env }) => {
-      const result = await runStakeholderDigestSweep(buildDatabase(env));
+    run: async ({ env, db }) => {
+      const result = await runStakeholderDigestSweep(db);
       return result.distributed > 0 ? `projects=${result.projects} distributed=${result.distributed}` : null;
     },
   },
@@ -300,8 +299,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'eval-drift',
     cadence: 'daily',
     description: 'Flag per-(action, model) quality regressions over persisted eval scores.',
-    run: async ({ env }) => {
-      await runEvalDriftSweep(env);
+    run: async ({ env, db }) => {
+      await runEvalDriftSweep(env, db);
       return null;
     },
   },
@@ -309,8 +308,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'alerts',
     cadence: 'daily',
     description: 'Evaluate every enabled threshold-alert rule and fire the ones that trip.',
-    run: async ({ env }) => {
-      await runAlertSweep(env);
+    run: async ({ env, db }) => {
+      await runAlertSweep(env, db);
       return null;
     },
   },
@@ -319,8 +318,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     cadence: 'daily',
     description: "Re-review each tenant's Done items against the codebase; gaps become GAP tasks.",
     dispatches: true,
-    run: async ({ env }) => {
-      const r = await runValidatorReviewSweep(env);
+    run: async ({ env, db }) => {
+      const r = await runValidatorReviewSweep(env, db);
       return r.dispatched > 0
         ? `tenantsWithValidator=${r.tenantsWithValidator} dispatched=${r.dispatched}`
         : null;
@@ -331,8 +330,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     cadence: 'daily',
     description: 'Reseed the demo tenants so a visitor-mutated demo never stays dirty.',
     available: (env: Env) => demoAccountsEnabled(env),
-    run: async ({ env }) => {
-      const r = await reseedDemoTenants(env);
+    run: async ({ env, db }) => {
+      const r = await reseedDemoTenants(env, db);
       return `personas=${r.personas.length}`;
     },
   },
@@ -345,8 +344,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     cadence: 'weekly-mon',
     description: 'Dispatch a SOC 2 audit per tenant that has a Security agent; findings become restricted tasks.',
     dispatches: true,
-    run: async ({ env }) => {
-      const r = await runSecurityAuditSweep(env);
+    run: async ({ env, db }) => {
+      const r = await runSecurityAuditSweep(env, db);
       return r.dispatched > 0
         ? `tenantsWithSecurityAgent=${r.tenantsWithSecurityAgent} dispatched=${r.dispatched}`
         : null;
@@ -362,7 +361,7 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     // from the SWEPT_TABLES registry — every member of which is a diagnostic log with
     // a best-effort writer. Weekly because a rewrite is not something to do daily.
     description: 'Rewrite the worst-bloated log table with VACUUM (FULL, ANALYZE) when it is past both the size and bloat-ratio thresholds.',
-    run: async ({ env }) => {
+    run: async ({ env, db }) => {
       const r = await runBloatReclaim(env);
       if (r.reclaimed.length === 0 && r.failed.length === 0) return null;
       const freed = r.reclaimed.reduce((sum, x) => sum + Math.max(0, x.beforeBytes - x.afterBytes), 0);
@@ -373,8 +372,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'webscan',
     cadence: 'weekly-mon',
     description: 'Re-scan every project with a website target so posture drift is caught unprompted.',
-    run: async ({ env }) => {
-      const r = await runWebScanSweep(env);
+    run: async ({ env, db }) => {
+      const r = await runWebScanSweep(env, db);
       return r.scanned > 0 || r.skippedOverCap > 0
         ? `projectsWithTarget=${r.projectsWithTarget} scanned=${r.scanned} findingsFiled=${r.findingsFiled} skippedOverCap=${r.skippedOverCap}`
         : null;
@@ -388,8 +387,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'release-digest',
     cadence: 'weekly-fri',
     description: 'Mail every published release note not yet sent to consenting users.',
-    run: async ({ env }) => {
-      const r = await runReleaseDigest(env);
+    run: async ({ env, db }) => {
+      const r = await runReleaseDigest(env, db);
       // `complete=false` means the run hit its per-invocation send ceiling and
       // left the audience part-mailed. It is a normal outcome for a large base,
       // not an error — the next invocation resumes at the persisted cursor — but
@@ -408,8 +407,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'pr-ticket-reconciler',
     cadence: 'frequent',
     description: 'Continuously reconcile open GitHub PRs against BuilderForce tickets; route active work and close only high-confidence stale PRs.',
-    run: async ({ env }) => {
-      const r = await runPrReconciliationSweep(env);
+    run: async ({ env, db }) => {
+      const r = await runPrReconciliationSweep(env, db);
       return r.due > 0 || r.failed > 0
         ? `due=${r.due} completed=${r.completed} failed=${r.failed} prs=${r.prs} findings=${r.findings}`
         : null;
@@ -424,8 +423,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     // sweep" — but no such sweep was ever registered, so a row written by a direct SQL
     // writer only projected if something later happened to read that execution's audit
     // trail. 7,741 `pending` rows had been sitting undelivered since 2026-08-04.
-    run: async ({ env }) => {
-      const r = await drainExecutionLifecycleOutbox(env, buildDatabase(env), { limit: 500 });
+    run: async ({ env, db }) => {
+      const r = await drainExecutionLifecycleOutbox(env, db, { limit: 500 });
       return r.projected > 0 || r.dead > 0
         ? `claimed=${r.claimed} projected=${r.projected} retried=${r.retried} dead=${r.dead}`
         : null;
@@ -447,8 +446,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     description:
       'Advance every running sales `sequence` by whatever step each enrolled person is due — '
       + 'email, social post, or a task card for the manual channels. Stops on reply.',
-    run: async ({ env }) => {
-      const r = await runSequenceSweep(env);
+    run: async ({ env, db }) => {
+      const r = await runSequenceSweep(env, new Date(), db);
       return r.sent > 0 || r.failed > 0 || r.stopped > 0
         ? `sequences=${r.sequences} sent=${r.sent} stopped=${r.stopped} failed=${r.failed}`
         : null;
@@ -458,8 +457,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'campaign-send',
     cadence: 'frequent',
     description: 'Advance every in-flight marketing campaign by one batch of recipients.',
-    run: async ({ env }) => {
-      const r = await runCampaignSendSweep(env, buildDatabase(env));
+    run: async ({ env, db }) => {
+      const r = await runCampaignSendSweep(env, db);
       return r.sent > 0 || r.failed > 0
         ? `campaigns=${r.campaigns} sent=${r.sent} failed=${r.failed}`
         : null;
@@ -469,8 +468,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'social-publish',
     cadence: 'frequent',
     description: 'Publish due scheduled social campaigns, and advance any still mid-publish.',
-    run: async ({ env }) => {
-      const r = await runSocialCampaignSweep(env, buildDatabase(env));
+    run: async ({ env, db }) => {
+      const r = await runSocialCampaignSweep(env, db);
       return r.published > 0 || r.failed > 0
         ? `campaigns=${r.campaigns} published=${r.published} failed=${r.failed}`
         : null;
@@ -480,8 +479,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'ad-insights',
     cadence: 'daily',
     description: 'Pull campaigns and daily spend/result delivery from every connected ad network.',
-    run: async ({ env }) => {
-      const r = await runAdInsightsSweep(env, buildDatabase(env));
+    run: async ({ env, db }) => {
+      const r = await runAdInsightsSweep(env, db);
       return r.daysWritten > 0 || r.failed > 0
         ? `tenants=${r.tenants} accounts=${r.accounts} days=${r.daysWritten} failed=${r.failed}`
         : null;
@@ -507,8 +506,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       + 'Xero, NetSuite, a Plaid bank feed, Stripe revenue — into the `ledger_entries` rows and '
       + '`ledger_accounts` balances that `financeRollup` reads. The half that makes burn, cash '
       + 'and runway live over a company\'s actuals instead of over what somebody typed.',
-    run: async ({ env }) => {
-      const r = await runLedgerSyncSweep(env, buildDatabase(env));
+    run: async ({ env, db }) => {
+      const r = await runLedgerSyncSweep(env, db);
       return r.written > 0 || r.removed > 0 || r.failed > 0
         ? `tenants=${r.tenants} books=${r.connections} written=${r.written} removed=${r.removed} failed=${r.failed}`
         : null;
@@ -527,8 +526,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     description:
       'Settle redeemed AI-token credits against the months they were actually spent in, '
       + 'so a granted credit depletes instead of lifting the token cap forever.',
-    run: async ({ env }) => {
-      const r = await runAiCreditReconcileSweep(buildDatabase(env), env);
+    run: async ({ env, db }) => {
+      const r = await runAiCreditReconcileSweep(db, env);
       return describeCreditReconcile(r);
     },
   },
@@ -540,8 +539,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     // so a fulfilment failure after the debit left a customer paid-and-unrewarded
     // forever. Frequent: a reward is something a person is waiting for.
     description: 'Retry point redemptions stuck `pending` past ten minutes so a debited reward always lands.',
-    run: async ({ env }) => {
-      const r = await runPendingRedemptionSweep(buildDatabase(env), env);
+    run: async ({ env, db }) => {
+      const r = await runPendingRedemptionSweep(db, env);
       return r.scanned > 0 ? `scanned=${r.scanned} fulfilled=${r.fulfilled}` : null;
     },
   },
@@ -556,8 +555,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     description:
       'Fetch every connected job board feed and upsert the listings it returned, '
       + 'recording per-source counters and failures on the connection.',
-    run: async ({ env }) => {
-      const r = await runSourcingSweep(buildDatabase(env), env);
+    run: async ({ env, db }) => {
+      const r = await runSourcingSweep(db, env);
       return describeSourcingSweep(r);
     },
   },
@@ -577,8 +576,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     description:
       'Grant the monthly communications allowance included in every active Business Phone '
       + 'subscription, priced at the published overage rates.',
-    run: async ({ env }) => {
-      const r = await runPhoneAllowanceSweep(buildDatabase(env), env);
+    run: async ({ env, db }) => {
+      const r = await runPhoneAllowanceSweep(db, env);
       return describeAllowanceGrant(r);
     },
   },
@@ -592,8 +591,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     description:
       'Charge monthly rent on every provisioned phone number, suspending a number whose '
       + 'workspace has run out of communications credit and reactivating it when they top up.',
-    run: async ({ env }) => {
-      const r = await runPhoneNumberRentSweep(buildDatabase(env), env);
+    run: async ({ env, db }) => {
+      const r = await runPhoneNumberRentSweep(db, env);
       return describeNumberRent(r);
     },
   },
@@ -602,8 +601,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     cadence: 'frequent',
     description: 'Evaluate unread connected-mailbox messages against AI response rules.',
     dispatches: true,
-    run: async ({ env, budget }) => {
-      const result = await runMailboxAutomationSweep(env, buildDatabase(env), undefined, budget);
+    run: async ({ env, db, budget }) => {
+      const result = await runMailboxAutomationSweep(env, db, undefined, budget);
       return result.matched > 0 || result.failed > 0
         ? `rules=${result.rules} matched=${result.matched} drafted=${result.drafted} approvals=${result.approvals} sent=${result.sent} failed=${result.failed}`
         : null;
@@ -618,8 +617,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     // expired and push silently degraded to nothing, while the docs said renewal
     // shipped. Frequent, because a renewal window missed by a day is a dead watch.
     description: 'Arm, renew and drain connected-mailbox push subscriptions so inbound mail keeps arriving by push rather than expiring silently.',
-    run: async ({ env }) => {
-      const r = await runMailboxPushSweep(env);
+    run: async ({ env, db }) => {
+      const r = await runMailboxPushSweep(env, db);
       return r.armed > 0 || r.renewed > 0 || r.rearmed > 0 || r.polled > 0 || r.failed > 0 || r.pruned > 0
         ? `armed=${r.armed} renewed=${r.renewed} rearmed=${r.rearmed} polled=${r.polled} fresh=${r.fresh} failed=${r.failed} pruned=${r.pruned}`
         : null;
@@ -632,8 +631,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     // on read kept callers correct, so this is cost and latency, not correctness —
     // a dead `running` row is now retired on schedule instead of on the next read.
     description: 'Retire stage-sandbox runs left `running` past their heartbeat so their capacity is released on schedule, not on the next read.',
-    run: async ({ env }) => {
-      const reaped = await reapStaleStageSandboxRuns(buildDatabase(env));
+    run: async ({ env, db }) => {
+      const reaped = await reapStaleStageSandboxRuns(db);
       return reaped > 0 ? `reaped=${reaped}` : null;
     },
   },
@@ -641,8 +640,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'custom-domains',
     cadence: 'frequent',
     description: 'Re-check custom domains waiting on their DNS proof or certificate; activate the ready ones.',
-    run: async ({ env }) => {
-      const r = await runCustomDomainSweep(env, buildDatabase(env));
+    run: async ({ env, db }) => {
+      const r = await runCustomDomainSweep(env, db);
       return r.activated > 0 ? `checked=${r.checked} activated=${r.activated}` : null;
     },
   },
@@ -653,8 +652,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     // and the claim is worthless to the customer until we notice it landed.
     cadence: 'frequent',
     description: 'Re-check unverified SSO domain claims for their DNS proof; verify the ones that published it.',
-    run: async ({ env }) => {
-      const r = await runSsoDomainSweep(buildDatabase(env));
+    run: async ({ env, db }) => {
+      const r = await runSsoDomainSweep(db);
       return r.verified > 0 ? `checked=${r.checked} verified=${r.verified}` : null;
     },
   },
@@ -668,8 +667,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     // whose expiry has passed.
     cadence: 'frequent',
     description: 'Drop expired WebAuthn challenges so the sign-in path reads a small table.',
-    run: async ({ env }) => {
-      const removed = await purgeExpiredPasskeyChallenges(buildDatabase(env));
+    run: async ({ env, db }) => {
+      const removed = await purgeExpiredPasskeyChallenges(db);
       return removed > 0 ? `removed=${removed}` : null;
     },
   },
@@ -685,8 +684,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       'Ask every published hosted listing’s address whether it is still serving, so a '
       + 'subscriber’s grace → read-only → released clock starts when the app goes dark '
       + 'rather than when somebody happens to look.',
-    run: async ({ env }) => {
-      const r = await runHostedListingSweep(buildDatabase(env), env);
+    run: async ({ env, db }) => {
+      const r = await runHostedListingSweep(db, env);
       // Quiet when everything is up, which is the normal day. A log line per healthy
       // sweep is how the one that matters gets scrolled past.
       return r.dark > 0 ? `probed=${r.probed} dark=${r.dark} suspended=${r.suspended}` : null;
@@ -707,8 +706,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'preview-eviction',
     cadence: 'frequent',
     description: 'Stop container instances held open by a live preview nobody is watching (tighter than the DO sleepAfter, which is sized for runs).',
-    run: async ({ env }) => {
-      const r = await sweepIdlePreviews(env);
+    run: async ({ env, db }) => {
+      const r = await sweepIdlePreviews(env, db);
       return r.evicted > 0 ? `evicted=${r.evicted}` : null;
     },
   },
@@ -716,8 +715,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'exec-reaper',
     cadence: 'frequent',
     description: 'Fail executions stranded in running/pending by a crashed host or dropped dispatch.',
-    run: async ({ env }) => {
-      await reapStaleExecutions(env);
+    run: async ({ env, db }) => {
+      await reapStaleExecutions(env, Date.now(), db);
       return null;
     },
   },
@@ -743,8 +742,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'gh-actions-reconcile',
     cadence: 'frequent',
     description: 'Ask GitHub whether dispatched runs exist; fail the ones it never scheduled with the real cause.',
-    run: async ({ env }) => {
-      const r = await reconcileGithubActionsRuns(env);
+    run: async ({ env, db }) => {
+      const r = await reconcileGithubActionsRuns(env, Date.now(), db);
       return r.failed > 0 ? `checked=${r.checked} failed=${r.failed} stillQueued=${r.stillQueued}` : null;
     },
   },
@@ -752,8 +751,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'gh-agent-workflow-refresh',
     cadence: 'daily',
     description: 'Re-commit the current agent workflow to enabled repos still carrying an older revision, so their runs carry an execution id the reconcile sweep can attribute.',
-    run: async ({ env }) => {
-      const r = await runAgentWorkflowRefreshSweep(env);
+    run: async ({ env, db }) => {
+      const r = await runAgentWorkflowRefreshSweep(env, Date.now(), db);
       return r.checked > 0
         ? `checked=${r.checked} refreshed=${r.refreshed} skipped=${r.skipped} deferred=${r.deferred} dropped=${r.dropped}`
         : null;
@@ -763,8 +762,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'approval-expiry',
     cadence: 'frequent',
     description: 'Expire pending approvals past their deadline and escalate.',
-    run: async ({ env }) => {
-      const r = await runApprovalExpirySweep(env, buildDatabase(env));
+    run: async ({ env, db }) => {
+      const r = await runApprovalExpirySweep(env, db);
       return r.escalated > 0 ? `escalated=${r.escalated} tenants=${r.tenants}` : null;
     },
   },
@@ -772,8 +771,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'stakeholder-escalations',
     cadence: 'frequent',
     description: 'Emit 24-hour/4-hour stakeholder escalation reminders and record SLA breaches.',
-    run: async ({ env }) => {
-      const result = await runStakeholderReminderSweep(buildDatabase(env));
+    run: async ({ env, db }) => {
+      const result = await runStakeholderReminderSweep(db);
       return result.reminders > 0 ? `reminders=${result.reminders} breached=${result.breached}` : null;
     },
   },
@@ -781,8 +780,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'escalation',
     cadence: 'frequent',
     description: 'Page the next on-call tier for every unacknowledged incident whose timer elapsed.',
-    run: async ({ env }) => {
-      const r = await runEscalationSweep(env);
+    run: async ({ env, db }) => {
+      const r = await runEscalationSweep(env, db);
       return r.escalated > 0 ? `open=${r.openIncidents} escalated=${r.escalated}` : null;
     },
   },
@@ -790,8 +789,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'monitors',
     cadence: 'frequent',
     description: 'Evaluate heartbeat/http/metric monitors; a breach opens an incident and pages on-call.',
-    run: async ({ env }) => {
-      const r = await runMonitorSweep(env);
+    run: async ({ env, db }) => {
+      const r = await runMonitorSweep(env, db);
       return r.breached > 0 || r.recovered > 0
         ? `evaluated=${r.evaluated} breached=${r.breached} recovered=${r.recovered}`
         : null;
@@ -829,8 +828,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'webhook-retry',
     cadence: 'frequent',
     description: 'Redeliver failed outbound webhook deliveries with capped exponential backoff.',
-    run: async ({ env }) => {
-      const redelivered = await runWebhookRetrySweep(env);
+    run: async ({ env, db }) => {
+      const redelivered = await runWebhookRetrySweep(env, Date.now(), { db });
       return redelivered > 0 ? `redelivered=${redelivered}` : null;
     },
   },
@@ -843,8 +842,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     // tick that closes nothing is a bounded indexed read and nothing else.
     cadence: 'daily',
     description: "Close each paid extension install's metered period: price the usage, invoice the tenant, credit the publisher.",
-    run: async ({ env }) => {
-      const r = await runExtensionBillingSweep(env);
+    run: async ({ env, db }) => {
+      const r = await runExtensionBillingSweep(env, Date.now(), { db });
       // `uninvoiced` is reported even when it is the only thing that happened: a
       // period that priced and credited but could not reach an invoice is money
       // somebody owes with no line asking for it, which is an operator problem
@@ -903,8 +902,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     cadence: 'frequent',
     description: 'Enqueue a heatmap-derived exploration for every due QA schedule.',
     dispatches: true,
-    run: async ({ env }) => {
-      const r = await runQaExplorationSweep(env);
+    run: async ({ env, db }) => {
+      const r = await runQaExplorationSweep(env, db);
       return r.enqueued > 0 ? `enqueued=${r.enqueued} rearmed=${r.rearmed}` : null;
     },
   },
@@ -923,13 +922,13 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'reports',
     cadence: 'frequent',
     description: 'Generate + email every due report schedule, advancing its next run.',
-    run: async ({ env }) => {
-      const r = await runDueReports(env, (db, s, now) =>
-        buildScheduledReport(db, s.reportType, s.tenantId, s.segmentId ?? '', now, {
+    run: async ({ env, db }) => {
+      const r = await runDueReports(env, (reportDb, s, now) =>
+        buildScheduledReport(reportDb, s.reportType, s.tenantId, s.segmentId ?? '', now, {
           subjectKind: s.subjectKind ?? null,
           subjectRef: s.subjectRef ?? null,
         }),
-      );
+      db);
       return r.processed > 0 ? `processed=${r.processed}` : null;
     },
   },
@@ -937,8 +936,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'lens-snapshots',
     cadence: 'frequent',
     description: 'Capture the rolling month/quarter/year lens snapshots per tenant.',
-    run: async ({ env }) => {
-      const r = await dueSnapshots(env);
+    run: async ({ env, db }) => {
+      const r = await dueSnapshots(env, new Date(), db);
       return r.captured > 0 ? `captured=${r.captured}` : null;
     },
   },
@@ -946,8 +945,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'ceremonies',
     cadence: 'frequent',
     description: 'Open a session for every due ceremony schedule and re-arm its cron.',
-    run: async ({ env }) => {
-      const r = await runDueCeremonies(env);
+    run: async ({ env, db }) => {
+      const r = await runDueCeremonies(env, db);
       return r.opened > 0 || r.errors > 0
         ? `due=${r.due} opened=${r.opened} skipped=${r.skipped} errors=${r.errors}`
         : null;
@@ -957,8 +956,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'ceremonies-reap',
     cadence: 'frequent',
     description: 'Close ceremony sessions nobody closed — one live session per board+kind blocks the next.',
-    run: async ({ env }) => {
-      const r = await runCeremonyReaper(env, buildDatabase(env));
+    run: async ({ env, db }) => {
+      const r = await runCeremonyReaper(env, db);
       return r.due > 0
         ? `due=${r.due} completed=${r.completed} abandoned=${r.abandoned} errors=${r.errors}`
         : null;

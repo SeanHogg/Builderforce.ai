@@ -1,7 +1,7 @@
 /** Incremental producer for the dedicated PR/Ticket Reconciler agent. */
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
-import { buildDatabase } from '../../infrastructure/database/connection';
+import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { ideAgents, prReconciliationErrors, prReconciliationRuns, projectRepositories } from '../../infrastructure/database/schema';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { PR_RECONCILIATION_POLICY_VERSION, runPrTicketReconciliation } from './prReconciliationService';
@@ -16,8 +16,7 @@ export interface PrReconciliationSweepResult {
 
 const MAX_REPOS_PER_DAILY_SWEEP = 10;
 
-export async function runPrReconciliationSweep(env: Env): Promise<PrReconciliationSweepResult> {
-  const db = buildDatabase(env);
+export async function runPrReconciliationSweep(env: Env, db: Db = buildDatabase(env)): Promise<PrReconciliationSweepResult> {
   // The frequent cron is every five minutes. A four-minute lease prevents
   // overlap while ensuring PRs opened just after a run wait at most one tick.
   const cutoff = new Date(Date.now() - 4 * 60 * 1_000);

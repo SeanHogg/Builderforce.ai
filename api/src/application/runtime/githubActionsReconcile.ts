@@ -218,8 +218,7 @@ interface StrandedRow {
  * has not reported in. Best-effort throughout: any failure degrades to "leave it
  * to the reaper", which is exactly the behaviour that existed before this sweep.
  */
-export async function reconcileGithubActionsRuns(env: Env, nowMs = Date.now()): Promise<ActionsReconcileResult> {
-  const db = buildDatabase(env);
+export async function reconcileGithubActionsRuns(env: Env, nowMs = Date.now(), db: Db = buildDatabase(env)): Promise<ActionsReconcileResult> {
   const result: ActionsReconcileResult = { checked: 0, failed: 0, stillQueued: 0 };
 
   const candidates = await loadStrandedDispatches(db, nowMs);
@@ -327,8 +326,7 @@ async function listAgentRuns(
   }
 
   const res = await githubRequest<{ workflow_runs?: Array<Record<string, unknown>> }>({
-    coords: auth.auth.coords,
-    token: auth.auth.token,
+    auth: auth.auth,
     // Scoped to OUR workflow and to dispatch-triggered runs: a busy repo's push /
     // PR runs are noise that would swamp the page and make `unattributedRuns`
     // permanently non-zero, wedging every verdict at "wait".

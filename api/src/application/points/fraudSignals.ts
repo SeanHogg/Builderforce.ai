@@ -30,7 +30,7 @@
  * referencing anything.
  */
 
-import { and, eq, gte, like, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, like, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { alertEvents, ledgerEntries } from '../../infrastructure/database/schema';
@@ -136,8 +136,12 @@ export async function recordFraudFlags(
 ): Promise<void> {
   const hour = new Date().toISOString().slice(0, 13);
 
-  for (const flag of input.flags) {
-    const already = await db.select({ id: alertEvents.id })
+  if (input.flags.length > 0) {
+    // ONE read of the kinds already raised for this (user, hour), then ONE insert
+    // of the rest. `alert_events` has no unique index over the evidence keys, so
+    // the dedupe stays a read rather than `onConflictDoNothing` — but it is one
+    // read for the whole batch, not one per flag.
+    const raised = await db.select({ kind: sql<string>`${alertEvents.evidence}->>'kind'` })
       .from(alertEvents)
       .where(and(
         eq(alertEvents.tenantId, input.tenantId),
@@ -145,21 +149,22 @@ export async function recordFraudFlags(
         eq(alertEvents.subjectKind, 'user'),
         eq(alertEvents.subjectRef, input.userId),
         sql`${alertEvents.evidence}->>'bucket' = ${hour}`,
-        sql`${alertEvents.evidence}->>'kind' = ${flag.kind}`,
-      ))
-      .limit(1);
-    if (already.length > 0) continue;
-
-    await db.insert(alertEvents).values({
-      tenantId: input.tenantId,
-      metric: POINTS_FRAUD_METRIC,
-      message: flag.summary,
-      status: 'triggered',
-      subjectKind: 'user',
-      subjectRef: input.userId,
-      severity: flag.severity,
-      evidence: { ...flag.evidence, kind: flag.kind, bucket: hour },
-    });
+        inArray(sql`${alertEvents.evidence}->>'kind'`, input.flags.map((flag) => flag.kind)),
+      ));
+    const already = new Set(raised.map((row) => row.kind));
+    const fresh = input.flags.filter((flag) => !already.has(flag.kind));
+    if (fresh.length > 0) {
+      await db.insert(alertEvents).values(fresh.map((flag) => ({
+        tenantId: input.tenantId,
+        metric: POINTS_FRAUD_METRIC,
+        message: flag.summary,
+        status: 'triggered' as const,
+        subjectKind: 'user' as const,
+        subjectRef: input.userId,
+        severity: flag.severity,
+        evidence: { ...flag.evidence, kind: flag.kind, bucket: hour },
+      })));
+    }
   }
 
   if (input.flags.some((flag) => flag.severity === 'high') && !input.profile.suspended) {

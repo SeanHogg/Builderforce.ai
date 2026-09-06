@@ -162,6 +162,11 @@ export async function syncRoster(
   };
 }
 
+/** Per-row UPDATEs in flight at once. Neon HTTP is one statement per request, so
+ *  a roster of a few hundred edits is a few hundred requests either way; this only
+ *  decides how many overlap. */
+const UPDATE_CONCURRENCY = 8;
+
 /** Apply the plan. Split out so the decision half stays a pure function. */
 async function applyPlan(
   db: Db,
@@ -170,52 +175,63 @@ async function applyPlan(
   plan: ReconciliationPlan,
   markDepartures: boolean,
 ): Promise<{ created: number; updated: number; departuresApplied: number }> {
+  // Every employment record this run earns, written in ONE statement at the end.
+  const records: Array<typeof hrEmploymentRecords.$inferInsert> = [];
+
   let created = 0;
-  for (const row of plan.create) {
+  if (plan.create.length) {
     const inserted = await db
       .insert(peopleEmployees)
-      .values({ tenantId, partyRef: row.partyRef, ...columnsFor(row.fields) })
+      .values(plan.create.map((row) => ({ tenantId, partyRef: row.partyRef, ...columnsFor(row.fields) })))
       // Two syncs racing on the same tenant would otherwise fail the unique index
-      // and abort the run partway through, leaving the roster half-imported.
+      // and abort the run partway through, leaving the roster half-imported. The
+      // rows the OTHER sync won are simply absent from RETURNING.
       .onConflictDoNothing({ target: [peopleEmployees.tenantId, peopleEmployees.partyRef] })
-      .returning({ id: peopleEmployees.id });
-    const id = inserted[0]?.id;
-    if (id == null) continue;
-    created += 1;
-    await db.insert(hrEmploymentRecords).values({
-      tenantId,
-      employeeId: id,
-      kind: 'hire',
-      effectiveAt: toDate(row.fields.startedAt) ?? new Date(),
-      next: row.fields as unknown as Record<string, unknown>,
-      reason: `Discovered by an ${connectorKey} roster sync.`,
-      approvedBy: `connector:${connectorKey}`,
-    });
+      .returning({ id: peopleEmployees.id, partyRef: peopleEmployees.partyRef });
+    const idByParty = new Map(inserted.map((row) => [row.partyRef, row.id]));
+    for (const row of plan.create) {
+      const id = idByParty.get(row.partyRef);
+      if (id == null) continue;
+      created += 1;
+      records.push({
+        tenantId,
+        employeeId: id,
+        kind: 'hire',
+        effectiveAt: toDate(row.fields.startedAt) ?? new Date(),
+        next: row.fields as unknown as Record<string, unknown>,
+        reason: `Discovered by an ${connectorKey} roster sync.`,
+        approvedBy: `connector:${connectorKey}`,
+      });
+    }
   }
 
+  // Each update carries its own column set, so it stays its own statement — but
+  // they are independent rows, so they go out together rather than one at a time.
   let updated = 0;
-  for (const row of plan.update) {
-    await db
+  for (let i = 0; i < plan.update.length; i += UPDATE_CONCURRENCY) {
+    const chunk = plan.update.slice(i, i + UPDATE_CONCURRENCY);
+    await Promise.all(chunk.map((row) => db
       .update(peopleEmployees)
       .set(columnsFor(row.fields))
-      .where(scopedToTenant(peopleEmployees, tenantId, eq(peopleEmployees.id, row.id)));
-    updated += 1;
+      .where(scopedToTenant(peopleEmployees, tenantId, eq(peopleEmployees.id, row.id)))));
+    updated += chunk.length;
+  }
+  for (const row of plan.update) {
     // Only a state change earns an employment record. A title correction is not
     // an employment event, and writing one for every field edit turns the audit
     // trail into noise that nobody reads.
     const statusChange = row.changes.find((c) => c.field === 'status');
-    if (statusChange) {
-      await db.insert(hrEmploymentRecords).values({
-        tenantId,
-        employeeId: row.id,
-        kind: row.fields.status === 'terminated' ? 'termination' : 'leave',
-        effectiveAt: toDate(row.fields.endedAt) ?? new Date(),
-        previous: { status: statusChange.from },
-        next: { status: statusChange.to },
-        reason: `${connectorKey} reported the change.`,
-        approvedBy: `connector:${connectorKey}`,
-      });
-    }
+    if (!statusChange) continue;
+    records.push({
+      tenantId,
+      employeeId: row.id,
+      kind: row.fields.status === 'terminated' ? 'termination' : 'leave',
+      effectiveAt: toDate(row.fields.endedAt) ?? new Date(),
+      previous: { status: statusChange.from },
+      next: { status: statusChange.to },
+      reason: `${connectorKey} reported the change.`,
+      approvedBy: `connector:${connectorKey}`,
+    });
   }
 
   let departuresApplied = 0;
@@ -227,7 +243,7 @@ async function applyPlan(
       .where(scopedToTenant(peopleEmployees, tenantId, inArray(peopleEmployees.id, ids)));
     departuresApplied = ids.length;
     for (const row of plan.departed) {
-      await db.insert(hrEmploymentRecords).values({
+      records.push({
         tenantId,
         employeeId: row.id,
         kind: 'termination',
@@ -238,6 +254,8 @@ async function applyPlan(
       });
     }
   }
+
+  if (records.length) await db.insert(hrEmploymentRecords).values(records);
 
   return { created, updated, departuresApplied };
 }

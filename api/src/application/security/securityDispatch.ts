@@ -167,8 +167,7 @@ export interface SecuritySweepResult {
  * dispatch one SOC 2 audit against its most-recently-active repo-linked project.
  * No-op for tenants without a Security agent or without an auditable project.
  */
-export async function runSecurityAuditSweep(env: Env): Promise<SecuritySweepResult> {
-  const db = buildDatabase(env);
+export async function runSecurityAuditSweep(env: Env, db: Db = buildDatabase(env)): Promise<SecuritySweepResult> {
   const out: SecuritySweepResult = { tenantsWithSecurityAgent: 0, dispatched: 0 };
 
   const agents = await db

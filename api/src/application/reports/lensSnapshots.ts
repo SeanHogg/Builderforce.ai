@@ -212,8 +212,7 @@ const REFRESH_MS = 6 * 60 * 60 * 1000;
  * REFRESH_MS. Bounded, idempotent, and safe to call every cron tick. Returns how
  * many (tenant, lens, period) snapshots were written this tick.
  */
-export async function dueSnapshots(env: Env, now: Date = new Date()): Promise<{ captured: number }> {
-  const db = buildDatabase(env);
+export async function dueSnapshots(env: Env, now: Date = new Date(), db: Db = buildDatabase(env)): Promise<{ captured: number }> {
   const periods = rollingPeriods(now).map((p) => p.period);
 
   const tenantRows = await db.select({ id: tenants.id }).from(tenants).limit(MAX_TENANTS_PER_TICK);

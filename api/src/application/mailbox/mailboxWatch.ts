@@ -782,8 +782,7 @@ export async function armUnwatchedMailboxes(env: Env, db: Db, limit = 10): Promi
 
 /** The cron entry point: arm what is unarmed, renew what is expiring, drain what
  *  nobody can notify. One sweep, because they are one machine. */
-export async function runMailboxPushSweep(env: Env): Promise<MailboxWatchSweepResult & { armed: number }> {
-  const db = buildDatabase(env);
+export async function runMailboxPushSweep(env: Env, db: Db = buildDatabase(env)): Promise<MailboxWatchSweepResult & { armed: number }> {
   const armed = await armUnwatchedMailboxes(env, db);
   const swept = await runMailboxWatchSweep(env, db);
   return { ...swept, armed };

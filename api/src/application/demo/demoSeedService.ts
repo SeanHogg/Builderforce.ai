@@ -490,8 +490,7 @@ async function seedPersona(env: Env, db: Db, bp: DemoBlueprint): Promise<DemoPer
 }
 
 /** Reseed every persona tenant (deploy hook / cron / admin). */
-export async function reseedDemoTenants(env: Env): Promise<{ personas: DemoPersonaSeedResult[] }> {
-  const db = buildDatabase(env);
+export async function reseedDemoTenants(env: Env, db: Db = buildDatabase(env)): Promise<{ personas: DemoPersonaSeedResult[] }> {
   const personas: DemoPersonaSeedResult[] = [];
   for (const bp of DEMO_BLUEPRINTS) {
     personas.push(await seedPersona(env, db, bp));

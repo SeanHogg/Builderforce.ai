@@ -102,8 +102,7 @@ export interface FormSweepResult {
  * the row update and the message must agree, and if they cannot, silence is the
  * honest outcome.
  */
-export async function runFormReminderSweep(env: Env, now = new Date()): Promise<FormSweepResult> {
-  const db: Db = buildDatabase(env);
+export async function runFormReminderSweep(env: Env, now = new Date(), db: Db = buildDatabase(env)): Promise<FormSweepResult> {
   const base = resolveAppBaseUrl(env);
   const due = await formRemindersDue(db, now);
 

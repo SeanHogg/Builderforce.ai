@@ -49,8 +49,7 @@ async function resolveTargetUrl(
   return def ?? null;
 }
 
-export async function runQaExplorationSweep(env: Env): Promise<{ enqueued: number; rearmed: number }> {
-  const db = buildDatabase(env);
+export async function runQaExplorationSweep(env: Env, db: Db = buildDatabase(env)): Promise<{ enqueued: number; rearmed: number }> {
   const now = new Date();
 
   const due = await db

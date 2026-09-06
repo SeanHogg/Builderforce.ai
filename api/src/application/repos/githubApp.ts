@@ -297,6 +297,30 @@ export async function getInstallationToken(
   coords: { host: string | null; owner: string; repo: string },
   fetchFn: typeof fetch = fetch,
 ): Promise<GitHubAppResult<string>> {
+  const auth = await getInstallationAuth(env, coords, fetchFn);
+  return auth.ok ? { ok: true, value: auth.value.token } : auth;
+}
+
+/** An installation token together with the coordinates of its cache entry —
+ *  what a caller needs to hold in order to drop the token when GitHub rejects it. */
+export interface InstallationAuth {
+  token: string;
+  appId: string;
+  installationId: number;
+}
+
+/**
+ * {@link getInstallationToken} plus the installation it was minted for. The
+ * repo-auth resolver keeps the coordinates on the credential it hands out so a
+ * mid-flight 401 (revoked install, rotated key) can call
+ * {@link invalidateInstallationToken} and re-mint instead of serving the dead
+ * token for the rest of its TTL.
+ */
+export async function getInstallationAuth(
+  env: Env,
+  coords: { host: string | null; owner: string; repo: string },
+  fetchFn: typeof fetch = fetch,
+): Promise<GitHubAppResult<InstallationAuth>> {
   const cfg = readGitHubAppConfig(env);
   if (!cfg) return { ok: false, code: 'not_configured', reason: 'GitHub App is not configured' };
 
@@ -331,7 +355,7 @@ export async function getInstallationToken(
       },
       { kvTtlSeconds: INSTALLATION_TOKEN_TTL_SECONDS, l1TtlMs: INSTALLATION_TOKEN_TTL_SECONDS * 1000 },
     );
-    return { ok: true, value: token };
+    return { ok: true, value: { token, appId: cfg.appId, installationId: installation.value } };
   } catch (e) {
     return { ok: false, code: 'provider_error', reason: (e as Error).message };
   }

@@ -27,7 +27,7 @@ import { authMiddleware, optionalAuthMiddleware } from '../middleware/authMiddle
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { optionalWebUserId } from '../middleware/webAuthMiddleware';
 import { notify } from '../../application/notifications/notify';
-import { buildDatabase } from '../../infrastructure/database/connection';
+import { requestDb } from '../../application/shared/dbHandle';
 import {
   freelancerConversations,
   freelancerEngagements,
@@ -190,7 +190,7 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
   // literal segment isn't swallowed. Accepts a tenant OR web token and authorizes the
   // viewer as a party to the conversation.
   router.get('/attachment/:messageId', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const messageId = c.req.param('messageId');
     if (!c.env.UPLOADS) return c.json({ error: 'Not found' }, 404);
     const [row] = await db.select({
@@ -230,7 +230,7 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
 
   // GET /mine — the freelancer's conversations across all tenants, with unread counts.
   router.get('/mine', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const userId = c.get('userId') as string;
     const rows = await db.select({
       ...getTableColumns(freelancerConversations),
@@ -251,7 +251,7 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
   // POST /mine — freelancer opens a thread with a tenant they are ENGAGED with
   // (reuses the engagement-scoped thread when one exists).
   router.post('/mine', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const userId = c.get('userId') as string;
     const b = await c.req.json<{ engagementId?: string; body?: string; title?: string }>().catch(() => ({} as Record<string, string>));
     if (!b.engagementId) return c.json({ error: 'engagementId required' }, 400);
@@ -282,7 +282,7 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
 
   // GET /mine/:id/messages — thread messages (freelancer side).
   router.get('/mine/:id/messages', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
     const [conv] = await db.select().from(freelancerConversations)
@@ -293,7 +293,7 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
 
   // POST /mine/:id/messages — freelancer sends (text or attachment).
   router.post('/mine/:id/messages', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
     const [conv] = await db.select().from(freelancerConversations)
@@ -313,7 +313,7 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
 
   // POST /mine/:id/read — advance the freelancer's read watermark.
   router.post('/mine/:id/read', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
     const rows = await db.update(freelancerConversations)
@@ -328,7 +328,7 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
 
   // GET / — this tenant's conversations, with unread counts.
   router.get('/', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const rows = await db.select({
       ...getTableColumns(freelancerConversations),
@@ -349,7 +349,7 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
   // POST / — employer opens (or reuses) a conversation with a freelancer. Optionally
   // scoped to an engagement / job / proposal, with an optional first message.
   router.post('/', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
     const b = await c.req.json<{ freelancerUserId?: string; engagementId?: string; jobId?: string; proposalId?: string; subjectType?: string; title?: string; body?: string; projectId?: number }>();
@@ -409,7 +409,7 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
 
   // GET /:id/messages — thread messages (employer side).
   router.get('/:id/messages', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
     const [conv] = await db.select().from(freelancerConversations)
@@ -420,7 +420,7 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
 
   // POST /:id/messages — employer sends (text or attachment).
   router.post('/:id/messages', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
     const id = c.req.param('id');
@@ -439,7 +439,7 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
 
   // POST /:id/read — advance the employer side's read watermark.
   router.post('/:id/read', authMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
     const rows = await db.update(freelancerConversations)

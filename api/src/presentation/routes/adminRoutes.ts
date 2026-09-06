@@ -36,7 +36,8 @@ import {
 } from '../../application/developer/publishers';
 import { setPartnerTrack } from '../../application/developer/partnerPrograms';
 import { invalidatePublicCatalog } from '../../application/developer/extensionRepository';
-import { buildDatabase, buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
+import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
+import { requestDb } from '../../application/shared/dbHandle';
 import { writeAdminAudit, type AdminAuditOpts } from '../../infrastructure/audit/adminAudit';
 import { parseJsonArray } from '../../domain/shared/json';
 import { reviewFeedbackSubmission } from '../../application/feedback/feedbackEngine';
@@ -375,20 +376,20 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // All admin routes require superadmin WebJWT
   router.use('*', superAdminMiddleware);
 
-  router.get('/pricing', async (c) => c.json(await getPricingDraft(buildDatabase(c.env))));
+  router.get('/pricing', async (c) => c.json(await getPricingDraft(requestDb(c))));
 
   // Draft saves never touch the public cache. Only the explicit publication
   // boundary below can make content visible and invalidate cached responses.
   router.put('/pricing/draft', async (c) => {
     try {
-      return c.json({ draft: await savePricingDraft(buildDatabase(c.env), await c.req.json()) });
+      return c.json({ draft: await savePricingDraft(requestDb(c), await c.req.json()) });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : 'Invalid pricing configuration' }, 400);
     }
   });
 
   router.post('/pricing/publish', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const actorId = c.get('userId') as string;
     const published = await publishPricing(db, c.env as Env, actorId);
     await writeAdminAudit(db, 'PLATFORM_PRICING_PUBLISHED', actorId, {
@@ -401,7 +402,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // GET /api/admin/legal/current
   // -------------------------------------------------------------------------
   router.get('/legal/current', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     return c.json(await getLegalCurrent(db));
   });
 
@@ -410,7 +411,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // every publish + amend, newest first.
   // -------------------------------------------------------------------------
   router.get('/legal/history', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const docTypeParam = c.req.query('docType');
     const docType = docTypeParam === 'terms' || docTypeParam === 'privacy' ? docTypeParam : undefined;
     return c.json({ versions: await getLegalHistory(db, docType) });
@@ -420,7 +421,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // POST /api/admin/legal/:docType/publish  (docType: terms | privacy)
   // -------------------------------------------------------------------------
   router.post('/legal/:docType/publish', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const actorUserId = c.get('userId') as string;
     const docType = c.req.param('docType');
     if (docType !== 'terms' && docType !== 'privacy') {
@@ -441,7 +442,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // (edit title/content without minting a new version; version optional)
   // -------------------------------------------------------------------------
   router.patch('/legal/:docType', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const docType = c.req.param('docType');
     if (docType !== 'terms' && docType !== 'privacy') {
       return c.json({ error: 'docType must be "terms" or "privacy"' }, 400);
@@ -491,7 +492,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // GET /api/admin/newsletter/subscribers
   // -------------------------------------------------------------------------
   router.get('/newsletter/subscribers', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const status = c.req.query('status')?.trim();
     const q = c.req.query('q')?.trim();
     const limit = Math.min(parsePositiveInt(c.req.query('limit'), 200), 1000);
@@ -550,7 +551,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // GET /api/admin/newsletter/templates
   // -------------------------------------------------------------------------
   router.get('/newsletter/templates', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const templates = await db
       .select({
         id: newsletterTemplates.id,
@@ -579,7 +580,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // POST /api/admin/newsletter/templates
   // -------------------------------------------------------------------------
   router.post('/newsletter/templates', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const actorUserId = c.get('userId') as string;
     const body = await c.req.json<{
       name?: string;
@@ -638,7 +639,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // PATCH /api/admin/newsletter/templates/:id
   // -------------------------------------------------------------------------
   router.patch('/newsletter/templates/:id', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const actorUserId = c.get('userId') as string;
     const templateId = Number(c.req.param('id'));
     if (!Number.isFinite(templateId) || templateId <= 0) {
@@ -688,7 +689,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // GET /api/admin/newsletter/events
   // -------------------------------------------------------------------------
   router.get('/newsletter/events', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const limit = Math.min(parsePositiveInt(c.req.query('limit'), 300), 1000);
 
     const rows = await db
@@ -728,7 +729,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // GET /api/admin/privacy-requests
   // -------------------------------------------------------------------------
   router.get('/privacy-requests', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const statusRaw = c.req.query('status')?.trim();
     const typeRaw = c.req.query('type')?.trim();
     const status = statusRaw && isPrivacyRequestStatus(statusRaw) ? statusRaw : undefined;
@@ -780,7 +781,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // PATCH /api/admin/privacy-requests/:id
   // -------------------------------------------------------------------------
   router.patch('/privacy-requests/:id', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const requestId = Number(c.req.param('id'));
     if (!Number.isFinite(requestId) || requestId <= 0) {
       return c.json({ error: 'Invalid request id' }, 400);
@@ -825,7 +826,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // POST /api/admin/newsletter/events
   // -------------------------------------------------------------------------
   router.post('/newsletter/events', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const body = await c.req.json<{
       subscriberEmail?: string;
       templateId?: number | null;
@@ -866,7 +867,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // GET /api/admin/security/users?tenantId=123
   // -------------------------------------------------------------------------
   router.get('/security/users', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = parseTenantId(c.req.query('tenantId'));
     if (!tenantId) return c.json({ error: 'tenantId is required' }, 400);
 
@@ -905,7 +906,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // GET /api/admin/security/users/:userId?tenantId=123
   // -------------------------------------------------------------------------
   router.get('/security/users/:userId', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = parseTenantId(c.req.query('tenantId'));
     const userId = c.req.param('userId');
     if (!tenantId) return c.json({ error: 'tenantId is required' }, 400);
@@ -1014,7 +1015,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // POST /api/admin/security/users/:userId/mfa/setup?tenantId=123
   // -------------------------------------------------------------------------
   router.post('/security/users/:userId/mfa/setup', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = parseTenantId(c.req.query('tenantId'));
     const userId = c.req.param('userId');
     if (!tenantId) return c.json({ error: 'tenantId is required' }, 400);
@@ -1062,7 +1063,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // POST /api/admin/security/users/:userId/mfa/enable?tenantId=123
   // -------------------------------------------------------------------------
   router.post('/security/users/:userId/mfa/enable', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = parseTenantId(c.req.query('tenantId'));
     const userId = c.req.param('userId');
     const body = await c.req.json<{ code: string }>();
@@ -1120,7 +1121,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // POST /api/admin/security/users/:userId/mfa/disable?tenantId=123
   // -------------------------------------------------------------------------
   router.post('/security/users/:userId/mfa/disable', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = parseTenantId(c.req.query('tenantId'));
     const userId = c.req.param('userId');
     const body = await c.req.json<{ code?: string; recoveryCode?: string }>();
@@ -1161,7 +1162,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // POST /api/admin/security/users/:userId/mfa/recovery-codes/regenerate?tenantId=123
   // -------------------------------------------------------------------------
   router.post('/security/users/:userId/mfa/recovery-codes/regenerate', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = parseTenantId(c.req.query('tenantId'));
     const userId = c.req.param('userId');
     const body = await c.req.json<{ code?: string; recoveryCode?: string }>();
@@ -1195,7 +1196,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // POST /api/admin/security/users/:userId/sessions/:sessionId/revoke?tenantId=123
   // -------------------------------------------------------------------------
   router.post('/security/users/:userId/sessions/:sessionId/revoke', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = parseTenantId(c.req.query('tenantId'));
     const userId = c.req.param('userId');
     const sessionId = c.req.param('sessionId');
@@ -1222,7 +1223,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // POST /api/admin/security/users/:userId/sessions/revoke-all?tenantId=123
   // -------------------------------------------------------------------------
   router.post('/security/users/:userId/sessions/revoke-all', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = parseTenantId(c.req.query('tenantId'));
     const userId = c.req.param('userId');
     if (!tenantId) return c.json({ error: 'tenantId is required' }, 400);
@@ -1248,7 +1249,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // POST /api/admin/security/users/:userId/tokens/:jti/revoke?tenantId=123
   // -------------------------------------------------------------------------
   router.post('/security/users/:userId/tokens/:jti/revoke', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = parseTenantId(c.req.query('tenantId'));
     const userId = c.req.param('userId');
     const jti = c.req.param('jti');
@@ -1270,7 +1271,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // GET /api/admin/users
   // -------------------------------------------------------------------------
   router.get('/users', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
 
     const rows = await db.execute(sql`
       SELECT
@@ -1313,7 +1314,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // -------------------------------------------------------------------------
 
   router.get('/accounts/suspect', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const rows = await db.execute(sql`
       SELECT
         u.id,
@@ -1348,7 +1349,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const body = await c.req.json<{ userIds?: string[] }>().catch(() => ({} as { userIds?: string[] }));
     const userIds = (body.userIds ?? []).filter((id) => typeof id === 'string' && id.length > 0).slice(0, 500);
     if (userIds.length === 0) return c.json({ error: 'userIds is required' }, 400);
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     // Clearing the stamp, not deleting the account: the person gets the ordinary
     // "verify your email" path on next sign-in, and a real account that was
     // caught by the heuristic recovers itself without an admin doing anything.
@@ -1375,14 +1376,14 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // same numbers, and they must agree).
   // -------------------------------------------------------------------------
   router.get('/guest-sessions', async (c) => {
-    const service = new GuestPromptService(buildDatabase(c.env));
+    const service = new GuestPromptService(requestDb(c));
     return c.json(await service.listSessionsWithIntent(c.env as Env));
   });
 
   router.get('/guest-sessions/:visitorId', async (c) => {
     const visitorId = c.req.param('visitorId');
     if (!isValidVisitorId(visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
-    const service = new GuestPromptService(buildDatabase(c.env));
+    const service = new GuestPromptService(requestDb(c));
     return c.json({ prompts: await service.listPromptsForVisitor(visitorId) });
   });
 
@@ -1397,7 +1398,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   router.delete('/guest-sessions/:visitorId/prompts', async (c) => {
     const visitorId = c.req.param('visitorId');
     if (!isValidVisitorId(visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const erased = await new GuestPromptService(db).forgetVisitor(c.env as Env, visitorId);
     await writeAdminAudit(db, 'GUEST_PROMPTS_ERASED', c.get('userId') as string, {
       metadata: { visitorId, ...erased },
@@ -1416,7 +1417,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // newsletter consent.
   // -------------------------------------------------------------------------
   router.get('/creation-sessions', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const rows = await db.execute(sql`
       SELECT
         cs.id,
@@ -1468,7 +1469,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const projectValue = Number(c.req.query('projectId'));
     const tenantId = Number.isInteger(tenantValue) && tenantValue > 0 ? tenantValue : undefined;
     const projectId = Number.isInteger(projectValue) && projectValue > 0 ? projectValue : undefined;
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     // Read-through cached: five cohort queries over every session in the window,
     // on a panel that re-polls on every filter change. Value rollups move on the
     // scale of hours, not seconds, so a minute of staleness costs nothing and a
@@ -1496,7 +1497,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // aggregation live in one place instead of as SQL inside a route handler.
   // -------------------------------------------------------------------------
   router.get('/visitor-flow', async (c) => {
-    const service = new VisitorJourneyService(buildDatabase(c.env));
+    const service = new VisitorJourneyService(requestDb(c));
     const days = Number(c.req.query('days') ?? VISITOR_FLOW_WINDOWS.defaultDays);
     return c.json(await service.flowGraph(c.env as Env, days));
   });
@@ -1504,7 +1505,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   router.get('/visitor-flow/:visitorId', async (c) => {
     const visitorId = c.req.param('visitorId');
     if (!isValidVisitorId(visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
-    const service = new VisitorJourneyService(buildDatabase(c.env));
+    const service = new VisitorJourneyService(requestDb(c));
     return c.json(await service.journeyFor(visitorId));
   });
 
@@ -1513,7 +1514,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // Book-a-demo pipeline: list newest-first, update status as sales works them.
   // -------------------------------------------------------------------------
   router.get('/sales-leads', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const status = (c.req.query('status') ?? '').trim();
     const rows = await db.execute(sql`
       SELECT id, name, email, company, interest, message, source, locale,
@@ -1533,7 +1534,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (!body.status || !allowed.includes(body.status)) {
       return c.json({ error: `status must be one of ${allowed.join(', ')}` }, 400);
     }
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const rows = await db.execute(sql`
       UPDATE sales_leads SET status = ${body.status} WHERE id = ${id}
       RETURNING id, status
@@ -1559,7 +1560,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // shared relay room, so a banner appears in open tabs rather than on next load.
   // -------------------------------------------------------------------------
   router.get('/broadcasts', async (c) => {
-    const service = new PlatformBroadcastService(buildDatabase(c.env));
+    const service = new PlatformBroadcastService(requestDb(c));
     return c.json({
       broadcasts: await service.listForConsole(c.env as Env),
       vocabulary: broadcastVocabulary,
@@ -1568,7 +1569,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   router.post('/broadcasts', async (c) => {
     const body = await c.req.json<BroadcastInput>().catch((): BroadcastInput => ({ message: '' }));
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const actorId = c.get('userId') as string;
     const created = await new PlatformBroadcastService(db).create(c.env as Env, body, actorId);
     if (!created) return c.json({ error: 'A broadcast needs a message.' }, 400);
@@ -1582,7 +1583,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const id = Number(c.req.param('id'));
     if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'Invalid broadcast id' }, 400);
     const body = await c.req.json<BroadcastInput>().catch((): BroadcastInput => ({ message: '' }));
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     if (!await new PlatformBroadcastService(db).update(c.env as Env, id, body)) {
       return c.json({ error: 'Broadcast not found' }, 404);
     }
@@ -1595,7 +1596,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   router.delete('/broadcasts/:id', async (c) => {
     const id = Number(c.req.param('id'));
     if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'Invalid broadcast id' }, 400);
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     if (!await new PlatformBroadcastService(db).remove(c.env as Env, id)) {
       return c.json({ error: 'Broadcast not found' }, 404);
     }
@@ -1609,7 +1610,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // Discount codes — SuperAdmin-authored signup/checkout offers.
   // -------------------------------------------------------------------------
   router.get('/discount-codes', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const rows = await db.execute(sql`
       SELECT dc.id, dc.code, dc.percent_off AS "percentOff",
              dc.applicable_plan AS "applicablePlan", dc.billing_cycle AS "billingCycle",
@@ -1639,7 +1640,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (!Number.isInteger(durationYears) || durationYears < 1 || durationYears > 20) return c.json({ error: 'durationYears must be an integer from 1 to 20' }, 400);
     const applicablePlan = body.applicablePlan === 'teams' ? 'teams' : 'pro';
     const billingCycle = body.billingCycle === 'monthly' ? 'monthly' : 'yearly';
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const [existing] = await db.select({ id: discountCodes.id }).from(discountCodes).where(eq(discountCodes.code, code)).limit(1);
     if (existing) return c.json({ error: 'Discount code already exists' }, 409);
     const [created] = await db.insert(discountCodes).values({
@@ -1677,7 +1678,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (body.applicablePlan !== undefined) updates.applicablePlan = body.applicablePlan;
     if (body.billingCycle !== undefined) updates.billingCycle = body.billingCycle;
     if (body.isActive !== undefined) updates.isActive = body.isActive;
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const [updated] = await db.update(discountCodes).set(updates).where(eq(discountCodes.id, c.req.param('id'))).returning();
     if (!updated) return c.json({ error: 'Discount code not found' }, 404);
     await writeAdminAudit(db, 'DISCOUNT_CODE_UPDATED', c.get('userId') as string, {
@@ -1690,7 +1691,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // GET /api/admin/tenants
   // -------------------------------------------------------------------------
   router.get('/tenants', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
 
     const rows = await db.execute(sql`
       SELECT
@@ -1760,7 +1761,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     }
     const next = value === undefined ? null : value;
 
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const [before] = await db.select({ prev: tenants.tokenDailyLimitOverride }).from(tenants).where(eq(tenants.id, tenantId));
     const [updated] = await db
       .update(tenants)
@@ -1807,7 +1808,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     }
     const next = value === undefined ? null : value;
 
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const [before] = await db.select({ prev: tenants.paidOverflowDailyCap }).from(tenants).where(eq(tenants.id, tenantId));
     const [updated] = await db
       .update(tenants)
@@ -1856,7 +1857,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     }
     const next = value === undefined ? null : value;
 
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const [before] = await db.select({ prev: tenants.premiumDailyCap }).from(tenants).where(eq(tenants.id, tenantId));
     const [updated] = await db
       .update(tenants)
@@ -1902,7 +1903,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     }
     const next = value === undefined ? null : value;
 
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const [before] = await db.select({ prev: tenants.imageCreditsDailyLimit }).from(tenants).where(eq(tenants.id, tenantId));
     const [updated] = await db
       .update(tenants)
@@ -1939,7 +1940,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'premiumOverride must be a boolean' }, 400);
     }
 
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const [before] = await db.select({ prev: tenants.premiumOverride }).from(tenants).where(eq(tenants.id, tenantId));
     const [updated] = await db
       .update(tenants)
@@ -1966,7 +1967,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // GET /api/admin/tenants/:id/members
   // -------------------------------------------------------------------------
   router.get('/tenants/:id/members', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = Number(c.req.param('id'));
     if (!tenantId) return c.json({ error: 'Invalid tenant id' }, 400);
     const rows = await db.execute(sql`
@@ -1994,7 +1995,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // (user + workspace growth, LLM tokens/spend, error-event volume) for the
   // superadmin Health/Usage charts. Cached on a short TTL (platform-scoped).
   router.get('/platform-rollup', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const raw = Number(c.req.query('days'));
     const days = Number.isFinite(raw) && raw >= 1 && raw <= 365 ? Math.floor(raw) : 30;
     const rollup = await getOrSetCached(
@@ -2007,7 +2008,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   router.get('/health', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
 
     let dbOk = false;
     let dbLatencyMs = 0;
@@ -2082,7 +2083,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // they make sustained growth visible without retaining a second metrics table.
   // -------------------------------------------------------------------------
   router.get('/system-health', async (c) => {
-    const primary = buildDatabase(c.env);
+    const primary = requestDb(c);
     const transactional = buildTransactionalDatabase(c.env);
     const [primaryDb, transactionalDb, runtime] = await Promise.all([
       inspectDatabase(primary, 'primary'),
@@ -2135,7 +2136,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const actorId = c.get('userId') as string | undefined;
     if (body.action === 'purge_expired') {
       await runRetentionPurge(c.env as Env);
-      await writeAdminAudit(buildDatabase(c.env), 'SYSTEM_HEALTH_PURGE_EXPIRED', actorId ?? null, {
+      await writeAdminAudit(requestDb(c), 'SYSTEM_HEALTH_PURGE_EXPIRED', actorId ?? null, {
         metadata: { target: 'both', retentionPolicy: true }, ipAddress: c.req.header('cf-connecting-ip') ?? null,
       });
       return c.json({ ok: true, action: body.action });
@@ -2146,7 +2147,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (body.table != null && !isSafeRelationName(body.table)) {
       return c.json({ error: 'Invalid table name.' }, 400);
     }
-    const db = body.target === 'primary' ? buildDatabase(c.env) : buildTransactionalDatabase(c.env);
+    const db = body.target === 'primary' ? requestDb(c) : buildTransactionalDatabase(c.env);
     try {
       // Same statement builder the daily maintenance sweep uses, so the quoting rule
       // and the relation-name guard cannot diverge between the two callers.
@@ -2154,7 +2155,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : 'VACUUM failed' }, 500);
     }
-    await writeAdminAudit(buildDatabase(c.env), 'SYSTEM_HEALTH_VACUUM_ANALYZE', actorId ?? null, {
+    await writeAdminAudit(requestDb(c), 'SYSTEM_HEALTH_VACUUM_ANALYZE', actorId ?? null, {
       metadata: { target: body.target, table: body.table ?? null }, ipAddress: c.req.header('cf-connecting-ip') ?? null,
     });
     return c.json({ ok: true, action: body.action, target: body.target, table: body.table ?? null });
@@ -2245,7 +2246,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : 'Could not persist cron control.' }, 503);
     }
-    await writeAdminAudit(buildDatabase(c.env), 'CRON_CONTROL_CHANGED', (c.get('userId') as string | undefined) ?? null, {
+    await writeAdminAudit(requestDb(c), 'CRON_CONTROL_CHANGED', (c.get('userId') as string | undefined) ?? null, {
       metadata: { sweep: target, enabled: body.enabled },
       ipAddress: c.req.header('cf-connecting-ip') ?? null,
     });
@@ -2267,7 +2268,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     }
     await signalPendingWork(env);
     const gate = await evaluateCronGate(env, Date.now());
-    await writeAdminAudit(buildDatabase(c.env), 'CRON_SIGNAL_WORK', (c.get('userId') as string | undefined) ?? null, {
+    await writeAdminAudit(requestDb(c), 'CRON_SIGNAL_WORK', (c.get('userId') as string | undefined) ?? null, {
       ipAddress: c.req.header('cf-connecting-ip') ?? null,
     });
     return c.json({ ok: true, gate: { wouldRun: gate.run, reason: gate.reason } });
@@ -2310,14 +2311,14 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const started = Date.now();
     const controls = await readCronControls(env);
     const controlledSweeps = applyCronControls(resolved.sweeps, controls);
-    const results = await runCronSweeps(controlledSweeps, { env, budget, controls }, {
+    const results = await runCronSweeps(controlledSweeps, { env, db: requestDb(c), budget, controls }, {
       timeoutMs: body.timeoutMs,
       // A sweep past its deadline keeps running after we answer; without this the
       // isolate would cancel it when the request ends and the force-run would
       // silently truncate real work.
       keepAlive: (p) => c.executionCtx.waitUntil(p),
     });
-    await writeAdminAudit(buildDatabase(c.env), 'CRON_FORCE_RUN', (c.get('userId') as string | undefined) ?? null, {
+    await writeAdminAudit(requestDb(c), 'CRON_FORCE_RUN', (c.get('userId') as string | undefined) ?? null, {
       metadata: {
         target,
         kind: resolved.kind,
@@ -2399,7 +2400,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // never stored, so this view is diagnostic without becoming a secrets store.
   // -------------------------------------------------------------------------
   router.get('/email-delivery-failures', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const q = c.req.query();
     const limit = Math.min(Math.max(Number(q.limit) || 50, 1), 200);
     const offset = Math.max(Number(q.offset) || 0, 0);
@@ -2448,7 +2449,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'userId and tenantId are required' }, 400);
     }
 
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
 
     // Verify the user exists
     const [userRow] = await db
@@ -2613,7 +2614,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // Everything here is builder-side / superadmin-only.
   // -------------------------------------------------------------------------
   router.get('/llm/traces', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const q        = c.req.query('q')?.trim() || null;
     const tenantId = parseTenantId(c.req.query('tenantId'));
     const model    = c.req.query('model')?.trim() || null;
@@ -2669,7 +2670,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // chain, and the full request/response bodies.
   // -------------------------------------------------------------------------
   router.get('/llm/traces/:traceId', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const traceId = c.req.param('traceId');
     const [row] = await db
       .select()
@@ -2777,7 +2778,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // -------------------------------------------------------------------------
   router.get('/llm-ratings', async (c) => {
     const days = daysParam(c.req.query('days'), 30, 365);
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     // tenantId omitted ⇒ every tenant, which is exactly what a platform view is.
     return c.json(await summarizeActionRatings(c.env, db, { days }));
   });
@@ -2786,7 +2787,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // GET /api/admin/personas   — list platform personas (admin CRUD)
   // -------------------------------------------------------------------------
   router.get('/personas', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const rows = await db.select().from(platformPersonas).orderBy(platformPersonas.name);
     const list = rows.map((r) => ({
       id:         r.id,
@@ -2813,7 +2814,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // POST /api/admin/personas   — create platform persona
   // -------------------------------------------------------------------------
   router.post('/personas', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const body = await c.req.json<{
       name: string;
       slug?: string;
@@ -2877,7 +2878,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // PATCH /api/admin/personas/:id   — update platform persona
   // -------------------------------------------------------------------------
   router.patch('/personas/:id', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const id = Number(c.req.param('id'));
     if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
     const body = await c.req.json<{
@@ -2943,7 +2944,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // DELETE /api/admin/personas/:id
   // -------------------------------------------------------------------------
   router.delete('/personas/:id', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const id = Number(c.req.param('id'));
     if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
     const result = await db.delete(platformPersonas).where(eq(platformPersonas.id, id)).returning({ id: platformPersonas.id, slug: platformPersonas.slug });
@@ -2957,7 +2958,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // GET /api/admin/projects   — list all projects (for Governance tab)
   // -------------------------------------------------------------------------
   router.get('/projects', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const rows = await db
       .select({
         id:         projects.id,
@@ -2985,7 +2986,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // PATCH /api/admin/projects/:id/governance   — update project governance (superadmin only)
   // -------------------------------------------------------------------------
   router.patch('/projects/:id/governance', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const id = Number(c.req.param('id'));
     if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
     const body = await c.req.json<{ governance?: string | null }>();
@@ -3017,7 +3018,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // -------------------------------------------------------------------------
   router.post('/impersonation/start', async (c) => {
     const adminId = c.get('userId') as string;
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null;
     const ua = c.req.header('User-Agent') ?? null;
 
@@ -3146,7 +3147,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   router.post('/impersonation/:id/end', async (c) => {
     const adminId = c.get('userId') as string;
     const sessionId = c.req.param('id');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
 
     const [session] = await db
       .select()
@@ -3190,7 +3191,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   router.post('/impersonation/:id/switch-role', async (c) => {
     const adminId = c.get('userId') as string;
     const sessionId = c.req.param('id');
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const { role } = await c.req.json<{ role: string }>();
 
     if (!role) return c.json({ error: 'role is required' }, 400);
@@ -3253,7 +3254,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // -------------------------------------------------------------------------
   router.get('/impersonation/active', async (c) => {
     const adminId = c.get('userId') as string;
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
 
     const [session] = await db
       .select()
@@ -3293,7 +3294,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // List all impersonation sessions (paginated).
   // -------------------------------------------------------------------------
   router.get('/impersonation', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const limit  = Math.min(parsePositiveInt(c.req.query('limit'), 50), 200);
     const offset = parsePositiveInt(c.req.query('offset'), 0);
 
@@ -3333,7 +3334,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // Get a single session detail including role switch history.
   // -------------------------------------------------------------------------
   router.get('/impersonation/:id', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const sessionId = c.req.param('id');
 
     const [session] = await db
@@ -3376,7 +3377,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // Paginated, filterable audit log.
   // -------------------------------------------------------------------------
   router.get('/audit-log', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const limit  = Math.min(parsePositiveInt(c.req.query('limit'), 50), 200);
     const offset = parsePositiveInt(c.req.query('offset'), 0);
     const event  = c.req.query('event') ?? null;
@@ -3413,7 +3414,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   // GET /api/admin/permissions/matrix — current effective role × permission matrix
   router.get('/permissions/matrix', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const overrides = await db.select().from(rolePermissionOverrides);
     const roles = ['viewer', 'developer', 'manager', 'owner'] as const;
     const matrix: Record<string, string[]> = {};
@@ -3435,7 +3436,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   // PUT /api/admin/permissions/roles/:role — update permission overrides for a role
   router.put('/permissions/roles/:role', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const actorId = c.get('userId') as string;
     const role = c.req.param('role');
     const validRoles = ['viewer', 'developer', 'manager', 'owner'];
@@ -3471,7 +3472,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   // GET /api/admin/permissions/matrix/export — CSV export
   router.get('/permissions/matrix/export', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const overrides = await db.select().from(rolePermissionOverrides);
     const roles = ['viewer', 'developer', 'manager', 'owner'];
     const header = ['permission', ...roles].join(',');
@@ -3498,7 +3499,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   // GET /api/admin/modules
   router.get('/modules', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const rows = await db.select().from(platformModules).orderBy(platformModules.name).limit(LIST_ROW_CAP);
     return c.json({
       modules: rows.map((m) => ({
@@ -3512,7 +3513,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   // POST /api/admin/modules
   router.post('/modules', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const actorId = c.get('userId') as string;
     const body = await c.req.json<{
       name: string;
@@ -3544,7 +3545,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   // PATCH /api/admin/modules/:id
   router.patch('/modules/:id', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const actorId = c.get('userId') as string;
     const id = c.req.param('id');
     const body = await c.req.json<{ name?: string; description?: string; baseRole?: string; permissions?: string[] }>();
@@ -3565,7 +3566,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   // DELETE /api/admin/modules/:id
   router.delete('/modules/:id', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const actorId = c.get('userId') as string;
     const id = c.req.param('id');
     const [mod] = await db.select({ isBuiltin: platformModules.isBuiltin, name: platformModules.name }).from(platformModules).where(eq(platformModules.id, id)).limit(1);
@@ -3578,7 +3579,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   // POST /api/admin/tenants/:tenantId/members/:userId/modules — assign module to user
   router.post('/tenants/:tenantId/members/:userId/modules', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const actorId = c.get('userId') as string;
     const tenantId = parseInt(c.req.param('tenantId'), 10);
     const userId = c.req.param('userId');
@@ -3594,7 +3595,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   // DELETE /api/admin/tenants/:tenantId/members/:userId/modules/:moduleId
   router.delete('/tenants/:tenantId/members/:userId/modules/:moduleId', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const actorId = c.get('userId') as string;
     const tenantId = parseInt(c.req.param('tenantId'), 10);
     const userId = c.req.param('userId');
@@ -3613,7 +3614,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   // POST /api/admin/users/:id/force-logout — increment session_version + revoke all tokens
   router.post('/users/:id/force-logout', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const actorId = c.get('userId') as string;
     const targetId = c.req.param('id');
     // Increment session_version (JWT-level invalidation for future tokens carrying sv)
@@ -3632,7 +3633,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   // POST /api/admin/users/:id/reset-password — send password reset email
   router.post('/users/:id/reset-password', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const actorId = c.get('userId') as string;
     const targetId = c.req.param('id');
     const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, targetId)).limit(1);
@@ -3677,7 +3678,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   // PUT /api/admin/users/:id/status — activate / suspend
   router.put('/users/:id/status', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const actorId = c.get('userId') as string;
     const targetId = c.req.param('id');
     const body = await c.req.json<{ suspended: boolean }>();
@@ -3699,7 +3700,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   // PUT /api/admin/users/:id/permissions — grant/revoke per-user permissions
   router.put('/users/:id/permissions', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const actorId = c.get('userId') as string;
     const targetId = c.req.param('id');
     const body = await c.req.json<{
@@ -3737,7 +3738,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   // PATCH /api/admin/tenants/:tenantId/members/:userId/role — override member role
   router.patch('/tenants/:tenantId/members/:userId/role', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const actorId = c.get('userId') as string;
     const tenantId = parseInt(c.req.param('tenantId'), 10);
     const userId = c.req.param('userId');
@@ -3763,7 +3764,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   // GET /api/admin/users/:id/effective-permissions — resolved permissions for user in tenant
   router.get('/users/:id/effective-permissions', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const targetId = c.req.param('id');
     const tenantId = parseInt(c.req.query('tenantId') ?? '0', 10);
     if (!tenantId) return c.json({ error: 'tenantId query param required' }, 400);
@@ -3812,7 +3813,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   // GET /api/admin/audit-log/export — CSV export
   router.get('/audit-log/export', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const event  = c.req.query('event') ?? null;
     const actor  = c.req.query('actor') ?? null;
     const target = c.req.query('target') ?? null;
@@ -3845,7 +3846,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   // GET /api/admin/users/:id/workspaces — workspace memberships for a user (tenantId, name, slug, role)
   router.get('/users/:id/workspaces', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const targetId = c.req.param('id');
     const rows = await db
       .select({
@@ -3872,7 +3873,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   // GET /api/admin/users/:id/admin-access — impersonation sessions targeting this user (for target transparency)
   router.get('/users/:id/admin-access', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const targetId = c.req.param('id');
     const rows = await db
       .select({
@@ -3908,7 +3909,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // ─────────────────────────────────────────────────────────────────────
 
   router.get('/tenants/:tenantId/api-keys', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = Number(c.req.param('tenantId'));
     if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
     const keys = await listTenantApiKeys(db, tenantId);
@@ -3916,7 +3917,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   router.post('/tenants/:tenantId/api-keys', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = Number(c.req.param('tenantId'));
     if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
     const adminUserId = c.get('userId') as string | undefined;
@@ -3933,7 +3934,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   router.get('/tenants/:tenantId/api-keys/:keyId/usage', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = Number(c.req.param('tenantId'));
     if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
     const keyId  = c.req.param('keyId');
@@ -3945,7 +3946,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   router.patch('/tenants/:tenantId/api-keys/:keyId', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = Number(c.req.param('tenantId'));
     if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
     const keyId = c.req.param('keyId');
@@ -3970,7 +3971,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
    * passing `tenantId: null` is what widens it to every workspace.
    */
   router.get('/feedback', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantParam = c.req.query('tenantId');
     const tenantId = tenantParam ? Number(tenantParam) : null;
     if (tenantId != null && !Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
@@ -3994,7 +3995,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
    * identically — there is no second, privileged approval path to keep in sync.
    */
   router.post('/feedback/:id/review', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const body = await c.req.json<{ decision?: string; tenantId?: number }>().catch(() => null);
     const decision = body?.decision;
     if (decision !== 'approved' && decision !== 'declined') {
@@ -4013,7 +4014,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   router.delete('/tenants/:tenantId/api-keys/:keyId', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = Number(c.req.param('tenantId'));
     if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
     const keyId = c.req.param('keyId');
@@ -4042,7 +4043,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // trust decision nobody can attribute is one that will eventually be disputed.
 
   router.post('/publishers/:tenantId/state', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = Number(c.req.param('tenantId'));
     if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
     const body = await c.req.json<{ state?: string; note?: string }>().catch(() => ({} as { state?: string; note?: string }));
@@ -4063,7 +4064,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   router.post('/publishers/:tenantId/suspension', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = Number(c.req.param('tenantId'));
     if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
     const body = await c.req.json<{ suspended?: boolean; reason?: string }>().catch(() => ({} as { suspended?: boolean; reason?: string }));
@@ -4092,7 +4093,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   router.post('/publishers/:tenantId/track', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const tenantId = Number(c.req.param('tenantId'));
     if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
     const body = await c.req.json<{ track?: string; featured?: boolean }>().catch(() => ({} as { track?: string; featured?: boolean }));

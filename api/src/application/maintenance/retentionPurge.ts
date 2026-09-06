@@ -29,8 +29,7 @@ const cutoff = (now: number, days: number) => new Date(now - days * DAY_MS);
  * failure on one is logged and does not block the others. `now` is injectable for
  * tests; defaults to the cron's wall clock.
  */
-export async function runRetentionPurge(env: Env, now: number = Date.now()): Promise<void> {
-  const db = buildDatabase(env);
+export async function runRetentionPurge(env: Env, now: number = Date.now(), db: Db = buildDatabase(env)): Promise<void> {
   const transactionalDb = buildTransactionalDatabase(env);
   const dbFor = (connection: 'primary' | 'transactional'): Db => (connection === 'primary' ? db : transactionalDb);
 

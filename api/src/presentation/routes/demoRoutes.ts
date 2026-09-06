@@ -2,7 +2,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
 import { Hono } from 'hono';
 import type { MiddlewareHandler } from 'hono';
 import type { Env, HonoEnv } from '../../env';
-import { buildDatabase } from '../../infrastructure/database/connection';
+import { requestDb } from '../../application/shared/dbHandle';
 import { salesLeads } from '../../infrastructure/database/schema';
 import { isValidVisitorId } from '../../application/marketing/MarketingService';
 import {
@@ -94,7 +94,7 @@ export function createDemoRoutes(): Hono<HonoEnv> {
     }
 
     const target = await getDemoSessionTarget(c.env, body.persona);
-    const db = buildDatabase(c.env);
+    const db = requestDb(c);
     const userAgent = c.req.header('user-agent') ?? null;
     const [web, tenant] = [
       await mintWebSessionToken(db, c.env.JWT_SECRET, {
@@ -166,7 +166,7 @@ export function createDemoRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'Too many requests today.', code: 'demo_limit_reached' }, 429);
     }
 
-    await buildDatabase(c.env).insert(salesLeads).values({
+    await requestDb(c).insert(salesLeads).values({
       name,
       email,
       company: typeof body.company === 'string' ? body.company.trim().slice(0, 200) || null : null,
