@@ -5,6 +5,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { clampScore } from '../../domain/shared/numbers';
 import { liveExecution } from '../rehearsal/executionMode';
 import { notSystemTask } from '../task/taskScope';
+import { TASK_TERMINAL_SET } from '../../domain/shared/terminalStatus';
 
 /**
  * Project 360 — the single source of truth for a project's whole-picture health,
@@ -174,7 +175,7 @@ export interface Project360Availability {
 }
 
 const DONE = new Set(['done', 'completed', 'closed', 'merged', 'resolved']);
-const TERMINAL = new Set([...DONE, 'cancelled']);
+const TERMINAL = new Set([...DONE, ...TASK_TERMINAL_SET]);
 const NOT_STARTED = new Set(['backlog', 'todo', 'ready', 'open', 'new']);
 
 type Owner = { ref: string; kind: Project360Member['kind'] };

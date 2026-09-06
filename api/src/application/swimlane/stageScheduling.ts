@@ -13,6 +13,8 @@
  * the coordinator then routes the ticket to needs_attention and never advances.
  */
 
+import { EXECUTION_TERMINAL_SET } from '../../domain/shared/terminalStatus';
+
 export type DispatchStatus =
   | 'blocked'    // waiting on an unmet dependency
   | 'pending'    // ready; awaiting a browser pull worker to claim it
@@ -29,7 +31,7 @@ export interface SchedulableDispatch {
   dependsOn: string[];
 }
 
-const TERMINAL: ReadonlySet<DispatchStatus> = new Set(['completed', 'failed', 'cancelled']);
+const TERMINAL: ReadonlySet<string> = EXECUTION_TERMINAL_SET;
 const ACTIVE_NONTERMINAL: ReadonlySet<DispatchStatus> = new Set([
   'pending',
   'claimed',

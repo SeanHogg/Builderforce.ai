@@ -24,7 +24,6 @@ import {
   tenantMembers,
   users,
 } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -369,37 +368,28 @@ export function createAnalyticsRoutes(db: Db): Hono<HonoEnv> {
       .from(agentHosts)
       .where(eq(agentHosts.tenantId, tenantId));
 
+    // ONE upsert per chunk for the whole fleet. The insert was already idempotent
+    // against the partial unique index (migration 0124), so the per-host existence
+    // probe + update was a second and third statement that decided nothing. `xmax = 0`
+    // on a returned row is Postgres' tell for "inserted, not updated", which keeps the
+    // created/updated split honest without the probe.
     let created = 0;
     let updated = 0;
-    for (const agentHost of hostRows) {
-      const [existing] = await db
-        .select({ id: contributors.id })
-        .from(contributors)
-        .where(and(eq(contributors.tenantId, tenantId), eq(contributors.agentHostId, agentHost.id)));
-
-      if (existing) {
-        await db
-          .update(contributors)
-          .set({ displayName: agentHost.name, isActive: agentHost.status === 'active', updatedAt: new Date() })
-          .where(scopedToTenant(contributors, tenantId, eq(contributors.id, existing.id)));
-        updated++;
-      } else {
-        // onConflictDoUpdate against the partial unique index (migration 0124)
-        // so a concurrent sync that inserted the same (tenant, host) first just
-        // updates instead of creating a duplicate — idempotent import [1557].
-        await db.insert(contributors).values({
-          tenantId,
-          displayName: agentHost.name,
-          kind: 'agent',
-          agentHostId: agentHost.id,
-          roleType: 'agent',
-        }).onConflictDoUpdate({
-          target: [contributors.tenantId, contributors.agentHostId],
-          targetWhere: sql`${contributors.kind} = 'agent'`,
-          set: { displayName: agentHost.name, isActive: agentHost.status === 'active', updatedAt: new Date() },
-        });
-        created++;
-      }
+    const CHUNK = 200;
+    for (let i = 0; i < hostRows.length; i += CHUNK) {
+      const rows = await db.insert(contributors).values(hostRows.slice(i, i + CHUNK).map((agentHost) => ({
+        tenantId,
+        displayName: agentHost.name,
+        kind: 'agent' as const,
+        agentHostId: agentHost.id,
+        roleType: 'agent',
+        isActive: agentHost.status === 'active',
+      }))).onConflictDoUpdate({
+        target: [contributors.tenantId, contributors.agentHostId],
+        targetWhere: sql`${contributors.kind} = 'agent'`,
+        set: { displayName: sql`excluded.display_name`, isActive: sql`excluded.is_active`, updatedAt: new Date() },
+      }).returning({ inserted: sql<boolean>`(xmax = 0)` });
+      for (const r of rows) { if (r.inserted) created++; else updated++; }
     }
 
     return c.json({ created, updated, total: hostRows.length });

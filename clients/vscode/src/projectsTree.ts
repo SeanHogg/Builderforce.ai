@@ -11,7 +11,7 @@ import {
 } from "./bfApi";
 import { SECRET_KEY } from "./gateway";
 import { getSelectedProject, onProjectChange } from "./projectState";
-import { attentionFor, attentionIcon, attentionDescriptionPrefix } from "./attention";
+import { attentionApprovalId, attentionFor, attentionIcon, attentionDescriptionPrefix } from "./attention";
 
 const HIDE_DONE_KEY = "builderforce.hideDoneTasks";
 const CONFIG_KEY = "builderforce.projectTreeConfig";
@@ -298,7 +298,13 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
           ? new vscode.ThemeIcon("pass-filled", new vscode.ThemeColor("testing.iconPassed"))
           : new vscode.ThemeIcon(iconForStatus(t.status));
     item.contextValue = "builderforceTask";
-    item.command = { command: "builderforce.startTaskSession", title: "Start Session", arguments: [node] };
+    // A ticket whose agent is waiting on a human answer deep-links straight to that
+    // question (the same review flow the Inbox and the palette use) instead of
+    // starting yet another session on top of the one that is blocked.
+    const approvalId = live === "awaiting_input" ? attentionApprovalId("task", t.id) : undefined;
+    item.command = approvalId
+      ? { command: "builderforce.humanRequests", title: vscode.l10n.t("Answer the agent's question"), arguments: [approvalId] }
+      : { command: "builderforce.startTaskSession", title: "Start Session", arguments: [node] };
     return item;
   }
 

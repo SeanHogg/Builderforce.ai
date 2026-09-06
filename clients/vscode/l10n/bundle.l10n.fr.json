@@ -526,5 +526,6 @@
   "{count} tokens left": "{count} jetons restants",
   "{count} uncommitted changes": "{count} modifications non validées",
   "{input} input / {output} output per 1M tokens + $0.01 per request": "{input} en entrée / {output} en sortie par million de tokens + $0,01 par requête",
-  "● Live": "● En direct"
+  "● Live": "● En direct",
+  "Answer the agent's question": "Répondre à la question de l'agent"
 }

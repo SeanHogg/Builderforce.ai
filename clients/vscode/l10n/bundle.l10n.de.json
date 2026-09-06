@@ -526,5 +526,6 @@
   "{count} tokens left": "{count} Token übrig",
   "{count} uncommitted changes": "{count} nicht committete Änderungen",
   "{input} input / {output} output per 1M tokens + $0.01 per request": "{input} Eingabe / {output} Ausgabe pro 1 Mio. Tokens + $0,01 pro Anfrage",
-  "● Live": "● Live"
+  "● Live": "● Live",
+  "Answer the agent's question": "Die Frage des Agenten beantworten"
 }

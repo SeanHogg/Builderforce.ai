@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import nodeFs from "node:fs";
 import { productForPlan, type ModelIdentityContext } from "@seanhogg/builderforce-brain-embedded";
 import { type LocalEndpoint, type LocalModelsConfig, type LocalProviderId } from "./localModels";
-import { isKimiCodeInstall, loadKimiCodeInstall } from "./kimiCodeInstall";
+import { isKimiCodeInstall, loadKimiCodeInstall, type KimiCodeInstallResult } from "./kimiCodeInstall";
 import { ensureFreshKimiToken } from "./kimiCodeAuth";
 
 /** Single source of truth for the SecretStorage key (DRY). */
@@ -46,13 +46,37 @@ export function getApiKey(secrets: vscode.SecretStorage): Thenable<string | unde
  * in the harness. Single source of truth: every surface that offers or dispatches a
  * local model reads this.
  */
+/**
+ * The Kimi Code install, memoized for a short window. Discovery is synchronous disk
+ * I/O (config.toml + the credential file), and three readers ask for it per proxied
+ * request — the model list, the endpoint authorizer and the picker's unavailable-reason
+ * — so an unmemoized read was six file reads per turn. The TOKEN is never taken from
+ * this value: `authorizeLocalEndpoint` resolves a fresh one from disk at request time,
+ * so the window only ever delays noticing an install/uninstall or a sign-out, and the
+ * configuration-change hook drops it early (same pattern as `MODELS_TTL_MS`).
+ */
+const KIMI_INSTALL_TTL_MS = 30_000;
+let kimiInstallMemo: { ts: number; value: KimiCodeInstallResult } | undefined;
+function currentKimiInstall(): KimiCodeInstallResult {
+  const now = Date.now();
+  if (kimiInstallMemo && now - kimiInstallMemo.ts < KIMI_INSTALL_TTL_MS) return kimiInstallMemo.value;
+  const value = loadKimiCodeInstall(nodeFs, process.env, undefined, now);
+  kimiInstallMemo = { ts: now, value };
+  return value;
+}
+/** Drop the memo so the next reader re-discovers the install (settings changed, a
+ *  Kimi sign-in/out was just performed here). */
+export function invalidateKimiInstallMemo(): void {
+  kimiInstallMemo = undefined;
+}
+
 export function getLocalModelsConfig(): LocalModelsConfig {
   const cfg = vscode.workspace.getConfiguration("builderforce");
   // Kimi Code is not configured, it is DISCOVERED: the user already signed in with its
   // own app, which wrote the endpoint, the model table and the credential to disk. Asking
   // them to re-enter any of that would be asking for something they have already given.
   // A machine without it simply contributes no endpoint and no rows.
-  const kimi = loadKimiCodeInstall(nodeFs);
+  const kimi = currentKimiInstall();
   return {
     enabled: cfg.get<boolean>("localModels.enabled") === true,
     endpoints: {
@@ -85,7 +109,7 @@ export async function authorizeLocalEndpoint(
   endpoint: LocalEndpoint,
 ): Promise<{ ok: true; endpoint: LocalEndpoint } | { ok: false; detail: string }> {
   if (provider !== "kimi-code") return { ok: true, endpoint };
-  const install = loadKimiCodeInstall(nodeFs);
+  const install = currentKimiInstall();
   if (!isKimiCodeInstall(install)) return { ok: false, detail: install.detail };
   const resolved = await ensureFreshKimiToken(nodeFs, install.home);
   if (resolved.kind !== "token") return { ok: false, detail: resolved.detail };
@@ -107,7 +131,7 @@ export async function authorizeLocalEndpoint(
  * credential field NAMES only — never a value — and is shown only where it helps.
  */
 export function getKimiCodeUnavailableReason(): { reason: string; detail: string } | null {
-  const kimi = loadKimiCodeInstall(nodeFs);
+  const kimi = currentKimiInstall();
   if (isKimiCodeInstall(kimi) || kimi.reason === "no_install") return null;
   return { reason: kimi.reason, detail: kimi.detail };
 }

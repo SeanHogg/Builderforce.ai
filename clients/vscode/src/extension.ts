@@ -10,7 +10,7 @@ import { ProjectPagePanel, projectPageChoices } from "./projectPagePanel";
 import { registerChatParticipant } from "./chatParticipant";
 import { registerChatSessions } from "./chatSessions";
 import { scanCodebase } from "./codebaseScan";
-import { getModels, getWebBaseUrl, getKimiCodeUnavailableReason, getLocalModelsConfig, SECRET_KEY, clearPersonalityBlockCache } from "./gateway";
+import { getModels, getWebBaseUrl, getKimiCodeUnavailableReason, getLocalModelsConfig, SECRET_KEY, clearPersonalityBlockCache, invalidateKimiInstallMemo } from "./gateway";
 import { listLocalModels, localModelOptions, type LocalModel } from "./localModels";
 import { resolveModelRoute, routeRequiresSignIn } from "./modelRouting";
 import { PERMISSION_MODE_SETTING } from "./permissionMode";
@@ -498,6 +498,8 @@ export function activate(context: vscode.ExtensionContext): void {
     // prevent, just delayed.
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration(PERMISSION_MODE_SETTING)) BrainWebview.refresh();
+      // Local-model settings changed: re-discover the Kimi Code install on the next read.
+      if (e.affectsConfiguration("builderforce.localModels")) invalidateKimiInstallMemo();
     }),
   );
 

@@ -97,16 +97,19 @@ export async function computeTenantEngagement(db: Db, tenantId: number, days: nu
     .where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.isActive, true)));
   if (members.length === 0) return [];
 
+  // The four per-user aggregates are independent of one another; one round-trip of
+  // wall-clock, not four in a row, on a member-page request path.
+  const [activityRows, auditRows, vscodeRows, completedRows] = await Promise.all([
   // External dev activity per linked user (activity_events → contributors.user_id).
-  const activityRows = await db
+  db
     .select({ userId: contributors.userId, c: sql<number>`count(*)::int` })
     .from(activityEvents)
     .innerJoin(contributors, eq(contributors.id, activityEvents.contributorId))
     .where(and(eq(activityEvents.tenantId, tenantId), gte(activityEvents.occurredAt, since), isNotNull(contributors.userId)))
-    .groupBy(contributors.userId);
+    .groupBy(contributors.userId),
 
   // Platform actions per user (unified activity_log — human/hire actors).
-  const auditRows = await db
+  db
     .select({ userId: activityLog.actorRef, c: sql<number>`count(*)::int` })
     .from(activityLog)
     .where(and(
@@ -115,22 +118,23 @@ export async function computeTenantEngagement(db: Db, tenantId: number, days: nu
       isNotNull(activityLog.actorRef),
       gte(activityLog.occurredAt, since),
     ))
-    .groupBy(activityLog.actorRef);
+    .groupBy(activityLog.actorRef),
 
   // VS Code presence per user (most-recent heartbeat).
-  const vscodeRows = await db
+  db
     .select({ userId: vscodeConnections.userId, lastSeenAt: sql<Date>`max(${vscodeConnections.lastSeenAt})` })
     .from(vscodeConnections)
     .where(and(eq(vscodeConnections.tenantId, tenantId), isNotNull(vscodeConnections.userId)))
-    .groupBy(vscodeConnections.userId);
+    .groupBy(vscodeConnections.userId),
 
   // Tasks completed per user in the window (tasks carry no tenant_id → scope via projects).
-  const completedRows = await db
+  db
     .select({ userId: tasks.assignedUserId, c: sql<number>`count(*)::int` })
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
     .where(and(eq(projects.tenantId, tenantId), isNotNull(tasks.assignedUserId), isNotNull(tasks.completedAt), gte(tasks.completedAt, since), notSystemTask))
-    .groupBy(tasks.assignedUserId);
+    .groupBy(tasks.assignedUserId),
+  ]);
 
   const activityBy = new Map(activityRows.map((r) => [r.userId, Number(r.c)]));
   const auditBy = new Map(auditRows.map((r) => [r.userId, Number(r.c)]));
@@ -180,19 +184,26 @@ export async function persistTenantEngagement(
   if (members.length === 0) return;
   const periodEnd = new Date();
   const periodStart = new Date(periodEnd.getTime() - days * 24 * HOUR_MS);
-  for (const m of members) {
+  const computedAt = new Date();
+  // ONE multi-row upsert per chunk instead of one statement per member — this runs
+  // on the member-page request path (waitUntil), so it must not scale with roster
+  // size. Chunked so a large roster stays under the bind-parameter limit (the same
+  // shape `migrationStore.replaceStagedItems` uses); `excluded.*` carries each row's
+  // own values into the conflict branch.
+  const CHUNK = 200;
+  for (let i = 0; i < members.length; i += CHUNK) {
     await db
       .insert(memberMetricsPeriod)
-      .values({
+      .values(members.slice(i, i + CHUNK).map((m) => ({
         tenantId,
-        memberKind: 'human',
+        memberKind: 'human' as const,
         memberRef: m.userId,
         memberName: m.displayName,
         periodStart,
         periodEnd,
         engagementScore: m.score,
-        computedAt: new Date(),
-      })
+        computedAt,
+      })))
       .onConflictDoUpdate({
         target: [
           memberMetricsPeriod.tenantId,
@@ -201,7 +212,11 @@ export async function persistTenantEngagement(
           memberMetricsPeriod.periodStart,
           memberMetricsPeriod.periodEnd,
         ],
-        set: { memberName: m.displayName, engagementScore: m.score, computedAt: new Date() },
+        set: {
+          memberName: sql`excluded.member_name`,
+          engagementScore: sql`excluded.engagement_score`,
+          computedAt: sql`excluded.computed_at`,
+        },
       });
   }
 }

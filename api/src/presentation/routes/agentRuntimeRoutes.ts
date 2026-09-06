@@ -35,6 +35,7 @@ import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaul
 import { openDispatchPullRequest } from '../../application/repos/openDispatchPullRequest';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { isTerminalExecutionStatus } from '../../domain/shared/terminalStatus';
 
 type RuntimeEnv = {
   AGENT_HOST_RELAY?: AgentHostRelayNamespace;
@@ -153,7 +154,7 @@ export function createAgentRuntimeRoutes(db: Db): Hono<HonoEnv> {
     const dispatchId = c.req.param('dispatchId');
     const body = await c.req.json<{ status: 'completed' | 'failed' | 'cancelled'; output?: string; error?: string }>();
 
-    if (!['completed', 'failed', 'cancelled'].includes(body.status)) {
+    if (!isTerminalExecutionStatus(body.status)) {
       return c.json({ error: 'status must be completed | failed | cancelled' }, 400);
     }
 

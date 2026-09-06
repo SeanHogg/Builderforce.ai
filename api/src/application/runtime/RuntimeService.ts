@@ -21,6 +21,7 @@ import { isLifecycleNeutralRun } from './executionAuthority';
 import type { PolicyGate } from '@builderforce/agent-tools';
 import { ticketKindForTaskType, type RunMilestonePhase } from '../brain/ChatTicketService';
 import { notifyExecutionSubscribers } from './executionEvents';
+import { EXECUTION_NON_TERMINAL_STATUSES } from '../../domain/shared/terminalStatus';
 
 export interface SubmitTaskDto {
   taskId:      number;
@@ -65,12 +66,7 @@ export class RuntimeService {
   /** Executions still in flight — anything not COMPLETED/FAILED/CANCELLED.
    *  The status set {@link listActiveByTasks} scans to answer "does this ticket
    *  still have a live run?" in one query across many tasks. */
-  static readonly NON_TERMINAL_STATUSES: ExecutionStatus[] = [
-    ExecutionStatus.PENDING,
-    ExecutionStatus.SUBMITTED,
-    ExecutionStatus.RUNNING,
-    ExecutionStatus.PAUSED,
-  ];
+  static readonly NON_TERMINAL_STATUSES: ExecutionStatus[] = [...EXECUTION_NON_TERMINAL_STATUSES];
 
   constructor(
     private readonly executions: IExecutionRepository,

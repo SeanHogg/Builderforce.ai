@@ -305,14 +305,17 @@ async function resolveScope(
     // Org-level rollup = the whole segment: every initiative and every project,
     // so delivery / spend / DORA / by-initiative / by-portfolio all light up
     // (not just the org-level unattached OKRs).
-    const inits = await db
-      .select({ id: initiatives.id, name: initiatives.name, status: initiatives.status })
-      .from(initiatives)
-      .where(and(eq(initiatives.tenantId, tenantId), eq(initiatives.segmentId, segmentId)));
-    const projRows = await db
-      .select({ id: projects.id, initiativeId: projects.initiativeId })
-      .from(projects)
-      .where(base);
+    // Two independent reads — one round-trip of wall-clock, not two in a row.
+    const [inits, projRows] = await Promise.all([
+      db
+        .select({ id: initiatives.id, name: initiatives.name, status: initiatives.status })
+        .from(initiatives)
+        .where(and(eq(initiatives.tenantId, tenantId), eq(initiatives.segmentId, segmentId))),
+      db
+        .select({ id: projects.id, initiativeId: projects.initiativeId })
+        .from(projects)
+        .where(base),
+    ]);
     return { name: 'Workspace', initiatives: inits, projects: projRows };
   }
 

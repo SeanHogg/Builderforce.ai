@@ -36,6 +36,7 @@ import { bumpOutcomesVersion } from '../../infrastructure/cache/readThroughCache
 import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { lexicalEval } from '../eval/semanticEval';
 import { resolveUsageDatabase } from '../llm/usageLedger';
+import { EXECUTION_TERMINAL_SET } from '../../domain/shared/terminalStatus';
 
 // ── D3 score weights + efficiency normalization (named so they're tunable without a
 //    schema change — see the Gap Register note on score calibration). ────────────
@@ -341,7 +342,7 @@ async function resolveApprovalOutcome(db: Db, executionId: number): Promise<{ ap
   }
 }
 
-const TERMINAL = new Set<string>(['completed', 'failed', 'cancelled']);
+const TERMINAL = EXECUTION_TERMINAL_SET;
 
 /**
  * Score ONE terminal cloud run and persist it. Idempotent (unique execution_id): a

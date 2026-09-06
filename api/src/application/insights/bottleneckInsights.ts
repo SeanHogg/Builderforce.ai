@@ -47,7 +47,7 @@ const MAX_ROWS = 5_000;
 /** Statuses that mean the task has left the board (excluded from aging WIP, and
  *  whose dwell is NOT extended to "now"). Mirrors reportRoutes.DONE_CLASS_STATUSES
  *  plus 'cancelled' (a task can be closed without being done). */
-export const TERMINAL_STATUSES = new Set<string>(['done', 'cancelled']);
+export const TERMINAL_STATUSES: ReadonlySet<string> = TASK_TERMINAL_SET;
 
 /** A task is "stuck" once it has sat untouched for this long (hours). 72h = 3
  *  working days; the threshold is a parameter so it is testable / tunable. */
@@ -67,6 +67,7 @@ export const AGING_TOP_N = 10;
  * lower-of-the-middle-two disagree on every even sample.
  */
 import { avg, median } from '../shared/stats';
+import { TASK_TERMINAL_SET } from '../../domain/shared/terminalStatus';
 
 export { avg, median };
 

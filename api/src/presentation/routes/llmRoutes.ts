@@ -120,6 +120,7 @@ import {
 } from '../../application/llm/providerAuthAlerts';
 import { raiseProviderAuthAlertsFromFailovers } from '../../application/llm/byoCredentialAlerting';
 import { probeByoProvider, probeOpenRouterConnection } from '../../application/llm/byoCredentialHealth';
+import { resolveProviderKeyHealth } from '../../application/llm/providerKeyHealth';
 import { buildHostEgress } from '../../application/llm/hostEgress';
 import { byoModelsFor } from '../../application/llm/byoModelRouting';
 import {
@@ -1394,8 +1395,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       resolveTenantLlmCredentials(c.env, access.tenantId),
       loadProviderAuthAlert(c.env, access.tenantId, provider),
     ]);
-    const configured = details.some((d) => d.provider === provider);
-    const usable = providersFromCredentials(creds).includes(provider);
+    // ONE verdict, shared with the drawer's own precedence rules: a credential that
+    // decrypts but is refused upstream is not ready, and neither is one whose vendor is
+    // reachable only from a runtime of the tenant's own while none is online — the read
+    // used to say `ready` there while the Test button, one line below, said otherwise.
+    const { status, configured, usable } = await resolveProviderKeyHealth(c.env, access.tenantId, provider, { details, creds, authAlert });
     const db = buildTransactionalDatabase(c.env);
     const usage = await db.execute(sql`
       SELECT COUNT(*)::int AS requests,
@@ -1409,14 +1413,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     `);
     const row = (usage.rows?.[0] ?? {}) as Record<string, unknown>;
     return c.json({
-      provider, configured, usable,
-      // A credential that decrypts but is refused upstream is not ready. Configuration
-      // and health are separate signals; health wins in the operator-facing verdict.
-      status: !configured ? 'not_connected'
-        : authAlert?.reason === 'capacity' ? 'capacity'
-        : authAlert ? 'needs_attention'
-        : usable ? 'ready'
-        : (creds.unresolvedReasons[provider] ?? 'unavailable'),
+      provider, configured, usable, status,
       // Only meaningful while the credential is still configured — a removed one has
       // nothing to reconnect, and the alert is cleared on removal anyway.
       ...(configured && authAlert ? { authAlert } : {}),
@@ -1447,7 +1444,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       // the ONE branch that is not a verdict on the credential — say so, and give the
       // remedy the owner can actually act on.
       error: probe.status === 'local_egress_required'
-        ? `${provider} is reachable only from a machine of your own: Kimi Code subscription keys are licensed for personal interactive clients, and Kimi's edge blocks the hosted Builderforce gateway before it can present a key. Nothing was sent, so this says nothing about your key. Connect a Builderforce runtime (Settings ▸ Agent hosts) and this account routes through YOUR machine — the client the subscription is for. A Moonshot Open Platform key is the alternative if you would rather not run one.`
+        ? `${provider} is reachable only from a machine of your own: Kimi Code subscription keys are licensed for personal interactive clients, and Kimi's edge blocks the hosted Builderforce gateway before it can present a key. Nothing was sent, so this says nothing about your key. Connect a Builderforce runtime (the Agents page, /agents — Quick start) and this account routes through YOUR machine — the client the subscription is for. A Moonshot Open Platform key is the alternative if you would rather not run one.`
         : probe.status === 'upstream_error'
         ? `Your ${provider} credential worked — it was accepted and the request was routed. ${probe.model ?? 'The model'} then returned HTTP ${probe.upstreamStatus}, twice. That is an upstream outage on that model, not a problem with this account: retry shortly.`
         : probe.error

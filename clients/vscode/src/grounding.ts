@@ -5,6 +5,11 @@ import { readRecentSessionNotes } from "./sessionNotes";
  *  chat panels and the native chat participant (so none holds its own copy). */
 let groundingSummary: string | undefined;
 const emitter = new vscode.EventEmitter<void>();
+/** Fires on every {@link setGroundingSummary}. No current reader subscribes, and none
+ *  needs to: every consumer (the webview Brain, the native chat participant) reads the
+ *  summary AT TURN TIME through {@link getGroundingWithHistory}, so a rescan is picked
+ *  up by the next turn without a notification. Subscribe only from a surface that
+ *  CACHES the summary across turns (a status-bar map indicator, say). */
 export const onGroundingChange = emitter.event;
 
 export function setGroundingSummary(summary: string | undefined): void {

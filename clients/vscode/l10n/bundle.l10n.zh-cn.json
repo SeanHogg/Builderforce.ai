@@ -526,5 +526,6 @@
   "{count} tokens left": "剩余 {count} 个令牌",
   "{count} uncommitted changes": "{count} 项未提交的更改",
   "{input} input / {output} output per 1M tokens + $0.01 per request": "每 100 万 token {input} 输入 / {output} 输出，另加每次请求 $0.01",
-  "● Live": "● 进行中"
+  "● Live": "● 进行中",
+  "Answer the agent's question": "回答智能体的问题"
 }

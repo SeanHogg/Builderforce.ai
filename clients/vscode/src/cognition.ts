@@ -15,7 +15,14 @@ import type { ChatMessage } from "./gateway";
 import type { ToolDef } from "./fileTools";
 
 /** A `system` message of shared project facts relevant to `query`, or null when
- *  none / no project selected / unavailable. */
+ *  none / no project selected / unavailable.
+ *
+ *  NOT on the turn path, by design: both chat surfaces recall project memory through
+ *  the api's ONE run-context section (`fetchRunContextSection` → `ContextSource`,
+ *  whose `memory` block is this same facts store, recall-scoped to the turn), so
+ *  adding this message would put the facts in the prompt twice. Kept as the
+ *  client-side read for a surface that has no run-context fetch (offline / signed-out
+ *  recall against a cached project), which none of the current ones is. */
 export async function recallSystemMessage(
   secrets: vscode.SecretStorage,
   projectId: number | undefined,

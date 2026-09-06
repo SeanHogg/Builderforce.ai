@@ -80,6 +80,69 @@ byte formatter (`SystemHealthSection`) and three more slug copies
 (`CanvasGamePanel`, `browserRuntime/factory`), all migrated. `rateLimitMiddleware`
 left the presentation→infrastructure baseline.
 
+**Pagination is one helper, and every list has a ceiling** (same-day continuation of the
+review). `domain/shared/boundedInt.ts` — `boundedIntParam`, `limitParam`, `offsetParam`,
+`daysParam`, `LIST_ROW_CAP` — replaced 55 NaN-unsafe `Math.min/max(Number(query))` clamps
+and 12 byte-identical `parseDays` copies (31 calls) across 57 files, and 64 GET list chains
+that ordered with no LIMIT now cap at 1,000 rows. `NaN` can no longer reach Postgres from a
+query string, and no list endpoint can return a whole table.
+
+**`projectInTenant` is the only project-ownership gate.** `loadProjectInTenant(db,
+tenantId, projectId, columns)` makes the column read part of the gate, so a caller handed
+a project id reads the columns it needs and the tenancy rule in one query. 21 application
+copies and 21 route copies now go through it (20 routes by script; `ideProjectRoutes`'
+container check by hand, keeping its non-storage test). `check:project-ownership` — the
+29th guard — fails on any new inline `select … from(projects) where(eq(projects.id),
+eq(projects.tenantId))` and freezes the four segment-scoped/join variants as a
+shrink-only baseline.
+
+**Written-but-unwired features, wired.** `unsubscribeAll` is now what
+`GET /api/email-preferences/unsubscribe` calls — the route had re-implemented it inline
+and read `users` directly; `accountForUser`/`accountForEmail` moved those reads behind
+the application. `redactSecretValues` scrubs project secrets out of every ingress
+request-log error and out of a failed Roblox publish's error text, the two places that
+hold the values. `revokeRunPrincipal` runs at `finalizeCloudRun`, and the
+stale-execution reaper bulk-revokes the principals of every run it makes terminal
+(`revokeRunPrincipalsForExecutions`, a declared cross-tenant write) — a run's callback
+credential no longer outlives it by up to 24 hours. The lane-ordinal cache moved out of
+`taskLifecycle` (453 lines) into `application/swimlane/laneOrdinals.ts`, and
+`invalidateSwimlaneOrdinals` is called by every lane writer: board create, default-lane
+seed, lane create/edit/delete, template apply, and the Brain's `swimlanes.create`/`remove`
+tools (`invalidateBoardLaneOrdinals` resolves the project from the board id). A project
+that had no board used to cache an EMPTY map for the whole TTL after its board was created,
+so every ticket move on a new board read "no lanes". `closePipeline` ends every open ATS
+entry, in one UPDATE, when a posting is filled (proposal accepted) or closed/filled by PATCH.
+
+**Two sweeps stopped scanning everything.** The weekly web-security sweep counts and picks
+in SQL, least-recently-scanned first (a correlated `max(started_at)` over `security_audits`),
+so a project ranked past the cap is reached on a later week instead of never.
+`executionBoardBroadcast` dropped the only ad-hoc module-level Map in the api — never
+pruned, one entry per task that ever ran on the isolate — for `getOrSetCached`.
+
+**A blocked ticket's row now opens the question.** In the VS Code Projects tree a task
+whose agent is `awaiting_input` deep-links to that pending question through the same
+`builderforce.humanRequests` flow the Inbox and the palette use (`attentionApprovalId`
+was captured by `bfApi` and accepted by the reviewer, and the row never passed it);
+other rows keep starting a session. Localized in all five bundles; extension 2026.9.14,
+VSIX packaged.
+
+**Re-validated as NOT gaps** (the review's dead-code flags that did not survive a second
+look): `DELTA_DIRECTIVE` is superseded by brain-embedded's chat-scoped directive in
+`chatWorkLinking.ts` plus its from_delta backstop (its docblock now says so);
+`recordVendorUpstreamFault` is the singular of `recordVendorUpstreamFaults`, which
+`LlmProxyService` records after every cascade; `recordProviderAuthAlerts` duplicates
+`raiseProviderAuthAlertsFromFailovers`; `reapStaleManagerRunTasks` runs inside every
+manager pass; `campaignEngine`'s policy constants and `campaignTransports` are consumed;
+`requirePremiumModelAccess` is the documented middleware form of a gate `llmRoutes`
+enforces in place; `invalidateVocabulary` has no writer because no vocabulary editor exists; the exact-match
+response cache IS wired in the gateway through its read/store pair (`getCachedOrGenerate`
+is the documented `CachingBridge`-shaped convenience for a caller that holds a loader);
+the natural-language dashboard query ships as `POST /api/dashboards/query` through
+`composeAnswer`, which widened `answerQuery` to situations; VS Code's `recallSystemMessage`
+is superseded by the api run-context section both chat surfaces already fetch (its
+`memory` block is the same facts store), and `onGroundingChange` has no subscriber because
+every reader takes the grounding at turn time — both docblocks now say so.
+
 **Validated as obsolete by a later decision, and left in place pending confirmation:**
 the BurnRateOS tenant/company ETL planner (`burnrateTenantCompanyMapping.ts` — closed
 by the operator's 2026-09-05 decision that existing BurnRateOS data is NOT migrated;

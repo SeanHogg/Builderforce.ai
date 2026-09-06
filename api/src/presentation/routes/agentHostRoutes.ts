@@ -76,6 +76,7 @@ import { resolveScheduledAgentBinding } from '../../application/agentHost/schedu
 import { limitParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
+import { isTerminalExecutionStatus } from '../../domain/shared/terminalStatus';
 
 // Extend HonoEnv bindings type to include the Durable Object
 type AgentHostHonoEnv = HonoEnv & {
@@ -1524,7 +1525,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       error?: string;
     }>();
     if (!body.dispatchId) return c.json({ error: 'dispatchId is required' }, 400);
-    if (!['completed', 'failed', 'cancelled'].includes(body.status)) {
+    if (!isTerminalExecutionStatus(body.status)) {
       return c.json({ error: 'status must be completed | failed | cancelled' }, 400);
     }
 

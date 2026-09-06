@@ -42,8 +42,9 @@ export async function seatCapacityForTenant(
   env: Env,
   tenantId: number,
 ): Promise<{ plan: TenantPlan; maxSeats: number; members: number; pendingInvites: number }> {
-  const plan = await resolveTenantEffectivePlan(env, tenantId, db);
-  const [[memberRow], [inviteRow]] = await Promise.all([
+  // The plan (cached snapshot) and the two counts are independent reads.
+  const [plan, [memberRow], [inviteRow]] = await Promise.all([
+    resolveTenantEffectivePlan(env, tenantId, db),
     db.select({ total: count() }).from(tenantMembers).where(eq(tenantMembers.tenantId, tenantId)),
     // The SAME cached read the members page lists from, so a seat cap and the
     // roster it is derived from can never disagree about what "pending" means.
@@ -87,11 +88,14 @@ export function buildPlanLimitsGuard(db: Db, env: Env) {
     /** Returns an error payload if the tenant has reached their project limit, otherwise null. */
     async checkProjectLimit(tenantId: number): Promise<LimitError | null> {
       if (await bypass(tenantId)) return null;
-      const plan = await resolveTenantEffectivePlan(env, tenantId, db);
-      const [row] = await db
-        .select({ total: count() })
-        .from(projects)
-        .where(eq(projects.tenantId, tenantId));
+      // The plan (cached snapshot) and the project count are independent reads.
+      const [plan, [row]] = await Promise.all([
+        resolveTenantEffectivePlan(env, tenantId, db),
+        db
+          .select({ total: count() })
+          .from(projects)
+          .where(eq(projects.tenantId, tenantId)),
+      ]);
       const current = Number(row?.total ?? 0);
       if (canAddProject(plan, current)) return null;
       const { maxProjects } = getLimits(plan);

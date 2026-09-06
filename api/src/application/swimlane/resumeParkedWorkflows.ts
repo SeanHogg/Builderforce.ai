@@ -21,6 +21,7 @@ import { makeSwimlaneCoordinator } from './makeCoordinator';
 import type { AgentHostRelayNamespace } from './agentHostStageDispatcher';
 import type { WorkflowStatus } from './transitions';
 import type { Env } from '../../env';
+import { EXECUTION_TERMINAL_STATUSES } from '../../domain/shared/terminalStatus';
 
 export interface ResumeParkedEnv {
   NEON_DATABASE_URL: string;
@@ -33,7 +34,7 @@ export interface ResumeParkedResult {
   errors: number;
 }
 
-const TERMINAL: WorkflowStatus[] = ['completed', 'failed', 'cancelled'];
+const TERMINAL = [...EXECUTION_TERMINAL_STATUSES] as string[] as WorkflowStatus[];
 
 /** Resume every ticket parked on a now-settled run_workflow. Safe per cron tick. */
 export async function runParkedWorkflowSweep(env: ResumeParkedEnv): Promise<ResumeParkedResult> {
