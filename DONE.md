@@ -1,3 +1,31 @@
+## ✅ RESOLVED 2026-09-06 — Both deploys red: the API suite ran brain-ui's tests without brain-ui's deps, and `InlineNameForm` shipped without `'use client'`
+
+**Symptom.** `Deploy API` failed on three suites under `packages/brain-ui/src` with `Cannot find package 'react'`
+/ `'@seanhogg/builderforce-brain-embedded'`; `Deploy frontend` failed in `next build` on
+`components/ui/InlineNameForm.tsx` ("You're importing a component that needs `useState`") reached from
+`app/product/page.tsx` → `HomePatterns` → the `ui` barrel.
+
+**Root causes.**
+- `api/vitest.config.ts` included `../packages/*/src/**/*.test.ts` — a glob over EVERY `packages/*`, while the
+  comment beside it argued only for the SOURCE-ONLY packages (no install of their own). `brain-ui` is a built
+  package with its own lockfile, vitest config and `react` devDependency; the api job never installs those, so
+  its tests failed there and, worse, that accident was the only place CI ran them at all.
+- `InlineNameForm` (fifth review pass, the `window.prompt` replacement) holds its draft in `useState` and is
+  exported from the `ui` barrel, which a Server Component page imports. Its two importers being client files is
+  the "already a boundary" argument the `'use client'` ratchet changelog already ruled out.
+
+**Fix (API 2026.9.12 · frontend 2026.9.12).**
+- The api include list is now DERIVED from `sourcePackageRoots()` in `scripts/sourcePackages.mjs` — the same
+  registry that produces the aliases — so "which packages test here" and "which packages resolve here" cannot
+  drift apart. The api suite collects 16 package test files (agent-stall, agent-tools, hono-wildcard-path,
+  hs256-jwt, kimi-oauth, run-context, workspace-path); brain-ui's three are no longer among them. 210/210 pass.
+- `deploy-frontend` in `release.yml` runs `pnpm --dir ../packages/brain-ui run test` right after the install
+  that (via ensure-linked-deps) provisions brain-ui's devDependencies — the one job where that suite can run.
+  11 files / 100 tests pass locally by the same command.
+- `InlineNameForm.tsx` declares `'use client'`. The `useClientFiles` baseline is TIGHTENED 938 → 935 (the
+  real count including this +1; the review passes had left four points of slack), with the argument written
+  into the ratchet's changelog in `check-frontend-architecture.mjs`.
+
 ## ✅ RESOLVED 2026-09-06 — "Commit and push to main": an @-addressed agent had no git tool, and the Brain was told to refuse
 
 **What was measured (chat #99, VSIX).** Directed to commit and push a one-line CSS change, the agent
@@ -16,32 +44,6 @@ reported it had no commit/push tool and could not. Three separate causes, one sy
    base branch with no override, and the IDE persona said: prefer a PR "even when asked to push to
    main — say you are opening a PR instead". An explicit human instruction ended in a refusal by design.
 
-**Fix (VSIX 2026.9.18 · brain-embedded 2026.9.2 · API 2026.9.11).**
-- **Addressed agents run in the editor when it has a workspace.** `useBrainConversation` gained
-  `runAddressedAgentLocally` (the IDE passes `init.hasWorkspace`); a directed turn fetches the agent's
-  compiled persona — the SAME lowering the server reply uses, `resolveWorkforceModel` → new
-  `api/src/application/brain/addressedAgentPersona.ts`, exposed as `GET /chats/:id/agent-persona`
-  (chat-access gated, resolver cached 5 min KV / 1 min L1) — and runs the host loop under
-  `addressedAgentSystemPrompt(persona, agent, hostPrompt)` (persona first, the tool-naming host prompt
-  last), with the host's tools. `BrainRunRequest.authoredBy` stamps every assistant turn the run
-  persists via ONE `persistMeta` helper (`withAuthoredBy` over the provenance), so the transcript
-  attributes the reply exactly as a server reply is. `WebviewRunStart.authoredBy` carries it over the
-  host bridge. The web Brain (no local tools) keeps the server reply unchanged.
-- **The server reply says what it cannot do.** One sentence in the `agentReply` system prompt: no
-  file/shell/git tools here; name the route that has them (the editor Brain, or a dispatched task).
-- **`git_commit` takes `allowBaseBranch`**, the same declared act `git_push` already had; the base-branch
-  guard is dropped only under it, a named `branch` still wins, and the refusal names the remedy. The
-  IDE approval label reads "commit N files on the BASE BRANCH (main) — skips pull-request review".
-- **The persona no longer argues.** Default route: ticket branch + `open_pull_request`. When the human
-  EXPLICITLY asks for main: `git_commit allowBaseBranch:true` then `git_push allowBaseBranch:true`, each
-  shown for approval — "do not refuse, argue, or substitute a pull request".
-- **DRY:** the send path and the trailing-message auto-reply built the model seed twice; ONE `seedFrom`.
-
-**Tests.** `git-publish.test.ts` (declared base-branch commit; branch wins; refusal names the remedy),
-`directedMessage.test.ts` (`withAuthoredBy` keeps provenance; prompt order), `brainRunStore.test.ts`
-(every persisted assistant turn carries `authoredBy` + provenance), `useBrainConversation.test.tsx`
-(local run with host tools + persona, server not asked; legacy path without the flag),
-`addressedAgentPersona.test.ts` (same lowering, null for unknown).
 
 ## ✅ RESOLVED 2026-09-06 — VSIX chat: runs survive a closed tab, denser replies, and four defects from chat #99's transcript
 

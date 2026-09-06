@@ -30,6 +30,20 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   938 → 935 (`useClientFiles`, 2026-09-06) — a TIGHTENING that carries one
+ *   addition, written up because the addition is the kind this ratchet exists to
+ *   argue. `components/ui/InlineNameForm.tsx`, the one-field form that replaced
+ *   `window.prompt` in the fifth review pass, landed WITHOUT a directive and the
+ *   frontend deploy failed on the first Server Component to reach it:
+ *   `app/product/page.tsx` → `home/HomePatterns` → the `ui` barrel, where Next
+ *   refuses `useState` outside a client boundary. Both of its importers
+ *   (`CeremonyStage`, `EpicRail`) are client files, which is the "already a
+ *   boundary" argument the "808 → 868" entry ruled out — the barrel is the reuse
+ *   surface, and a barrel export is reachable from a Server Component by
+ *   construction. It holds the draft in `useState`; it could not be anything else.
+ *   The other four points are slack the review passes left behind (934 real
+ *   against 938 declared), closed here as the guard's own report asked.
+ *
  *   936 → 938 (`useClientFiles`, 2026-09-05) — the two files the "801 → 802"
  *   entry below said carried NO directive: `components/templates/GuidedSetupPanel.tsx`
  *   and `lib/templates/useTemplateCatalog.ts`. That entry's argument was "every

@@ -1,8 +1,24 @@
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
-import { sourcePackageAliases } from '../scripts/sourcePackages.mjs';
+import { sourcePackageAliases, sourcePackageRoots } from '../scripts/sourcePackages.mjs';
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
+
+/**
+ * Test globs for the SOURCE-ONLY packages, derived from the same registry as the
+ * aliases below. This was one glob over every directory under `packages/` and
+ * everything beneath its `src`, which is a different set: `packages/brain-ui` is a
+ * BUILT package with its own lockfile, its own `vitest.config.ts` and a `react`
+ * devDependency this suite never installs. The glob ran its three test files here
+ * anyway and the API deploy failed on "Cannot find package 'react'" for tests that
+ * belong to, and pass in, another package. A source-only package is exactly one
+ * with no install of its own: the set `sourcePackageRoots()` already computes.
+ */
+const API_ROOT = fileURLToPath(new URL('.', import.meta.url));
+const sourcePackageTests = sourcePackageRoots(REPO_ROOT).map(
+  (root) => `${path.relative(API_ROOT, root).split(path.sep).join('/')}/**/*.test.ts`,
+);
 
 // Vitest does not read tsconfig `paths`, so the source-only shared packages
 // (`@builderforce/agent-tools`, resolved via tsconfig paths for tsc + wrangler/esbuild
@@ -31,8 +47,9 @@ export default defineConfig({
     // The source-only packages under `packages/` have no install of their own, so
     // their tests ran NOWHERE: `packages/kimi-oauth/src/index.test.ts` was green by
     // never executing. This suite already aliases every one of them, so it runs
-    // them too — a package's contract is checked wherever its consumer is.
-    include: ['src/**/*.{test,spec}.ts', '../packages/*/src/**/*.test.ts'],
+    // them too — a package's contract is checked wherever its consumer is. Built
+    // packages (`brain-ui`) test themselves; see `sourcePackageTests` above.
+    include: ['src/**/*.{test,spec}.ts', ...sourcePackageTests],
   },
   resolve: {
     // Derived from the package manifests, never listed: every tsconfig path

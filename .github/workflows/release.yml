@@ -452,6 +452,12 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: |
           pnpm install --frozen-lockfile || pnpm install
+          # brain-ui's own suite. The package is BUILT (exports → dist, its own
+          # lockfile and vitest config), so it is not one of the source-only packages
+          # the API suite runs, and it ran there only by a glob accident that failed
+          # on a missing `react`. Its devDependencies were just installed by
+          # ensure-linked-deps above, so this is the one job where it can run.
+          pnpm --dir ../packages/brain-ui run test
           # THE WHOLE GUARD CHAIN, not a hand-picked three.
           #
           # This job used to name `check:edge-runtime`, `check:declared-deps` and
