@@ -25,8 +25,8 @@ import { llmUsageLog, tenantMembers, tenants, users } from '../../infrastructure
 import { getOrSetCached, invalidateCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { resolveSuperadminUnlimited } from '../llm/tenantTokenAvailability';
 import { getLimits } from '../../domain/tenant/PlanLimits';
-import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
-import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
+import { TenantPlan } from '../../domain/shared/types';
+import { effectivePlanOf, loadTenantPlanRow } from '../tenant/tenantPlanSnapshot';
 import { utcMonthStart, utcNextMonthStart } from '../llm/tokenUsage';
 import { notify } from '../notifications/notify';
 
@@ -293,24 +293,10 @@ export async function getTeamSpendOverview(db: Db, env: Env | undefined, tenantI
   const monthStart = utcMonthStart();
   const monthKey = monthKeyOf(monthStart);
   const compute = async (): Promise<TeamSpendOverview> => {
-    const [tenantRow] = await db
-      .select({
-        plan: tenants.plan,
-        billingStatus: tenants.billingStatus,
-        trialEndsAt: tenants.trialEndsAt,
-        defaultCap: tenants.memberDefaultSpendCapMillicents,
-      })
-      .from(tenants)
-      .where(eq(tenants.id, tenantId))
-      .limit(1);
-
-    const effectivePlan = resolveEffectivePlan({
-      plan: (tenantRow?.plan ?? 'free') as TenantPlan,
-      billingStatus: (tenantRow?.billingStatus ?? 'none') as TenantBillingStatus,
-      trialEndsAt: tenantRow?.trialEndsAt ?? null,
-    });
+    const tenantRow = await loadTenantPlanRow(env, tenantId, db);
+    const effectivePlan = effectivePlanOf(tenantRow);
     const planString = effectivePlan === TenantPlan.TEAMS ? 'teams' : effectivePlan === TenantPlan.PRO ? 'pro' : 'free';
-    const defaultCap = tenantRow?.defaultCap ?? null;
+    const defaultCap = tenantRow?.memberDefaultSpendCapMillicents ?? null;
 
     const [members, spendRows] = await Promise.all([
       db

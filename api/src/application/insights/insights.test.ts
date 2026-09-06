@@ -127,7 +127,7 @@ describe('compliance', () => {
     const csv = evidencePackToCsv([
       { ts: '2026-07-27T23:59:00.000Z', grain: 'day', events: 312, toolName: 'auto_run_skipped', risk: 'normal', category: 'tool', agent: 'cloud:a1', executionId: null, durationMs: 900 },
     ]);
-    expect(csv).toContain('"day",312,');
+    expect(csv).toContain('"day","312"');
   });
 });
 

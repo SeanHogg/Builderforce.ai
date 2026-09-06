@@ -33,7 +33,7 @@ export type { NormalizedRunOutcome, OutcomeSource, TerminalStatus };
 import { classifyRunFailure } from './runFailureReasons';
 import { applyOutcomeToRoutingTable } from '../llm/routingTable';
 import { bumpOutcomesVersion } from '../../infrastructure/cache/readThroughCache';
-import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
+import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { lexicalEval } from '../eval/semanticEval';
 import { resolveUsageDatabase } from '../llm/usageLedger';
 

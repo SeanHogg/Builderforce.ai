@@ -2,7 +2,7 @@ import type { Context } from 'hono';
 import type { Env, HonoEnv } from '../../env';
 import { TenantPlan } from '../../domain/shared/types';
 import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
-import { resolveTenantPlan } from '../routes/llmRoutes';
+import { resolveTenantPlan } from '../../application/tenant/tenantPlanSnapshot';
 import {
   CANVAS_CAPABILITY_FEATURES,
   evaluateFeatureEntitlement,

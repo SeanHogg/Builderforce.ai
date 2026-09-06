@@ -14,16 +14,15 @@ import { and, count, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
-  tenants,
   agentHosts,
   tenantMembers,
   projects,
 } from '../../infrastructure/database/schema';
 import { canAddAgentHost, canAddProject, canAddSeat, getLimits } from '../../domain/tenant/PlanLimits';
 import { countPending } from '../../application/kernel/InvitationService';
-import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { tenantHasSuperadminMember } from '../../application/llm/tenantTokenAvailability';
-import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
+import { TenantPlan } from '../../domain/shared/types';
+import { resolveTenantEffectivePlan } from '../../application/tenant/tenantPlanSnapshot';
 
 interface LimitError {
   error: string;
@@ -43,7 +42,7 @@ export async function seatCapacityForTenant(
   env: Env,
   tenantId: number,
 ): Promise<{ plan: TenantPlan; maxSeats: number; members: number; pendingInvites: number }> {
-  const plan = await getTenantPlan(db, tenantId);
+  const plan = await resolveTenantEffectivePlan(env, tenantId, db);
   const [[memberRow], [inviteRow]] = await Promise.all([
     db.select({ total: count() }).from(tenantMembers).where(eq(tenantMembers.tenantId, tenantId)),
     // The SAME cached read the members page lists from, so a seat cap and the
@@ -58,23 +57,6 @@ export async function seatCapacityForTenant(
   };
 }
 
-async function getTenantPlan(db: Db, tenantId: number): Promise<TenantPlan> {
-  const [row] = await db
-    .select({ plan: tenants.plan, billingStatus: tenants.billingStatus, trialEndsAt: tenants.trialEndsAt })
-    .from(tenants)
-    .where(eq(tenants.id, tenantId))
-    .limit(1);
-
-  if (!row) return TenantPlan.FREE;
-  // The single shared resolver: 'active' (paid) OR an unexpired trial → the
-  // tenant's plan; everything else → free. Never re-derive this inline.
-  return resolveEffectivePlan({
-    plan: (row.plan as TenantPlan) ?? TenantPlan.FREE,
-    billingStatus: (row.billingStatus as TenantBillingStatus) ?? TenantBillingStatus.NONE,
-    trialEndsAt: row.trialEndsAt ?? null,
-  });
-}
-
 export function buildPlanLimitsGuard(db: Db, env: Env) {
   // A tenant with an active superadmin member is unlimited — the SAME operator
   // bypass the token-cap and cloud-run-count gates use ({@link tenantHasSuperadminMember}),
@@ -87,7 +69,7 @@ export function buildPlanLimitsGuard(db: Db, env: Env) {
     /** Returns an error payload if the tenant has reached their agentHost limit, otherwise null. */
     async checkAgentHostLimit(tenantId: number): Promise<LimitError | null> {
       if (await bypass(tenantId)) return null;
-      const plan = await getTenantPlan(db, tenantId);
+      const plan = await resolveTenantEffectivePlan(env, tenantId, db);
       const [row] = await db
         .select({ total: count() })
         .from(agentHosts)
@@ -105,7 +87,7 @@ export function buildPlanLimitsGuard(db: Db, env: Env) {
     /** Returns an error payload if the tenant has reached their project limit, otherwise null. */
     async checkProjectLimit(tenantId: number): Promise<LimitError | null> {
       if (await bypass(tenantId)) return null;
-      const plan = await getTenantPlan(db, tenantId);
+      const plan = await resolveTenantEffectivePlan(env, tenantId, db);
       const [row] = await db
         .select({ total: count() })
         .from(projects)

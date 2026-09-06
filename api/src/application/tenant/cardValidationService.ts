@@ -16,6 +16,7 @@
 
 import { eq } from 'drizzle-orm';
 import type { Env } from '../../env';
+import { invalidateTenantPlan } from './tenantPlanCache';
 import { tenants } from '../../infrastructure/database/schema';
 import { buildDatabase, buildTransactionalDatabase } from '../../infrastructure/database/connection';
 
@@ -121,6 +122,7 @@ export async function markCardPending(env: Env, tenantId: number): Promise<void>
   await db.update(tenants)
     .set({ cardValidationStatus: 'pending', updatedAt: new Date() })
     .where(eq(tenants.id, tenantId));
+  await invalidateTenantPlan(env, tenantId);
 }
 
 /**
@@ -147,6 +149,7 @@ export async function clearCardValidation(env: Env, tenantId: number): Promise<v
       updatedAt: new Date(),
     })
     .where(eq(tenants.id, tenantId));
+  await invalidateTenantPlan(env, tenantId);
 }
 
 /**
@@ -225,6 +228,7 @@ export async function markCardValidatedByCustomer(
       updatedAt: new Date(),
     })
     .where(eq(tenants.id, row.id));
+  await invalidateTenantPlan(env, row.id);
 
   // Only a genuinely DIFFERENT prior card is worth detaching — re-validating the
   // same one must not revoke the card we just confirmed.
@@ -258,5 +262,6 @@ export async function markCardValidationFailedByCustomer(
   await db.update(tenants)
     .set({ cardValidationStatus: 'failed', updatedAt: new Date() })
     .where(eq(tenants.id, row.id));
+  await invalidateTenantPlan(env, row.id);
   return true;
 }

@@ -204,8 +204,7 @@ export function evaluatePremiumModelAccess(input: PremiumModelAccessInput): Prem
  * The standardized premium-model **402** body.
  *
  * Lives here (pure domain) rather than in the route middleware because BOTH the gateway
- * (`llmRoutes`, which owns `resolveTenantPlan` and so cannot import the middleware back
- * without a cycle) and `featureGate.requirePremiumModelAccess` must answer with the
+ * (`llmRoutes`, which cannot import the middleware back without a cycle) and `featureGate.requirePremiumModelAccess` must answer with the
  * identical envelope.
  */
 export function premiumModelGateBody(access: PremiumModelAccess) {

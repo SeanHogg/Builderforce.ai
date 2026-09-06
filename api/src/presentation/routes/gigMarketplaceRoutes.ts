@@ -24,7 +24,7 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { notify } from '../../application/notifications/notify';
-import { resolveTenantPlan } from './llmRoutes';
+import { resolveTenantPlan } from '../../application/tenant/tenantPlanSnapshot';
 import { gatewayJudge } from '../../application/eval/gatewayJudge';
 import { evaluateProposal, evalPercent } from '../../application/marketplace/proposalEval';
 import { EngagementAccessService } from '../../application/marketplace/EngagementAccessService';

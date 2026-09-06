@@ -23,7 +23,7 @@ import {
   RATING_SUMMARY_DAYS_DEFAULT,
   type ActionRatingInput,
 } from '../../application/llm/actionRatings';
-import { resolveTenantPlan } from './llmRoutes';
+import { resolveTenantPlan } from '../../application/tenant/tenantPlanSnapshot';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 

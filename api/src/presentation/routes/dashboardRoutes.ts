@@ -27,8 +27,8 @@ import {
 } from '../../infrastructure/database/schema';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
 import { getLimits } from '../../domain/tenant/PlanLimits';
-import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
-import { TenantPlan, TenantRole, TenantBillingStatus } from '../../domain/shared/types';
+import { TenantPlan, TenantRole } from '../../domain/shared/types';
+import { effectivePlanOf, loadTenantPlanRow } from '../../application/tenant/tenantPlanSnapshot';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
@@ -298,20 +298,12 @@ export function createDashboardRoutes(db: Db): Hono<HonoEnv> {
         .orderBy(desc(workflows.createdAt))
         .limit(10),
 
-      // Tenant plan info
-      db
-        .select({ plan: tenants.plan, billingStatus: tenants.billingStatus, trialEndsAt: tenants.trialEndsAt })
-        .from(tenants)
-        .where(eq(tenants.id, tenantId))
-        .limit(1),
+      // Tenant plan info — the cached snapshot, one shared resolver
+      loadTenantPlanRow(c.env, tenantId, db),
     ]);
 
-    const billingStatus = tenantRow[0]?.billingStatus ?? 'none';
-    const effectivePlan: TenantPlan = resolveEffectivePlan({
-      plan: (tenantRow[0]?.plan ?? 'free') as TenantPlan,
-      billingStatus: billingStatus as TenantBillingStatus,
-      trialEndsAt: tenantRow[0]?.trialEndsAt ?? null,
-    });
+    const billingStatus = tenantRow?.billingStatus ?? 'none';
+    const effectivePlan: TenantPlan = effectivePlanOf(tenantRow);
     const limits = getLimits(effectivePlan);
 
     const tokenUsedToday = Number(tokenUsageResult[0]?.total ?? 0);

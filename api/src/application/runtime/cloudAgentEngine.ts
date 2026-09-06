@@ -42,7 +42,7 @@ import { resolveTenantLlmCredentials, byoVendorIdsFromCredentials, type TenantVe
 import { assertCloudRunByo, type CloudByoFailure } from '../llm/cloudByoPolicy';
 import { cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool, callBuiltinTool } from '../llm/builtinMcpService';
 import { TenantRole } from '../../domain/shared/types';
-import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
+import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { recordUsageRow, clampTokenCount, normalizeByoProvider } from '../llm/usageLedger';
 import { logTrace } from '../llm/traceLogger';
 import { ensureTaskPrdRecord, appendTaskPrdRevision, editTaskPrdSection, findTaskPrimarySpec } from '../prd/taskPrd';

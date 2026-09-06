@@ -14,6 +14,7 @@ import type { PaymentProvider, WebhookEvent } from '../../infrastructure/payment
 import { PLAN_LIMITS } from '../../domain/tenant/PlanLimits';
 import { membershipChanged } from './membershipChanged';
 import type { Env } from '../../env';
+import { invalidateTenantPlan } from './tenantPlanCache';
 
 export interface CreateTenantDto {
   name: string;
@@ -35,6 +36,18 @@ export class TenantService {
      */
     private readonly env?: Env,
   ) {}
+
+  /**
+   * Every tenant write ends here so the cached plan snapshot
+   * (`tenantPlanSnapshot`) never outlives the row it mirrors. Membership and
+   * rename writes drop it too — one extra KV delete is cheaper than a second
+   * "which columns changed" rule that can drift from the entity.
+   */
+  private async persist(tenant: Tenant): Promise<Tenant> {
+    const saved = await this.tenants.update(tenant);
+    await invalidateTenantPlan(this.env, saved.id);
+    return saved;
+  }
 
   /** Every membership use case ends here — see `membershipChanged`. */
   private async announceMembership(tenantId: number, userIds: readonly string[] = []): Promise<void> {
@@ -188,7 +201,7 @@ export class TenantService {
   ): Promise<Tenant> {
     const tenant = await this.getTenant(tenantId);
     const updated = tenant.rename(actorUserId, name);
-    return this.tenants.update(updated);
+    return this.persist(updated);
   }
 
   async addMember(
@@ -199,7 +212,7 @@ export class TenantService {
   ): Promise<Tenant> {
     const tenant = await this.getTenant(tenantId);
     const updated = tenant.addMember(actorUserId, newUserId, role);
-    const persisted = await this.tenants.update(updated);
+    const persisted = await this.persist(updated);
     await this.announceMembership(tenantId, [newUserId]);
     return persisted;
   }
@@ -211,7 +224,7 @@ export class TenantService {
   ): Promise<Tenant> {
     const tenant = await this.getTenant(tenantId);
     const updated = tenant.removeMember(actorUserId, targetUserId);
-    const persisted = await this.tenants.update(updated);
+    const persisted = await this.persist(updated);
     await this.announceMembership(tenantId, [targetUserId]);
     return persisted;
   }
@@ -224,7 +237,7 @@ export class TenantService {
   ): Promise<Tenant> {
     const tenant = await this.getTenant(tenantId);
     const updated = tenant.changeMemberRole(actorUserId, targetUserId, role);
-    const persisted = await this.tenants.update(updated);
+    const persisted = await this.persist(updated);
     await this.announceMembership(tenantId, [targetUserId]);
     return persisted;
   }
@@ -336,7 +349,7 @@ export class TenantService {
     // Store the customer id now so the activation webhook can correlate back to us.
     if (result.externalCustomerId) {
       const withIds = tenant.setExternalIds(result.externalCustomerId, result.externalSubscriptionId);
-      await this.tenants.update(withIds);
+      await this.persist(withIds);
     }
 
     return { checkoutUrl: result.checkoutUrl, sessionId: result.sessionId };
@@ -401,20 +414,20 @@ export class TenantService {
               externalCustomerId: event.externalCustomerId,
               externalSubscriptionId: event.externalSubscriptionId,
             });
-        await this.tenants.update(updated);
+        await this.persist(updated);
         break;
       }
 
       case 'subscription.past_due':
       case 'payment.failed': {
         const updated = tenant.markBillingInactive(TenantBillingStatus.PAST_DUE);
-        await this.tenants.update(updated);
+        await this.persist(updated);
         break;
       }
 
       case 'subscription.cancelled': {
         const updated = tenant.downgradeToFree();
-        await this.tenants.update(updated);
+        await this.persist(updated);
         break;
       }
     }
@@ -432,12 +445,12 @@ export class TenantService {
     }
 
     const updated = tenant.downgradeToFree();
-    return this.tenants.update(updated);
+    return this.persist(updated);
   }
 
   async setDefaultAgentHost(tenantId: number, agentHostId: number | null): Promise<Tenant> {
     const tenant = await this.getTenant(tenantId);
     const updated = tenant.setDefaultAgentHost(agentHostId);
-    return this.tenants.update(updated);
+    return this.persist(updated);
   }
 }

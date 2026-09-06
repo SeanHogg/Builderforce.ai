@@ -38,7 +38,7 @@ import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { positiveIntOrNull } from './queryParams';
 import { gatewayIntentRefiner } from '../../application/dashboards/gatewayIntentRefiner';
-import { resolveTenantPlan } from './llmRoutes';
+import { resolveTenantPlan } from '../../application/tenant/tenantPlanSnapshot';
 import type { IntentRefiner } from '../../application/dashboards/nlQuery';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };

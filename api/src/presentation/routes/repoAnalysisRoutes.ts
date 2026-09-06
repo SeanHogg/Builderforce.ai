@@ -79,7 +79,7 @@ export function createRepoAnalysisRoutes(db: Db, taskService: TaskService): Hono
     const tenantId = c.get('tenantId') as number;
     const projectId = Number(c.req.param('projectId'));
     if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid projectId' }, 400);
-    const run = await loadLatestArchitectRun(db, tenantId, projectId);
+    const run = await loadLatestArchitectRun(db, tenantId, projectId, c.env);
     return c.json({ run });
   });
 

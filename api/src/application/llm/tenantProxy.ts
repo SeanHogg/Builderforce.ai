@@ -39,7 +39,7 @@ import {
   type TenantVendorKeys,
 } from './tenantProviderKeyService';
 import { recordProxyUsage } from './usageLedger';
-import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
+import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 

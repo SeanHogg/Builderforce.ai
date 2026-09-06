@@ -13,6 +13,7 @@
  */
 import { and, eq, inArray, isNull, notInArray } from 'drizzle-orm';
 import type { Env } from '../../env';
+import { invalidateTenantPlan } from '../tenant/tenantPlanCache';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import {
   activityLog,
@@ -134,6 +135,7 @@ async function ensureDemoTenant(env: Env, db: Db, bp: DemoBlueprint, ownerUserId
       paidOverflowDailyCap: 0,
       updatedAt: new Date(),
     }).where(eq(tenants.id, existing.id));
+    await invalidateTenantPlan(env, existing.id);
     await ensureMembership(env, db, existing.id, ownerUserId);
     return { id: existing.id, slug: existing.slug, created: false };
   }

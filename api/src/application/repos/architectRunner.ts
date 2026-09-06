@@ -18,14 +18,14 @@
  */
 import { and, desc, eq } from 'drizzle-orm';
 import {
-  executions, projects, repoAnalysisArtifacts, repoAnalysisRuns, tenants,
+  executions, projects, repoAnalysisArtifacts, repoAnalysisRuns,
 } from '../../infrastructure/database/schema';
 import { partitionRetryableArtifacts } from '../repoanalysis/analysisPlan';
 import type { ArtifactKind } from '../repoanalysis/types';
 import { RepoService } from '../repos/RepoService';
 import type { TaskService } from '../task/TaskService';
-import { TaskStatus, TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
-import { resolveEffectivePlan as resolveTenantEffectivePlan } from '../../domain/tenant/effectivePlan';
+import { TaskStatus } from '../../domain/shared/types';
+import { effectivePlanOf, loadTenantPlanRow } from '../tenant/tenantPlanSnapshot';
 import { onTaskLandedInLane } from '../swimlane/laneEntryTrigger';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -50,18 +50,11 @@ export interface ArchitectStartArgs {
  * The tenant's effective plan for the analysis token budget. Honours an unexpired
  * trial (via the shared resolver) and the superadmin premium override.
  */
-export async function resolveAnalysisPlan(db: Db, tenantId: number): Promise<string> {
-  const [row] = await db
-    .select({ plan: tenants.plan, billingStatus: tenants.billingStatus, trialEndsAt: tenants.trialEndsAt, premiumOverride: tenants.premiumOverride })
-    .from(tenants)
-    .where(eq(tenants.id, tenantId));
+export async function resolveAnalysisPlan(env: Env | undefined, tenantId: number, db: Db): Promise<string> {
+  const row = await loadTenantPlanRow(env, tenantId, db);
   if (!row) return 'free';
   if (row.premiumOverride) return 'pro';
-  return resolveTenantEffectivePlan({
-    plan: (row.plan as TenantPlan) ?? TenantPlan.FREE,
-    billingStatus: (row.billingStatus as TenantBillingStatus) ?? TenantBillingStatus.NONE,
-    trialEndsAt: row.trialEndsAt ?? null,
-  });
+  return effectivePlanOf(row);
 }
 
 /**
@@ -93,7 +86,7 @@ export async function startArchitectAnalysis(
   const repos = await repoService.listRepos(projectId, tenantId);
   if (repos.length === 0) return { ok: false, reason: 'no_repo' };
 
-  const effectivePlan = await resolveAnalysisPlan(db, tenantId);
+  const effectivePlan = await resolveAnalysisPlan(env, tenantId, db);
 
   const created = await taskService.createTask(
     {
@@ -219,6 +212,7 @@ export async function loadLatestArchitectRun(
   db: Db,
   tenantId: number,
   projectId: number,
+  env?: Env,
 ): Promise<ArchitectRunSummary | null> {
   const [run] = await db
     .select({
@@ -241,7 +235,7 @@ export async function loadLatestArchitectRun(
     .from(repoAnalysisArtifacts)
     .where(and(eq(repoAnalysisArtifacts.runId, run.id), eq(repoAnalysisArtifacts.tenantId, tenantId)));
 
-  const plan = await resolveAnalysisPlan(db, tenantId);
+  const plan = await resolveAnalysisPlan(env, tenantId, db);
   const { retryable, locked } = partitionRetryableArtifacts(rows, plan);
   const busy = IN_PROGRESS_STATUSES.has(run.status);
 
@@ -295,7 +289,7 @@ export async function retryArchitectAnalysis(
     .from(repoAnalysisArtifacts)
     .where(and(eq(repoAnalysisArtifacts.runId, run.id), eq(repoAnalysisArtifacts.tenantId, tenantId)));
 
-  const effectivePlan = await resolveAnalysisPlan(db, tenantId);
+  const effectivePlan = await resolveAnalysisPlan(env, tenantId, db);
   const { retryable } = partitionRetryableArtifacts(rows, effectivePlan);
   if (retryable.length === 0) return { ok: false, reason: 'nothing_to_retry' };
 

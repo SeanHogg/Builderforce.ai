@@ -17,6 +17,7 @@ import { getObject } from '../../application/kernel/ObjectRegistry';
 import { sha256Hex } from '../../domain/shared/hash';
 import { TenantRole, TenantBillingCycle, TenantBillingStatus, TenantPlan } from '../../domain/shared/types';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
+import { invalidateTenantPlan } from '../../application/tenant/tenantPlanCache';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { requirePermission } from '../middleware/requirePermission';
 import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
@@ -1246,6 +1247,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       millicents = usdToMillicents(amount);
     }
     await db.update(tenants).set({ memberDefaultSpendCapMillicents: millicents }).where(eq(tenants.id, id));
+    await invalidateTenantPlan(c.env as Env, id);
     await invalidateTeamSpendCaches(c.env as Env, id);
     return c.json(await getTeamSpendOverview(db, c.env as Env, id));
   });

@@ -43,7 +43,7 @@ import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { notify } from '../../application/notifications/notify';
 import { admitCandidate } from '../../application/hiring/candidateIntake';
 import { parseJsonArray } from '../../domain/shared/json';
-import { resolveTenantPlan } from './llmRoutes';
+import { resolveTenantPlan } from '../../application/tenant/tenantPlanSnapshot';
 import { gatewayJudge } from '../../application/eval/gatewayJudge';
 import { evaluateProposal, evalPercent, readProposalEvalLens } from '../../application/marketplace/proposalEval';
 import { jobFilterConditions, jobFilterIsEmpty, normalizeJobFilters } from '../../application/marketplace/jobFilters';

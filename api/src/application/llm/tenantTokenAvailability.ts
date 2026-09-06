@@ -10,8 +10,8 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * meter and the same thing the gateway enforces.
  *
  * Unlike `enforceTokenCaps`, this takes no Hono `Context`: it resolves the
- * tenant's plan snapshot straight from the `tenants` row so a cron (which has
- * only `db`) can call it per tenant.
+ * tenant's plan snapshot itself (the cached `tenantPlanSnapshot` read) so a cron
+ * (which has only `db`) can call it per tenant.
  *
  * THE single source of the "superadmin ⇒ unlimited" rule for every caller. It is
  * granted from BOTH the acting user (when present) AND the tenant's OWN active
@@ -25,9 +25,9 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { listTenantProviderKeys } from './tenantProviderKeyService';
 import { getMemberSpendAvailability } from '../consumption/memberSpend';
-import { tenants, tenantMembers, users } from '../../infrastructure/database/schema';
-import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
-import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
+import { tenantMembers, users } from '../../infrastructure/database/schema';
+import { TenantPlan } from '../../domain/shared/types';
+import { effectivePlanOf, loadTenantPlanRow } from '../tenant/tenantPlanSnapshot';
 import { resolveTokenLimits } from '../../domain/tenant/PlanLimits';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { sumTenantTextTokensDayAndMonth, utcDayStart, utcMonthStart } from './tokenUsage';
@@ -110,21 +110,8 @@ export async function getTenantTokenAvailability(
     effectivePlanEnum = toTenantPlanEnum(opts.planSnapshot.effectivePlan);
     tokenDailyLimitOverride = opts.planSnapshot.tokenDailyLimitOverride;
   } else {
-    const [row] = await db
-      .select({
-        plan: tenants.plan,
-        billingStatus: tenants.billingStatus,
-        trialEndsAt: tenants.trialEndsAt,
-        tokenDailyLimitOverride: tenants.tokenDailyLimitOverride,
-      })
-      .from(tenants)
-      .where(eq(tenants.id, tenantId))
-      .limit(1);
-    effectivePlanEnum = resolveEffectivePlan({
-      plan: (row?.plan as TenantPlan) ?? TenantPlan.FREE,
-      billingStatus: (row?.billingStatus ?? 'none') as TenantBillingStatus,
-      trialEndsAt: row?.trialEndsAt ?? null,
-    });
+    const row = await loadTenantPlanRow(env, tenantId, db);
+    effectivePlanEnum = effectivePlanOf(row);
     tokenDailyLimitOverride = row?.tokenDailyLimitOverride ?? null;
   }
   const effectivePlan = planString(effectivePlanEnum);

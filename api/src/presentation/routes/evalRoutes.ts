@@ -21,7 +21,7 @@ import { evaluateResponse, type EvalJudge } from '../../application/eval/semanti
 import { gatewayJudge } from '../../application/eval/gatewayJudge';
 import { getTenantDriftReport } from '../../application/eval/driftReport';
 import { evaluateVariant } from '../../application/eval/variantEval';
-import { resolveTenantPlan } from './llmRoutes';
+import { resolveTenantPlan } from '../../application/tenant/tenantPlanSnapshot';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 

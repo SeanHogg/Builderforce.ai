@@ -136,6 +136,7 @@ export { replayRoute, resolveReplayAuth } from './builtinToolContext';
 import { replayRoute, type BuiltinCtx, type BuiltinTool } from './builtinToolContext';
 import { taskCreatedHook } from '../task/taskCreationHook';
 import { forLane, laneAgentAssignments, laneAssignmentValues } from '../swimlane/laneAgentAssignments';
+import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 
 
 /** Best-effort invalidation after a strategy write (portfolio / initiative /
@@ -573,9 +574,6 @@ const CATALOG: BuiltinTool[] = [
     parameters: obj({ model: S }),
     run: async (ctx, a) => {
       if (!ctx.env) throw new Error('Model info requires the platform environment.');
-      // Dynamic import: `llmRoutes` imports THIS module, so a static import would be a
-      // cycle. Same escape hatch `replayRoute` uses.
-      const { resolveTenantPlan } = await import('../../presentation/routes/llmRoutes');
       const access = await resolveTenantPlan(ctx.env, ctx.tenantId);
 
       const observed = str(a.model).trim();

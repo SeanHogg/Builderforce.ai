@@ -140,16 +140,15 @@ import type { FailoverEvent, ByoDiagnostics } from '../../application/llm/LlmPro
 import { verifyJwt, signJwt } from '../../infrastructure/auth/JwtService';
 import { parseMachineSubject } from '../../infrastructure/auth/machineSubject';
 import { hashSecret } from '../../infrastructure/auth/HashService';
-import { TenantRole, TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
+import { TenantRole, TenantPlan } from '../../domain/shared/types';
 import { getLimits, resolveImageCreditsDailyLimit, GUEST_CHAT_LIMITS } from '../../domain/tenant/PlanLimits';
 import { evaluateFrontierAccess, evaluatePremiumModelAccess, premiumModelGateBody } from '../../domain/tenant/planFeatures';
-import { isCardValidated } from '../../application/tenant/cardValidationService';
+import { resolveTenantPlan, type TenantPlanSnapshot } from '../../application/tenant/tenantPlanSnapshot';
 import { GuestChatService } from '../../application/guest/GuestChatService';
 import { GuestPromptService } from '../../application/marketing/GuestPromptService';
 import { verifyGuestToken, guestBrainEnabled, GUEST_TOKEN_PREFIX } from '../../application/guest/guestToken';
 import { guestRoomTurn } from '../../application/guest/guestRoomClient';
 import { restrictGuestTools } from '../../application/guest/guestCanvasTools';
-import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import {
   utcDayStart,
   secondsUntilNextUtcMonth,
@@ -322,7 +321,7 @@ export function respondToAccessError(c: Context<HonoEnv>, err: unknown) {
   return c.json({ error: (err as Error).message || 'Unauthorized' }, 401);
 }
 
-export type TenantAccess = {
+export type TenantAccess = TenantPlanSnapshot & {
   userId: string | null;
   tenantId: number;
   /** Numeric agentHost ID, set when request authenticates via agentHost API key. */
@@ -335,44 +334,6 @@ export type TenantAccess = {
    *  (full-tenant key) or a non-key auth path (agentHost / JWT). See migration 0070. */
   tenantApiKeyScopes: string[] | null;
   role: TenantRole;
-  plan: 'free' | 'pro' | 'teams';
-  billingStatus: 'none' | 'pending' | 'active' | 'trialing' | 'past_due' | 'cancelled';
-  effectivePlan: 'free' | 'pro' | 'teams';
-  /**
-   * Superadmin override for the plan-level daily token cap.
-   *   null → use plan default
-   *   -1   → unlimited (skip the gate)
-   *   >= 0 → use this value
-   */
-  tokenDailyLimitOverride: number | null;
-  /**
-   * Per-tenant daily ceiling on paid-overflow spend (millicents), or null to use
-   * the plan default. -1 = unlimited (gate skipped). See migration 0130 and
-   * DEFAULT_PAID_OVERFLOW_CAP_MILLICENTS.
-   */
-  paidOverflowDailyCap: number | null;
-  /** Per-tenant daily ceiling on PREMIUM spend, millicents (0952). null → plan
-   *  default; -1 → unlimited. See `isPremiumSpendExhausted`. */
-  premiumDailyCap: number | null;
-  /**
-   * Per-tenant daily image-generation credit override (1 credit = 1 returned
-   * image), or null to use the plan default. -1 = unlimited. Metered separately
-   * from the text token budget (migration 0131). See resolveImageCreditsDailyLimit.
-   */
-  imageCreditsDailyLimit: number | null;
-  /** Superadmin grant of premium routing — when true the LLM proxy uses the
-   *  premium model pool (top PREMIUM-tier models) and the extended per-vendor
-   *  timeout regardless of plan/billingStatus. Comped / beta access. */
-  premiumOverride: boolean;
-  /**
-   * The tenant has a card that passed the explicit validation flow (SetupIntent /
-   * $0 auth — migration 0342). Combined with a PAID plan this unlocks PREMIUM model
-   * selection: any paid OpenRouter model, billed at OpenRouter cost + a flat 1¢ per
-   * request. See `evaluatePremiumModelAccess`.
-   */
-  cardValidated: boolean;
-  /** Where the card-validation flow currently stands (drives the unlock CTA). */
-  cardValidationStatus: 'none' | 'pending' | 'validated' | 'failed';
   /** True when the JWT carries `sa: true`. Bypasses plan-cap and strict-pin
    *  gates so platform admins can use the gateway without hitting tenant caps.
    *  Always false for `clk_*` and `bfk_*` machine-credential paths. */
@@ -386,69 +347,12 @@ function toTenantPlan(ep: TenantAccess['effectivePlan']): TenantPlan {
   return TenantPlan.FREE;
 }
 
-/**
- * Resolve a tenant id to its plan/billing snapshot and derive the
- * effective plan (downgrades to 'free' when billing isn't active).
- * Shared between every API-key-style auth path on this route.
- */
-export async function resolveTenantPlan(
-  env: Env,
-  tenantId: number,
-): Promise<Pick<TenantAccess, 'plan' | 'billingStatus' | 'effectivePlan' | 'tokenDailyLimitOverride' | 'paidOverflowDailyCap' | 'premiumDailyCap' | 'imageCreditsDailyLimit' | 'premiumOverride' | 'cardValidated' | 'cardValidationStatus'>> {
-  const db = buildDatabase(env);
-  const [tenantRow] = await db
-    .select({
-      id: tenants.id,
-      plan: tenants.plan,
-      billingStatus: tenants.billingStatus,
-      trialEndsAt: tenants.trialEndsAt,
-      tokenDailyLimitOverride: tenants.tokenDailyLimitOverride,
-      paidOverflowDailyCap: tenants.paidOverflowDailyCap,
-      premiumDailyCap: tenants.premiumDailyCap,
-      imageCreditsDailyLimit: tenants.imageCreditsDailyLimit,
-      premiumOverride: tenants.premiumOverride,
-      cardValidatedAt: tenants.cardValidatedAt,
-      cardValidationStatus: tenants.cardValidationStatus,
-    })
-    .from(tenants)
-    .where(eq(tenants.id, tenantId))
-    .limit(1);
-
-  if (!tenantRow) throw new Error('Tenant not found');
-
-  const plan = (tenantRow.plan ?? 'free') as TenantAccess['plan'];
-  const billingStatus = (tenantRow.billingStatus ?? 'none') as TenantAccess['billingStatus'];
-  // One shared resolver: 'active' (paid) OR an unexpired trial → the tenant's
-  // plan; everything else → free. Keeps the gateway aligned with the plan guard.
-  const effectivePlan = resolveEffectivePlan({
-    plan: plan as TenantPlan,
-    billingStatus: billingStatus as TenantBillingStatus,
-    trialEndsAt: tenantRow.trialEndsAt ?? null,
-  }) as TenantAccess['effectivePlan'];
-
-  const cardValidationStatus = (tenantRow.cardValidationStatus ?? 'none') as TenantAccess['cardValidationStatus'];
-
-  return {
-    plan,
-    billingStatus,
-    effectivePlan,
-    tokenDailyLimitOverride: tenantRow.tokenDailyLimitOverride ?? null,
-    paidOverflowDailyCap: tenantRow.paidOverflowDailyCap ?? null,
-    premiumDailyCap: tenantRow.premiumDailyCap ?? null,
-    imageCreditsDailyLimit: tenantRow.imageCreditsDailyLimit ?? null,
-    premiumOverride: tenantRow.premiumOverride === true,
-    // A card counts as validated only when the flow COMPLETED (status + stamp) —
-    // the same rule `isCardValidated` applies, kept in lockstep via one predicate.
-    cardValidated: isCardValidated({ status: cardValidationStatus, validatedAt: tenantRow.cardValidatedAt ?? null }),
-    cardValidationStatus,
-  };
-}
-
 // The psychometric-persona entitlement check moved to the shared feature gate
 // (`presentation/middleware/featureGate.ts` → `tenantHasFeature(..., 'psychometricPersona')`)
 // so every paid-plan gate — plan grant, premium override, AND superadmin bypass —
-// runs through one evaluator. `resolveTenantPlan` (below/above) stays here as the
-// gateway's plan resolver; the gate imports it.
+// runs through one evaluator. `resolveTenantPlan` lives in
+// `application/tenant/tenantPlanSnapshot` (cached, invalidated on write); the gate
+// and this gateway both import it from there.
 
 /**
  * Resolve validated work-attribution hints for THIS request.

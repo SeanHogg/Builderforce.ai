@@ -1,9 +1,7 @@
-import { eq } from 'drizzle-orm';
 import type { Env } from '../../env';
-import { TenantBillingStatus, TenantPlan } from '../../domain/shared/types';
-import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
+import { TenantPlan } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
-import { tenants } from '../../infrastructure/database/schema';
+import { effectivePlanOf, loadTenantPlanRow } from '../tenant/tenantPlanSnapshot';
 import { resolveSuperadminUnlimited } from '../llm/tenantTokenAvailability';
 import { utcMonthStart } from '../llm/tokenUsage';
 
@@ -42,22 +40,8 @@ export async function enforceMonthlyTenantCap({
   sumUsage,
 }: EnforceMonthlyTenantCapOptions): Promise<MonthlyTenantCapResult> {
   try {
-    const [tenantRow] = await db
-      .select({
-        plan: tenants.plan,
-        billingStatus: tenants.billingStatus,
-        trialEndsAt: tenants.trialEndsAt,
-        tokenDailyLimitOverride: tenants.tokenDailyLimitOverride,
-      })
-      .from(tenants)
-      .where(eq(tenants.id, tenantId))
-      .limit(1);
-
-    const effectivePlan = resolveEffectivePlan({
-      plan: (tenantRow?.plan ?? 'free') as TenantPlan,
-      billingStatus: (tenantRow?.billingStatus ?? 'none') as TenantBillingStatus,
-      trialEndsAt: tenantRow?.trialEndsAt ?? null,
-    });
+    const tenantRow = await loadTenantPlanRow(env, tenantId, db);
+    const effectivePlan = effectivePlanOf(tenantRow);
     const limit = resolveLimit({
       effectivePlan,
       tokenDailyLimitOverride: tenantRow?.tokenDailyLimitOverride ?? null,

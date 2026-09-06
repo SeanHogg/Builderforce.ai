@@ -14,7 +14,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { llmUsageLog } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { utcDayStart } from '../llm/tokenUsage';
-import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
+import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { resolveTokenLimits } from '../../domain/tenant/PlanLimits';
 import { TenantPlan } from '../../domain/shared/types';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';

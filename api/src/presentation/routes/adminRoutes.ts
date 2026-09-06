@@ -25,6 +25,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
 import { Hono } from 'hono';
 import { and, desc, eq, gt, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
+import { invalidateTenantPlan } from '../../application/tenant/tenantPlanCache';
 import { screenshotConfigured } from '../../application/web/webScreenshot';
 import { credentialSecret } from '../../application/integrations/credentialCrypto';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
@@ -1766,6 +1767,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       .returning({ id: tenants.id, tokenDailyLimitOverride: tenants.tokenDailyLimitOverride });
 
     if (!updated) return c.json({ error: 'Tenant not found' }, 404);
+    await invalidateTenantPlan(c.env, tenantId);
 
     // Forensic trail: who flipped a tenant's token cap, from what to what, and when.
     await writeAudit(db, 'TOKEN_LIMIT_OVERRIDE_CHANGED', c.get('userId') as string, {
@@ -1812,6 +1814,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       .returning({ id: tenants.id, paidOverflowDailyCap: tenants.paidOverflowDailyCap });
 
     if (!updated) return c.json({ error: 'Tenant not found' }, 404);
+    await invalidateTenantPlan(c.env, tenantId);
 
     // Forensic trail: who changed a tenant's funded-overflow ceiling, and when.
     await writeAudit(db, 'PAID_OVERFLOW_CAP_CHANGED', c.get('userId') as string, {
@@ -1860,6 +1863,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       .returning({ id: tenants.id, premiumDailyCap: tenants.premiumDailyCap });
 
     if (!updated) return c.json({ error: 'Tenant not found' }, 404);
+    await invalidateTenantPlan(c.env, tenantId);
 
     // Forensic trail: raising a premium ceiling is raising a spend ceiling.
     await writeAudit(db, 'PREMIUM_CAP_CHANGED', c.get('userId') as string, {
@@ -1905,6 +1909,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       .returning({ id: tenants.id, imageCreditsDailyLimit: tenants.imageCreditsDailyLimit });
 
     if (!updated) return c.json({ error: 'Tenant not found' }, 404);
+    await invalidateTenantPlan(c.env, tenantId);
 
     await writeAudit(db, 'IMAGE_CREDITS_LIMIT_CHANGED', c.get('userId') as string, {
       tenantId,
@@ -1941,6 +1946,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       .returning({ id: tenants.id, premiumOverride: tenants.premiumOverride });
 
     if (!updated) return c.json({ error: 'Tenant not found' }, 404);
+    await invalidateTenantPlan(c.env, tenantId);
 
     // Forensic trail: who flipped a tenant to/from premium routing, and when.
     await writeAudit(db, 'PREMIUM_OVERRIDE_CHANGED', c.get('userId') as string, {

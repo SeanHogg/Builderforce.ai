@@ -51,6 +51,10 @@ sufficient evidence for shutting down BurnRateOS.
 - Migrations 0418–0433 contain **245 `CREATE TABLE` statements and zero `INSERT ... SELECT` or
   `UPDATE` data transforms**. There is no BurnRateOS database extractor/loader, ID map, replay,
   reconciliation report, or rollback manifest in this repository.
+- **Decision 2026-09-05 (operator): none will be built.** Existing BurnRateOS data is NOT
+  migrated into Builderforce; this program consolidates FUNCTIONALITY only. The seven-part
+  migration manifest is withdrawn as a requirement. `burnrateTenantCompanyMapping.ts` stays as
+  the mapping contract (documentation of the tenancy axes), never as the seed of an ETL.
 - **Resolved 2026-08-10:** Builderforce makes no runtime HTTP pull to BurnRateOS.
   [`burnRateService.ts`](../../api/src/application/seams/burnRateService.ts) reads tenant-scoped
   `metric_facts`; [`validationEngagementsService.ts`](../../api/src/application/seams/validationEngagementsService.ts)

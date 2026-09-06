@@ -23,9 +23,9 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * affects auth resolution explicitly calls `invalidateKeyCache`** —
  * specifically: revoke, update (origin allowlist / name), agentHost deactivation,
  * agentHost daily-limit change. Mint creates no cache entry to invalidate (the
- * first call populates it). Tenant plan/billing changes don't need
- * invalidation because `resolveTenantPlan` runs fresh on every request,
- * outside the cached block.
+ * first call populates it). Tenant plan/billing changes invalidate their OWN
+ * cache (`application/tenant/tenantPlanCache`) — `resolveTenantPlan` reads that
+ * snapshot, outside this block.
  *
  * If you add a new mutation that changes auth resolution, you MUST call
  * `invalidateKeyCache` from that handler — otherwise the change won't take
