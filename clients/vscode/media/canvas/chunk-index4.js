@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./chunk-index2.js","./index.js","./index4.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./chunk-index2.js","./index.js","./index5.css"])))=>i.map(i=>d[i]);
 var AD=Object.defineProperty;var OD=(e,t,r)=>t in e?AD(e,t,{enumerable:!0,configurable:!0,writable:!0,value:r}):e[t]=r;var re=(e,t,r)=>OD(e,typeof t!="symbol"?t+"":t,r);import{_ as XE}from"./index.js";import{p as Rc,h as YE}from"./chunk-chunk-Q5Y27QLY.js";/*!
  * ONNX Runtime Web v1.27.0
  * Copyright (c) Microsoft Corporation. All rights reserved.

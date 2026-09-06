@@ -865,16 +865,20 @@ const EMPTY_ATTENTION: BfAttention = { tasks: {}, chats: {}, counts: { running: 
  * lockstep with the board and the browser. Scoped to `projectId` when given.
  * Degrades to an empty map when signed out / unreachable (never throws).
  */
+/** The live map, or `null` when the gateway could not be reached — the poller
+ *  keeps its last map and backs off, rather than painting every session idle
+ *  and asking again in eight seconds. An unauthenticated read is an EMPTY map,
+ *  not a failure: there is genuinely nothing live for this person. */
 export async function getAttention(
   secrets: vscode.SecretStorage,
   projectId?: number,
-): Promise<BfAttention> {
+): Promise<BfAttention | null> {
   try {
     const q = projectId != null ? `?projectId=${projectId}` : "";
     const r = await authed<BfAttention>(secrets, `/api/runtime/attention${q}`);
     return r ?? EMPTY_ATTENTION;
   } catch {
-    return EMPTY_ATTENTION;
+    return null;
   }
 }
 

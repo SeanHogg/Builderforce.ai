@@ -61,6 +61,10 @@ export const CAPABILITIES = {
   // PATCH /api/tenants/:id/spend-limits (+ the per-seat variant).
   'billing.spendLimits':  'owner',
   'integrations.manage':  'manager',
+  // Embedded app surfaces — enable embedding and pick which capability areas
+  // (Product / Agile / Security) a host app may mount. Mirrors
+  // requireRole(MANAGER) on PUT /api/embed/config and PUT /api/embed/features/:feature.
+  'embed.manage':         'manager',
   // Institutional identity — enterprise SSO connections and LTI 1.3 platform
   // registrations. Mirrors requireRole(MANAGER) on /api/sso-connections and
   // /api/lti-registrations. Manager rather than owner because connecting a

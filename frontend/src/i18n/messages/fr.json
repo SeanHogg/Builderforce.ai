@@ -17387,7 +17387,12 @@
       "save": "Save",
       "saved": "Saved",
       "loadError": "Could not load app-surface settings.",
-      "saveError": "Could not save app-surface settings."
+      "saveError": "Could not save app-surface settings.",
+      "catalogTitle": "Ce qu’un hôte peut monter",
+      "catalogIntro": "Chaque domaine est un ensemble de vues BuilderForce réelles qu’une page hôte affiche avec un seul composant. Activez un domaine ci-dessous et chacune de ses vues devient montable.",
+      "viewCount": "{count, plural, one {# vue} other {# vues}}",
+      "live": "Active",
+      "previewNote": "Aperçu de l’installation complète. Les vues que votre hôte peut réellement monter sont celles des domaines qu’un propriétaire ou un manager active ci-dessus."
     },
     "install": {
       "title": "One script, every capability",

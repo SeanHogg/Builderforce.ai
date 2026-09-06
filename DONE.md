@@ -1,3 +1,39 @@
+## ✅ RESOLVED 2026-09-05 — `/embedded` › "BuilderForce surfaces" tab was empty for every visitor and every member below manager
+
+**What was wrong.** The fourth tab on the public `/embedded` page mounted `EmbedIntegrationSettings`, which
+`return null`-ed unless the caller was a signed-in owner/manager with a workspace JWT. The tab itself was
+offered to everyone, so a signed-out visitor (and any developer/viewer member) clicked "BuilderForce surfaces"
+and got a blank panel above the footer. That broke two standing rules at once: guests see the REAL app and
+only ACTIONS are session-gated ([[guest-preview-session-gate]]), and roles DISABLE, never hide
+([[rbac-rolegate-primitives]]). It also duplicated the `role === 'owner' || role === 'manager'` gate inline in
+two components with no shared capability behind it.
+
+**Fix.**
+- **`embed.manage` capability** — `frontend/src/lib/rbac.ts` (manager+), mirroring `requireRole(MANAGER)` on
+  `PUT /api/embed/config` and `PUT /api/embed/features/:feature`. Both `EmbeddedCapabilities` (the feature
+  switches) and `EmbedIntegrationSettings` now read `usePermission('embed.manage')`; the inline role
+  comparison is gone from both.
+- **`EmbedSurfaceCatalog`** (`components/settings/EmbedSurfaceCatalog.tsx`, new) — the three capability areas
+  and every view each one exposes, derived from the package's `EMBED_VIEWS` registry (view keys are the literal
+  `view="…"` tokens, rendered as code; labels ride on `title`). Renders for everyone; takes the persisted
+  enabled areas as data to badge "Live".
+- **`EmbedIntegrationSettings`** always renders: title, catalog, then the enable/capability/save controls
+  inside `<RoleGate capability="embed.manage" variant="block">` — a guest sees the shared "create an account"
+  notice, a developer sees "Requires Manager role", a manager gets the live form. The install walkthrough
+  (`EmbedInstallSnippet`) shows as a labelled preview with all three areas for anyone who cannot manage, and
+  as the real, capability-filtered snippet once a manager has enabled embedding. Config is fetched only when
+  the caller can manage AND holds a workspace JWT; the pre-exchange gap shows "Loading…" instead of an
+  unfetched form.
+- **Tests** — `EmbedIntegrationSettings.test.tsx` (new): guest sees catalog + snippet preview + account
+  notice and no config call; developer sees the role hint; manager loads config and the catalog marks the live
+  area. `EmbeddedCapabilities.test.tsx` mocks the rbac hook it now depends on.
+- **i18n** — five new `embedded.surfaces.*` keys (`catalogTitle`, `catalogIntro`, `viewCount` plural, `live`,
+  `previewNote`) in all five catalogs.
+- UI version `2026.9.9` → `2026.9.10`.
+
+**Verified:** vitest (7/7 across the two embed test files), tsgo clean, i18n-keys / design-tokens /
+architecture ratchet green, eslint clean on touched files.
+
 ## ✅ RESOLVED 2026-09-05 — Kimi drawer said "Current status: ready" one line above a Test that said "needs a runtime of your own"
 
 **What was wrong.** The provider status read (`GET /llm/provider-keys/:provider/status`) derived its verdict from
@@ -195,6 +231,62 @@ synchronously three times per proxied request; one 30-second memo (`MODELS_TTL_M
 dropped on a local-model settings change, and never the source of the token, which
 `authorizeLocalEndpoint` still resolves fresh at request time. Extension 2026.9.14, VSIX packaged.
 
+**Third pass, same day — the performance findings.**
+
+**One database client per request, and per cron tick.** `application/shared/dbHandle.requestDb(c)`
+reads the handle `authMiddleware` already publishes (and publishes one itself on a public
+route); the 304 handlers that each called `buildDatabase(c.env)` now read through it, and the
+route files that no longer touch `infrastructure/database/connection` left the layering
+baseline. `CronSweepContext.db` is built once per tick; the 22 inline builds in `cronSweeps.ts`
+and the 25 sweeps that built their own client (`runX(env, …, db = buildDatabase(env))`) all
+take it.
+
+**Loops that read once.** The signature reminder sweep reads every pending party for its due
+requests in ONE statement grouped by request; `recordFraudFlags` reads the kinds already raised
+for the (user, hour) once and inserts the rest once; the quality ingest folds a batch by
+(project, fingerprint) and upserts each chunk of groups in one statement carrying `count` and the
+newest timestamp through `excluded.*`; the HRMS roster sync inserts its creates, its employment
+records and its departures as one statement each. The AI-credit reconcile is three grouped reads
+for the whole platform (first grant per tenant, settled references, plan rows) and then work only
+where a month is owed. `/api/freelancers` runs every criterion in SQL with an exact window count
+and caches pages on a version token the profile writers bump — a freelancer past row 200 is
+found. The employer's postings list carries its live-invite badge from one grouped read
+(`countLiveInvitesByJob`), and the profile shortlist toggle asks for one id
+(`GET /api/marketplace/saved-talent/ids` over `readSavedTalentIds`) instead of the whole list.
+
+**A revoked GitHub App token recovers.** `ResolvedRepoAuth.refresh` (present only for an
+installation token) drops the cached token and re-mints; `githubRequest` takes the credential
+whole (`{ auth }`) and, on a 401, refreshes and repeats the call once — every caller that held a
+`ResolvedRepoAuth` now passes it, including the check-run publisher, the alerts backfill, the
+Actions dispatch/reconcile, PR comments and the delivery probe.
+
+**The auth cache is the one cache.** `keyResolutionCache` is a key scheme over
+`getOrSetCached`/`invalidateCached`: an L1 hit per hot key, the KV-unbound fallthrough, and the
+rate-limit retry that makes an invalidation hold — none of which the hand-rolled KV cache had.
+
+**Polling, decided once.** `hooks/usePolledResource(load, { intervalMs, enabled, immediate,
+pauseWhenHidden, backoffOnError, maxTicks, restartKey })` reads the latest `load` through a
+ref, pauses while the tab is hidden and reloads on return, backs off after a failure, never
+overlaps a tick, and hands `load` an abort signal. Nineteen data polls migrated (the notification
+bell and panel, messages button and panel, active runs, agent trace, PR build, manager digest and
+content, meeting transcript, observability backstop, RFP deep-analysis, ceremony heartbeat, guest
+credential renewal, Evermind studio, facilitation surface, poll join, and the canvas's board
+reconcile and Evermind sync). The VS Code `AttentionPoller` backs off after a failed fetch and
+rests while the window is unfocused; `brainRunStore` repaints once per frame while a reply
+streams instead of once per token; the training-log SSE tail is bounded four ways.
+
+**A canvas that does not rebuild its tools per keystroke.** The composer text reaches the Brain
+tools through a ref, so `prompt` left the `canvasActions` dependency list; the reconcile and
+Evermind polls ride the hook, so a click no longer tears the timer down.
+
+**The root layout's static closure: 742 → 475 files, 162k → 120k lines.** The Brain, the guest
+panel, the feedback tab, the announcements, the release-notes host, the live bar, the exit-intent
+prompt, the two work bridges, the footer and the route-marketing block load through
+`next/dynamic`; the task board, the observability panel and the 3D scene load at their own
+surfaces; the admin API loads when an emulation ends. `check:root-closure` ratchets both numbers.
+`ats.vocabulary` and the marketplace page's six reads ride the browser's read-through cache with
+invalidation at the page's own mutations. Extension 2026.9.15, VSIX packaged.
+
 **Re-validated as NOT gaps** (the review's dead-code flags that did not survive a second
 look): `DELTA_DIRECTIVE` is superseded by brain-embedded's chat-scoped directive in
 `chatWorkLinking.ts` plus its from_delta backstop (its docblock now says so);
@@ -215,7 +307,9 @@ every reader takes the grounding at turn time — both docblocks now say so;
 performs through `installGrants`; `cooldownStore` is KV-backed and its per-isolate Map is the
 documented fallback for a process with no KV bound; the login-path invite loop in `tenantRoutes`
 iterates the signing-in user's OWN pending invites (found by one read, each seat a distinct
-authorized membership write), so it does not scale with roster size.
+authorized membership write), so it does not scale with roster size; `MAILBOX_MAX_LIMIT`/`MAILBOX_DEFAULT_LIMIT` ARE read (the mailbox limit
+clamp and both provider page sizes); `loadPackagesByIds` was superseded by the install list's own
+join and is gone; `IMPORTABLE_AUTH_KINDS` restated the importer's own `deriveAuth` switch and is gone.
 
 **Validated as obsolete by a later decision, and left in place pending confirmation:**
 the BurnRateOS tenant/company ETL planner (`burnrateTenantCompanyMapping.ts` — closed

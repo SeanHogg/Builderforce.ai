@@ -17387,7 +17387,12 @@
       "save": "Save",
       "saved": "Saved",
       "loadError": "Could not load app-surface settings.",
-      "saveError": "Could not save app-surface settings."
+      "saveError": "Could not save app-surface settings.",
+      "catalogTitle": "宿主应用可以挂载的内容",
+      "catalogIntro": "每个领域都是一组真实的 BuilderForce 视图，宿主页面只需一个组件即可渲染。在下方启用某个领域后，其中的每个视图都可以挂载。",
+      "viewCount": "{count, plural, other {# 个视图}}",
+      "live": "已启用",
+      "previewNote": "完整安装流程的预览。宿主实际可挂载的视图，取决于所有者或经理在上方启用的领域。"
     },
     "install": {
       "title": "One script, every capability",

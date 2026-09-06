@@ -407,6 +407,8 @@ interface RunCell {
   appended: BrainMessage[];
   messagesEpoch: number;
   listeners: Set<() => void>;
+  /** A pending coalesced repaint for streamed tokens — see {@link emitStreaming}. */
+  emitTimer: ReturnType<typeof setTimeout> | null;
   /**
    * Abort handle for the run currently in flight. Created fresh in `startRun` and
    * used to (a) cancel the streaming LLM fetch and (b) let the loop unwind
@@ -490,6 +492,7 @@ function makeCell(): RunCell {
     appended: [],
     messagesEpoch: 0,
     listeners: new Set(),
+    emitTimer: null,
     abort: null,
     activity: null,
     byoUnresolved: [],
@@ -534,8 +537,32 @@ function evictIdleCells(protectId: number): void {
   }
 }
 
+/**
+ * How long streamed tokens may accumulate before the mounted views repaint.
+ * A frame's worth: a reply arrives as hundreds of deltas a second, and a repaint
+ * per delta — every subscriber of the cell plus every cross-chat subscriber of
+ * the store — was the hottest path in the loop. Nobody can read faster than a
+ * frame, so nothing is lost by drawing once per frame.
+ */
+const STREAM_EMIT_MS = 32;
+
+/** Repaint soon, coalescing every delta that lands in the meantime. Any direct
+ *  `emit` before the frame flushes it first, so a phase change never trails
+ *  the text it belongs to. */
+function emitStreaming(c: RunCell): void {
+  if (c.emitTimer) return;
+  c.emitTimer = setTimeout(() => {
+    c.emitTimer = null;
+    emit(c);
+  }, STREAM_EMIT_MS);
+}
+
 /** Re-derive the cached snapshot and notify subscribers. */
 function emit(c: RunCell): void {
+  if (c.emitTimer) {
+    clearTimeout(c.emitTimer);
+    c.emitTimer = null;
+  }
   c.snapshot = {
     running: c.running,
     streamingText: c.streamingText,
@@ -1654,16 +1681,18 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         { messages: working, tools, tool_choice: tools ? 'auto' : undefined, model: activeModel, modelStrict: !!activeModel && modelStrict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
         {
           onTextDelta: (d) => {
+            c.streamingText += d;
             if (firstTokenAt === undefined) {
               firstTokenAt = nowMs();
               // First token: the reply is visibly forming, so the indicator stops
-              // claiming the model is still thinking. Set directly (not via
-              // setActivity) because the delta below emits anyway — one repaint,
-              // not two, on the hottest path in the loop.
+              // claiming the model is still thinking. A PHASE change, so it repaints
+              // now (one repaint carrying the first token too); every later delta
+              // is text only and coalesces into a frame.
               c.activity = { phase: 'writing', startedAt: Date.now(), step: iter };
+              emit(c);
+              return;
             }
-            c.streamingText += d;
-            emit(c);
+            emitStreaming(c);
           },
         },
       );

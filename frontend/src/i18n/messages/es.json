@@ -17387,7 +17387,12 @@
       "save": "Save",
       "saved": "Saved",
       "loadError": "Could not load app-surface settings.",
-      "saveError": "Could not save app-surface settings."
+      "saveError": "Could not save app-surface settings.",
+      "catalogTitle": "Lo que puede montar un host",
+      "catalogIntro": "Cada área es un conjunto de vistas reales de BuilderForce que una página host renderiza con un solo componente. Activa un área abajo y todas sus vistas pasan a ser montables.",
+      "viewCount": "{count, plural, one {# vista} other {# vistas}}",
+      "live": "Activa",
+      "previewNote": "Vista previa de la instalación completa. Las vistas que tu host puede montar realmente son las de las áreas que un propietario o gestor active arriba."
     },
     "install": {
       "title": "One script, every capability",

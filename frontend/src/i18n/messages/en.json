@@ -17387,7 +17387,12 @@
       "save": "Save",
       "saved": "Saved",
       "loadError": "Could not load app-surface settings.",
-      "saveError": "Could not save app-surface settings."
+      "saveError": "Could not save app-surface settings.",
+      "catalogTitle": "What a host can mount",
+      "catalogIntro": "Each area is a set of real BuilderForce views a host page renders with one component. Enable an area below and every view in it becomes mountable.",
+      "viewCount": "{count, plural, one {# view} other {# views}}",
+      "live": "Live",
+      "previewNote": "Preview of the full install. The views your host can actually mount are the ones an owner or manager enables above."
     },
     "install": {
       "title": "One script, every capability",

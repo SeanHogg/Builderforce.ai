@@ -8,6 +8,7 @@ import { EmbedIntegrationSettings } from '@/components/settings/EmbedIntegration
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { Icon } from '@/components/ui/Icon';
 import { useAuth } from '@/lib/AuthContext';
+import { usePermission } from '@/lib/rbac';
 import { embedApi, type CustomerEmbedFeatureKey, type EmbedConfigResult } from '@/lib/builderforceApi';
 import { capabilitySnippet, EMBEDDED_CAPABILITIES, unifiedEmbedSnippet, type EmbeddedCapabilityCategory } from '@/lib/embeddedCapabilities';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
@@ -22,7 +23,8 @@ type Filter = 'all' | EmbeddedCapabilityCategory;
 export function EmbeddedCapabilities() {
   const fmt = useFormat();
   const t = useTranslations('embedded');
-  const { isAuthenticated, tenant, tenantToken } = useAuth();
+  const { isAuthenticated, tenantToken } = useAuth();
+  const { allowed: canManage } = usePermission('embed.manage');
   const [tab, setTab] = useState<Tab>('features');
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
@@ -31,8 +33,6 @@ export function EmbeddedCapabilities() {
   const [saving, setSaving] = useState<CustomerEmbedFeatureKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const copy = useCopyToClipboard();
-  const role = tenant?.role;
-  const canManage = role === 'owner' || role === 'manager';
 
   useEffect(() => {
     // /api/embed/config is tenant-scoped. A person-level session can exist for a

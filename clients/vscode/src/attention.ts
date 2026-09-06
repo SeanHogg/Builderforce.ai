@@ -125,25 +125,40 @@ export function sessionTabIcon(extensionUri: vscode.Uri, state: BfAttentionState
 
 /**
  * Adaptive poller for the attention map. Fast while anything is live, lazy when
- * idle — the trees are lightweight, and this is the only recurring signal that
- * makes them feel live (they otherwise repaint only on explicit refresh). Fires
- * {@link onDidChange} only when the map actually changes, so subscribers (the
- * trees) don't repaint every tick for nothing.
+ * idle, slower still while the window is not focused, and backing off after a
+ * failed fetch — the trees are lightweight, and this is the only recurring signal
+ * that makes them feel live (they otherwise repaint only on explicit refresh).
+ * Fires {@link onDidChange} only when the map actually changes, so subscribers
+ * (the trees) don't repaint every tick for nothing.
  */
 export class AttentionPoller implements vscode.Disposable {
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
 
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private focusSub: vscode.Disposable | null = null;
   private disposed = false;
   private lastKey = "";
+  /** Current wait after a failed fetch; 0 while the gateway answers. */
+  private errorMs = 0;
 
   private static readonly FAST_MS = 8_000;
   private static readonly IDLE_MS = 30_000;
+  /** The window is not focused: nobody is reading the trees, so they can wait. */
+  private static readonly BACKGROUND_MS = 120_000;
+  /** After a failed fetch: the first retry, and the ceiling the wait doubles up to
+   *  — the same ladder `insights.ts` climbs down when its stream drops. */
+  private static readonly ERROR_MIN_MS = 15_000;
+  private static readonly ERROR_MAX_MS = 5 * 60_000;
 
   constructor(private readonly secrets: vscode.SecretStorage) {}
 
   start(): void {
+    // Regaining focus is the moment a stale tree gets noticed — refetch right then,
+    // and let the unfocused cadence take over again when the window is left.
+    this.focusSub = vscode.window.onDidChangeWindowState((state) => {
+      if (state.focused) this.refresh();
+    });
     void this.tick();
   }
 
@@ -157,6 +172,18 @@ export class AttentionPoller implements vscode.Disposable {
     const project = getSelectedProject();
     const next = await getAttention(this.secrets, project?.id);
     if (this.disposed) return;
+
+    if (!next) {
+      // Unreachable (offline, a deploy, a dead session): keep the last map on the
+      // trees and widen the wait. Polling a dead endpoint every eight seconds is
+      // what this poller used to do for as long as the editor stayed open.
+      this.errorMs = this.errorMs === 0
+        ? AttentionPoller.ERROR_MIN_MS
+        : Math.min(this.errorMs * 2, AttentionPoller.ERROR_MAX_MS);
+      this.schedule(this.errorMs);
+      return;
+    }
+    this.errorMs = 0;
 
     current = next;
     // Only repaint when the surfaced state changed — a stable key of every
@@ -173,7 +200,8 @@ export class AttentionPoller implements vscode.Disposable {
     }
 
     const active = next.counts.running + next.counts.awaiting > 0;
-    this.schedule(active ? AttentionPoller.FAST_MS : AttentionPoller.IDLE_MS);
+    const focused = vscode.window.state.focused;
+    this.schedule(!focused ? AttentionPoller.BACKGROUND_MS : active ? AttentionPoller.FAST_MS : AttentionPoller.IDLE_MS);
   }
 
   private schedule(ms: number): void {
@@ -184,6 +212,7 @@ export class AttentionPoller implements vscode.Disposable {
   dispose(): void {
     this.disposed = true;
     if (this.timer) clearTimeout(this.timer);
+    this.focusSub?.dispose();
     this._onDidChange.dispose();
   }
 }

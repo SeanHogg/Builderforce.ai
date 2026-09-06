@@ -17387,7 +17387,12 @@
       "save": "Save",
       "saved": "Saved",
       "loadError": "Could not load app-surface settings.",
-      "saveError": "Could not save app-surface settings."
+      "saveError": "Could not save app-surface settings.",
+      "catalogTitle": "Was ein Host einbetten kann",
+      "catalogIntro": "Jeder Bereich ist eine Gruppe echter BuilderForce-Ansichten, die eine Host-Seite mit einer einzigen Komponente rendert. Aktivieren Sie unten einen Bereich, und jede seiner Ansichten wird einbettbar.",
+      "viewCount": "{count, plural, one {# Ansicht} other {# Ansichten}}",
+      "live": "Aktiv",
+      "previewNote": "Vorschau der vollständigen Installation. Welche Ansichten Ihr Host tatsächlich einbetten kann, bestimmen die Bereiche, die ein Owner oder Manager oben aktiviert."
     },
     "install": {
       "title": "One script, every capability",
