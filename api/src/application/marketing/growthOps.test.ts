@@ -258,10 +258,6 @@ describe('the platform vocabulary has exactly one definition', () => {
     expect(vocab).not.toContain('.update(stageLookup)');
   });
 
-  it('returns unknown stage keys as null rather than echoing the key', () => {
-    expect(fn(vocab, 'stageLabel')).toContain('?? null');
-  });
-
   it('keeps unsupported countries visible and makes filtering explicit', () => {
     expect(vocab).toContain('export async function supportedCountries');
     expect(fn(vocab, 'countries')).not.toContain('isSupported, true');

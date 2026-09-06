@@ -98,9 +98,6 @@ export async function stages(db: Db, env?: Env, category = 'company'): Promise<S
   );
 }
 
-/** Resolve one stage key to its label, or null when the key is not in the
- *  vocabulary. Null rather than the key itself: rendering an unknown key as if it
- *  were a label is how a typo becomes a stage nobody can filter by. */
 async function loadCountries(db: Db): Promise<Country[]> {
   return db
     .select({
