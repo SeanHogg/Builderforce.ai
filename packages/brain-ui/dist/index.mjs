@@ -1650,15 +1650,13 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
   ] });
 }
 
-// src/pendingChanges/PendingChangesBar.tsx
-import { useState as useState6 } from "react";
+// src/pendingChanges/PendingChangesList.tsx
 import { jsx as jsx10, jsxs as jsxs10 } from "react/jsx-runtime";
 var DEFAULT_PENDING_CHANGES_LABELS = {
+  pill: "Changes",
   summary: "{count} uncommitted changes",
   summaryOne: "1 uncommitted change",
   hint: "Changed in your workspace and not committed yet.",
-  expand: "Show the changed files",
-  collapse: "Hide the changed files",
   review: "Review",
   staged: "staged",
   status: {
@@ -1671,6 +1669,16 @@ var DEFAULT_PENDING_CHANGES_LABELS = {
     typechange: "type changed"
   }
 };
+function resolvePendingChangesLabels(overrides) {
+  return {
+    ...DEFAULT_PENDING_CHANGES_LABELS,
+    ...overrides,
+    status: { ...DEFAULT_PENDING_CHANGES_LABELS.status, ...overrides?.status }
+  };
+}
+function pendingChangesSummary(count, labels) {
+  return count === 1 ? labels.summaryOne : labels.summary.replace("{count}", String(count));
+}
 function statusColor(status) {
   switch (status) {
     case "added":
@@ -1688,80 +1696,26 @@ function splitPath(path) {
   const cut = path.lastIndexOf("/");
   return cut < 0 ? { dir: "", file: path } : { dir: path.slice(0, cut + 1), file: path.slice(cut + 1) };
 }
-function PendingChangesBar({
+function PendingChangesList({
   changes,
   onOpenChange,
   onReview,
-  defaultExpanded = false,
   labels: labelOverrides,
   className,
   style
 }) {
-  const [expanded, setExpanded] = useState6(defaultExpanded);
-  const labels = {
-    ...DEFAULT_PENDING_CHANGES_LABELS,
-    ...labelOverrides,
-    status: { ...DEFAULT_PENDING_CHANGES_LABELS.status, ...labelOverrides?.status }
-  };
+  const labels = resolvePendingChangesLabels(labelOverrides);
   if (!changes.length) return null;
-  const heading = changes.length === 1 ? labels.summaryOne : labels.summary.replace("{count}", String(changes.length));
   const showRepo = new Set(changes.map((c) => c.repo ?? "")).size > 1;
   return /* @__PURE__ */ jsxs10(
     "section",
     {
       className,
-      "aria-label": heading,
-      style: {
-        border: "1px solid var(--bf-border, rgba(128, 128, 128, 0.35))",
-        borderRadius: 8,
-        background: "var(--bf-surface-2, var(--bf-surface, transparent))",
-        fontSize: 12,
-        color: "var(--bf-text, inherit)",
-        overflow: "hidden",
-        ...style
-      },
+      "aria-label": pendingChangesSummary(changes.length, labels),
+      style: { fontSize: 12, color: "var(--bf-text, inherit)", ...style },
       children: [
-        /* @__PURE__ */ jsxs10("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "6px 8px" }, children: [
-          /* @__PURE__ */ jsxs10(
-            "button",
-            {
-              type: "button",
-              onClick: () => setExpanded((v) => !v),
-              "aria-expanded": expanded,
-              title: expanded ? labels.collapse : labels.expand,
-              style: {
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                flex: "1 1 auto",
-                minWidth: 0,
-                padding: 0,
-                background: "transparent",
-                border: "none",
-                color: "inherit",
-                font: "inherit",
-                textAlign: "left",
-                cursor: "pointer"
-              },
-              children: [
-                /* @__PURE__ */ jsx10("span", { "aria-hidden": true, style: { flex: "0 0 auto", opacity: 0.7 }, children: expanded ? "\u25BE" : "\u25B8" }),
-                /* @__PURE__ */ jsx10(
-                  "span",
-                  {
-                    "aria-hidden": true,
-                    style: {
-                      flex: "0 0 auto",
-                      width: 8,
-                      height: 8,
-                      borderRadius: "50%",
-                      background: "var(--bf-accent, #4a8cf7)"
-                    }
-                  }
-                ),
-                /* @__PURE__ */ jsx10("span", { style: { fontWeight: 600, minWidth: 0, overflowWrap: "anywhere" }, children: heading })
-              ]
-            }
-          ),
+        /* @__PURE__ */ jsxs10("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "2px 0 6px" }, children: [
+          /* @__PURE__ */ jsx10("span", { style: { flex: "1 1 auto", minWidth: 0, color: "var(--bf-text-muted, #8a8a8a)" }, children: labels.hint }),
           onReview && /* @__PURE__ */ jsx10(
             "button",
             {
@@ -1782,8 +1736,7 @@ function PendingChangesBar({
             }
           )
         ] }),
-        /* @__PURE__ */ jsx10("div", { style: { padding: "0 8px 6px 30px", color: "var(--bf-text-muted, #8a8a8a)" }, children: labels.hint }),
-        expanded && /* @__PURE__ */ jsx10("ul", { style: { listStyle: "none", margin: 0, padding: "0 4px 6px" }, children: changes.map((change) => {
+        /* @__PURE__ */ jsx10("ul", { style: { listStyle: "none", margin: 0, padding: 0 }, children: changes.map((change) => {
           const { dir, file } = splitPath(change.path);
           const state = change.staged ? `${labels.status[change.status]} \xB7 ${labels.staged}` : labels.status[change.status];
           return /* @__PURE__ */ jsx10("li", { children: /* @__PURE__ */ jsxs10(
@@ -1797,7 +1750,7 @@ function PendingChangesBar({
                 alignItems: "baseline",
                 gap: 6,
                 width: "100%",
-                padding: "3px 6px",
+                padding: "3px 4px",
                 background: "transparent",
                 border: "none",
                 borderRadius: 4,
@@ -1831,7 +1784,7 @@ function PendingChangesBar({
 }
 
 // src/chatTickets/ChatTicketsPanel.tsx
-import { memo, useCallback, useEffect as useEffect4, useMemo as useMemo5, useRef as useRef3, useState as useState7 } from "react";
+import { memo, useCallback, useEffect as useEffect4, useMemo as useMemo5, useRef as useRef3, useState as useState6 } from "react";
 
 // src/optionStyle.ts
 var nativeOptionStyle = {
@@ -1930,19 +1883,24 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
 import { jsx as jsx11, jsxs as jsxs11 } from "react/jsx-runtime";
 var RUNNABLE = new Set(RUNNABLE_KINDS);
 var COLLAPSE_THRESHOLD = 8;
-function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket }) {
-  const [tickets, setTickets] = useState7([]);
-  const [agents, setAgents] = useState7([]);
-  const [members, setMembers] = useState7([]);
-  const [pool, setPool] = useState7([]);
-  const [questions, setQuestions] = useState7([]);
-  const [panel, setPanel] = useState7(null);
-  const [lineageKey, setLineageKey] = useState7(null);
-  const [lineage, setLineage] = useState7([]);
-  const [runKey, setRunKey] = useState7(null);
-  const [msg, setMsg] = useState7(null);
-  const [busy, setBusy] = useState7(false);
-  const [collapsed, setCollapsed] = useState7(null);
+function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions }) {
+  const [tickets, setTickets] = useState6([]);
+  const [agents, setAgents] = useState6([]);
+  const [members, setMembers] = useState6([]);
+  const [pool, setPool] = useState6([]);
+  const [questions, setQuestions] = useState6([]);
+  const [panel, setPanel] = useState6(null);
+  const togglePanel = (key) => setPanel((open) => open === key ? null : key);
+  const openExtension = extensions?.find((ext) => ext.key === panel) ?? null;
+  useEffect4(() => {
+    if (panel && !isBuiltinPanel(panel) && !extensions?.some((ext) => ext.key === panel)) setPanel(null);
+  }, [panel, extensions]);
+  const [lineageKey, setLineageKey] = useState6(null);
+  const [lineage, setLineage] = useState6([]);
+  const [runKey, setRunKey] = useState6(null);
+  const [msg, setMsg] = useState6(null);
+  const [busy, setBusy] = useState6(false);
+  const [collapsed, setCollapsed] = useState6(null);
   const userCollapsed = useRef3(false);
   const load = useCallback(async () => {
     const [tk, ag, mem, qs] = await Promise.all([
@@ -2082,33 +2040,51 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       ] }, c.chatId)) })
     ] }),
     /* @__PURE__ */ jsxs11("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ jsxs11("button", { type: "button", onClick: () => setPanel(panel === "link" ? null : "link"), style: S.pill(panel === "link"), children: [
+      /* @__PURE__ */ jsxs11("button", { type: "button", onClick: () => togglePanel("link"), style: S.pill(panel === "link"), children: [
         "\uFF0B ",
         labels.link
       ] }),
-      /* @__PURE__ */ jsxs11("button", { type: "button", onClick: () => setPanel(panel === "agents" ? null : "agents"), style: S.pill(panel === "agents"), children: [
+      /* @__PURE__ */ jsxs11("button", { type: "button", onClick: () => togglePanel("agents"), style: S.pill(panel === "agents"), children: [
         "\u{1F465} ",
         labels.agents,
         agents.length ? ` (${agents.length})` : ""
       ] }),
-      /* @__PURE__ */ jsxs11("button", { type: "button", onClick: () => setPanel(panel === "people" ? null : "people"), style: S.pill(panel === "people"), children: [
+      /* @__PURE__ */ jsxs11("button", { type: "button", onClick: () => togglePanel("people"), style: S.pill(panel === "people"), children: [
         "\u{1F464} ",
         labels.people,
         members.length ? ` (${members.length})` : ""
       ] }),
-      /* @__PURE__ */ jsxs11("button", { type: "button", onClick: () => setPanel(panel === "merge" ? null : "merge"), style: S.pill(panel === "merge"), children: [
+      /* @__PURE__ */ jsxs11("button", { type: "button", onClick: () => togglePanel("merge"), style: S.pill(panel === "merge"), children: [
         "\u29C9 ",
         labels.merge
       ] }),
-      questions.length > 0 && /* @__PURE__ */ jsxs11("button", { type: "button", onClick: () => setPanel(panel === "questions" ? null : "questions"), style: S.pill(panel === "questions"), children: [
+      questions.length > 0 && /* @__PURE__ */ jsxs11("button", { type: "button", onClick: () => togglePanel("questions"), style: S.pill(panel === "questions"), children: [
         "\u2753 ",
         labels.questions,
         " (",
         questions.length,
         ")"
       ] }),
+      extensions?.map((ext) => /* @__PURE__ */ jsxs11(
+        "button",
+        {
+          type: "button",
+          title: ext.title ?? ext.label,
+          "aria-label": ext.title ?? ext.label,
+          "aria-expanded": panel === ext.key,
+          onClick: () => togglePanel(ext.key),
+          style: S.pill(panel === ext.key),
+          children: [
+            ext.icon ? `${ext.icon} ` : "",
+            ext.label,
+            ext.count ? ` (${ext.count})` : ""
+          ]
+        },
+        ext.key
+      )),
       msg && /* @__PURE__ */ jsx11("span", { style: { fontSize: 12, color: V.accent, alignSelf: "center" }, children: msg })
     ] }),
+    openExtension && /* @__PURE__ */ jsx11("div", { style: S.drawer, children: openExtension.render() }),
     panel === "link" && /* @__PURE__ */ jsx11(LinkForm, { search: adapter.searchTickets, projectId, existing: tickets, labels, onLink: async (kind, ref, linkType) => {
       try {
         await adapter.linkTicket(chatId, { kind, ref, linkType });
@@ -2213,9 +2189,13 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     )
   ] });
 }
+var BUILTIN_PANELS = /* @__PURE__ */ new Set(["link", "agents", "people", "merge", "questions"]);
+function isBuiltinPanel(key) {
+  return BUILTIN_PANELS.has(key);
+}
 function QuestionsSection({ questions, labels, onAnswer }) {
-  const [answers, setAnswers] = useState7({});
-  const [sending, setSending] = useState7(null);
+  const [answers, setAnswers] = useState6({});
+  const [sending, setSending] = useState6(null);
   return /* @__PURE__ */ jsx11("div", { style: S.drawer, children: questions.length === 0 ? /* @__PURE__ */ jsx11("span", { style: S.muted, children: labels.noQuestions }) : questions.map((q, index) => {
     const value = answers[q.id] ?? "";
     return /* @__PURE__ */ jsxs11("div", { style: { padding: "10px 0", borderBottom: index < questions.length - 1 ? `1px solid ${V.border}` : void 0 }, children: [
@@ -2242,13 +2222,13 @@ function QuestionsSection({ questions, labels, onAnswer }) {
 }
 var SEARCH_LIMIT = 40;
 function LinkForm({ search, projectId, existing, labels, onLink }) {
-  const [kind, setKind] = useState7("task");
-  const [ref, setRef] = useState7("");
-  const [query, setQuery] = useState7("");
-  const [linkType, setLinkType] = useState7("linked");
-  const [busy, setBusy] = useState7(false);
-  const [results, setResults] = useState7([]);
-  const [loading, setLoading] = useState7(false);
+  const [kind, setKind] = useState6("task");
+  const [ref, setRef] = useState6("");
+  const [query, setQuery] = useState6("");
+  const [linkType, setLinkType] = useState6("linked");
+  const [busy, setBusy] = useState6(false);
+  const [results, setResults] = useState6([]);
+  const [loading, setLoading] = useState6(false);
   useEffect4(() => {
     let live = true;
     setLoading(true);
@@ -2338,7 +2318,7 @@ function AgentsSection({ agents, pool, labels, onInvite, onRemove, busy }) {
   ] });
 }
 function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite, onRemove, busy }) {
-  const [email, setEmail] = useState7("");
+  const [email, setEmail] = useState6("");
   const submit = async () => {
     const e = email.trim();
     if (!e) return;
@@ -2378,7 +2358,7 @@ function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite,
   ] });
 }
 function MergeSection({ chatId, chatList, labels, onMerge, busy }) {
-  const [selected, setSelected] = useState7([]);
+  const [selected, setSelected] = useState6([]);
   const candidates = chatList.filter((c) => c.id !== chatId);
   const toggle = (id) => setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
   return /* @__PURE__ */ jsxs11("div", { style: { ...S.section, flexDirection: "column", alignItems: "stretch" }, children: [
@@ -2444,11 +2424,11 @@ var S = {
 };
 
 // src/chatTickets/useChatParticipants.ts
-import { useEffect as useEffect5, useMemo as useMemo6, useState as useState8 } from "react";
+import { useEffect as useEffect5, useMemo as useMemo6, useState as useState7 } from "react";
 function useChatParticipants(adapter, chatId, refreshSignal = 0) {
-  const [pool, setPool] = useState8([]);
-  const [invited, setInvited] = useState8([]);
-  const [members, setMembers] = useState8([]);
+  const [pool, setPool] = useState7([]);
+  const [invited, setInvited] = useState7([]);
+  const [members, setMembers] = useState7([]);
   useEffect5(() => {
     let ok = true;
     adapter.loadAgentPool().then((p) => {
@@ -2496,7 +2476,7 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
 }
 
 // src/mention/MentionAutocomplete.tsx
-import { useCallback as useCallback2, useEffect as useEffect6, useMemo as useMemo7, useState as useState9 } from "react";
+import { useCallback as useCallback2, useEffect as useEffect6, useMemo as useMemo7, useState as useState8 } from "react";
 import {
   activeMentionToken,
   filterMentionCandidates
@@ -2504,8 +2484,8 @@ import {
 import { jsx as jsx12, jsxs as jsxs12 } from "react/jsx-runtime";
 function useMentionAutocomplete(opts) {
   const { textareaRef, value, setValue, participants, onPick, labels, disabled } = opts;
-  const [token, setToken] = useState9(null);
-  const [index, setIndex] = useState9(0);
+  const [token, setToken] = useState8(null);
+  const [index, setIndex] = useState8(0);
   const matches = useMemo7(
     () => token && !disabled ? filterMentionCandidates(participants, token.query) : [],
     [token, participants, disabled]
@@ -2634,7 +2614,7 @@ var POP = {
 };
 
 // src/evermind/EvermindConsole.tsx
-import { useCallback as useCallback8, useEffect as useEffect9, useId, useMemo as useMemo9, useRef as useRef6, useState as useState14 } from "react";
+import { useCallback as useCallback8, useEffect as useEffect9, useId, useMemo as useMemo9, useRef as useRef6, useState as useState13 } from "react";
 
 // src/evermind/types.ts
 function defaultFormatWhen(atMs) {
@@ -2855,7 +2835,7 @@ function evermindNextAction(input) {
 }
 
 // src/evermind/EvermindTestBench.tsx
-import { useCallback as useCallback3, useState as useState10 } from "react";
+import { useCallback as useCallback3, useState as useState9 } from "react";
 
 // src/evermind/consoleStyles.ts
 var C = {
@@ -3020,9 +3000,9 @@ var warnBox = {
 // src/evermind/EvermindTestBench.tsx
 import { jsx as jsx13, jsxs as jsxs13 } from "react/jsx-runtime";
 function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
-  const [prompt, setPrompt] = useState10("");
-  const [running, setRunning] = useState10(false);
-  const [error, setError] = useState10(null);
+  const [prompt, setPrompt] = useState9("");
+  const [running, setRunning] = useState9(false);
+  const [error, setError] = useState9(null);
   const run = useCallback3(async (withPrompt) => {
     setRunning(true);
     setError(null);
@@ -3076,7 +3056,7 @@ function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
 }
 
 // src/evermind/EvermindMaintenance.tsx
-import { useCallback as useCallback4, useState as useState11 } from "react";
+import { useCallback as useCallback4, useState as useState10 } from "react";
 import { jsx as jsx14, jsxs as jsxs14 } from "react/jsx-runtime";
 function EvermindMaintenance({
   t,
@@ -3086,8 +3066,8 @@ function EvermindMaintenance({
   onReindex,
   onCleanup
 }) {
-  const [slug, setSlug] = useState11("");
-  const [pending, setPending] = useState11(null);
+  const [slug, setSlug] = useState10("");
+  const [pending, setPending] = useState10(null);
   const doReseed = useCallback4(async () => {
     setPending(null);
     await onReseed?.(slug || void 0);
@@ -3196,7 +3176,7 @@ function Confirm({
 }
 
 // src/evermind/EvermindAnalyzer.tsx
-import { useCallback as useCallback5, useEffect as useEffect7, useMemo as useMemo8, useState as useState12 } from "react";
+import { useCallback as useCallback5, useEffect as useEffect7, useMemo as useMemo8, useState as useState11 } from "react";
 import { Fragment as Fragment4, jsx as jsx15, jsxs as jsxs15 } from "react/jsx-runtime";
 var TONE = {
   ok: "ok",
@@ -3207,11 +3187,11 @@ var TONE = {
   redundant: "warn"
 };
 function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysis, onAnalysis }) {
-  const [selected, setSelected] = useState12(/* @__PURE__ */ new Set());
-  const [running, setRunning] = useState12(false);
-  const [applying, setApplying] = useState12(false);
-  const [repair, setRepair] = useState12(null);
-  const [error, setError] = useState12(null);
+  const [selected, setSelected] = useState11(/* @__PURE__ */ new Set());
+  const [running, setRunning] = useState11(false);
+  const [applying, setApplying] = useState11(false);
+  const [repair, setRepair] = useState11(null);
+  const [error, setError] = useState11(null);
   useEffect7(() => {
     setSelected(new Set(analysis?.findings.map((f) => f.id) ?? []));
   }, [analysis]);
@@ -3342,12 +3322,12 @@ function FindingRow({
 }
 
 // src/evermind/EvermindDiagnostics.tsx
-import { useCallback as useCallback6, useEffect as useEffect8, useRef as useRef4, useState as useState13 } from "react";
+import { useCallback as useCallback6, useEffect as useEffect8, useRef as useRef4, useState as useState12 } from "react";
 import { Fragment as Fragment5, jsx as jsx16, jsxs as jsxs16 } from "react/jsx-runtime";
 function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
-  const [report, setReport] = useState13(null);
-  const [copied, setCopied] = useState13(false);
-  const [revealed, setRevealed] = useState13(false);
+  const [report, setReport] = useState12(null);
+  const [copied, setCopied] = useState12(false);
+  const [revealed, setRevealed] = useState12(false);
   const copy = useCallback6(async () => {
     const text = buildReport();
     setReport(text);
@@ -3685,24 +3665,24 @@ var TEACH_POLL_INTERVAL_MS = 3e3;
 var TEACH_POLL_TIMEOUT_MS = 12e4;
 function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate, host = "web" }) {
   const t = useMemo9(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
-  const [data, setData] = useState14(null);
-  const [targets, setTargets] = useState14(null);
-  const [seedModels, setSeedModels] = useState14([]);
-  const [teacherOpts, setTeacherOpts] = useState14(null);
-  const [selectedSlug, setSelectedSlug] = useState14("");
-  const [teachPrompt, setTeachPrompt] = useState14("");
-  const [teachText, setTeachText] = useState14("");
-  const [busy, setBusy] = useState14(false);
-  const [validating, setValidating] = useState14(false);
-  const [validateResult, setValidateResult] = useState14(null);
-  const [notice, setNotice] = useState14(null);
-  const [noticeTone, setNoticeTone] = useState14("good");
-  const [error, setError] = useState14(null);
-  const [loaded, setLoaded] = useState14(false);
-  const [tab, setTab] = useState14("teach");
-  const [probeResult, setProbeResult] = useState14(null);
-  const [analysis, setAnalysis] = useState14(null);
-  const [loadFailed, setLoadFailed] = useState14(false);
+  const [data, setData] = useState13(null);
+  const [targets, setTargets] = useState13(null);
+  const [seedModels, setSeedModels] = useState13([]);
+  const [teacherOpts, setTeacherOpts] = useState13(null);
+  const [selectedSlug, setSelectedSlug] = useState13("");
+  const [teachPrompt, setTeachPrompt] = useState13("");
+  const [teachText, setTeachText] = useState13("");
+  const [busy, setBusy] = useState13(false);
+  const [validating, setValidating] = useState13(false);
+  const [validateResult, setValidateResult] = useState13(null);
+  const [notice, setNotice] = useState13(null);
+  const [noticeTone, setNoticeTone] = useState13("good");
+  const [error, setError] = useState13(null);
+  const [loaded, setLoaded] = useState13(false);
+  const [tab, setTab] = useState13("teach");
+  const [probeResult, setProbeResult] = useState13(null);
+  const [analysis, setAnalysis] = useState13(null);
+  const [loadFailed, setLoadFailed] = useState13(false);
   const reload = useCallback8(async () => {
     const targetsP = adapter.loadTargets?.().catch(() => null);
     try {
@@ -4409,7 +4389,7 @@ function RecentList({ t, entries }) {
   ] });
 }
 function RecentRow({ t, entry }) {
-  const [open, setOpen] = useState14(false);
+  const [open, setOpen] = useState13(false);
   const status = evermindLearnedStatus(entry);
   const faulted = status.state === "fault";
   const body = entry.kind === "delta" ? t.deltaEntry : faulted ? "" : entry.text ?? "";
@@ -4464,7 +4444,7 @@ var targetChip = {
 };
 
 // src/project360/Project360View.tsx
-import { useMemo as useMemo10, useState as useState15 } from "react";
+import { useMemo as useMemo10, useState as useState14 } from "react";
 
 // src/project360/sunburstGeometry.ts
 var VIEWBOX = 320;
@@ -4645,7 +4625,7 @@ import { Fragment as Fragment7, jsx as jsx20, jsxs as jsxs20 } from "react/jsx-r
 var STATUS_ORDER = ["working", "awaiting", "blocked", "idle", "available"];
 function Project360View({ data, loading, error, labels, onAction, onRefresh }) {
   const L = useMemo10(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
-  const [selected, setSelected] = useState15(null);
+  const [selected, setSelected] = useState14(null);
   const sortedWorkforce = useMemo10(
     () => [...data?.workforce ?? []].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)),
     [data?.workforce]
@@ -4927,7 +4907,7 @@ export {
   Markdown,
   PROJECT_EVERMIND_MODEL_PREFIX,
   ParticipantBadge,
-  PendingChangesBar,
+  PendingChangesList,
   PendingQuestionBanner,
   Project360View,
   ProjectListView,
@@ -4959,11 +4939,13 @@ export {
   modelCategoryLabel2 as modelCategoryLabel,
   modelInUse2 as modelInUse,
   parseAskUser,
+  pendingChangesSummary,
   perMillionUsd,
   premiumCostLabel,
   productForPlan,
   productModelName,
   promptOptionsLabels,
+  resolvePendingChangesLabels,
   revealsModelId,
   selectPendingAskUser,
   serializeAskUser,

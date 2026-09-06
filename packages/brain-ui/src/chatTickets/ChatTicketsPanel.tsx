@@ -20,7 +20,7 @@ import { aggregateTicketHealth } from './aggregateTicketHealth';
 import {
   RUNNABLE_KINDS, TICKET_KINDS,
   type ChatTicketsAdapter, type ChatTicketsLabels, type TicketKind,
-  type TicketLinkVM, type ChatAgentVM, type ChatMemberVM, type AgentOptionVM, type LineageVM, type TicketOptionVM, type ChatOptionVM, type LinkType, type ChatQuestionVM,
+  type TicketLinkVM, type ChatAgentVM, type ChatMemberVM, type AgentOptionVM, type LineageVM, type TicketOptionVM, type ChatOptionVM, type LinkType, type ChatQuestionVM, type ChatTicketsExtension,
 } from './types';
 
 export interface ChatTicketsPanelProps {
@@ -48,7 +48,14 @@ export interface ChatTicketsPanelProps {
    *  When provided, each ticket's label becomes a clickable "open the artifact" link
    *  so every item the Brain created from this chat is one click from its board card. */
   onOpenTicket?: (tk: TicketLinkVM) => void;
+  /** Host-registered pills + drawers appended to the action row (see
+   *  {@link ChatTicketsExtension}). Pass only the ones that currently have
+   *  something to show; an empty/absent list adds nothing. */
+  extensions?: ChatTicketsExtension[];
 }
+
+/** The action-row drawers the panel ships with; extension keys must not collide. */
+type BuiltinPanel = 'link' | 'agents' | 'people' | 'merge' | 'questions';
 
 const RUNNABLE = new Set<TicketKind>(RUNNABLE_KINDS);
 
@@ -57,13 +64,21 @@ const RUNNABLE = new Set<TicketKind>(RUNNABLE_KINDS);
  *  expand/collapse manually; once they do, we stop auto-deciding for this chat. */
 const COLLAPSE_THRESHOLD = 8;
 
-function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket }: ChatTicketsPanelProps) {
+function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions }: ChatTicketsPanelProps) {
   const [tickets, setTickets] = useState<TicketLinkVM[]>([]);
   const [agents, setAgents] = useState<ChatAgentVM[]>([]);
   const [members, setMembers] = useState<ChatMemberVM[]>([]);
   const [pool, setPool] = useState<AgentOptionVM[]>([]);
   const [questions, setQuestions] = useState<ChatQuestionVM[]>([]);
-  const [panel, setPanel] = useState<null | 'link' | 'agents' | 'people' | 'merge' | 'questions'>(null);
+  // Which ONE drawer is open — a built-in key or a host extension's key.
+  const [panel, setPanel] = useState<null | BuiltinPanel | string>(null);
+  const togglePanel = (key: BuiltinPanel | string) => setPanel((open) => (open === key ? null : key));
+  const openExtension = extensions?.find((ext) => ext.key === panel) ?? null;
+  // An extension the host withdrew while its drawer was open (the tree went clean,
+  // say) leaves `panel` pointing at nothing — fold the row back up instead.
+  useEffect(() => {
+    if (panel && !isBuiltinPanel(panel) && !extensions?.some((ext) => ext.key === panel)) setPanel(null);
+  }, [panel, extensions]);
   const [lineageKey, setLineageKey] = useState<string | null>(null);
   const [lineage, setLineage] = useState<LineageVM[]>([]);
   const [runKey, setRunKey] = useState<string | null>(null);
@@ -222,13 +237,28 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
 
       {/* Action toggles */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        <button type="button" onClick={() => setPanel(panel === 'link' ? null : 'link')} style={S.pill(panel === 'link')}>＋ {labels.link}</button>
-        <button type="button" onClick={() => setPanel(panel === 'agents' ? null : 'agents')} style={S.pill(panel === 'agents')}>👥 {labels.agents}{agents.length ? ` (${agents.length})` : ''}</button>
-        <button type="button" onClick={() => setPanel(panel === 'people' ? null : 'people')} style={S.pill(panel === 'people')}>👤 {labels.people}{members.length ? ` (${members.length})` : ''}</button>
-        <button type="button" onClick={() => setPanel(panel === 'merge' ? null : 'merge')} style={S.pill(panel === 'merge')}>⧉ {labels.merge}</button>
-        {questions.length > 0 && <button type="button" onClick={() => setPanel(panel === 'questions' ? null : 'questions')} style={S.pill(panel === 'questions')}>❓ {labels.questions} ({questions.length})</button>}
+        <button type="button" onClick={() => togglePanel('link')} style={S.pill(panel === 'link')}>＋ {labels.link}</button>
+        <button type="button" onClick={() => togglePanel('agents')} style={S.pill(panel === 'agents')}>👥 {labels.agents}{agents.length ? ` (${agents.length})` : ''}</button>
+        <button type="button" onClick={() => togglePanel('people')} style={S.pill(panel === 'people')}>👤 {labels.people}{members.length ? ` (${members.length})` : ''}</button>
+        <button type="button" onClick={() => togglePanel('merge')} style={S.pill(panel === 'merge')}>⧉ {labels.merge}</button>
+        {questions.length > 0 && <button type="button" onClick={() => togglePanel('questions')} style={S.pill(panel === 'questions')}>❓ {labels.questions} ({questions.length})</button>}
+        {extensions?.map((ext) => (
+          <button
+            key={ext.key}
+            type="button"
+            title={ext.title ?? ext.label}
+            aria-label={ext.title ?? ext.label}
+            aria-expanded={panel === ext.key}
+            onClick={() => togglePanel(ext.key)}
+            style={S.pill(panel === ext.key)}
+          >
+            {ext.icon ? `${ext.icon} ` : ''}{ext.label}{ext.count ? ` (${ext.count})` : ''}
+          </button>
+        ))}
         {msg && <span style={{ fontSize: 12, color: V.accent, alignSelf: 'center' }}>{msg}</span>}
       </div>
+
+      {openExtension && <div style={S.drawer}>{openExtension.render()}</div>}
 
       {panel === 'link' && <LinkForm search={adapter.searchTickets} projectId={projectId} existing={tickets} labels={labels} onLink={async (kind, ref, linkType) => {
         try { await adapter.linkTicket(chatId, { kind, ref, linkType }); await load(); }
@@ -255,6 +285,9 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     </div>
   );
 }
+
+const BUILTIN_PANELS: ReadonlySet<string> = new Set<BuiltinPanel>(['link', 'agents', 'people', 'merge', 'questions']);
+function isBuiltinPanel(key: string): key is BuiltinPanel { return BUILTIN_PANELS.has(key); }
 
 function QuestionsSection({ questions, labels, onAnswer }: {
   questions: ChatQuestionVM[];

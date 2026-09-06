@@ -1,3 +1,33 @@
+## ✅ RESOLVED 2026-09-06 — A signed-out visitor met `Missing or malformed Authorization header` in a red box; now they meet the invitation to take an account
+
+**Symptom.** `/investor?tab=pack` (and every sibling surface whose read has no sample-workspace fixture)
+rendered the API's 401 text verbatim as an error. The product deliberately lets a guest open every route;
+the honest answer to a read that needs an account is what an account unlocks, not a sentence about an
+HTTP header.
+
+**Root cause.** The transport already recognised the rejection (`ApiRequestError.signedOut`,
+`isSignedOutFailure`, `faultMessage`) and `SectionError` already hid it — but 692 call sites in 286
+files still did `setError(e instanceof Error ? e.message : …)` / `(e as Error).message` and painted the
+string, and nothing anywhere PROMOTED sign-up in that spot. The investor views kept their own copy of
+the rule (`message(cause, fallback)` in `investorStyles.ts`).
+
+**Fix (frontend 2026.9.13).**
+- `domains/guest/application/guestWall.ts` — the transport records the route a signed-out read was
+  refused on (`noteSignedOutRead()` from `reportAndThrow`), plus an inline-prompt count. Plain module,
+  `useSyncExternalStore`-shaped, guarded on `window`.
+- `components/guest/GuestAccountPrompt.tsx` — THE reusable invitation. Decides its own visibility
+  (guest + wall met on this route), renders `GuestSignupCta` (the existing conversion CTA, `next` back
+  to the route) with new `guest.wall.title/body` copy in all five catalogs. Two placements, one rule:
+  `SectionError` mounts it inline where the rows would have been; `AppShell` mounts one catch-all copy
+  above every page, which stands down while an inline one is up. Both loaded via `next/dynamic`.
+- `faultMessage(error, fallback?)` gained the fallback the sites were spelling by hand; `faultText`
+  is its sibling for surfaces whose "nothing" is `''`. Codemod migrated all 692 setter sites (189 of
+  them to `faultText` where state is typed `string`); the investor `message()` helper is deleted.
+- Guards: `useClientFiles` 935 → 936 (argued in the ratchet's changelog); root closure 482 → 483 files
+  (argued in `check-root-closure.mjs`). Tests: `guestWall.test.ts`, `GuestAccountPrompt.test.tsx`, and
+  three new `apiClient.test.ts` cases (anonymous 401 → null/'' and records the wall; expired session
+  does NOT).
+
 ## ✅ RESOLVED 2026-09-06 — Both deploys red: the API suite ran brain-ui's tests without brain-ui's deps, and `InlineNameForm` shipped without `'use client'`
 
 **Symptom.** `Deploy API` failed on three suites under `packages/brain-ui/src` with `Cannot find package 'react'`
@@ -30,6 +60,16 @@
   barrel. Baseline set to the CI-measured 482 / 120667 — same file count, +2 lines, no new import.
 
 ## ✅ RESOLVED 2026-09-06 — "Commit and push to main": an @-addressed agent had no git tool, and the Brain was told to refuse
+
+**Follow-up the same day (VSIX 2026.9.19 · brain-embedded 2026.9.3 · API 2026.9.12).** Re-tested live: the
+@-addressed reply STILL came from the server. `code --install-extension builderforce-ai-2026.9.18.vsix` had
+reported success but installed nothing (relative path from a shifted cwd; `code --list-extensions
+--show-versions` still said 2026.9.17) — reinstalled by absolute path and verified in the extensions folder.
+Hardened while there: `GET /chats/:id/agent-persona` never 404s past the chat gate (an unresolved or failing
+persona lowers to `NO_PERSONA`, and `addressedAgentSystemPrompt` frames it "You are <name>, a member of this
+team's chat", the server reply's own fallback) so a V2 Container participant runs locally regardless; and the
+IDE `FOLLOW_THROUGH_DIRECTIVE` now says that an instruction a participant could not carry out — or one the user
+says they gave it — falls to the Brain, which had answered "Bob is working on it" instead of committing.
 
 **What was measured (chat #99, VSIX).** Directed to commit and push a one-line CSS change, the agent
 reported it had no commit/push tool and could not. Three separate causes, one symptom:

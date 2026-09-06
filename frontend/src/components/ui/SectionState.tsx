@@ -20,8 +20,18 @@
  */
 
 import type { CSSProperties } from 'react';
+import dynamic from 'next/dynamic';
 import { faultMessage, isSignedOutFailure } from '@/lib/apiClient';
-import { GuestAccountPrompt } from '@/components/guest/GuestAccountPrompt';
+
+/**
+ * Off the first paint: this module sits in the root layout's static closure,
+ * and the invitation is needed only by a guest whose read was refused. Same
+ * cut `AppShell` makes for its own copy, for the same `check:root-closure` reason.
+ */
+const GuestAccountPrompt = dynamic(
+  () => import('@/components/guest/GuestAccountPrompt').then((module) => module.GuestAccountPrompt),
+  { ssr: false },
+);
 
 /**
  * What a card inside a data section looks like.

@@ -33,6 +33,7 @@
   "All files": "所有文件",
   "Always": "始终",
   "Answer needed": "需要回答",
+  "Answer the agent's question": "回答智能体的问题",
   "Any paid OpenRouter model, at cost + 1¢/request": "任意付费 OpenRouter 模型，按成本 + 每次请求 1 美分计费",
   "Anytime": "随时",
   "Apply": "应用",
@@ -71,6 +72,7 @@
   "Change model": "更换模型",
   "Change type — {0}": "更改类型 — {0}",
   "Changed in your workspace and not committed yet.": "已在你的工作区中更改，尚未提交。",
+  "Changes": "更改",
   "Chat": "聊天",
   "Chat diagnostics copied to clipboard.": "对话诊断信息已复制到剪贴板。",
   "Chat name": "对话名称",
@@ -158,7 +160,6 @@
   "Group tasks by": "任务分组方式",
   "Here is my project's Project 360 health check. Help me work through these gaps, highest impact first.": "这是我项目的“项目 360”健康检查。请帮我逐一解决这些缺口，从影响最大的开始。",
   "Hide report": "隐藏报告",
-  "Hide the changed files": "隐藏已更改的文件",
   "High": "高",
   "I just dispatched {task} to run on the platform. Check the latest execution's status and trace, then help me follow up.": "我刚刚把 {task} 派发到平台上运行。请查看最新一次执行的状态和轨迹，然后帮我跟进。",
   "IDE build": "IDE 构建",
@@ -364,7 +365,6 @@
   "Show my unresolved production errors using quality.list_error_groups (most impactful first). For the top one, get its details with quality.get_error_group, then search_code/read_file the culprit and propose a fix.": "使用 quality.list_error_groups 显示我未解决的生产错误（影响最大的优先）。针对最严重的一个，用 quality.get_error_group 获取详情，然后用 search_code/read_file 查看出错代码并提出修复方案。",
   "Show report": "显示报告",
   "Show statuses": "显示状态",
-  "Show the changed files": "显示已更改的文件",
   "Sign In": "登录",
   "Sign in": "登录",
   "Sign in to BuilderForce": "登录 BuilderForce",
@@ -527,6 +527,5 @@
   "{count} tokens left": "剩余 {count} 个令牌",
   "{count} uncommitted changes": "{count} 项未提交的更改",
   "{input} input / {output} output per 1M tokens + $0.01 per request": "每 100 万 token {input} 输入 / {output} 输出，另加每次请求 $0.01",
-  "● Live": "● 进行中",
-  "Answer the agent's question": "回答智能体的问题"
+  "● Live": "● 进行中"
 }

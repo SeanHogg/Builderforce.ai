@@ -26,16 +26,20 @@ export interface AddressedAgentPersona {
   model: string | null;
 }
 
-/** Null when `agentRef` is not a workforce agent of this tenant. */
+/** A participant with no resolvable persona (not a workforce row, or a resolver failure)
+ *  still gets a turn — under its name alone, exactly the fallback `agentReply` uses.
+ *  Empty directives mean "no persona", never "no agent": the host frames it by name. */
+export const NO_PERSONA: AddressedAgentPersona = { directives: '', model: null };
+
 export async function resolveAddressedAgentPersona(
   env: Env,
   tenantId: number,
   agentRef: string,
   query?: string,
-): Promise<AddressedAgentPersona | null> {
+): Promise<AddressedAgentPersona> {
   const ref = agentRef.trim();
-  if (!ref) return null;
-  const resolved = await resolveWorkforceModel(env, tenantId, WORKFORCE_MODEL_REF_PREFIX + ref, query);
-  if (!resolved) return null;
+  if (!ref) return NO_PERSONA;
+  const resolved = await resolveWorkforceModel(env, tenantId, WORKFORCE_MODEL_REF_PREFIX + ref, query).catch(() => null);
+  if (!resolved) return NO_PERSONA;
   return { directives: resolved.directives, model: resolved.baseModel };
 }

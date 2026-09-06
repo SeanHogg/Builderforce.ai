@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.19] — The Brain picks up what an @-agent could not do
+
+- **"I told Bob to commit and push" now gets a commit, not a status report.** When a participant in the chat answered that it lacked the tools, or you tell the Brain you already instructed that participant and the work is not done, the Brain treats the original instruction as its own and carries it out — a requested commit-and-push included — instead of narrating who is working on what.
+- **A participant the server cannot resolve still answers here.** An @-addressed agent with no compiled persona (a container agent registered outside the workforce table, or a resolver failure) now runs in the editor under its name rather than falling back to the server's tool-less reply.
+
 ## [2026.9.18] — "Commit and push to main" now lands, and an @-addressed agent works in your workspace
 
 - **Asking an invited agent to commit ended in "I have no git tool".** A message addressed to an @agent was answered on the server, where the agent has the platform tools (tasks, projects, OKRs) and nothing else — no files, no shell, no git — while the editor that asked has all three. When a folder is open, an addressed agent now runs in the editor's own loop, under its own persona, with the workspace's file and git tools; its replies are still attributed to it in the transcript. Without a folder open, the server still answers for it, and now says plainly what it cannot do from there and where to ask instead.

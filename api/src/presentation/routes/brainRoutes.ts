@@ -658,9 +658,9 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     if (!agentRef) return c.json({ error: 'agentRef is required' }, 400);
     const chat = await brainService.getChat(id, c.get('tenantId') as number, c.get('userId') as string);
     if (!chat) return c.json({ error: 'Chat not found' }, 404);
-    const persona = await resolveAddressedAgentPersona(c.env as Env, c.get('tenantId') as number, agentRef, c.req.query('q') ?? undefined);
-    if (!persona) return c.json({ error: 'Agent not found' }, 404);
-    return c.json(persona);
+    // Never a 404 past the chat gate: a participant the resolver does not know still
+    // answers under its name (empty directives), as the server-side reply would.
+    return c.json(await resolveAddressedAgentPersona(c.env as Env, c.get('tenantId') as number, agentRef, c.req.query('q') ?? undefined));
   });
 
   // POST /fetch-url — fetch an external URL/file/website server-side (CORS-free)

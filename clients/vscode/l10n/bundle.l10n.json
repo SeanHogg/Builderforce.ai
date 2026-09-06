@@ -33,6 +33,7 @@
   "All files": "All files",
   "Always": "Always",
   "Answer needed": "Answer needed",
+  "Answer the agent's question": "Answer the agent's question",
   "Any paid OpenRouter model, at cost + 1¢/request": "Any paid OpenRouter model, at cost + 1¢/request",
   "Anytime": "Anytime",
   "Apply": "Apply",
@@ -71,6 +72,7 @@
   "Change model": "Change model",
   "Change type — {0}": "Change type — {0}",
   "Changed in your workspace and not committed yet.": "Changed in your workspace and not committed yet.",
+  "Changes": "Changes",
   "Chat": "Chat",
   "Chat diagnostics copied to clipboard.": "Chat diagnostics copied to clipboard.",
   "Chat name": "Chat name",
@@ -158,7 +160,6 @@
   "Group tasks by": "Group tasks by",
   "Here is my project's Project 360 health check. Help me work through these gaps, highest impact first.": "Here is my project's Project 360 health check. Help me work through these gaps, highest impact first.",
   "Hide report": "Hide report",
-  "Hide the changed files": "Hide the changed files",
   "High": "High",
   "I just dispatched {task} to run on the platform. Check the latest execution's status and trace, then help me follow up.": "I just dispatched {task} to run on the platform. Check the latest execution's status and trace, then help me follow up.",
   "IDE build": "IDE build",
@@ -364,7 +365,6 @@
   "Show my unresolved production errors using quality.list_error_groups (most impactful first). For the top one, get its details with quality.get_error_group, then search_code/read_file the culprit and propose a fix.": "Show my unresolved production errors using quality.list_error_groups (most impactful first). For the top one, get its details with quality.get_error_group, then search_code/read_file the culprit and propose a fix.",
   "Show report": "Show report",
   "Show statuses": "Show statuses",
-  "Show the changed files": "Show the changed files",
   "Sign In": "Sign In",
   "Sign in": "Sign in",
   "Sign in to BuilderForce": "Sign in to BuilderForce",
@@ -527,6 +527,5 @@
   "{count} tokens left": "{count} tokens left",
   "{count} uncommitted changes": "{count} uncommitted changes",
   "{input} input / {output} output per 1M tokens + $0.01 per request": "{input} input / {output} output per 1M tokens + $0.01 per request",
-  "● Live": "● Live",
-  "Answer the agent's question": "Answer the agent's question"
+  "● Live": "● Live"
 }

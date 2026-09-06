@@ -200,5 +200,8 @@ export function addressedAgentSystemPrompt(persona: AddressedAgentPersona, agent
   const framing =
     `You have been addressed directly as ${agent.name} in this multi-party chat. Reply AS ${agent.name} — first person, no "${agent.name}:" label. ` +
     'The tools available to you are the tools of the surface you are running on right now; the instructions below say what they are and how to use them, and they apply to you in full.';
-  return [persona.directives.trim(), framing, hostPrompt].filter(Boolean).join('\n\n');
+  // No compiled persona (a participant the server could not resolve) is still a
+  // participant: it speaks under its name, the same fallback the server reply uses.
+  const who = persona.directives.trim() || `You are ${agent.name}, a member of this team's chat.`;
+  return [who, framing, hostPrompt].join('\n\n');
 }

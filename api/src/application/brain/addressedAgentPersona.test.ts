@@ -9,7 +9,7 @@ vi.mock('../agent/agentPrompt', () => ({
   ),
 }));
 
-import { resolveAddressedAgentPersona } from './addressedAgentPersona';
+import { resolveAddressedAgentPersona, NO_PERSONA } from './addressedAgentPersona';
 import { resolveWorkforceModel } from '../agent/agentPrompt';
 
 describe('resolveAddressedAgentPersona', () => {
@@ -19,8 +19,13 @@ describe('resolveAddressedAgentPersona', () => {
     expect(vi.mocked(resolveWorkforceModel)).toHaveBeenCalledWith({}, 1, 'builderforce/workforce-42', 'commit and push to main');
   });
 
-  it('is null for an unknown agent or an empty ref, never a throw', async () => {
-    expect(await resolveAddressedAgentPersona({} as never, 1, '999')).toBeNull();
-    expect(await resolveAddressedAgentPersona({} as never, 1, '   ')).toBeNull();
+  it('gives an unknown agent an EMPTY persona rather than no turn — the same fallback the server reply uses', async () => {
+    expect(await resolveAddressedAgentPersona({} as never, 1, '999')).toEqual(NO_PERSONA);
+    expect(await resolveAddressedAgentPersona({} as never, 1, '   ')).toEqual(NO_PERSONA);
+  });
+
+  it('degrades a resolver failure to the empty persona instead of throwing', async () => {
+    vi.mocked(resolveWorkforceModel).mockRejectedValueOnce(new Error('db down'));
+    expect(await resolveAddressedAgentPersona({} as never, 1, '42')).toEqual(NO_PERSONA);
   });
 });

@@ -55,7 +55,7 @@ import { loadComposerModels, invalidateModelSurface, type ComposerModelSurface }
 import { createChatTicketsAdapter } from './chatTicketsAdapter';
 import { adoptChatProject } from './adoptChatProject';
 import { EvermindStatusBadge } from './EvermindStatusBadge';
-import { PendingChangesPanel } from './PendingChangesPanel';
+import { usePendingChangesExtension } from './usePendingChangesExtension';
 import { WEBVIEW_BUILD_ID, WEBVIEW_BUILT_AT } from './webviewBuildInfo';
 import { PlanBadge, fetchPlanSnapshot, invalidatePlanSnapshot, openUpgrade } from './accountPlan';
 import { onHostMessage,
@@ -1092,6 +1092,7 @@ function Chat({ init }: { init: InitData }) {
   // Bumped when the Brain mutates work items via MCP tools, so the ticket panel
   // refreshes live (rings/links) rather than only on its own button actions.
   const [ticketRefresh, setTicketRefresh] = useState(0);
+  const pendingChangesExtension = usePendingChangesExtension(init.labels);
 
   // Auto-link the work item that opened this chat (a task/epic/gap from the tree or
   // board, a roadmap/spec row from a project page) so the chat is tied to it and the
@@ -1685,12 +1686,6 @@ function Chat({ init }: { init: InitData }) {
         </button>
       </header>
 
-      {/* "The agent changed code and nothing said so" — the chat's own signal, right
-          above the ticket rail. Self-gating: a clean working tree renders nothing (not
-          even a wrapper), so it sits outside the chatId guard and shows on a chat with
-          no ticket too — the edits are just as unreviewed either way. */}
-      <PendingChangesPanel labels={init.labels} />
-
       {chatId != null && (
         <div style={{ padding: '0 12px' }}>
           <ChatTicketsPanel
@@ -1704,6 +1699,10 @@ function Chat({ init }: { init: InitData }) {
             visibility={chatVisibility}
             onSetVisibility={chatIsOwner ? async (v) => { await persistence.updateChat(chatId, { visibility: v }); setChatVisibility(v); } : undefined}
             onOpenTicket={(tk) => post('open.artifact', { kind: tk.kind, ref: tk.ref, projectId: init.project?.id ?? undefined })}
+            // "The agent changed code and nothing said so" — the chat's own signal, as a
+            // "Changes (N)" pill beside Link ticket / Agents / People. A clean tree
+            // registers nothing, so the rail is exactly as it was.
+            extensions={pendingChangesExtension ? [pendingChangesExtension] : undefined}
           />
         </div>
       )}

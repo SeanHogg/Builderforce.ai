@@ -1763,7 +1763,8 @@ function withAuthoredBy(metadata, author) {
 }
 function addressedAgentSystemPrompt(persona, agent, hostPrompt) {
   const framing = `You have been addressed directly as ${agent.name} in this multi-party chat. Reply AS ${agent.name} \u2014 first person, no "${agent.name}:" label. The tools available to you are the tools of the surface you are running on right now; the instructions below say what they are and how to use them, and they apply to you in full.`;
-  return [persona.directives.trim(), framing, hostPrompt].filter(Boolean).join("\n\n");
+  const who = persona.directives.trim() || `You are ${agent.name}, a member of this team's chat.`;
+  return [who, framing, hostPrompt].join("\n\n");
 }
 
 // ../packages/agent-stall/src/requestIntent.ts
@@ -4432,8 +4433,8 @@ ${refs}`;
         if (messages.length === 0) onFirstUserTurn?.(id, trimmed);
         if (addressedTo) {
           if (addressedTo.kind === "agent") {
-            if (runAddressedAgentLocally && persistence.resolveAgentPersona) {
-              const persona = await persistence.resolveAgentPersona(id, { agentRef: addressedTo.ref, query: trimmed });
+            const persona = runAddressedAgentLocally && persistence.resolveAgentPersona ? await persistence.resolveAgentPersona(id, { agentRef: addressedTo.ref, query: trimmed }).catch(() => null) : null;
+            if (persona) {
               const base = buildRequest(seedFrom(messages), modelContent);
               await startRun(id, {
                 ...base,

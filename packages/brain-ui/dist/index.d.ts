@@ -692,24 +692,23 @@ declare function healthRingColor(percent: number, muted?: boolean): string;
 declare function HealthRing({ percent, size, stroke, caption, muted, ariaLabel }: HealthRingProps): React.JSX.Element;
 
 /**
- * The chat's "this turn left code on disk" bar.
+ * The chat's "this turn left code on disk" list.
  *
- * A Brain turn can edit the workspace through its local tools, and until this bar the
- * conversation was the ONLY record that it had: the transcript said "the file change
- * has been made", the ticket rail showed a task in progress, and nothing anywhere told
- * you there were now unreviewed edits in the working tree — let alone gave you a way
- * to look at them. You had to notice the editor's separate Source Control view on your
- * own, and correlate it to the chat by memory.
+ * A Brain turn can edit the workspace through its local tools, and until this existed
+ * the conversation was the ONLY record that it had: the transcript said "the file
+ * change has been made", the ticket rail showed a task in progress, and nothing
+ * anywhere told you there were now unreviewed edits in the working tree — let alone
+ * gave you a way to look at them.
  *
- * So this sits directly under the ticket rail, states the count, and opens each file's
- * real diff. It renders the working set as the HOST reports it — the host owns what
- * "pending" means (its git working tree) and what "open" does (the editor's own diff
- * viewer); this component owns only how it reads.
+ * The COUNT lives in the ticket rail's pill row (a `ChatTicketsExtension` the host
+ * registers — see ChatTicketsPanel), so it sits beside Link ticket / Agents / People
+ * instead of as a separate block above the rail that pushed the rail under the
+ * header. This is the drawer that pill opens: the hint, each file's real diff, and
+ * the review action. It renders the working set as the HOST reports it — the host
+ * owns what "pending" means (its git working tree) and what "open" does (the editor's
+ * own diff viewer); this component owns only how it reads.
  *
- * Self-gating, per the shared-component rule: nothing pending ⇒ it renders nothing, so
- * a host mounts it unconditionally and never computes a `shouldShow` of its own. A
- * surface with no local working tree (the web app) simply passes no changes and the
- * bar stays invisible without a second code path.
+ * Self-gating, per the shared-component rule: nothing pending ⇒ it renders nothing.
  */
 /** What happened to one file. Mirrors the host's git vocabulary. */
 type PendingChangeKind = 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' | 'conflict' | 'typechange';
@@ -731,22 +730,26 @@ interface PendingChangeVM {
     repo?: string;
 }
 interface PendingChangesLabels {
-    /** Summary heading. Must contain the literal `{count}` token. */
+    /** The pill's word in the ticket rail; the rail appends the count itself. */
+    pill: string;
+    /** Summary sentence (the pill's tooltip). Must contain the literal `{count}` token. */
     summary: string;
-    /** Summary heading for exactly one change. */
+    /** Summary sentence for exactly one change. */
     summaryOne: string;
-    /** Explains WHY the bar is there, under the heading. */
+    /** Explains WHY the list is there, at the top of the drawer. */
     hint: string;
-    expand: string;
-    collapse: string;
     review: string;
     staged: string;
     /** Per-status words, shown beside each path. */
     status: Record<PendingChangeKind, string>;
 }
 declare const DEFAULT_PENDING_CHANGES_LABELS: PendingChangesLabels;
-interface PendingChangesBarProps {
-    /** The uncommitted files. Empty ⇒ the bar renders nothing. */
+/** Merge a host's partial label bundle over the defaults (status words included). */
+declare function resolvePendingChangesLabels(overrides?: Partial<PendingChangesLabels>): PendingChangesLabels;
+/** "3 uncommitted changes" / "1 uncommitted change" — the ONE place the sentence is built. */
+declare function pendingChangesSummary(count: number, labels: PendingChangesLabels): string;
+interface PendingChangesListProps {
+    /** The uncommitted files. Empty ⇒ the list renders nothing. */
     changes: PendingChangeVM[];
     /** Open one file's diff. */
     onOpenChange: (change: PendingChangeVM) => void;
@@ -755,13 +758,11 @@ interface PendingChangesBarProps {
      * view). Omit on a surface that has none — the button then isn't offered.
      */
     onReview?: () => void;
-    /** Start expanded. Defaults to collapsed: the COUNT is the signal, the list is on demand. */
-    defaultExpanded?: boolean;
     labels?: Partial<PendingChangesLabels>;
     className?: string;
     style?: React__default.CSSProperties;
 }
-declare function PendingChangesBar({ changes, onOpenChange, onReview, defaultExpanded, labels: labelOverrides, className, style, }: PendingChangesBarProps): React__default.JSX.Element | null;
+declare function PendingChangesList({ changes, onOpenChange, onReview, labels: labelOverrides, className, style, }: PendingChangesListProps): React__default.JSX.Element | null;
 
 /**
  * Shared types for the ChatTicketsPanel — the chat↔ticket surface rendered
@@ -997,6 +998,29 @@ interface ChatTicketsLabels {
 }
 /** English defaults — the VS Code webview uses these; the web app overrides via next-intl. */
 declare const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels;
+/**
+ * A host-registered pill in the ChatTicketsPanel's action row (beside Link ticket ·
+ * Agents · People · Merge), with the drawer it opens. This is how a host adds a
+ * rail-level signal of its OWN — the VS Code webview's "Changes (N)" for uncommitted
+ * edits, say — without the shared panel growing a branch per host. Registry DATA, not
+ * a prop-drilled boolean: a host passes the extension only while it has something to
+ * show (the panel renders whatever list it is handed), and the panel owns which one
+ * drawer is open, exactly as for its built-in pills.
+ */
+interface ChatTicketsExtension {
+    /** Stable key — the open-drawer identity. Must not collide with the built-in pills. */
+    key: string;
+    /** Leading glyph/emoji, matching the built-in pills' visual grammar. */
+    icon?: string;
+    /** The pill's word. */
+    label: string;
+    /** Appended as ` (N)` when > 0, like Agents/People. */
+    count?: number;
+    /** Tooltip / accessible name; defaults to the label. */
+    title?: string;
+    /** The drawer body, rendered inside the rail's standard drawer chrome when open. */
+    render: () => React.ReactNode;
+}
 
 interface ChatTicketsPanelProps {
     chatId: number;
@@ -1023,8 +1047,12 @@ interface ChatTicketsPanelProps {
      *  When provided, each ticket's label becomes a clickable "open the artifact" link
      *  so every item the Brain created from this chat is one click from its board card. */
     onOpenTicket?: (tk: TicketLinkVM) => void;
+    /** Host-registered pills + drawers appended to the action row (see
+     *  {@link ChatTicketsExtension}). Pass only the ones that currently have
+     *  something to show; an empty/absent list adds nothing. */
+    extensions?: ChatTicketsExtension[];
 }
-declare function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket }: ChatTicketsPanelProps): React.JSX.Element;
+declare function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions }: ChatTicketsPanelProps): React.JSX.Element;
 /**
  * Memoized: this panel sits directly under the composer, so it would otherwise
  * reconcile its whole subtree (health-ring SVGs, selects, link/merge/agents forms)
@@ -2161,4 +2189,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, type MessageRating, ParticipantBadge, type PendingAskUser, type PendingChangeKind, type PendingChangeVM, PendingChangesBar, type PendingChangesBarProps, type PendingChangesLabels, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, SLOW_AFTER_MS, Sunburst, type SunburstProps, TICKET_KINDS, type ThinkSegment, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, answerTextOf, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, evermindLearnedStatus, evermindNextAction, formatDuration, formatElapsed, formatPayload, healthRingColor, initialsOf, parseAskUser, promptOptionsLabels, selectPendingAskUser, serializeAskUser, splitThinkSegments, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };
+export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, type MessageRating, ParticipantBadge, type PendingAskUser, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, SLOW_AFTER_MS, Sunburst, type SunburstProps, TICKET_KINDS, type ThinkSegment, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, answerTextOf, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, evermindLearnedStatus, evermindNextAction, formatDuration, formatElapsed, formatPayload, healthRingColor, initialsOf, parseAskUser, pendingChangesSummary, promptOptionsLabels, resolvePendingChangesLabels, selectPendingAskUser, serializeAskUser, splitThinkSegments, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };

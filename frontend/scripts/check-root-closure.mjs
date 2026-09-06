@@ -16,6 +16,16 @@
  *
  *   node scripts/check-root-closure.mjs            # verify
  *   node scripts/check-root-closure.mjs --update   # re-baseline after cutting edges
+ *
+ * Deliberate raises, so a number in the baseline always has an argument:
+ *
+ *   482 → 483 files (2026-09-06) — `domains/guest/application/guestWall.ts`,
+ *   the transport's record of "a read on this route was refused for want of a
+ *   credential". `lib/apiClient.ts` is already in the closure and is the ONE
+ *   place that fact is known, so the record must sit beside `resolveGuestRead`
+ *   rather than behind an `import()` the throw path would have to await. The
+ *   components that read it (`GuestAccountPrompt`, its `GuestSignupCta`) are cut
+ *   out with `dynamic()` from both `AppShell` and `ui/SectionState`.
  */
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, resolve, relative } from 'node:path';

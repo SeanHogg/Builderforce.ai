@@ -53,7 +53,7 @@ __export(src_exports, {
   Markdown: () => Markdown,
   PROJECT_EVERMIND_MODEL_PREFIX: () => import_builderforce_brain_embedded6.PROJECT_EVERMIND_MODEL_PREFIX,
   ParticipantBadge: () => ParticipantBadge,
-  PendingChangesBar: () => PendingChangesBar,
+  PendingChangesList: () => PendingChangesList,
   PendingQuestionBanner: () => PendingQuestionBanner,
   Project360View: () => Project360View,
   ProjectListView: () => ProjectListView,
@@ -85,11 +85,13 @@ __export(src_exports, {
   modelCategoryLabel: () => import_builderforce_brain_embedded6.modelCategoryLabel,
   modelInUse: () => import_builderforce_brain_embedded6.modelInUse,
   parseAskUser: () => parseAskUser,
+  pendingChangesSummary: () => pendingChangesSummary,
   perMillionUsd: () => import_builderforce_brain_embedded6.perMillionUsd,
   premiumCostLabel: () => import_builderforce_brain_embedded6.premiumCostLabel,
   productForPlan: () => import_builderforce_brain_embedded6.productForPlan,
   productModelName: () => import_builderforce_brain_embedded6.productModelName,
   promptOptionsLabels: () => promptOptionsLabels,
+  resolvePendingChangesLabels: () => resolvePendingChangesLabels,
   revealsModelId: () => import_builderforce_brain_embedded6.revealsModelId,
   selectPendingAskUser: () => selectPendingAskUser,
   serializeAskUser: () => serializeAskUser,
@@ -1718,15 +1720,13 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
   ] });
 }
 
-// src/pendingChanges/PendingChangesBar.tsx
-var import_react6 = require("react");
+// src/pendingChanges/PendingChangesList.tsx
 var import_jsx_runtime10 = require("react/jsx-runtime");
 var DEFAULT_PENDING_CHANGES_LABELS = {
+  pill: "Changes",
   summary: "{count} uncommitted changes",
   summaryOne: "1 uncommitted change",
   hint: "Changed in your workspace and not committed yet.",
-  expand: "Show the changed files",
-  collapse: "Hide the changed files",
   review: "Review",
   staged: "staged",
   status: {
@@ -1739,6 +1739,16 @@ var DEFAULT_PENDING_CHANGES_LABELS = {
     typechange: "type changed"
   }
 };
+function resolvePendingChangesLabels(overrides) {
+  return {
+    ...DEFAULT_PENDING_CHANGES_LABELS,
+    ...overrides,
+    status: { ...DEFAULT_PENDING_CHANGES_LABELS.status, ...overrides?.status }
+  };
+}
+function pendingChangesSummary(count, labels) {
+  return count === 1 ? labels.summaryOne : labels.summary.replace("{count}", String(count));
+}
 function statusColor(status) {
   switch (status) {
     case "added":
@@ -1756,80 +1766,26 @@ function splitPath(path) {
   const cut = path.lastIndexOf("/");
   return cut < 0 ? { dir: "", file: path } : { dir: path.slice(0, cut + 1), file: path.slice(cut + 1) };
 }
-function PendingChangesBar({
+function PendingChangesList({
   changes,
   onOpenChange,
   onReview,
-  defaultExpanded = false,
   labels: labelOverrides,
   className,
   style
 }) {
-  const [expanded, setExpanded] = (0, import_react6.useState)(defaultExpanded);
-  const labels = {
-    ...DEFAULT_PENDING_CHANGES_LABELS,
-    ...labelOverrides,
-    status: { ...DEFAULT_PENDING_CHANGES_LABELS.status, ...labelOverrides?.status }
-  };
+  const labels = resolvePendingChangesLabels(labelOverrides);
   if (!changes.length) return null;
-  const heading = changes.length === 1 ? labels.summaryOne : labels.summary.replace("{count}", String(changes.length));
   const showRepo = new Set(changes.map((c) => c.repo ?? "")).size > 1;
   return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
     "section",
     {
       className,
-      "aria-label": heading,
-      style: {
-        border: "1px solid var(--bf-border, rgba(128, 128, 128, 0.35))",
-        borderRadius: 8,
-        background: "var(--bf-surface-2, var(--bf-surface, transparent))",
-        fontSize: 12,
-        color: "var(--bf-text, inherit)",
-        overflow: "hidden",
-        ...style
-      },
+      "aria-label": pendingChangesSummary(changes.length, labels),
+      style: { fontSize: 12, color: "var(--bf-text, inherit)", ...style },
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "6px 8px" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
-            "button",
-            {
-              type: "button",
-              onClick: () => setExpanded((v) => !v),
-              "aria-expanded": expanded,
-              title: expanded ? labels.collapse : labels.expand,
-              style: {
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                flex: "1 1 auto",
-                minWidth: 0,
-                padding: 0,
-                background: "transparent",
-                border: "none",
-                color: "inherit",
-                font: "inherit",
-                textAlign: "left",
-                cursor: "pointer"
-              },
-              children: [
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { "aria-hidden": true, style: { flex: "0 0 auto", opacity: 0.7 }, children: expanded ? "\u25BE" : "\u25B8" }),
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
-                  "span",
-                  {
-                    "aria-hidden": true,
-                    style: {
-                      flex: "0 0 auto",
-                      width: 8,
-                      height: 8,
-                      borderRadius: "50%",
-                      background: "var(--bf-accent, #4a8cf7)"
-                    }
-                  }
-                ),
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { fontWeight: 600, minWidth: 0, overflowWrap: "anywhere" }, children: heading })
-              ]
-            }
-          ),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "2px 0 6px" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { flex: "1 1 auto", minWidth: 0, color: "var(--bf-text-muted, #8a8a8a)" }, children: labels.hint }),
           onReview && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
             "button",
             {
@@ -1850,8 +1806,7 @@ function PendingChangesBar({
             }
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { style: { padding: "0 8px 6px 30px", color: "var(--bf-text-muted, #8a8a8a)" }, children: labels.hint }),
-        expanded && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: "0 4px 6px" }, children: changes.map((change) => {
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0 }, children: changes.map((change) => {
           const { dir, file } = splitPath(change.path);
           const state = change.staged ? `${labels.status[change.status]} \xB7 ${labels.staged}` : labels.status[change.status];
           return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
@@ -1865,7 +1820,7 @@ function PendingChangesBar({
                 alignItems: "baseline",
                 gap: 6,
                 width: "100%",
-                padding: "3px 6px",
+                padding: "3px 4px",
                 background: "transparent",
                 border: "none",
                 borderRadius: 4,
@@ -1899,7 +1854,7 @@ function PendingChangesBar({
 }
 
 // src/chatTickets/ChatTicketsPanel.tsx
-var import_react7 = require("react");
+var import_react6 = require("react");
 
 // src/optionStyle.ts
 var nativeOptionStyle = {
@@ -1998,21 +1953,26 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
 var import_jsx_runtime11 = require("react/jsx-runtime");
 var RUNNABLE = new Set(RUNNABLE_KINDS);
 var COLLAPSE_THRESHOLD = 8;
-function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket }) {
-  const [tickets, setTickets] = (0, import_react7.useState)([]);
-  const [agents, setAgents] = (0, import_react7.useState)([]);
-  const [members, setMembers] = (0, import_react7.useState)([]);
-  const [pool, setPool] = (0, import_react7.useState)([]);
-  const [questions, setQuestions] = (0, import_react7.useState)([]);
-  const [panel, setPanel] = (0, import_react7.useState)(null);
-  const [lineageKey, setLineageKey] = (0, import_react7.useState)(null);
-  const [lineage, setLineage] = (0, import_react7.useState)([]);
-  const [runKey, setRunKey] = (0, import_react7.useState)(null);
-  const [msg, setMsg] = (0, import_react7.useState)(null);
-  const [busy, setBusy] = (0, import_react7.useState)(false);
-  const [collapsed, setCollapsed] = (0, import_react7.useState)(null);
-  const userCollapsed = (0, import_react7.useRef)(false);
-  const load = (0, import_react7.useCallback)(async () => {
+function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions }) {
+  const [tickets, setTickets] = (0, import_react6.useState)([]);
+  const [agents, setAgents] = (0, import_react6.useState)([]);
+  const [members, setMembers] = (0, import_react6.useState)([]);
+  const [pool, setPool] = (0, import_react6.useState)([]);
+  const [questions, setQuestions] = (0, import_react6.useState)([]);
+  const [panel, setPanel] = (0, import_react6.useState)(null);
+  const togglePanel = (key) => setPanel((open) => open === key ? null : key);
+  const openExtension = extensions?.find((ext) => ext.key === panel) ?? null;
+  (0, import_react6.useEffect)(() => {
+    if (panel && !isBuiltinPanel(panel) && !extensions?.some((ext) => ext.key === panel)) setPanel(null);
+  }, [panel, extensions]);
+  const [lineageKey, setLineageKey] = (0, import_react6.useState)(null);
+  const [lineage, setLineage] = (0, import_react6.useState)([]);
+  const [runKey, setRunKey] = (0, import_react6.useState)(null);
+  const [msg, setMsg] = (0, import_react6.useState)(null);
+  const [busy, setBusy] = (0, import_react6.useState)(false);
+  const [collapsed, setCollapsed] = (0, import_react6.useState)(null);
+  const userCollapsed = (0, import_react6.useRef)(false);
+  const load = (0, import_react6.useCallback)(async () => {
     const [tk, ag, mem, qs] = await Promise.all([
       adapter.listTickets(chatId).catch(() => []),
       adapter.listAgents(chatId).catch(() => []),
@@ -2025,17 +1985,17 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     setQuestions(qs);
     if (!userCollapsed.current) setCollapsed(tk.length > COLLAPSE_THRESHOLD);
   }, [adapter, chatId]);
-  (0, import_react7.useEffect)(() => {
+  (0, import_react6.useEffect)(() => {
     void load();
   }, [load, refreshSignal]);
-  (0, import_react7.useEffect)(() => {
+  (0, import_react6.useEffect)(() => {
     adapter.loadAgentPool().then(setPool).catch(() => setPool([]));
   }, [adapter]);
   const flash = (m) => {
     setMsg(m);
     if (typeof window !== "undefined") window.setTimeout(() => setMsg(null), 3500);
   };
-  const poolName = (0, import_react7.useCallback)((ref) => pool.find((p) => p.ref === ref)?.name ?? ref, [pool]);
+  const poolName = (0, import_react6.useCallback)((ref) => pool.find((p) => p.ref === ref)?.name ?? ref, [pool]);
   const unlink = async (tk) => {
     setBusy(true);
     try {
@@ -2068,7 +2028,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       setBusy(false);
     }
   };
-  const agg = (0, import_react7.useMemo)(() => aggregateTicketHealth(tickets), [tickets]);
+  const agg = (0, import_react6.useMemo)(() => aggregateTicketHealth(tickets), [tickets]);
   const isCollapsed = tickets.length > 0 && (collapsed ?? tickets.length > COLLAPSE_THRESHOLD);
   const toggleCollapsed = () => {
     userCollapsed.current = true;
@@ -2150,33 +2110,51 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       ] }, c.chatId)) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { type: "button", onClick: () => setPanel(panel === "link" ? null : "link"), style: S.pill(panel === "link"), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { type: "button", onClick: () => togglePanel("link"), style: S.pill(panel === "link"), children: [
         "\uFF0B ",
         labels.link
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { type: "button", onClick: () => setPanel(panel === "agents" ? null : "agents"), style: S.pill(panel === "agents"), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { type: "button", onClick: () => togglePanel("agents"), style: S.pill(panel === "agents"), children: [
         "\u{1F465} ",
         labels.agents,
         agents.length ? ` (${agents.length})` : ""
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { type: "button", onClick: () => setPanel(panel === "people" ? null : "people"), style: S.pill(panel === "people"), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { type: "button", onClick: () => togglePanel("people"), style: S.pill(panel === "people"), children: [
         "\u{1F464} ",
         labels.people,
         members.length ? ` (${members.length})` : ""
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { type: "button", onClick: () => setPanel(panel === "merge" ? null : "merge"), style: S.pill(panel === "merge"), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { type: "button", onClick: () => togglePanel("merge"), style: S.pill(panel === "merge"), children: [
         "\u29C9 ",
         labels.merge
       ] }),
-      questions.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { type: "button", onClick: () => setPanel(panel === "questions" ? null : "questions"), style: S.pill(panel === "questions"), children: [
+      questions.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { type: "button", onClick: () => togglePanel("questions"), style: S.pill(panel === "questions"), children: [
         "\u2753 ",
         labels.questions,
         " (",
         questions.length,
         ")"
       ] }),
+      extensions?.map((ext) => /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
+        "button",
+        {
+          type: "button",
+          title: ext.title ?? ext.label,
+          "aria-label": ext.title ?? ext.label,
+          "aria-expanded": panel === ext.key,
+          onClick: () => togglePanel(ext.key),
+          style: S.pill(panel === ext.key),
+          children: [
+            ext.icon ? `${ext.icon} ` : "",
+            ext.label,
+            ext.count ? ` (${ext.count})` : ""
+          ]
+        },
+        ext.key
+      )),
       msg && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { style: { fontSize: 12, color: V.accent, alignSelf: "center" }, children: msg })
     ] }),
+    openExtension && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { style: S.drawer, children: openExtension.render() }),
     panel === "link" && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(LinkForm, { search: adapter.searchTickets, projectId, existing: tickets, labels, onLink: async (kind, ref, linkType) => {
       try {
         await adapter.linkTicket(chatId, { kind, ref, linkType });
@@ -2281,9 +2259,13 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     )
   ] });
 }
+var BUILTIN_PANELS = /* @__PURE__ */ new Set(["link", "agents", "people", "merge", "questions"]);
+function isBuiltinPanel(key) {
+  return BUILTIN_PANELS.has(key);
+}
 function QuestionsSection({ questions, labels, onAnswer }) {
-  const [answers, setAnswers] = (0, import_react7.useState)({});
-  const [sending, setSending] = (0, import_react7.useState)(null);
+  const [answers, setAnswers] = (0, import_react6.useState)({});
+  const [sending, setSending] = (0, import_react6.useState)(null);
   return /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { style: S.drawer, children: questions.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { style: S.muted, children: labels.noQuestions }) : questions.map((q, index) => {
     const value = answers[q.id] ?? "";
     return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: { padding: "10px 0", borderBottom: index < questions.length - 1 ? `1px solid ${V.border}` : void 0 }, children: [
@@ -2310,14 +2292,14 @@ function QuestionsSection({ questions, labels, onAnswer }) {
 }
 var SEARCH_LIMIT = 40;
 function LinkForm({ search, projectId, existing, labels, onLink }) {
-  const [kind, setKind] = (0, import_react7.useState)("task");
-  const [ref, setRef] = (0, import_react7.useState)("");
-  const [query, setQuery] = (0, import_react7.useState)("");
-  const [linkType, setLinkType] = (0, import_react7.useState)("linked");
-  const [busy, setBusy] = (0, import_react7.useState)(false);
-  const [results, setResults] = (0, import_react7.useState)([]);
-  const [loading, setLoading] = (0, import_react7.useState)(false);
-  (0, import_react7.useEffect)(() => {
+  const [kind, setKind] = (0, import_react6.useState)("task");
+  const [ref, setRef] = (0, import_react6.useState)("");
+  const [query, setQuery] = (0, import_react6.useState)("");
+  const [linkType, setLinkType] = (0, import_react6.useState)("linked");
+  const [busy, setBusy] = (0, import_react6.useState)(false);
+  const [results, setResults] = (0, import_react6.useState)([]);
+  const [loading, setLoading] = (0, import_react6.useState)(false);
+  (0, import_react6.useEffect)(() => {
     let live = true;
     setLoading(true);
     const h = setTimeout(() => {
@@ -2334,12 +2316,12 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
       clearTimeout(h);
     };
   }, [search, kind, query, projectId]);
-  const shown = (0, import_react7.useMemo)(
+  const shown = (0, import_react6.useMemo)(
     () => results.filter((o) => !existing.some((e) => e.kind === kind && e.ref === o.ref)),
     [results, existing, kind]
   );
   const atCap = results.length >= SEARCH_LIMIT;
-  (0, import_react7.useEffect)(() => {
+  (0, import_react6.useEffect)(() => {
     if (ref && !shown.some((o) => o.ref === ref)) setRef("");
   }, [shown, ref]);
   const submit = async () => {
@@ -2406,7 +2388,7 @@ function AgentsSection({ agents, pool, labels, onInvite, onRemove, busy }) {
   ] });
 }
 function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite, onRemove, busy }) {
-  const [email, setEmail] = (0, import_react7.useState)("");
+  const [email, setEmail] = (0, import_react6.useState)("");
   const submit = async () => {
     const e = email.trim();
     if (!e) return;
@@ -2446,7 +2428,7 @@ function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite,
   ] });
 }
 function MergeSection({ chatId, chatList, labels, onMerge, busy }) {
-  const [selected, setSelected] = (0, import_react7.useState)([]);
+  const [selected, setSelected] = (0, import_react6.useState)([]);
   const candidates = chatList.filter((c) => c.id !== chatId);
   const toggle = (id) => setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
   return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: { ...S.section, flexDirection: "column", alignItems: "stretch" }, children: [
@@ -2460,7 +2442,7 @@ function MergeSection({ chatId, chatList, labels, onMerge, busy }) {
     }, disabled: busy || selected.length === 0, style: S.pill(true), children: busy ? "\u2026" : labels.mergeAction(selected.length) })
   ] });
 }
-var ChatTicketsPanel = (0, import_react7.memo)(ChatTicketsPanelInner);
+var ChatTicketsPanel = (0, import_react6.memo)(ChatTicketsPanelInner);
 var V = {
   border: "var(--bf-ct-border, var(--border-subtle, var(--bf-border, var(--vscode-panel-border, rgba(148,163,184,0.3)))))",
   surface: "var(--bf-ct-surface, var(--bg-elevated, var(--bf-surface, var(--vscode-editorWidget-background, transparent))))",
@@ -2512,12 +2494,12 @@ var S = {
 };
 
 // src/chatTickets/useChatParticipants.ts
-var import_react8 = require("react");
+var import_react7 = require("react");
 function useChatParticipants(adapter, chatId, refreshSignal = 0) {
-  const [pool, setPool] = (0, import_react8.useState)([]);
-  const [invited, setInvited] = (0, import_react8.useState)([]);
-  const [members, setMembers] = (0, import_react8.useState)([]);
-  (0, import_react8.useEffect)(() => {
+  const [pool, setPool] = (0, import_react7.useState)([]);
+  const [invited, setInvited] = (0, import_react7.useState)([]);
+  const [members, setMembers] = (0, import_react7.useState)([]);
+  (0, import_react7.useEffect)(() => {
     let ok = true;
     adapter.loadAgentPool().then((p) => {
       if (ok) setPool(p);
@@ -2528,7 +2510,7 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
       ok = false;
     };
   }, [adapter]);
-  (0, import_react8.useEffect)(() => {
+  (0, import_react7.useEffect)(() => {
     if (chatId == null) {
       setInvited([]);
       setMembers([]);
@@ -2549,7 +2531,7 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
       ok = false;
     };
   }, [adapter, chatId, refreshSignal]);
-  return (0, import_react8.useMemo)(
+  return (0, import_react7.useMemo)(
     () => [
       ...invited.map((a) => ({
         kind: "agent",
@@ -2564,19 +2546,19 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
 }
 
 // src/mention/MentionAutocomplete.tsx
-var import_react9 = require("react");
+var import_react8 = require("react");
 var import_builderforce_brain_embedded5 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime12 = require("react/jsx-runtime");
 function useMentionAutocomplete(opts) {
   const { textareaRef, value, setValue, participants, onPick, labels, disabled } = opts;
-  const [token, setToken] = (0, import_react9.useState)(null);
-  const [index, setIndex] = (0, import_react9.useState)(0);
-  const matches = (0, import_react9.useMemo)(
+  const [token, setToken] = (0, import_react8.useState)(null);
+  const [index, setIndex] = (0, import_react8.useState)(0);
+  const matches = (0, import_react8.useMemo)(
     () => token && !disabled ? (0, import_builderforce_brain_embedded5.filterMentionCandidates)(participants, token.query) : [],
     [token, participants, disabled]
   );
   const open = !disabled && token != null && matches.length > 0;
-  const recompute = (0, import_react9.useCallback)(() => {
+  const recompute = (0, import_react8.useCallback)(() => {
     const el = textareaRef.current;
     if (!el || disabled || participants.length === 0) {
       setToken(null);
@@ -2586,10 +2568,10 @@ function useMentionAutocomplete(opts) {
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, participants.length]);
-  (0, import_react9.useEffect)(() => {
+  (0, import_react8.useEffect)(() => {
     recompute();
   }, [value, recompute]);
-  const choose = (0, import_react9.useCallback)((r) => {
+  const choose = (0, import_react8.useCallback)((r) => {
     const el = textareaRef.current;
     const tk = token ?? (el ? (0, import_builderforce_brain_embedded5.activeMentionToken)(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
@@ -2611,7 +2593,7 @@ function useMentionAutocomplete(opts) {
     setToken(null);
     onPick(r);
   }, [token, value, setValue, onPick, textareaRef]);
-  const onKeyDown = (0, import_react9.useCallback)((e) => {
+  const onKeyDown = (0, import_react8.useCallback)((e) => {
     if (!open) return false;
     switch (e.key) {
       case "ArrowDown":
@@ -2699,7 +2681,7 @@ var POP = {
 };
 
 // src/evermind/EvermindConsole.tsx
-var import_react15 = require("react");
+var import_react14 = require("react");
 
 // src/evermind/types.ts
 function defaultFormatWhen(atMs) {
@@ -2920,7 +2902,7 @@ function evermindNextAction(input) {
 }
 
 // src/evermind/EvermindTestBench.tsx
-var import_react10 = require("react");
+var import_react9 = require("react");
 
 // src/evermind/consoleStyles.ts
 var C = {
@@ -3085,10 +3067,10 @@ var warnBox = {
 // src/evermind/EvermindTestBench.tsx
 var import_jsx_runtime13 = require("react/jsx-runtime");
 function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
-  const [prompt, setPrompt] = (0, import_react10.useState)("");
-  const [running, setRunning] = (0, import_react10.useState)(false);
-  const [error, setError] = (0, import_react10.useState)(null);
-  const run = (0, import_react10.useCallback)(async (withPrompt) => {
+  const [prompt, setPrompt] = (0, import_react9.useState)("");
+  const [running, setRunning] = (0, import_react9.useState)(false);
+  const [error, setError] = (0, import_react9.useState)(null);
+  const run = (0, import_react9.useCallback)(async (withPrompt) => {
     setRunning(true);
     setError(null);
     try {
@@ -3141,7 +3123,7 @@ function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
 }
 
 // src/evermind/EvermindMaintenance.tsx
-var import_react11 = require("react");
+var import_react10 = require("react");
 var import_jsx_runtime14 = require("react/jsx-runtime");
 function EvermindMaintenance({
   t,
@@ -3151,13 +3133,13 @@ function EvermindMaintenance({
   onReindex,
   onCleanup
 }) {
-  const [slug, setSlug] = (0, import_react11.useState)("");
-  const [pending, setPending] = (0, import_react11.useState)(null);
-  const doReseed = (0, import_react11.useCallback)(async () => {
+  const [slug, setSlug] = (0, import_react10.useState)("");
+  const [pending, setPending] = (0, import_react10.useState)(null);
+  const doReseed = (0, import_react10.useCallback)(async () => {
     setPending(null);
     await onReseed?.(slug || void 0);
   }, [onReseed, slug]);
-  const doCleanup = (0, import_react11.useCallback)(async () => {
+  const doCleanup = (0, import_react10.useCallback)(async () => {
     setPending(null);
     await onCleanup?.();
   }, [onCleanup]);
@@ -3261,7 +3243,7 @@ function Confirm({
 }
 
 // src/evermind/EvermindAnalyzer.tsx
-var import_react12 = require("react");
+var import_react11 = require("react");
 var import_jsx_runtime15 = require("react/jsx-runtime");
 var TONE = {
   ok: "ok",
@@ -3272,15 +3254,15 @@ var TONE = {
   redundant: "warn"
 };
 function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysis, onAnalysis }) {
-  const [selected, setSelected] = (0, import_react12.useState)(/* @__PURE__ */ new Set());
-  const [running, setRunning] = (0, import_react12.useState)(false);
-  const [applying, setApplying] = (0, import_react12.useState)(false);
-  const [repair, setRepair] = (0, import_react12.useState)(null);
-  const [error, setError] = (0, import_react12.useState)(null);
-  (0, import_react12.useEffect)(() => {
+  const [selected, setSelected] = (0, import_react11.useState)(/* @__PURE__ */ new Set());
+  const [running, setRunning] = (0, import_react11.useState)(false);
+  const [applying, setApplying] = (0, import_react11.useState)(false);
+  const [repair, setRepair] = (0, import_react11.useState)(null);
+  const [error, setError] = (0, import_react11.useState)(null);
+  (0, import_react11.useEffect)(() => {
     setSelected(new Set(analysis?.findings.map((f) => f.id) ?? []));
   }, [analysis]);
-  const run = (0, import_react12.useCallback)(async () => {
+  const run = (0, import_react11.useCallback)(async () => {
     setRunning(true);
     setError(null);
     setRepair(null);
@@ -3293,7 +3275,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
       setRunning(false);
     }
   }, [onAnalyze, onAnalysis, t.errorGeneric]);
-  const apply = (0, import_react12.useCallback)(async () => {
+  const apply = (0, import_react11.useCallback)(async () => {
     if (!onApply || !analysis) return;
     const picked = analysis.findings.filter((f) => selected.has(f.id));
     if (picked.length === 0) return;
@@ -3309,7 +3291,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
       setApplying(false);
     }
   }, [analysis, onAnalysis, onApply, onRepaired, selected, t.errorGeneric]);
-  const toggle = (0, import_react12.useCallback)((id) => {
+  const toggle = (0, import_react11.useCallback)((id) => {
     setSelected((cur) => {
       const next = new Set(cur);
       if (next.has(id)) next.delete(id);
@@ -3318,7 +3300,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
     });
   }, []);
   const findings = analysis?.findings ?? [];
-  const allSelected = (0, import_react12.useMemo)(() => findings.length > 0 && findings.every((f) => selected.has(f.id)), [findings, selected]);
+  const allSelected = (0, import_react11.useMemo)(() => findings.length > 0 && findings.every((f) => selected.has(f.id)), [findings, selected]);
   const busy = disabled || running || applying;
   return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: sectionBlock, children: [
     /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { style: fieldTitle, children: t.analyzeTitle }),
@@ -3407,13 +3389,13 @@ function FindingRow({
 }
 
 // src/evermind/EvermindDiagnostics.tsx
-var import_react13 = require("react");
+var import_react12 = require("react");
 var import_jsx_runtime16 = require("react/jsx-runtime");
 function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
-  const [report, setReport] = (0, import_react13.useState)(null);
-  const [copied, setCopied] = (0, import_react13.useState)(false);
-  const [revealed, setRevealed] = (0, import_react13.useState)(false);
-  const copy = (0, import_react13.useCallback)(async () => {
+  const [report, setReport] = (0, import_react12.useState)(null);
+  const [copied, setCopied] = (0, import_react12.useState)(false);
+  const [revealed, setRevealed] = (0, import_react12.useState)(false);
+  const copy = (0, import_react12.useCallback)(async () => {
     const text = buildReport();
     setReport(text);
     try {
@@ -3428,13 +3410,13 @@ function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
       onManualFallback?.();
     }
   }, [buildReport, onCopy, onManualFallback]);
-  const toggleReveal = (0, import_react13.useCallback)(() => setRevealed((v) => !v), []);
+  const toggleReveal = (0, import_react12.useCallback)(() => setRevealed((v) => !v), []);
   return { report, copied, revealed, copy, toggleReveal };
 }
 function EvermindDiagnostics({ t, disabled, copy }) {
   const { report, copied, revealed } = copy;
-  const areaRef = (0, import_react13.useRef)(null);
-  (0, import_react13.useEffect)(() => {
+  const areaRef = (0, import_react12.useRef)(null);
+  (0, import_react12.useEffect)(() => {
     if (!revealed) return;
     areaRef.current?.focus();
     areaRef.current?.select();
@@ -3465,11 +3447,11 @@ function EvermindDiagnostics({ t, disabled, copy }) {
 }
 
 // src/evermind/ConsoleTabs.tsx
-var import_react14 = require("react");
+var import_react13 = require("react");
 var import_jsx_runtime17 = require("react/jsx-runtime");
 function ConsoleTabs({ tabs, activeId, onSelect, label, idPrefix }) {
-  const stripRef = (0, import_react14.useRef)(null);
-  const onKeyDown = (0, import_react14.useCallback)((e) => {
+  const stripRef = (0, import_react13.useRef)(null);
+  const onKeyDown = (0, import_react13.useCallback)((e) => {
     const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
     if (!keys.includes(e.key)) return;
     e.preventDefault();
@@ -3749,26 +3731,26 @@ var import_jsx_runtime18 = require("react/jsx-runtime");
 var TEACH_POLL_INTERVAL_MS = 3e3;
 var TEACH_POLL_TIMEOUT_MS = 12e4;
 function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate, host = "web" }) {
-  const t = (0, import_react15.useMemo)(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
-  const [data, setData] = (0, import_react15.useState)(null);
-  const [targets, setTargets] = (0, import_react15.useState)(null);
-  const [seedModels, setSeedModels] = (0, import_react15.useState)([]);
-  const [teacherOpts, setTeacherOpts] = (0, import_react15.useState)(null);
-  const [selectedSlug, setSelectedSlug] = (0, import_react15.useState)("");
-  const [teachPrompt, setTeachPrompt] = (0, import_react15.useState)("");
-  const [teachText, setTeachText] = (0, import_react15.useState)("");
-  const [busy, setBusy] = (0, import_react15.useState)(false);
-  const [validating, setValidating] = (0, import_react15.useState)(false);
-  const [validateResult, setValidateResult] = (0, import_react15.useState)(null);
-  const [notice, setNotice] = (0, import_react15.useState)(null);
-  const [noticeTone, setNoticeTone] = (0, import_react15.useState)("good");
-  const [error, setError] = (0, import_react15.useState)(null);
-  const [loaded, setLoaded] = (0, import_react15.useState)(false);
-  const [tab, setTab] = (0, import_react15.useState)("teach");
-  const [probeResult, setProbeResult] = (0, import_react15.useState)(null);
-  const [analysis, setAnalysis] = (0, import_react15.useState)(null);
-  const [loadFailed, setLoadFailed] = (0, import_react15.useState)(false);
-  const reload = (0, import_react15.useCallback)(async () => {
+  const t = (0, import_react14.useMemo)(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
+  const [data, setData] = (0, import_react14.useState)(null);
+  const [targets, setTargets] = (0, import_react14.useState)(null);
+  const [seedModels, setSeedModels] = (0, import_react14.useState)([]);
+  const [teacherOpts, setTeacherOpts] = (0, import_react14.useState)(null);
+  const [selectedSlug, setSelectedSlug] = (0, import_react14.useState)("");
+  const [teachPrompt, setTeachPrompt] = (0, import_react14.useState)("");
+  const [teachText, setTeachText] = (0, import_react14.useState)("");
+  const [busy, setBusy] = (0, import_react14.useState)(false);
+  const [validating, setValidating] = (0, import_react14.useState)(false);
+  const [validateResult, setValidateResult] = (0, import_react14.useState)(null);
+  const [notice, setNotice] = (0, import_react14.useState)(null);
+  const [noticeTone, setNoticeTone] = (0, import_react14.useState)("good");
+  const [error, setError] = (0, import_react14.useState)(null);
+  const [loaded, setLoaded] = (0, import_react14.useState)(false);
+  const [tab, setTab] = (0, import_react14.useState)("teach");
+  const [probeResult, setProbeResult] = (0, import_react14.useState)(null);
+  const [analysis, setAnalysis] = (0, import_react14.useState)(null);
+  const [loadFailed, setLoadFailed] = (0, import_react14.useState)(false);
+  const reload = (0, import_react14.useCallback)(async () => {
     const targetsP = adapter.loadTargets?.().catch(() => null);
     try {
       const d = await adapter.loadData();
@@ -3785,11 +3767,11 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       if (tg) setTargets(tg);
     }
   }, [adapter]);
-  (0, import_react15.useEffect)(() => {
+  (0, import_react14.useEffect)(() => {
     setLoaded(false);
     void reload();
   }, [reload]);
-  (0, import_react15.useEffect)(() => {
+  (0, import_react14.useEffect)(() => {
     if (!canManage) return;
     let cancelled = false;
     void adapter.loadSeedModels().then((m) => {
@@ -3807,20 +3789,20 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       cancelled = true;
     };
   }, [adapter, canManage]);
-  (0, import_react15.useEffect)(() => {
+  (0, import_react14.useEffect)(() => {
     if (!refreshMs) return;
     const id = setInterval(() => {
       if (!busy) void reload();
     }, refreshMs);
     return () => clearInterval(id);
   }, [refreshMs, busy, reload]);
-  const lastRefreshSignal = (0, import_react15.useRef)(refreshSignal);
-  (0, import_react15.useEffect)(() => {
+  const lastRefreshSignal = (0, import_react14.useRef)(refreshSignal);
+  (0, import_react14.useEffect)(() => {
     if (refreshSignal == null || refreshSignal === lastRefreshSignal.current) return;
     lastRefreshSignal.current = refreshSignal;
     void reload();
   }, [refreshSignal, reload]);
-  const runValidate = (0, import_react15.useCallback)(async (prompt) => {
+  const runValidate = (0, import_react14.useCallback)(async (prompt) => {
     const task = prompt.trim();
     if (task.length < 3) return;
     setValidating(true);
@@ -3836,20 +3818,20 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       setValidating(false);
     }
   }, [adapter, onValidate, t.errorGeneric]);
-  const clearValidate = (0, import_react15.useCallback)(() => {
+  const clearValidate = (0, import_react14.useCallback)(() => {
     setValidateResult(null);
     onValidate?.(null);
   }, [onValidate]);
-  const pollTimer = (0, import_react15.useRef)(null);
-  const mounted = (0, import_react15.useRef)(true);
-  (0, import_react15.useEffect)(() => {
+  const pollTimer = (0, import_react14.useRef)(null);
+  const mounted = (0, import_react14.useRef)(true);
+  (0, import_react14.useEffect)(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
       if (pollTimer.current) clearTimeout(pollTimer.current);
     };
   }, []);
-  const describeTeachOutcome = (0, import_react15.useCallback)((status) => {
+  const describeTeachOutcome = (0, import_react14.useCallback)((status) => {
     if (status.state === "dropped") return { text: t.taughtDropped, tone: "warn" };
     if (status.state !== "merged") return { text: t.taughtStillPending, tone: "warn" };
     const verdict = evermindLearnedStatus({
@@ -3865,7 +3847,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     if (verdict.state === "fault") return { text: t.taughtTeacherFault(verdict.teacherModel ?? "", verdict.reason), tone: "warn" };
     return { text: t.taughtSelf(version), tone: "good" };
   }, [t]);
-  const trackTeach = (0, import_react15.useCallback)((contributionId) => {
+  const trackTeach = (0, import_react14.useCallback)((contributionId) => {
     const readStatus = adapter.teachStatus;
     if (!readStatus || !Number.isInteger(contributionId) || contributionId <= 0) return;
     if (pollTimer.current) clearTimeout(pollTimer.current);
@@ -3899,7 +3881,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       void tick();
     }, TEACH_POLL_INTERVAL_MS);
   }, [adapter, describeTeachOutcome, reload, t.taughtStillPending]);
-  const run = (0, import_react15.useCallback)(async (op, successNotice) => {
+  const run = (0, import_react14.useCallback)(async (op, successNotice) => {
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -3914,8 +3896,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       setBusy(false);
     }
   }, [reload, t.errorGeneric]);
-  const panelId = (0, import_react15.useId)();
-  const buildReport = (0, import_react15.useCallback)(() => buildEvermindDiagnostics({
+  const panelId = (0, import_react14.useId)();
+  const buildReport = (0, import_react14.useCallback)(() => buildEvermindDiagnostics({
     data,
     projectName,
     host,
@@ -4474,7 +4456,7 @@ function RecentList({ t, entries }) {
   ] });
 }
 function RecentRow({ t, entry }) {
-  const [open, setOpen] = (0, import_react15.useState)(false);
+  const [open, setOpen] = (0, import_react14.useState)(false);
   const status = evermindLearnedStatus(entry);
   const faulted = status.state === "fault";
   const body = entry.kind === "delta" ? t.deltaEntry : faulted ? "" : entry.text ?? "";
@@ -4529,7 +4511,7 @@ var targetChip = {
 };
 
 // src/project360/Project360View.tsx
-var import_react16 = require("react");
+var import_react15 = require("react");
 
 // src/project360/sunburstGeometry.ts
 var VIEWBOX = 320;
@@ -4709,9 +4691,9 @@ var DEFAULT_PROJECT360_LABELS = {
 var import_jsx_runtime20 = require("react/jsx-runtime");
 var STATUS_ORDER = ["working", "awaiting", "blocked", "idle", "available"];
 function Project360View({ data, loading, error, labels, onAction, onRefresh }) {
-  const L = (0, import_react16.useMemo)(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
-  const [selected, setSelected] = (0, import_react16.useState)(null);
-  const sortedWorkforce = (0, import_react16.useMemo)(
+  const L = (0, import_react15.useMemo)(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
+  const [selected, setSelected] = (0, import_react15.useState)(null);
+  const sortedWorkforce = (0, import_react15.useMemo)(
     () => [...data?.workforce ?? []].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)),
     [data?.workforce]
   );
@@ -4878,7 +4860,7 @@ function MemberRow({ member, labels, onAction }) {
 }
 
 // src/projectList/ProjectListView.tsx
-var import_react17 = require("react");
+var import_react16 = require("react");
 
 // src/projectList/types.ts
 var DEFAULT_PROJECT_LIST_LABELS = {
@@ -4893,7 +4875,7 @@ var DEFAULT_PROJECT_LIST_LABELS = {
 // src/projectList/ProjectListView.tsx
 var import_jsx_runtime21 = require("react/jsx-runtime");
 function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }) {
-  const L = (0, import_react17.useMemo)(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
+  const L = (0, import_react16.useMemo)(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
   const header = /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("header", { className: "bf-list-head", children: [
     /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "bf-list-head__id", children: [
       /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: "bf-list-head__title", children: title }),
@@ -4993,7 +4975,7 @@ function Row2({ item, onAction }) {
   Markdown,
   PROJECT_EVERMIND_MODEL_PREFIX,
   ParticipantBadge,
-  PendingChangesBar,
+  PendingChangesList,
   PendingQuestionBanner,
   Project360View,
   ProjectListView,
@@ -5025,11 +5007,13 @@ function Row2({ item, onAction }) {
   modelCategoryLabel,
   modelInUse,
   parseAskUser,
+  pendingChangesSummary,
   perMillionUsd,
   premiumCostLabel,
   productForPlan,
   productModelName,
   promptOptionsLabels,
+  resolvePendingChangesLabels,
   revealsModelId,
   selectPendingAskUser,
   serializeAskUser,

@@ -7,7 +7,8 @@
  * unit-testing without an extension host, and the shape has to cross the webview
  * bridge into the React chat, which cannot import editor APIs. The cached read port
  * that actually talks to git lives in {@link gitChanges}; the surfaces that render
- * this live in `pendingChangesTree.ts` and the shared brain-ui `PendingChangesBar`.
+ * this live in `pendingChangesTree.ts` and the webview's `usePendingChangesExtension`
+ * (the ticket rail's "Changes (N)" pill + the shared brain-ui `PendingChangesList`).
  */
 
 /**

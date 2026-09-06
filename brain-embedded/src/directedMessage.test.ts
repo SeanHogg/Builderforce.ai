@@ -116,6 +116,12 @@ describe('a host-run addressed turn', () => {
     expect(withAuthoredBy('{"a":1}', undefined)).toBe('{"a":1}');
   });
 
+  it('frames a participant with no compiled persona by name, so it still takes the turn', () => {
+    const prompt = addressedAgentSystemPrompt({ directives: '' }, bob, 'Use git_commit to ship.');
+    expect(prompt.startsWith("You are Bob Developer, a member of this team's chat.")).toBe(true);
+    expect(prompt).toContain('Use git_commit to ship.');
+  });
+
   it('puts the persona first and the host prompt — the one that names the tools — last', () => {
     const prompt = addressedAgentSystemPrompt({ directives: 'You are Bob, a terse developer.' }, bob, 'Use git_commit to ship.');
     expect(prompt.indexOf('You are Bob')).toBeLessThan(prompt.indexOf('Reply AS Bob Developer'));

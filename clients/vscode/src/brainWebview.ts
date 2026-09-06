@@ -207,14 +207,14 @@ function buildLabels(): Record<string, string> {
     // Chat | Work — the CONVERSATION's mode (migration 0409), not an editor setting.
     // The same chat opened on the web reads the same mode, which is the whole point:
     // one conversation means one thing on every surface.
-    // The pending-changes bar under the ticket rail — the chat's own "this turn left
-    // code on disk" signal. The status words are the SAME source strings the Changes
-    // sidebar renders (`pendingChangesTree.ts`), so one catalog entry serves both.
+    // The "Changes (N)" pill in the ticket rail — the chat's own "this turn left
+    // code on disk" signal — and the drawer it opens. The pill word is the SAME
+    // source string as the Changes sidebar's title, and the status words are the
+    // ones `pendingChangesTree.ts` renders, so one catalog entry serves both.
+    "changes.pill": t("Changes"),
     "changes.summary": t("{count} uncommitted changes"),
     "changes.summaryOne": t("1 uncommitted change"),
     "changes.hint": t("Changed in your workspace and not committed yet."),
-    "changes.expand": t("Show the changed files"),
-    "changes.collapse": t("Hide the changed files"),
     "changes.review": t("Review"),
     "changes.staged": t("staged"),
     "changes.status.modified": t("modified"),

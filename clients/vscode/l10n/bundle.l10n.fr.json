@@ -33,6 +33,7 @@
   "All files": "Tous les fichiers",
   "Always": "Toujours",
   "Answer needed": "Réponse requise",
+  "Answer the agent's question": "Répondre à la question de l'agent",
   "Any paid OpenRouter model, at cost + 1¢/request": "N’importe quel modèle OpenRouter payant, au coût + 1 ¢ par requête",
   "Anytime": "À tout moment",
   "Apply": "Appliquer",
@@ -71,6 +72,7 @@
   "Change model": "Changer de modèle",
   "Change type — {0}": "Changer le type — {0}",
   "Changed in your workspace and not committed yet.": "Modifié dans votre espace de travail et pas encore validé.",
+  "Changes": "Modifications",
   "Chat": "Chat",
   "Chat diagnostics copied to clipboard.": "Diagnostic de la conversation copié dans le presse-papiers.",
   "Chat name": "Nom de la conversation",
@@ -158,7 +160,6 @@
   "Group tasks by": "Grouper les tâches par",
   "Here is my project's Project 360 health check. Help me work through these gaps, highest impact first.": "Voici le bilan de santé Projet 360 de mon projet. Aide-moi à combler ces lacunes, en commençant par les plus importantes.",
   "Hide report": "Masquer le rapport",
-  "Hide the changed files": "Masquer les fichiers modifiés",
   "High": "Élevée",
   "I just dispatched {task} to run on the platform. Check the latest execution's status and trace, then help me follow up.": "Je viens de lancer {task} sur la plateforme. Vérifie le statut et la trace de la dernière exécution, puis aide-moi à assurer le suivi.",
   "IDE build": "Build de l’IDE",
@@ -364,7 +365,6 @@
   "Show my unresolved production errors using quality.list_error_groups (most impactful first). For the top one, get its details with quality.get_error_group, then search_code/read_file the culprit and propose a fix.": "Affiche mes erreurs de production non résolues avec quality.list_error_groups (les plus impactantes d’abord). Pour la principale, obtiens ses détails avec quality.get_error_group, puis utilise search_code/read_file sur le code fautif et propose un correctif.",
   "Show report": "Afficher le rapport",
   "Show statuses": "Afficher les statuts",
-  "Show the changed files": "Afficher les fichiers modifiés",
   "Sign In": "Se connecter",
   "Sign in": "Se connecter",
   "Sign in to BuilderForce": "Se connecter à BuilderForce",
@@ -527,6 +527,5 @@
   "{count} tokens left": "{count} jetons restants",
   "{count} uncommitted changes": "{count} modifications non validées",
   "{input} input / {output} output per 1M tokens + $0.01 per request": "{input} en entrée / {output} en sortie par million de tokens + $0,01 par requête",
-  "● Live": "● En direct",
-  "Answer the agent's question": "Répondre à la question de l'agent"
+  "● Live": "● En direct"
 }

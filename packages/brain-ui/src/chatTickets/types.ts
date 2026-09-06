@@ -287,3 +287,27 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   mergeAction: (n) => `Merge ${n} here`,
   mergedN: (n) => `Merged ${n} chat(s).`,
 };
+
+/**
+ * A host-registered pill in the ChatTicketsPanel's action row (beside Link ticket ·
+ * Agents · People · Merge), with the drawer it opens. This is how a host adds a
+ * rail-level signal of its OWN — the VS Code webview's "Changes (N)" for uncommitted
+ * edits, say — without the shared panel growing a branch per host. Registry DATA, not
+ * a prop-drilled boolean: a host passes the extension only while it has something to
+ * show (the panel renders whatever list it is handed), and the panel owns which one
+ * drawer is open, exactly as for its built-in pills.
+ */
+export interface ChatTicketsExtension {
+  /** Stable key — the open-drawer identity. Must not collide with the built-in pills. */
+  key: string;
+  /** Leading glyph/emoji, matching the built-in pills' visual grammar. */
+  icon?: string;
+  /** The pill's word. */
+  label: string;
+  /** Appended as ` (N)` when > 0, like Agents/People. */
+  count?: number;
+  /** Tooltip / accessible name; defaults to the label. */
+  title?: string;
+  /** The drawer body, rendered inside the rail's standard drawer chrome when open. */
+  render: () => import('react').ReactNode;
+}
