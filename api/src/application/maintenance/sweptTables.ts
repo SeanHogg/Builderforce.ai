@@ -29,6 +29,7 @@
 import { and, eq, isNotNull, lt, or } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
+import { rollUpToolAudit, TOOL_AUDIT_ROLLUP_AFTER_DAYS } from './toolAuditRollup';
 import {
   activitySignals,
   apiErrorLog,
@@ -45,6 +46,7 @@ import {
   prReconciliationItems,
   prReconciliationRuns,
   qaJourneyEvents,
+  toolAuditDaily,
   toolAuditEvents,
 } from '../../infrastructure/database/schema';
 
@@ -95,6 +97,35 @@ export interface SweptTable {
     /** What the payload is and why nothing needs it past the window. */
     rationale: string;
     /** Blank the payload on rows older than `cutoff`, leaving the row itself intact. */
+    run: (db: Db, cutoff: Date) => Promise<unknown>;
+  };
+  /**
+   * Optional GRAIN-level retention — the third and last stage.
+   *
+   * WHY A THIRD KNOB. `redact` shrinks a row and `purge` deletes it, and on
+   * `tool_audit_events` neither could touch the actual cost. Redaction already took it
+   * from 298 MB to 176 MB and then stopped, because what remained was 665,010 NARROW
+   * rows: the cost was the row COUNT, and the count could not come down while the 90-day
+   * evidence window required the rows to exist.
+   *
+   * A rollup resolves that by changing what "the row" means. Every figure the consumers
+   * compute is a sum over a handful of dimensions, so a day of calls folded to one row
+   * per (dimension set) preserves all of them — measured 170:1 — and the fold is itself
+   * an audit artifact: this agent called this tool this many times on this day. What is
+   * lost is the ability to cite ONE call.
+   *
+   * ORDERING IS THE SAFETY PROPERTY: `redact.afterDays` < `rollup.afterDays` <
+   * `retentionDays`. A row is folded only after its payload has already been blanked, so
+   * the fold discards a row with nothing left in it but the dimensions the tally keeps.
+   * `retentionPurge.test.ts` enforces the chain.
+   */
+  rollup?: {
+    /** Days before rows are folded to a coarser grain — must be > `redact.afterDays`
+     *  and < `retentionDays`. */
+    afterDays: number;
+    /** What grain the fold lands on and which figures survive it unchanged. */
+    rationale: string;
+    /** Fold rows older than `cutoff` into their summary relation and remove them. */
     run: (db: Db, cutoff: Date) => Promise<unknown>;
   };
 }
@@ -167,7 +198,9 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     rationale:
       'Agent tool-audit timeline. The 90d window is NOT arbitrary and must not be shortened to '
       + 'save space: it is the window the SOC 2 evidence export reads (`insights/complianceInsights.ts` '
-      + '→ `buildEvidencePack`, `parseDays(…, 90)`). Shrink the ROW instead — see `redact` below.',
+      + '→ `buildEvidencePack`, `parseDays(…, 90)`). Shrink the ROW instead (`redact`), then the '
+      + 'GRAIN (`rollup`) — both below. In practice `rollup` at 45d is what bounds this relation and '
+      + 'this window is the backstop that still holds if a fold ever fails.',
     purge: (db, cutoff) => db.delete(toolAuditEvents).where(acrossTenants(toolAuditEvents, 'scheduled_sweep', lt(toolAuditEvents.createdAt, cutoff))),
     redact: {
       afterDays: 30,
@@ -189,6 +222,29 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
           ),
         )),
     },
+    rollup: {
+      afterDays: TOOL_AUDIT_ROLLUP_AFTER_DAYS,
+      rationale:
+        'Folds a day of tool calls to one row per (tenant, day, tool, category, agent) in '
+        + '`tool_audit_daily`. That is exactly the grain the compliance summary and the evidence '
+        + 'pack aggregate to, so volume, sensitive-action count, the per-tool/per-category/per-agent '
+        + 'breakdowns and duration all come out unchanged — measured 170:1 in production '
+        + '(655,700 rows → 3,859 tallies). What it gives up is citing ONE call older than 45 days, '
+        + 'by which point `redact` has already emptied that row of everything but its dimensions.',
+      run: (db, cutoff) => rollUpToolAudit(db, cutoff),
+    },
+  },
+  {
+    relation: 'tool_audit_daily',
+    connections: ['primary'],
+    retentionDays: 400,
+    rationale:
+      'The compliance record `tool_audit_events` becomes at 45 days. Retained far LONGER than its '
+      + 'source on purpose — a full annual audit period plus the lookback an auditor asks for — '
+      + 'which is affordable precisely because it is ~4k rows per quarter rather than 665k. It is in '
+      + 'this registry for the vacuum half as much as the purge: unlike every other member it is '
+      + 'UPDATEd in place (a re-fold adds to a tally), so it accrues dead tuples without the tuning.',
+    purge: (db, cutoff) => db.delete(toolAuditDaily).where(acrossTenants(toolAuditDaily, 'scheduled_sweep', lt(toolAuditDaily.createdAt, cutoff))),
   },
   {
     relation: 'pr_reconciliation_items',

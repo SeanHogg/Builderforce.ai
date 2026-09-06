@@ -35,6 +35,19 @@ export async function runRetentionPurge(env: Env, now: number = Date.now()): Pro
   const dbFor = (connection: 'primary' | 'transactional'): Db => (connection === 'primary' ? db : transactionalDb);
 
   const targets: Array<{ name: string; run: () => Promise<unknown> }> = [
+    // Grain-level retention, FIRST — and the order is load-bearing, not tidiness. A
+    // rollup folds a row into a summary and then deletes it; a purge deletes it
+    // outright. Both claim rows past their window, so whichever runs first decides
+    // whether that history survives as a tally or not at all. Running the purge first
+    // would silently drop every row that was already past `retentionDays` when the
+    // rollup was introduced — which on `tool_audit_events` was the oldest third of the
+    // relation, exactly the backlog the fold exists to preserve.
+    ...SWEPT_TABLES.flatMap((table) => (table.rollup
+      ? table.connections.map((connection) => ({
+        name: `${table.relation}.rollup@${connection}`,
+        run: () => table.rollup!.run(dbFor(connection), cutoff(now, table.rollup!.afterDays)),
+      }))
+      : [])),
     // One target per (table, endpoint): a relation that exists on both databases is
     // purged on both, or the copy on the endpoint that lost its writer is never swept.
     ...SWEPT_TABLES.flatMap((table) => table.connections.map((connection) => ({
