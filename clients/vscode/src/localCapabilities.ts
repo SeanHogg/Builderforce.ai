@@ -15,7 +15,7 @@
 
 import * as fs from "fs/promises";
 import * as path from "path";
-import { exec } from "child_process";
+import { exec, execFile } from "child_process";
 import { promisify } from "util";
 import { filterByGlob, applyStringEdit, normalizeScopeDir } from "@builderforce/agent-tools";
 // The ONE workspace-containment resolver, shared with the agent-runtime Node provider.
@@ -37,6 +37,7 @@ import type {
 import { needsPosixShell, findBash, posixShellOption } from "./posixShell";
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // Bound the bytes pulled off disk per read. The shared `read_file` tool paginates the
 // returned content into line windows, and an oversized file returns a truncated PREFIX
@@ -74,6 +75,18 @@ export const LOCAL_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   // a surface may push to a remote is a different question from whether it has a shell.
   "git.write",
 ]);
+
+/**
+ * The pattern `search_code` scans with: the query as a regex when it is one, else the
+ * same text escaped and matched literally. Exported for the guard test.
+ */
+export function compileSearchPattern(query: string): RegExp {
+  try {
+    return new RegExp(query, "i");
+  } catch {
+    return new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  }
+}
 
 function clamp(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max)}\n…(${text.length - max} more chars truncated)`;
@@ -176,12 +189,11 @@ export function buildLocalCapabilityProvider(root: string): CapabilityProvider {
       }
     },
     async searchCode(query: string, scope?: string): Promise<RepoSearchResult> {
-      let re: RegExp;
-      try {
-        re = new RegExp(query, "i");
-      } catch (e) {
-        return { ok: false, query, error: `invalid regex: ${e instanceof Error ? e.message : String(e)}` };
-      }
+      // A query that is not a valid regex is searched LITERALLY rather than refused. The
+      // model reaches for this tool with text it just read — `?task=`, `foo(bar`,
+      // `a[0]` — and "invalid regex: Nothing to repeat" made it retry with the same
+      // words for a whole turn instead of getting its answer.
+      const re = compileSearchPattern(query);
       // Optional subdirectory scope: on a big monorepo an unscoped walk can hit the
       // file cap before it reaches the relevant subtree, so the model can narrow here.
       let start = rootResolved;
@@ -283,13 +295,23 @@ export function buildLocalCapabilityProvider(root: string): CapabilityProvider {
         };
       }
       try {
-        const { stdout, stderr } = await execAsync(command, {
-          cwd: rootResolved,
-          timeout: RUN_TIMEOUT_MS,
-          maxBuffer: RUN_MAX_BUFFER,
-          windowsHide: true,
-          ...posixShellOption(command),
-        });
+        // A POSIX script goes to bash EXPLICITLY (`bash -c <script>`), not through the
+        // platform shell with an override: the one thing that must not vary between
+        // machines is which interpreter parses `set -e`. A one-liner keeps the default.
+        const bash = posixShellOption(command).shell;
+        const { stdout, stderr } = bash
+          ? await execFileAsync(bash, ["-c", command], {
+              cwd: rootResolved,
+              timeout: RUN_TIMEOUT_MS,
+              maxBuffer: RUN_MAX_BUFFER,
+              windowsHide: true,
+            })
+          : await execAsync(command, {
+              cwd: rootResolved,
+              timeout: RUN_TIMEOUT_MS,
+              maxBuffer: RUN_MAX_BUFFER,
+              windowsHide: true,
+            });
         const out = [stdout, stderr].filter((s) => s && s.trim()).join("\n").trim();
         return { ok: true, exitCode: 0, stdout: clamp(out || "(no output)", RUN_MAX_OUTPUT) };
       } catch (e) {

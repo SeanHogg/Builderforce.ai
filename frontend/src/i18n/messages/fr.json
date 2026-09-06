@@ -10007,6 +10007,7 @@
         "ariaLabel": "Activité en cours"
       },
       "thoughtFor": "A réfléchi pendant {duration}",
+      "thought": "Réflexion",
       "you": "Vous",
       "assistant": "BuilderForce",
       "input": "Entrée",
@@ -19430,6 +19431,7 @@
     "noObjectsConnected": "Aucun autre objet connecté pour l’instant.",
     "tokensSpent": "{count} jetons",
     "thoughtFor": "A réfléchi pendant {duration}",
+    "thought": "Réflexion",
     "ranActions": "{count} actions",
     "brainPhase": {
       "thinking": "Réflexion…",

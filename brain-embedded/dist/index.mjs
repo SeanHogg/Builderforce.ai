@@ -768,6 +768,14 @@ function getLastResolvedModel() {
   return lastResolvedModel;
 }
 
+// src/stableStringify.ts
+function stableStringify(value) {
+  if (value == null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  const o = value;
+  return `{${Object.keys(o).sort().map((k) => `${JSON.stringify(k)}:${stableStringify(o[k])}`).join(",")}}`;
+}
+
 // src/mcpCatalog.ts
 var CREATE_DEDUPE_MS = 8e3;
 var recentCreates = /* @__PURE__ */ new Map();
@@ -782,12 +790,6 @@ function withObservedModel(tool, args) {
   const supplied = args ?? {};
   if (typeof supplied.model === "string" && supplied.model.trim()) return args;
   return { ...supplied, model: observed };
-}
-function stableStringify(value) {
-  if (value == null || typeof value !== "object") return JSON.stringify(value) ?? "null";
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-  const o = value;
-  return `{${Object.keys(o).sort().map((k) => `${JSON.stringify(k)}:${stableStringify(o[k])}`).join(",")}}`;
 }
 function isCreateTool(name, tool) {
   return /(^|_)create($|_)/.test(name) || tool.endsWith(".create");
@@ -1721,7 +1723,12 @@ var CODE_CHANGE_TOOLS = /* @__PURE__ */ new Set([
   "edit_file",
   "delete_file"
 ]);
-var UNSCOPED_MUTATION_TOOLS = /* @__PURE__ */ new Set(["run_command"]);
+var UNSCOPED_MUTATION_TOOLS = /* @__PURE__ */ new Set([
+  "run_command",
+  "git_sync_latest",
+  "git_undo",
+  "git_redo"
+]);
 function isLocalWorkspaceTool(name) {
   return LOCAL_WORKSPACE_TOOLS.has(name);
 }
@@ -2343,6 +2350,15 @@ function ratedTurnContext(messages, messageId) {
   };
 }
 
+// src/runDriver.ts
+var installed = null;
+function installRunDriver(driver) {
+  installed = driver;
+}
+function getRunDriver() {
+  return installed;
+}
+
 // src/selectTools.ts
 var DEFAULT_TOOL_LIMIT = 64;
 var STOP_WORDS = /* @__PURE__ */ new Set([
@@ -2627,14 +2643,29 @@ function shippedToBaseBranch(events) {
 var REVISIT_NUDGE_AT = 3;
 var REVISIT_HARD_AT = 5;
 var MAX_REMEMBERED_ARGS = 8;
-var ReadCoverage = class {
+var ReadCoverage = class _ReadCoverage {
   visits = /* @__PURE__ */ new Map();
+  /** Successful reads by `${tool}:${canonical args}` — the exact-repeat guard. */
+  exact = /* @__PURE__ */ new Map();
+  static exactKey(tool, args) {
+    return `${tool}:${stableStringify(args ?? {})}`;
+  }
   /**
-   * Record a read and return the resulting visit, or null when the call names no
-   * target (nothing to be circling around). `args` is the parsed argument object.
+   * Has this exact read — same tool, same arguments in any key order — already
+   * SUCCEEDED this run, with nothing since that could have changed its answer? The run
+   * loop answers such a call with a stub instead of re-running it.
+   */
+  isRepeat(tool, args) {
+    return this.exact.has(_ReadCoverage.exactKey(tool, args));
+  }
+  /**
+   * Record a SUCCESSFUL read. Arms the exact-repeat guard for it, and returns the
+   * resulting target visit — or null when the call names no target (nothing to be
+   * circling around; the exact guard still applies).
    */
   record(tool, args) {
-    const target = activityTarget(args);
+    const target = activityTarget(args) ?? null;
+    this.exact.set(_ReadCoverage.exactKey(tool, args), { tool, target });
     if (!target) return null;
     const key = `${tool}:${target}`;
     const existing = this.visits.get(key);
@@ -2656,31 +2687,43 @@ var ReadCoverage = class {
     return existing;
   }
   /**
-   * A mutation makes a re-read of WHAT IT CHANGED legitimate — that read returns
-   * genuinely new information, and nagging about it would punish exactly the right
-   * behaviour. So the tally for that target is dropped.
+   * A non-read call has run. Forget exactly the reads it could have changed — no more,
+   * no less — for BOTH guards:
    *
-   * It says nothing about any OTHER target, and treating it as if it did is what made
-   * this guard almost inert. Clearing the whole map on every non-read call meant a
-   * single `edit_file`, ticket write, git status or failed dispatch wiped the history
-   * of every file in the run — and in a run that interleaves reads with platform
-   * writes, the counter never reached three. Measured on the run this was built for:
-   * one CSS file read 14 times and its component 13, across 78 calls, with the
-   * advisory firing on neither.
-   *
-   * A tool that can touch arbitrary files (`run_command` — a codemod, a formatter, a
-   * checkout) is the one honest exception: the answer to "what did that change?" is
-   * unknown, so everything is invalidated.
+   * - A tool whose blast radius is unknown (`run_command`, a base-branch merge, an
+   *   undo) forgets everything: the honest answer to "what did that touch?" is "anything".
+   * - A file write/edit/delete forgets its own target, across every tool that reads it —
+   *   `read_file` and `search_code` on one path are the same stale picture. A re-read of
+   *   what was just changed is genuinely new information; nagging about it would punish
+   *   exactly the right behaviour. It forgets NOTHING about other files: clearing the
+   *   whole tally on every non-read call is what once let one CSS file be read 14 times
+   *   with the advisory firing on neither it nor its component.
+   * - The remaining local tools (`git_status`, `git_diff`, `git_commit`, …) change nothing
+   *   a read observes, so they forget nothing.
+   * - Anything else is a platform or MCP call. It may have changed what a PLATFORM read
+   *   returns (a ticket update changes the ticket list), so target-less platform reads
+   *   are forgotten; file reads are not, because a ticket write does not edit source.
    */
   invalidate(tool, args) {
     if (isUnscopedMutationTool(tool)) {
       this.visits.clear();
+      this.exact.clear();
       return;
     }
-    const target = activityTarget(args);
-    if (!target) return;
-    for (const key of [...this.visits.keys()]) {
-      if (key.slice(key.indexOf(":") + 1) === target) this.visits.delete(key);
+    if (isCodeChangeTool(tool)) {
+      const target = activityTarget(args);
+      if (!target) return;
+      for (const key of [...this.visits.keys()]) {
+        if (key.slice(key.indexOf(":") + 1) === target) this.visits.delete(key);
+      }
+      for (const [key, read] of [...this.exact.entries()]) {
+        if (read.target === target) this.exact.delete(key);
+      }
+      return;
+    }
+    if (isLocalWorkspaceTool(tool)) return;
+    for (const [key, read] of [...this.exact.entries()]) {
+      if (!isLocalWorkspaceTool(read.tool)) this.exact.delete(key);
     }
   }
   /** Targets read more than once, most-revisited first — for the run's own reporting. */
@@ -2692,9 +2735,9 @@ function revisitAdvisory(tool, target, visit) {
   if (visit.count < REVISIT_NUDGE_AT) return null;
   const shape = visit.priorArgs.length > 1 ? ` The argument sets you have already used on it: ${visit.priorArgs.map((a) => `\`${a}\``).join(", ")}.` : "";
   if (visit.count >= REVISIT_HARD_AT) {
-    return `STOP RE-READING. This is call ${visit.count} of \`${tool}\` against ${target} in this run, and the previous ${visit.count - 1} results are all still above you in this conversation.${shape} Re-reading it again will return content you already have and will not move the task forward \u2014 this pattern is how a run exhausts its tool budget without producing a single change. Do ONE of these now: (a) if you still need more of the file, request it WHOLE in a single call instead of another window; (b) otherwise stop reading and make the edit, or state plainly what is blocking you. Do not issue another partial read of this target.`;
+    return `STOP RE-READING. This is call ${visit.count} of \`${tool}\` against ${target} in this run, and the previous ${visit.count - 1} results are all still above you in this conversation.${shape} Re-reading it again will return content you already have and will not move the task forward \u2014 this pattern is how a run exhausts its tool budget without producing a single change. Do ONE of these now: (a) if you still need more of the file, continue from the \`offset\` the last result's note gave you and page forward in order \u2014 never re-open a window you already have; (b) otherwise stop reading and make the edit, or state plainly what is blocking you. Do not issue another partial read of this target.`;
   }
-  return `You have now read ${target} ${visit.count} times in this run with \`${tool}\`, and every earlier result is still above you in this conversation.${shape} If you are looking for something you have not found, another window over the same file is unlikely to surface it \u2014 read the file whole in one call, or search for the specific symbol. If you already have what you need, act on it rather than re-reading.`;
+  return `You have now read ${target} ${visit.count} times in this run with \`${tool}\`, and every earlier result is still above you in this conversation.${shape} If you are looking for something you have not found, another window over the same lines is unlikely to surface it \u2014 page forward from the \`offset\` the last result's note gave you, or search for the specific symbol with search_code. If you already have what you need, act on it rather than re-reading.`;
 }
 function withAdvisory(result, advisory) {
   if (result && typeof result === "object" && !Array.isArray(result)) {
@@ -2705,6 +2748,69 @@ ${advisory}` : advisory;
     return { ...result, note };
   }
   return { result, note: advisory };
+}
+
+// src/toolResultBudget.ts
+var MAX_TOOL_RESULT_CHARS = 6e3;
+var READ_FILE_RESULT_CHARS = 16e3;
+var READ_FILE_TOOL = "read_file";
+function isReadFileResult(out) {
+  return !!out && typeof out === "object" && !Array.isArray(out) && out.ok !== false && typeof out.content === "string";
+}
+function withNote(result, advisory) {
+  return advisory ? withAdvisory(result, advisory) : result;
+}
+function trimReadFile(out, advisory) {
+  const lines = out.content.split("\n");
+  const offset = typeof out.offset === "number" && out.offset > 0 ? Math.floor(out.offset) : 1;
+  const totalLines = typeof out.totalLines === "number" && out.totalLines > 0 ? Math.floor(out.totalLines) : offset + lines.length - 1;
+  const alreadyPartial = out.truncated === true;
+  const build = (kept, note) => {
+    const lastLine = offset + kept.length - 1;
+    return withNote(
+      { ...out, content: kept.join("\n"), offset, totalLines, truncated: lastLine < totalLines || alreadyPartial, note },
+      advisory
+    );
+  };
+  const fits = (value) => JSON.stringify(value).length <= READ_FILE_RESULT_CHARS;
+  const whole = withNote({ ...out }, advisory);
+  if (fits(whole)) return { value: whole, truncated: false };
+  const continuation = (lastLine) => `Showing lines ${offset}\u2013${lastLine} of ${totalLines}. This surface returns at most ~${READ_FILE_RESULT_CHARS.toLocaleString()} chars per read, so a large file arrives in several windows \u2014 call read_file again with offset ${lastLine + 1} to continue from exactly where this one stopped. Do not re-request lines you already have.`;
+  let lo = 1;
+  let hi = lines.length;
+  let best = 0;
+  while (lo <= hi) {
+    const mid = lo + hi >> 1;
+    if (fits(build(lines.slice(0, mid), continuation(offset + mid - 1)))) {
+      best = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  if (best === 0) {
+    const head = lines[0].slice(0, Math.max(0, READ_FILE_RESULT_CHARS - 600));
+    const note = `Line ${offset} of ${totalLines} is longer than the ~${READ_FILE_RESULT_CHARS.toLocaleString()}-char read budget; the first ${head.length.toLocaleString()} of its ${lines[0].length.toLocaleString()} chars are shown. Paging by offset cannot reach the rest of this line \u2014 use search_code for the specific symbol instead.`;
+    return { value: withNote({ ...out, content: head, offset, totalLines, truncated: true, note }, advisory), truncated: true };
+  }
+  return { value: build(lines.slice(0, best), continuation(offset + best - 1)), truncated: true };
+}
+function trimToolResult(tool, out, opts = {}) {
+  const bytes = JSON.stringify(out ?? null).length;
+  if (tool === READ_FILE_TOOL && isReadFileResult(out)) {
+    const trimmed = trimReadFile(out, opts.advisory);
+    return { content: JSON.stringify(trimmed.value), bytes, truncated: trimmed.truncated };
+  }
+  const advised = opts.advisory ? withAdvisory(out ?? null, opts.advisory) : out ?? null;
+  const full = JSON.stringify(advised);
+  if (full.length <= MAX_TOOL_RESULT_CHARS) return { content: full, bytes, truncated: false };
+  const itemNote = Array.isArray(out) ? ` The full result had ${out.length} items; re-call this tool with a narrower filter (e.g. status, projectId, or limit) to see specific ones.` : " The full result was large; re-call with a narrower query if you need the elided fields.";
+  const head = JSON.stringify(out ?? null).slice(0, MAX_TOOL_RESULT_CHARS);
+  const marker = `\u2026[truncated ${bytes - MAX_TOOL_RESULT_CHARS} of ${bytes} chars to protect the context window.${itemNote}]`;
+  const content = `${head}
+${marker}${opts.advisory ? `
+${opts.advisory}` : ""}`;
+  return { content, bytes, truncated: true };
 }
 
 // src/turnOptimization.ts
@@ -2763,7 +2869,6 @@ function accrueProviderCap(c, raw) {
   if (next.size !== before) c.providerCap = [...next];
 }
 var HISTORY_TOKEN_BUDGET = 24e3;
-var MAX_TOOL_RESULT_CHARS = 6e3;
 function estimateTokens(chars) {
   return Math.ceil(chars / 4);
 }
@@ -2771,16 +2876,6 @@ function messageTokens(m) {
   let chars = typeof m.content === "string" ? m.content.length : JSON.stringify(m.content ?? "").length;
   if (m.tool_calls) chars += JSON.stringify(m.tool_calls).length;
   return estimateTokens(chars) + 4;
-}
-function trimToolResult(out) {
-  const full = JSON.stringify(out ?? null);
-  const bytes = full.length;
-  if (bytes <= MAX_TOOL_RESULT_CHARS) return { content: full, bytes, truncated: false };
-  const itemNote = Array.isArray(out) ? ` The full result had ${out.length} items; re-call this tool with a narrower filter (e.g. status, projectId, or limit) to see specific ones.` : " The full result was large; re-call with a narrower query if you need the elided fields.";
-  const head = full.slice(0, MAX_TOOL_RESULT_CHARS);
-  const content = `${head}
-\u2026[truncated ${bytes - MAX_TOOL_RESULT_CHARS} of ${bytes} chars to protect the context window.${itemNote}]`;
-  return { content, bytes, truncated: true };
 }
 var MAX_CELLS = 50;
 var MAX_TRACE_EVENTS = 500;
@@ -2814,6 +2909,7 @@ function makeCell() {
     appended: [],
     messagesEpoch: 0,
     listeners: /* @__PURE__ */ new Set(),
+    emitTimer: null,
     abort: null,
     activity: null,
     byoUnresolved: [],
@@ -2845,7 +2941,19 @@ function evictIdleCells(protectId) {
     cells.delete(id);
   }
 }
+var STREAM_EMIT_MS = 32;
+function emitStreaming(c) {
+  if (c.emitTimer) return;
+  c.emitTimer = setTimeout(() => {
+    c.emitTimer = null;
+    emit(c);
+  }, STREAM_EMIT_MS);
+}
 function emit(c) {
+  if (c.emitTimer) {
+    clearTimeout(c.emitTimer);
+    c.emitTimer = null;
+  }
   c.snapshot = {
     running: c.running,
     streamingText: c.streamingText,
@@ -3083,6 +3191,8 @@ function getRunTrace(chatId) {
   return cells.get(chatId)?.trace ?? [];
 }
 function stopRun(chatId) {
+  const driver = getRunDriver();
+  if (driver) return driver.stop(chatId);
   const c = cells.get(chatId);
   if (!c || !c.running) return;
   c.abort?.abort();
@@ -3098,6 +3208,8 @@ function stopRun(chatId) {
 }
 function clearRunError(chatId) {
   if (chatId == null) return;
+  const driver = getRunDriver();
+  if (driver) return driver.clearError(chatId);
   const c = cells.get(chatId);
   if (!c || !c.error) return;
   c.error = "";
@@ -3105,6 +3217,8 @@ function clearRunError(chatId) {
   emit(c);
 }
 function resolveRunConfirm(chatId, ok) {
+  const driver = getRunDriver();
+  if (driver) return driver.confirm(chatId, ok);
   const c = cells.get(chatId);
   if (!c || !c.confirmResolver) return;
   const resolve = c.confirmResolver;
@@ -3113,7 +3227,25 @@ function resolveRunConfirm(chatId, ok) {
   emit(c);
   resolve(ok);
 }
+function applyRemoteRun(chatId, snapshot) {
+  const c = getCell(chatId);
+  if (c.abort) return;
+  c.running = snapshot.running;
+  c.streamingText = snapshot.streamingText;
+  c.error = snapshot.error;
+  c.errorAction = snapshot.errorAction;
+  c.pendingConfirm = snapshot.pendingConfirm;
+  c.messagesEpoch = snapshot.messagesEpoch;
+  c.appended = snapshot.appended;
+  c.trace = snapshot.trace;
+  c.activity = snapshot.activity;
+  c.byoUnresolved = snapshot.byoUnresolved;
+  c.providerCap = snapshot.providerCap;
+  emit(c);
+}
 async function startRun(chatId, req) {
+  const driver = getRunDriver();
+  if (driver) return driver.start(chatId, req);
   const c = getCell(chatId);
   if (c.running) return;
   c.running = true;
@@ -3384,7 +3516,6 @@ ${continuationDirective()}`;
       result: "The user's bare directive was resolved against the previous turn's unfinished proposal, so the run carries that proposal out instead of asking what to fix."
     });
   }
-  const readDedupe = /* @__PURE__ */ new Set();
   const readCoverage = new ReadCoverage();
   let announcementRecoveries = 0;
   let activeModel = model;
@@ -3478,12 +3609,14 @@ ${continuationDirective()}`;
         { messages: working, tools, tool_choice: tools ? "auto" : void 0, model: activeModel, modelStrict: !!activeModel && modelStrict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
         {
           onTextDelta: (d) => {
+            c.streamingText += d;
             if (firstTokenAt === void 0) {
               firstTokenAt = nowMs2();
               c.activity = { phase: "writing", startedAt: Date.now(), step: iter };
+              emit(c);
+              return;
             }
-            c.streamingText += d;
-            emit(c);
+            emitStreaming(c);
           }
         }
       );
@@ -3611,9 +3744,8 @@ ${continuationDirective()}`;
           }
         }
         const isReadTool = isDedupableRead(tc.name);
-        const dedupeKey = `${tc.name}:${tc.args ?? ""}`;
         if (isReadTool) {
-          if (readDedupe.has(dedupeKey)) {
+          if (readCoverage.isRepeat(tc.name, args)) {
             const stub = {
               note: `Duplicate ${tc.name} call \u2014 identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping).`
             };
@@ -3622,7 +3754,6 @@ ${continuationDirective()}`;
             continue;
           }
         } else {
-          readDedupe.clear();
           readCoverage.invalidate(tc.name, args);
         }
         const toolStart = nowMs2();
@@ -3644,13 +3775,12 @@ ${continuationDirective()}`;
         }
         if (isTicketRecordingTool(tc.name)) c.ticketRecorded = true;
         if (runTool) await autoLinkCreatedItem(chatId, c, persistence, runTool, tc.name, out);
-        let modelOut = out;
+        let advisory = null;
         if (isReadTool && !isFailedToolResult(out)) {
           const visit = readCoverage.record(tc.name, args);
           const target = visit ? activityTarget(args) : void 0;
-          const advisory = visit && target ? revisitAdvisory(tc.name, target, visit) : null;
+          advisory = visit && target ? revisitAdvisory(tc.name, target, visit) : null;
           if (advisory) {
-            modelOut = withAdvisory(out, advisory);
             pushTrace(c, {
               ts: nowIso(),
               category: "message",
@@ -3660,7 +3790,7 @@ ${continuationDirective()}`;
             });
           }
         }
-        const trimmedOut = trimToolResult(modelOut ?? null);
+        const trimmedOut = trimToolResult(tc.name, out ?? null, { advisory });
         convo.push({ role: "tool", tool_call_id: tc.id, content: trimmedOut.content });
         pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
@@ -3673,7 +3803,6 @@ ${continuationDirective()}`;
           resultBytes: trimmedOut.bytes,
           truncated: trimmedOut.truncated
         });
-        if (isReadTool && !isFailedToolResult(out)) readDedupe.add(dedupeKey);
         usedTools.add(tc.name);
       }
       continue;
@@ -4962,12 +5091,14 @@ export {
   DEFAULT_TOOL_LIMIT,
   EVERMIND_LEARN_MIN_CHARS,
   LOCAL_WORKSPACE_TOOLS,
+  MAX_TOOL_RESULT_CHARS,
   MODEL_CATEGORIES,
   NEW_CHAT_MODE,
   NOT_STARTED_TASK_STATUSES,
   PMO_FOCUS_PARAM,
   PROJECT_EVERMIND_MODEL_PREFIX,
   PROVENANCE_META_KEY,
+  READ_FILE_RESULT_CHARS,
   RESTING_CHAT_MODE,
   REVISIT_HARD_AT,
   REVISIT_NUDGE_AT,
@@ -4988,6 +5119,7 @@ export {
   activityTone,
   allowanceState,
   announcesUntakenAction,
+  applyRemoteRun,
   artifactRoutePath,
   attachEvermindLearn,
   brainRequestError,
@@ -5040,10 +5172,12 @@ export {
   getGlobalRunState,
   getLastResolvedModel,
   getMcpToolStatus,
+  getRunDriver,
   getRunSnapshot,
   getRunTrace,
   handleRouterCall,
   hasEditIntent,
+  installRunDriver,
   isActivityMessage,
   isChatMode,
   isCodeChangeTool,
@@ -5115,6 +5249,7 @@ export {
   setMcpToolStatus,
   shippedToBaseBranch,
   shortenTarget,
+  stableStringify,
   stallRecoveriesInTrace,
   stallUnrecoveredInTrace,
   startRun,
@@ -5130,6 +5265,7 @@ export {
   toolNamesMentionedIn,
   toolSpecsFor,
   traceWithPersistedSteps,
+  trimToolResult,
   turnInterruption,
   turnOptimizationDirective,
   useBrainActions,

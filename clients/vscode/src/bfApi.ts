@@ -4,6 +4,7 @@ import type {
   EvermindRecallResult,
   EvermindRunHooks,
   MemoryFirstAnswer,
+  BrainMessage,
 } from "@seanhogg/builderforce-brain-embedded";
 import { renderPlatformContextSection, type RunContextEnvelope } from "@builderforce/run-context";
 import { getApiKey, getBaseUrl } from "./gateway";
@@ -794,15 +795,32 @@ export async function appendBrainMessages(
   messages: Array<{ role: string; content: string }>,
 ): Promise<EvermindLearnOutcome | null> {
   if (messages.length === 0) return null;
+  return (await postBrainMessages(secrets, chatId, messages))?.evermindLearn ?? null;
+}
+
+/**
+ * POST turns to a Brain chat and get back the rows the server created, plus the
+ * learn-gate outcome — the ONE write behind both the participant's after-the-fact
+ * persist ({@link appendBrainMessages}) and the host-owned webview run's in-loop
+ * persistence, which needs the created rows to append them to the live transcript.
+ * Best-effort: undefined on any failure, never a throw.
+ */
+export async function postBrainMessages(
+  secrets: vscode.SecretStorage,
+  chatId: number,
+  messages: Array<{ role: string; content: string; metadata?: string }>,
+): Promise<{ messages: BrainMessage[]; evermindLearn?: EvermindLearnOutcome } | undefined> {
   try {
-    const r = await authed<{ evermindLearn?: EvermindLearnOutcome }>(secrets, `/api/brain/chats/${chatId}/messages`, {
-      method: "POST",
-      body: JSON.stringify({ messages }),
-    });
-    return r?.evermindLearn ?? null;
+    const r = await authed<{ messages?: BrainMessage[]; evermindLearn?: EvermindLearnOutcome }>(
+      secrets,
+      `/api/brain/chats/${chatId}/messages`,
+      { method: "POST", body: JSON.stringify({ messages }) },
+    );
+    if (!r) return undefined;
+    return { messages: r.messages ?? [], ...(r.evermindLearn ? { evermindLearn: r.evermindLearn } : {}) };
   } catch {
     /* best-effort persistence — never blocks the chat turn */
-    return null;
+    return undefined;
   }
 }
 

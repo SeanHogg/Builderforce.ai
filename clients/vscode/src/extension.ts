@@ -28,7 +28,8 @@ import { invalidateProjectNames } from "./projectNames";
 import { ProjectsTreeProvider } from "./projectsTree";
 import { SessionsTreeProvider } from "./sessionsTree";
 import { InboxTreeProvider } from "./inboxTree";
-import { AttentionPoller, setLocalChatRuns, onLocalRunsChange, managerAttention } from "./attention";
+import { AttentionPoller, onLocalRunsChange, managerAttention } from "./attention";
+import { createVsCodeRunHost } from "./brainRunHostPorts";
 import { appUrl } from "./auth";
 import { MeetingsController, joinMeetingInBrowser, joinMeetingNative, openMeetingsWeb, type MeetingItem } from "./meetings";
 import { PendingChangesController } from "./pendingChangesTree";
@@ -186,8 +187,8 @@ export function activate(context: vscode.ExtensionContext): void {
       // same map — repaint them on the same signal (no second poller).
       BrainWebview.refreshTabStatus();
     }),
-    // The in-webview Brain loop reports its own running / awaiting chats (the server
-    // can't see them) — repaint the Sessions tree so they light up in lockstep.
+    // The host-owned Brain loop reports its running / awaiting chats (the server can't
+    // see them) — repaint the Sessions tree so they light up in lockstep.
     onLocalRunsChange(() => { tree.refresh(); BrainWebview.refreshTabStatus(); }),
     // Switching the active project re-scopes the attention query.
     onProjectChange(() => attention.refresh()),
@@ -199,7 +200,9 @@ export function activate(context: vscode.ExtensionContext): void {
   // a new/renamed conversation refreshes the Sessions list; a platform-catalog write
   // (task/project/OKR) refreshes Project & Tasks; either may have started/answered a
   // run, so re-poll attention immediately rather than waiting for the next tick.
-  BrainWebview.configure({
+  // The Brain's agent loop runs HERE, in the extension host — a chat tab can be closed
+  // or switched away from while its run carries on (see `brainRunHost.ts`).
+  const runHost = createVsCodeRunHost(context, {
     onChatsChanged: () => { tree.refresh(); attention.refresh(); },
     onPlatformWrite: () => {
       bfApi.invalidateTasks();
@@ -207,11 +210,17 @@ export function activate(context: vscode.ExtensionContext): void {
       attention.refresh();
       void refreshWorkspaceHeader(context);
     },
-    // Merge the webview's in-flight chat runs into the live-status map so a chat
-    // that keeps executing after the user opens a new one still shows a spinner
-    // (or ❓ when paused on a confirm) in the Sessions tree. Keyed by the reporting
-    // panel — with per-session tabs several panels report at once.
-    onLocalRunsChanged: (sourceId, runs) => setLocalChatRuns(sourceId, runs),
+  });
+  context.subscriptions.push({ dispose: () => runHost.dispose() });
+  BrainWebview.configure({
+    runHost,
+    onChatsChanged: () => { tree.refresh(); attention.refresh(); },
+    onPlatformWrite: () => {
+      bfApi.invalidateTasks();
+      projects.refresh();
+      attention.refresh();
+      void refreshWorkspaceHeader(context);
+    },
   });
   projectView = vscode.window.createTreeView("builderforce.project", { treeDataProvider: projects });
   context.subscriptions.push(projectView);

@@ -58,10 +58,13 @@ function promoteSwallowedAnswer(segments) {
   for (const s of thoughts) if (s !== richest) promoted.unshift(s);
   return promoted;
 }
+function answerTextOf(content) {
+  return splitThinkSegments(content).filter((s) => s.kind === "answer").map((s) => s.content).join("\n\n").trim();
+}
 
 // src/Markdown.tsx
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
-var DEFAULT_LABELS = { copy: "Copy", copied: "Copied", apply: "Apply", createFile: "Create file" };
+var DEFAULT_LABELS = { copy: "Copy", copied: "Copied", apply: "Apply", createFile: "Create file", thought: "Thought" };
 function detectPath(code) {
   const first = code.split("\n", 1)[0] ?? "";
   const m = first.match(/(?:\/\/|#|<!--)\s*(?:path|file):\s*([^\s>]+)/i);
@@ -131,7 +134,7 @@ function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateFile, lab
     }
   };
   return /* @__PURE__ */ jsx("div", { className: "bf-md", children: segments.map((segment, index) => segment.kind === "thought" ? /* @__PURE__ */ jsxs("details", { className: "bf-md__think", children: [
-    /* @__PURE__ */ jsx("summary", { children: "Thought" }),
+    /* @__PURE__ */ jsx("summary", { children: lab.thought }),
     /* @__PURE__ */ jsx("div", { className: "bf-md__think-body", children: /* @__PURE__ */ jsx(ReactMarkdown, { remarkPlugins: [remarkGfm], components, children: segment.content }) })
   ] }, `${segment.kind}-${index}`) : /* @__PURE__ */ jsx(ReactMarkdown, { remarkPlugins: [remarkGfm], components, children: segment.content }, `${segment.kind}-${index}`)) });
 }
@@ -575,6 +578,7 @@ var DEFAULT_TIMELINE_LABELS = {
   thinking: "Thinking\u2026",
   live: DEFAULT_LIVE_ACTIVITY_LABELS,
   thoughtFor: "Thought for {duration}",
+  thought: "Thought",
   you: "You",
   assistant: "BuilderForce",
   input: "Input",
@@ -897,6 +901,16 @@ function BrainTimelineInner({
           const card = onAnswerQuestion ? parseAskUser(node.text) : null;
           const bodyText = card ? stripAskUser(node.text) : node.text;
           const prov = parseMessageProvenance(node.message);
+          const answer = answerTextOf(bodyText);
+          if (!answer && bodyText && !card) {
+            return /* @__PURE__ */ jsxs5("li", { className: "bf-tl__item bf-tl__item--thought", children: [
+              /* @__PURE__ */ jsx5("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx5("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("thinking") }) }),
+              /* @__PURE__ */ jsxs5("div", { className: "bf-tl__body bf-tl__thought-line", children: [
+                renderMsg(node.message, "assistant", bodyText),
+                prov && /* @__PURE__ */ jsx5(ProvenanceChip, { prov, labels, identity: modelIdentity })
+              ] })
+            ] }, node.key);
+          }
           return /* @__PURE__ */ jsxs5("li", { className: "bf-tl__item bf-tl__item--assistant", children: [
             /* @__PURE__ */ jsx5("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx5("span", { className: "bf-tl__dot", children: author ? /* @__PURE__ */ jsx5(Avatar, { name: author.name, kind: author.kind, size: 16 }) : dotIcon("assistant") }) }),
             /* @__PURE__ */ jsxs5("div", { className: "bf-tl__body", children: [
@@ -911,22 +925,24 @@ function BrainTimelineInner({
                   anchorId: askUserAnchorId(node.message.id)
                 }
               ),
-              /* @__PURE__ */ jsxs5("div", { className: "bf-tl__actions", children: [
-                /* @__PURE__ */ jsx5(
-                  MessageActions,
-                  {
-                    message: node.message,
-                    role: "assistant",
-                    text: bodyText,
-                    labels,
-                    onReplay: onReplayMessage,
-                    onRate: onRateMessage,
-                    rating: ratings?.[node.message.id]
-                  }
-                ),
-                renderAssistantActions?.(node.message)
-              ] }),
-              prov && /* @__PURE__ */ jsx5(ProvenanceChip, { prov, labels, identity: modelIdentity })
+              /* @__PURE__ */ jsxs5("div", { className: "bf-tl__foot", children: [
+                prov && /* @__PURE__ */ jsx5(ProvenanceChip, { prov, labels, identity: modelIdentity }),
+                /* @__PURE__ */ jsxs5("div", { className: "bf-tl__actions bf-tl__actions--hover", children: [
+                  /* @__PURE__ */ jsx5(
+                    MessageActions,
+                    {
+                      message: node.message,
+                      role: "assistant",
+                      text: answer,
+                      labels,
+                      onReplay: onReplayMessage,
+                      onRate: onRateMessage,
+                      rating: ratings?.[node.message.id]
+                    }
+                  ),
+                  renderAssistantActions?.(node.message)
+                ] })
+              ] })
             ] })
           ] }, node.key);
         }
@@ -1830,6 +1846,24 @@ function resolveRunGate(adapter) {
   return { allowed: probe.allowed, reason: probe.reason };
 }
 
+// src/chatTickets/aggregateTicketHealth.ts
+function aggregateTicketHealth(tickets) {
+  let done = 0;
+  let total = 0;
+  let sumPct = 0;
+  let weightedPct = 0;
+  for (const tk of tickets) {
+    const pct2 = Number.isFinite(tk.progressPct) ? tk.progressPct : 0;
+    const weight = Number.isFinite(tk.total) && tk.total > 0 ? tk.total : 0;
+    done += Number.isFinite(tk.done) ? tk.done : 0;
+    total += weight;
+    sumPct += pct2;
+    weightedPct += pct2 * weight;
+  }
+  const pct = total > 0 ? Math.round(weightedPct / total) : tickets.length ? Math.round(sumPct / tickets.length) : 0;
+  return { pct, done, total };
+}
+
 // src/chatTickets/types.ts
 var TICKET_KINDS = ["task", "epic", "gap", "objective", "initiative", "portfolio", "roadmap", "spec", "retro", "poker"];
 var RUNNABLE_KINDS = ["task", "epic", "gap"];
@@ -1966,16 +2000,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       setBusy(false);
     }
   };
-  const agg = useMemo5(() => {
-    let done = 0, total = 0, sumPct = 0;
-    for (const tk of tickets) {
-      done += tk.done;
-      total += tk.total;
-      sumPct += tk.progressPct;
-    }
-    const pct = total > 0 ? Math.round(done / total * 100) : tickets.length ? Math.round(sumPct / tickets.length) : 0;
-    return { pct, done, total };
-  }, [tickets]);
+  const agg = useMemo5(() => aggregateTicketHealth(tickets), [tickets]);
   const isCollapsed = tickets.length > 0 && (collapsed ?? tickets.length > COLLAPSE_THRESHOLD);
   const toggleCollapsed = () => {
     userCollapsed.current = true;
@@ -4914,6 +4939,7 @@ export {
   Sunburst,
   TICKET_KINDS,
   activeModelKey2 as activeModelKey,
+  answerTextOf,
   askUserAnchorId,
   attachmentsOf,
   avatarColor,

@@ -92,3 +92,21 @@ function promoteSwallowedAnswer(segments: ThinkSegment[]): ThinkSegment[] {
   for (const s of thoughts) if (s !== richest) promoted.unshift(s);
   return promoted;
 }
+
+/**
+ * The reply WITHOUT its reasoning: every `answer` segment joined back together.
+ *
+ * Empty when the turn was reasoning only — a model that thought and then called a
+ * tool without saying anything to the user. The transcript uses that emptiness to
+ * decide what a turn deserves: a thought-only turn is a single collapsed line with
+ * no author header, no copy / send-again / rating row, and no attribution chip,
+ * while copy and replay on a real reply hand back the answer alone, never the
+ * `<think>` scaffolding around it.
+ */
+export function answerTextOf(content: string): string {
+  return splitThinkSegments(content)
+    .filter((s) => s.kind === 'answer')
+    .map((s) => s.content)
+    .join('\n\n')
+    .trim();
+}

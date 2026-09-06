@@ -50,9 +50,9 @@ function strongestState(...states: Array<BfAttentionState | undefined>): BfAtten
   return undefined;
 }
 
-/** Replace ONE source's webview-local run set (chat ids that panel's Brain loop is
- *  running / paused on). Pass an empty set to retire a source (e.g. its panel
- *  closed). Fires {@link onLocalRunsChange} only when that source's set changes. */
+/** Replace ONE source's editor-local run set (chat ids the host-owned Brain loop is
+ *  running / paused on — runs the server cannot see). Pass an empty set to retire a
+ *  source. Fires {@link onLocalRunsChange} only when that source's set changes. */
 export function setLocalChatRuns(sourceId: string, runs: { running: number[]; awaiting: number[] }): void {
   const next = new Map<number, BfAttentionState>();
   for (const id of runs.running) next.set(id, "running");

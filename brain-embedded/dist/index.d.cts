@@ -2499,12 +2499,47 @@ declare function clearRunError(chatId: number | null): void;
 /** Resolve a pending human-in-the-loop confirmation. No-op if none is pending. */
 declare function resolveRunConfirm(chatId: number, ok: boolean): void;
 /**
+ * Mirror a run that is executing in ANOTHER process into this store's cell, so every
+ * local reader — the conversation hook, the timeline, `getGlobalRunState` — sees it
+ * exactly as it would see an in-process run. The only writer of a cell that no local
+ * loop owns; a locally running cell is never overwritten (the local loop is the
+ * truth for it). `trace` is taken as sent: the remote side decides how much of its
+ * bounded trace to ship (see the VS Code host's delta relay).
+ */
+declare function applyRemoteRun(chatId: number, snapshot: BrainRunSnapshot): void;
+/**
  * Start (or no-op join) the agent loop for a chat. Single-flight per chat: if a
  * run is already in flight the call returns immediately, so a second mounted
  * Brain instance can never spawn a duplicate loop. The claim is synchronous
  * (set before any await), so two callers in the same tick can't both pass it.
  */
 declare function startRun(chatId: number, req: BrainRunRequest): Promise<void>;
+
+/**
+ * The run DRIVER seam: who actually executes a Brain run.
+ *
+ * By default a run executes in the process that called `startRun` — the module-level
+ * store in `brainRunStore.ts` IS the loop. A host whose UI process is disposable (the
+ * VS Code webview: closing the tab destroys its JavaScript context and, with it, any
+ * loop running inside it) installs a driver that hands the run to a process that
+ * outlives the view — the extension host — and MIRRORS that process's run state back
+ * into this store with {@link applyRemoteRun}, so every consumer (`useBrainConversation`,
+ * the timeline, the cross-chat indicator) keeps reading the same store it always did.
+ *
+ * The seam is deliberately four verbs: the store's own public API for a run, minus
+ * reads. Reads stay local, fed by the mirror.
+ */
+
+interface BrainRunDriver {
+    /** Execute a run elsewhere. Resolves when that run has settled, like `startRun`. */
+    start(chatId: number, req: BrainRunRequest): Promise<void>;
+    stop(chatId: number): void;
+    confirm(chatId: number, ok: boolean): void;
+    clearError(chatId: number): void;
+}
+/** Route this process's runs through `driver`; `null` restores in-process execution. */
+declare function installRunDriver(driver: BrainRunDriver | null): void;
+declare function getRunDriver(): BrainRunDriver | null;
 
 /**
  * A size budget for a copied triage report.
@@ -2633,10 +2668,13 @@ declare function shippedToBaseBranch(events: BrainTraceEvent[]): boolean;
 /**
  * The loop-breaker for re-reading.
  *
- * The run loop already suppresses an EXACT repeat of a read — same tool, same
- * arguments — and returns a stub telling the model to reuse the earlier result.
- * That catches a model that asks the identical question twice. It does not catch
- * the failure that actually burns runs:
+ * Two guards, one tally:
+ *
+ * 1. The EXACT repeat — same tool, same arguments. The run loop answers it with a stub
+ *    telling the model to reuse the earlier result. That catches a model that asks the
+ *    identical question twice.
+ *
+ * 2. The CIRCLING read — the failure that actually burns runs:
  *
  *     read_file(LandingCanvasHero.module.css, offset 1)
  *     read_file(LandingCanvasHero.module.css, offset 140)
@@ -2646,16 +2684,24 @@ declare function shippedToBaseBranch(events: BrainTraceEvent[]): boolean;
  *     read_file(LandingCanvasHero.module.css, offset 340)
  *     read_file(LandingCanvasHero.module.css, offset 440)
  *
- * Seven DIFFERENT calls, so the exact-repeat guard stays silent for all of them,
- * while the model shuffles a window up and down one 566-line file until the tool
- * budget is gone and the user's actual request — a one-line CSS change — is never
- * made. Every existing signal scores that run clean.
+ *    Seven DIFFERENT calls, so the exact-repeat guard stays silent for all of them,
+ *    while the model shuffles a window up and down one 566-line file until the tool
+ *    budget is gone and the user's actual request — a one-line CSS change — is never
+ *    made. Every existing signal scores that run clean.
  *
  * The fix is not to block the read: a legitimate second pass over a large file is
  * normal, and refusing it would break real work. The fix is to make the model AWARE
  * that it is circling, at the only moment it can act on that — inside the tool
  * result it is about to read — and to tell it exactly what it has already been
  * shown, so "I'll just look again" stops being the cheapest next move.
+ *
+ * Both guards live in ONE object because they share the one question that decides
+ * whether they are still valid: "did something just change what a re-read would see?"
+ * They used to be two structures with two answers. The exact-repeat set was cleared
+ * wholesale by EVERY non-read call — a ticket write, a git status, a failed dispatch —
+ * so a run that interleaves reads with platform writes never suppressed anything, while
+ * the circling tally had already learned to forget only the target an edit touched.
+ * Now one `invalidate` speaks for both.
  *
  * Pure and self-contained: a small tally with one method to record a visit and one
  * to describe it. No clock, no I/O.
@@ -2678,32 +2724,43 @@ interface ReadVisit {
     priorArgs: string[];
 }
 /**
- * Per-run tally of which targets have been read and how. One instance per run;
- * the run loop owns it and drops it when the run ends.
+ * Per-run tally of which reads have been made, which targets they were about, and how
+ * often. One instance per run; the run loop owns it and drops it when the run ends.
  */
 declare class ReadCoverage {
     private readonly visits;
+    /** Successful reads by `${tool}:${canonical args}` — the exact-repeat guard. */
+    private readonly exact;
+    private static exactKey;
     /**
-     * Record a read and return the resulting visit, or null when the call names no
-     * target (nothing to be circling around). `args` is the parsed argument object.
+     * Has this exact read — same tool, same arguments in any key order — already
+     * SUCCEEDED this run, with nothing since that could have changed its answer? The run
+     * loop answers such a call with a stub instead of re-running it.
+     */
+    isRepeat(tool: string, args: unknown): boolean;
+    /**
+     * Record a SUCCESSFUL read. Arms the exact-repeat guard for it, and returns the
+     * resulting target visit — or null when the call names no target (nothing to be
+     * circling around; the exact guard still applies).
      */
     record(tool: string, args: unknown): ReadVisit | null;
     /**
-     * A mutation makes a re-read of WHAT IT CHANGED legitimate — that read returns
-     * genuinely new information, and nagging about it would punish exactly the right
-     * behaviour. So the tally for that target is dropped.
+     * A non-read call has run. Forget exactly the reads it could have changed — no more,
+     * no less — for BOTH guards:
      *
-     * It says nothing about any OTHER target, and treating it as if it did is what made
-     * this guard almost inert. Clearing the whole map on every non-read call meant a
-     * single `edit_file`, ticket write, git status or failed dispatch wiped the history
-     * of every file in the run — and in a run that interleaves reads with platform
-     * writes, the counter never reached three. Measured on the run this was built for:
-     * one CSS file read 14 times and its component 13, across 78 calls, with the
-     * advisory firing on neither.
-     *
-     * A tool that can touch arbitrary files (`run_command` — a codemod, a formatter, a
-     * checkout) is the one honest exception: the answer to "what did that change?" is
-     * unknown, so everything is invalidated.
+     * - A tool whose blast radius is unknown (`run_command`, a base-branch merge, an
+     *   undo) forgets everything: the honest answer to "what did that touch?" is "anything".
+     * - A file write/edit/delete forgets its own target, across every tool that reads it —
+     *   `read_file` and `search_code` on one path are the same stale picture. A re-read of
+     *   what was just changed is genuinely new information; nagging about it would punish
+     *   exactly the right behaviour. It forgets NOTHING about other files: clearing the
+     *   whole tally on every non-read call is what once let one CSS file be read 14 times
+     *   with the advisory firing on neither it nor its component.
+     * - The remaining local tools (`git_status`, `git_diff`, `git_commit`, …) change nothing
+     *   a read observes, so they forget nothing.
+     * - Anything else is a platform or MCP call. It may have changed what a PLATFORM read
+     *   returns (a ticket update changes the ticket list), so target-less platform reads
+     *   are forgotten; file reads are not, because a ticket write does not edit source.
      */
     invalidate(tool: string, args: unknown): void;
     /** Targets read more than once, most-revisited first — for the run's own reporting. */
@@ -2720,16 +2777,96 @@ declare class ReadCoverage {
  * Written as a diagnosis plus a next move, not a scolding: a model told only "you
  * are repeating yourself" tends to repeat itself apologetically. It is told what it
  * has already been given, why looking again will not help, and which of the two
- * things it should do instead — read the file WHOLE, or act on what it has.
+ * things it should do instead — page FORWARD through the rest of the file from the
+ * offset its last result named, or act on what it has. (Not "read it whole in one
+ * call": a large file is delivered in budgeted windows, so that advice asked for
+ * something the transcript could never carry.)
  */
 declare function revisitAdvisory(tool: string, target: string, visit: ReadVisit): string | null;
 /**
  * Attach an advisory to a tool result without disturbing its shape. Object results
- * gain a `note` field (the same channel the run loop's dedupe stub already uses, so
- * the model meets one convention rather than two); anything else is wrapped so the
- * original value survives intact under `result`.
+ * gain a `note` field (the same channel the tools' own guidance uses, so the model
+ * meets one convention rather than two); anything else is wrapped so the original
+ * value survives intact under `result`.
  */
 declare function withAdvisory(result: unknown, advisory: string): unknown;
+
+/**
+ * What a tool result costs the MODEL transcript — and how it is cut down when it costs
+ * too much.
+ *
+ * The full result always survives in the trace (timeline + triage copy); only the copy
+ * the model re-reads every turn is bounded. The generic rule is a head slice with a
+ * marker, sized for the list-shaped platform results that first flooded the window (a
+ * `tasks.list` of 352 rows). That rule was also applied to `read_file`, and it is why a
+ * coding run could not make an edit:
+ *
+ *   `read_file` returns up to 2,000 lines, then `{content, truncated, totalLines,
+ *   offset, note}` — the continuation fields AFTER the content. Slicing the JSON at
+ *   6,000 chars cut mid-line and, because they sit at the end, deleted every one of
+ *   those fields. The model was handed ~10% of a 54 KB service file with no line
+ *   number for where it stopped, no total, and no `offset` to continue from — while the
+ *   re-read guard told it to "request the file WHOLE in a single call", which this very
+ *   cap made impossible. Measured on chat #99: one file read six times, 45% of all
+ *   calls revisiting ground already covered, nine results truncated before the model saw
+ *   them, and the requested change never made.
+ *
+ * So a file read is trimmed the way the tool itself pages: at a LINE boundary, with the
+ * structured fields rewritten to describe exactly what was returned and the precise
+ * `offset` that continues it. A large file now costs several honest windows instead of
+ * one dishonest one — and the model can page forward instead of guessing.
+ *
+ * Pure: no I/O, no clock. Owned here so the run loop states a budget rather than
+ * implementing one.
+ */
+/** Per-result cap (chars of JSON) for every tool that is not a file read. */
+declare const MAX_TOOL_RESULT_CHARS = 6000;
+/**
+ * Per-result cap for `read_file`. Larger than the generic cap on purpose: reading source
+ * is what a coding surface DOES, and a window this size (~4k tokens) still leaves the
+ * 24k-token history budget room for several reads before compaction. Under it a 566-line
+ * CSS module arrives in two windows; the service file above in four — each one saying
+ * where the next begins.
+ */
+declare const READ_FILE_RESULT_CHARS = 16000;
+interface TrimmedToolResult {
+    /** The string to store as the tool message the model sees. */
+    content: string;
+    /** Size of the ORIGINAL result's JSON — what the diagnostics report as result bytes. */
+    bytes: number;
+    /** True when the model was handed less than the tool returned. */
+    truncated: boolean;
+}
+interface TrimOptions {
+    /**
+     * A loop-guard advisory to attach to the result (the re-read warning). Attached AFTER
+     * trimming so the trim can never delete it, and folded into the same `note` field the
+     * tools' own guidance uses so the model meets one convention.
+     */
+    advisory?: string | null;
+}
+/**
+ * Trim a tool result to what the model transcript can afford.
+ *
+ * `read_file` successes are paged by line (see {@link trimReadFile}); every other
+ * result gets a head slice and an explicit marker so the model knows data was elided
+ * and can re-call the tool with a narrower filter/limit instead of assuming it saw
+ * everything. `bytes` is always the ORIGINAL size — the diagnostics report it.
+ */
+declare function trimToolResult(tool: string, out: unknown, opts?: TrimOptions): TrimmedToolResult;
+
+/**
+ * Deterministic JSON — object keys sorted at every depth — for anything that is KEYED
+ * on a tool call's arguments.
+ *
+ * Two places in this package fingerprint a call by its arguments: the MCP relay's
+ * create-dedupe (`mcpCatalog.ts`) and the run loop's read-repeat guard
+ * (`readCoverage.ts`). Object key order can differ between two calls a model means
+ * identically (`{path, offset}` vs `{offset, path}`), and `JSON.stringify` preserves
+ * insertion order, so a naive fingerprint sees two different calls. Both consumers need
+ * the same answer to "are these the same arguments?", so the canonicalisation lives once.
+ */
+declare function stableStringify(value: unknown): string;
 
 /**
  * CHAT ACTIVITY — the structured contract behind a run milestone / agent dispatch line.
@@ -3251,9 +3388,12 @@ declare const CODE_CHANGE_TOOLS: ReadonlySet<string>;
 /**
  * Local tools that can change ARBITRARY files — a shell command may run a codemod, a
  * formatter, `git checkout`, or nothing at all, and the call site cannot tell which.
- * Consumers that invalidate per-target state (see `readCoverage`) must treat these as
- * invalidating everything, because the honest answer to "what did that touch?" is
- * "unknown".
+ * The three git tools that REWRITE the working tree belong here for the same reason: a
+ * merge of the base branch, an undo or a redo can change any file in the checkout, and
+ * name none of them. Consumers that invalidate per-target state (see `readCoverage`)
+ * must treat these as invalidating everything, because the honest answer to "what did
+ * that touch?" is "unknown". `git_commit` / `git_push` / `open_pull_request` are NOT
+ * here: they move work out of the tree without changing a byte a read would see.
  */
 declare const UNSCOPED_MUTATION_TOOLS: ReadonlySet<string>;
 declare function isLocalWorkspaceTool(name: string): boolean;
@@ -4341,4 +4481,4 @@ declare function pmoFocusDomId(kind: string, id: string): string;
  */
 declare function artifactRoutePath(kind: string, ref: string | null | undefined, projectId?: number | null): string;
 
-export { ADDRESSED_TO_META_KEY, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArtifactKind, type AssembledToolCall, BASE_BRANCHES, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunActivity, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type CompletionMetadata, type ComposerDirectiveOptions, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GitShortStatus, type GlobalRunState, type ImageUrlContentPart, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MentionToken, type MessageProvenance, type ModelCategory, type ModelChoiceLabels, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, PMO_FOCUS_PARAM, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PersistedStep, type PreparedImage, type ProvenanceAccount, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RepeatedTarget, type RoutedProduct, type RunMilestoneActivity, type RunMilestonePhase, type RunProgress, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, type TurnInterruption, UNSCOPED_MUTATION_TOOLS, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, activeModelKey, activityIcon, activityTarget, activityTone, allowanceState, announcesUntakenAction, artifactRoutePath, attachEvermindLearn, buildBrainTriageReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, canChangeCodeHere, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, computeRunProgress, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, createPayloadBudget, deriveChatTitle, describeLiveStep, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, displayModelName, effortProfile, extractXmlToolCalls, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, findTools, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, formatRunProgress, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, isActivityMessage, isChatMode, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isLocalWorkspaceTool, isMalformedToolCall, isMutationTool, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, isTruncatedTurn, isUnscopedMutationTool, isUserConfiguredModelRef, lastConsolidationIndex, linkedTicketsToAdvance, linkedTicketsToComplete, localStorageConfirmationPersistence, localToolsIn, mcpActionsFrom, mentionRecipient, mergeRecoveredTrace, midRunNotice, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, parseByoUnresolved, parseChatActivity, parseDirectedRecipient, parseGitShortStatus, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, perMillionUsd, pmoFocusDomId, pmoFocusValue, premiumCostLabel, prepareImageDataUrl, productForPlan, productModelName, progressDuration, ratedTurnContext, ratedTurnTool, reasoningForRun, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, revealsModelId, revisitAdvisory, routerToolSpecs, routingQueryForTurn, startRun as runBrainLoop, runProgressVerdict, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, shortenTarget, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolActivity, toolExposureInTrace, toolNamesMentionedIn, toolSpecsFor, traceWithPersistedSteps, turnInterruption, turnOptimizationDirective, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, useToolConfirmationGate, withAdvisory, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArtifactKind, type AssembledToolCall, BASE_BRANCHES, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunActivity, type BrainRunDriver, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type CompletionMetadata, type ComposerDirectiveOptions, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GitShortStatus, type GlobalRunState, type ImageUrlContentPart, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, MAX_TOOL_RESULT_CHARS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MentionToken, type MessageProvenance, type ModelCategory, type ModelChoiceLabels, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, PMO_FOCUS_PARAM, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PersistedStep, type PreparedImage, type ProvenanceAccount, READ_FILE_RESULT_CHARS, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RepeatedTarget, type RoutedProduct, type RunMilestoneActivity, type RunMilestonePhase, type RunProgress, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNSCOPED_MUTATION_TOOLS, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, activeModelKey, activityIcon, activityTarget, activityTone, allowanceState, announcesUntakenAction, applyRemoteRun, artifactRoutePath, attachEvermindLearn, buildBrainTriageReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, canChangeCodeHere, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, computeRunProgress, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, createPayloadBudget, deriveChatTitle, describeLiveStep, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, displayModelName, effortProfile, extractXmlToolCalls, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, findTools, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, formatRunProgress, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, installRunDriver, isActivityMessage, isChatMode, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isLocalWorkspaceTool, isMalformedToolCall, isMutationTool, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, isTruncatedTurn, isUnscopedMutationTool, isUserConfiguredModelRef, lastConsolidationIndex, linkedTicketsToAdvance, linkedTicketsToComplete, localStorageConfirmationPersistence, localToolsIn, mcpActionsFrom, mentionRecipient, mergeRecoveredTrace, midRunNotice, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, parseByoUnresolved, parseChatActivity, parseDirectedRecipient, parseGitShortStatus, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, perMillionUsd, pmoFocusDomId, pmoFocusValue, premiumCostLabel, prepareImageDataUrl, productForPlan, productModelName, progressDuration, ratedTurnContext, ratedTurnTool, reasoningForRun, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, revealsModelId, revisitAdvisory, routerToolSpecs, routingQueryForTurn, startRun as runBrainLoop, runProgressVerdict, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, shortenTarget, stableStringify, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolActivity, toolExposureInTrace, toolNamesMentionedIn, toolSpecsFor, traceWithPersistedSteps, trimToolResult, turnInterruption, turnOptimizationDirective, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, useToolConfirmationGate, withAdvisory, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };

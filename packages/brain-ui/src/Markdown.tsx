@@ -8,6 +8,8 @@ export interface MarkdownLabels {
   copied: string;
   apply: string;
   createFile: string;
+  /** Summary of a collapsed `<think>` block. */
+  thought: string;
 }
 
 export interface MarkdownProps {
@@ -21,7 +23,7 @@ export interface MarkdownProps {
   labels?: Partial<MarkdownLabels>;
 }
 
-const DEFAULT_LABELS: MarkdownLabels = { copy: 'Copy', copied: 'Copied', apply: 'Apply', createFile: 'Create file' };
+const DEFAULT_LABELS: MarkdownLabels = { copy: 'Copy', copied: 'Copied', apply: 'Apply', createFile: 'Create file', thought: 'Thought' };
 
 /** A leading `// path: x` / `# path: x` / `<!-- path: x -->` comment, if present. */
 function detectPath(code: string): string {
@@ -130,7 +132,7 @@ function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateFile, lab
     <div className="bf-md">
       {segments.map((segment, index) => segment.kind === 'thought' ? (
         <details className="bf-md__think" key={`${segment.kind}-${index}`}>
-          <summary>Thought</summary>
+          <summary>{lab.thought}</summary>
           <div className="bf-md__think-body">
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{segment.content}</ReactMarkdown>
           </div>

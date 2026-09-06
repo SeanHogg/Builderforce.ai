@@ -17,9 +17,8 @@ import { getEditorContextLive } from "./editorContext";
 import { editorContextDirective } from "./idePersona";
 import { getSelectedProject } from "./projectState";
 import { buildSystemMessages } from "./prompt";
-import { TOOL_DEFS, type ToolDef } from "./fileTools";
-import { listPlatformTools } from "./platformTools";
-import { cognitionToolDefs } from "./cognition";
+import type { ToolDef } from "./fileTools";
+import { brainToolCatalog } from "./brainToolCatalog";
 import { runNativeBrain, unlinkedRunId, type NativeApprovalRequest } from "./nativeBrainRun";
 
 const PARTICIPANT_ID = "builderforce.agent";
@@ -175,9 +174,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
     // (projects, tasks, OKRs, specs, …) fetched from the gateway MCP relay. File tools
     // need a workspace; `remember_fact` needs only a project (works chat-only). Gate
     // each on what it actually requires.
-    const cognitionTools = activeProject ? cognitionToolDefs(ctx.secrets, activeProject.id) : [];
-    const platformTools = await listPlatformTools(ctx.secrets);
-    const tools: ToolDef[] = [...(root ? TOOL_DEFS : []), ...cognitionTools, ...platformTools];
+    const tools: ToolDef[] = await brainToolCatalog(ctx.secrets, root, activeProject?.id);
 
     const { systemPrompt, seed } = splitSystemPrompt(messages);
 

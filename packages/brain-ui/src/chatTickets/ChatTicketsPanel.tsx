@@ -16,6 +16,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HealthRing } from '../HealthRing';
 import { nativeOptionStyle } from '../optionStyle';
 import { resolveRunGate } from './runGate';
+import { aggregateTicketHealth } from './aggregateTicketHealth';
 import {
   RUNNABLE_KINDS, TICKET_KINDS,
   type ChatTicketsAdapter, type ChatTicketsLabels, type TicketKind,
@@ -122,16 +123,10 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     } finally { setBusy(false); }
   };
 
-  // Roll the linked tickets up into one overall % for the collapsed header ring:
-  // work-weighted (Σdone / Σtotal) when any ticket has sub-items, else the mean of
-  // the per-ticket rings so a flat list of leaf tasks still reads a sensible number.
-  const agg = useMemo(() => {
-    let done = 0, total = 0, sumPct = 0;
-    for (const tk of tickets) { done += tk.done; total += tk.total; sumPct += tk.progressPct; }
-    const pct = total > 0 ? Math.round((done / total) * 100)
-      : tickets.length ? Math.round(sumPct / tickets.length) : 0;
-    return { pct, done, total };
-  }, [tickets]);
+  // Roll the linked tickets up into one overall % for the collapsed header ring.
+  // See aggregateTicketHealth for why this weights `progressPct` rather than
+  // counting Σdone/Σtotal (which rendered "0% · 0/3" beside rings of 75/50/75).
+  const agg = useMemo(() => aggregateTicketHealth(tickets), [tickets]);
 
   const isCollapsed = tickets.length > 0 && (collapsed ?? tickets.length > COLLAPSE_THRESHOLD);
   const toggleCollapsed = () => { userCollapsed.current = true; setCollapsed(!isCollapsed); };

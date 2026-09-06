@@ -158,6 +158,7 @@ export function BrainSurfaceBody({
     thinking: liveLine ?? t('brainPhase.thinking'),
     live: liveLabels,
     thoughtFor: t('thoughtFor', { duration: '{duration}' }),
+    thought: t('thought'),
     // The per-message copy / send-again actions are part of the shared transcript, so
     // the dock has to name them too — otherwise they fall back to the package's
     // English defaults on a board the user is reading in another language.

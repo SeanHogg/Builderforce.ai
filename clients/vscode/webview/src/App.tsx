@@ -1,12 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BrainProvider,
-  BrainActionsProvider,
-  useRegisterBrainActions,
-  useBrainActions,
   useBrainConversation,
   useBrainConfig,
-  useMcpExtensions,
   consolidationMarkerContent,
   consolidationMetadata,
   mentionRecipient,
@@ -62,7 +58,7 @@ import { EvermindStatusBadge } from './EvermindStatusBadge';
 import { PendingChangesPanel } from './PendingChangesPanel';
 import { WEBVIEW_BUILD_ID, WEBVIEW_BUILT_AT } from './webviewBuildInfo';
 import { PlanBadge, fetchPlanSnapshot, invalidatePlanSnapshot, openUpgrade } from './accountPlan';
-import {
+import { onHostMessage,
   getToken,
   hostFetch,
   getEditorContext,
@@ -83,7 +79,7 @@ import { ProjectPageScreen } from './ProjectPageScreen';
 import { EvermindScreen } from './EvermindScreen';
 import { createPersistence } from './persistence';
 import { createInMemoryPersistence } from './localPersistence';
-import { buildHostTools } from './hostTools';
+import { installHostRunDriver, setHostRunContext } from './hostRunDriver';
 import { buildIdeSystemPrompt } from './systemPrompt';
 import { activeProjectDirective, editorContextDirective } from '../../src/idePersona';
 import { buildTranscript, hasTranscriptContent } from './transcript';
@@ -152,6 +148,7 @@ function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels> {
       ariaLabel: t('tl.liveAria', 'Current activity'),
     },
     thoughtFor: t('tl.thoughtFor', 'Thought for {duration}'),
+    thought: t('tl.thought', 'Thought'),
     you: t('tl.you', 'You'),
     assistant: t('tl.assistant', 'BuilderForce'),
     input: t('tl.input', 'Input'),
@@ -532,53 +529,39 @@ function ConfiguredApp({ init }: { init: InitData }) {
 
   return (
     <BrainProvider config={config}>
-      <BrainActionsProvider>
-        <ToolRegistrar tools={init.tools} />
-        <PlatformTools transport={gatewayTransport} />
-        <Chat init={init} />
-      </BrainActionsProvider>
+      <HostRunBridge />
+      <Chat init={init} />
     </BrainProvider>
   );
 }
 
-/** Registers the host's file tools so the model can call them over the bridge. */
-function ToolRegistrar({ tools }: { tools: InitData['tools'] }) {
-  const actions = useMemo(() => buildHostTools(tools), [tools]);
-  useRegisterBrainActions(actions);
-  return null;
-}
-
 /**
- * Registers the SHARED gateway MCP catalog (projects/tasks/OKRs/specs/…) — the
- * exact same server-side tool list the web Brain consumes via this hook, fetched
- * directly from the gateway (the webview reaches it over HTTPS; CORS allows the
- * `vscode-webview://` origin). So the IDE Brain can manage work items, not just
- * edit local files: one brain, one tool catalog. On any write we nudge the host so
- * its Project & Tasks tree refreshes live.
+ * Runs execute in the EXTENSION HOST, not in this webview (see `hostRunDriver.ts`):
+ * closing or switching away from the tab no longer ends the agent's work. The host
+ * owns the tools — the local file tools AND the shared gateway platform catalog, the
+ * same list the native chat participant uses — so this panel registers none. What it
+ * still does is refresh in-webview views (the chat↔ticket panel) after a platform
+ * write, off the host's `run.tool` announcement, mirroring the web app's event bus.
  */
-function PlatformTools({ transport }: { transport: BrainTransport }) {
-  useMcpExtensions({
-    // The PLATFORM endpoint, which is not the model endpoint on an on-device route.
-    // Projects, tasks and OKRs live on the gateway no matter which model answers; when
-    // this defaulted to the run's transport, pinning a local model pointed the catalogue
-    // fetch at the local runtime and the Brain lost every platform tool.
-    transport,
-    onToolResult: (info) => {
-      if (info.mutating && info.ok) {
-        post('platform.write', { name: info.name });
-        // Let in-webview views (e.g. the chat↔ticket panel) refresh live after a
-        // Brain-driven MCP write, mirroring the web app's brain-data event bus.
-        window.dispatchEvent(new CustomEvent('bf:mcp-write', { detail: { name: info.name } }));
+function HostRunBridge() {
+  useEffect(() => {
+    const uninstall = installHostRunDriver();
+    const offTool = onHostMessage<{ name: string; mutating: boolean; remote: boolean; ok: boolean }>('run.tool', (m) => {
+      if (m.remote && m.mutating && m.ok) {
+        window.dispatchEvent(new CustomEvent('bf:mcp-write', { detail: { name: m.name } }));
       }
-    },
-  });
+    });
+    return () => {
+      offTool();
+      uninstall();
+    };
+  }, []);
   return null;
 }
 
 function Chat({ init }: { init: InitData }) {
   const t = makeT(init.labels);
   const { persistence } = useBrainConfig();
-  const { toolSpecs, runTool, isMutating } = useBrainActions();
   const [chatId, setChatId] = useState<number | null>(null);
   const [chats, setChats] = useState<BrainChat[]>([]);
   // Inline rename of the selected chat: the header select swaps to a text field
@@ -599,13 +582,16 @@ function Chat({ init }: { init: InitData }) {
   // `defaultOn` carries the SETTING, not a constant: it is both the seed for a panel
   // that has never been toggled and the hook's re-read trigger, so a setting change
   // reaches an open panel (the host re-pushes init on `onDidChangeConfiguration`).
+  //
+  // The gate PREDICATE itself is evaluated by the host (`nativeNeedsConfirm`, against
+  // the tool catalog it owns); this panel only owns the switch and its persistence,
+  // and tells the host every time it moves (see `setHostRunContext`).
   const autoApproveSetting = init.autoApproveDefault ?? false;
   const {
     autoApprove,
     setAutoApprove: setAutoApproveMode,
-    needsConfirm,
   } = useToolConfirmationGate({
-    isMutating,
+    isMutating: () => true,
     persistence: useMemo(() => autoApprovePersistence(autoApproveSetting), [autoApproveSetting]),
     defaultOn: autoApproveSetting,
   });
@@ -728,13 +714,6 @@ function Chat({ init }: { init: InitData }) {
     (id: number) => (awaitingSet.has(id) ? '❓ ' : runningSet.has(id) ? '● ' : ''),
     [awaitingSet, runningSet],
   );
-  // Report the live set to the host so the native Sessions tree can show the same
-  // running / awaiting indicators (it otherwise only sees SERVER-tracked cloud /
-  // on-prem runs — the in-webview Brain loop is invisible to it). `runState`'s
-  // identity only changes when the set changes, so this posts once per change.
-  useEffect(() => {
-    post('runs.local', { running: runState.running, awaiting: runState.awaiting });
-  }, [runState]);
 
   // LOCK state for the open chat (owner-only toggle in the People section).
   const [chatVisibility, setChatVisibility] = useState<'shared' | 'locked'>('shared');
@@ -940,6 +919,12 @@ function Chat({ init }: { init: InitData }) {
     (tried: readonly string[]) => nextFallbackModel(modelSurface, tried),
     [modelSurface],
   );
+  // The host runs the loop, so it needs the two things only this panel knows: the
+  // Auto-mode switch (its confirm gate follows it live) and the picker's surface
+  // (its stall failover keeps ONE ordering function, `nextFallbackModel`).
+  useEffect(() => {
+    setHostRunContext({ autoApprove, modelSurface });
+  }, [autoApprove, modelSurface]);
 
   // Project-Evermind memory hooks: recall the chat's project learnings before
   // answering (grounding the reply + surfacing recall/learn/reconcile steps in the
@@ -1046,9 +1031,6 @@ function Chat({ init }: { init: InitData }) {
     maxTokens: effortMaxTokens,
     reasoning,
     extraSystem,
-    toolSpecs,
-    runTool,
-    needsConfirm,
     ensureChatId,
     onActivity: reloadChats,
     onFirstUserTurn: autoTitleChat,
@@ -1473,10 +1455,10 @@ function Chat({ init }: { init: InitData }) {
         tenantId: claims.tid ?? null,
         userId: claims.sub ?? null,
         messages: conv.messages,
-        // The live registry the conversation runs on (`toolSpecs` — navigation + the
-        // MCP catalog together); the catalog status explains a zero. The trace supplies
-        // what was ACTUALLY advertised per turn.
-        tools: { count: toolSpecs.length, error: mcp.error, loading: mcp.loading },
+        // The catalog the HOST built for the last run (local file tools + the platform
+        // catalog together — it reports the count on `run.tools`); the status explains a
+        // zero. The trace supplies what was ACTUALLY advertised per turn.
+        tools: { count: mcp.count, error: mcp.error, loading: mcp.loading },
         trace: conv.trace,
         model: init.model ?? null,
         modelSurface,
@@ -1542,7 +1524,7 @@ function Chat({ init }: { init: InitData }) {
       );
       window.setTimeout(() => setCopyState('idle'), 3000);
     }
-  }, [conv, init.model, init.extensionVersion, init.buildId, init.builtAt, init.posixShell, init.baseUrl, modelSurface, toolSpecs, associatedProject, associatedProjectId, activeChat?.title, chatVisibility, chatId, ticketAdapter, apiReq, init.project?.id, init.project?.name, t]);
+  }, [conv, init.model, init.extensionVersion, init.buildId, init.builtAt, init.posixShell, init.baseUrl, modelSurface, associatedProject, associatedProjectId, activeChat?.title, chatVisibility, chatId, ticketAdapter, apiReq, init.project?.id, init.project?.name, t]);
 
   // Consolidate: summarize the whole chat into ONE compact assistant message tagged
   // as a consolidation marker. It's shown back to the user (the "flag"), and the

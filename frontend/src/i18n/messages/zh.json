@@ -10007,6 +10007,7 @@
         "ariaLabel": "当前活动"
       },
       "thoughtFor": "思考了 {duration}",
+      "thought": "思考",
       "you": "你",
       "assistant": "BuilderForce",
       "input": "输入",
@@ -19430,6 +19431,7 @@
     "noObjectsConnected": "尚未连接其他对象。",
     "tokensSpent": "{count} 个 token",
     "thoughtFor": "思考了 {duration}",
+    "thought": "思考",
     "ranActions": "{count} 项操作",
     "brainPhase": {
       "thinking": "思考中…",

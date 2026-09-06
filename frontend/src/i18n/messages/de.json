@@ -10007,6 +10007,7 @@
         "ariaLabel": "Aktuelle Aktivität"
       },
       "thoughtFor": "Hat {duration} nachgedacht",
+      "thought": "Überlegung",
       "you": "Du",
       "assistant": "BuilderForce",
       "input": "Eingabe",
@@ -19430,6 +19431,7 @@
     "noObjectsConnected": "Noch keine weiteren Objekte verbunden.",
     "tokensSpent": "{count} Tokens",
     "thoughtFor": "Hat {duration} nachgedacht",
+    "thought": "Überlegung",
     "ranActions": "{count} Aktionen",
     "brainPhase": {
       "thinking": "Denkt nach…",

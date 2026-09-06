@@ -27,6 +27,7 @@
  */
 
 import type { BrainMessage } from './types';
+import { getRunDriver } from './runDriver';
 import type {
   BrainToolSpec,
   ChatCompletionMessage,
@@ -1003,6 +1004,8 @@ export function getRunTrace(chatId: number | null): BrainTraceEvent[] {
  * fires; we emit here too so the Stop is reflected immediately.
  */
 export function stopRun(chatId: number): void {
+  const driver = getRunDriver();
+  if (driver) return driver.stop(chatId);
   const c = cells.get(chatId);
   if (!c || !c.running) return;
   c.abort?.abort();
@@ -1030,6 +1033,8 @@ export function stopRun(chatId: number): void {
  */
 export function clearRunError(chatId: number | null): void {
   if (chatId == null) return;
+  const driver = getRunDriver();
+  if (driver) return driver.clearError(chatId);
   const c = cells.get(chatId);
   if (!c || !c.error) return;
   c.error = '';
@@ -1039,6 +1044,8 @@ export function clearRunError(chatId: number | null): void {
 
 /** Resolve a pending human-in-the-loop confirmation. No-op if none is pending. */
 export function resolveRunConfirm(chatId: number, ok: boolean): void {
+  const driver = getRunDriver();
+  if (driver) return driver.confirm(chatId, ok);
   const c = cells.get(chatId);
   if (!c || !c.confirmResolver) return;
   const resolve = c.confirmResolver;
@@ -1049,12 +1056,41 @@ export function resolveRunConfirm(chatId: number, ok: boolean): void {
 }
 
 /**
+ * Mirror a run that is executing in ANOTHER process into this store's cell, so every
+ * local reader — the conversation hook, the timeline, `getGlobalRunState` — sees it
+ * exactly as it would see an in-process run. The only writer of a cell that no local
+ * loop owns; a locally running cell is never overwritten (the local loop is the
+ * truth for it). `trace` is taken as sent: the remote side decides how much of its
+ * bounded trace to ship (see the VS Code host's delta relay).
+ */
+export function applyRemoteRun(chatId: number, snapshot: BrainRunSnapshot): void {
+  const c = getCell(chatId);
+  if (c.abort) return; // an in-process loop owns this cell
+  c.running = snapshot.running;
+  c.streamingText = snapshot.streamingText;
+  c.error = snapshot.error;
+  c.errorAction = snapshot.errorAction;
+  c.pendingConfirm = snapshot.pendingConfirm;
+  c.messagesEpoch = snapshot.messagesEpoch;
+  c.appended = snapshot.appended;
+  c.trace = snapshot.trace;
+  c.activity = snapshot.activity;
+  c.byoUnresolved = snapshot.byoUnresolved;
+  c.providerCap = snapshot.providerCap;
+  emit(c);
+}
+
+/**
  * Start (or no-op join) the agent loop for a chat. Single-flight per chat: if a
  * run is already in flight the call returns immediately, so a second mounted
  * Brain instance can never spawn a duplicate loop. The claim is synchronous
  * (set before any await), so two callers in the same tick can't both pass it.
  */
 export async function startRun(chatId: number, req: BrainRunRequest): Promise<void> {
+  // A host whose UI process cannot be trusted to outlive the run (see `runDriver.ts`)
+  // executes it elsewhere; this store then only MIRRORS that run via applyRemoteRun.
+  const driver = getRunDriver();
+  if (driver) return driver.start(chatId, req);
   const c = getCell(chatId);
   if (c.running) return; // already running elsewhere — never double-fire
   c.running = true;

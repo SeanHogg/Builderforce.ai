@@ -417,6 +417,7 @@
   "This project has no connected repository to scan.": "此项目没有可扫描的已连接代码仓库。",
   "This project’s Evermind isn’t set up yet. A project manager can enable it.": "此项目的 Evermind 尚未设置。项目管理者可以启用它。",
   "Thorough": "深入",
+  "Thought": "思考",
   "Thought for {duration}": "思考了 {duration}",
   "Throw away anything queued but not yet learned, and clear cached answers so repeat questions are answered fresh. Learned knowledge is untouched.": "丢弃所有已排队但尚未学习的内容，并清空缓存的回答，让重复的问题重新作答。已学到的知识不受影响。",
   "Timer": "计时器",

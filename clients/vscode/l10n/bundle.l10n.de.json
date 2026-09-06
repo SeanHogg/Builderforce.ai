@@ -417,6 +417,7 @@
   "This project has no connected repository to scan.": "Dieses Projekt hat kein verbundenes Repository, das gescannt werden könnte.",
   "This project’s Evermind isn’t set up yet. A project manager can enable it.": "Das Evermind dieses Projekts ist noch nicht eingerichtet. Ein Projektmanager kann es aktivieren.",
   "Thorough": "Gründlich",
+  "Thought": "Überlegung",
   "Thought for {duration}": "Nachgedacht für {duration}",
   "Throw away anything queued but not yet learned, and clear cached answers so repeat questions are answered fresh. Learned knowledge is untouched.": "Verwirf alles, was eingereiht, aber noch nicht gelernt ist, und leere zwischengespeicherte Antworten, damit wiederholte Fragen neu beantwortet werden. Gelerntes Wissen bleibt unangetastet.",
   "Timer": "Timer",

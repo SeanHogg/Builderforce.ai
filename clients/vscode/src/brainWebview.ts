@@ -5,13 +5,12 @@ import { artifactRoutePath } from "@seanhogg/builderforce-brain-embedded";
 import { BUILD_ID, BUILT_AT } from "./buildInfo";
 import { posixShellReport } from "./posixShell";
 import { getTenantJwt, getCurrentUserId } from "./bfApi";
-import { TOOL_DEFS } from "./fileTools";
+import type { BrainRunHost, WebviewRunStart } from "./brainRunHost";
 import { authorizeLocalEndpoint, getBaseUrl, getWebBaseUrl, getLocalModelsConfig, SECRET_KEY, fetchPersonalityBlock, fetchLimbicBlock, getSessionTabMode, type SessionTabMode } from "./gateway";
 import { attentionFor, sessionTabIcon, sessionTabPrefix } from "./attention";
 import { getGroundingWithHistory } from "./grounding";
-import { appendSessionNote, readRecentSessionNotes, SessionNotes } from "./sessionNotes";
 import { getEditorContext, getEditorContextLive, watchEditorContext } from "./editorContext";
-import { detectPendingChanges, refreshPendingChanges, watchPendingChanges } from "./gitChanges";
+import { detectPendingChanges, watchPendingChanges } from "./gitChanges";
 import { setSelectedModel, setSelectedModelPool } from "./modelState";
 import { resolveModelRoute } from "./modelRouting";
 import { resolveLocalChatEndpoint } from "./localModels";
@@ -31,9 +30,12 @@ interface BrainInbound extends WebviewInbound {
   kind?: string;
   ref?: string;
   projectId?: number;
-  /** For `runs.local`: chat ids the webview's agent loop is executing / paused on. */
-  running?: number[];
-  awaiting?: number[];
+  /** For `run.start`: the serializable half of the run request (see `brainRunHost.ts`). */
+  run?: WebviewRunStart;
+  /** For `run.confirm`: the human's answer to the paused tool call. */
+  ok?: boolean;
+  /** For `run.autoApprove`: the panel's Auto-mode switch. */
+  on?: boolean;
   /** For `session.meta`: the chat this panel is showing (id + current title), so a
    *  per-session tab can name itself and bind to the chat it was opened for. */
   chatId?: number;
@@ -92,17 +94,11 @@ export interface BrainWebviewHooks {
   /** A platform (catalog) write happened in the chat — refresh Project & Tasks. */
   onPlatformWrite?: (toolName: string) => void;
   /**
-   * The set of chats the in-webview Brain loop is currently running / paused on a
-   * confirm changed. The agent loop lives in the webview (it streams straight to
-   * the gateway), so the server-side attention endpoint never sees it — the host
-   * merges this into the same live-status map so the Sessions tree lights up the
-   * still-running conversations after the user switches to a new chat.
-   *
-   * `sourceId` identifies the reporting PANEL: in `sessionTabs:perSession` several
-   * panels report concurrently, each seeing only its own chat, so the merge must be
-   * per-source or the last reporter would erase the others' runs.
+   * The host that EXECUTES this panel's runs. The agent loop lives in the extension
+   * host (see `brainRunHost.ts`), so closing or switching away from the tab never
+   * ends a run; the panel starts runs, watches them, and re-attaches when reopened.
    */
-  onLocalRunsChanged?: (sourceId: string, runs: { running: number[]; awaiting: number[] }) => void;
+  runHost?: BrainRunHost;
 }
 
 /**
@@ -130,6 +126,7 @@ function buildLabels(): Record<string, string> {
     "tl.liveSlow": t("Still working — {elapsed} elapsed"),
     "tl.liveAria": t("Current activity"),
     "tl.thoughtFor": t("Thought for {duration}"),
+    "tl.thought": t("Thought"),
     "tl.you": t("You"),
     "tl.assistant": "BuilderForce",
     "tl.input": t("Input"),
@@ -316,7 +313,6 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
    *  each re-keys itself into {@link byChat} once the webview reports its chat. */
   private static readonly unassigned = new Set<BrainWebview>();
   private static hooks: BrainWebviewHooks = {};
-  private static seq = 0;
 
   /** Wire host callbacks once (from `activate`) so the panel can refresh the trees. */
   static configure(hooks: BrainWebviewHooks): void {
@@ -392,18 +388,8 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
   private ownChatId?: number;
   /** The bound chat's title — the per-session tab's label. */
   private chatTitle = "";
-  /** Identifies this panel in the shared local-run overlay (see BrainWebviewHooks). */
-  private readonly sourceId = `brain:${++BrainWebview.seq}`;
-  /**
-   * This panel's contribution to the `.builderforce/` knowledge loop: what the current
-   * run has touched, flushed as a dated note when the run finishes. The editor used to
-   * write the grounding MAP and nothing else, so its knowledge never compounded the way
-   * the on-prem runtime's did — see `sessionNotes.ts`.
-   */
-  private notes = new SessionNotes();
-  /** Whether a local run was in flight on the previous `runs.local` report, so the
-   *  non-empty → empty transition can be read as "the run finished". */
-  private runWasActive = false;
+  /** Stops relaying the host's runs to this panel (set while the webview is attached). */
+  private detachRuns?: () => void;
 
   private constructor(ctx: vscode.ExtensionContext, intent: BrainIntent | undefined, private readonly mode: SessionTabMode) {
     super(ctx, { viewType: "builderforce.brain", title: "BuilderForce", htmlTitle: "BuilderForce" });
@@ -421,14 +407,34 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
   protected async onMessage(msg: BrainInbound): Promise<void> {
     switch (msg.type) {
       case "ready":
+        // Watch the host-owned runs from this panel: a reopened tab is brought up to
+        // date on every live run the moment it asks. Re-attached on each `ready` (a
+        // webview reload is a fresh mirror), never twice at once.
+        this.detachRuns?.();
+        this.detachRuns = BrainWebview.hooks.runHost?.attach({ post: (m) => this.post(m) });
         await this.sendInit();
         if (this.pendingIntent) {
           this.sendIntent(this.pendingIntent);
           this.pendingIntent = undefined;
         }
         break;
-      case "tool.call":
-        await this.runTool(msg.id, msg.name, msg.args);
+      // The run verbs, forwarded to the host-owned loop. `run.start` is fire-and-forget
+      // here: the host answers with `run.settled` / `run.failed` when the loop ends,
+      // which can be minutes later — far past any request timeout.
+      case "run.start":
+        if (msg.run && typeof msg.run.chatId === "number") void BrainWebview.hooks.runHost?.start(msg.run);
+        break;
+      case "run.stop":
+        if (typeof msg.chatId === "number") BrainWebview.hooks.runHost?.stop(msg.chatId);
+        break;
+      case "run.confirm":
+        if (typeof msg.chatId === "number") BrainWebview.hooks.runHost?.confirm(msg.chatId, msg.ok === true);
+        break;
+      case "run.clearError":
+        if (typeof msg.chatId === "number") BrainWebview.hooks.runHost?.clearError(msg.chatId);
+        break;
+      case "run.autoApprove":
+        BrainWebview.hooks.runHost?.setAutoApprove(msg.on === true);
         break;
       case "chats.changed":
         BrainWebview.hooks.onChatsChanged?.();
@@ -436,25 +442,6 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
       case "platform.write":
         BrainWebview.hooks.onPlatformWrite?.(typeof msg.name === "string" ? msg.name : "");
         break;
-      // The set of chats the webview's agent loop is executing / paused on changed
-      // — forward it so the Sessions tree lights up the still-live conversations.
-      case "runs.local": {
-        const nums = (v: unknown): number[] =>
-          Array.isArray(v) ? v.filter((n): n is number => typeof n === "number") : [];
-        // Repainting this panel's tab rides the overlay's change event (which the host
-        // already fans out to refreshTabStatus) — no direct call needed here.
-        const running = nums(msg.running);
-        BrainWebview.hooks.onLocalRunsChanged?.(this.sourceId, {
-          running,
-          awaiting: nums(msg.awaiting),
-        });
-        // The non-empty → empty transition IS run completion, which is when the on-prem
-        // loop writes its note too. Flushing per tool call instead would scatter one run
-        // across many headings and make the history unreadable.
-        if (this.runWasActive && running.length === 0) void this.flushSessionNote();
-        this.runWasActive = running.length > 0;
-        break;
-      }
       // The webview switched to (or created / renamed) the chat it is showing. A
       // per-session tab binds to that chat here: it re-keys itself under the new id
       // and names the tab after the conversation.
@@ -884,103 +871,20 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
       projectNames,
       // Static personality tone for the chat's system prompt (see above).
       personalityBlock,
-      // The local file tools, forwarded so the model can call them over the bridge.
-      // (The shared platform catalog is fetched by the webview directly from the gateway.)
-      tools: TOOL_DEFS.map((d) => ({
-        name: d.name,
-        description: d.description,
-        parameters: d.parameters,
-        mutating: d.mutating,
-      })),
       labels: buildLabels(),
       // The model rows' copy, shared verbatim with the host's `Change model` QuickPick.
       modelLabels: modelChoiceLabels(),
     });
   }
 
-  /** Execute a local file tool against the workspace and return its result string. */
-  private async runTool(id: string | undefined, name: string | undefined, args: Record<string, unknown> = {}): Promise<void> {
-    const def = TOOL_DEFS.find((d) => d.name === name);
-    if (!def) {
-      this.respond(id, false, undefined, `Unknown tool: ${name}`);
-      return;
-    }
-    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (!root) {
-      this.respond(id, false, undefined, `Tool "${name}" needs an open workspace folder.`);
-      return;
-    }
-    try {
-      const result = await def.execute(args, root);
-      this.respond(id, true, result);
-      // Feed the knowledge loop. Recorded on SUCCESS only — a note claiming a file was
-      // written when the write threw would ground every later run on a lie.
-      this.notes.record(def.name, args);
-      // Link the change back to the editor: reveal the file the agent just wrote
-      // or edited so the user SEES each change land (a preview tab beside the
-      // chat, focus preserved). Fire-and-forget — never blocks the tool result.
-      void this.revealChangedFile(name, args, root);
-      // The tools write through `node:fs`, which raises no text-document event, so
-      // nothing else would tell the chat or the Changes view that the working tree
-      // just moved. A mutating tool IS that signal.
-      if (def.mutating) refreshPendingChanges();
-    } catch (e) {
-      this.respond(id, false, undefined, (e as Error).message ?? String(e));
-    }
-  }
-
-  /**
-   * Open the file a mutating file tool just touched, so the change is visible in
-   * the editor (VS Code auto-reloads the on-disk edit). Preview mode reuses one
-   * tab across a multi-file run, opened Beside the chat with focus preserved so
-   * it never steals the composer. Only `write_file`/`edit_file` reveal — a delete
-   * has nothing to show, and shell/read tools aren't changes. Best-effort.
-   */
-  private async revealChangedFile(name: string | undefined, args: Record<string, unknown>, root: string): Promise<void> {
-    if (name !== "write_file" && name !== "edit_file") return;
-    const rel = typeof args.path === "string" ? args.path : "";
-    if (!rel) return;
-    try {
-      const uri = vscode.Uri.joinPath(vscode.Uri.file(root), ...rel.split("/").filter(Boolean));
-      const doc = await vscode.workspace.openTextDocument(uri);
-      await vscode.window.showTextDocument(doc, {
-        preview: true,
-        preserveFocus: true,
-        viewColumn: vscode.ViewColumn.Beside,
-      });
-    } catch {
-      /* file may have been deleted/moved by a later tool — non-fatal */
-    }
-  }
-
-  /**
-   * Write this run's note and start a fresh accumulator. Best-effort throughout: a
-   * read-only workspace or a locked file costs a note, never a turn.
-   */
-  private async flushSessionNote(): Promise<void> {
-    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (!root || this.notes.isEmpty) return;
-    const activity = this.notes.activity;
-    // Reset BEFORE the await so a run that starts while this write is in flight
-    // accumulates into a new note instead of being folded into the one being written.
-    this.notes = new SessionNotes();
-    await appendSessionNote(root, {
-      sessionKey: this.ownChatId != null ? `chat-${this.ownChatId}` : this.sourceId,
-      activity,
-    });
-  }
-
   protected onDispose(): void {
-    // Closing the panel mid-run still ends the run, so its work must not be lost.
-    void this.flushSessionNote();
+    // The run itself lives in the host and carries on; only this VIEW of it goes.
+    this.detachRuns?.();
+    this.detachRuns = undefined;
     if (BrainWebview.reused === this) BrainWebview.reused = undefined;
     if (this.ownChatId != null && BrainWebview.byChat.get(this.ownChatId) === this) {
       BrainWebview.byChat.delete(this.ownChatId);
     }
     BrainWebview.unassigned.delete(this);
-    // Closing the panel destroys the webview's JS context, so its in-flight runs
-    // are gone — retire THIS panel's indicators from the Sessions tree. Scoped to
-    // its own source so closing one tab never clears another tab's live runs.
-    BrainWebview.hooks.onLocalRunsChanged?.(this.sourceId, { running: [], awaiting: [] });
   }
 }

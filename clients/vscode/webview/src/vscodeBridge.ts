@@ -7,24 +7,19 @@
  * no proxy. The ONLY things it can't do itself are touch the local filesystem and
  * mint a tenant token — those cross this typed postMessage bridge to the host:
  *
- *   webview → host : 'ready', 'tool.call'{id,name,args}, 'token.refresh'{id}, 'signin',
- *                    'chats.changed', 'platform.write'{name}, 'runs.local'{running,awaiting},
+ *   webview → host : 'ready', 'token.refresh'{id}, 'signin', 'chats.changed', 'platform.write'{name},
+ *                    'run.start'{run} / 'run.stop' / 'run.confirm' / 'run.clearError' / 'run.autoApprove'
+ *                    (the host-owned agent loop — see hostRunDriver.ts),
  *                    'open.artifact'{kind,ref,projectId},
  *                    'changes.open'{changePath,changeStatus}, 'changes.review'
  *   host → webview : 'init'{…}, 'token'{token}, 'response'{id,ok,result|error}, 'intent'{intent},
- *                    'editorContext'{editorContext}, 'pendingChanges'{pendingChanges}, 'refresh'
+ *                    'editorContext'{editorContext}, 'pendingChanges'{pendingChanges}, 'refresh',
+ *                    'run.sync' / 'run.settled' / 'run.failed' / 'run.tool' / 'run.tools' (see onHostMessage)
  */
 
 import type { ModelChoiceLabels } from '@seanhogg/builderforce-brain-embedded';
 import type { EditorContext } from '../../src/idePersona';
 import type { PendingChangeSet } from '../../src/gitChangeModel';
-
-export interface ToolSpecMsg {
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-  mutating: boolean;
-}
 
 /**
  * A localized string bundle the host builds from its `vscode.l10n` catalog and
@@ -113,7 +108,6 @@ export interface InitData {
    *  stringified ids (JSON). Best-effort — an unknown id falls back to "No project". */
   projectNames?: Record<string, string>;
   /** The host's local file tools, forwarded so the model can call them over the bridge. */
-  tools: ToolSpecMsg[];
   /** Localized UI strings (see {@link LabelBundle}). */
   labels: LabelBundle;
   /** The MODEL ROWS' copy (categories, funding lines, Auto/Pool/Evermind naming),
@@ -387,6 +381,25 @@ export async function refreshToken(): Promise<void> {
   }
 }
 
+/**
+ * Subscribe to a host-posted message TYPE the bridge does not itself interpret (the
+ * run relay: `run.sync`, `run.settled`, …). Returns an unsubscribe. The frame is
+ * delivered whole; the bridge's own frames (`init`, `intent`, `response`, …) never
+ * reach these subscribers.
+ */
+const hostMessageWaiters = new Map<string, Set<(frame: never) => void>>();
+export function onHostMessage<T extends object>(type: string, cb: (frame: T) => void): () => void {
+  let set = hostMessageWaiters.get(type);
+  if (!set) {
+    set = new Set();
+    hostMessageWaiters.set(type, set);
+  }
+  set.add(cb as (frame: never) => void);
+  return () => {
+    set?.delete(cb as (frame: never) => void);
+  };
+}
+
 window.addEventListener('message', (e: MessageEvent) => {
   const m = e.data as { type?: string; id?: string; ok?: boolean; result?: unknown; error?: string; token?: string | null; intent?: BrainIntent; editorContext?: EditorContext; pendingChanges?: PendingChangeSet } & Partial<InitData>;
   if (!m || typeof m !== 'object') return;
@@ -448,7 +461,10 @@ window.addEventListener('message', (e: MessageEvent) => {
       if (m.ok) p.resolve(m.result);
       else p.reject(new Error(m.error || 'host error'));
     }
+    return;
   }
+  const waiters = m.type ? hostMessageWaiters.get(m.type) : undefined;
+  if (waiters) for (const w of [...waiters]) (w as (frame: unknown) => void)(m);
 });
 
 // Announce readiness so the host sends `init`. Done at module load — before React

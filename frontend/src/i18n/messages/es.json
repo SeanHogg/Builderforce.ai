@@ -10007,6 +10007,7 @@
         "ariaLabel": "Actividad actual"
       },
       "thoughtFor": "Pensó durante {duration}",
+      "thought": "Razonamiento",
       "you": "Tú",
       "assistant": "BuilderForce",
       "input": "Entrada",
@@ -19430,6 +19431,7 @@
     "noObjectsConnected": "Aún no hay otros objetos conectados.",
     "tokensSpent": "{count} tokens",
     "thoughtFor": "Pensó durante {duration}",
+    "thought": "Razonamiento",
     "ranActions": "{count} acciones",
     "brainPhase": {
       "thinking": "Pensando…",

@@ -926,6 +926,7 @@ export function BrainPanel({
     // never word the same running step differently.
     live: liveLabels,
     thoughtFor: tTimeline('thoughtFor'),
+    thought: tTimeline('thought'),
     you: tTimeline('you'),
     assistant: tTimeline('assistant'),
     input: tTimeline('input'),

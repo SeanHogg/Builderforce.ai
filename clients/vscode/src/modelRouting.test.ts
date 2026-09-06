@@ -141,15 +141,21 @@ describe("the permission mode is decided in one place", () => {
  * "I don't have that data" with zero tool calls in the trace.
  */
 describe("the platform stays on the gateway when the model does not", () => {
-  const app = fs.readFileSync(path.join(SRC, "..", "webview", "src", "App.tsx"), "utf8");
+  // The run now executes in the extension host (brainRunHost.ts); its ports are where
+  // the two questions are answered — and they must be answered by DIFFERENT seams.
+  const ports = stripComments(fs.readFileSync(path.join(SRC, "brainRunHostPorts.ts"), "utf8"));
+  const catalog = stripComments(fs.readFileSync(path.join(SRC, "platformTools.ts"), "utf8"));
 
-  it("builds the gateway transport once and hands it to the tool catalogue", () => {
-    expect(app).toContain("gatewayTransport");
-    expect(stripComments(app)).toMatch(/<PlatformTools transport=\{gatewayTransport\}/);
+  it("fetches the tool catalogue from the gateway, never from the route's endpoint", () => {
+    expect(ports).toContain("brainToolCatalog(");
+    // The catalogue's base URL is the platform's, resolved without consulting the route.
+    expect(catalog).toMatch(/fetch\(`\$\{url\}\/llm\/v1\/mcp\/tools`/);
+    expect(catalog).toContain("const url = getBaseUrl();");
+    expect(catalog).not.toContain("resolveModelRoute");
   });
 
   it("keeps the run's transport free to be the local one", () => {
     // The whole point: the completion goes to the machine, the catalogue does not.
-    expect(stripComments(app)).toMatch(/transport: init\.localRoute/);
+    expect(ports).toMatch(/routeStream\(await resolveModelRoute\(secrets\)/);
   });
 });

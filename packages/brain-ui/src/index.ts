@@ -18,7 +18,7 @@ export type { LiveActivityProps, LiveActivityLabels } from './LiveActivity';
 
 export { Markdown } from './Markdown';
 export type { MarkdownProps, MarkdownLabels } from './Markdown';
-export { splitThinkSegments } from './thinkBlocks';
+export { splitThinkSegments, answerTextOf } from './thinkBlocks';
 export type { ThinkSegment } from './thinkBlocks';
 
 export {

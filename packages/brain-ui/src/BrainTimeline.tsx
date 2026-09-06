@@ -17,6 +17,7 @@ import {
   type BrainRunActivity,
 } from '@seanhogg/builderforce-brain-embedded';
 import { Markdown } from './Markdown';
+import { answerTextOf } from './thinkBlocks';
 import { Avatar } from './ParticipantBadge';
 import { parseAskUser, stripAskUser, QuestionCard, askUserAnchorId, DEFAULT_ASK_USER_LABELS } from './askUser';
 import { buildSettledTimeline, formatDuration, formatPayload, streamingNode, type TimelineNode } from './timelineModel';
@@ -33,6 +34,8 @@ export interface BrainTimelineLabels {
   live: LiveActivityLabels;
   /** "Thought for {duration}" — must contain the literal `{duration}` token. */
   thoughtFor: string;
+  /** Summary of a collapsed `<think>` block inside a reply. */
+  thought: string;
   you: string;
   assistant: string;
   input: string;
@@ -105,6 +108,7 @@ export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
   thinking: 'Thinking…',
   live: DEFAULT_LIVE_ACTIVITY_LABELS,
   thoughtFor: 'Thought for {duration}',
+  thought: 'Thought',
   you: 'You',
   assistant: 'BuilderForce',
   input: 'Input',
@@ -645,6 +649,26 @@ function BrainTimelineInner({
             // a small chip so the user can always see whether their own connected
             // account ran it — not only when a turn comes back empty.
             const prov = parseMessageProvenance(node.message);
+            // The reply minus its `<think>` reasoning. A turn that only reasoned (the
+            // model thought, then called a tool without addressing the user) is not a
+            // response: it collapses to ONE line — the "Thought" disclosure with the
+            // attribution chip beside it — with no author header and no copy /
+            // send-again / rating row, because there is nothing to copy, replay or
+            // grade. Six such turns in a row used to cost the editor ~30 rows.
+            const answer = answerTextOf(bodyText);
+            if (!answer && bodyText && !card) {
+              return (
+                <li key={node.key} className="bf-tl__item bf-tl__item--thought">
+                  <span className="bf-tl__gutter">
+                    <span className="bf-tl__dot bf-tl__dot--muted">{dotIcon('thinking')}</span>
+                  </span>
+                  <div className="bf-tl__body bf-tl__thought-line">
+                    {renderMsg(node.message, 'assistant', bodyText)}
+                    {prov && <ProvenanceChip prov={prov} labels={labels} identity={modelIdentity} />}
+                  </div>
+                </li>
+              );
+            }
             return (
               <li key={node.key} className="bf-tl__item bf-tl__item--assistant">
                 <span className="bf-tl__gutter">
@@ -661,19 +685,25 @@ function BrainTimelineInner({
                       anchorId={askUserAnchorId(node.message.id)}
                     />
                   )}
-                  <div className="bf-tl__actions">
-                    <MessageActions
-                      message={node.message}
-                      role="assistant"
-                      text={bodyText}
-                      labels={labels}
-                      onReplay={onReplayMessage}
-                      onRate={onRateMessage}
-                      rating={ratings?.[node.message.id]}
-                    />
-                    {renderAssistantActions?.(node.message)}
+                  {/* ONE footer line: attribution on the left, the actions on the right.
+                      They used to stack as two blocks under every reply; the actions now
+                      reveal on hover / focus (always shown on touch) like a user turn's,
+                      so a settled reply reads as header + text + one quiet line. */}
+                  <div className="bf-tl__foot">
+                    {prov && <ProvenanceChip prov={prov} labels={labels} identity={modelIdentity} />}
+                    <div className="bf-tl__actions bf-tl__actions--hover">
+                      <MessageActions
+                        message={node.message}
+                        role="assistant"
+                        text={answer}
+                        labels={labels}
+                        onReplay={onReplayMessage}
+                        onRate={onRateMessage}
+                        rating={ratings?.[node.message.id]}
+                      />
+                      {renderAssistantActions?.(node.message)}
+                    </div>
                   </div>
-                  {prov && <ProvenanceChip prov={prov} labels={labels} identity={modelIdentity} />}
                 </div>
               </li>
             );

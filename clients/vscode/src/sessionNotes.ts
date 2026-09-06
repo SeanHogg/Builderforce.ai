@@ -63,6 +63,8 @@ function argPath(args: unknown, key: string): string | undefined {
  * because that is the tool the model chose — the note describes the run's actions, not a
  * filesystem diff.
  */
+export type { RunActivity };
+
 export class SessionNotes {
   private readonly created: string[] = [];
   private readonly edited: string[] = [];

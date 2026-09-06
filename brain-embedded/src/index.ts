@@ -147,6 +147,10 @@ export {
   resetBrainRunStore,
 } from './brainRunStore';
 export type { BrainRunRequest, BrainRunSnapshot, BrainRunPersistence, BrainStreamFn } from './brainRunStore';
+// The run-driver seam: a host whose UI process is disposable (the VS Code webview)
+// executes runs in a longer-lived process and mirrors them back with `applyRemoteRun`.
+export { applyRemoteRun } from './brainRunStore';
+export { installRunDriver, getRunDriver, type BrainRunDriver } from './runDriver';
 
 // Execution triage — capture the Brain run (LLM/tool/error trace) as a report.
 export {

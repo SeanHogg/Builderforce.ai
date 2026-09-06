@@ -342,6 +342,48 @@
   .bf-tl__actions--hover { opacity: 1; }
 }
 
+/* The single footer line under a settled reply: attribution chip left, actions right.
+   Replaces the two stacked blocks (action row, then chip) every reply used to carry. */
+.bf-tl__foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 4px;
+  min-height: 24px;
+}
+.bf-tl__foot .bf-tl__prov,
+.bf-tl__foot .bf-tl__actions {
+  margin-top: 0;
+}
+.bf-tl__foot .bf-tl__actions {
+  margin-left: auto;
+}
+
+/* A reasoning-only turn (the model thought, then called a tool without replying):
+   one line — the collapsed "Thought" disclosure with the attribution chip beside it.
+   No header, no actions; the disclosure still opens to the full reasoning. */
+.bf-tl__item--thought {
+  padding-bottom: 6px;
+}
+.bf-tl__thought-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.bf-tl__thought-line > .bf-md {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.bf-tl__thought-line .bf-md__think,
+.bf-tl__thought-line .bf-tl__prov {
+  margin: 0;
+}
+.bf-tl__thought-line .bf-md__think[open] {
+  flex-basis: 100%;
+}
+
 /* Per-message icon action (copy / send again). */
 .bf-tl__act {
   flex: 0 0 auto;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { splitThinkSegments } from './thinkBlocks';
+import { answerTextOf, splitThinkSegments } from './thinkBlocks';
 
 describe('splitThinkSegments', () => {
   it('separates model reasoning from the answer without exposing control tags', () => {
@@ -66,5 +66,24 @@ Done.`)).toEqual([
     expect(splitThinkSegments('  **Normal answer**\n')).toEqual([
       { kind: 'answer', content: '  **Normal answer**\n' },
     ]);
+  });
+});
+
+describe('answerTextOf', () => {
+  it('returns the reply with the reasoning removed', () => {
+    expect(answerTextOf('<think>Inspect the model.</think>\nThe answer.')).toBe('The answer.');
+  });
+
+  it('is empty for a reasoning-only turn, closed or still streaming', () => {
+    expect(answerTextOf('<think>Only reasoning.</think>')).toBe('');
+    expect(answerTextOf('<think>Still reasoning…')).toBe('');
+  });
+
+  it('keeps a plain reply untouched', () => {
+    expect(answerTextOf('Done.')).toBe('Done.');
+  });
+
+  it('joins the answer around an interleaved thought', () => {
+    expect(answerTextOf('First.<think>hmm</think>Second.')).toBe('First.\n\nSecond.');
   });
 });

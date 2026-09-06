@@ -1,3 +1,47 @@
+## ✅ RESOLVED 2026-09-06 — VSIX chat: runs survive a closed tab, denser replies, and four defects from chat #99's transcript
+
+**Runs execute in the extension host, not the webview (VSIX 2026.9.17 · brain-embedded 2026.9.1).**
+Closing the Brain tab destroyed the webview's JavaScript context and, with it, the agent loop
+running inside it — the panel's own teardown said so. The loop now runs in the extension host
+(`clients/vscode/src/brainRunHost.ts`, ports in `brainRunHostPorts.ts`), assembled from the SAME
+primitives the native `@builderforce` participant uses (shared `brainToolCatalog.ts`, `routeStream`,
+`postBrainMessages`, `projectEvermindHooks`, session notes). The panel is a VIEW: the shared store
+gained a run-driver seam (`brain-embedded/src/runDriver.ts` + `applyRemoteRun`) so `startRun` /
+`stopRun` / `resolveRunConfirm` / `clearRunError` route to the host and every relayed `run.sync`
+(snapshot + trace DELTA) mirrors into the webview's store — `useBrainConversation`, the timeline
+and the cross-chat indicator read exactly what they always did. A reopened tab re-attaches on
+`ready` and is brought up to date; the Auto-mode switch follows live (`run.autoApprove`); the
+Sessions tree overlay is fed by the host store instead of a per-panel report. Deleted: the
+webview's `hostTools.ts`, `ToolRegistrar` / `PlatformTools`, the `tool.call` / `runs.local` bridge
+cases, `BrainWebview.runTool`, the deprecated `revealChangedFile` stub and per-panel notes.
+Tests: `brainRunHost.test.ts` (no panel attached, late attach, delta replay equals host trace,
+tool announcement, note flush, confirm gate + live switch, pre-loop failure → `run.failed`),
+`runDriver.test.ts`.
+
+**Denser replies (brain-ui 2026.9.1 · frontend 2026.9.11).** A reasoning-only turn (the model
+thought, then called a tool without addressing the user) collapsed to ONE line — the "Thought"
+disclosure with the attribution chip beside it — with no author header and no copy / send-again /
+rating row; six such turns cost ~30 rows before. A real reply keeps header + text + ONE footer
+line (chip left, hover-revealed actions right); copy / replay hand back the answer alone
+(`answerTextOf`), never the `<think>` scaffolding. The disclosure summary is localized
+(`thought` in all five web catalogs, `tl.thought` in all five VSIX bundles).
+
+**From the transcript of chat #99 (the mobile hero-height task):**
+- *The VSIX opened every edited file beside the chat* — the old in-panel tool path revealed
+  `write_file` / `edit_file` targets; gone with that path (edits land on disk, the Changes view
+  refreshes off `refreshPendingChanges`).
+- *`search_code` refused `?task=` with "invalid regex: Nothing to repeat"* and the agent retried
+  the same words for a turn — a query that is not a regex is now searched literally
+  (`compileSearchPattern`, guarded by `localCapabilities.test.ts`).
+- *`git_sync_latest` failed with cmd.exe's "Environment variable -e not defined"* — POSIX scripts
+  now go to bash EXPLICITLY (`execFile(bash, ["-c", script])`) instead of through the platform
+  shell with an override; verified on this Windows machine with a `set -e` script.
+- *`read_file` results reached the model double-JSON-encoded* (`"{\"ok\":true,…`, every `
+`
+  escaped twice) because the webview path handed the tool's JSON STRING to the trimmer as a
+  string — the host path parses it (`parseToolOutput`) so the read-file pager and the failure
+  detector see an object.
+
 ## ✅ RESOLVED 2026-09-06 — Codebase review, fourth pass: the unwired features are wired, or re-validated, or named as surfaces
 
 **What this pass was.** The register's seven "validated as intended; wire, do not delete" bullets

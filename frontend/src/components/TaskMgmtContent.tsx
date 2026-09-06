@@ -100,6 +100,8 @@ export interface TaskMgmtContentProps {
   projects?: Project[];
   /** Compact mode: hide header actions and filters (e.g. inside panel). */
   compact?: boolean;
+  /** Optional task ID to open in the drawer on initial load (deep-link support). */
+  initialTaskId?: number;
 }
 
 function formatDate(fmt: Formatter, d?: string | null): string {

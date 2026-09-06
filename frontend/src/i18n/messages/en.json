@@ -10007,6 +10007,7 @@
         "ariaLabel": "Current activity"
       },
       "thoughtFor": "Thought for {duration}",
+      "thought": "Thought",
       "you": "You",
       "assistant": "BuilderForce",
       "input": "Input",
@@ -19430,6 +19431,7 @@
     "noObjectsConnected": "No other objects connected yet.",
     "tokensSpent": "{count} tokens",
     "thoughtFor": "Thought for {duration}",
+    "thought": "Thought",
     "ranActions": "{count} actions",
     "brainPhase": {
       "thinking": "Thinking…",

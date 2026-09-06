@@ -417,6 +417,7 @@
   "This project has no connected repository to scan.": "This project has no connected repository to scan.",
   "This project’s Evermind isn’t set up yet. A project manager can enable it.": "This project’s Evermind isn’t set up yet. A project manager can enable it.",
   "Thorough": "Thorough",
+  "Thought": "Thought",
   "Thought for {duration}": "Thought for {duration}",
   "Throw away anything queued but not yet learned, and clear cached answers so repeat questions are answered fresh. Learned knowledge is untouched.": "Throw away anything queued but not yet learned, and clear cached answers so repeat questions are answered fresh. Learned knowledge is untouched.",
   "Timer": "Timer",
