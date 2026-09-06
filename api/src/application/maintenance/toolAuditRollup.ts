@@ -17,8 +17,9 @@
  * a defensible audit artifact in its own right: it states that this agent called this
  * tool this many times on this day, first at this time and last at that one.
  *
- * WHAT A FOLD COSTS. The ability to cite ONE call. That is why the boundary sits
- * BEYOND the redaction boundary rather than at it — see {@link TOOL_AUDIT_ROLLUP_AFTER_DAYS}.
+ * WHAT A FOLD COSTS. The ability to cite ONE call, from the fold boundary back. Where
+ * that boundary belongs, and what the two windows either side of it are for, is
+ * {@link TOOL_AUDIT_ROLLUP_AFTER_DAYS}.
  *
  * WHOLE DAYS ONLY. The fold is keyed on a calendar day and the cutoff is floored to
  * midnight, so a day is either entirely folded or entirely raw. A partially folded
@@ -36,15 +37,32 @@ import type { Db } from '../../infrastructure/database/connection';
 /**
  * Days a raw tool-audit row keeps its individual identity.
  *
- * WHY 45 AND NOT 30. It has to sit strictly between the two windows that already
- * exist, and the ORDER is the point: `redact.afterDays` (30) → this (45) →
- * `retentionDays` (90). A row is only ever folded after its `args`/`result` payload
- * has already been blanked, so the fold discards a row that had nothing left in it
- * but the dimensions the tally keeps. Folding AT the redaction boundary would have
- * been the same size for 15 days less row-level history, because by then nearly
- * everything foldable is months old — the space is in the backlog, not the margin.
+ * THE LADDER. Three windows, each of which has to earn its place or it is a knob that
+ * does nothing: `redact.afterDays` (14) → this (30) → `retentionDays` (90).
+ *
+ *   0–14d   full fidelity — `args`/`result` readable, which is the window in which
+ *           anyone is actually debugging a run or reading a skip reason off the
+ *           lifecycle ledger.
+ *   14–30d  row-level identity, payload blanked. Still cites an individual call.
+ *   30d+    a daily tally. Every compliance figure intact, no individual call.
+ *
+ * WHY 30 AND NOT LATER. The first choice here was 45, on the reasoning that pushing
+ * the fold past the redaction boundary bought row-level history for free because
+ * "the space is in the backlog, not the margin". Running it disproved that: folding
+ * at 45 days cleared 229,944 rows and LEFT 421,719 — the July re-dispatch loop sits
+ * almost entirely in the 30-to-45-day band, so the margin was where nearly all of
+ * the space was. 30 is also the point at which the row has already lost its payload,
+ * which is what makes the fold cheap in what it discards.
+ *
+ * The redaction window moved 30 → 14 in the same pass rather than the fold moving to
+ * 31 to clear it. Two stages one day apart is theatre: the fold subsumes redaction
+ * (it drops the whole row, not two columns of it), so a redaction window that only
+ * ever applies for a day is a dead knob dressed as a policy. At 14 days it is a real
+ * stage again, and the cost is bounded — the compliance summary and evidence pack
+ * never read either column, so this narrows only the ledger's ability to quote a skip
+ * REASON on a ticket idle 14–30 days, a degradation that path already handles.
  */
-export const TOOL_AUDIT_ROLLUP_AFTER_DAYS = 45;
+export const TOOL_AUDIT_ROLLUP_AFTER_DAYS = 30;
 
 /** Days of tallies to fold per invocation. Bounds the work of one sweep tick; the
  *  backlog drains over consecutive ticks rather than in one long transaction. */

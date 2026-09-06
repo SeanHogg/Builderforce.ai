@@ -203,13 +203,16 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
       + 'this window is the backstop that still holds if a fold ever fails.',
     purge: (db, cutoff) => db.delete(toolAuditEvents).where(acrossTenants(toolAuditEvents, 'scheduled_sweep', lt(toolAuditEvents.createdAt, cutoff))),
     redact: {
-      afterDays: 30,
+      afterDays: 14,
       rationale:
         'The verbatim tool `args`/`result` payloads. No consumer reads either column past the live '
         + 'timeline: the compliance summary and the evidence pack both project only ts, tool, category, '
         + 'agent, execution and duration. At 154 + 139 bytes average they were 186 MB of a 298 MB '
-        + 'relation, so blanking them past 30d keeps 90 days of COMPLETE compliance evidence while '
-        + 'returning ~20% of the entire database.',
+        + 'relation, so blanking them keeps the compliance evidence COMPLETE while returning ~20% of '
+        + 'the entire database. The window was 30d until `rollup` arrived below and made that a dead '
+        + 'knob — a fold at 30d drops the whole row first, so redaction at the same boundary would '
+        + 'never have found one. 14d is the window in which anyone actually reads a payload: a live '
+        + 'run, or a skip reason quoted off the lifecycle ledger.',
       run: (db, cutoff) => db.update(toolAuditEvents)
         .set({ args: null, result: null })
         .where(acrossTenants(
@@ -228,9 +231,10 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
         'Folds a day of tool calls to one row per (tenant, day, tool, category, agent) in '
         + '`tool_audit_daily`. That is exactly the grain the compliance summary and the evidence '
         + 'pack aggregate to, so volume, sensitive-action count, the per-tool/per-category/per-agent '
-        + 'breakdowns and duration all come out unchanged — measured 170:1 in production '
-        + '(655,700 rows → 3,859 tallies). What it gives up is citing ONE call older than 45 days, '
-        + 'by which point `redact` has already emptied that row of everything but its dimensions.',
+        + 'breakdowns and duration all come out unchanged — measured 196:1 in production '
+        + '(651,663 rows → 3,325 tallies). What it gives up is citing ONE call older than the '
+        + 'boundary, by which point `redact` has already emptied that row of everything but the '
+        + 'dimensions the tally keeps.',
       run: (db, cutoff) => rollUpToolAudit(db, cutoff),
     },
   },

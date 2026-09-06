@@ -9,11 +9,10 @@
 -- (tenant, day, tool_name, category, agent). Folding to that grain measured 170:1:
 -- 655,700 raw rows → 3,859 tallies.
 --
--- WHAT IT COSTS. The ability to cite ONE tool call older than the fold boundary.
--- That boundary sits BEYOND the existing redaction boundary on purpose (30d redact
--- → 45d fold → 90d purge), so a row is only ever folded after its `args`/`result`
--- payload has already been blanked — i.e. the fold discards a row that had nothing
--- left in it but its dimensions, and the tally keeps those.
+-- WHAT IT COSTS. The ability to cite ONE tool call older than the fold boundary. The
+-- three stages are 14d redact → 30d fold → 90d purge, so a row is only ever folded
+-- after its `args`/`result` payload has already been blanked — the fold discards a row
+-- that had nothing left in it but its dimensions, and the tally keeps those.
 --
 -- NO FK ON agent_host_id. The raw table cascade-deletes an agent host's events with
 -- the host. An audit record a deregistration erases is not an audit record, so the
