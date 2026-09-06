@@ -16,6 +16,24 @@ describe('canonical Canvas resume renderer', () => {
     expect(resumeHtmlFile('Ada', rendered!)).toContain(rendered!.html);
   });
 
+  /** A Hired descriptor travels with the revision and outranks the stock id: it is the
+   *  fuller statement of the layout, and the stock template alone would render the
+   *  same résumé in the template's defaults. An invalid one falls back to the id. */
+  it('renders through the revision\'s template descriptor when it carries one', () => {
+    const descriptor = {
+      id: 'actor-headshot-hero', version: '1.2', documentMode: 'hero',
+      layout: { columns: 1 }, hero: { enabled: true, layout: 'stacked', showAvatar: true, showContactButtons: false, showSummary: true, showVideo: false },
+    };
+    const family = createResumeFamily({ title: 'Ada', markdown: '# Ada', templateId: 'actor-headshot-hero', templateDescriptor: descriptor, idFactory: () => 'original' });
+    expect(family.revisions[0]?.templateDescriptor).toEqual(descriptor);
+    const rendered = renderedCanvasResume({ kind: 'resume', title: 'Ada', ...resumeNodePatch(family) })!;
+    expect(rendered.template.hero).toMatchObject({ layout: 'stacked', showContactButtons: false });
+    expect(rendered.html).toContain('data-hero-layout="stacked"');
+
+    const stale = createResumeFamily({ title: 'Ada', markdown: '# Ada', templateId: 'executive-taupe', templateDescriptor: { id: 'executive-taupe', version: '9.0' }, idFactory: () => 'original' });
+    expect(renderedCanvasResume({ kind: 'resume', title: 'Ada', ...resumeNodePatch(stale) })?.template.id).toBe('executive-taupe');
+  });
+
   it('uses the persisted page size and orientation in true-size preview and export CSS', () => {
     expect(resumePageDimensions('letter', 'portrait')).toEqual({ width: 215.9, height: 279.4 });
     expect(resumePageDimensions('legal', 'landscape')).toEqual({ width: 355.6, height: 215.9 });

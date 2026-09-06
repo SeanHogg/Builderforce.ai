@@ -38,6 +38,9 @@ export interface CloneSynthesisOutput {
 
 /** Thrown when no synthesis backend is configured — the route maps it to 503. */
 export class TtsProviderUnavailable extends Error {
+  /** An honest 503 — no provider is wired, and faking audio is never an option (PRD §7). */
+  readonly status = 503;
+  readonly code = 'provider_unavailable';
   constructor(message = 'Voice synthesis provider not configured.') {
     super(message);
     this.name = 'TtsProviderUnavailable';

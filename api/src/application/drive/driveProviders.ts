@@ -58,12 +58,22 @@ export interface DriveProvider {
   download(accessToken: string, fileId: string): Promise<DriveDownload>;
 }
 
-/** A provider said no. Carries the status so the caller can tell "reconnect"
- * (401) from "that folder is gone" (404) from "try again" (5xx). */
+/**
+ * A provider said no. `upstreamStatus` is the code the vendor answered with;
+ * `status` is what THIS API answers with, decided once here rather than at each
+ * route: a 401/403 upstream means "reconnect" (401), 413 means the file is too
+ * big, 415 means it has no downloadable form, a 404 is the caller naming a
+ * folder or file that is gone (400), and anything else is transient (503).
+ */
 export class DriveProviderError extends Error {
-  constructor(message: string, readonly status: number) {
+  readonly status: 400 | 401 | 413 | 415 | 503;
+  constructor(message: string, readonly upstreamStatus: number) {
     super(message);
     this.name = 'DriveProviderError';
+    this.status = upstreamStatus === 401 || upstreamStatus === 403 ? 401
+      : upstreamStatus === 413 ? 413
+        : upstreamStatus === 415 ? 415
+          : upstreamStatus === 404 ? 400 : 503;
   }
 }
 

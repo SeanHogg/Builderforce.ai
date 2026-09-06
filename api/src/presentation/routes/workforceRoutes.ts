@@ -42,7 +42,6 @@ import {
   holdsAgentPurchase,
   startAgentCheckout,
 } from '../../application/marketplace/agentCommerce';
-import { ListingError } from '../../application/marketplace/creationListings';
 import { demoTenantAgent, publicAgentScope } from '../../application/marketplace/publicAgentScope';
 import {
   ensureAgentIdentity,
@@ -51,6 +50,36 @@ import {
   revokeHiredAgent,
 } from '../../application/workforce/hiredAgents';
 import type { Env, HonoEnv } from '../../env';
+import { parseBody, z, zNonEmptyString } from './requestBody';
+
+/** The fields a cloud agent's owner may write; create requires `name`, patch may also set `status`. */
+const AgentWriteBody = z.object({
+  name: z.string().optional(),
+  title: z.string().optional(),
+  bio: z.string().optional(),
+  skills: z.array(z.string()).optional(),
+  baseModel: z.string().optional(),
+  runtimeSupport: z.string().optional(),
+  preferredRuntime: z.string().nullable().optional(),
+  runtimeSurface: z.string().optional(),
+  priceCents: z.number().optional(),
+  pricingModel: z.string().optional(),
+  priceUnit: z.string().nullable().optional(),
+  published: z.boolean().optional(),
+  psychometric: z.unknown().optional(),
+});
+const AgentCreateBody = AgentWriteBody.extend({ name: zNonEmptyString });
+const AgentPatchBody = AgentWriteBody.extend({ status: z.string().optional() });
+
+const CheckoutStartBody = z.object({
+  returnUrl: z.string().optional(),
+  buyerEmail: z.string().optional(),
+});
+const CheckoutCompleteBody = z.object({ checkoutSessionId: zNonEmptyString });
+const FeedbackBody = z.object({
+  rating: z.number(),
+  comment: z.string().nullable().optional(),
+});
 
 /** Cache key for a tenant's purchased (marketplace-acquired) agents. */
 const purchasedCacheKey = (tenantId: number): string => `wf:purchased:${tenantId}`;
@@ -487,27 +516,21 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     if (Number(agent.price_cents ?? 0) <= 0) return c.json({ free: true });
     if (await holdsAgentPurchase(db, tenantId, id)) return c.json({ purchased: true });
 
-    const body = await c.req
-      .json<{ returnUrl?: string; buyerEmail?: string }>()
-      .catch(() => ({} as { returnUrl?: string; buyerEmail?: string }));
+    const body = await parseBody(c, CheckoutStartBody);
     // The buyer comes back to the page they left, so the return url is theirs to
     // name — but only its origin and path are used, and the processor substitutes
     // the session id, so it cannot be turned into an open redirect carrying data.
     const returnUrl = body.returnUrl ?? `${new URL(c.req.url).origin}/workforce`;
-    try {
-      const { checkoutUrl } = await startAgentCheckout(db, c.env as Env, {
-        tenantId,
-        buyerUserId: c.get('userId') as string,
-        // Only prefills the processor's own email field; it collects one either way.
-        buyerEmail: typeof body.buyerEmail === 'string' ? body.buyerEmail : null,
-        agentId: id,
-        returnUrl,
-      });
-      return c.json({ checkoutUrl });
-    } catch (error) {
-      if (error instanceof ListingError) return c.json({ error: error.message }, error.status);
-      throw error;
-    }
+    // A `ListingError` carries its own status; `statusOf` renders it (no local map).
+    const { checkoutUrl } = await startAgentCheckout(db, c.env as Env, {
+      tenantId,
+      buyerUserId: c.get('userId') as string,
+      // Only prefills the processor's own email field; it collects one either way.
+      buyerEmail: body.buyerEmail ?? null,
+      agentId: id,
+      returnUrl,
+    });
+    return c.json({ checkoutUrl });
   });
 
   // POST /agents/:id/checkout/complete — the processor's redirect lands here.
@@ -516,19 +539,13 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   router.post('/agents/:id/checkout/complete', authMiddleware, async (c) => {
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ checkoutSessionId?: string }>().catch(() => ({ checkoutSessionId: undefined }));
-    if (!body.checkoutSessionId) return c.json({ error: 'checkoutSessionId is required' }, 400);
-    try {
-      const purchase = await completeAgentCheckout(db, c.env as Env, {
-        tenantId,
-        buyerUserId: c.get('userId') as string,
-        checkoutSessionId: body.checkoutSessionId,
-      });
-      return c.json({ purchased: true, purchase });
-    } catch (error) {
-      if (error instanceof ListingError) return c.json({ error: error.message }, error.status);
-      throw error;
-    }
+    const body = await parseBody(c, CheckoutCompleteBody);
+    const purchase = await completeAgentCheckout(db, c.env as Env, {
+      tenantId,
+      buyerUserId: c.get('userId') as string,
+      checkoutSessionId: body.checkoutSessionId,
+    });
+    return c.json({ purchased: true, purchase });
   });
 
   // DELETE /agents/:id/hire — release a previously-hired marketplace agent from
@@ -565,23 +582,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
-    const body = await c.req.json<{
-      name: string;
-      title?: string;
-      bio?: string;
-      skills?: string[];
-      baseModel?: string;
-      runtimeSupport?: string;
-      preferredRuntime?: string | null;
-      runtimeSurface?: string;
-      priceCents?: number;
-      pricingModel?: string;
-      priceUnit?: string | null;
-      published?: boolean;
-      psychometric?: unknown;
-    }>();
-
-    if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
+    const body = await parseBody(c, AgentCreateBody);
 
     const runtimeSupport = (RUNTIME_SUPPORT as readonly string[]).includes(body.runtimeSupport ?? '')
       ? body.runtimeSupport! : 'cloud';
@@ -605,8 +606,8 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
         id,
         tenantId,
         projectId: null,
-        name: body.name.trim(),
-        title: body.title?.trim() || body.name.trim(),
+        name: body.name,
+        title: body.title?.trim() || body.name,
         bio: body.bio ?? '',
         skills: JSON.stringify(body.skills ?? []),
         baseModel: body.baseModel || 'builderforce-default',
@@ -622,6 +623,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
         psychometric,
       })
       .returning(agentRowColumns);
+    if (!row) throw new Error('ide_agents insert returned no row');
     await invalidateAgentCaches(c.env as Env, tenantId);
     return c.json(mapAgentRow(row), 201);
   });
@@ -631,22 +633,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
     const id = c.req.param('id');
-    const body = await c.req.json<{
-      name?: string;
-      title?: string;
-      bio?: string;
-      skills?: string[];
-      baseModel?: string;
-      runtimeSupport?: string;
-      preferredRuntime?: string | null;
-      runtimeSurface?: string;
-      priceCents?: number;
-      pricingModel?: string;
-      priceUnit?: string | null;
-      published?: boolean;
-      status?: string;
-      psychometric?: unknown;
-    }>();
+    const body = await parseBody(c, AgentPatchBody);
 
     const [existing] = await db
       .select(agentRowColumns)
@@ -767,7 +754,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     const projectAgentId = await ensureAgentIdentity(db, {
       tenantId, agentId: id, name: agent.name, addedBy: userId,
     });
-    if (projectAgentId == null) return c.json({ error: 'Failed to create agent identity' }, 500);
+    if (projectAgentId == null) throw new Error('project_agents identity upsert returned no row');
     return c.json({ projectAgentId });
   });
 
@@ -800,8 +787,8 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const body = await c.req.json<{ rating?: number; comment?: string | null }>();
-    const rating = Math.round(Number(body.rating));
+    const body = await parseBody(c, FeedbackBody);
+    const rating = Math.round(body.rating);
     if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
       return c.json({ error: 'rating must be an integer 1..5' }, 400);
     }
@@ -816,7 +803,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       ));
     if (!purchase) return c.json({ error: 'Hire this agent before leaving feedback.' }, 409);
 
-    const comment = (body.comment ?? '').toString().trim() || null;
+    const comment = (body.comment ?? '').trim() || null;
     const [row] = await db
       .insert(agentFeedback)
       .values({ purchaseId: purchase.id, agentId: id, tenantId, rating, comment })

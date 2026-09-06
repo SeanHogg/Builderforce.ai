@@ -37,7 +37,7 @@ import type { Context } from 'hono';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { authMiddleware, isManager, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import { ForbiddenError } from '../../domain/shared/errors';
+import { ForbiddenError, RequestValidationError } from '../../domain/shared/errors';
 import {
   boards,
   swimlanes,
@@ -74,15 +74,38 @@ import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { forLane, laneAgentAssignments, laneAssignmentValues } from '../../application/swimlane/laneAgentAssignments';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { invalidateBoardLaneOrdinals, invalidateSwimlaneOrdinals } from '../../application/swimlane/laneOrdinals';
+import { parseBody, z, zNonEmptyString, zPositiveInt } from './requestBody';
 
-const WORKFLOW_STATUSES: WorkflowStatus[] = ['pending', 'running', 'completed', 'failed', 'cancelled'];
+const WORKFLOW_STATUSES = ['pending', 'running', 'completed', 'failed', 'cancelled'] as const satisfies readonly WorkflowStatus[];
 
 /** Env shape we read for agentHost dispatch — AGENT_HOST_RELAY is optional (browser-only works without it). */
 type BoardEnv = { AGENT_HOST_RELAY?: AgentHostRelayNamespace };
 
+const CreateBoardBody = z.object({
+  projectId: zPositiveInt,
+  name: zNonEmptyString,
+  maxConcurrentTickets: zPositiveInt.optional(),
+  needsAttentionLane: z.string().optional(),
+  segmentId: z.string().optional(),
+  /** Seed the standard status-mirroring swimlanes (default true). */
+  seedDefaultLanes: z.boolean().optional(),
+});
+
+const PatchBoardBody = z.object({
+  name: z.string().optional(),
+  maxConcurrentTickets: z.number().int().optional(),
+  needsAttentionLane: z.string().optional(),
+  standupTurnMode: z.string().optional(),
+  standupTurnSeconds: z.number().int().optional(),
+  /** Default per-member WIP cap for the round table's power meter (1084). */
+  defaultMemberWipCap: z.number().optional(),
+  hideDoneItems: z.boolean().optional(),
+  requireExecutionApproval: z.boolean().optional(),
+});
+
 /** Mutable swimlane fields shared by the create + patch routes. */
-interface LaneWriteBody {
-  name?: string;
+const LaneWriteBody = z.object({
+  name: z.string().optional(),
   /**
    * The lane's KEY — the status its tickets hold, not the label a person reads.
    *
@@ -91,19 +114,19 @@ interface LaneWriteBody {
    * board's other lane-key pointers) instead of stranding them. `renameLaneKey`
    * owns that cascade; the route never writes `key` directly.
    */
-  key?: string;
-  position?: number;
-  isTerminal?: boolean;
-  gate?: string;
-  executionMode?: string;
-  failurePolicy?: string;
+  key: z.string().optional(),
+  position: z.number().int().optional(),
+  isTerminal: z.boolean().optional(),
+  gate: z.string().optional(),
+  executionMode: z.string().optional(),
+  failurePolicy: z.string().optional(),
   /** Lane action + success quorum (migration 0084). */
-  actionType?: string;      // ''|'advance' | 'move_ticket' | 'run_workflow'
-  actionTarget?: string;    // lane key (move_ticket) | workflow id (run_workflow)
-  successPolicy?: string;   // 'all' | 'any' | 'n_of_m'
-  successThreshold?: number;
+  actionType: z.string().optional(),      // ''|'advance' | 'move_ticket' | 'run_workflow'
+  actionTarget: z.string().optional(),    // lane key (move_ticket) | workflow id (run_workflow)
+  successPolicy: z.string().optional(),   // 'all' | 'any' | 'n_of_m'
+  successThreshold: z.number().int().optional(),
   /** How strictly this lane's requirements gate entry (migration 0274): off|soft|hard. */
-  requirementGate?: string;
+  requirementGate: z.string().optional(),
   /**
    * PARKED — off the delivery path (migration 1080).
    *
@@ -112,8 +135,58 @@ interface LaneWriteBody {
    * blocked ticket used to report ~87% complete because `Blocked` sits late in the lane
    * order) and `resolveNextLaneKey` refuses to advance INTO one.
    */
-  isParking?: boolean;
-}
+  isParking: z.boolean().optional(),
+});
+const LaneCreateBody = LaneWriteBody.extend({ name: zNonEmptyString });
+
+/** Re-home orphaned tickets onto the lane whose key this names. */
+const AdoptOrphansBody = z.object({ into: zNonEmptyString });
+
+/**
+ * A lane assignment MUST name an agent. There used to be a second, "legacy" branch
+ * that accepted a free-text `role` alone and wrote `agentKind`/`agentRef` as
+ * null — which migration 1085 made impossible: lane staffing now lives in the
+ * canonical `agent_assignments`, where both columns are NOT NULL, and 1085 DELETED
+ * the pre-existing role-only rows on the same reasoning ("a lane assignment naming
+ * no agent could never be dispatched — it was a half-written row"). That branch
+ * could therefore only ever produce a constraint violation, and no client sent it:
+ * the typed API client has required `agentKind` + `agentRef` since. A `role` is
+ * still accepted, as the OVERRIDE it always was on top of a named agent.
+ */
+const LaneAgentBody = z.object({
+  // Pick a registry agent; runtime/target/model are resolved from it.
+  agentKind: z.enum(['workforce', 'registered'] as const satisfies readonly AgentKind[]),
+  agentRef: zNonEmptyString,
+  // Optional overrides applied on top of the resolved registry agent: a
+  // display `name` for this lane's slot and a `role` (e.g. QA, Reviewer) the
+  // SwimlaneCoordinator dispatches under. Blank = keep the agent's defaults.
+  name: z.string().optional(),
+  role: z.string().optional(),
+  taskTemplate: z.string().optional(),
+  requiredCapabilities: z.unknown().optional(),
+  model: z.string().optional(),
+  position: z.number().int().optional(),
+});
+
+const RunLaneBody = z.object({ limit: zPositiveInt.optional() });
+
+const REQUIREMENT_KINDS = ['role', 'diagnostic', 'review'] as const;
+const RequirementPatchBody = z.object({
+  ref: z.string().optional(),
+  responsibility: z.string().optional(),
+  isRequired: z.boolean().optional(),
+  description: z.string().optional(),
+  position: z.number().int().optional(),
+});
+const RequirementCreateBody = RequirementPatchBody.extend({
+  kind: z.enum(REQUIREMENT_KINDS),
+  ref: zNonEmptyString,
+});
+
+const StartTicketBody = z.object({ taskId: zPositiveInt });
+
+/** A stage report; omitted status = the stage completed. */
+const AdvanceBody = z.object({ workflowStatus: z.enum(WORKFLOW_STATUSES).optional() });
 
 /**
  * The workspace's cloud-run allowance, as ONE fact (DISP-R3).
@@ -162,18 +235,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
 
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{
-      projectId: number;
-      name: string;
-      maxConcurrentTickets?: number;
-      needsAttentionLane?: string;
-      segmentId?: string;
-      /** Seed the standard status-mirroring swimlanes (default true). */
-      seedDefaultLanes?: boolean;
-    }>();
-
-    if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
-    if (!body.projectId) return c.json({ error: 'projectId is required' }, 400);
+    const body = await parseBody(c, CreateBoardBody);
 
     // One board per project (UNIQUE(project_id), migration 0111): find-or-create
     // rather than blindly inserting, so a repeat create returns the existing board
@@ -238,17 +300,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   router.patch('/:boardId', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const boardId = c.req.param('boardId');
-    const body = await c.req.json<{
-      name?: string;
-      maxConcurrentTickets?: number;
-      needsAttentionLane?: string;
-      standupTurnMode?: string;
-      standupTurnSeconds?: number;
-      /** Default per-member WIP cap for the round table's power meter (1084). */
-      defaultMemberWipCap?: number;
-      hideDoneItems?: boolean;
-      requireExecutionApproval?: boolean;
-    }>();
+    const body = await parseBody(c, PatchBoardBody);
 
     // The execution-approval gate is a governance control: only managers+ may
     // override it (mirrors the <RoleGate capability="board.manageApproval"> UX
@@ -357,8 +409,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const boardId = c.req.param('boardId');
     if (!(await assertBoard(tenantId, boardId))) return c.json({ error: 'Board not found' }, 404);
 
-    const body = await c.req.json<LaneWriteBody & { name: string }>();
-    if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
+    const body = await parseBody(c, LaneCreateBody);
 
     // The key is DERIVED from the name unless the caller names one. It used to be
     // derived in the lane editor instead, from whatever lane list the browser was
@@ -409,6 +460,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         updatedAt: now,
       })
       .returning();
+    if (!row) throw new Error('swimlanes insert returned no row');
     await invalidateBoardLaneOrdinals(c.env as Env, db, boardId);
     return c.json(row, 201);
   });
@@ -418,7 +470,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const boardId = c.req.param('boardId');
     const laneId = c.req.param('laneId');
 
-    const body = await c.req.json<LaneWriteBody>();
+    const body = await parseBody(c, LaneWriteBody);
 
     // RENAMING THE KEY IS A CASCADE, NOT A COLUMN WRITE. The key IS the status every
     // resident ticket holds, and three other live rows point at a lane by it, so this
@@ -555,9 +607,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const boardId = c.req.param('boardId');
     if (!(await assertBoard(tenantId, boardId))) return c.json({ error: 'Board not found' }, 404);
-    const body = await c.req.json<{ into?: string }>().catch(() => ({} as { into?: string }));
-    const targetKey = body.into?.trim();
-    if (!targetKey) return c.json({ error: 'into (a lane key) is required' }, 400);
+    const { into: targetKey } = await parseBody(c, AdoptOrphansBody);
 
     const adopted = await adoptOrphanedTasks(db, { tenantId, boardId, targetKey });
     if (!adopted.movedTo) return c.json({ error: 'That board has no column with that key' }, 400);
@@ -600,38 +650,11 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const laneId = c.req.param('laneId');
     if (!(await assertLane(tenantId, boardId, laneId))) return c.json({ error: 'Swimlane not found' }, 404);
 
-    const body = await c.req.json<{
-      // New model: pick a registry agent; runtime/target/model are resolved from it.
-      agentKind?: AgentKind;
-      agentRef?: string;
-      // Optional overrides applied on top of the resolved registry agent: a
-      // display `name` for this lane's slot and a `role` (e.g. QA, Reviewer) the
-      // SwimlaneCoordinator dispatches under. Blank = keep the agent's defaults.
-      name?: string;
-      role?: string;
-      taskTemplate?: string;
-      requiredCapabilities?: unknown;
-      model?: string;
-      position?: number;
-    }>();
+    // `LaneAgentBody` says why the agent is REQUIRED here.
+    const body = await parseBody(c, LaneAgentBody);
 
-    /**
-     * Resolve the chosen registry agent (runtime/host/model defaults) at assign time so
-     * the dispatch pipeline keeps reading plain columns.
-     *
-     * A lane assignment MUST name an agent. There used to be a second, "legacy" branch
-     * here that accepted a free-text `role` alone and wrote `agentKind`/`agentRef` as
-     * null — which migration 1085 made impossible: lane staffing now lives in the
-     * canonical `agent_assignments`, where both columns are NOT NULL, and 1085 DELETED
-     * the pre-existing role-only rows on the same reasoning ("a lane assignment naming
-     * no agent could never be dispatched — it was a half-written row"). That branch
-     * could therefore only ever produce a constraint violation, and no client sent it:
-     * the typed API client has required `agentKind` + `agentRef` since. A `role` is
-     * still accepted, as the OVERRIDE it always was on top of a named agent.
-     */
-    if (!body.agentKind || !body.agentRef) {
-      return c.json({ error: 'agentKind and agentRef are required — a lane assignment must name an agent' }, 400);
-    }
+    // Resolve the chosen registry agent (runtime/host/model defaults) at assign time so
+    // the dispatch pipeline keeps reading plain columns.
     let resolved: {
       agentKind: AgentKind;
       agentRef: string;
@@ -682,6 +705,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         position: body.position ?? 0,
       }))
       .returning();
+    if (!row) throw new Error('agent_assignments insert returned no row');
 
     // ── THE MOMENT THE ANSWER CHANGES ───────────────────────────────────────────
     // The autonomous trigger only fires when a ticket ENTERS a lane. Staffing a lane
@@ -721,10 +745,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const laneKey = await loadLaneKey(tenantId, boardId, laneId);
     if (!laneKey) return c.json({ error: 'Swimlane not found' }, 404);
 
-    const body = await c.req.json<{ limit?: unknown }>().catch(() => ({ limit: undefined }));
-    const limit = typeof body.limit === 'number' && Number.isSafeInteger(body.limit) && body.limit > 0
-      ? body.limit
-      : undefined;
+    const { limit } = await parseBody(c, RunLaneBody);
 
     const result = await backfillLaneResidents(c.env as Env, db, {
       tenantId,
@@ -775,16 +796,14 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const laneId = c.req.param('laneId');
     if (!boardId || !laneId) return c.json({ error: 'Swimlane not found' }, 404);
     if (!(await assertLane(tenantId, boardId, laneId))) return c.json({ error: 'Swimlane not found' }, 404);
-    const body = await c.req.json<{ kind: string; ref: string; responsibility?: string; isRequired?: boolean; description?: string; position?: number }>();
-    const kind = ['role', 'diagnostic', 'review'].includes(body.kind) ? body.kind : null;
-    if (!kind || !body.ref?.trim()) return c.json({ error: 'kind (role|diagnostic|review) and ref are required' }, 400);
+    const body = await parseBody(c, RequirementCreateBody);
     const [row] = await db
       .insert(swimlaneRequirements)
       .values({
         id: crypto.randomUUID(),
         tenantId,
         swimlaneId: laneId,
-        kind,
+        kind: body.kind,
         ref: body.ref.trim().slice(0, 120),
         responsibility: body.responsibility && ['owner', 'reviewer', 'contributor'].includes(body.responsibility) ? body.responsibility : null,
         isRequired: body.isRequired ?? true,
@@ -792,6 +811,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         position: body.position ?? 0,
       })
       .returning();
+    if (!row) throw new Error('swimlane_requirements insert returned no row');
     return c.json(row, 201);
   });
 
@@ -803,7 +823,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const reqId = c.req.param('reqId');
     if (!boardId || !laneId || !reqId) return c.json({ error: 'Requirement not found' }, 404);
     if (!(await assertLane(tenantId, boardId, laneId))) return c.json({ error: 'Swimlane not found' }, 404);
-    const body = await c.req.json<{ ref?: string; responsibility?: string; isRequired?: boolean; description?: string; position?: number }>();
+    const body = await parseBody(c, RequirementPatchBody);
     await db
       .update(swimlaneRequirements)
       .set({
@@ -838,8 +858,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const boardId = c.req.param('boardId');
     if (!(await assertBoard(tenantId, boardId))) return c.json({ error: 'Board not found' }, 404);
 
-    const body = await c.req.json<{ taskId: number }>();
-    if (!body.taskId) return c.json({ error: 'taskId is required' }, 400);
+    const body = await parseBody(c, StartTicketBody);
 
     try {
       const run = await mkCoordinator(c.env).startTicket(boardId, body.taskId, tenantId);
@@ -911,11 +930,13 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const ticketRunId = c.req.param('ticketRunId');
     if (!(await assertTicketRun(tenantId, ticketRunId))) return c.json({ error: 'Ticket run not found' }, 404);
 
-    const body = await c.req.json<{ workflowStatus: WorkflowStatus }>().catch(() => ({ workflowStatus: 'completed' as WorkflowStatus }));
-    const status = body.workflowStatus ?? 'completed';
-    if (!WORKFLOW_STATUSES.includes(status)) {
-      return c.json({ error: `workflowStatus must be one of ${WORKFLOW_STATUSES.join(', ')}` }, 400);
-    }
+    // A bare POST (no body at all) has always meant "completed"; a body that IS
+    // sent must name a known status.
+    const body = await parseBody(c, AdvanceBody).catch((e: unknown) => {
+      if (e instanceof RequestValidationError && e.issues[0]?.path === '') return {};
+      throw e;
+    });
+    const status: WorkflowStatus = body.workflowStatus ?? 'completed';
 
     try {
       const run = await mkCoordinator(c.env).onStageComplete(ticketRunId, status);

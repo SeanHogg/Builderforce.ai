@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { FOUNDER_OBJECT_KINDS, isFounderObjectKind, CREATION_OBJECT_KINDS } from '@builderforce/creation-canvas-contract';
 import {
   FOUNDER_BOOKKEEPING_FIELDS, FOUNDER_FIELD_NAMES, FOUNDER_OBJECT_SPECS,
-  counterpartyAccountField, founderMutableFields,
+  capTablePercentBalance, counterpartyAccountField, founderMutableFields,
 } from './founderObjects';
 import { makeSpecDeriveBoard, specFieldGuidance, specFieldValue, specObjectSpec, specSetGuidance } from './specObjects';
 import {
@@ -148,7 +148,52 @@ describe('the empty-shell rule', () => {
   });
 });
 
+describe('the cap table percent column', () => {
+  const fieldOn = (kind: string, name: string) => specObjectSpec(kind)!.fields.find((entry) => entry.name === name)!;
+  const table = (holders: Array<Record<string, unknown>>, poolUnallocated: number) => ({
+    kind: 'capTable', title: 'Cap table', fullyDiluted: 1_000, poolUnallocated, holders,
+  });
+
+  it('balances only when holders plus the unallocated pool reach ~100', () => {
+    const holders = [{ shares: 600, percent: 60 }, { shares: 300, percent: 30 }];
+    expect(capTablePercentBalance(holders, 100, 1_000)).toMatchObject({ balanced: true, total: 100 });
+    // The same rows with the pool misreported: the shares still add up, the percentages do not.
+    expect(capTablePercentBalance(holders, 0, 1_000)).toMatchObject({ balanced: false, total: 90 });
+    // A board saved before the column existed is not judged.
+    expect(capTablePercentBalance([{ shares: 600 }], 100, 1_000)).toBeNull();
+  });
+
+  it('says on the card when the percentages do not balance, rather than adjusting one', () => {
+    const check = fieldOn('capTable', 'ownershipCheck');
+    const balanced = String(specFieldValue(check, table([{ shares: 600, percent: 60 }, { shares: 300, percent: 30 }], 100)));
+    expect(balanced).not.toContain('do not balance');
+    const skewed = String(specFieldValue(check, table([{ shares: 600, percent: 55 }, { shares: 300, percent: 30 }], 100)));
+    expect(skewed).toContain('percent column totals 95%');
+    expect(skewed).toContain('do not balance');
+  });
+});
+
 describe('model-facing guidance', () => {
+  /** A spec kind sent as a shell is answered with its own field contract — the moment
+   *  it was authored wrong is the moment the model needs exactly this kind's shape. */
+  it('teaches a spec kind its shape when it arrives as an empty shell', () => {
+    const problem = emptyShellProblem('competitor', { title: 'Rival' });
+    expect(problem).toContain('empty shell');
+    expect(problem).toContain(specFieldGuidance('competitor'));
+    // A hand-declared kind gets the shell verdict alone: it has no registry contract to teach.
+    expect(emptyShellProblem('note', { title: 'Untitled' })).not.toContain('•');
+  });
+
+  /** The snapshot for a spec kind carries only ITS readable fields: another
+   *  vocabulary's slot never appears on it, even when the data carries the name. */
+  it('narrows a spec object\'s AI context to the fields its own kind declares', () => {
+    const invoice = creationObjectAiContext({ kind: 'invoice', title: 'INV-1', customer: 'Acme', marks: [{ learner: 'x' }] } as never);
+    expect(invoice).toHaveProperty('customer');
+    expect(invoice).not.toHaveProperty('marks');
+    // A hand-declared name is never narrowed away — it means one thing everywhere.
+    expect(creationObjectAiContext({ kind: 'invoice', title: 'INV-1', status: 'sent' } as never)).toHaveProperty('status');
+  });
+
   it('documents every field of a kind', () => {
     const guidance = specFieldGuidance('competitor');
     for (const field of specObjectSpec('competitor')!.fields) expect(guidance).toContain(field.name);

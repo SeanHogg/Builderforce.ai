@@ -82,8 +82,9 @@ export function pickTaskToStart(
 ): { taskId: number } | { error: string } {
   if (taskId != null) return { taskId };
   const mine = linked.filter((t) => t.assignedAgentRef === agentRef);
-  if (mine.length === 1) return { taskId: mine[0].id };
-  if (mine.length === 0 && linked.length === 1) return { taskId: linked[0].id };
+  const only = (list: readonly LinkedTaskCandidate[]): LinkedTaskCandidate | undefined => (list.length === 1 ? list[0] : undefined);
+  const chosen = only(mine) ?? (mine.length === 0 ? only(linked) : undefined);
+  if (chosen) return { taskId: chosen.id };
   if (linked.length === 0) {
     return { error: 'this chat has no runnable ticket linked to it and you have no run on it — link the ticket first (chats.link_ticket), or pass taskId.' };
   }

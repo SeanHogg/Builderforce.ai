@@ -10,6 +10,7 @@ import {
   marketedRoutes,
   noindexTeaserRoutes,
   teaserDestinationIds,
+  teaserDestinationPitchKey,
 } from './routeMarketing';
 
 /** The `routeMarketing` namespace as a nested object, for key lookups. */
@@ -79,6 +80,13 @@ describe('the destination tier', () => {
 
   it('keys the pitch the way the component asks for it', () => {
     expect(destinationPitchKey('inbox')).toBe('destination.inbox.description');
+  });
+
+  /** The teaser and its server head resolve the pitch through the same gate the
+   *  ratchet reads, so an id the ratchet never checked cannot render a dotted key. */
+  it('gates the pitch lookup to destinations that actually have a teaser', () => {
+    for (const id of teaserDestinationIds()) expect(teaserDestinationPitchKey(id)).toBe(destinationPitchKey(id));
+    expect(teaserDestinationPitchKey('not-a-destination')).toBeNull();
   });
 });
 

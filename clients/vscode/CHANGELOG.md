@@ -2,16 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
-## [2026.9.19] — The Brain picks up what an @-agent could not do
+## [2026.9.20] — An @-addressed agent does the work in its own runtime
 
-- **"I told Bob to commit and push" now gets a commit, not a status report.** When a participant in the chat answered that it lacked the tools, or you tell the Brain you already instructed that participant and the work is not done, the Brain treats the original instruction as its own and carries it out — a requested commit-and-push included — instead of narrating who is working on what.
-- **A participant the server cannot resolve still answers here.** An @-addressed agent with no compiled persona (a container agent registered outside the workforce table, or a resolver failure) now runs in the editor under its name rather than falling back to the server's tool-less reply.
-
-## [2026.9.18] — "Commit and push to main" now lands, and an @-addressed agent works in your workspace
-
-- **Asking an invited agent to commit ended in "I have no git tool".** A message addressed to an @agent was answered on the server, where the agent has the platform tools (tasks, projects, OKRs) and nothing else — no files, no shell, no git — while the editor that asked has all three. When a folder is open, an addressed agent now runs in the editor's own loop, under its own persona, with the workspace's file and git tools; its replies are still attributed to it in the transcript. Without a folder open, the server still answers for it, and now says plainly what it cannot do from there and where to ask instead.
-- **"Commit and push to main" could not be done even by the Brain.** Pushing the base branch could be declared (`allowBaseBranch`), but the commit before it refused main outright, and the persona told the agent to argue for a pull request instead. A commit now takes the same declaration a push does, both are shown to you for approval, and the persona is explicit: the default route is a ticket branch and a pull request, but when you ask for main, that is your call — do it, do not substitute a PR.
-- **The approval prompt for a base-branch commit says so.** "commit 1 file on the BASE BRANCH (main) — skips pull-request review", the same wording the push prompt already used.
+- **"Bob, merge your changes and push to main" now reaches Bob's runtime.** A message addressed to an invited agent is answered on the server, which has no working tree — so the agent could only say it had no git tool, while its clone, shell and git were sitting in its container. The agent now hands such an instruction to its own run: it steers a live run, resumes a paused one, or starts a follow-up run on the same ticket branch its previous run left the changes on, and that run narrates in the chat. A container run told explicitly to push to main does so and reports the commit.
+- **Withdrawn: running an addressed agent inside the editor.** Two interim builds ran an @-addressed agent in the editor's loop with the workspace's tools. That aimed at the wrong tree — the agent's changes are in its own runtime, not in your folder — so it is gone; addressed agents always execute where their work is.
+- **"Commit and push to main" for the Brain itself is unchanged from 2026.9.18:** commit takes the same base-branch declaration a push does, and the persona carries out an explicit push to main instead of arguing for a pull request.
 
 ## [2026.8.141] — Local models kept their platform tools, and a wrong explanation was withdrawn
 

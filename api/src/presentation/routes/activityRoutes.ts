@@ -1,4 +1,3 @@
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Activity + timecard routes.
  *
@@ -39,9 +38,40 @@ import {
 } from '../../infrastructure/database/schema';
 import type { Env, HonoEnv } from '../../env';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { parseBody, z, zNonEmptyString } from './requestBody';
 
 const SIGNAL_SOURCES = ['portal', 'vscode', 'agent', 'meeting', 'system'] as const;
 const MAX_BATCH = 100;
+
+// ── Body schemas ─────────────────────────────────────────────────────────────
+
+/** Signals are shaped per-item by `ingestSignals` (a bad one is skipped, not
+ *  refused) — the batch only has to be an array. */
+const SignalsBody = z.object({ signals: z.array(z.unknown()).optional() });
+const MeetingSignalBody = z.object({
+  engagementId: zNonEmptyString,
+  occurredAt: z.string().optional(),
+  durationMinutes: z.number().positive(),
+  note: z.string().optional(),
+});
+const ResolveBody = z.object({
+  engagementId: zNonEmptyString,
+  periodStart: zNonEmptyString,
+  periodEnd: zNonEmptyString,
+});
+const EntryCreateBody = z.object({
+  workDate: z.string().optional(),
+  minutes: z.number().optional(),
+  description: z.string().optional(),
+  billable: z.boolean().optional(),
+});
+const EntryPatchBody = z.object({
+  minutes: z.number().optional(),
+  billable: z.boolean().optional(),
+  description: z.string().optional(),
+});
+/** A reject may carry no reason (`{}` or `{ reason: null }`). */
+const RejectBody = z.object({ reason: z.string().nullable().optional() });
 
 /** Shared batch-ingest — used by BOTH the web-JWT portal route and the tenant-JWT
  *  VSIX route so the two capture surfaces stay identical (DRY). Attributes each
@@ -164,8 +194,8 @@ export function createActivityRoutes(db: Db): Hono<HonoEnv> {
   // POST /signals — batch-ingest for the signed-in worker (WEB JWT; the portal).
   router.post('/signals', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{ signals?: unknown[] }>();
-    const list = Array.isArray(body.signals) ? body.signals.slice(0, MAX_BATCH) : [];
+    const body = await parseBody(c, SignalsBody);
+    const list = (body.signals ?? []).slice(0, MAX_BATCH);
     if (list.length === 0) return c.json({ ok: true, ingested: 0 });
     const ingested = await ingestSignals(requestDb(c), userId, list, 'portal', null);
     return c.json({ ok: true, ingested });
@@ -176,8 +206,8 @@ export function createActivityRoutes(db: Db): Hono<HonoEnv> {
   router.post('/ingest', authMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ signals?: unknown[] }>();
-    const list = Array.isArray(body.signals) ? body.signals.slice(0, MAX_BATCH) : [];
+    const body = await parseBody(c, SignalsBody);
+    const list = (body.signals ?? []).slice(0, MAX_BATCH);
     if (list.length === 0) return c.json({ ok: true, ingested: 0 });
     const ingested = await ingestSignals(requestDb(c), userId, list, 'vscode', tenantId);
     return c.json({ ok: true, ingested });
@@ -188,8 +218,7 @@ export function createActivityRoutes(db: Db): Hono<HonoEnv> {
   // (web JWT); attributed to the given engagement.
   router.post('/meeting', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const b = await c.req.json<{ engagementId?: string; occurredAt?: string; durationMinutes?: number; note?: string }>();
-    if (!b.engagementId || !b.durationMinutes || b.durationMinutes <= 0) return c.json({ error: 'engagementId and durationMinutes required' }, 400);
+    const b = await parseBody(c, MeetingSignalBody);
     const ingested = await ingestSignals(requestDb(c), userId, [{
       source: 'meeting', kind: 'meeting', engagementId: b.engagementId,
       durationSeconds: Math.round(b.durationMinutes * 60),
@@ -299,8 +328,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
   // idempotent per (engagement, period). Only the engaged worker may resolve.
   router.post('/resolve', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const b = await c.req.json<{ engagementId?: string; periodStart?: string; periodEnd?: string }>();
-    if (!b.engagementId || !b.periodStart || !b.periodEnd) return c.json({ error: 'engagementId, periodStart, periodEnd required' }, 400);
+    const b = await parseBody(c, ResolveBody);
     const engagementId = b.engagementId;
     const periodStart = b.periodStart;
     const periodEnd = b.periodEnd;
@@ -364,7 +392,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
         set: { updatedAt: sql`NOW()` },
       })
       .returning({ id: timecards.id, status: timecards.status });
-    if (!card) return c.json({ error: 'Failed to create timecard' }, 500);
+    if (!card) throw new Error('timecards upsert returned no row');
     if (card.status !== 'draft') return c.json({ error: 'Timecard for this period is already submitted' }, 409);
     const realCardId = card.id;
 
@@ -461,7 +489,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
   router.post('/:id/entries', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
-    const b = await c.req.json<{ workDate?: string; minutes?: number; description?: string; billable?: boolean }>();
+    const b = await parseBody(c, EntryCreateBody);
     const db = requestDb(c);
     const [card] = await db
       .select({ id: timecards.id, engagementId: timecards.engagementId, tenantId: timecards.tenantId })
@@ -492,7 +520,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
     const entryId = c.req.param('entryId');
-    const b = await c.req.json<{ minutes?: number; billable?: boolean; description?: string }>();
+    const b = await parseBody(c, EntryPatchBody);
     const db = requestDb(c);
     const [card] = await db
       .select({ id: timecards.id })
@@ -605,10 +633,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
   router.post('/:id/reject', authMiddleware, requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    let reason: string | null = null;
-    try { const b = await c.req.json<{ reason?: string }>(); reason = b.reason ?? null; } catch (error) { /* optional */ 
-      reportCaughtError(error, { source: "presentation/routes/activityRoutes.ts", operation: "createTimecardRoutes" });
-    }
+    const reason = (await parseBody(c, RejectBody)).reason ?? null;
     const db = requestDb(c);
     const rows = await db
       .update(timecards)

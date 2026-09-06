@@ -25,14 +25,15 @@ import {
   contributors,
   contributorIdentities,
   activityEvents,
+  activityEventTypeEnum,
   contributorDailyMetrics,
+  integrationProviderEnum,
 } from '../../infrastructure/database/schema';
 import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { contributorMerges, tenantMembers } from '../../infrastructure/database/schema';
 import {
-  MergeError,
   previewMerge,
   mergeContributors,
   unmergeContributors,
@@ -41,6 +42,69 @@ import {
 import { aggregateDailyMetrics, ingestActivityEvents } from '../../application/contributors/activityIngest';
 import { limitParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { parseBody, z, zNonEmptyString, zOptionalString, zPositiveInt } from './requestBody';
+
+// ── Body schemas ─────────────────────────────────────────────────────────────
+// Provider and event-type are the SAME pg enums the rows are written with, so a
+// value the column would refuse is refused here, by name, as a 400.
+
+const ActivityIngestEvent = z.object({
+  externalId: zOptionalString,
+  contributorExternalId: zOptionalString,
+  authorDisplayName: zOptionalString,
+  authorEmail: zOptionalString,
+  authorAvatarUrl: zOptionalString,
+  eventType: z.enum(activityEventTypeEnum.enumValues),
+  repositoryName: zOptionalString,
+  repositoryFullName: zOptionalString,
+  title: zOptionalString,
+  url: zOptionalString,
+  linesAdded: z.number().optional(),
+  linesRemoved: z.number().optional(),
+  filesChanged: z.number().optional(),
+  cycleTimeHours: z.number().optional(),
+  occurredAt: zNonEmptyString,
+});
+const ActivityIngestBody = z.object({
+  provider: z.enum(integrationProviderEnum.enumValues),
+  events: z.array(ActivityIngestEvent).min(1),
+});
+
+const MergePairBody = z.object({ sourceId: zPositiveInt, targetId: zPositiveInt });
+
+const ContributorCreateBody = z.object({
+  displayName: zNonEmptyString,
+  email: zOptionalString,
+  avatarUrl: zOptionalString,
+  jobTitle: zOptionalString,
+  roleType: zOptionalString,
+  excludeFromMetrics: z.boolean().optional(),
+  userId: zOptionalString,
+});
+
+/** PATCH: every column optional; spread straight into `.set()`, so unknown keys
+ *  are stripped rather than forwarded. */
+const ContributorPatchBody = z.object({
+  displayName: zNonEmptyString.optional(),
+  email: z.string().nullable().optional(),
+  avatarUrl: z.string().nullable().optional(),
+  jobTitle: z.string().nullable().optional(),
+  roleType: zNonEmptyString.optional(),
+  excludeFromMetrics: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+});
+
+const IdentityBody = z.object({
+  provider: z.enum(integrationProviderEnum.enumValues),
+  externalId: zNonEmptyString,
+  externalEmail: zOptionalString,
+  displayName: zOptionalString,
+  avatarUrl: zOptionalString,
+});
+
+const LinkUserBody = z.object({ userId: z.string().nullable() });
+
+const AggregateBody = z.object({ from: zOptionalString, to: zOptionalString });
 
 // ---------------------------------------------------------------------------
 // Routes
@@ -59,38 +123,12 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = (c as unknown as { get: (k: string) => unknown }).get('tenantId') as number | undefined;
     if (!tenantId) return c.text('Unauthorized', 401);
 
-    const body = await c.req.json<{
-      provider: string;
-      events: Array<{
-        externalId?: string;
-        contributorExternalId?: string;
-        authorDisplayName?: string;
-        authorEmail?: string;
-        authorAvatarUrl?: string;
-        eventType: string;
-        repositoryName?: string;
-        repositoryFullName?: string;
-        title?: string;
-        url?: string;
-        linesAdded?: number;
-        linesRemoved?: number;
-        filesChanged?: number;
-        cycleTimeHours?: number;
-        occurredAt: string;
-      }>;
-    }>();
-
-    if (!body.provider || !Array.isArray(body.events) || body.events.length === 0) {
-      return c.json({ error: 'provider and events[] are required' }, 400);
-    }
+    const body = await parseBody(c, ActivityIngestBody);
 
     const result = await ingestActivityEvents(c.env as Env, db, {
       tenantId,
-      provider: body.provider as typeof activityEvents.$inferInsert['provider'],
-      events: body.events.map((ev) => ({
-        ...ev,
-        eventType: ev.eventType as typeof activityEvents.$inferInsert['eventType'],
-      })),
+      provider: body.provider,
+      events: body.events,
     });
 
     return c.json(result, 201);
@@ -136,41 +174,25 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
   // POST /api/contributors/merge/preview — counts + conflicts for a proposed merge.
   router.post('/merge/preview', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const { sourceId, targetId } = await c.req.json<{ sourceId: number; targetId: number }>();
-    if (!sourceId || !targetId) return c.json({ error: 'sourceId and targetId are required' }, 400);
-    try {
-      return c.json(await previewMerge(db, tenantId, sourceId, targetId));
-    } catch (e) {
-      if (e instanceof MergeError) return c.json({ error: e.message }, e.status);
-      throw e;
-    }
+    const { sourceId, targetId } = await parseBody(c, MergePairBody);
+    return c.json(await previewMerge(db, tenantId, sourceId, targetId));
   });
 
   // POST /api/contributors/merge — consolidate source INTO target (tenant-wide).
   router.post('/merge', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
-    const { sourceId, targetId } = await c.req.json<{ sourceId: number; targetId: number }>();
-    if (!sourceId || !targetId) return c.json({ error: 'sourceId and targetId are required' }, 400);
-    try {
-      const result = await mergeContributors(db, c.env as Env, { tenantId, sourceId, targetId, mergedByUserId: userId ?? null });
-      return c.json(result, 201);
-    } catch (e) {
-      if (e instanceof MergeError) return c.json({ error: e.message }, e.status);
-      throw e;
-    }
+    const { sourceId, targetId } = await parseBody(c, MergePairBody);
+    const result = await mergeContributors(db, c.env as Env, { tenantId, sourceId, targetId, mergedByUserId: userId ?? null });
+    return c.json(result, 201);
   });
 
   // POST /api/contributors/merges/:mergeId/revert — undo a prior merge.
   router.post('/merges/:mergeId/revert', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const mergeId = c.req.param('mergeId');
-    try {
-      return c.json(await unmergeContributors(db, c.env as Env, { tenantId, mergeId }));
-    } catch (e) {
-      if (e instanceof MergeError) return c.json({ error: e.message }, e.status);
-      throw e;
-    }
+    // `MergeError` carries `status`; `app.onError` answers it through `statusOf`.
+    return c.json(await unmergeContributors(db, c.env as Env, { tenantId, mergeId }));
   });
 
   // ── GET /api/contributors ─────────────────────────────────────────────────
@@ -191,25 +213,13 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
   // ── POST /api/contributors ────────────────────────────────────────────────
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{
-      displayName: string;
-      email?: string;
-      avatarUrl?: string;
-      jobTitle?: string;
-      roleType?: string;
-      excludeFromMetrics?: boolean;
-      userId?: string;
-    }>();
-
-    if (!body.displayName?.trim()) {
-      return c.json({ error: 'displayName is required' }, 400);
-    }
+    const body = await parseBody(c, ContributorCreateBody);
 
     const [row] = await db
       .insert(contributors)
       .values({
         tenantId,
-        displayName:         body.displayName.trim(),
+        displayName:         body.displayName,
         email:               body.email ?? null,
         avatarUrl:           body.avatarUrl ?? null,
         jobTitle:            body.jobTitle ?? null,
@@ -252,11 +262,7 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(contributors.id, id), eq(contributors.tenantId, tenantId)));
     if (!existing) return c.json({ error: 'Contributor not found' }, 404);
 
-    const body = await c.req.json<Partial<{
-      displayName: string; email: string | null; avatarUrl: string | null;
-      jobTitle: string | null; roleType: string; excludeFromMetrics: boolean;
-      isActive: boolean;
-    }>>();
+    const body = await parseBody(c, ContributorPatchBody);
 
     const [updated] = await db
       .update(contributors)
@@ -295,24 +301,14 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(contributors.id, id), eq(contributors.tenantId, tenantId)));
     if (!existing) return c.json({ error: 'Contributor not found' }, 404);
 
-    const body = await c.req.json<{
-      provider: string;
-      externalId: string;
-      externalEmail?: string;
-      displayName?: string;
-      avatarUrl?: string;
-    }>();
-
-    if (!body.provider || !body.externalId) {
-      return c.json({ error: 'provider and externalId are required' }, 400);
-    }
+    const body = await parseBody(c, IdentityBody);
 
     const [row] = await db
       .insert(contributorIdentities)
       .values({
         contributorId:  id,
         tenantId,
-        provider:       body.provider as 'github',
+        provider:       body.provider,
         externalId:     body.externalId,
         externalEmail:  body.externalEmail ?? null,
         displayName:    body.displayName ?? null,
@@ -347,7 +343,7 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
   router.patch('/:id/link-user', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = Number(c.req.param('id'));
-    const { userId } = await c.req.json<{ userId: string | null }>();
+    const { userId } = await parseBody(c, LinkUserBody);
 
     const [existing] = await db
       .select({ id: contributors.id })
@@ -437,7 +433,7 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
   // Recalculate daily metrics for all contributors in a date range.
   router.post('/aggregate', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ from?: string; to?: string }>();
+    const body = await parseBody(c, AggregateBody);
 
     const fromDate = body.from ? new Date(body.from) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const toDate   = body.to   ? new Date(body.to)   : new Date();

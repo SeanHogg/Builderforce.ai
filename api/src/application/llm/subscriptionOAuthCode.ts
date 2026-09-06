@@ -73,9 +73,50 @@ export function parsePastedAuthorizationCode(input: string): PastedAuthorization
  * Connect button instead of leaving them retrying a code that can never work.
  */
 export const OAUTH_CODE_SPENT = 'oauth_code_spent';
+/** Wire code for "the account behind this grant has no subscription to use". */
+export const OAUTH_SUBSCRIPTION_NOT_ENTITLED = 'oauth_subscription_not_entitled';
+/** Wire code for every other token-endpoint failure — "not your fault, retry later". */
+export const OAUTH_EXCHANGE_FAILED = 'oauth_exchange_failed';
+/** Wire code for a provider whose authorize/device endpoint could not be reached or trusted. */
+export const OAUTH_DISCOVERY_FAILED = 'oauth_discovery_failed';
 
-/** An exchange failure carrying the HTTP status and wire code to answer with. */
-export type OAuthExchangeError = Error & { status?: number; code?: string };
+/**
+ * An exchange failure, carrying the status and wire code THIS API answers with.
+ *
+ * The distinction that matters: a dead authorization code is a 400 the operator
+ * fixes by consenting again, an unentitled account is a 403 they fix on the
+ * provider's billing page, and only everything else is the 502 that says "not
+ * your fault". `upstreamStatus` keeps what the token endpoint actually said for
+ * the reporter; it is never the answer, because a provider's 500 is our 502.
+ */
+export class OAuthExchangeError extends Error {
+  readonly status: 400 | 403 | 502;
+  readonly code: typeof OAUTH_CODE_SPENT | typeof OAUTH_SUBSCRIPTION_NOT_ENTITLED | typeof OAUTH_EXCHANGE_FAILED;
+  constructor(message: string, readonly upstreamStatus: number, spentCode = false) {
+    super(message);
+    this.name = 'OAuthExchangeError';
+    if (spentCode) {
+      this.status = 400;
+      this.code = OAUTH_CODE_SPENT;
+    } else if (upstreamStatus === 403) {
+      this.status = 403;
+      this.code = OAUTH_SUBSCRIPTION_NOT_ENTITLED;
+    } else {
+      this.status = 502;
+      this.code = OAUTH_EXCHANGE_FAILED;
+    }
+  }
+}
+
+/** A provider's OIDC discovery / device-authorization step failed — an upstream 502. */
+export class OAuthDiscoveryError extends Error {
+  readonly status = 502;
+  readonly code = OAUTH_DISCOVERY_FAILED;
+  constructor(message: string) {
+    super(message);
+    this.name = 'OAuthDiscoveryError';
+  }
+}
 
 /**
  * True when a token endpoint's rejection means the code itself is dead —
@@ -97,10 +138,7 @@ export function isSpentAuthorizationCode(status: number, body: string): boolean 
  */
 export function spentAuthorizationCodeError(hint?: string): OAuthExchangeError {
   const base = 'That authorization code has already been used or expired — codes are single-use and short-lived. Start the connect again and paste the new code promptly.';
-  const error = new Error(hint ? `${base} ${hint}` : base) as OAuthExchangeError;
-  error.status = 400;
-  error.code = OAUTH_CODE_SPENT;
-  return error;
+  return new OAuthExchangeError(hint ? `${base} ${hint}` : base, 400, true);
 }
 
 /**
@@ -118,7 +156,5 @@ export function throwTokenExchangeFailure(params: {
 }): never {
   const detail = params.body.slice(0, 240);
   if (isSpentAuthorizationCode(params.status, detail)) throw spentAuthorizationCodeError(params.spentHint);
-  const error = new Error(`${params.label} OAuth token request failed (${params.status}): ${detail}`) as OAuthExchangeError;
-  error.status = params.status;
-  throw error;
+  throw new OAuthExchangeError(`${params.label} OAuth token request failed (${params.status}): ${detail}`, params.status);
 }

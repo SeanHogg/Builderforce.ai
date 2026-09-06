@@ -33,6 +33,7 @@ import {
   unsealOAuthTokens,
 } from '../integrations/oauthTokenVault';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { ServiceUnavailableError } from '../../domain/shared/errors';
 import {
   DriveProviderError,
   getDriveProvider,
@@ -287,6 +288,21 @@ const LISTING_TTL_SECONDS = 120;
  * invalidated. Reconnecting the drive bumps that version and the whole tree
  * falls away at once, which is exactly the moment a stale tree would be worst.
  */
+/**
+ * Run one provider call. A {@link DriveProviderError} already says what the
+ * caller should do; anything else (a network failure, a vendor answering with
+ * something that is not JSON) is the drive being unreachable, which is a 503
+ * with a fixed sentence — never the raw failure, and never a 500.
+ */
+async function reachingDrive<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (error) {
+    if (error instanceof DriveProviderError) throw error;
+    throw Object.assign(new ServiceUnavailableError('Could not reach that drive.'), { cause: error });
+  }
+}
+
 export async function listDriveFolder(
   db: Db,
   env: Env,
@@ -299,7 +315,7 @@ export async function listDriveFolder(
   const token = await freshDriveToken(db, env, tenantId, userId, connectionId);
   if (!token.ok) throw new DriveProviderError(token.error, token.status === 'revoked' ? 401 : 503);
   const key = `drive:list:${tenantId}:${connectionId}:v${token.cacheVersion}:${folderId ?? 'root'}:${cursor ?? ''}`;
-  return getOrSetCached(env, key, () => token.provider.list(token.accessToken, folderId, cursor), {
+  return getOrSetCached(env, key, () => reachingDrive(() => token.provider.list(token.accessToken, folderId, cursor)), {
     kvTtlSeconds: LISTING_TTL_SECONDS,
   });
 }
@@ -321,5 +337,5 @@ export async function downloadDriveFile(
 ): Promise<DriveDownload> {
   const token = await freshDriveToken(db, env, tenantId, userId, connectionId);
   if (!token.ok) throw new DriveProviderError(token.error, token.status === 'revoked' ? 401 : 503);
-  return token.provider.download(token.accessToken, fileId);
+  return reachingDrive(() => token.provider.download(token.accessToken, fileId));
 }

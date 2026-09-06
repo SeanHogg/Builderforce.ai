@@ -66,7 +66,9 @@
  *
  * This module holds no SQL. Every handler calls an application service, which is
  * what `npm run check:layering` requires of a new route and what makes the scope
- * rules testable without an HTTP server.
+ * rules testable without an HTTP server. A `PublisherError` carries its own status
+ * (400 / 403 / 404 / 409) and is rendered by the global handler through `statusOf`;
+ * nothing is caught here.
  */
 
 import { Hono } from 'hono';
@@ -79,13 +81,12 @@ import {
   requirePublisher,
   publisherFor,
   setPayoutDestination,
-  PublisherError,
 } from '../../application/developer/publishers';
 import { verifyPublisherDomain } from '../../application/developer/domainVerification';
 import {
   EXTENSION_SCOPES,
+  LISTING_STATES,
   SUBMITTABLE_KINDS,
-  type ListingState,
 } from '../../application/developer/extensionContract';
 import {
   createPackage,
@@ -120,12 +121,70 @@ import {
 } from '../../application/developer/extensionCommerce';
 import { openPeriodFor } from '../../application/developer/extensionBilling';
 import { usageEvents } from '../../application/developer/extensionUsage';
+import { parseBody, z, zNonEmptyString, zPositiveInt } from './requestBody';
 
-/** Map an application error onto its status once, rather than in fifteen handlers. */
-function fail(error: unknown): { body: { error: string }; status: 400 | 403 | 404 | 409 | 500 } {
-  if (error instanceof PublisherError) return { body: { error: error.message }, status: error.status };
-  return { body: { error: error instanceof Error ? error.message : 'unexpected error' }, status: 500 };
-}
+const RegisterPublisherBody = z.object({
+  website: z.string().optional(),
+  supportEmail: z.string().optional(),
+});
+
+const VerifyDomainBody = z.object({
+  domain: zNonEmptyString,
+});
+
+/** `kind` is checked against `SUBMITTABLE_KINDS` by the service, which owns that vocabulary. */
+const CreatePackageBody = z.object({
+  kind: zNonEmptyString,
+  name: zNonEmptyString,
+  slug: z.string().optional(),
+  tagline: z.string().optional(),
+  description: z.string().nullable().optional(),
+  categories: z.array(z.string()).optional(),
+  docsUrl: z.string().nullable().optional(),
+});
+
+/** The spec is untrusted and reviewed by the pipeline; the scopes are checked against the contract there. */
+const SubmitVersionBody = z.object({
+  semver: zNonEmptyString,
+  spec: z.record(z.string(), z.unknown()).optional(),
+  requestedScopes: z.array(z.string()).optional(),
+  changelog: z.string().nullable().optional(),
+});
+
+const PublishVersionBody = z.object({
+  versionId: zNonEmptyString,
+});
+
+const ListingStateBody = z.object({
+  state: z.enum(LISTING_STATES),
+});
+
+const InstallBody = z.object({
+  packageId: zNonEmptyString,
+  approvedScopes: z.array(z.string()).optional(),
+  connectionId: z.string().nullable().optional(),
+});
+
+/** `plans` is untrusted: parsed and clamped by `parseExtensionPlans`, never stored raw. */
+const SetPlansBody = z.object({
+  plans: z.array(z.unknown()).optional(),
+  currency: z.string().optional(),
+});
+
+const PayoutDestinationBody = z.object({
+  connectionId: zPositiveInt.nullable().optional(),
+});
+
+const StartCheckoutBody = z.object({
+  packageId: zNonEmptyString,
+  planCode: zNonEmptyString,
+  approvedScopes: z.array(z.string()).optional(),
+  returnUrl: zNonEmptyString,
+});
+
+const CompleteCheckoutBody = z.object({
+  checkoutSessionId: zNonEmptyString,
+});
 
 export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -158,38 +217,26 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
   router.post('/publisher', async (c) => {
     const { userId, tenantId, env } = ctx(c);
     if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
-    type Body = { website?: string; supportEmail?: string };
-    const body = await c.req.json<Body>().catch((): Body => ({}));
-    try {
-      const publisher = await becomePublisher(db, env, {
-        tenantId,
-        userId,
-        website: body.website ?? null,
-        supportEmail: body.supportEmail ?? null,
-      });
-      return c.json({ publisher }, 201);
-    } catch (error) {
-      const { body: b, status } = fail(error);
-      return c.json(b, status);
-    }
+    const body = await parseBody(c, RegisterPublisherBody);
+    const publisher = await becomePublisher(db, env, {
+      tenantId,
+      userId,
+      website: body.website ?? null,
+      supportEmail: body.supportEmail ?? null,
+    });
+    return c.json({ publisher }, 201);
   });
 
   router.post('/publisher/verify-domain', async (c) => {
     const { userId, tenantId, env } = ctx(c);
     if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
-    type Body = { domain?: string };
-    const body = await c.req.json<Body>().catch((): Body => ({}));
-    try {
-      const challenge = await beginDomainVerification(db, env, {
-        tenantId,
-        userId,
-        domain: body.domain ?? '',
-      });
-      return c.json({ challenge });
-    } catch (error) {
-      const { body: b, status } = fail(error);
-      return c.json(b, status);
-    }
+    const body = await parseBody(c, VerifyDomainBody);
+    const challenge = await beginDomainVerification(db, env, {
+      tenantId,
+      userId,
+      domain: body.domain,
+    });
+    return c.json({ challenge });
   });
 
   /**
@@ -203,14 +250,9 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
   router.post('/publisher/verify-domain/check', async (c) => {
     const { userId, tenantId, env } = ctx(c);
     if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
-    try {
-      await requirePublisher(db, tenantId, userId, 'manager');
-      const result = await verifyPublisherDomain(db, env, tenantId);
-      return c.json(result);
-    } catch (error) {
-      const { body: b, status } = fail(error);
-      return c.json(b, status);
-    }
+    await requirePublisher(db, tenantId, userId, 'manager');
+    const result = await verifyPublisherDomain(db, env, tenantId);
+    return c.json(result);
   });
 
   // ── Packages ──────────────────────────────────────────────────────────────
@@ -218,50 +260,31 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
   router.get('/packages', async (c) => {
     const { userId, tenantId } = ctx(c);
     if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
-    try {
-      return c.json({ packages: await listPackagesForPublisher(db, tenantId, userId) });
-    } catch (error) {
-      const { body, status } = fail(error);
-      return c.json(body, status);
-    }
+    return c.json({ packages: await listPackagesForPublisher(db, tenantId, userId) });
   });
 
   router.post('/packages', async (c) => {
     const { userId, tenantId, env } = ctx(c);
     if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
-    type Body = {
-      kind?: string; name?: string; slug?: string; tagline?: string;
-      description?: string; categories?: string[]; docsUrl?: string;
-    };
-    const body = await c.req.json<Body>().catch((): Body => ({}));
-    try {
-      const pkg = await createPackage(db, env, {
-        tenantId,
-        actorUserId: userId,
-        kind: body.kind ?? '',
-        name: body.name ?? '',
-        slug: body.slug,
-        tagline: body.tagline,
-        description: body.description ?? null,
-        categories: body.categories,
-        docsUrl: body.docsUrl ?? null,
-      });
-      return c.json({ package: pkg }, 201);
-    } catch (error) {
-      const { body: b, status } = fail(error);
-      return c.json(b, status);
-    }
+    const body = await parseBody(c, CreatePackageBody);
+    const pkg = await createPackage(db, env, {
+      tenantId,
+      actorUserId: userId,
+      kind: body.kind,
+      name: body.name,
+      slug: body.slug,
+      tagline: body.tagline,
+      description: body.description ?? null,
+      categories: body.categories,
+      docsUrl: body.docsUrl ?? null,
+    });
+    return c.json({ package: pkg }, 201);
   });
 
   router.get('/packages/:id/versions', async (c) => {
     const { userId } = ctx(c);
     if (!userId) return c.json({ error: 'Authentication required' }, 401);
-    try {
-      return c.json({ versions: await listVersions(db, c.req.param('id'), userId) });
-    } catch (error) {
-      const { body, status } = fail(error);
-      return c.json(body, status);
-    }
+    return c.json({ versions: await listVersions(db, c.req.param('id'), userId) });
   });
 
   /**
@@ -276,62 +299,40 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
   router.post('/packages/:id/versions', async (c) => {
     const { userId, env } = ctx(c);
     if (!userId) return c.json({ error: 'Authentication required' }, 401);
-    type Body = { semver?: string; spec?: unknown; requestedScopes?: string[]; changelog?: string };
-    const body = await c.req.json<Body>().catch((): Body => ({}));
-    try {
-      const { version, approved } = await submitVersion(db, env, {
-        packageId: c.req.param('id'),
-        actorUserId: userId,
-        semver: body.semver ?? '',
-        spec: body.spec ?? {},
-        requestedScopes: body.requestedScopes ?? [],
-        changelog: body.changelog ?? null,
-      });
-      return c.json({ version, approved }, 201);
-    } catch (error) {
-      const { body: b, status } = fail(error);
-      return c.json(b, status);
-    }
+    const body = await parseBody(c, SubmitVersionBody);
+    const { version, approved } = await submitVersion(db, env, {
+      packageId: c.req.param('id'),
+      actorUserId: userId,
+      semver: body.semver,
+      spec: body.spec ?? {},
+      requestedScopes: body.requestedScopes ?? [],
+      changelog: body.changelog ?? null,
+    });
+    return c.json({ version, approved }, 201);
   });
 
   router.post('/packages/:id/publish', async (c) => {
     const { userId, env } = ctx(c);
     if (!userId) return c.json({ error: 'Authentication required' }, 401);
-    type Body = { versionId?: string };
-    const body = await c.req.json<Body>().catch((): Body => ({}));
-    if (!body.versionId) return c.json({ error: 'versionId is required' }, 400);
-    try {
-      const pkg = await publishVersion(db, env, {
-        packageId: c.req.param('id'),
-        versionId: body.versionId,
-        actorUserId: userId,
-      });
-      return c.json({ package: pkg });
-    } catch (error) {
-      const { body: b, status } = fail(error);
-      return c.json(b, status);
-    }
+    const body = await parseBody(c, PublishVersionBody);
+    const pkg = await publishVersion(db, env, {
+      packageId: c.req.param('id'),
+      versionId: body.versionId,
+      actorUserId: userId,
+    });
+    return c.json({ package: pkg });
   });
 
   router.post('/packages/:id/listing', async (c) => {
     const { userId, env } = ctx(c);
     if (!userId) return c.json({ error: 'Authentication required' }, 401);
-    type Body = { state?: ListingState };
-    const body = await c.req.json<Body>().catch((): Body => ({}));
-    if (body.state !== 'listed' && body.state !== 'delisted' && body.state !== 'draft') {
-      return c.json({ error: 'state must be draft, listed or delisted' }, 400);
-    }
-    try {
-      const pkg = await setListingState(db, env, {
-        packageId: c.req.param('id'),
-        actorUserId: userId,
-        state: body.state,
-      });
-      return c.json({ package: pkg });
-    } catch (error) {
-      const { body: b, status } = fail(error);
-      return c.json(b, status);
-    }
+    const body = await parseBody(c, ListingStateBody);
+    const pkg = await setListingState(db, env, {
+      packageId: c.req.param('id'),
+      actorUserId: userId,
+      state: body.state,
+    });
+    return c.json({ package: pkg });
   });
 
   // ── Directory ─────────────────────────────────────────────────────────────
@@ -372,12 +373,7 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
   router.get('/versions/:versionId/review', async (c) => {
     const { userId } = ctx(c);
     if (!userId) return c.json({ error: 'Authentication required' }, 401);
-    try {
-      return c.json({ stages: await listReviewStages(db, c.req.param('versionId'), userId) });
-    } catch (error) {
-      const { body, status } = fail(error);
-      return c.json(body, status);
-    }
+    return c.json({ stages: await listReviewStages(db, c.req.param('versionId'), userId) });
   });
 
   // ── Analytics ─────────────────────────────────────────────────────────────
@@ -389,12 +385,7 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
   router.get('/analytics', async (c) => {
     const { userId, tenantId, env } = ctx(c);
     if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
-    try {
-      return c.json({ analytics: await publisherAnalytics(db, env, tenantId, userId) });
-    } catch (error) {
-      const { body, status } = fail(error);
-      return c.json(body, status);
-    }
+    return c.json({ analytics: await publisherAnalytics(db, env, tenantId, userId) });
   });
 
   // ── Catalog ───────────────────────────────────────────────────────────────
@@ -422,57 +413,35 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
   router.get('/installs/preview/:packageId', async (c) => {
     const { tenantId } = ctx(c);
     if (!tenantId) return c.json({ error: 'Authentication required' }, 401);
-    try {
-      return c.json({ preview: await previewInstall(db, { tenantId, packageId: c.req.param('packageId') }) });
-    } catch (error) {
-      const { body, status } = fail(error);
-      return c.json(body, status);
-    }
+    return c.json({ preview: await previewInstall(db, { tenantId, packageId: c.req.param('packageId') }) });
   });
 
   router.post('/installs', async (c) => {
     const { userId, tenantId, env } = ctx(c);
     if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
-    type Body = { packageId?: string; approvedScopes?: string[]; connectionId?: string };
-    const body = await c.req.json<Body>().catch((): Body => ({}));
-    if (!body.packageId) return c.json({ error: 'packageId is required' }, 400);
-    try {
-      const install = await installPackage(db, env, {
-        tenantId,
-        packageId: body.packageId,
-        userId,
-        approvedScopes: body.approvedScopes ?? [],
-        connectionId: body.connectionId ?? null,
-      });
-      return c.json({ install }, 201);
-    } catch (error) {
-      const { body: b, status } = fail(error);
-      return c.json(b, status);
-    }
+    const body = await parseBody(c, InstallBody);
+    const install = await installPackage(db, env, {
+      tenantId,
+      packageId: body.packageId,
+      userId,
+      approvedScopes: body.approvedScopes ?? [],
+      connectionId: body.connectionId ?? null,
+    });
+    return c.json({ install }, 201);
   });
 
   router.post('/installs/:id/update', async (c) => {
     const { tenantId, env } = ctx(c);
     if (!tenantId) return c.json({ error: 'Authentication required' }, 401);
-    try {
-      const install = await updateInstall(db, env, { tenantId, installId: c.req.param('id') });
-      return c.json({ install });
-    } catch (error) {
-      const { body, status } = fail(error);
-      return c.json(body, status);
-    }
+    const install = await updateInstall(db, env, { tenantId, installId: c.req.param('id') });
+    return c.json({ install });
   });
 
   router.delete('/installs/:id', async (c) => {
     const { tenantId, env } = ctx(c);
     if (!tenantId) return c.json({ error: 'Authentication required' }, 401);
-    try {
-      await uninstallPackage(db, env, { tenantId, installId: c.req.param('id') });
-      return c.json({ ok: true });
-    } catch (error) {
-      const { body, status } = fail(error);
-      return c.json(body, status);
-    }
+    await uninstallPackage(db, env, { tenantId, installId: c.req.param('id') });
+    return c.json({ ok: true });
   });
 
   // ── Plans (PRD 24 Phase 2 — the publisher's price list) ───────────────────
@@ -484,12 +453,7 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
   router.get('/packages/:id/plans', async (c) => {
     const { userId } = ctx(c);
     if (!userId) return c.json({ error: 'Authentication required' }, 401);
-    try {
-      return c.json({ pricing: await pricingForPackage(db, c.req.param('id')) });
-    } catch (error) {
-      const { body, status } = fail(error);
-      return c.json(body, status);
-    }
+    return c.json({ pricing: await pricingForPackage(db, c.req.param('id')) });
   });
 
   /**
@@ -501,20 +465,14 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
   router.put('/packages/:id/plans', async (c) => {
     const { userId, env } = ctx(c);
     if (!userId) return c.json({ error: 'Authentication required' }, 401);
-    type Body = { plans?: unknown; currency?: string };
-    const body = await c.req.json<Body>().catch((): Body => ({}));
-    try {
-      const pricing = await setPackagePlans(db, env, {
-        packageId: c.req.param('id'),
-        actorUserId: userId,
-        plans: body.plans ?? [],
-        currency: body.currency,
-      });
-      return c.json({ pricing });
-    } catch (error) {
-      const { body: b, status } = fail(error);
-      return c.json(b, status);
-    }
+    const body = await parseBody(c, SetPlansBody);
+    const pricing = await setPackagePlans(db, env, {
+      packageId: c.req.param('id'),
+      actorUserId: userId,
+      plans: body.plans ?? [],
+      currency: body.currency,
+    });
+    return c.json({ pricing });
   });
 
   // ── Earnings and payout ───────────────────────────────────────────────────
@@ -526,13 +484,8 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
   router.get('/earnings', async (c) => {
     const { userId, tenantId, env } = ctx(c);
     if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
-    try {
-      await requirePublisher(db, tenantId, userId, 'manager');
-      return c.json({ earnings: await publisherEarnings(db, env, tenantId) });
-    } catch (error) {
-      const { body, status } = fail(error);
-      return c.json(body, status);
-    }
+    await requirePublisher(db, tenantId, userId, 'manager');
+    return c.json({ earnings: await publisherEarnings(db, env, tenantId) });
   });
 
   /**
@@ -545,39 +498,28 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
   router.post('/earnings/destination', async (c) => {
     const { userId, tenantId, env } = ctx(c);
     if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
-    type Body = { connectionId?: number | null };
-    const body = await c.req.json<Body>().catch((): Body => ({}));
-    try {
-      // `owner`: this decides where the workspace's money leaves to, which is
-      // the highest-consequence action in this router.
-      await requirePublisher(db, tenantId, userId, 'owner');
-      return c.json({
-        publisher: await setPayoutDestination(db, env, {
-          tenantId,
-          userId,
-          connectionId: body.connectionId ?? null,
-        }),
-      });
-    } catch (error) {
-      const { body: b, status } = fail(error);
-      return c.json(b, status);
-    }
+    const body = await parseBody(c, PayoutDestinationBody);
+    // `owner`: this decides where the workspace's money leaves to, which is
+    // the highest-consequence action in this router.
+    await requirePublisher(db, tenantId, userId, 'owner');
+    return c.json({
+      publisher: await setPayoutDestination(db, env, {
+        tenantId,
+        userId,
+        connectionId: body.connectionId ?? null,
+      }),
+    });
   });
 
   router.post('/earnings/payout', async (c) => {
     const { userId, tenantId, env } = ctx(c);
     if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
-    try {
-      await requirePublisher(db, tenantId, userId, 'owner');
-      // The amount is the AVAILABLE balance computed server-side, never a number
-      // from the request: an endpoint that accepts an amount pays whatever a
-      // crafted request asks for.
-      const result = await payoutPublisherBalance(db, env, tenantId);
-      return c.json(result, result.ok ? 200 : 409);
-    } catch (error) {
-      const { body, status } = fail(error);
-      return c.json(body, status);
-    }
+    await requirePublisher(db, tenantId, userId, 'owner');
+    // The amount is the AVAILABLE balance computed server-side, never a number
+    // from the request: an endpoint that accepts an amount pays whatever a
+    // crafted request asks for.
+    const result = await payoutPublisherBalance(db, env, tenantId);
+    return c.json(result, result.ok ? 200 : 409);
   });
 
   // ── Programs (PRD 24 Phase 4) ─────────────────────────────────────────────
@@ -591,12 +533,7 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
   router.get('/programs', async (c) => {
     const { userId, tenantId, env } = ctx(c);
     if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
-    try {
-      return c.json({ standing: await partnerStandingFor(db, env, tenantId, userId) });
-    } catch (error) {
-      const { body, status } = fail(error);
-      return c.json(body, status);
-    }
+    return c.json({ standing: await partnerStandingFor(db, env, tenantId, userId) });
   });
 
   // ── Paid installs (PRD 24 §5.4 — the Vercel move) ─────────────────────────
@@ -610,43 +547,28 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
   router.post('/installs/checkout', async (c) => {
     const { userId, tenantId, env } = ctx(c);
     if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
-    type Body = { packageId?: string; planCode?: string; approvedScopes?: string[]; returnUrl?: string };
-    const body = await c.req.json<Body>().catch((): Body => ({}));
-    if (!body.packageId || !body.planCode) return c.json({ error: 'packageId and planCode are required' }, 400);
-    if (!body.returnUrl) return c.json({ error: 'returnUrl is required' }, 400);
-    try {
-      const start = await startPlanCheckout(db, env, {
-        tenantId,
-        userId,
-        packageId: body.packageId,
-        planCode: body.planCode,
-        approvedScopes: body.approvedScopes ?? [],
-        returnUrl: body.returnUrl,
-      });
-      return c.json(start);
-    } catch (error) {
-      const { body: b, status } = fail(error);
-      return c.json(b, status);
-    }
+    const body = await parseBody(c, StartCheckoutBody);
+    const start = await startPlanCheckout(db, env, {
+      tenantId,
+      userId,
+      packageId: body.packageId,
+      planCode: body.planCode,
+      approvedScopes: body.approvedScopes ?? [],
+      returnUrl: body.returnUrl,
+    });
+    return c.json(start);
   });
 
   router.post('/installs/checkout/complete', async (c) => {
     const { userId, tenantId, env } = ctx(c);
     if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
-    type Body = { checkoutSessionId?: string };
-    const body = await c.req.json<Body>().catch((): Body => ({}));
-    if (!body.checkoutSessionId) return c.json({ error: 'checkoutSessionId is required' }, 400);
-    try {
-      const subscription = await completePlanCheckout(db, env, {
-        tenantId,
-        userId,
-        checkoutSessionId: body.checkoutSessionId,
-      });
-      return c.json({ subscription });
-    } catch (error) {
-      const { body: b, status } = fail(error);
-      return c.json(b, status);
-    }
+    const body = await parseBody(c, CompleteCheckoutBody);
+    const subscription = await completePlanCheckout(db, env, {
+      tenantId,
+      userId,
+      checkoutSessionId: body.checkoutSessionId,
+    });
+    return c.json({ subscription });
   });
 
   /**
@@ -659,13 +581,8 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
   router.post('/installs/:id/cancel-plan', async (c) => {
     const { userId, tenantId, env } = ctx(c);
     if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
-    try {
-      await cancelPlan(db, env, { tenantId, installId: c.req.param('id') });
-      return c.json({ ok: true });
-    } catch (error) {
-      const { body, status } = fail(error);
-      return c.json(body, status);
-    }
+    await cancelPlan(db, env, { tenantId, installId: c.req.param('id') });
+    return c.json({ ok: true });
   });
 
   /**

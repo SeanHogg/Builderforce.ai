@@ -9,6 +9,7 @@ import {
   type AssetRejection,
 } from '../../application/assets/tenantAssetStore';
 import { wildcardPath } from '@builderforce/hono-wildcard-path';
+import { parseBody, z, zNonEmptyString } from './requestBody';
 
 /**
  * ASSETS — /api/assets. The ONE place a file becomes a URL.
@@ -36,18 +37,31 @@ import { wildcardPath } from '@builderforce/hono-wildcard-path';
  * tenant-scoped and size/type-checked; only the read is public.
  */
 
-/** Turn a rejection from the store into the response shape a client expects. */
-export function assetErrorResponse(c: Context<HonoEnv>, rejection: AssetRejection) {
+/** The status each store rejection answers with — ONE table, not a switch per case. */
+const ASSET_REJECTION_STATUS: Readonly<Record<AssetRejection['error'], 400 | 503>> = {
+  unconfigured: 503,
+  'no-file': 400,
+  'too-large': 400,
+  'type-not-allowed': 400,
+};
+
+/** What each rejection says. Kept separate from the status so a message can carry the rejection's own fields. */
+function assetRejectionMessage(rejection: AssetRejection): string {
   switch (rejection.error) {
     case 'unconfigured':
-      return c.json({ error: 'File storage not configured' }, 503);
+      return 'File storage not configured';
     case 'no-file':
-      return c.json({ error: 'No file provided' }, 400);
+      return 'No file provided';
     case 'too-large':
-      return c.json({ error: `File too large (max ${rejection.maxBytes / 1024 / 1024}MB)` }, 400);
+      return `File too large (max ${rejection.maxBytes / 1024 / 1024}MB)`;
     case 'type-not-allowed':
-      return c.json({ error: `File type ${rejection.type} not allowed` }, 400);
+      return `File type ${rejection.type} not allowed`;
   }
+}
+
+/** Turn a rejection from the store into the response shape a client expects. */
+export function assetErrorResponse(c: Context<HonoEnv>, rejection: AssetRejection) {
+  return c.json({ error: assetRejectionMessage(rejection) }, ASSET_REJECTION_STATUS[rejection.error]);
 }
 
 /** POST an upload. Shared by `/api/assets` and the legacy `/api/brain/upload`. */
@@ -83,12 +97,14 @@ export async function handleTenantAssetRead(c: Context<HonoEnv>) {
   return result;
 }
 
+const SignBody = z.object({ key: zNonEmptyString });
+
 /** POST a signing request — a short-lived public URL for one owned object, for a
  *  consumer (an upstream LLM's vision fetch) that needs a TIME-BOXED link rather
  *  than the durable one `GET /api/assets/*` already hands out. */
 export async function handleAssetSign(c: Context<HonoEnv>) {
   const tenantId = c.get('tenantId') as number;
-  const { key } = await c.req.json<{ key?: string }>();
+  const { key } = await parseBody(c, SignBody);
   const secret = (c.env as Env).JWT_SECRET;
   if (!secret) return c.json({ error: 'Signing not configured' }, 503);
   const signed = await signTenantAsset(key, tenantId, secret);

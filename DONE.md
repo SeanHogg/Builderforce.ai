@@ -91,32 +91,51 @@ the rule (`message(cause, fallback)` in `investorStyles.ts`).
 
 ## ✅ RESOLVED 2026-09-06 — "Commit and push to main": an @-addressed agent had no git tool, and the Brain was told to refuse
 
-**Follow-up the same day (VSIX 2026.9.19 · brain-embedded 2026.9.3 · API 2026.9.12).** Re-tested live: the
-@-addressed reply STILL came from the server. `code --install-extension builderforce-ai-2026.9.18.vsix` had
-reported success but installed nothing (relative path from a shifted cwd; `code --list-extensions
---show-versions` still said 2026.9.17) — reinstalled by absolute path and verified in the extensions folder.
-Hardened while there: `GET /chats/:id/agent-persona` never 404s past the chat gate (an unresolved or failing
-persona lowers to `NO_PERSONA`, and `addressedAgentSystemPrompt` frames it "You are <name>, a member of this
-team's chat", the server reply's own fallback) so a V2 Container participant runs locally regardless; and the
-IDE `FOLLOW_THROUGH_DIRECTIVE` now says that an instruction a participant could not carry out — or one the user
-says they gave it — falls to the Brain, which had answered "Bob is working on it" instead of committing.
+**What was measured (chat #99, VSIX).** "Bob Developer (V2 (Container))", addressed in the chat with "merge your
+changes and push to main", answered "I don't have git commit/push tools available in this chat". Bob's changes
+were in HIS runtime's working tree (the container's clone, committed to his ticket branch via the `write` op) —
+not in the user's folder. Three causes, one symptom:
 
-**What was measured (chat #99, VSIX).** Directed to commit and push a one-line CSS change, the agent
-reported it had no commit/push tool and could not. Three separate causes, one symptom:
+1. **The very first turn ran on VSIX 2026.9.5** (built 17:17 on 2026-09-05), before the `git.write` publish tools
+   and the POSIX-script routing (commit 852c4cb93, 19:05 the same day). Not re-fixed; verified in the bundle.
+2. **An @-addressed agent is answered ON THE WORKER** (`BrainService.agentReply` via `POST /chats/:id/agent-reply`)
+   with the curated platform tools only — no working tree — while the agent's clone, shell and git live in its
+   RUNTIME (the container run). Nothing let the reply hand an instruction to that runtime, so "commit and push"
+   could only ever end in "I have no git tool": true of the reply, false of the agent.
+3. **The Brain itself could not commit to main.** `git_push` took `allowBaseBranch`; `git_commit` refused the base
+   branch with no override, and the IDE persona said to argue for a PR "even when asked to push to main".
 
-1. **The turn ran on VSIX 2026.9.5** (built 17:17 on 2026-09-05), which predates BOTH the `git.write`
-   publish tools and the POSIX-script routing (commit 852c4cb93, 19:05 the same day). The `set -e`
-   scripts reached `cmd.exe` ("Environment variable -e not defined") and `git_commit` / `git_push` did
-   not exist. The running host at report time (2026.9.17, build d6546f869d7b, `out/extension.js` 12:19)
-   ships both — verified by grepping the packaged bundle and the installed extension. Not re-fixed.
-2. **An @-addressed agent is answered ON THE SERVER** (`BrainService.agentReply`, via
-   `POST /chats/:id/agent-reply`) with the curated platform tools only — no file, shell or git tool,
-   because a Worker has no working tree. The editor that asked has all three. So "direct the
-   Developer to commit" could only ever end in "I have no git tool", truthfully, on every build.
-3. **Even the Brain could not do it.** `git_push` took `allowBaseBranch`, but `git_commit` refused the
-   base branch with no override, and the IDE persona said: prefer a PR "even when asked to push to
-   main — say you are opening a PR instead". An explicit human instruction ended in a refusal by design.
+**A wrong turn, withdrawn the same day (VSIX 2026.9.18 / 2026.9.19).** Two interim builds ran an @-addressed
+agent in the EDITOR's loop with the workspace's tools (`runAddressedAgentLocally`, `GET /chats/:id/agent-persona`,
+`BrainRunRequest.authoredBy`). The user corrected it: the change to commit was in Bob's remote working tree, not
+local — the editor's tools act on the wrong tree. All of it was removed; no dead seam remains.
 
+**Fix (VSIX 2026.9.20 · brain-embedded 2026.9.4 · API 2026.9.13).**
+- **`chats.execute_as_agent`** (new chat-scoped tool, `api/src/application/brain/addressedAgentRun.ts`): hands the
+  user's instruction to the addressed agent's OWN runtime through the platform's one directive path
+  (`POST /runtime/executions/:id/messages`): steers the agent's live run on a linked ticket, resumes a paused one,
+  or starts a follow-up run on the SAME agent/repo/ticket branch (`buildFollowUpPayload`); with no prior run it
+  assigns the agent (unless lifecycle-managed) and `run-now`s the linked ticket with the directive queued as the
+  run's first steer. Only the agent's own runs are candidates (`pickAgentRun`: live > paused > newest terminal);
+  ambiguity over which ticket to start is reported, never guessed (`pickTaskToStart`). Route replays keep the
+  human's role and the approval gate. In `CHAT_SCOPED_AGENT_TOOLS`; the addressed reply now stamps
+  `agentRef` into the tool context (it is this agent acting) and its prompt says: never reply that you lack a
+  git tool — call it and report steered / resumed / run id / awaiting approval.
+- **Container runs honor an explicit push to main.** `cloudAgentEngine` shell guidance: an EXPLICIT "merge/push
+  to main" directive is done with run_command (fetch, merge into base, push) and the commit reported; the
+  shell-less durable surface says plainly it cannot push and ships the PR.
+- **Brain publish tools (kept from 2026.9.18):** `git_commit` gained `allowBaseBranch` (same declared act as
+  push; named branch wins; refusal names the remedy), the IDE approval label says "on the BASE BRANCH (main)",
+  the persona carries out an explicit push to main instead of substituting a PR, and `FOLLOW_THROUGH_DIRECTIVE`
+  says an instruction a participant could not carry out — or one the user says they gave it — falls to the Brain.
+- **DRY:** one `seedFrom` for the send path and the trailing-message auto-reply in `useBrainConversation`.
+- **Ops:** `code --install-extension` with a RELATIVE path had reported success and installed nothing; installs
+  are now by absolute path and verified against `code --list-extensions --show-versions`.
+
+**Tests.** `addressedAgentRun.test.ts` (own-run selection incl. never another agent's run; live>paused>terminal;
+follow-up / steer / approval outcomes; first-run assign+run-now+first-steer; managed board dispatches without
+reassigning), `git-publish.test.ts` (declared base-branch commit; branch wins; remedy named),
+`builtinMcpService.test.ts` (catalog membership of the new chat-scoped tool).
 
 ## ✅ RESOLVED 2026-09-06 — VSIX chat: runs survive a closed tab, denser replies, and four defects from chat #99's transcript
 

@@ -5,6 +5,8 @@ import {
   INTEGRATION_CATEGORIES,
   INTEGRATION_SURFACES,
   getIntegrationCatalog,
+  integrationCategoryLabelKey,
+  integrationSurfaceLabelKey,
   leafPageFor,
 } from './integrationCatalog';
 import { publicApiGet } from './publicApi';
@@ -24,6 +26,19 @@ const asMock = () => vi.mocked(publicApiGet);
  * VOCABULARY in step with the labels, which is the half neither file was checking.
  */
 describe('the reader vocabulary is labelled', () => {
+  /** The page never interpolates a wire value into a key: a member gets its own key
+   *  and anything else gets a key the catalogs carry, so a surface the API gains
+   *  tomorrow renders a true sentence rather than its dotted key. */
+  it('keys a label only for a member of the vocabulary', () => {
+    for (const surface of INTEGRATION_SURFACES) expect(integrationSurfaceLabelKey(surface)).toBe(`surface.${surface}`);
+    for (const category of INTEGRATION_CATEGORIES) expect(integrationCategoryLabelKey(category)).toBe(`category.${category}`);
+    expect(integrationSurfaceLabelKey('telemetry')).toBe('surface.connector');
+    expect(integrationSurfaceLabelKey(undefined)).toBe('surface.connector');
+    expect(integrationCategoryLabelKey('robotics')).toBe('category.other');
+    expect(messages.integrationsIndex.surface).toHaveProperty('connector');
+    expect(messages.integrationsIndex.category).toHaveProperty('other');
+  });
+
   it('has a category label for every category the API can send', () => {
     for (const category of INTEGRATION_CATEGORIES) {
       expect(messages.integrationsIndex.category, category).toHaveProperty(category);

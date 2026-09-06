@@ -33,16 +33,22 @@ import {
   TtsProviderUnavailable,
 } from './ttsProvider';
 
+// Each refusal carries the status it answers with (`statusOf` reads it), so no
+// route re-decides whether a missing consent attestation is a 403 or a 422.
 export class VoiceCloneNotFound extends Error {
+  readonly status = 404;
   constructor() { super('Voice clone not found.'); this.name = 'VoiceCloneNotFound'; }
 }
 export class VoiceCloneForbidden extends Error {
+  readonly status = 403;
   constructor() { super('You do not own or hold a license for this voice.'); this.name = 'VoiceCloneForbidden'; }
 }
 export class VoiceCloneConsentRequired extends Error {
+  readonly status = 422;
   constructor() { super('This voice clone has no consent attestation; synthesis is blocked.'); this.name = 'VoiceCloneConsentRequired'; }
 }
 export class VoiceCloneReferenceMissing extends Error {
+  readonly status = 422;
   constructor() { super('The clone has no reference sample to synthesize from.'); this.name = 'VoiceCloneReferenceMissing'; }
 }
 

@@ -37,6 +37,7 @@ import {
   type KimiOAuthRequest,
   type KimiParsedBody,
 } from '@builderforce/kimi-oauth';
+import { OAuthDiscoveryError, OAuthExchangeError } from './subscriptionOAuthCode';
 
 
 /** Tokens as the rest of the BYO layer stores them. Mirrors `XaiOAuthTokens`. */
@@ -86,7 +87,7 @@ export async function startKimiDeviceAuthorization(env?: KimiOAuthEnv): Promise<
   const { status, body } = await send(kimiDeviceAuthorizationRequest(env));
   const outcome = parseKimiDeviceAuthorization(status, body);
   if (outcome.kind === 'failed') {
-    throw new Error(`Kimi device authorization failed (HTTP ${status}): ${outcome.detail}`);
+    throw new OAuthDiscoveryError(`Kimi device authorization failed (HTTP ${status}): ${outcome.detail}`);
   }
   return outcome.authorization;
 }
@@ -118,7 +119,7 @@ export async function pollKimiDeviceToken(
       // the operator restarts the connect instead of polling a code that can never approve.
       return { kind: 'expired' };
     default:
-      throw new Error(`Kimi device token polling failed (HTTP ${status}): ${outcome.detail}`);
+      throw new OAuthExchangeError(`Kimi device token polling failed (HTTP ${status}): ${outcome.detail}`, status);
   }
 }
 

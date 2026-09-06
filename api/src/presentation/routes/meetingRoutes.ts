@@ -41,13 +41,56 @@ import { applyMediaPrivacyMode } from '../../domain/meetings/mediaPrivacy';
 
 import { iceServers } from '../../application/meetings/iceServers';
 import { boundedIntParam } from './queryParams';
+import { parseBody, z, zNonEmptyString, zOptionalString, zPositiveInt } from './requestBody';
 
 const KINDS = new Set(['standup', 'planning', 'retrospective', 'adhoc', 'direct', 'interview', 'review']);
 /** Team ceremonies default to being backed by a team chat — "the meeting IS the
  *  team chat": joining opens it, and absentees still post their update there. */
 const TEAM_CEREMONY_KINDS = new Set(['standup', 'planning', 'retrospective', 'review']);
 
-interface AttendeeInput { kind?: string; ref: string; name: string; email?: string; role?: string; }
+const AttendeeInputSchema = z.object({
+  kind: z.string().optional(),
+  ref: zNonEmptyString,
+  name: z.string(),
+  email: z.string().optional(),
+  role: z.string().optional(),
+});
+type AttendeeInput = z.infer<typeof AttendeeInputSchema>;
+
+const MeetingCreateBody = z.object({
+  title: zOptionalString,
+  kind: z.string().optional(),
+  projectId: zPositiveInt.nullable().optional(),
+  scheduledAt: z.string().nullable().optional(),
+  durationMinutes: z.number().optional(),
+  videoEnabled: z.boolean().optional(),
+  attendees: z.array(AttendeeInputSchema).optional(),
+  organizerName: z.string().optional(),
+  organizerEmail: z.string().optional(),
+  // Gig Marketplace (0293): optional back-links so this meeting is tracked against
+  // a work item / job posting / engagement (e.g. a review or interview).
+  ticketId: zPositiveInt.nullable().optional(),
+  jobId: z.string().nullable().optional(),
+  engagementId: z.string().nullable().optional(),
+  // Team Chat (0294): scope the backing team chat to a named workforce team, and
+  // opt in/out of linking one (defaults on for team ceremonies).
+  teamId: zPositiveInt.nullable().optional(),
+  linkTeamChat: z.boolean().optional(),
+});
+
+/** Walk-ins may join with no body at all (`{}`), so both fields are optional. */
+const JoinBody = z.object({ name: zOptionalString, email: zOptionalString });
+const TranscriptBody = z.object({ text: zNonEmptyString });
+const AgentTurnBody = z.object({ agentRef: z.string().optional(), prompt: z.string().optional() });
+const RsvpBody = z.object({ response: z.enum(['accepted', 'declined', 'tentative']) });
+const MeetingPatchBody = z.object({
+  title: zNonEmptyString.optional(),
+  scheduledAt: z.string().nullable().optional(),
+  durationMinutes: z.number().optional(),
+  videoEnabled: z.boolean().optional(),
+});
+/** `windows` is normalised by `normalizeWindows`, which clamps rather than refuses. */
+const AvailabilityBody = z.object({ timezone: z.string().max(64).optional(), windows: z.unknown().optional() });
 
 export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
@@ -147,29 +190,10 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId, segmentId } = scope(c);
     const env = c.env as Env;
     const userId = (c.get('userId') as string) ?? '';
-    const body = await c.req.json<{
-      title?: string;
-      kind?: string;
-      projectId?: number | null;
-      scheduledAt?: string | null;
-      durationMinutes?: number;
-      videoEnabled?: boolean;
-      attendees?: AttendeeInput[];
-      organizerName?: string;
-      organizerEmail?: string;
-      // Gig Marketplace (0293): optional back-links so this meeting is tracked against
-      // a work item / job posting / engagement (e.g. a review or interview).
-      ticketId?: number | null;
-      jobId?: string | null;
-      engagementId?: string | null;
-      // Team Chat (0294): scope the backing team chat to a named workforce team, and
-      // opt in/out of linking one (defaults on for team ceremonies).
-      teamId?: number | null;
-      linkTeamChat?: boolean;
-    }>();
+    const body = await parseBody(c, MeetingCreateBody);
 
     const kind = body.kind && KINDS.has(body.kind) ? body.kind : 'adhoc';
-    const title = body.title?.trim() || defaultTitle(kind);
+    const title = body.title || defaultTitle(kind);
     const scheduledAt = body.scheduledAt ? new Date(body.scheduledAt) : null;
     const durationMinutes = Math.min(480, Math.max(5, body.durationMinutes ?? 30));
     const roomKey = crypto.randomUUID();
@@ -189,7 +213,7 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
       jobId: body.jobId ?? null,
       engagementId: body.engagementId ?? null,
     }).returning();
-    if (!meeting) return c.json({ error: 'Failed to create meeting' }, 500);
+    if (!meeting) throw new Error('meetings insert returned no row');
 
     // The meeting IS a team chat (0294): back a team ceremony with the canonical team
     // chat for its scope so joining opens the conversation and absentees can still post
@@ -259,7 +283,7 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     const env = c.env as Env;
     const id = c.req.param('id');
     const userId = (c.get('userId') as string) ?? '';
-    const body = await c.req.json<{ name?: string; email?: string }>().catch(() => ({} as { name?: string; email?: string }));
+    const body = await parseBody(c, JoinBody);
     const [m] = await db.select().from(meetings).where(and(eq(meetings.id, id), eq(meetings.tenantId, tenantId)));
     if (!m) return c.json({ error: 'Not found' }, 404);
     if (m.status === 'cancelled' || m.status === 'ended') return c.json({ error: `Meeting has ${m.status}` }, 409);
@@ -356,8 +380,7 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     const userId = (c.get('userId') as string) ?? '';
     const res = await loadForAccess(c, c.req.param('id'));
     if ('error' in res) return c.json({ error: res.error }, res.code);
-    const { text } = await c.req.json<{ text?: string }>().catch(() => ({} as { text?: string }));
-    if (!text || !text.trim()) return c.json({ error: 'Empty caption' }, 400);
+    const { text } = await parseBody(c, TranscriptBody);
     const mine = res.attendees.find((a) => a.memberRef === userId);
     const row = await appendTranscriptLine(db, c.env as Env, res.meeting, {
       speakerRef: userId, speakerName: mine?.memberName || 'Guest', speakerKind: 'human', text,
@@ -370,15 +393,18 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     const res = await loadForAccess(c, c.req.param('id'));
     if ('error' in res) return c.json({ error: res.error }, res.code);
     if (res.meeting.status !== 'live') return c.json({ error: 'Meeting is not live' }, 409);
-    const { agentRef, prompt } = await c.req.json<{ agentRef?: string; prompt?: string }>().catch(() => ({} as { agentRef?: string; prompt?: string }));
+    const { agentRef, prompt } = await parseBody(c, AgentTurnBody);
     const agent = res.attendees.find((a) => a.memberRef === agentRef && a.memberKind !== 'human');
     if (!agent) return c.json({ error: 'Not an agent attendee of this meeting' }, 404);
     try {
       const { text, atMs } = await runAgentTurn(db, c.env as Env, res.meeting, { ref: agent.memberRef, name: agent.memberName }, prompt);
       if (!text) return c.json({ error: 'The agent had nothing to add.' }, 422);
       return c.json({ text, atMs, agentRef: agent.memberRef, agentName: agent.memberName });
-    } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : 'Agent turn failed' }, 502);
+    } catch (error) {
+      // The model gateway failed: a 502 the caller can retry. The gateway's own
+      // message is a diagnostic for the reporter, not for the caption feed.
+      reportCaughtError(error, { source: 'presentation/routes/meetingRoutes.ts', operation: 'agent-turn' });
+      return c.json({ error: 'The agent could not take its turn. The failure has been recorded — try again.' }, 502);
     }
   });
 
@@ -402,8 +428,7 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId } = scope(c);
     const id = c.req.param('id');
     const userId = (c.get('userId') as string) ?? '';
-    const { response } = await c.req.json<{ response: string }>();
-    if (!['accepted', 'declined', 'tentative'].includes(response)) return c.json({ error: 'Invalid response' }, 400);
+    const { response } = await parseBody(c, RsvpBody);
     // RETURNING makes the no-op visible. The update matched on (meeting, member, tenant)
     // and reported success whether or not a row existed, so a caller who was never
     // invited — or who mistyped the meeting id — got a 200 and an unchanged meeting,
@@ -459,9 +484,9 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId } = scope(c);
     const res = await loadForMutation(c, c.req.param('id'));
     if ('error' in res) return c.json({ error: res.error }, res.code);
-    const body = await c.req.json<{ title?: string; scheduledAt?: string | null; durationMinutes?: number; videoEnabled?: boolean }>();
+    const body = await parseBody(c, MeetingPatchBody);
     const patch: Record<string, unknown> = { updatedAt: new Date() };
-    if (body.title != null) patch.title = body.title.trim();
+    if (body.title != null) patch.title = body.title;
     if (body.scheduledAt !== undefined) patch.scheduledAt = body.scheduledAt ? new Date(body.scheduledAt) : null;
     if (body.durationMinutes != null) patch.durationMinutes = Math.min(480, Math.max(5, body.durationMinutes));
     if (body.videoEnabled != null) patch.videoEnabled = body.videoEnabled;
@@ -495,8 +520,8 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
   r.put('/availability/me', async (c) => {
     const { tenantId } = scope(c);
     const userId = (c.get('userId') as string) ?? '';
-    const body = await c.req.json<{ timezone?: string; windows?: unknown }>();
-    const timezone = (body.timezone && body.timezone.length <= 64) ? body.timezone : DEFAULT_TZ;
+    const body = await parseBody(c, AvailabilityBody);
+    const timezone = body.timezone || DEFAULT_TZ;
     const windows = normalizeWindows(body.windows);
     await db.insert(userAvailability).values({ tenantId, userId, timezone, windows })
       .onConflictDoUpdate({

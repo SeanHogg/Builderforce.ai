@@ -21,7 +21,6 @@
 import { Hono } from 'hono';
 import {
   DOCUMENT_KINDS,
-  TermsError,
   acceptanceHistory,
   bindOrganisation,
   currentAcceptances,
@@ -30,7 +29,6 @@ import {
   recordAcceptance,
   supersedeEarlierVersions,
   tenantComplianceSummary,
-  type DocumentKind,
 } from '../../application/legal/termsAcceptance';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
@@ -38,7 +36,6 @@ import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveActorFromContext } from '../../application/activity/activityLog';
 import {
-  LegalDocumentError,
   downloadLegalDocumentFile,
   getLegalDocumentFile,
   requestLegalDocumentSignature,
@@ -48,18 +45,41 @@ import {
   shareLegalDocumentFile,
   uploadLegalDocumentFile,
 } from '../../application/legal/legalDocumentStore';
-import { SignatureError } from '../../application/signature/signatureEngine';
+import { parseBody, z, zPositiveInt } from './requestBody';
 
-const handle = async (run: () => Promise<Response>): Promise<Response> => {
-  try {
-    return await run();
-  } catch (error) {
-    if (error instanceof LegalDocumentError || error instanceof SignatureError) {
-      return Response.json({ error: error.message }, { status: error.status });
-    }
-    throw error;
-  }
-};
+// `LegalDocumentError`, `SignatureError` and `TermsError` all carry `status`, so a
+// thrown one is answered by `app.onError` through `statusOf` — no local mapper.
+
+const DataRoomBody = z.object({ dataRoomId: zPositiveInt.nullable().optional() });
+
+const ShareBody = z.object({
+  permission: z.enum(['view', 'download']).optional(),
+  recipientEmail: z.string().nullable().optional(),
+  expiresAt: z.string().nullable().optional(),
+});
+
+const RequestSignatureBody = z.object({
+  subject: z.string().optional(),
+  intent: z.string().optional(),
+  expiresAt: z.string().nullable().optional(),
+  remindAfterDays: z.number().optional(),
+  parties: z.array(z.object({
+    name: z.string(),
+    email: z.string(),
+    partyRef: z.string().nullable().optional(),
+  })).optional(),
+});
+
+const ConsentDocumentBody = z.object({
+  kind: z.enum(DOCUMENT_KINDS),
+  version: z.string().optional(),
+});
+const AcceptBody = ConsentDocumentBody.extend({ documentHash: z.string().nullable().optional() });
+const BindBody = ConsentDocumentBody.extend({
+  signatoryRef: z.string().optional(),
+  signatoryTitle: z.string().nullable().optional(),
+  legalEntityName: z.string().nullable().optional(),
+});
 
 function fileResponse(bytes: Uint8Array, filename: string, mime: string | null, disposition: 'attachment' | 'inline' = 'attachment'): Response {
   return new Response(bytes, {
@@ -125,14 +145,13 @@ export function createLegalDocumentRoutes(db: Db): Hono<HonoEnv> {
   /** Put this file in a data room, or take it out (0937). MANAGER, because it
    *  changes what an external firm holding a room link can read. */
   router.post('/:id/data-room', requireRole(TenantRole.MANAGER), async (c) => {
-    const body = await c.req.json<{ dataRoomId?: unknown }>();
-    const raw = Number(body.dataRoomId);
+    const body = await parseBody(c, DataRoomBody);
     await setLegalDocumentDataRoom(
       db,
       c.env as Env,
       c.get('tenantId') as number,
       c.req.param('id'),
-      Number.isInteger(raw) && raw > 0 ? raw : null,
+      body.dataRoomId ?? null,
       await resolveActorFromContext(c.env as Env, db, c),
     );
     return Response.json({ ok: true });
@@ -143,12 +162,12 @@ export function createLegalDocumentRoutes(db: Db): Hono<HonoEnv> {
     const env = c.env as Env;
     const userId = (c.get('userId') as string | undefined) ?? null;
     const actor = await resolveActorFromContext(env, db, c);
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({}) as Record<string, unknown>);
+    const body = await parseBody(c, ShareBody);
     const result = await shareLegalDocumentFile(db, env, tenantId, {
       documentId: c.req.param('id'),
-      permission: body.permission === 'download' ? 'download' : 'view',
-      recipientEmail: typeof body.recipientEmail === 'string' ? body.recipientEmail : null,
-      expiresAt: typeof body.expiresAt === 'string' ? body.expiresAt : null,
+      permission: body.permission ?? 'view',
+      recipientEmail: body.recipientEmail ?? null,
+      expiresAt: body.expiresAt ?? null,
       actor,
       createdBy: userId,
     });
@@ -168,22 +187,14 @@ export function createLegalDocumentRoutes(db: Db): Hono<HonoEnv> {
     const env = c.env as Env;
     const userId = (c.get('userId') as string | undefined) ?? null;
     const actor = await resolveActorFromContext(env, db, c);
-    const body = await c.req.json<Record<string, unknown>>();
-    const parties = Array.isArray(body.parties)
-      ? body.parties.flatMap((p) => {
-          const row = p as { name?: unknown; email?: unknown; partyRef?: unknown };
-          return typeof row.name === 'string' && typeof row.email === 'string'
-            ? [{ name: row.name, email: row.email, partyRef: typeof row.partyRef === 'string' ? row.partyRef : null }]
-            : [];
-        })
-      : [];
+    const body = await parseBody(c, RequestSignatureBody);
     const result = await requestLegalDocumentSignature(db, env, tenantId, {
       documentId: c.req.param('id'),
-      subject: String(body.subject ?? ''),
-      intent: typeof body.intent === 'string' ? body.intent : undefined,
-      expiresAt: typeof body.expiresAt === 'string' ? body.expiresAt : null,
-      ...(Number.isFinite(body.remindAfterDays) ? { remindAfterDays: Number(body.remindAfterDays) } : {}),
-      parties,
+      subject: body.subject ?? '',
+      intent: body.intent,
+      expiresAt: body.expiresAt ?? null,
+      ...(body.remindAfterDays !== undefined ? { remindAfterDays: body.remindAfterDays } : {}),
+      parties: (body.parties ?? []).map((p) => ({ name: p.name, email: p.email, partyRef: p.partyRef ?? null })),
       actor,
       createdBy: userId,
     });
@@ -217,22 +228,6 @@ export function createConsentRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
-  const consent = async (run: () => Promise<Response>): Promise<Response> => {
-    try {
-      return await run();
-    } catch (error) {
-      if (error instanceof TermsError) {
-        return Response.json({ error: error.message }, { status: error.status });
-      }
-      throw error;
-    }
-  };
-
-  const kindOf = (v: unknown): DocumentKind => {
-    if (!isDocumentKind(v)) throw new TermsError('kind must be one of: ' + DOCUMENT_KINDS.join(', '), 400);
-    return v;
-  };
-
   router.get('/consent/me', async (c) =>
     Response.json({ acceptances: await currentAcceptances(db, String(c.get('userId') ?? '')) }));
 
@@ -249,20 +244,20 @@ export function createConsentRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.post('/consent/accept', async (c) => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, AcceptBody);
     // Evidence is taken from the request, never from the body — an IP a client
     // can set is not evidence.
     const result = await recordAcceptance(
       db,
       c.env as Env,
       String(c.get('userId') ?? ''),
-      kindOf(body.kind),
-      String(body.version ?? ''),
+      body.kind,
+      body.version ?? '',
       {
         tenantId: (c.get('tenantId') as number | undefined) ?? null,
         ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
         userAgent: (c.req.header('user-agent') ?? '').slice(0, 500) || null,
-        documentHash: typeof body.documentHash === 'string' ? body.documentHash : null,
+        documentHash: body.documentHash ?? null,
       },
     );
     return Response.json(result);
@@ -272,27 +267,25 @@ export function createConsentRoutes(db: Db): Hono<HonoEnv> {
     Response.json(await tenantComplianceSummary(db, c.get('tenantId') as number)));
 
   router.post('/consent/bind', requireRole(TenantRole.MANAGER), async (c) => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, BindBody);
     return Response.json(await bindOrganisation(
       db,
       c.env as Env,
       c.get('tenantId') as number,
       await resolveActorFromContext(c.env as Env, db, c),
       {
-        kind: kindOf(body.kind),
-        version: String(body.version ?? ''),
-        signatoryRef: String(body.signatoryRef ?? c.get('userId') ?? ''),
-        signatoryTitle: typeof body.signatoryTitle === 'string' ? body.signatoryTitle : null,
-        legalEntityName: typeof body.legalEntityName === 'string' ? body.legalEntityName : null,
+        kind: body.kind,
+        version: body.version ?? '',
+        signatoryRef: body.signatoryRef ?? String(c.get('userId') ?? ''),
+        signatoryTitle: body.signatoryTitle ?? null,
+        legalEntityName: body.legalEntityName ?? null,
       },
     ));
   });
 
   router.post('/consent/supersede', requireRole(TenantRole.MANAGER), async (c) => {
-    const body = await c.req.json<Record<string, unknown>>();
-    return Response.json(await supersedeEarlierVersions(
-      db, c.env as Env, kindOf(body.kind), String(body.version ?? ''),
-    ));
+    const body = await parseBody(c, ConsentDocumentBody);
+    return Response.json(await supersedeEarlierVersions(db, c.env as Env, body.kind, body.version ?? ''));
   });
 
   return router;

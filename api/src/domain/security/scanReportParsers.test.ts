@@ -66,13 +66,20 @@ describe('sarifToFindings', () => {
 
   it('maps level → severity, promotes by security-severity, and enriches from rule metadata', () => {
     const out = sarifToFindings(sarif);
-    expect(out).toHaveLength(3);
+    expect(out).toHaveLength(4);
     expect(out[0]).toMatchObject({
       severity: 'CRITICAL', ruleId: 'js/xss', title: 'XSS sink on line 4', filePath: 'src/app.ts', line: 4,
       cwe: 'CWE-079', description: 'Untrusted input reaches the DOM.', remediation: 'Escape output.',
     });
     expect(out[1]).toMatchObject({ severity: 'LOW', filePath: null, line: null, description: 'Unused variable' });
     expect(out[2]).toMatchObject({ severity: 'HIGH', cwe: null });
+    // A result with a rule but no message is still a finding — titled by its rule,
+    // defaulting to MEDIUM (an unweighted finding is not a dropped one).
+    expect(out[3]).toMatchObject({ severity: 'MEDIUM', ruleId: 'js/blank', title: 'js/blank' });
+  });
+
+  it('drops a result with neither a message nor a rule (nothing to name it by)', () => {
+    expect(sarifToFindings({ runs: [{ results: [{ level: 'error' }] }] })).toEqual([]);
   });
 
   it('is empty for a non-SARIF document', () => {

@@ -39,6 +39,44 @@ import { parseJsonArray } from '../../domain/shared/json';
 import { limitParam, offsetParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { parseJsonOr } from '../../domain/shared/json';
+import { parseBody, z, zNonEmptyString } from './requestBody';
+
+// ── Request bodies ───────────────────────────────────────────────────────────
+
+const PromptVariable = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+  default: z.string().optional(),
+});
+const zVisibility = z.enum(['private', 'tenant', 'public']);
+
+const CreatePromptBody = z.object({
+  title: zNonEmptyString,
+  description: z.string().optional(),
+  category: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  visibility: zVisibility.optional(),
+  authorName: z.string().optional(),
+  body: zNonEmptyString,
+  variables: z.array(PromptVariable).optional(),
+  model: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+const PatchPromptBody = z.object({
+  title: z.string().optional(),
+  description: z.string().nullable().optional(),
+  category: z.string().nullable().optional(),
+  tags: z.array(z.string()).optional(),
+  visibility: zVisibility.optional(),
+});
+
+const NewVersionBody = z.object({
+  body: zNonEmptyString,
+  variables: z.array(PromptVariable).optional(),
+  model: z.string().optional(),
+  notes: z.string().optional(),
+});
 
 /** Version token for the public prompts-gallery keyspace. The gallery is
  *  searchable + paginated (q/category/tag/sort/limit/offset) → an unbounded
@@ -213,22 +251,7 @@ export function createPromptLibraryRoutes(db: Db): Hono<HonoEnv> {
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
-    const body = await c.req.json<{
-      title: string;
-      description?: string;
-      category?: string;
-      tags?: string[];
-      visibility?: 'private' | 'tenant' | 'public';
-      authorName?: string;
-      body: string;
-      variables?: Array<{ name: string; description?: string; default?: string }>;
-      model?: string;
-      notes?: string;
-    }>();
-
-    if (!body.title?.trim() || !body.body?.trim()) {
-      return c.json({ error: 'title and body are required' }, 400);
-    }
+    const body = await parseBody(c, CreatePromptBody);
 
     const visibility = body.visibility ?? 'private';
     let slug = await uniqueTenantSlug(db, tenantId, slugify(body.title));
@@ -240,7 +263,7 @@ export function createPromptLibraryRoutes(db: Db): Hono<HonoEnv> {
       .values({
         tenantId,
         slug,
-        title: body.title.trim(),
+        title: body.title,
         description: body.description ?? null,
         category: body.category ?? null,
         tags: JSON.stringify(body.tags ?? []),
@@ -250,7 +273,7 @@ export function createPromptLibraryRoutes(db: Db): Hono<HonoEnv> {
         currentVersion: 1,
       })
       .returning();
-    if (!entry) return c.json({ error: 'Failed to create prompt' }, 500);
+    if (!entry) throw new Error('prompt_library_entries insert returned no row');
 
     await db.insert(promptLibraryVersions).values({
       entryId: entry.id,
@@ -300,13 +323,7 @@ export function createPromptLibraryRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(promptLibraryEntries.id, id), eq(promptLibraryEntries.tenantId, tenantId)));
     if (!entry) return c.json({ error: 'Prompt not found' }, 404);
 
-    const body = await c.req.json<Partial<{
-      title: string;
-      description: string | null;
-      category: string | null;
-      tags: string[];
-      visibility: 'private' | 'tenant' | 'public';
-    }>>();
+    const body = await parseBody(c, PatchPromptBody);
 
     const set: Record<string, unknown> = { updatedAt: new Date() };
     if (body.title !== undefined) set.title = body.title;
@@ -326,7 +343,7 @@ export function createPromptLibraryRoutes(db: Db): Hono<HonoEnv> {
       .set(set)
       .where(and(eq(promptLibraryEntries.id, id), eq(promptLibraryEntries.tenantId, tenantId)))
       .returning();
-    if (!updated) return c.json({ error: 'Update failed' }, 500);
+    if (!updated) throw new Error('prompt_library_entries update returned no row');
 
     // Metadata edits / publish-unpublish change gallery rows + ordering → bump.
     // (Always bump: the row may have been public before this edit unpublished it.)
@@ -345,13 +362,7 @@ export function createPromptLibraryRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(promptLibraryEntries.id, id), eq(promptLibraryEntries.tenantId, tenantId)));
     if (!entry) return c.json({ error: 'Prompt not found' }, 404);
 
-    const body = await c.req.json<{
-      body: string;
-      variables?: Array<{ name: string; description?: string; default?: string }>;
-      model?: string;
-      notes?: string;
-    }>();
-    if (!body.body?.trim()) return c.json({ error: 'body is required' }, 400);
+    const body = await parseBody(c, NewVersionBody);
 
     const nextVersion = entry.currentVersion + 1;
     await db.insert(promptLibraryVersions).values({
@@ -369,7 +380,7 @@ export function createPromptLibraryRoutes(db: Db): Hono<HonoEnv> {
       .set({ currentVersion: nextVersion, updatedAt: new Date() })
       .where(scopedToTenant(promptLibraryEntries, tenantId, eq(promptLibraryEntries.id, id)))
       .returning();
-    if (!updated) return c.json({ error: 'Version bump failed' }, 500);
+    if (!updated) throw new Error('prompt_library_entries version bump returned no row');
 
     // A new version touches updatedAt (affects 'recent' ordering) for a possibly
     // public prompt → bump so the gallery re-loads.

@@ -5,6 +5,9 @@ import {
   spentAuthorizationCodeError,
   throwTokenExchangeFailure,
   OAUTH_CODE_SPENT,
+  OAUTH_EXCHANGE_FAILED,
+  OAUTH_SUBSCRIPTION_NOT_ENTITLED,
+  OAuthExchangeError,
 } from './subscriptionOAuthCode';
 
 describe('parsePastedAuthorizationCode', () => {
@@ -69,16 +72,23 @@ describe('throwTokenExchangeFailure', () => {
       .toThrowError(expect.objectContaining({ code: OAUTH_CODE_SPENT, status: 400 }));
   });
 
-  it('carries the status through for a genuine upstream failure', () => {
+  it('answers a genuine upstream failure as a 502, keeping what the provider said for the reporter', () => {
     try {
       throwTokenExchangeFailure({ status: 503, body: 'upstream down', label: 'Anthropic' });
       expect.unreachable('should have thrown');
     } catch (e) {
-      const error = e as Error & { status?: number; code?: string };
-      expect(error.status).toBe(503);
-      expect(error.code).toBeUndefined();
+      const error = e as OAuthExchangeError;
+      expect(error).toBeInstanceOf(OAuthExchangeError);
+      expect(error.status).toBe(502);
+      expect(error.upstreamStatus).toBe(503);
+      expect(error.code).toBe(OAUTH_EXCHANGE_FAILED);
       expect(error.message).toContain('Anthropic OAuth token request failed (503)');
     }
+  });
+
+  it('answers an unentitled account as a 403 the operator fixes on the billing page', () => {
+    expect(() => throwTokenExchangeFailure({ status: 403, body: 'no subscription', label: 'OpenAI' }))
+      .toThrowError(expect.objectContaining({ status: 403, code: OAUTH_SUBSCRIPTION_NOT_ENTITLED }));
   });
 
   it('truncates the upstream body so a huge error page cannot reach the UI', () => {

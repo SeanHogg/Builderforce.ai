@@ -208,6 +208,19 @@ export type CreateChildTask = (input: {
   assignedUserId?: string | null;
 }) => Promise<{ id: number }>;
 
+/**
+ * A refusal from this service, carrying the status it answers with: 400 for a
+ * malformed request, 404 for a task / role / assignee that is not there, 409 for
+ * a removal the participation policy forbids. Routes read `status` through
+ * `statusOf` instead of sniffing the sentence.
+ */
+export class TicketParticipantError extends Error {
+  constructor(message: string, readonly status: 400 | 404 | 409) {
+    super(message);
+    this.name = 'TicketParticipantError';
+  }
+}
+
 interface SlotSeed {
   stageKey: string | null;
   roleKey: string;
@@ -241,11 +254,11 @@ export class TicketParticipantsService {
   ): Promise<AssignParticipantResult> {
     const roleKey = input.roleKey.trim();
     const assigneeRef = input.assigneeRef.trim();
-    if (!Number.isInteger(taskId) || taskId <= 0) throw new Error('taskId must be a positive integer');
-    if (!roleKey) throw new Error('roleKey is required');
-    if (!assigneeRef) throw new Error('assigneeRef is required');
+    if (!Number.isInteger(taskId) || taskId <= 0) throw new TicketParticipantError('taskId must be a positive integer', 400);
+    if (!roleKey) throw new TicketParticipantError('roleKey is required', 400);
+    if (!assigneeRef) throw new TicketParticipantError('assigneeRef is required', 400);
     if (input.assigneeKind !== 'agent' && input.assigneeKind !== 'user') {
-      throw new Error('assigneeKind must be "agent" or "user"');
+      throw new TicketParticipantError('assigneeKind must be "agent" or "user"', 400);
     }
 
     const [task] = await this.db
@@ -254,7 +267,7 @@ export class TicketParticipantsService {
       .innerJoin(projects, and(eq(projects.id, tasks.projectId), eq(projects.tenantId, tenantId)))
       .where(eq(tasks.id, taskId))
       .limit(1);
-    if (!task) throw new Error('task not found');
+    if (!task) throw new TicketParticipantError('task not found', 404);
 
     const slots = await this.db
       .select({ id: ticketParticipants.id })
@@ -264,7 +277,7 @@ export class TicketParticipantsService {
         eq(ticketParticipants.taskId, taskId),
         eq(ticketParticipants.roleKey, roleKey),
       ));
-    if (!slots.length) throw new Error(`participant role "${roleKey}" not found on task`);
+    if (!slots.length) throw new TicketParticipantError(`participant role "${roleKey}" not found on task`, 404);
 
     let assigneeName: string;
     let storedKind: 'agent' | 'human';
@@ -274,7 +287,7 @@ export class TicketParticipantsService {
         .from(ideAgents)
         .where(and(eq(ideAgents.tenantId, tenantId), eq(ideAgents.id, assigneeRef), eq(ideAgents.status, 'active')))
         .limit(1);
-      if (!agent) throw new Error('active agent assignee not found in tenant');
+      if (!agent) throw new TicketParticipantError('active agent assignee not found in tenant', 404);
       assigneeName = agent.name;
       storedKind = 'agent';
     } else {
@@ -284,7 +297,7 @@ export class TicketParticipantsService {
         .innerJoin(users, eq(users.id, tenantMembers.userId))
         .where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, assigneeRef)))
         .limit(1);
-      if (!member) throw new Error('user assignee is not a tenant member');
+      if (!member) throw new TicketParticipantError('user assignee is not a tenant member', 404);
       assigneeName = member.name ?? member.email;
       storedKind = 'human';
     }
@@ -581,9 +594,9 @@ export class TicketParticipantsService {
       .from(ticketParticipants)
       .where(scopedToTenant(ticketParticipants, tenantId, eq(ticketParticipants.taskId, taskId)));
     const target = rows.find((row) => row.id === participantId);
-    if (!target) throw new Error('participant not found on task');
+    if (!target) throw new TicketParticipantError('participant not found on task', 404);
     const decision = decideParticipantRemoval(target, rows);
-    if (!decision.allowed) throw new Error(decision.message);
+    if (!decision.allowed) throw new TicketParticipantError(decision.message, 409);
     await this.db
       .delete(ticketParticipants)
       .where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.taskId, taskId), eq(ticketParticipants.id, participantId)));

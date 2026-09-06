@@ -21,7 +21,6 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import {
-  EquityError,
   applyRoundConversions,
   capTable,
   cliffsDueWithin,

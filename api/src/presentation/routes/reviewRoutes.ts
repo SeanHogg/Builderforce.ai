@@ -33,18 +33,24 @@ import { resolveHumanActor } from '../../application/activity/activityLog';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { limitParam } from './queryParams';
+import { parseBody, z, zNonEmptyString } from './requestBody';
 
 /** Employer reviews publish user-authored claims about a NAMED organisation that
  *  never agreed to be described. They are held until a human approves them. */
 const EMPLOYER_REVIEWS_ARE_MODERATED = true;
 
-interface ReviewBody {
-  rating?: number;
-  title?: string;
-  body?: string;
-  subRatings?: Record<string, number>;
-  metadata?: Record<string, string>;
-}
+const ReviewBody = z.object({
+  rating: z.number(),
+  title: zNonEmptyString,
+  body: z.string().optional(),
+  subRatings: z.record(z.string(), z.number()).optional(),
+  metadata: z.record(z.string(), z.string()).optional(),
+});
+
+const ModerationBody = z.object({
+  decision: z.enum(['published', 'rejected']),
+  reason: z.string().nullable().optional(),
+});
 
 export function createReviewRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -94,11 +100,7 @@ export function createReviewRoutes(db: Db): Hono<HonoEnv> {
     const reviewId = Number(c.req.param('reviewId'));
     if (!Number.isInteger(reviewId)) return c.json({ error: 'invalid review id' }, 400);
 
-    const body = await c.req.json<{ decision?: string; reason?: string }>()
-      .catch((): { decision?: string; reason?: string } => ({}));
-    if (body.decision !== 'published' && body.decision !== 'rejected') {
-      return c.json({ error: "decision must be 'published' or 'rejected'" }, 400);
-    }
+    const body = await parseBody(c, ModerationBody);
 
     const applied = await decideReview(db, c.env as Env, {
       tenantId: c.get('tenantId') as number,
@@ -144,9 +146,7 @@ export function createReviewRoutes(db: Db): Hono<HonoEnv> {
     const userId = c.get('userId') as string | undefined;
     if (!userId) return c.json({ error: 'a signed-in user is required' }, 401);
 
-    const body = await c.req.json<ReviewBody>().catch((): ReviewBody => ({}));
-    if (typeof body.rating !== 'number') return c.json({ error: 'rating is required' }, 400);
-    if (!body.title?.trim()) return c.json({ error: 'title is required' }, 400);
+    const body = await parseBody(c, ReviewBody);
 
     const employer = await getEmployer(db, c.env as Env, tenantId, id);
     if (!employer) return c.json({ error: 'not_found' }, 404);

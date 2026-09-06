@@ -56,6 +56,60 @@ import { getTenantTokenAvailability } from '../../application/llm/tenantTokenAva
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
 import { limitParam } from './queryParams';
+import { parseBody, z } from './requestBody';
+
+// ── Request bodies ───────────────────────────────────────────────────────────
+// Tri-state fields (0363/0365/0386): true/false = an explicit decision, null =
+// inherit the tier above, absent = leave whatever is stored alone.
+const zTriBool = z.boolean().nullable().optional();
+const zTriNumber = z.number().nullable().optional();
+
+const DefaultsBody = z.object({
+  enabled: zTriBool,
+  prMergePolicy: z.string().nullable().optional(),
+  autoAssign: zTriBool,
+  autoBusinessValue: zTriBool,
+  autoPrioritize: zTriBool,
+  autoSchedule: zTriBool,
+  requireSignoffToComplete: zTriBool,
+  allowAutoMerge: zTriBool,
+  allowUnattendedCeremonies: zTriBool,
+  allowAgentReassignment: zTriBool,
+  agentReassignIdleHours: zTriNumber,
+  agentReassignMaxPerSession: zTriNumber,
+  allowAutoStaffLanes: zTriBool,
+});
+
+const ConfigBody = z.object({
+  managerRef: z.string().nullable().optional(),
+  enabled: z.boolean().optional(),
+  prMergePolicy: z.string().optional(),
+  autoAssign: z.boolean().optional(),
+  autoBusinessValue: z.boolean().optional(),
+  autoPrioritize: z.boolean().optional(),
+  autoSchedule: z.boolean().optional(),
+  managerType: z.string().optional(),
+  requireSignoffToComplete: z.boolean().optional(),
+  allowAutoMerge: zTriBool,
+  allowUnattendedCeremonies: zTriBool,
+  allowAgentReassignment: zTriBool,
+  agentReassignIdleHours: zTriNumber,
+  agentReassignMaxPerSession: zTriNumber,
+  allowAutoStaffLanes: zTriBool,
+});
+
+const ClosePrsBody = z.object({
+  prIds: z.array(z.string()).min(1, 'prIds must be a non-empty array of pull-request ids'),
+});
+
+const CoachBody = z.object({
+  directive: z.string().optional(),
+  scope: z.enum(['project', 'tenant']).optional(),
+  mode: z.enum(['directive', 'task']).optional(),
+  expiresInDays: z.number().optional(),
+});
+
+const DirectiveStatusBody = z.object({ status: z.string().optional() });
 
 /**
  * The `reason` a `merge_blocked` decision recorded, out of its raw `detail` TEXT.
@@ -126,22 +180,6 @@ export function createManagerRoutes(
     return n >= range.min && n <= range.max ? n : undefined;
   }
 
-  type DefaultsBody = {
-    enabled?: boolean | null;
-    prMergePolicy?: string | null;
-    autoAssign?: boolean | null;
-    autoBusinessValue?: boolean | null;
-    autoPrioritize?: boolean | null;
-    autoSchedule?: boolean | null;
-    requireSignoffToComplete?: boolean | null;
-    allowAutoMerge?: boolean | null;
-    allowUnattendedCeremonies?: boolean | null;
-    allowAgentReassignment?: boolean | null;
-    agentReassignIdleHours?: number | null;
-    agentReassignMaxPerSession?: number | null;
-    allowAutoStaffLanes?: boolean | null;
-  };
-
   /**
    * The workspace posture, in three parts, all resolved SERVER-SIDE by the one shared fold:
    *   • `defaults`      — the raw stored opinions (nulls included, so the UI can tell
@@ -171,7 +209,7 @@ export function createManagerRoutes(
   router.patch('/defaults', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId');
     const userId = (c as { get(k: 'userId'): string | undefined }).get('userId');
-    const body = await c.req.json<DefaultsBody>().catch(() => ({} as DefaultsBody));
+    const body = await parseBody(c, DefaultsBody);
 
     const patch: TenantManagerDefaultsPatch = {};
     const bools = [
@@ -534,28 +572,7 @@ export function createManagerRoutes(
     if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
       return c.json({ error: 'Project not found' }, 404);
     }
-    type ConfigBody = {
-      managerRef?: string | null;
-      enabled?: boolean;
-      prMergePolicy?: string;
-      autoAssign?: boolean;
-      autoBusinessValue?: boolean;
-      autoPrioritize?: boolean;
-      autoSchedule?: boolean;
-      managerType?: string;
-      requireSignoffToComplete?: boolean;
-      /** Tri-state (0363): true/false = an explicit project decision, null = inherit the
-       *  workspace default, absent = leave whatever is stored alone. */
-      allowAutoMerge?: boolean | null;
-      /** Ceremony autonomy (0365) — all tri-state, for the same reason. */
-      allowUnattendedCeremonies?: boolean | null;
-      allowAgentReassignment?: boolean | null;
-      agentReassignIdleHours?: number | null;
-      agentReassignMaxPerSession?: number | null;
-      /** May the manager configure a lane that authorises nothing (0386) — tri-state. */
-      allowAutoStaffLanes?: boolean | null;
-    };
-    const body = (await c.req.json<ConfigBody>().catch(() => ({} as ConfigBody)));
+    const body = await parseBody(c, ConfigBody);
 
     // Capture the designation BEFORE the upsert so the roster sync can move the
     // manager's role pin if the manager (or its type) changed.
@@ -694,11 +711,7 @@ export function createManagerRoutes(
     if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
       return c.json({ error: 'Project not found' }, 404);
     }
-    const body = await c.req.json<{ prIds?: unknown }>().catch(() => ({} as { prIds?: unknown }));
-    const prIds = Array.isArray(body.prIds) ? body.prIds.filter((v): v is string => typeof v === 'string') : [];
-    if (prIds.length === 0) {
-      return c.json({ error: 'prIds must be a non-empty array of pull-request ids' }, 400);
-    }
+    const { prIds } = await parseBody(c, ClosePrsBody);
     const result = await closeRetiredPullRequests(c.env as Env, db, {
       tenantId, projectId, prIds, actorId: userId ?? null,
     });
@@ -721,8 +734,7 @@ export function createManagerRoutes(
     if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
       return c.json({ error: 'Project not found' }, 404);
     }
-    type CoachBody = { directive?: string; scope?: 'project' | 'tenant'; mode?: 'directive' | 'task'; expiresInDays?: number };
-    const body = await c.req.json<CoachBody>().catch(() => ({} as CoachBody));
+    const body = await parseBody(c, CoachBody);
     const directive = (body.directive ?? '').trim();
     if (directive.length < 3) return c.json({ error: 'directive is required' }, 400);
     const mode = body.mode === 'task' ? 'task' : 'directive';
@@ -733,7 +745,8 @@ export function createManagerRoutes(
       const taskId = await createManagerCoachingTask(c.env as Env, db, runtimeService, {
         tenantId, projectId, directive, createdBy: userId ?? null,
       });
-      if (taskId == null) return c.json({ error: 'could not create task' }, 500);
+      // Null only for a short directive or a foreign project — both refused above.
+      if (taskId == null) throw new Error('createManagerCoachingTask returned no task for an owned project');
       await recordManagerAction(db, {
         tenantId, projectId, taskId, actionType: 'flag',
         summary: `Coaching task: “${directive.slice(0, 200)}”.`,
@@ -758,7 +771,7 @@ export function createManagerRoutes(
     const id = await addManagerDirective(db, {
       tenantId, projectId: scopeProjectId, directive, createdBy: userId ?? null, source: 'coach', expiresAt,
     });
-    if (!id) return c.json({ error: 'could not record directive' }, 500);
+    if (!id) throw new Error('manager_directives insert returned no row');
 
     // Surface it in the manager feed + the cross-surface audit timeline.
     await recordManagerAction(db, {
@@ -795,7 +808,7 @@ export function createManagerRoutes(
     if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
       return c.json({ error: 'Project not found' }, 404);
     }
-    const body = await c.req.json<{ status?: string }>().catch(() => ({} as { status?: string }));
+    const body = await parseBody(c, DirectiveStatusBody);
     const status: ManagerDirectiveStatus = body.status === 'done' ? 'done' : 'dismissed';
     const ok = await setManagerDirectiveStatus(db, tenantId, directiveId, status);
     if (!ok) return c.json({ error: 'directive not found' }, 404);

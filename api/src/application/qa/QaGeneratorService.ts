@@ -183,7 +183,8 @@ export class QaGeneratorService extends TenantAiService {
         },
         readModelJson,
       );
-      const model = (out.ok ? out.result?.resolvedModel : out.result?.resolvedModel) ?? null;
+      // The gateway envelope is on BOTH branches (a 4xx/5xx still names the model it landed on).
+      const model = out.result?.resolvedModel ?? null;
       if (!out.ok) {
         return { spec: fallbackSpec(input), steps: input.steps, model };
       }

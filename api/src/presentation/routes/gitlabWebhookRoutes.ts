@@ -18,8 +18,22 @@ import type { RepoCiEvent } from '../../application/ci/ingestRepoCiEvent';
 import { handleCiEventOutcome } from '../../application/ci/handleCiEventOutcome';
 import { ciOutcomeDeps } from './ciOutcomeDeps';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
+import { parseBody, z } from './requestBody';
 
-const g = (o: unknown, k: string): unknown => (o && typeof o === 'object' ? (o as Record<string, unknown>)[k] : undefined);
+/**
+ * A GitLab hook payload is large and vendor-shaped; only the project identity the
+ * route itself reads is declared. The per-event readers below walk the rest with
+ * the defensive accessors, so an unexpected shape yields no events, not a 400.
+ */
+const GitLabPayload = z.looseObject({
+  object_kind: z.string().nullish(),
+  project: z.looseObject({
+    path_with_namespace: z.string().nullish(),
+    name: z.string().nullish(),
+  }).nullish(),
+});
+
+const g =(o: unknown, k: string): unknown => (o && typeof o === 'object' ? (o as Record<string, unknown>)[k] : undefined);
 const gs = (o: unknown, k: string): string | null => { const v = g(o, k); return typeof v === 'string' ? v : null; };
 
 function projectFullName(p: Record<string, unknown>): string | null {
@@ -167,8 +181,7 @@ export function createGitLabWebhookRoutes(db: Db, runtimeService: RuntimeService
     // GitLab sends the configured secret verbatim in this header (no HMAC).
     if (c.req.header('X-Gitlab-Token') !== secret) return c.json({ error: 'Invalid token' }, 401);
 
-    let p: Record<string, unknown>;
-    try { p = (await c.req.json()) as Record<string, unknown>; } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
+    const p: Record<string, unknown> = await parseBody(c, GitLabPayload);
 
     const event = c.req.header('X-Gitlab-Event');
 

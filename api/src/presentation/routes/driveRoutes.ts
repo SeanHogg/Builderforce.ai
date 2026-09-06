@@ -28,7 +28,8 @@ import {
   completeProviderOAuthCallback,
 } from '../../application/shared/providerOAuthConnect';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
-import { availableDriveProviders, getDriveProvider, DriveProviderError } from '../../application/drive/driveProviders';
+import { failResponse } from '../middleware/errorResponse';
+import { availableDriveProviders, getDriveProvider } from '../../application/drive/driveProviders';
 import {
   deleteDriveConnection,
   downloadDriveFile,
@@ -40,18 +41,13 @@ import {
 /** Where the connect flow sends the browser back to when it is not told. */
 const DEFAULT_RETURN_TO = '/create';
 
-/** Turn a provider failure into the status the client can act on: 401 means
- *  reconnect, 413 means the file is too big, anything else is transient. */
-function providerFailure(error: unknown): { message: string; status: 400 | 401 | 413 | 415 | 503 } {
-  if (error instanceof DriveProviderError) {
-    const status = error.status === 401 || error.status === 403 ? 401
-      : error.status === 413 ? 413
-        : error.status === 415 ? 415
-          : error.status === 404 ? 400 : 503;
-    return { message: error.message, status };
-  }
-  return { message: 'Could not reach that drive.', status: 503 };
-}
+/**
+ * A provider failure carries its own answer: {@link DriveProviderError} decides
+ * the status (401 reconnect, 413 too big, 415 no downloadable form, 400 gone,
+ * 503 transient) from the upstream code, and `driveService` turns anything else
+ * into a `ServiceUnavailableError`. The route only renders.
+ */
+const SOURCE = 'presentation/routes/driveRoutes.ts';
 
 export function createDriveRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
@@ -115,7 +111,7 @@ export function createDriveRoutes(db: Db): Hono<HonoEnv> {
     });
     if (!result.ok) {
       if (result.reason === 'exchange_failed') {
-        reportCaughtError(result.error, { source: 'presentation/routes/driveRoutes.ts', operation: 'callback' });
+        reportCaughtError(result.error, { source: SOURCE, operation: 'callback' });
       }
       const returnTo = result.returnTo ?? DEFAULT_RETURN_TO;
       const outcome = result.reason === 'exchange_failed' ? 'error' : result.reason;
@@ -143,7 +139,7 @@ export function createDriveRoutes(db: Db): Hono<HonoEnv> {
       });
       return c.redirect(`${base}${state.returnTo}?drive=connected`);
     } catch (error) {
-      reportCaughtError(error, { source: 'presentation/routes/driveRoutes.ts', operation: 'callback' });
+      reportCaughtError(error, { source: SOURCE, operation: 'callback' });
       return c.redirect(`${base}${state.returnTo}?drive=error`);
     }
   });
@@ -173,8 +169,7 @@ export function createDriveRoutes(db: Db): Hono<HonoEnv> {
       );
       return c.json(listing);
     } catch (error) {
-      const failure = providerFailure(error);
-      return c.json({ error: failure.message }, failure.status);
+      return failResponse(c, error, { source: SOURCE, operation: 'list-drive-folder' });
     }
   });
 
@@ -201,8 +196,7 @@ export function createDriveRoutes(db: Db): Hono<HonoEnv> {
         },
       });
     } catch (error) {
-      const failure = providerFailure(error);
-      return c.json({ error: failure.message }, failure.status);
+      return failResponse(c, error, { source: SOURCE, operation: 'download-drive-file' });
     }
   });
 

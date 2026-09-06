@@ -279,7 +279,7 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
   /**
    * POST /github
    * GitHub posts here for subscribed events. Signature verification is required.
-   * Body must be read as raw text — do not use c.req.json() before verification.
+   * Body must be read as raw text and only parsed AFTER the signature verifies.
    */
   router.post('/github', async (c) => {
     const secret = c.env.GITHUB_WEBHOOK_SECRET;

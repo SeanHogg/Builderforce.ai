@@ -19,6 +19,27 @@ import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 import { limitParam } from './queryParams';
+import { parseBody, z } from './requestBody';
+
+/** One WorkflowSpan as BuilderForce Agents emits it; every field but `kind` may be absent or null. */
+const SpanBody = z.object({
+  kind: z.string(),
+  workflowId: z.string().nullable().optional(),
+  taskId: z.string().nullable().optional(),
+  agentRole: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  ts: z.string().nullable().optional(),
+  durationMs: z.number().nullable().optional(),
+  model: z.string().nullable().optional(),
+  inputTokens: z.number().nullable().optional(),
+  outputTokens: z.number().nullable().optional(),
+  estimatedCostUsd: z.number().nullable().optional(),
+  error: z.string().nullable().optional(),
+  traceId: z.string().nullable().optional(),
+  agentHostId: z.string().nullable().optional(),
+});
+/** A batch, or a single span (the relay sends one at a time). */
+const SpansBody = z.union([z.array(SpanBody), SpanBody]);
 
 export function createTelemetryRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -35,30 +56,8 @@ export function createTelemetryRoutes(db: Db): Hono<HonoEnv> {
     // Also accept traceId from header (set by BuilderForce Agents agentlink-relay)
     const headerTraceId = c.req.header('X-Trace-Id') ?? null;
 
-    type IncomingSpan = {
-      kind: string;
-      workflowId?: string;
-      taskId?: string;
-      agentRole?: string;
-      description?: string;
-      ts?: string;
-      durationMs?: number;
-      model?: string;
-      inputTokens?: number;
-      outputTokens?: number;
-      estimatedCostUsd?: number;
-      error?: string;
-      traceId?: string;
-      agentHostId?: string;
-    };
-
-    let spans: IncomingSpan[];
-    try {
-      const body = await c.req.json();
-      spans = Array.isArray(body) ? body : [body];
-    } catch {
-      return c.json({ error: 'Invalid JSON body' }, 400);
-    }
+    const body = await parseBody(c, SpansBody);
+    const spans = Array.isArray(body) ? body : [body];
 
     if (spans.length === 0) return c.json({ inserted: 0 });
     if (spans.length > 500) return c.json({ error: 'Batch too large (max 500 spans)' }, 400);

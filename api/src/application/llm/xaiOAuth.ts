@@ -1,5 +1,5 @@
 /** xAI SuperGrok OAuth (OIDC discovery + authorization-code PKCE). */
-import { throwTokenExchangeFailure } from './subscriptionOAuthCode';
+import { OAuthDiscoveryError, throwTokenExchangeFailure } from './subscriptionOAuthCode';
 
 const DISCOVERY_URL = 'https://auth.x.ai/.well-known/openid-configuration';
 const CLIENT_ID = 'b1a00492-073a-47ea-816f-4c329264a828';
@@ -10,17 +10,17 @@ export interface XaiOAuthTokens { access: string; refresh: string; expires: numb
 interface Discovery { authorization_endpoint: string; token_endpoint: string }
 
 function trustedEndpoint(value: unknown, field: string): string {
-  if (typeof value !== 'string') throw new Error(`xAI discovery missing ${field}`);
+  if (typeof value !== 'string') throw new OAuthDiscoveryError(`xAI discovery missing ${field}`);
   const url = new URL(value);
   if (url.protocol !== 'https:' || (url.hostname !== 'x.ai' && !url.hostname.endsWith('.x.ai'))) {
-    throw new Error(`xAI discovery returned an untrusted ${field}`);
+    throw new OAuthDiscoveryError(`xAI discovery returned an untrusted ${field}`);
   }
   return url.toString();
 }
 
 export async function discoverXaiOAuth(): Promise<Discovery> {
   const response = await fetch(DISCOVERY_URL, { headers: { accept: 'application/json' } });
-  if (!response.ok) throw new Error(`xAI OAuth discovery failed (${response.status})`);
+  if (!response.ok) throw new OAuthDiscoveryError(`xAI OAuth discovery failed (${response.status})`);
   const data = await response.json() as Record<string, unknown>;
   return {
     authorization_endpoint: trustedEndpoint(data['authorization_endpoint'], 'authorization_endpoint'),

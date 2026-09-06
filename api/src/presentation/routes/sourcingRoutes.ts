@@ -26,16 +26,17 @@ import {
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { limitParam } from './queryParams';
+import { parseBody, z, zNonEmptyString } from './requestBody';
 
-interface NewSourceBody {
-  name?: string;
-  vendor?: string;
-  url?: string;
-  format?: string;
-  itemsPath?: string;
-  mapping?: Record<string, string>;
-  apiKey?: string;
-}
+const NewSourceBody = z.object({
+  name: zNonEmptyString,
+  vendor: z.string().optional(),
+  url: zNonEmptyString,
+  format: z.string().optional(),
+  itemsPath: z.string().optional(),
+  mapping: z.record(z.string(), z.string()).optional(),
+  apiKey: z.string().optional(),
+});
 
 export function createSourcingRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -62,15 +63,10 @@ export function createSourcingRoutes(db: Db): Hono<HonoEnv> {
 
   router.post('/sources', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    // The fallback is TYPED, not a bare `{}`: an untyped one widens the union and
-    // every field access below becomes an error on the empty branch.
-    const body = await c.req.json<NewSourceBody>().catch((): NewSourceBody => ({}));
-
-    if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
-    if (!body.url?.trim()) return c.json({ error: 'url is required' }, 400);
+    const body = await parseBody(c, NewSourceBody);
 
     const config: SourceConfig = {
-      url: body.url.trim(),
+      url: body.url,
       format: body.format === 'json' ? 'json' : 'rss',
       ...(body.itemsPath ? { itemsPath: body.itemsPath } : {}),
       ...(body.mapping ? { mapping: body.mapping } : {}),
@@ -79,7 +75,7 @@ export function createSourcingRoutes(db: Db): Hono<HonoEnv> {
     const result = await saveSource(db, c.env as Env, {
       tenantId,
       userId: (c.get('userId') as string | undefined) ?? null,
-      name: body.name.trim(),
+      name: body.name,
       vendor: (body.vendor ?? 'feed').trim(),
       config,
       apiKey: body.apiKey ?? null,

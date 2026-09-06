@@ -41,6 +41,19 @@ import {
 } from '../../application/ide/siteData';
 import { HOSTING_APEX } from '../../application/ide/siteHosting';
 import { limitParam } from './queryParams';
+import { parseBody, z } from './requestBody';
+
+/** The domain service validates the hostname itself (its message names the fix). */
+const ClaimDomainBody = z.object({ hostname: z.string().optional() });
+/** Likewise `createCollection` owns the name rule. */
+const CreateCollectionBody = z.object({ name: z.string().optional() });
+const PatchCollectionBody = z.object({
+  acceptsPublicWrites: z.boolean().optional(),
+  audienceId: z.number().int().nullable().optional(),
+  dailyWriteCap: z.number().optional(),
+  raisesTickets: z.boolean().optional(),
+  readPolicy: z.enum(['none', 'owner']).optional(),
+});
 
 export function createSiteManageRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -74,13 +87,13 @@ export function createSiteManageRoutes(db: Db): Hono<HonoEnv> {
   router.put('/:projectId/site/domain', manager, async (c) => {
     const projectId = projectIdOf(c.req.param('projectId'));
     if (!projectId) return c.json({ error: 'Invalid project id.' }, 400);
-    const body = await c.req.json<{ hostname?: string }>().catch(() => ({}) as never);
+    const body = await parseBody(c, ClaimDomainBody);
     const result = await claimCustomDomain(
       c.env,
       db,
       c.get('tenantId') as number,
       projectId,
-      String(body.hostname ?? ''),
+      body.hostname ?? '',
     );
     if (!result.ok) return c.json({ error: result.error }, result.status);
     return c.json(result.state);
@@ -141,8 +154,8 @@ export function createSiteManageRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const site = await siteForProject(db, tenantId, projectId);
     if (!site) return c.json({ error: 'This project has no published site yet.' }, 404);
-    const body = await c.req.json<{ name?: string }>().catch(() => ({}) as never);
-    const result = await createCollection(db, tenantId, site.siteId, projectId, String(body.name ?? ''));
+    const body = await parseBody(c, CreateCollectionBody);
+    const result = await createCollection(db, tenantId, site.siteId, projectId, body.name ?? '');
     if (!result.ok) return c.json({ error: result.error }, result.status);
     return c.json(result.collection, 201);
   });
@@ -150,13 +163,7 @@ export function createSiteManageRoutes(db: Db): Hono<HonoEnv> {
   router.patch('/:projectId/site/collections/:collectionId', manager, async (c) => {
     const collectionId = Number(c.req.param('collectionId'));
     if (!Number.isInteger(collectionId)) return c.json({ error: 'Invalid collection id.' }, 400);
-    const body = await c.req.json<{
-      acceptsPublicWrites?: boolean;
-      audienceId?: number | null;
-      dailyWriteCap?: number;
-      raisesTickets?: boolean;
-      readPolicy?: 'none' | 'owner';
-    }>().catch(() => ({}) as never);
+    const body = await parseBody(c, PatchCollectionBody);
     const result = await updateCollection(db, c.get('tenantId') as number, collectionId, body);
     if (!result.ok) return c.json({ error: result.error }, result.status);
     return c.json(result.collection);

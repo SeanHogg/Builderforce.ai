@@ -54,10 +54,34 @@ export interface EvermindRecipeInput {
   name?: string;
 }
 
+/** Why a published model could not be copied into a project base. */
+export type SeedFromPublishedRefusal = 'unconfigured' | 'invalid_slug' | 'not_published' | 'artifact_missing' | 'malformed';
+
+/** The status each refusal answers with — decided here, once, not by regex on the sentence at a route. */
+const SEED_FROM_PUBLISHED_STATUS: Readonly<Record<SeedFromPublishedRefusal, 400 | 404 | 503>> = {
+  unconfigured: 503,
+  invalid_slug: 400,
+  not_published: 404,
+  artifact_missing: 404,
+  malformed: 400,
+};
+
+/**
+ * Thrown by {@link seedProjectEvermindFromPublished} when the copy cannot happen.
+ * Carries `status` (read by `statusOf`) and a machine-readable `code`, so a route
+ * lets it propagate and a recipe can tell "no such model" from a real failure.
+ */
+export class SeedFromPublishedError extends Error {
+  readonly status: 400 | 404 | 503;
+  constructor(readonly code: SeedFromPublishedRefusal, message: string) {
+    super(message);
+    this.name = 'SeedFromPublishedError';
+    this.status = SEED_FROM_PUBLISHED_STATUS[code];
+  }
+}
+
 export interface SeedFromPublishedResult {
-  ok: boolean;
   version: number;
-  error?: string;
 }
 
 /**
@@ -69,6 +93,9 @@ export interface SeedFromPublishedResult {
  * `replace: true` is the REPAIR path: it overwrites a head that is already seeded (as a
  * new version) instead of no-op'ing, which is how a project whose model trained itself
  * into gibberish is recovered from a known-good published model.
+ *
+ * Throws a {@link SeedFromPublishedError} for every refusal (no store, no such published
+ * model, a broken artifact); a store or database failure propagates as itself.
  */
 export async function seedProjectEvermindFromPublished(
   env: Env,
@@ -79,14 +106,14 @@ export async function seedProjectEvermindFromPublished(
   name?: string,
   opts: { replace?: boolean } = {},
 ): Promise<SeedFromPublishedResult> {
-  if (!env.UPLOADS) return { ok: false, version: 0, error: 'R2 artifact storage not configured' };
+  if (!env.UPLOADS) throw new SeedFromPublishedError('unconfigured', 'R2 artifact storage not configured');
   const clean = slug.trim();
-  if (!clean) return { ok: false, version: 0, error: 'slug is required' };
+  if (!clean) throw new SeedFromPublishedError('invalid_slug', 'slug is required');
 
   // Resolve the published model → its immutable R2 ref (tenant-scoped, so no IDOR).
   const tm = await resolveTenantModel(env, db, tenantId, `${TENANT_MODEL_REF_PREFIX}${clean}`);
   if (!tm || !tm.baseModel?.startsWith('evermind/')) {
-    return { ok: false, version: 0, error: 'no published Evermind model with that slug' };
+    throw new SeedFromPublishedError('not_published', 'no published Evermind model with that slug');
   }
   const ref = tm.baseModel.slice('evermind/'.length);
 
@@ -94,15 +121,15 @@ export async function seedProjectEvermindFromPublished(
     env.UPLOADS.get(`${ref}/model.evermind`),
     env.UPLOADS.get(`${ref}/tokenizer.json`),
   ]);
-  if (!modelObj) return { ok: false, version: 0, error: 'published model artifact not found in storage' };
-  if (!tokObj) return { ok: false, version: 0, error: 'published model tokenizer not found in storage' };
+  if (!modelObj) throw new SeedFromPublishedError('artifact_missing', 'published model artifact not found in storage');
+  if (!tokObj) throw new SeedFromPublishedError('artifact_missing', 'published model tokenizer not found in storage');
 
   const modelBlob = await modelObj.arrayBuffer();
   const verdict = EvermindModelPackage.fromBlob(modelBlob).validate();
-  if (!verdict.ok) return { ok: false, version: 0, error: `invalid .evermind artifact: ${verdict.errors.join('; ')}` };
+  if (!verdict.ok) throw new SeedFromPublishedError('malformed', `invalid .evermind artifact: ${verdict.errors.join('; ')}`);
   const tokenizer = (await tokObj.json().catch(() => null)) as { vocab?: unknown; merges?: unknown } | null;
   if (!tokenizer || typeof tokenizer.vocab !== 'object' || !Array.isArray(tokenizer.merges)) {
-    return { ok: false, version: 0, error: 'published model tokenizer is malformed' };
+    throw new SeedFromPublishedError('malformed', 'published model tokenizer is malformed');
   }
 
   const seedParams = {
@@ -115,7 +142,7 @@ export async function seedProjectEvermindFromPublished(
   const head = opts.replace
     ? await reseedProjectEvermind(env, db, env.UPLOADS, seedParams)
     : await seedProjectEvermind(env, db, env.UPLOADS, seedParams);
-  return { ok: true, version: head.version };
+  return { version: head.version };
 }
 
 /**
@@ -141,8 +168,14 @@ export async function applyEvermindRecipe(
 ): Promise<void> {
   try {
     if (input.recipe === 'seed-published' && input.seedModelSlug?.trim()) {
-      const seeded = await seedProjectEvermindFromPublished(env, db, tenantId, projectId, input.seedModelSlug, input.name);
-      if (seeded.ok) {
+      // A refusal (no such published model, a broken artifact) degrades to the starter
+      // base below; anything else is a real failure and reaches the reporter.
+      const seeded = await seedProjectEvermindFromPublished(env, db, tenantId, projectId, input.seedModelSlug, input.name)
+        .then(() => true, (error: unknown) => {
+          if (error instanceof SeedFromPublishedError) return false;
+          throw error;
+        });
+      if (seeded) {
         // A published model is already trained → running the project's agents on it
         // is meaningful, so turn on inference (mode defaults to 'connected' on seed) —
         // BUT still benchmark-gate it (same bar as the manual toggle), so a published

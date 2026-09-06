@@ -39,9 +39,18 @@ import {
   type PayoutCredential,
 } from '../../application/payouts/payoutProviders';
 import { limitParam } from './queryParams';
+import { parseBody, z } from './requestBody';
 
 /** Where the connect flow sends the browser back to when it is not told. */
 const DEFAULT_RETURN_TO = '/billing/payouts';
+
+/** The provider is checked against the registry below (so the 400 can name it);
+ *  the field values are checked against THAT provider's declarations. */
+const ConnectBody = z.object({
+  provider: z.string().optional(),
+  fields: z.record(z.string(), z.unknown()).optional(),
+  makeDefault: z.boolean().optional(),
+});
 
 export function createPayoutRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
@@ -64,7 +73,7 @@ export function createPayoutRoutes(db: Db): Hono<HonoEnv> {
    *  checked here rather than in the adapter, so every provider's form fails the
    *  same way with the same message. */
   r.post('/connections', async (c) => {
-    const body = await c.req.json<{ provider?: string; fields?: Record<string, unknown>; makeDefault?: boolean }>();
+    const body = await parseBody(c, ConnectBody);
     const name = String(body.provider ?? '');
     const provider = isPayoutProviderName(name) ? getPayoutProvider(name) : null;
     if (!provider) return c.json({ error: 'Unknown payout provider.' }, 400);
@@ -85,7 +94,10 @@ export function createPayoutRoutes(db: Db): Hono<HonoEnv> {
       credential: { fields },
       makeDefault: body.makeDefault === true,
     });
-    return account ? c.json(account, 201) : c.json({ error: 'Could not save that payout destination.' }, 500);
+    // The provider was resolved above, so a null here is the upsert returning no
+    // row — an invariant failure the global handler reports, not a caller error.
+    if (!account) throw new Error('connections upsert returned no row');
+    return c.json(account, 201);
   });
 
   r.get('/connect/:provider', async (c) => {

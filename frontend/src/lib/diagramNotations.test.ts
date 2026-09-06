@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import {
-  DIAGRAM_TARGETS, convertDiagramSource, detectDiagramSource, diagramNotation,
+  DIAGRAM_TARGETS, convertDiagramSource, convertGraph, detectDiagramSource, diagramNotation,
   notationForFileName, readDiagramSource,
 } from './diagramNotations';
 import { layoutDiagramGraph, resolveEdgeEndpoints, type DiagramGraph } from './diagramGraph';
@@ -451,6 +451,14 @@ describe('conversion', () => {
   it('refuses a conversion it cannot honour instead of writing an empty file', async () => {
     expect(await convertDiagramSource('sequenceDiagram\n  A->>B: hi', 'mermaid', 'drawio')).toBeNull();
     expect(await convertDiagramSource(DRAWIO, 'drawio', 'vsdx')).toBeNull();
+  });
+
+  /** The text conversion is the graph conversion behind a read — one writer, so a graph
+   *  that came from an SVG or a Visio package is written exactly as one read from text. */
+  it('writes an already-read graph through the same path as a text source', async () => {
+    const graph = (await readDiagramSource('drawio', DRAWIO))!;
+    expect(convertGraph(graph, 'mermaid')).toEqual(await convertDiagramSource(DRAWIO, 'drawio', 'mermaid'));
+    expect(convertGraph(graph, 'vsdx')).toBeNull();
   });
 });
 
