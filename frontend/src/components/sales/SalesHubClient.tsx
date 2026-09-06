@@ -48,7 +48,7 @@ import {
 import type { PayoutBalance, PayoutRecord } from '@/lib/payoutsApi';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultText } from '@/lib/apiClient';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -119,7 +119,7 @@ export default function SalesHubClient() {
   useEffect(() => {
     salesApi.canvas()
       .then((result) => setCodes({ referralCode: result.referralCode, salesCode: result.salesCode, sessionId: result.sessionId }))
-      .catch((cause) => setError(cause instanceof Error ? cause.message : t('loadFailed')));
+      .catch((cause) => setError(faultText(cause, t('loadFailed'))));
   }, [t]);
 
   useEffect(() => {

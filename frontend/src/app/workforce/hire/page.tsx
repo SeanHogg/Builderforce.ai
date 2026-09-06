@@ -23,7 +23,7 @@ import PageContainer from '@/components/PageContainer';
 import { AgentCheckoutPanel } from '@/components/marketplace/AgentCheckoutPanel';
 import { listAgents, listPurchasedAgents } from '@/lib/api';
 import type { PublishedAgent } from '@/lib/types';
-
+import { faultMessage } from '@/lib/apiClient';
 function WorkforceHirePageInner() {
   const t = useTranslations('agentCheckout');
   const allowed = useRequireAuth();
@@ -48,7 +48,7 @@ function WorkforceHirePageInner() {
       setAgents(published);
       setHeld(new Set(purchased.map((a) => a.id)));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('loadFailed'));
+      setError(faultMessage(e, t('loadFailed')));
     } finally {
       setLoading(false);
     }

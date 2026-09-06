@@ -14,7 +14,7 @@ import { useTranslations } from 'next-intl';
 import { Badge, Button, Surface } from '@/components/ui';
 import { careerAiApi, type XyzPart, type XyzRewriteOutcome } from '@/lib/careerAiApi';
 import { MissingParts, ProvenanceNote, QuotedLine, ScoreRow, labelStyle, stackStyle, textAreaStyle } from './careerAiShared';
-
+import { faultMessage } from '@/lib/apiClient';
 const MIN_RESUME = 40;
 
 export function RewriteBulletsPanel() {
@@ -33,7 +33,7 @@ export function RewriteBulletsPanel() {
     try {
       setOutcome(await careerAiApi.rewriteBullets(resumeText.trim()));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t('error.failed'));
+      setError(faultMessage(caught, t('error.failed')));
     } finally {
       setBusy(false);
     }

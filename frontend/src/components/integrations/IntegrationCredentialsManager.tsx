@@ -11,7 +11,7 @@ import {
   type IntegrationProvider,
 } from '@/lib/builderforceApi';
 import { getStoredTenant } from '@/lib/auth';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Shared credential manager used by BOTH the workspace Settings page (global
  * keys) and the project detail "Integrations" tab (project-scoped keys). The
@@ -258,7 +258,7 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
       closeForm();
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('saveFailed'));
+      setError(faultMessage(e, t('saveFailed')));
     } finally {
       setSaving(false);
     }
@@ -284,7 +284,7 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
       await integrationsApi.update(credential.id, { isEnabled: !credential.isEnabled });
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('toggleFailed'));
+      setError(faultMessage(e, t('toggleFailed')));
     } finally {
       setToggling(null);
     }

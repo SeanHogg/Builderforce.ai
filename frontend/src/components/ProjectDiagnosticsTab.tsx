@@ -10,7 +10,7 @@ import {
   runArchitectureAnalysis,
   type ArchitectureRunSummary,
 } from '@/lib/api';
-import { ApiRequestError } from '@/lib/apiClient';
+import { ApiRequestError, faultMessage, faultText } from '@/lib/apiClient';
 import { DiagnosticsResultsPanel } from '@/components/DiagnosticsResultsPanel';
 import {
   ARCHITECTURE_DIAGNOSTIC_ID,
@@ -77,7 +77,7 @@ export function ProjectDiagnosticsTab({ projectId, initialAuditId }: { projectId
     try {
       setScore(await toolsApi.projectScore(projectId));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('loadError'));
+      setError(faultMessage(e, t('loadError')));
     }
   }, [projectId, t]);
 
@@ -140,7 +140,7 @@ export function ProjectDiagnosticsTab({ projectId, initialAuditId }: { projectId
       setArchState('error');
       if (e instanceof ApiRequestError && e.status === 409) setArchMsg(t('architectureRetryBusy'));
       else if (e instanceof ApiRequestError && e.status === 400) setArchMsg(t('architectureRetryNone'));
-      else setArchMsg(e instanceof Error ? e.message : t('architectureRetryError'));
+      else setArchMsg(faultText(e, t('architectureRetryError')));
     } finally {
       setRetryState('idle');
       await loadArchRun();

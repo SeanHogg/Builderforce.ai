@@ -27623,6 +27623,10 @@
         "account": "Erstelle ein Konto, um dies freizuschalten.",
         "installTemplate": "Melde dich an, um diese Vorlage in einem Workspace einzurichten."
       }
+    },
+    "wall": {
+      "title": "Diese Ansicht gehört Ihnen, sobald Sie ein Konto haben",
+      "body": "Sie erkunden Builderforce als Gast. Erstellen Sie ein kostenloses Konto, um hier Ihre eigenen Projekte, Ihr Team und Ihre Agenten zu sehen – und alles zu behalten, was Sie erstellen."
     }
   },
   "employers": {

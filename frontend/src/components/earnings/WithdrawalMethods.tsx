@@ -31,7 +31,7 @@ import {
   type WithdrawalMethodsView,
   type WithdrawalVerification,
 } from '@/lib/earningsApi';
-
+import { faultMessage } from '@/lib/apiClient';
 const VERIFICATION_TONE: Record<WithdrawalVerification, string> = {
   verified: 'var(--success)',
   unverified: 'var(--text-secondary)',
@@ -76,7 +76,7 @@ export function WithdrawalMethods({
       setFields({});
       await onChanged();
     } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : String(cause));
+      setNotice(faultMessage(cause));
     } finally {
       setBusy(false);
     }
@@ -88,7 +88,7 @@ export function WithdrawalMethods({
       await makeWithdrawalMethodDefault(method.id);
       await onChanged();
     } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : String(cause));
+      setNotice(faultMessage(cause));
     } finally {
       setBusy(false);
     }
@@ -109,7 +109,7 @@ export function WithdrawalMethods({
       await removeWithdrawalMethod(method.id);
       await onChanged();
     } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : String(cause));
+      setNotice(faultMessage(cause));
     } finally {
       setBusy(false);
     }

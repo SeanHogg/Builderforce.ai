@@ -20,7 +20,7 @@ import {
   type CreationListing,
 } from '@/lib/creationListings';
 import { SkeletonGrid } from './SkeletonGrid';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * `kind` comes from the storefront's ONE kind control (the chip row under the
  * families). This section used to own a second chip row of its own, which meant
@@ -40,7 +40,7 @@ export function CreationsSection({ search, kind }: { search: string; kind: strin
       const result = await publicListingApi.browse({ q: search, kind, limit: 24 });
       setListings(result.listings);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(faultMessage(cause));
       setListings([]);
     }
   }, [search, kind]);

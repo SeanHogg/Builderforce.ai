@@ -40,7 +40,7 @@ import {
   type PublishCandidate,
 } from '@/lib/creationListings';
 import styles from './CreationCanvas.module.css';
-
+import { faultMessage } from '@/lib/apiClient';
 export interface CanvasPublishPanelProps {
   open: boolean;
   onClose: () => void;
@@ -80,7 +80,7 @@ export function CanvasPublishPanel({
     creationListingApi.candidates(sessionId)
       .then((next) => { if (live) setView(next); })
       .catch((cause: unknown) => {
-        if (live) setError(cause instanceof Error ? cause.message : String(cause));
+        if (live) setError(faultMessage(cause));
       });
     return () => { live = false; };
   }, [open, sessionId]);
@@ -145,7 +145,7 @@ export function CanvasPublishPanel({
       // next open offers "update" rather than a second competing listing.
       setView(await creationListingApi.candidates(sessionId));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(faultMessage(cause));
     } finally {
       setBusy(false);
     }
@@ -160,7 +160,7 @@ export function CanvasPublishPanel({
       setPublished(null);
       setView(await creationListingApi.candidates(sessionId));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(faultMessage(cause));
     } finally {
       setBusy(false);
     }

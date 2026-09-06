@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Select } from '@/components/Select';
 import { ideRepoApi, type RepoSyncStatus } from '@/lib/api';
 import { integrationsApi, type IntegrationCredential } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * RepoSyncControl — Builder's repo bridge UI. R2 is always the working store; this
  * adds optional git sync on top:
@@ -54,7 +54,7 @@ export function RepoSyncControl({ projectId, onChanged }: { projectId: number; o
       setMsg(`Imported ${r.imported} file(s) from ${r.ref}.`);
       onChanged?.();
       reload();
-    } catch (e) { setErr(e instanceof Error ? e.message : 'Import failed'); }
+    } catch (e) { setErr(faultMessage(e, 'Import failed')); }
     finally { setBusy(null); }
   };
 
@@ -65,7 +65,7 @@ export function RepoSyncControl({ projectId, onChanged }: { projectId: number; o
       const r = await ideRepoApi.commit(projectId, status.repoId);
       setMsg(r.prUrl ? `Pushed ${r.committed} file(s) — PR #${r.prNumber} opened.` : `Committed ${r.committed} file(s) to ${r.branch}.`);
       reload();
-    } catch (e) { setErr(e instanceof Error ? e.message : 'Commit failed'); }
+    } catch (e) { setErr(faultMessage(e, 'Commit failed')); }
     finally { setBusy(null); }
   };
 
@@ -78,7 +78,7 @@ export function RepoSyncControl({ projectId, onChanged }: { projectId: number; o
       setShowCreate(false); setRepoName('');
       onChanged?.();
       reload();
-    } catch (e) { setErr(e instanceof Error ? e.message : 'Create failed'); }
+    } catch (e) { setErr(faultMessage(e, 'Create failed')); }
     finally { setBusy(null); }
   };
 

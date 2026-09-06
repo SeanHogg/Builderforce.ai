@@ -670,7 +670,7 @@ function AiAssist({
       );
       setResult(final.trim() || null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'AI failed');
+      setError(faultMessage(e, 'AI failed'));
       setResult(null);
     } finally {
       setBusy(false);
@@ -785,7 +785,7 @@ function AnalyzePanel({
     try {
       setResult(await knowledgeApi.analyze(docId));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Analysis failed');
+      setError(faultMessage(e, 'Analysis failed'));
     } finally {
       setBusy(false);
     }

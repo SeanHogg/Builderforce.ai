@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { getMyFreelancerProfileCached, invalidateMyFreelancerProfile, updateMyFreelancerProfile, type FreelancerProfile } from '@/lib/freelance/talentProfile';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Read-through cache for the signed-in user's own for-hire profile.
  *
@@ -42,7 +42,7 @@ export function useMyTalentProfile(): MyTalentProfileState {
     let alive = true;
     loadMyTalentProfile()
       .then((p) => { if (alive) setProfile(p); })
-      .catch((e) => { if (alive) setError(e instanceof Error ? e.message : String(e)); })
+      .catch((e) => { if (alive) setError(faultMessage(e)); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, []);
@@ -61,7 +61,7 @@ export function useMyTalentProfile(): MyTalentProfileState {
       setSaved(true);
       return true;
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
       return false;
     } finally {
       setSaving(false);

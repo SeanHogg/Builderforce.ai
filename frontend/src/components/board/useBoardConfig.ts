@@ -8,7 +8,7 @@ import {
   type Swimlane,
   type SwimlaneAgent,
 } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 export interface BoardConfig {
   board: Board | null;
   lanes: Swimlane[];
@@ -69,7 +69,7 @@ export function useBoardConfig(
         setAgentsByLane({});
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load board');
+      setError(faultMessage(e, 'Failed to load board'));
     } finally {
       setLoading(false);
     }

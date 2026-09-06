@@ -5,7 +5,7 @@ import type { CreationNodeData } from './types';
 import styles from './CreationCanvas.module.css';
 import { LEGAL_DOCUMENT_CATEGORIES, uploadLegalDocumentFile, type LegalDocumentCategory } from '@/lib/legalDocumentApi';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultText } from '@/lib/apiClient';
 /** Mirrors the backend's own bound (`legalDocumentStore.ts`'s `MAX_BYTES`), so an
  *  oversized file is refused HERE rather than after a full upload attempt. */
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
@@ -68,7 +68,7 @@ export function CanvasLegalDocumentUpload({ objectId, data, onEdit }: {
         status: t('statusDraft'),
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('uploadFailed'));
+      setError(faultText(err, t('uploadFailed')));
     } finally {
       setUploading(false);
     }

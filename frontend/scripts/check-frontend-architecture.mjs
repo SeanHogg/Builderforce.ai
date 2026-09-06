@@ -30,6 +30,19 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   935 → 936 (`useClientFiles`, 2026-09-06) — `components/guest/GuestAccountPrompt.tsx`,
+ *   the invitation a signed-out visitor sees where a read that needs an account
+ *   would have rendered, in place of the raw 401 text (`Missing or malformed
+ *   Authorization header`) that `/investor` and a few hundred sibling surfaces
+ *   painted in a red box. Genuinely client-only on its own terms: it subscribes
+ *   to the transport's wall record with `useSyncExternalStore`, reads
+ *   `usePathname()` and `useAuth()` through `useSampleWorkspace`, and claims its
+ *   inline slot in a `useEffect` so the shell's catch-all copy can stand down.
+ *   It has two importers today — `ui/SectionState.tsx` (no directive, a shared
+ *   presentational module) and `AppShell` via `next/dynamic` — and the "808 →
+ *   868" rule applies as written: the shared module is the reuse surface, so the
+ *   boundary belongs on the component, not inferred from whoever mounts it.
+ *
  *   938 → 935 (`useClientFiles`, 2026-09-06) — a TIGHTENING that carries one
  *   addition, written up because the addition is the kind this ratchet exists to
  *   argue. `components/ui/InlineNameForm.tsx`, the one-field form that replaced

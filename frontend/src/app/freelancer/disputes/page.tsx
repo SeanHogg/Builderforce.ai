@@ -25,7 +25,7 @@ import {
   withdrawMyDispute,
   type Dispute,
 } from '@/lib/disputesApi';
-
+import { faultMessage } from '@/lib/apiClient';
 export const runtime = 'edge';
 
 export default function FreelancerDisputesPage() {
@@ -41,7 +41,7 @@ export default function FreelancerDisputesPage() {
     try {
       setDisputes(await listMyDisputes());
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(faultMessage(cause));
     } finally {
       setLoading(false);
     }

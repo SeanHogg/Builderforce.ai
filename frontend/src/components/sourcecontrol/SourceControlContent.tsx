@@ -17,7 +17,7 @@ import { parseRepoIdentifier, isValidRepoSegment } from '@/lib/repoIdentifier';
 import { formatRepoDiagnostic } from '@/lib/repoDiagnostic';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 import { useGithubActionsReadiness } from '@/lib/useGithubActionsReadiness';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Project "Source control" tab — manage the repositories a project's agents
  * operate on. Each repo can be bound to an integration credential (project or
@@ -117,7 +117,7 @@ export function SourceControlContent({
         .then(([a, b]) => [...a, ...b]),
     ])
       .then(([r, c]) => { setRepos(r); setCreds(c); })
-      .catch((e) => setError(e instanceof Error ? e.message : t('errLoad')))
+      .catch((e) => setError(faultMessage(e, t('errLoad'))))
       .finally(() => setLoading(false));
   }, [projectId]);
 
@@ -187,7 +187,7 @@ export function SourceControlContent({
       else await reposApi.add(projectId, payload);
       closeForm(); load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : (editingId ? t('errUpdate') : t('errAdd')));
+      setError(faultMessage(e, (editingId ? t('errUpdate') : t('errAdd'))));
     } finally {
       setSaving(false);
     }

@@ -3,7 +3,7 @@
 export const runtime = 'edge';
 
 import { useEffect, useState } from 'react';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * WebContainer "connect" page. When the user opens the preview URL in a new tab,
  * that tab redirects to this URL (e.g. /webcontainer/connect/61636aac). This page
@@ -25,7 +25,7 @@ export default function WebContainerConnectPage() {
         if (!cancelled) setStatus('ok');
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : String(e));
+          setError(faultMessage(e));
           setStatus('error');
         }
       }

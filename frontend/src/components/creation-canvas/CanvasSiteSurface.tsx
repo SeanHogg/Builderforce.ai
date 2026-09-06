@@ -29,7 +29,7 @@ import {
 } from './websiteWysiwyg';
 import type { CreationNodeData } from './types';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultText } from '@/lib/apiClient';
 /**
  * A site at a width you choose — the site runtime.
  *
@@ -175,7 +175,7 @@ export function CanvasSiteSurface({ data, onExit, onEdit }: CanvasSiteSurfacePro
       // The gateway's message names the real reason — a page that timed out, a
       // deployment with no renderer. Relaying it is the point; "capture failed" would
       // leave the person guessing exactly as the model used to.
-      setCaptureError(error instanceof Error ? error.message : t('surface.site.captureFailed'));
+      setCaptureError(faultText(error, t('surface.site.captureFailed')));
     } finally {
       setCapturing(false);
     }

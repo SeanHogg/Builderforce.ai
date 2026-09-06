@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { generatePrd, savePrd, generateTasks, saveTasks } from '@/lib/brain';
 import { PrdReviewModal, TasksReviewModal } from './ArtifactReviewModals';
-
+import { faultMessage } from '@/lib/apiClient';
 interface ChatProjectActionsProps {
   projectId: number;
   /** The assistant message content (for Generate Tasks). */
@@ -35,7 +35,7 @@ export function ChatProjectActions({
       if (prd.trim()) setPrdModal({ prd: prd.trim() });
       else setError('No PRD content generated.');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to generate PRD');
+      setError(faultMessage(e, 'Failed to generate PRD'));
     } finally {
       setPrdLoading(false);
     }
@@ -49,7 +49,7 @@ export function ChatProjectActions({
       setPrdModal(null);
       onPrdSaved?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save PRD');
+      setError(faultMessage(e, 'Failed to save PRD'));
     }
   }, [projectId, prdModal, onPrdSaved]);
 
@@ -61,7 +61,7 @@ export function ChatProjectActions({
       if (titles.length > 0) setTasksModal({ titles, descriptions });
       else setError('No tasks extracted.');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to generate tasks');
+      setError(faultMessage(e, 'Failed to generate tasks'));
     } finally {
       setTasksLoading(false);
     }
@@ -75,7 +75,7 @@ export function ChatProjectActions({
       setTasksModal(null);
       onTasksAdded?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to add tasks');
+      setError(faultMessage(e, 'Failed to add tasks'));
     }
   }, [projectId, tasksModal, onTasksAdded]);
 

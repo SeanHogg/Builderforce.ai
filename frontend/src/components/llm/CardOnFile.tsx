@@ -8,7 +8,7 @@ import { useStartCardValidation } from '@/lib/useCardValidation';
 import { invalidateLlmModels } from '@/lib/useLlmModels';
 import { invalidateConsumption } from '@/lib/useConsumption';
 import { cardValidationApi, type CardValidationState } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * The card BuilderForce has on file, and the only way to change it.
  *
@@ -96,7 +96,7 @@ export function CardOnFile() {
       invalidateLlmModels();
       invalidateConsumption();
     } catch (e) {
-      setRemoveError(e instanceof Error ? e.message : t('removeCardFailed'));
+      setRemoveError(faultMessage(e, t('removeCardFailed')));
     } finally {
       setBusy(false);
     }

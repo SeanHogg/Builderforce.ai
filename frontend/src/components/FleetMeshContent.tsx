@@ -5,7 +5,7 @@ import { Select } from '@/components/Select';
 import { useState, useMemo } from 'react';
 import type { AgentHost } from '@/lib/builderforceApi';
 import { dispatchApi } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 interface FleetMeshContentProps {
   agentHosts: AgentHost[];
 }
@@ -68,7 +68,7 @@ export function FleetMeshContent({ agentHosts }: FleetMeshContentProps) {
       const result = await dispatchApi.send(selectedAgentHost.id, payload);
       setDispatchResult(JSON.stringify(result, null, 2));
     } catch (e) {
-      setDispatchError(e instanceof Error ? e.message : 'Dispatch failed');
+      setDispatchError(faultMessage(e, 'Dispatch failed'));
     } finally {
       setDispatching(false);
     }

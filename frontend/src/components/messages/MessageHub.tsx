@@ -38,7 +38,7 @@ import {
   type MessageThread,
 } from '@/lib/messagesApi';
 import { useOptionalMessageHub } from './MessageHubContext';
-
+import { faultText } from '@/lib/apiClient';
 /** The other people in a thread — the name a list row shows. */
 function otherNames(thread: MessageThread, meId: string | null): string {
   const others = thread.participants.filter((participant) => participant.userId !== meId);
@@ -102,7 +102,7 @@ export function MessageHubPanel({ meId }: { meId: string | null }) {
     if (!activeThreadId) { setMessages([]); return; }
     messagesApi.messages(activeThreadId)
       .then((result) => setMessages(result.messages))
-      .catch((cause) => setError(cause instanceof Error ? cause.message : ''));
+      .catch((cause) => setError(faultText(cause, '')));
   }, [activeThreadId]);
 
   useEffect(() => { if (open) loadMessages(); }, [loadMessages, open]);
@@ -142,7 +142,7 @@ export function MessageHubPanel({ meId }: { meId: string | null }) {
         hub.setActiveThreadId(thread.id);
         hub.refresh();
       } catch (cause) {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : t('openFailed'));
+        if (!cancelled) setError(faultText(cause, t('openFailed')));
       } finally {
         if (!cancelled) hub.clearPendingContact();
       }
@@ -163,7 +163,7 @@ export function MessageHubPanel({ meId }: { meId: string | null }) {
       loadMessages();
       hub.refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('sendFailed'));
+      setError(faultText(cause, t('sendFailed')));
     } finally {
       setSending(false);
     }
@@ -176,7 +176,7 @@ export function MessageHubPanel({ meId }: { meId: string | null }) {
       hub.setActiveThreadId(thread.id);
       hub.refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('openFailed'));
+      setError(faultText(cause, t('openFailed')));
     }
   };
 

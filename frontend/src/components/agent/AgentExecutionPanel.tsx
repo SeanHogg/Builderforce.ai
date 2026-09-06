@@ -36,7 +36,7 @@ import { ObservabilityContent } from '../ObservabilityContent';
 import { TaskChangesPanel } from './TaskChangesPanel';
 import { PullRequestPanel } from './PullRequestPanel';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Live execution view for a task. Queued runs stream their status, output
  * (rendered as markdown in a fixed-height scroll region), file changes, and tool
@@ -617,7 +617,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
       loadTaskChanges();
       onTaskChanged?.();
     } catch (err) {
-      setRevertError(err instanceof Error ? err.message : t('failedToRevert'));
+      setRevertError(faultMessage(err, t('failedToRevert')));
     } finally {
       setRevertingId(null);
     }
@@ -662,7 +662,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
       loadExecutions(true);
       onTaskChanged?.();
     } catch (err) {
-      setRerunError(err instanceof Error ? err.message : t(affordance === 'resume' ? 'failedToResume' : 'failedToRerun'));
+      setRerunError(faultMessage(err, t(affordance === 'resume' ? 'failedToResume' : 'failedToRerun')));
     } finally {
       setRerunningId(null);
     }

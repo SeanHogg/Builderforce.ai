@@ -14,7 +14,7 @@ import { MeetingTranscriptList } from './MeetingTranscriptList';
 import { BrainPanel } from '@/components/brain/BrainPanel';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { Select } from '@/components/Select';
-
+import { faultMessage } from '@/lib/apiClient';
 const TILE_SIZE_KEY = 'bf.meetingTileSize';
 
 function readTileSize(): 'small' | 'large' {
@@ -71,7 +71,7 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
         setVideoEnabled(info.videoEnabled);
         setDetail(info.meeting);
       })
-      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : 'Could not join'); });
+      .catch((e) => { if (!cancelled) setError(faultMessage(e, 'Could not join')); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meetingId]);
@@ -132,7 +132,7 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
     try {
       await meetingsApi.agentTurn(meetingId, ref, prompt); // response arrives via the agent-say broadcast
     } catch (e) {
-      setNotice(e instanceof Error ? e.message : t('agentTurnFailed'));
+      setNotice(faultMessage(e, t('agentTurnFailed')));
     } finally {
       setAgentBusy((prev) => { const n = new Set(prev); n.delete(ref); return n; });
     }
@@ -171,7 +171,7 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
       loadTranscript();
       setNotice(t('minutesReady'));
     } catch (e) {
-      setNotice(e instanceof Error ? e.message : t('minutesFailed'));
+      setNotice(faultMessage(e, t('minutesFailed')));
     }
   }, [meetingId, loadTranscript, t]);
 

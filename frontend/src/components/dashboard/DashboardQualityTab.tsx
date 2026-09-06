@@ -7,7 +7,7 @@ import { qualityApi } from '@/lib/builderforceApi';
 import { QualityCollectorsManager } from '@/components/quality/QualityCollectorsManager';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { RoleGate } from '@/components/RoleGate';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Quality dashboard tab — shows the registered error/quality collectors via the
  * shared QualityCollectorsManager (which renders the list, the "enable a
@@ -36,7 +36,7 @@ export function DashboardQualityTab() {
       setOpen(false);
       setRefreshKey((k) => k + 1);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('quality.createFailed'));
+      setError(faultMessage(err, t('quality.createFailed')));
     } finally {
       setCreating(false);
     }

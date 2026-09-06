@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl';
 import { fetchFiles, fetchProject } from '@/lib/api';
 import type { FileEntry, Project } from '@/lib/types';
 import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * The full Builder workspace, mounted inside the Creation Canvas.
  *
@@ -51,7 +51,7 @@ export function CanvasBuildPanel({ storageProjectId, onClose, onProjectRenamed, 
         setFiles(loadedFiles);
       })
       .catch((cause: unknown) => {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : t('loadFailed'));
+        if (!cancelled) setError(faultMessage(cause, t('loadFailed')));
       });
     return () => { cancelled = true; };
   }, [storageProjectId, t]);

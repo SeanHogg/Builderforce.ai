@@ -8,7 +8,7 @@ import { useOptionalAuth } from '@/lib/AuthContext';
 import { fetchEmployers, type EmployerCard } from '@/lib/employersApi';
 import { RatingStars } from './RatingStars';
 import styles from './employers.module.css';
-
+import { faultText } from '@/lib/apiClient';
 /**
  * Employers, and what they score.
  *
@@ -44,7 +44,7 @@ export function EmployerDirectory({
     setLoading(true);
     fetchEmployers(q)
       .then((next) => { setRows(next); setError(''); })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : t('directory.failed')))
+      .catch((cause) => setError(faultText(cause, t('directory.failed'))))
       .finally(() => setLoading(false));
   }, [t]);
 

@@ -19,7 +19,7 @@ import {
 import { ErrorConsumptionCard } from './ErrorConsumptionCard';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 const ingestBase = `${AUTH_API_URL}/api/quality-ingest`;
 
 const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20 };
@@ -53,7 +53,7 @@ export function QualityCollectorsManager() {
     setLoading(true);
     Promise.all([qualityApi.collectors.list(), qualityApi.sourceCatalog()])
       .then(([cols, cat]) => { setCollectors(cols); setCatalog(cat); setError(null); })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load collectors'))
+      .catch((e) => setError(faultMessage(e, 'Failed to load collectors')))
       .finally(() => setLoading(false));
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -73,7 +73,7 @@ export function QualityCollectorsManager() {
       });
       setCreated(res); setName(''); load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create collector');
+      setError(faultMessage(e, 'Failed to create collector'));
     } finally {
       setCreating(false);
     }
@@ -159,7 +159,7 @@ function CollectorPanel({
       setRotated(await qualityApi.collectors.rotateKey(collector.id, graceHours));
       onChanged();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('setup.rotate.failed'));
+      setError(faultMessage(e, t('setup.rotate.failed')));
     } finally {
       setRotating(false);
     }
@@ -172,7 +172,7 @@ function CollectorPanel({
       setTestMessage(t('setup.testSucceeded'));
       onChanged();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('setup.testFailed'));
+      setError(faultMessage(e, t('setup.testFailed')));
     } finally {
       setTesting(false);
     }
@@ -285,14 +285,14 @@ function IntegrationsSection({ collector, catalog, setError, t }: {
         baseUrl: provider === 'sentry' ? baseUrl.trim() || null : null,
       });
       reset(); setAdding(false); load();
-    } catch (e) { setError(e instanceof Error ? e.message : 'Failed to connect provider'); }
+    } catch (e) { setError(faultMessage(e, 'Failed to connect provider')); }
     finally { setBusy(false); }
   };
   const remove = async (p: string) => { await qualityApi.collectors.integrations.remove(collector.id, p); load(); };
   const backfill = async () => {
     setBackfilling(true); setMsg(null);
     try { const r = await qualityApi.collectors.integrations.backfillSentry(collector.id); setMsg(t('setup.integrations.backfillDone', { pulled: r.pulled, accepted: r.accepted })); }
-    catch (e) { setMsg(e instanceof Error ? e.message : t('setup.integrations.backfillFailed')); }
+    catch (e) { setMsg(faultMessage(e, t('setup.integrations.backfillFailed'))); }
     finally { setBackfilling(false); }
   };
 
@@ -372,7 +372,7 @@ function MappingSection({ collector, projects, projName, onChanged, setError, t 
     try {
       await qualityApi.collectors.rules.create(collector.id, { matchField, matchOp, matchValue: matchValue.trim(), projectId: Number(projectId), priority });
       setMatchValue(''); setProjectId(''); setPriority(100); setAdding(false); load();
-    } catch (e) { setError(e instanceof Error ? e.message : 'Failed to add rule'); }
+    } catch (e) { setError(faultMessage(e, 'Failed to add rule')); }
     finally { setBusy(false); }
   };
   const remove = async (id: string) => { await qualityApi.collectors.rules.remove(collector.id, id); load(); };

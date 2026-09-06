@@ -9,7 +9,7 @@ import {
 import { BUILTIN_SKILLS, type BuiltinSkill } from '@/lib/marketplaceData';
 import { Icon } from '@/components/ui/Icon';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 export interface SkillAssignmentsContentProps {
   scope: 'tenant' | 'host' | 'project' | 'task' | 'agent';
   scopeId: number;
@@ -60,7 +60,7 @@ export function SkillAssignmentsContent({ scope, scopeId, className, style }: Sk
       }));
       setCatalog([...apiSkills, ...builtins]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load');
+      setError(faultMessage(e, 'Failed to load'));
     } finally {
       setLoading(false);
     }
@@ -76,7 +76,7 @@ export function SkillAssignmentsContent({ scope, scopeId, className, style }: Sk
       await artifactAssignments.assign('skill', slug, scope, scopeId);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Assign failed');
+      setError(faultMessage(e, 'Assign failed'));
     }
   };
 
@@ -86,7 +86,7 @@ export function SkillAssignmentsContent({ scope, scopeId, className, style }: Sk
       await artifactAssignments.unassign('skill', slug, scope, scopeId);
       setAssigned((prev) => prev.filter((a) => a.artifactSlug !== slug));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unassign failed');
+      setError(faultMessage(e, 'Unassign failed'));
     }
   };
 

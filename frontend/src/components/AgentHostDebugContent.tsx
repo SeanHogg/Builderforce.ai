@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { agentHosts } from '@/lib/builderforceApi';
 import { AgentHostGateway } from '@/lib/agentHostGateway';
-
+import { faultMessage } from '@/lib/apiClient';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -166,7 +166,7 @@ export function AgentHostDebugContent({
       setStatusSnapshot(status);
       setHealthSnapshot(health);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to refresh snapshots');
+      setError(faultMessage(e, 'Failed to refresh snapshots'));
     } finally {
       setRefreshing(false);
     }
@@ -193,7 +193,7 @@ export function AgentHostDebugContent({
       setRpcOutput(pretty(result));
     } catch (e) {
       setRpcOutput('');
-      setError(e instanceof Error ? e.message : 'RPC failed');
+      setError(faultMessage(e, 'RPC failed'));
     } finally {
       setRpcRunning(false);
     }

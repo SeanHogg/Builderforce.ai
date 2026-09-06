@@ -5,7 +5,7 @@ import { getStoredTenantToken } from './auth';
 import { apiSocketUrl } from './apiSocket';
 import { meetingsApi } from './builderforceApi';
 import { acquireUserMedia, stopStream } from './mediaCapture';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * useMediaRoom — mesh-P2P WebRTC for a live meeting / ceremony.
  *
@@ -379,7 +379,7 @@ export function useMediaRoom(
         setCamOn(!audioOnly && stream.getVideoTracks().length > 0);
         setMicOn(true);
       } catch (e) {
-        setMediaError(e instanceof Error ? e.message : 'Camera/microphone unavailable');
+        setMediaError(faultMessage(e, 'Camera/microphone unavailable'));
       }
       // 2) ICE config (best-effort; STUN default already set).
       try {

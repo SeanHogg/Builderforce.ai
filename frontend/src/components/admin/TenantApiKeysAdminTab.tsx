@@ -17,7 +17,7 @@ import { TenantApiKeyEditor } from '@/components/TenantApiKeyEditor';
 import { TenantApiKeyUsageDrawer } from '@/components/TenantApiKeyUsageDrawer';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Superadmin tab for minting / listing / revoking tenant `bfk_*` keys
  * on behalf of any tenant. Renders nothing unless its parent tab is active —
@@ -53,7 +53,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
         setTenants(list);
         if (tenantId == null && list.length > 0) setTenantId(list[0].id);
       })
-      .catch((e: Error) => !cancelled && setError(e.message));
+      .catch((e: Error) => !cancelled && setError(faultMessage(e)));
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
@@ -66,7 +66,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
     setError(null);
     adminApi.listTenantApiKeys(tenantId)
       .then((rows) => !cancelled && setKeys(rows ?? []))
-      .catch((e: Error) => !cancelled && setError(e.message))
+      .catch((e: Error) => !cancelled && setError(faultMessage(e)))
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
   }, [active, tenantId]);
@@ -88,7 +88,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
       setNewName('');
       setNewAllowedOrigins(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('apikeys.mintFailed'));
+      setError(faultMessage(e, t('apikeys.mintFailed')));
     } finally {
       setCreating(false);
     }
@@ -103,7 +103,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
       setKeys((prev) => prev.map((k) => k.id === keyId ? updated : k));
       setEditingKeyId(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('apikeys.updateFailed'));
+      setError(faultMessage(e, t('apikeys.updateFailed')));
     } finally {
       setSavingEdit(false);
     }
@@ -118,7 +118,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
       await adminApi.revokeTenantApiKey(tenantId, keyId);
       setKeys((prev) => prev.map((k) => k.id === keyId ? { ...k, revokedAt: new Date().toISOString() } : k));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('apikeys.revokeFailed'));
+      setError(faultMessage(e, t('apikeys.revokeFailed')));
     } finally {
       setRevoking(null);
     }

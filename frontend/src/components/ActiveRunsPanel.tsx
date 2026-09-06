@@ -5,7 +5,7 @@ import { usePolledResource } from '@/hooks/usePolledResource';
 import { runtimeApi, type ActiveRun } from '@/lib/builderforceApi';
 import { RoleGate } from '@/components/RoleGate';
 import { useConfirm } from '@/components/ConfirmProvider';
-
+import { faultText } from '@/lib/apiClient';
 /**
  * Fleet "what's running right now": every non-terminal execution across the
  * tenant, on-prem and cloud, with elapsed time and a working Cancel. This is the
@@ -81,7 +81,7 @@ export function ActiveRunsPanel() {
       }
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not stop all agents.');
+      setError(faultText(e, 'Could not stop all agents.'));
     } finally {
       setStoppingAll(false);
     }

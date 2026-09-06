@@ -86,7 +86,7 @@ export function AgentHostSessionsContent({ agentHostId }: AgentHostSessionsConte
       setHandoffResult('Session handed off successfully.');
       setShowHandoff(false);
     } catch (e) {
-      setHandoffError(e instanceof Error ? e.message : 'Handoff failed');
+      setHandoffError(faultMessage(e, 'Handoff failed'));
     } finally {
       setHanding(false);
     }

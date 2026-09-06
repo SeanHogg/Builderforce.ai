@@ -53,13 +53,13 @@ export function MemberTimeChart({ kind, refId, days = 30 }: { kind: MemberKind; 
     try {
       await timeApi.log({ taskId: Number(taskId), minutes, entryDate, memberKind: kind, memberRef: refId });
       setHours(''); setReload((r) => r + 1);
-    } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+    } catch (e) { setError(faultMessage(e)); } finally { setBusy(false); }
   };
 
   const del = async (id: string) => {
     setBusy(true);
     try { await timeApi.remove(id); setReload((r) => r + 1); }
-    catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+    catch (e) { setError(faultMessage(e)); } finally { setBusy(false); }
   };
 
   return (

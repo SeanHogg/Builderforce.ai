@@ -8,7 +8,7 @@ import {
   type StakeholderMapEntry,
   type StakeholderQuestionKey,
 } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 const QUESTIONS: Array<{ key: StakeholderQuestionKey; label: string }> = [
   { key: 'priorities_clear', label: 'Priorities are clear and agreed' },
   { key: 'competing_p0s_reconciled', label: 'Competing P0s are reconciled' },
@@ -55,7 +55,7 @@ export function StakeholderAlignmentPanel({ projectId }: { projectId: number }) 
       if (profileResult.profile) setAnswers(profileResult.profile.answers);
       setError(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to load stakeholder alignment');
+      setError(faultMessage(cause, 'Unable to load stakeholder alignment'));
     }
   }, [projectId]);
 
@@ -71,7 +71,7 @@ export function StakeholderAlignmentPanel({ projectId }: { projectId: number }) 
       setName(''); setRef(''); setTeamScope('');
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to save stakeholder');
+      setError(faultMessage(cause, 'Unable to save stakeholder'));
     } finally { setBusy(false); }
   }
 
@@ -81,7 +81,7 @@ export function StakeholderAlignmentPanel({ projectId }: { projectId: number }) 
       await governanceApi.stakeholder.saveHealthProfile(projectId, answers);
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to save health profile');
+      setError(faultMessage(cause, 'Unable to save health profile'));
     } finally { setBusy(false); }
   }
 
@@ -91,7 +91,7 @@ export function StakeholderAlignmentPanel({ projectId }: { projectId: number }) 
       await governanceApi.stakeholder.removeMapEntry(id);
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to remove stakeholder');
+      setError(faultMessage(cause, 'Unable to remove stakeholder'));
     } finally { setBusy(false); }
   }
 

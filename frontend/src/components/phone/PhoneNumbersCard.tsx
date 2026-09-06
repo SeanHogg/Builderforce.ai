@@ -12,7 +12,7 @@ import { formatCents } from '@/lib/canvasMoney';
 import { releaseNumber } from '@/lib/phoneApi';
 import { usePhone } from '@/lib/usePhone';
 import styles from './phone.module.css';
-
+import { faultText } from '@/lib/apiClient';
 /**
  * The lines this workspace holds.
  *
@@ -53,7 +53,7 @@ export function PhoneNumbersCard() {
       await releaseNumber(id);
       await refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('numbers.releaseFailed'));
+      setError(faultText(cause, t('numbers.releaseFailed')));
     } finally {
       setBusyId(null);
     }

@@ -41,7 +41,7 @@ import {
   type TenantModelInput,
   type PublicPersona,
 } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 /** A published Evermind pins `evermind/<ref>`; only the publish flow can mint one. */
 const EVERMIND_PIN_PREFIX = 'evermind/';
 
@@ -191,7 +191,7 @@ export function MyLlmsContent() {
       setModels(list.models ?? []);
       setPersonas(personaList);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errors.load'));
+      setError(faultMessage(e, t('errors.load')));
     } finally {
       setLoading(false);
     }
@@ -219,7 +219,7 @@ export function MyLlmsContent() {
       close();
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errors.save'));
+      setError(faultMessage(e, t('errors.save')));
     } finally {
       setSaving(false);
     }
@@ -239,7 +239,7 @@ export function MyLlmsContent() {
       await tenantModelApi.remove(model.id);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errors.delete'));
+      setError(faultMessage(e, t('errors.delete')));
     }
   };
 

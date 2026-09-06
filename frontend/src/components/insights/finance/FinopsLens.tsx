@@ -32,7 +32,7 @@ import {
   type AuditReport,
 } from '@/lib/finopsApi';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 // 'finops.manage' is added to the RBAC capability map by the orchestrator-owned
 // rbac.ts merge; cast keeps this client typesafe until that lands.
 export const FINOPS_CAP = 'finops.manage' as Capability;
@@ -121,7 +121,7 @@ function RdSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; ca
       setCats(cfg.qualifiedCategories.join(', '));
       setActions(cfg.qualifiedActionTypes.join(', '));
     } catch (e) {
-      setError((e as Error).message);
+      setError(faultMessage(e));
     }
   }, []);
 
@@ -140,7 +140,7 @@ function RdSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; ca
       const rep = await getRdTaxReport();
       setReport(rep);
     } catch (e) {
-      setError((e as Error).message);
+      setError(faultMessage(e));
     } finally {
       setSaving(false);
     }
@@ -233,7 +233,7 @@ function SocSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; c
     try {
       setCoverage(await getSocControls());
     } catch (e) {
-      setError((e as Error).message);
+      setError(faultMessage(e));
     }
   }, []);
 
@@ -252,7 +252,7 @@ function SocSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; c
           setCoverage(cov);
         }
       } catch (e) {
-        setError((e as Error).message);
+        setError(faultMessage(e));
       } finally {
         setBusy(false);
       }
@@ -262,7 +262,7 @@ function SocSection({ t, canManage }: { t: ReturnType<typeof useTranslations>; c
     try {
       setCoverage(await updateSocControl(ctrl.id, change));
     } catch (e) {
-      setError((e as Error).message);
+      setError(faultMessage(e));
     } finally {
       setBusy(false);
     }
@@ -353,7 +353,7 @@ function AuditSection({ t }: { t: ReturnType<typeof useTranslations> }) {
     try {
       setReport(await getAuditReport(p));
     } catch (e) {
-      setError((e as Error).message);
+      setError(faultMessage(e));
     } finally {
       setLoading(false);
     }

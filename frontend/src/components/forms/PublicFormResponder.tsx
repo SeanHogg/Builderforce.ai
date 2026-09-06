@@ -30,7 +30,7 @@ import { useTranslations } from 'next-intl';
 import type { FormQuestion, PublishedForm } from '@builderforce/creation-canvas-contract';
 import { publicForm, submitPublicForm, type PublicFormView } from '@/lib/founderOpsApi';
 import styles from './PublicFormResponder.module.css';
-
+import { faultMessage } from '@/lib/apiClient';
 type Answers = Record<string, unknown>;
 
 /**
@@ -120,7 +120,7 @@ export function PublicFormResponder({ slug, token }: { slug: string; token?: str
       const result = await submitPublicForm(slug, answers, token);
       setDone(result.confirmationMessage ?? '');
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : t('submitFailed'));
+      setError(faultMessage(submitError, t('submitFailed')));
     } finally {
       setSending(false);
     }

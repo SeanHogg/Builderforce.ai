@@ -36,7 +36,7 @@ import {
   type CreationListing,
   type SellerEarnings as Earnings,
 } from '@/lib/creationListings';
-
+import { faultMessage } from '@/lib/apiClient';
 export function SellerEarnings() {
   const t = useTranslations('marketplaceCreations');
   const confirm = useConfirm();
@@ -86,7 +86,7 @@ export function SellerEarnings() {
         : result.error ?? t('payoutFailed'));
       if (result.ok) await load();
     } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : String(cause));
+      setNotice(faultMessage(cause));
     } finally {
       setBusy(false);
     }

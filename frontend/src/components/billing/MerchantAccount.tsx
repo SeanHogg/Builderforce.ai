@@ -39,7 +39,7 @@ import {
   startMerchantOnboarding,
   type MerchantAccountView,
 } from '@/lib/founderOpsApi';
-
+import { faultText } from '@/lib/apiClient';
 export interface MerchantAccountProps {
   /** Where the processor's round trip returns to. */
   returnTo: string;
@@ -90,7 +90,7 @@ export function MerchantAccount({ returnTo, onChanged }: MerchantAccountProps) {
       setAccount(await merchantAccount());
       setError('');
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('loadFailed'));
+      setError(faultText(cause, t('loadFailed')));
     } finally {
       setLoading(false);
     }
@@ -106,7 +106,7 @@ export function MerchantAccount({ returnTo, onChanged }: MerchantAccountProps) {
       // multi-step identity flow that a blocked popup turns into a dead end.
       window.location.href = onboardingUrl;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('connectFailed'));
+      setError(faultText(cause, t('connectFailed')));
       setBusy(false);
     }
   };
@@ -124,7 +124,7 @@ export function MerchantAccount({ returnTo, onChanged }: MerchantAccountProps) {
       await load();
       onChanged?.();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('disconnectFailed'));
+      setError(faultText(cause, t('disconnectFailed')));
     } finally {
       setBusy(false);
     }

@@ -27,8 +27,9 @@ import { Icon } from '@/components/ui/Icon';
 import { investorApi, packDocumentUrl, type BuiltPack, type CompanyDetail, type PackSummary } from '@/lib/investorApi';
 import {
   buttonStyle, cardStyle, emptyStyle, errorStyle, gapChipStyle, inputStyle, labelStyle,
-  listRowStyle, listStyle, message, mutedStyle, primaryButtonStyle, rowStyle, sectionStyle,
+  listRowStyle, listStyle, mutedStyle, primaryButtonStyle, rowStyle, sectionStyle,
 } from './investorStyles';
+import { faultMessage } from '@/lib/apiClient';
 
 export function PackView({
   detail,
@@ -63,7 +64,7 @@ export function PackView({
         emphasis: emphasis.trim() || null,
       })
       .then((pack) => { setBuilt(pack); onChanged(); })
-      .catch((cause: unknown) => setError(message(cause, t('error.buildPack'))))
+      .catch((cause: unknown) => setError(faultMessage(cause, t('error.buildPack'))))
       .finally(() => setBusy(false));
   }, [audience, companyId, emphasis, onChanged, projectId, t]);
 

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { agentHostConfigApi } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 interface AgentHostConfigContentProps {
   agentHostId: number;
 }
@@ -59,7 +59,7 @@ export function AgentHostConfigContent({ agentHostId }: AgentHostConfigContentPr
       await agentHostConfigApi.update(agentHostId, parsed);
       setSavedAt(new Date());
     } catch (e) {
-      setSaveError(e instanceof Error ? e.message : 'Save failed');
+      setSaveError(faultMessage(e, 'Save failed'));
     } finally {
       setSaving(false);
     }

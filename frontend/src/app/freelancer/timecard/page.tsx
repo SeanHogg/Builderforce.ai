@@ -10,7 +10,7 @@ import {
   listMyTimecards, resolveTimecard, submitTimecard, listTimecardEntries, addTimecardEntry, updateTimecardEntry, deleteTimecardEntry, type Timecard, type TimecardEntry,
 } from '@/lib/freelance/timecards';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
-
+import { faultMessage } from '@/lib/apiClient';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18,
 };
@@ -53,7 +53,7 @@ export default function FreelancerTimecardPage() {
       setEngagements(engs.filter((e) => e.status === 'active'));
       setCards(tcs);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load');
+      setError(faultMessage(e, 'Failed to load'));
     } finally {
       setLoading(false);
     }
@@ -68,7 +68,7 @@ export default function FreelancerTimecardPage() {
       await resolveTimecard({ engagementId, periodStart: start, periodEnd: end });
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to resolve');
+      setError(faultMessage(e, 'Failed to resolve'));
     } finally {
       setBusy(null);
     }
@@ -77,7 +77,7 @@ export default function FreelancerTimecardPage() {
   const submit = async (id: string) => {
     setBusy(id); setError(null);
     try { await submitTimecard(id); await load(); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Failed to submit'); }
+    catch (e) { setError(faultMessage(e, 'Failed to submit')); }
     finally { setBusy(null); }
   };
 
@@ -100,21 +100,21 @@ export default function FreelancerTimecardPage() {
     if (!minutes || minutes <= 0) return;
     setBusy(`add:${id}`); setError(null);
     try { await addTimecardEntry(id, { minutes, description: newEntry.description || undefined }); setNewEntry({ minutes: '', description: '' }); await refreshEntries(id); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
+    catch (e) { setError(faultMessage(e, 'Failed')); }
     finally { setBusy(null); }
   };
 
   const toggleBillable = async (id: string, entry: TimecardEntry) => {
     setBusy(`e:${entry.id}`);
     try { await updateTimecardEntry(id, entry.id, { billable: !entry.billable }); await refreshEntries(id); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
+    catch (e) { setError(faultMessage(e, 'Failed')); }
     finally { setBusy(null); }
   };
 
   const removeEntry = async (id: string, entryId: string) => {
     setBusy(`e:${entryId}`);
     try { await deleteTimecardEntry(id, entryId); await refreshEntries(id); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
+    catch (e) { setError(faultMessage(e, 'Failed')); }
     finally { setBusy(null); }
   };
 
@@ -123,7 +123,7 @@ export default function FreelancerTimecardPage() {
     if (!meeting.engagementId || !minutes || minutes <= 0) return;
     setBusy('meeting'); setError(null);
     try { await logMeeting({ engagementId: meeting.engagementId, durationMinutes: minutes, note: meeting.note || undefined }); setMeeting({ engagementId: '', minutes: '', note: '' }); await load(); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
+    catch (e) { setError(faultMessage(e, 'Failed')); }
     finally { setBusy(null); }
   };
 

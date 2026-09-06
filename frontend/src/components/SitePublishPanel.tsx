@@ -16,7 +16,7 @@ import { GitHubDeployPanel } from './builder/GitHubDeployPanel';
 import { SiteDomainPanel, SiteFormsPanel, SiteTrafficPanel } from './site/SiteGrowthPanels';
 import { ProjectAppPanel } from './apps/ProjectAppPanel';
 import { SiteReleasePanel } from './site/SiteReleasePanel';
-
+import { faultText } from '@/lib/apiClient';
 interface SitePublishPanelProps {
   projectId: number;
   projectName: string;
@@ -83,7 +83,7 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
       });
       setPhase('done');
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('publish.failed'));
+      setError(faultText(e, t('publish.failed')));
       setPhase('error');
     }
   }, [subdomain, onBuild, projectId, t]);

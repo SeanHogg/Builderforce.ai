@@ -12,7 +12,7 @@ import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { Select } from '@/components/Select';
 import { publishTicket, type PostingType, type EngagementType, type TicketPosting } from '@/lib/freelance/postings';
-
+import { faultMessage } from '@/lib/apiClient';
 const input: React.CSSProperties = {
   background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)',
   borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: 13, outline: 'none', width: '100%', boxSizing: 'border-box',
@@ -65,7 +65,7 @@ export function PublishToMarketplaceModal({
       });
       onPublished(posting);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('publish.publishError'));
+      setError(faultMessage(e, t('publish.publishError')));
     } finally { setBusy(false); }
   };
 

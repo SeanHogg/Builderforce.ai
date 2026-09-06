@@ -22,7 +22,7 @@ import { mailboxApi, type MailboxConnection } from '@/lib/mailboxApi';
 import { connectorsApi, type ConnectorConnection } from '@/lib/connectorsApi';
 import { CampaignComposer, type CampaignDraftBody } from './CampaignComposer';
 import { button, listItem, listReset, muted, primary, spread, Row } from './growthStyles';
-
+import { faultText } from '@/lib/apiClient';
 /** Twilio's email product. The campaign transport resolves against this key. */
 const SENDGRID_CONNECTOR_KEY = 'sendgrid';
 
@@ -83,7 +83,7 @@ export function CampaignsSection() {
       setNotice(successMessage);
       await reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('genericError'));
+      setError(faultText(e, t('genericError')));
     } finally {
       setBusy(false);
     }

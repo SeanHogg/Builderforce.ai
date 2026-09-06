@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import { savedTalentIds, saveTalent, unsaveTalent } from '@/lib/freelance/invites';
-
+import { faultMessage } from '@/lib/apiClient';
 export function ShortlistToggle({ freelancerUserId }: { freelancerUserId: string }) {
   const t = useTranslations('talent');
   const [saved, setSaved] = useState<boolean | null>(null);
@@ -41,7 +41,7 @@ export function ShortlistToggle({ freelancerUserId }: { freelancerUserId: string
       if (saved) { await unsaveTalent(freelancerUserId); setSaved(false); }
       else { await saveTalent({ freelancerUserId }); setSaved(true); }
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('shortlist.failed'));
+      setError(faultMessage(e, t('shortlist.failed')));
     } finally {
       setBusy(false);
     }

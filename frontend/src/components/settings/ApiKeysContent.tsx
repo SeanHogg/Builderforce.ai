@@ -16,7 +16,7 @@ import { ProviderKeysSettings } from '@/components/ProviderKeysSettings';
 import PageContainer from '@/components/PageContainer';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -91,7 +91,7 @@ export function ApiKeysContent({ embedded = false, showProviderKeys = true, sear
     if (!isOwner || !Number.isFinite(tenantId)) { setLoading(false); return; }
     tenantApiKeysApi.list(tenantId)
       .then(setKeys)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: Error) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, [isOwner, tenantId]);
 
@@ -138,7 +138,7 @@ export function ApiKeysContent({ embedded = false, showProviderKeys = true, sear
       setNewName('');
       setNewAllowedOrigins(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errCreate'));
+      setError(faultMessage(e, t('errCreate')));
     } finally {
       setCreating(false);
     }
@@ -163,7 +163,7 @@ export function ApiKeysContent({ embedded = false, showProviderKeys = true, sear
       await tenantApiKeysApi.revoke(tenantId, keyId);
       setKeys((prev) => prev.map((k) => k.id === keyId ? { ...k, revokedAt: new Date().toISOString() } : k));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errRevoke'));
+      setError(faultMessage(e, t('errRevoke')));
     } finally {
       setRevoking(null);
     }

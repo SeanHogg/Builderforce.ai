@@ -21,7 +21,7 @@ import {
   type FeedbackKind, type FeedbackQueue, type FeedbackStatus, type FeedbackSubmission,
 } from '@/lib/feedbackApi';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
 };
@@ -111,7 +111,7 @@ export function FeedbackTriage({ load, review, showTenant = false, refreshKey = 
     setLoading(true);
     loadRef.current(status)
       .then((q) => { if (active) { setQueue(q); setError(null); } })
-      .catch((e) => { if (active) setError(e instanceof Error ? e.message : t('triage.loadFailed')); })
+      .catch((e) => { if (active) setError(faultMessage(e, t('triage.loadFailed'))); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [status, reloadNonce, t]);
@@ -123,7 +123,7 @@ export function FeedbackTriage({ load, review, showTenant = false, refreshKey = 
       await review(s, decision);
       refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('triage.reviewFailed'));
+      setError(faultMessage(e, t('triage.reviewFailed')));
     } finally {
       setBusyId(null);
     }

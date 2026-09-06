@@ -33,7 +33,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { apiRequest, getApiBaseUrl } from '@/lib/apiClient';
+import { apiRequest, getApiBaseUrl, faultText } from '@/lib/apiClient';
 import styles from '../signature/SignerConsole.module.css';
 import { useFormat } from "@/i18n/useFormat";
 
@@ -80,7 +80,7 @@ export function PublicInvoice() {
       setInvoice(result.invoice);
       setError('');
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('loadFailed'));
+      setError(faultText(cause, t('loadFailed')));
     } finally {
       setLoading(false);
     }

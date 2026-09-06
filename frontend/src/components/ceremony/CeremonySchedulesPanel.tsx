@@ -15,7 +15,7 @@ import {
   ceremonySchedulesApi, type CeremonySchedule, type CeremonyScheduleInput,
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultText } from '@/lib/apiClient';
 /**
  * Ceremony cadence management — the UI for `ceremony_schedules` (migration 0349).
  *
@@ -99,7 +99,7 @@ export function CeremonySchedulesPanel({ projectId }: { projectId: number }) {
       const res = await ceremonySchedulesApi.list(projectId);
       setSchedules(res.schedules ?? []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errorLoad'));
+      setError(faultText(e, t('errorLoad')));
     } finally {
       setLoading(false);
     }
@@ -133,7 +133,7 @@ export function CeremonySchedulesPanel({ projectId }: { projectId: number }) {
       }
       setPanelOpen(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errorSave'));
+      setError(faultText(e, t('errorSave')));
     } finally {
       setSaving(false);
     }
@@ -144,7 +144,7 @@ export function CeremonySchedulesPanel({ projectId }: { projectId: number }) {
       const { schedule } = await ceremonySchedulesApi.update(s.id, { enabled: !s.enabled });
       setSchedules((prev) => prev.map((x) => (x.id === schedule.id ? schedule : x)));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errorSave'));
+      setError(faultText(e, t('errorSave')));
     }
   }, [t]);
 
@@ -154,7 +154,7 @@ export function CeremonySchedulesPanel({ projectId }: { projectId: number }) {
       await ceremonySchedulesApi.remove(s.id);
       setSchedules((prev) => prev.filter((x) => x.id !== s.id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errorDelete'));
+      setError(faultText(e, t('errorDelete')));
     }
   }, [confirm, t]);
 

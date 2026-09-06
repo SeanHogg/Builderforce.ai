@@ -17,7 +17,7 @@ import Link from 'next/link';
 import { useFormat } from '@/i18n/useFormat';
 import { inviteStatusKey } from './jobVocabulary';
 import { listJobInvites, withdrawJobInvite, type JobInvite } from '@/lib/freelance/invites';
-
+import { faultMessage } from '@/lib/apiClient';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
   borderRadius: 'var(--radius-lg)', padding: 14, minWidth: 0,
@@ -43,7 +43,7 @@ export function JobInvitesPanel({ jobId }: { jobId: string }) {
     setLoading(true);
     setError(null);
     try { setInvites(await listJobInvites(jobId)); }
-    catch (e) { setError(e instanceof Error ? e.message : t('invite.loadError')); }
+    catch (e) { setError(faultMessage(e, t('invite.loadError'))); }
     finally { setLoading(false); }
   }, [jobId, t]);
 
@@ -53,7 +53,7 @@ export function JobInvitesPanel({ jobId }: { jobId: string }) {
     setBusy(invite.id);
     setError(null);
     try { await withdrawJobInvite(jobId, invite.id); await load(); }
-    catch (e) { setError(e instanceof Error ? e.message : t('invite.failed')); }
+    catch (e) { setError(faultMessage(e, t('invite.failed'))); }
     finally { setBusy(null); }
   };
 

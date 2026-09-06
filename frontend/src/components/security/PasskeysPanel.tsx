@@ -24,7 +24,7 @@ import {
 } from '@/lib/passkeys';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useFormat } from '@/i18n/useFormat';
-
+import { faultMessage } from '@/lib/apiClient';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -84,7 +84,7 @@ export default function PasskeysPanel() {
     void hasPlatformAuthenticator().then(setPlatform);
     passkeysApi.list()
       .then(setPasskeys)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: Error) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, []);
 
@@ -98,7 +98,7 @@ export default function PasskeysPanel() {
       setPasskeys((prev) => [...prev, created]);
     } catch (e) {
       // Dismissing the system prompt is a choice, not a failure.
-      if (!isPasskeyCancellation(e)) setError(e instanceof Error ? e.message : t('addFailed'));
+      if (!isPasskeyCancellation(e)) setError(faultMessage(e, t('addFailed')));
     } finally {
       setBusy(false);
     }
@@ -116,7 +116,7 @@ export default function PasskeysPanel() {
       await passkeysApi.remove(passkey.id);
       setPasskeys((prev) => prev.filter((p) => p.id !== passkey.id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('removeFailed'));
+      setError(faultMessage(e, t('removeFailed')));
     }
   }, [confirm, t]);
 
@@ -128,7 +128,7 @@ export default function PasskeysPanel() {
       const updated = await passkeysApi.rename(passkey.id, name);
       setPasskeys((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('renameFailed'));
+      setError(faultMessage(e, t('renameFailed')));
     }
   }, [draftName, t]);
 

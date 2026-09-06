@@ -139,7 +139,7 @@ export default function PromptsPage() {
       setPrompts((prev) => prev.map((x) => (x.slug === p.slug ? { ...x, usageCount: fresh.usageCount } : x)));
       setTimeout(() => setToast(null), 2500);
     } catch (e) {
-      setToast(e instanceof Error ? e.message : t('useFailed'));
+      setToast(faultMessage(e, t('useFailed')));
       setTimeout(() => setToast(null), 2500);
     }
   };
@@ -335,7 +335,7 @@ function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPubl
     try {
       setAnalysis(await promptLibraryApi.analyze(id));
     } catch (e) {
-      setAnalyzeError(e instanceof Error ? e.message : t('analysisFailed'));
+      setAnalyzeError(faultMessage(e, t('analysisFailed')));
     } finally {
       setAnalyzing(false);
     }
@@ -347,7 +347,7 @@ function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPubl
       await promptLibraryApi.addVersion(id, { body: analysis.suggestion, notes: 'Analyzer suggestion' });
       setSaved(true);
     } catch (e) {
-      setAnalyzeError(e instanceof Error ? e.message : t('saveFailed'));
+      setAnalyzeError(faultMessage(e, t('saveFailed')));
     }
   };
 

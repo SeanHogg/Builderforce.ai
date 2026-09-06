@@ -8,7 +8,7 @@ import { CronJobsContent } from './CronJobsContent';
 import { ObservabilityContent } from './ObservabilityContent';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
-
+import { faultMessage } from '@/lib/apiClient';
 export interface AgentCapabilitiesContentProps {
   projectId: number;
   /** Tenant ID for content block name resolution. */
@@ -46,7 +46,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
       setAttached(list);
       setPool(poolAgents);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('failedLoadAgents'));
+      setError(faultMessage(e, t('failedLoadAgents')));
     } finally {
       setLoading(false);
     }
@@ -70,7 +70,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
       await projectAgents.add({ projectId, agentKind: p.kind, agentRef: p.ref, name: p.name });
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('failedAddAgent'));
+      setError(faultMessage(e, t('failedAddAgent')));
     } finally {
       setBusy(false);
     }
@@ -85,7 +85,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
       if (target === agent.id) setTarget(null);
       setAttached((prev) => prev.filter((a) => a.id !== agent.id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('failedRemoveAgent'));
+      setError(faultMessage(e, t('failedRemoveAgent')));
     } finally {
       setBusy(false);
     }

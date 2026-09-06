@@ -31,7 +31,7 @@ import {
   type CloudAgentFormState,
 } from './CloudAgentFormFields';
 import { useRuntimeSurfaceBlocked } from './RuntimeSurfaceSelect';
-
+import { faultText } from '@/lib/apiClient';
 /**
  * Manage an existing cloud agent in a right-side drawer (matches the remote
  * AgentHost slide-out). Replaces the cramped edit modal and folds the old
@@ -156,7 +156,7 @@ export function CloudAgentSlideOutPanel({
     setBridgeError('');
     ensureWorkforceAgentBridge(agent.id)
       .then((id) => { if (!cancelled) setBridgeId(id); })
-      .catch((e) => { if (!cancelled) setBridgeError(e instanceof Error ? e.message : t('errLoadCapabilities')); });
+      .catch((e) => { if (!cancelled) setBridgeError(faultText(e, t('errLoadCapabilities'))); });
     return () => { cancelled = true; };
   }, [open, agent.id]);
 
@@ -168,7 +168,7 @@ export function CloudAgentSlideOutPanel({
     setPerfError('');
     fetchAgentPerf(agent.id)
       .then((r) => { if (!cancelled) setPerf(r); })
-      .catch((e) => { if (!cancelled) setPerfError(e instanceof Error ? e.message : t('errLoadPerformance')); });
+      .catch((e) => { if (!cancelled) setPerfError(faultText(e, t('errLoadPerformance'))); });
     return () => { cancelled = true; };
   }, [open, owner, activeTab, agent.id]);
 
@@ -183,7 +183,7 @@ export function CloudAgentSlideOutPanel({
       await updateAgent(agent.id, cloudAgentFormToInput(form));
       onSaved();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errSaveFailed'));
+      setError(faultText(e, t('errSaveFailed')));
     } finally {
       setSaving(false);
     }
@@ -201,7 +201,7 @@ export function CloudAgentSlideOutPanel({
       });
       onSaved();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errSaveFailed'));
+      setError(faultText(e, t('errSaveFailed')));
     } finally {
       setSaving(false);
     }
@@ -215,7 +215,7 @@ export function CloudAgentSlideOutPanel({
       onDeleted(agent.id);
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errDeleteFailed'));
+      setError(faultText(e, t('errDeleteFailed')));
       setSaving(false);
     }
   }, [agent.id, agent.name, onDeleted, onClose]);

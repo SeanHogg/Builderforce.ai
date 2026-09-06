@@ -26,7 +26,7 @@ import type { RightTab } from '@/lib/modality';
 import { BenchmarkPanel } from '@/components/BenchmarkPanel';
 import { ModelExportPanel } from '@/components/ModelExportPanel';
 import { Icon } from '@/components/ui/Icon';
-
+import { faultMessage } from '@/lib/apiClient';
 interface FinetuneStudioPanelProps {
   projectId: number | string;
   /** Project files — used to surface dataset-like files (.json/.jsonl) the Brain wrote. */
@@ -62,7 +62,7 @@ export function FinetuneStudioPanel({ projectId, files = [], onGoToTab, onOpenFi
       setDatasets(Array.isArray(ds) ? ds : []);
       setJobs(Array.isArray(tj) ? tj : []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('loadError'));
+      setError(faultMessage(e, t('loadError')));
     } finally {
       setLoading(false);
     }

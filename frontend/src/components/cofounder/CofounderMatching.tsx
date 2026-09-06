@@ -32,7 +32,7 @@ import {
 } from '@/lib/founderOpsApi';
 import { FounderPaperwork } from './FounderPaperwork';
 import styles from './CofounderMatching.module.css';
-
+import { faultMessage } from '@/lib/apiClient';
 const EMPTY_PROFILE = {
   headline: '',
   bio: '',
@@ -120,7 +120,7 @@ export function CofounderMatching() {
       } as never);
       await load();
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : t('saveFailed'));
+      setError(faultMessage(saveError, t('saveFailed')));
     } finally {
       setSaving(false);
     }
@@ -306,7 +306,7 @@ function MatchCard({
       await requestIntroduction(match.profileId, message);
       await onAsked();
     } catch (askError) {
-      setError(askError instanceof Error ? askError.message : t('askFailed'));
+      setError(faultMessage(askError, t('askFailed')));
     } finally {
       setBusy(false);
     }

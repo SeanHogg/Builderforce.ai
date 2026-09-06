@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { invalidateLlmModels } from '@/lib/useLlmModels';
 import { invalidateConsumption } from '@/lib/useConsumption';
 import { cardValidationApi } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Start card validation — the ONE client-side implementation of "add and validate
  * a card", shared by every surface that can hit the `validate_card` unlock step
@@ -53,7 +53,7 @@ export function useStartCardValidation(): {
       invalidateConsumption();
       window.location.reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : '');
+      setError(faultMessage(e, ''));
       setBusy(false);
     }
   }, [tenantId]);

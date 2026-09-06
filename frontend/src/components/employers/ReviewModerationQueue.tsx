@@ -11,7 +11,7 @@ import {
 } from '@/lib/employersApi';
 import { RatingStars } from './RatingStars';
 import styles from './employers.module.css';
-
+import { faultText } from '@/lib/apiClient';
 /**
  * Reviews waiting for a decision.
  *
@@ -62,7 +62,7 @@ export function ReviewModerationQueue() {
       await decideReview(id, decision, reasons[id]?.trim() || undefined);
       load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('moderation.failed'));
+      setError(faultText(cause, t('moderation.failed')));
     } finally { setBusyId(null); }
   };
 

@@ -7,7 +7,7 @@ import { Select } from '@/components/Select';
 import { promptLibraryApi, type PromptVersion } from '@/lib/builderforceApi';
 import { diffLines, diffStat, sideBySide, type DiffRow } from '@/lib/textDiff';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * PromptVersionDiff — version history + line diff for a prompt, in the canonical
  * SlideOutPanel. Lists every version and shows a unified OR side-by-side line
@@ -48,7 +48,7 @@ export function PromptVersionDiff({ promptId, open, onClose }: PromptVersionDiff
         setFromV(prev);
         setToV(last);
       })
-      .catch((e: Error) => alive && setError(e.message));
+      .catch((e: Error) => alive && setError(faultMessage(e)));
     return () => { alive = false; };
   }, [open, promptId]);
 

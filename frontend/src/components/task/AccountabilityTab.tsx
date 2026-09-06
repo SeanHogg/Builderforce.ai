@@ -11,7 +11,7 @@ import {
   tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle,
 } from '@/components/dataTableStyles';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * "Sign-off & Accountability" tab of the ticket detail — the operator's headline
  * surface (PRD-coordinated-role-participation.md §5.9). For every required role it
@@ -140,7 +140,7 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
     setLoading(true);
     kanbanApi.accountability(taskId)
       .then((r) => { setReport(r); setError(null); })
-      .catch((e) => setError((e as Error).message))
+      .catch((e) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, [taskId]);
 
@@ -160,13 +160,13 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
       await kanbanApi.assessResource(taskId, { roleKey: addRole, note: addNote || undefined });
       setAddRole(''); setAddNote('');
       load();
-    } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+    } catch (e) { setError(faultMessage(e)); } finally { setBusy(false); }
   }, [taskId, addRole, addNote, load]);
 
   const materialize = useCallback(async () => {
     setBusy(true);
     try { await kanbanApi.materializeParticipants(taskId); load(); }
-    catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+    catch (e) { setError(faultMessage(e)); } finally { setBusy(false); }
   }, [taskId, load]);
 
   /**
@@ -189,7 +189,7 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
       setSigning(null); setSummary(''); setVerdict('approved');
       setError(null);
       load();
-    } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+    } catch (e) { setError(faultMessage(e)); } finally { setBusy(false); }
   }, [taskId, signing, verdict, summary, load]);
 
   const verdictLabel = (v: string) => t.has(`verdict.${v}` as never) ? t(`verdict.${v}` as never) : v;

@@ -16,7 +16,7 @@ import {
 } from '@/lib/canvasPreviewReport';
 import { CanvasDeviceFrame } from './CanvasDeviceFrame';
 import { useCanvasPreviewLog } from './useCanvasPreviewLog';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * A live web page, framed as a panel on the board.
  *
@@ -183,7 +183,7 @@ export function CanvasWebPage({ data, onEdit }: CanvasWebPageProps) {
         // the page may still render for the user's own browser (a private
         // network host the gateway cannot reach is the common case). Record the
         // attempt so it is not retried on every render, and say what happened.
-        setError(cause instanceof Error ? cause.message : translate('probeFailed'));
+        setError(faultMessage(cause, translate('probeFailed')));
         // `httpStatus: 0` records "the gateway never got an answer" — distinct from a
         // status it did get, and from the absence of a probe entirely.
         live.current.onEdit?.({ frameCheckedUrl: url, frameable: true, frameBlockedBy: null, httpStatus: 0 });

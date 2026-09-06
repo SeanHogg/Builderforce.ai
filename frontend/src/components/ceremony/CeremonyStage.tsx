@@ -26,7 +26,7 @@ import { AssignedWorkPanel } from './AssignedWorkPanel';
 import { DRAG_TASK, memberAssigneePatch, memberKey, taskBelongsToMember, type CeremonyMember } from './types';
 import { CeremonyPickProvider, placeTargetProps, useCeremonyPick } from './pickToPlace';
 import { InlineNameForm } from '@/components/ui/InlineNameForm';
-
+import { faultMessage } from '@/lib/apiClient';
 export type CeremonyMode = 'standup' | 'planning';
 
 /** Active-work statuses that count toward a member's load (power meter). */
@@ -149,7 +149,7 @@ function CeremonyStageInner({
         prev || sprintsData.find((s) => s.status === 'active')?.id || sprintsData[0]?.id || '',
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errorLoad'));
+      setError(faultMessage(e, t('errorLoad')));
     } finally {
       setLoading(false);
     }
@@ -301,7 +301,7 @@ function CeremonyStageInner({
         setTasks((prev) => prev.map((t) => (t.id === id ? updated : t)));
         setDrawerTask((d) => (d?.id === id ? updated : d));
       } catch (e) {
-        setError(e instanceof Error ? e.message : t('errorUpdate'));
+        setError(faultMessage(e, t('errorUpdate')));
       }
     },
     [t],
@@ -324,7 +324,7 @@ function CeremonyStageInner({
       const epic = await tasksApi.create({ projectId, title, taskType: 'epic' });
       setTasks((prev) => [epic, ...prev]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errorCreateEpic'));
+      setError(faultMessage(e, t('errorCreateEpic')));
     }
   }, [projectId, t]);
 
@@ -336,7 +336,7 @@ function CeremonyStageInner({
       setActiveSprintId(sprint.id);
       setNamingSprint(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errorCreateSprint'));
+      setError(faultMessage(e, t('errorCreateSprint')));
     }
   }, [projectId, t]);
 
@@ -352,7 +352,7 @@ function CeremonyStageInner({
       const parts = members.map((m) => ({ kind: m.kind, ref: m.ref, name: m.name }));
       applySession(await ceremonySessionsApi.start(projectId, mode, parts));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errorStart'));
+      setError(faultMessage(e, t('errorStart')));
     } finally {
       setSessionBusy(false);
     }
@@ -364,7 +364,7 @@ function CeremonyStageInner({
     try {
       applySession(await ceremonySessionsApi.advanceTurn(session.id, nextTurn));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errorAdvance'));
+      setError(faultMessage(e, t('errorAdvance')));
     } finally {
       setSessionBusy(false);
     }
@@ -386,7 +386,7 @@ function CeremonyStageInner({
         ? await ceremonySessionsApi.pauseTurn(session.id)
         : await ceremonySessionsApi.resumeTurn(session.id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errorAdvance'));
+      setError(faultMessage(e, t('errorAdvance')));
     } finally {
       setSessionBusy(false);
     }
@@ -405,7 +405,7 @@ function CeremonyStageInner({
       applySession(await ceremonySessionsApi.complete(session.id));
       reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errorComplete'));
+      setError(faultMessage(e, t('errorComplete')));
     } finally {
       setSessionBusy(false);
     }

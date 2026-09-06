@@ -21,7 +21,7 @@ import { DonutChart } from '@/components/charts/DonutChart';
 import { colorAt } from '@/components/charts/chartColors';
 import { workforcePlanApi, type WorkforcePlan, type WorkforcePlanMember } from '@/lib/personaCadenceApi';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 const HUMAN_COLOR = colorAt(1);
@@ -57,7 +57,7 @@ export function WorkforcePlanView() {
     let alive = true;
     workforcePlanApi.get()
       .then((p) => { if (alive) setPlan(p); })
-      .catch((e) => { if (alive) setError(e instanceof Error ? e.message : String(e)); });
+      .catch((e) => { if (alive) setError(faultMessage(e)); });
     return () => { alive = false; };
   }, []);
 

@@ -6,7 +6,7 @@ import { useToast } from './ToastProvider';
 import { reportProductError, REPORT_ERROR_EVENT, type ReportErrorPrefill } from '@/lib/reportError';
 import { SlideOutPanel } from './SlideOutPanel';
 import { Select } from './Select';
-
+import { faultMessage } from '@/lib/apiClient';
 type OpenReporter = (prefill?: ReportErrorPrefill) => void;
 
 /**
@@ -60,7 +60,7 @@ export function ReportErrorProvider({ children }: { children: React.ReactNode })
       toast.success(t('reported'));
       setOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('failed'));
+      setError(faultMessage(err, t('failed')));
     } finally {
       setSubmitting(false);
     }

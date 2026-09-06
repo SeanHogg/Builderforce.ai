@@ -24,7 +24,7 @@ import {
   profileHasSignal,
   type PsychometricProfile,
 } from '@/lib/psychometric';
-
+import { faultText } from '@/lib/apiClient';
 type Tab = 'sliders' | 'questionnaire' | 'import';
 
 /** Plan slug → display name (brand proper nouns; not translated). */
@@ -111,7 +111,7 @@ export default function PsychometricEditor({ value, onChange, forceUnlocked = fa
       }
       setNotice(t('noticeScored'));
     } catch (e) {
-      setNotice(e instanceof Error ? e.message : t('noticeScoreFailed'));
+      setNotice(faultText(e, t('noticeScoreFailed')));
     } finally {
       setBusy(false);
     }

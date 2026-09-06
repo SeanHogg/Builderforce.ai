@@ -15,7 +15,7 @@ import { useTranslations } from 'next-intl';
 import { getBrainCapability, extractCsv, exportFilenameStem } from '@/lib/brain';
 import { exportDocx, exportPptx, exportCsv } from '@/lib/exportApi';
 import { Icon } from '@/components/ui/Icon';
-
+import { faultText } from '@/lib/apiClient';
 export interface BrainMessageExportProps {
   /** The chat's capability id (null = no capability picked). */
   capability?: string | null;
@@ -50,7 +50,7 @@ export function BrainMessageExport({ capability, content, title }: BrainMessageE
       else await exportPptx(content, name);
       setDownloaded(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('export.failed'));
+      setError(faultText(e, t('export.failed')));
     } finally {
       setBusy(false);
     }

@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { knowledgeApi, type CreateDocInput } from '@/lib/knowledgeApi';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * One place that turns "I picked a template" into a created draft + a jump into
  * the editor. Shared by the Knowledge home's gap list and the /knowledge/new
@@ -26,7 +26,7 @@ export function useCreateKnowledge(projectId: number | null = null) {
         const doc = await knowledgeApi.create({ projectId, ...payload });
         router.push(`/knowledge/${doc.id}`);
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed to create document');
+        setError(faultMessage(e, 'Failed to create document'));
         setCreatingKey(null);
       }
     },

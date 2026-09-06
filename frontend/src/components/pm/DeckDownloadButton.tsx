@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { decksApi, type DeckTemplateSummary } from '@/lib/builderforceApi';
 import { Select } from '@/components/Select';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Board-deck download — the dedicated entry point (paired with the Brain
  * `generate_deck` tool). Picks a template (the built-in R&D board deck or
@@ -58,7 +58,7 @@ export function DeckDownloadButton() {
       const tmpl = templates.find((x) => x.id === templateId);
       setWarnings(await decksApi.download({ templateId: templateId || undefined, quarter, mode: tmpl?.fillable ? 'fill' : 'generative' }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('error'));
+      setError(faultMessage(e, t('error')));
     } finally {
       setBusy(false);
     }

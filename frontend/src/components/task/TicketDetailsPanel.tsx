@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { tasksApi, type Task } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 export interface TicketDetailsPanelProps {
   taskId: number | null;
   onClose: () => void;
@@ -30,7 +30,7 @@ export function TicketDetailsPanel({ taskId, onClose }: TicketDetailsPanelProps)
     void tasksApi.get(taskId).then(
       (result) => { if (active) setTask(result); },
       (reason: unknown) => {
-        if (active) setError(reason instanceof Error ? reason.message : t('loading'));
+        if (active) setError(faultMessage(reason, t('loading')));
       },
     ).finally(() => { if (active) setLoading(false); });
 

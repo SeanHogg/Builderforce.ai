@@ -21,7 +21,7 @@ import { safeRedirectPath } from '@/lib/safeRedirect';
 import { getRetainedDiscountCode, retainDiscountCode } from '@/lib/discountCode';
 import { useLegalDocs } from '@/components/legal/useLegalDocs';
 import LegalDocModal, { type LegalDocType } from '@/components/legal/LegalDocModal';
-
+import { faultMessage } from '@/lib/apiClient';
 export default function RegisterPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -81,7 +81,7 @@ export default function RegisterPageClient() {
         router.push(destination);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : tr('registrationFailed'));
+      setError(faultMessage(err, tr('registrationFailed')));
     } finally {
       setIsLoading(false);
     }

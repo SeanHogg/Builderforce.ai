@@ -42,7 +42,7 @@ import AgentExecutionControl from '@/components/settings/AgentExecutionControl';
 import type { PsychometricProfile } from '@/lib/psychometric';
 import { clearPersonalityBlockCache } from '@/lib/usePersonalityBlock';
 import NavigationFeaturesSettings from '@/components/settings/NavigationFeaturesSettings';
-
+import { faultMessage, faultText } from '@/lib/apiClient';
 /**
  * Self-gating nav link to the API Keys page. Per product rule we don't hide the
  * link from non-owners — RoleGate shows it disabled with a "Requires Owner role"
@@ -122,7 +122,7 @@ export default function SettingsClient() {
     if (!token) { setLoadingAccounts(false); return; }
     getLinkedAccounts(token)
       .then(({ accounts, hasPassword: hp }) => { setLinkedAccounts(accounts); setHasPassword(hp); })
-      .catch((e: Error) => setAccountsError(e.message))
+      .catch((e: Error) => setAccountsError(faultMessage(e)))
       .finally(() => setLoadingAccounts(false));
     getMe(token)
       .then(({ psychometric }) => setPersonality(psychometric ?? undefined))
@@ -150,7 +150,7 @@ export default function SettingsClient() {
       await unlinkProvider(token, provider);
       setLinkedAccounts((prev) => prev.filter((a) => a.provider !== provider));
     } catch (e) {
-      setAccountsError(e instanceof Error ? e.message : 'Failed to disconnect');
+      setAccountsError(faultMessage(e, 'Failed to disconnect'));
     } finally {
       setUnlinking(null);
     }
@@ -169,7 +169,7 @@ export default function SettingsClient() {
       clearPersonalityBlockCache();
       setPersonalityNotice(t('personalitySaved'));
     } catch (e) {
-      setPersonalityNotice(e instanceof Error ? e.message : t('personalitySaveFailed'));
+      setPersonalityNotice(faultText(e, t('personalitySaveFailed')));
     } finally {
       setPersonalitySaving(false);
     }

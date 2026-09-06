@@ -102,7 +102,7 @@ export function WhyLadderSection({
       setDraft(null);
       onSaved?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setError(faultMessage(e, 'Save failed'));
     } finally {
       setBusy(false);
     }

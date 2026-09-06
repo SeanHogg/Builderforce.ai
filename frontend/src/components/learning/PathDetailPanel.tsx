@@ -9,7 +9,7 @@ import {
 } from '@/lib/learningApi';
 import { PathProgressMeter } from './PathProgressMeter';
 import styles from './learning.module.css';
-
+import { faultText } from '@/lib/apiClient';
 /**
  * One path: the courses it sequences, in order, and what a learner has done with it.
  *
@@ -49,7 +49,7 @@ export function PathDetailPanel({
         setCatalogue(courses.courses);
         setError('');
       })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : t('detail.failed')));
+      .catch((cause) => setError(faultText(cause, t('detail.failed'))));
   }, [pathId, t]);
 
   useEffect(() => { load(); }, [load]);
@@ -91,7 +91,7 @@ export function PathDetailPanel({
     setBusy(true);
     work
       .then(() => { setError(''); load(); onChanged?.(); })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : fallback))
+      .catch((cause) => setError(faultText(cause, fallback)))
       .finally(() => setBusy(false));
   };
 
@@ -99,7 +99,7 @@ export function PathDetailPanel({
     setBusy(true);
     learningApi.enroll(pathId)
       .then((res) => { setProgress(res.progress); setError(''); })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : t('detail.enrollFailed')))
+      .catch((cause) => setError(faultText(cause, t('detail.enrollFailed'))))
       .finally(() => setBusy(false));
   };
 

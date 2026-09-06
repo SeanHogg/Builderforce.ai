@@ -31,8 +31,9 @@ import {
 import { ConsolidateProjectsPanel } from './ConsolidateProjectsPanel';
 import {
   buttonStyle, cardStyle, emptyStyle, errorStyle, gapChipStyle, inputStyle, labelStyle,
-  listRowStyle, listStyle, message, mutedStyle, primaryButtonStyle, rowStyle, sectionStyle,
+  listRowStyle, listStyle, mutedStyle, primaryButtonStyle, rowStyle, sectionStyle,
 } from './investorStyles';
+import { faultMessage } from '@/lib/apiClient';
 
 export function CompaniesView({
   companies,
@@ -79,7 +80,7 @@ export function CompaniesView({
         setStage('');
         setSector('');
       })
-      .catch((cause: unknown) => setError(message(cause, t('error.createCompany'))))
+      .catch((cause: unknown) => setError(faultMessage(cause, t('error.createCompany'))))
       .finally(() => setBusy(false));
   }, [name, onCreated, sector, stage, t, website]);
 
@@ -215,7 +216,7 @@ function CompanyWork({
     investorApi.projects
       .attach(companyId, projectId)
       .then(() => { setChosen(''); onChanged(); })
-      .catch((cause: unknown) => setError(message(cause, t('error.attachProject'))))
+      .catch((cause: unknown) => setError(faultMessage(cause, t('error.attachProject'))))
       .finally(() => setBusy(false));
   }, [chosen, companyId, onChanged, t]);
 
@@ -225,7 +226,7 @@ function CompanyWork({
     investorApi.projects
       .detach(companyId, projectId)
       .then(onChanged)
-      .catch((cause: unknown) => setError(message(cause, t('error.detachProject'))))
+      .catch((cause: unknown) => setError(faultMessage(cause, t('error.detachProject'))))
       .finally(() => setBusy(false));
   }, [companyId, onChanged, t]);
 

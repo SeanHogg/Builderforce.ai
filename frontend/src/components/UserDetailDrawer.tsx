@@ -15,7 +15,7 @@ import {
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useToast } from '@/components/ToastProvider';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultText } from '@/lib/apiClient';
 type DrawerTab = 'profile' | 'permissions' | 'sessions' | 'security' | 'access';
 
 interface Props {
@@ -68,7 +68,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
           setAdminAccess(r.sessions);
         }
       } catch (e) {
-        setErrorMsg(e instanceof Error ? e.message : String(e));
+        setErrorMsg(faultText(e));
       } finally {
         setLoading(false);
       }
@@ -89,7 +89,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
       setErrorMsg('');
       toast.success(t('users.drawer.forceLogoutDone'));
     } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : String(e));
+      setErrorMsg(faultText(e));
     } finally {
       setForceLogoutBusy(false);
     }
@@ -103,7 +103,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
       await adminApi.resetPassword(user.id);
       toast.success(t('users.drawer.resetPasswordDone'));
     } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : String(e));
+      setErrorMsg(faultText(e));
     } finally {
       setResetPwBusy(false);
     }
@@ -117,7 +117,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
       await adminApi.setUserStatus(user.id, suspend);
       toast.success(suspend ? t('users.drawer.suspendDone') : t('users.drawer.unsuspendDone'));
     } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : String(e));
+      setErrorMsg(faultText(e));
     } finally {
       setStatusBusy(false);
     }
@@ -392,7 +392,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                               .securityRevokeAllSessions(selectedTenantId, user.id)
                               .then(() => adminApi.securityDetails(selectedTenantId, user.id))
                               .then(setSecDetails)
-                              .catch((e) => setErrorMsg(e instanceof Error ? e.message : String(e)))
+                              .catch((e) => setErrorMsg(faultText(e)))
                               .finally(() => setLoading(false));
                           }}
                         >

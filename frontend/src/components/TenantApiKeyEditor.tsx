@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { AllowedOriginsField } from '@/components/AllowedOriginsField';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Inline editor for an existing tenant API key. Shared between the owner
  * self-service flow (`/settings/api-keys`) and the superadmin mint-on-behalf
@@ -55,7 +55,7 @@ export function TenantApiKeyEditor({ initialName, initialAllowedOrigins, onSave,
     try {
       await onSave(patch);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setError(faultMessage(e, 'Save failed'));
     }
   };
 

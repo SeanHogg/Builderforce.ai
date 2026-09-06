@@ -17,7 +17,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui';
 import { taxApi, type TaxProfile, type TaxProfileOptions } from '@/lib/taxApi';
-
+import { faultText } from '@/lib/apiClient';
 const fieldLabel: React.CSSProperties = {
   fontSize: 'var(--font-size-field-label)', fontWeight: 600, color: 'var(--text-secondary)',
 };
@@ -83,7 +83,7 @@ export function TaxProfileForm() {
       setProfile(p);
       setDraft(draftFrom(p));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('loadFailed'));
+      setError(faultText(cause, t('loadFailed')));
     } finally {
       setLoading(false);
     }
@@ -118,7 +118,7 @@ export function TaxProfileForm() {
       setDraft(draftFrom(next));
       setSaved(true);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('saveFailed'));
+      setError(faultText(cause, t('saveFailed')));
     } finally {
       setBusy(false);
     }

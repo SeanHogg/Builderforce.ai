@@ -6,7 +6,7 @@ import { Icon } from '@/components/ui/Icon';
 import { RoleGate } from '@/components/RoleGate';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { pmoApi, type Holiday, type WorkingCalendarSettings as Settings } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * The workspace's WORKING CALENDAR — which weekdays this workspace works, and the
  * days nobody does.
@@ -41,7 +41,7 @@ export function WorkingCalendarSettings() {
     try {
       setSettings(await pmoApi.workingCalendar());
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     }
   }, []);
 
@@ -60,7 +60,7 @@ export function WorkingCalendarSettings() {
       setSettings(written);
       setSaved(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     } finally {
       setBusy(false);
     }

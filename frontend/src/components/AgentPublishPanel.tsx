@@ -11,7 +11,7 @@ import ModelApiSamples from '@/components/ModelApiSamples';
 import { MambaEngine } from '@/lib/mamba-engine';
 import { downloadJson, downloadText } from '@/lib/download';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
-
+import { faultMessage } from '@/lib/apiClient';
 const INSTALL_COMMAND = 'iwr -useb https://builderforce.ai/install.ps1 | iex';
 
 interface AgentPublishPanelProps {
@@ -86,7 +86,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
       const result = await ingestAgentKnowledge(publishedId, { text: knowledgeText });
       setIngestResult(result);
     } catch (err) {
-      setIngestError(err instanceof Error ? err.message : String(err));
+      setIngestError(faultMessage(err));
     } finally {
       setIsIngesting(false);
     }
@@ -195,7 +195,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
       });
       setPublishedId(agent.id);
     } catch (e) {
-      setPublishError(e instanceof Error ? e.message : tp('publishFailedFallback'));
+      setPublishError(faultMessage(e, tp('publishFailedFallback')));
     } finally {
       setIsPublishing(false);
     }

@@ -165,7 +165,7 @@ export function ContributorsView() {
       await analyticsApi.syncAgents();
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('syncFailed'));
+      setError(faultMessage(e, t('syncFailed')));
     } finally {
       setSyncing(false);
     }

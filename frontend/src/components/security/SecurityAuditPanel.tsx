@@ -13,7 +13,7 @@ import {
   type SecurityAuditFinding,
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -53,7 +53,7 @@ export function SecurityAuditPanel() {
     setLoading(true);
     securityAgentApi.listAudits()
       .then(setAudits)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: Error) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   };
   useEffect(() => { load(); }, []);
@@ -64,7 +64,7 @@ export function SecurityAuditPanel() {
       await securityAgentApi.runAudit();
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to start audit');
+      setError(faultMessage(e, 'Failed to start audit'));
     } finally {
       setRunning(false);
     }
@@ -78,7 +78,7 @@ export function SecurityAuditPanel() {
       const res = await securityAgentApi.getAudit(id);
       setFindings((prev) => ({ ...prev, [id]: res.findings }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load findings');
+      setError(faultMessage(e, 'Failed to load findings'));
     }
   };
 

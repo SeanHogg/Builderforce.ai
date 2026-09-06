@@ -11,7 +11,7 @@ import {
   managerApi, brain,
   type ManagerChatHandle, type BrainMessage,
 } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * ASK THE MANAGER — the conversation where a person holds the AI Manager to account.
  *
@@ -101,7 +101,7 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
       // than loading a conversation it will not show.
       if (!compact) setMessages(await brain.getMessages(h.chatId, 60));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('error'));
+      setError(faultMessage(e, t('error')));
     } finally {
       setLoading(false);
     }
@@ -141,7 +141,7 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
       });
       setMessages((prev) => [...prev, reply]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('error'));
+      setError(faultMessage(e, t('error')));
       // Re-read rather than trusting the optimistic append: the question may well have
       // persisted even though the reply failed, and dropping it would show the user a
       // conversation that lost their message.

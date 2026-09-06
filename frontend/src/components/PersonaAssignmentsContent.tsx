@@ -7,7 +7,7 @@ import {
 } from '@/lib/builderforceApi';
 import { BUILTIN_PERSONAS, type Persona } from '@/lib/marketplaceData';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 export interface PersonaAssignmentsContentProps {
   scope: 'tenant' | 'host' | 'project' | 'task' | 'agent';
   scopeId: number;
@@ -30,7 +30,7 @@ export function PersonaAssignmentsContent({ scope, scopeId, className, style }: 
       const list = await artifactAssignments.list(scope, scopeId, 'persona').catch(() => []);
       setAssigned(list);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load');
+      setError(faultMessage(e, 'Failed to load'));
     } finally {
       setLoading(false);
     }
@@ -46,7 +46,7 @@ export function PersonaAssignmentsContent({ scope, scopeId, className, style }: 
       await artifactAssignments.assign('persona', slug, scope, scopeId);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Assign failed');
+      setError(faultMessage(e, 'Assign failed'));
     }
   };
 
@@ -56,7 +56,7 @@ export function PersonaAssignmentsContent({ scope, scopeId, className, style }: 
       await artifactAssignments.unassign('persona', slug, scope, scopeId);
       setAssigned((prev) => prev.filter((a) => a.artifactSlug !== slug));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unassign failed');
+      setError(faultMessage(e, 'Unassign failed'));
     }
   };
 

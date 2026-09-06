@@ -35,7 +35,7 @@ import {
   type PartnerStanding,
   type PublisherEarnings,
 } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -126,7 +126,7 @@ export function PublisherEarningsPanel({ busy, onRun }: Props) {
         setStanding(s);
       })
       .catch((e: unknown) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : t('loadFailed'));
+        if (!cancelled) setError(faultMessage(e, t('loadFailed')));
       });
     return () => { cancelled = true; };
   }, [t]);

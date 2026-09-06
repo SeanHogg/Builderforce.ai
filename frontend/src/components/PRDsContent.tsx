@@ -12,7 +12,7 @@ import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { PrdCreateModal } from './prd/PrdCreateModal';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { tableWrapStyle, tableStyle } from './dataTableStyles';
-
+import { faultMessage } from '@/lib/apiClient';
 export interface PRDsContentProps {
   projectId: number;
   projectName: string;
@@ -66,7 +66,7 @@ export function PRDsContent({
       const list = await specsApi.list(projectId);
       setSpecs(list);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('loadFailed'));
+      setError(faultMessage(e, t('loadFailed')));
     } finally {
       setIsLoading(false);
     }
@@ -91,7 +91,7 @@ export function PRDsContent({
       setSpecs((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
       setSelectedSpec(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('saveFailed'));
+      setError(faultMessage(e, t('saveFailed')));
     } finally {
       setIsSaving(false);
     }
@@ -105,7 +105,7 @@ export function PRDsContent({
       setDeleteSpec(null);
       if (selectedSpec?.id === deleteSpec.id) setSelectedSpec(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('deleteFailed'));
+      setError(faultMessage(e, t('deleteFailed')));
     }
   };
 

@@ -70,7 +70,7 @@ export function ContributorConsolidation() {
   const doPreview = async (s: number, tgt: number) => {
     setError(null);
     try { setPreview(await contributorsApi.mergePreview(s, tgt)); }
-    catch (e) { setError(e instanceof Error ? e.message : t('previewFailed')); }
+    catch (e) { setError(faultMessage(e, t('previewFailed'))); }
   };
 
   const doMerge = async (s: number, tgt: number) => {
@@ -79,21 +79,21 @@ export function ContributorConsolidation() {
       await contributorsApi.merge(s, tgt);
       setPreview(null); setSourceId(''); setTargetId('');
       load();
-    } catch (e) { setError(e instanceof Error ? e.message : t('mergeFailed')); }
+    } catch (e) { setError(faultMessage(e, t('mergeFailed'))); }
     finally { setBusy(false); }
   };
 
   const doRevert = async (mergeId: string) => {
     setBusy(true); setError(null);
     try { await contributorsApi.revertMerge(mergeId); load(); }
-    catch (e) { setError(e instanceof Error ? e.message : t('revertFailed')); }
+    catch (e) { setError(faultMessage(e, t('revertFailed'))); }
     finally { setBusy(false); }
   };
 
   const doLink = async (contributorId: number, userId: string | null) => {
     setBusy(true); setError(null);
     try { await contributorsApi.linkUser(contributorId, userId); load(); }
-    catch (e) { setError(e instanceof Error ? e.message : t('linkFailed')); }
+    catch (e) { setError(faultMessage(e, t('linkFailed'))); }
     finally { setBusy(false); }
   };
 

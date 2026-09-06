@@ -10,7 +10,7 @@ import {
   tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle,
 } from '@/components/dataTableStyles';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * The AI Manager's STUCK-TICKET REGISTER.
  *
@@ -81,7 +81,7 @@ export function ManagerStallRegister({ projectId }: ManagerStallRegisterProps) {
     try {
       setData(await managerApi.stalls(projectId));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('error'));
+      setError(faultMessage(e, t('error')));
     } finally {
       setLoading(false);
     }

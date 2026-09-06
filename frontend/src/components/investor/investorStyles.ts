@@ -151,6 +151,3 @@ export const tokenStyle: CSSProperties = {
   background: 'var(--surface-sunken)',
   color: 'var(--text-primary)',
 };
-
-export const message = (error: unknown, fallback: string): string =>
-  (error instanceof Error && error.message ? error.message : fallback);

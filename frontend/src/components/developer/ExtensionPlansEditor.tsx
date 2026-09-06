@@ -30,7 +30,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { developerApi, type ExtensionPlan, type ExtensionPricing } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 type Props = {
   packageId: string;
   /** The publisher's trust tier. Only `identity_verified` may charge. */
@@ -138,7 +138,7 @@ export function ExtensionPlansEditor({ packageId, publisherState, busy, onRun }:
         setDrafts(p.plans.map(toDraft));
       })
       .catch((e: unknown) => {
-        if (!cancelled) setLoadError(e instanceof Error ? e.message : t('loadFailed'));
+        if (!cancelled) setLoadError(faultMessage(e, t('loadFailed')));
       });
     return () => { cancelled = true; };
   }, [packageId, t]);

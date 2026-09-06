@@ -13,7 +13,7 @@ import {
   type SecurityAccessConfig,
   type SecurityAudiences,
 } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -47,7 +47,7 @@ export function SecurityTicketAccessCard() {
         setUserIds((c.allowUserIds ?? []).join('\n'));
         setAgentRefs((c.allowAgentRefs ?? []).join('\n'));
       })
-      .catch((e: Error) => setError(e.message))
+      .catch((e: Error) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, []);
 
@@ -71,7 +71,7 @@ export function SecurityTicketAccessCard() {
       setAgentRefs((next.allowAgentRefs ?? []).join('\n'));
       setSaved(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setError(faultMessage(e, 'Save failed'));
     } finally {
       setSaving(false);
     }

@@ -6,7 +6,7 @@ import { useOptionalAuth } from '@/lib/AuthContext';
 import { RoleGate } from '@/components/RoleGate';
 import { learningApi, type LearningPathSummary } from '@/lib/learningApi';
 import styles from './learning.module.css';
-
+import { faultText } from '@/lib/apiClient';
 /**
  * The learning paths in this workspace, and the box that adds one.
  *
@@ -43,7 +43,7 @@ export function PathDirectory({
   const load = useCallback(() => {
     learningApi.paths()
       .then((res) => { setPaths(res.paths); setError(''); })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : t('paths.failed')));
+      .catch((cause) => setError(faultText(cause, t('paths.failed'))));
   }, [t]);
 
   useEffect(() => {
@@ -62,7 +62,7 @@ export function PathDirectory({
         setPaths((rows) => [...rows, res.path].sort((a, b) => a.title.localeCompare(b.title)));
         onSelect?.(res.path);
       })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : t('paths.createFailed')))
+      .catch((cause) => setError(faultText(cause, t('paths.createFailed'))))
       .finally(() => setBusy(false));
   }, [title, onSelect, t]);
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { reposApi, type ProjectRepository, type TaskRepoBinding } from '@/lib/builderforceApi';
 import { RoleGate } from '@/components/RoleGate';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * The ticket's REPO SET (migration 0956).
  *
@@ -59,7 +59,7 @@ export function TicketRepoSet({ taskId, projectId }: { taskId: number; projectId
       const updated = await reposApi.setTaskRepoBindings(taskId, [...next]);
       setBindings(updated.bindings);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     } finally {
       setSaving(false);
     }

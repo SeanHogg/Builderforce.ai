@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { membersApi, type MemberScorecard, type MemberProfile } from '@/lib/builderforceApi';
 import { formatHours } from '@/lib/duration';
 import type { CeremonyMember } from './types';
-
+import { faultMessage } from '@/lib/apiClient';
 /** One labelled stat tile; renders "No data yet" when the value is null. */
 function Tile({ label, value, hint }: { label: string; value: string | number | null; hint?: string }) {
   const empty = value == null || value === '';
@@ -43,7 +43,7 @@ export function ScorecardPanel({ member }: { member: CeremonyMember }) {
         setCard(metrics.find((m) => m.memberKind === member.kind && m.memberRef === member.ref) ?? null);
         setProfile(profiles.find((p) => p.memberKind === member.kind && p.memberRef === member.ref) ?? null);
       })
-      .catch((e) => { if (live) setError(e instanceof Error ? e.message : 'Failed to load'); })
+      .catch((e) => { if (live) setError(faultMessage(e, 'Failed to load')); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, [member.kind, member.ref]);

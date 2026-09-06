@@ -35,7 +35,7 @@ import {
   type MailboxConnection,
   type MailboxProviderInfo,
 } from '@/lib/mailboxApi';
-
+import { faultText } from '@/lib/apiClient';
 /** Recipients as the object stores them (a list) and as the user edits them (a line). */
 function recipientList(value: unknown): string[] {
   if (Array.isArray(value)) return value.map((entry) => String(entry).trim()).filter(Boolean);
@@ -94,7 +94,7 @@ export function CanvasEmailComposer({ data, editable, persistence, onChange }: {
       const { authUrl } = await mailboxApi.connect(provider.name, window.location.pathname);
       window.location.href = authUrl;
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : t('connectFailed'));
+      setNotice(faultText(error, t('connectFailed')));
       setBusy(false);
     }
   }, [t]);
@@ -119,7 +119,7 @@ export function CanvasEmailComposer({ data, editable, persistence, onChange }: {
       });
       setNotice(t('sent'));
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : t('sendFailed'));
+      setNotice(faultText(error, t('sendFailed')));
     } finally {
       setBusy(false);
     }

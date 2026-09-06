@@ -10,7 +10,7 @@ import {
   type AgentExecutionScope,
 } from '@/lib/builderforceApi';
 import { loadAgentPool, AGENT_KIND_LABEL, type PoolAgent } from '@/lib/agentPool';
-
+import { faultMessage } from '@/lib/apiClient';
 export interface AgentAssignmentPanelProps {
   /** Which platform aspect agents are being assigned to. */
   scope: AgentAssignmentScope;
@@ -57,7 +57,7 @@ export function AgentAssignmentPanel({
       setAssignments(list);
       setPool(poolAgents);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load assignments');
+      setError(faultMessage(e, 'Failed to load assignments'));
     } finally {
       setLoading(false);
     }
@@ -91,7 +91,7 @@ export function AgentAssignmentPanel({
       });
       setAssignments((prev) => [...prev.filter((a) => a.id !== created.id), created]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to assign');
+      setError(faultMessage(e, 'Failed to assign'));
     } finally {
       setBusy(false);
     }
@@ -109,7 +109,7 @@ export function AgentAssignmentPanel({
       });
       setAssignments((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to update');
+      setError(faultMessage(e, 'Failed to update'));
     } finally {
       setBusy(false);
     }
@@ -122,7 +122,7 @@ export function AgentAssignmentPanel({
       await agentAssignmentsApi.remove(a.id);
       setAssignments((prev) => prev.filter((x) => x.id !== a.id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to remove');
+      setError(faultMessage(e, 'Failed to remove'));
     } finally {
       setBusy(false);
     }

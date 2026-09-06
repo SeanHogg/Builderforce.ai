@@ -41,7 +41,7 @@ export default function TalentDetailClient() {
       await hireFreelancer({ freelancerUserId: profile.userId, status });
       setHireState(status === 'active' ? 'hired' : 'invited');
     } catch (e) {
-      setHireError(e instanceof Error ? e.message : t('hireError'));
+      setHireError(faultMessage(e, t('hireError')));
       setHireState('idle');
     }
   };

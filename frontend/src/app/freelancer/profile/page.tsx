@@ -15,7 +15,7 @@ import {
 import { getMyFreelancerProfile, updateMyFreelancerProfile, checkMySlug, type FreelancerProfile, type MyResume, type ResumeSuggestions, type SlugCheck } from '@/lib/freelance/talentProfile';
 import { ProfileResumePanel } from '@/components/freelance/ProfileResumePanel';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
-
+import { faultMessage } from '@/lib/apiClient';
 const DISCIPLINES = TALENT_DISCIPLINES;
 const AVAILABILITIES = TALENT_AVAILABILITIES;
 const SEEKING_MODES = TALENT_SEEKING_MODES;
@@ -59,7 +59,7 @@ export default function FreelancerProfilePage() {
       setSalaryMinText(p.desiredSalaryMinCents != null ? (p.desiredSalaryMinCents / 100).toString() : '');
       setSalaryMaxText(p.desiredSalaryMaxCents != null ? (p.desiredSalaryMaxCents / 100).toString() : '');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load');
+      setError(faultMessage(e, 'Failed to load'));
     } finally {
       setLoading(false);
     }
@@ -116,7 +116,7 @@ export default function FreelancerProfilePage() {
       // Reflect the persisted name/slug locally without a full reload.
       setProfile((p) => (p ? { ...p, displayName: nameText.trim() || null, slug: trimmedSlug || null, skills: currentSkills } : p));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save');
+      setError(faultMessage(e, 'Failed to save'));
     } finally {
       setSaving(false);
     }

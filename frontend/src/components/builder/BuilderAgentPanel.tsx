@@ -6,7 +6,7 @@ import { tasksApi, agentHosts as agentHostsApi, type Task, type AgentHost } from
 import { RunAgentControl } from '@/components/task/RunAgentControl';
 import { AgentExecutionPanel } from '@/components/agent/AgentExecutionPanel';
 import { ProjectEvermindPanel } from '@/components/builder/ProjectEvermindPanel';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * BuilderAgentPanel — run a cloud agent / AI prompt against this project from inside
  * the Designer, exactly like the VS Code plugin: pick (or create from a prompt) a
@@ -46,7 +46,7 @@ export function BuilderAgentPanel({ projectId }: { projectId: number }) {
       setTasks((prev) => [task, ...prev]);
       setSelectedId(task.id);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create task');
+      setError(faultMessage(e, 'Failed to create task'));
     } finally {
       setCreating(false);
     }

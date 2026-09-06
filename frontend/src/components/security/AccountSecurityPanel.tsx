@@ -20,7 +20,7 @@ import {
 import { SessionList } from '@/components/security/SessionList';
 import PasskeysPanel from '@/components/security/PasskeysPanel';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -47,7 +47,7 @@ export default function AccountSecurityPanel() {
   useEffect(() => {
     mySessionsApi.list()
       .then(setMySessions)
-      .catch((e: Error) => setMyError(e.message))
+      .catch((e: Error) => setMyError(faultMessage(e)))
       .finally(() => setLoadingMine(false));
     myAdminAccessApi.list()
       .then(setAdminAccess)
@@ -62,7 +62,7 @@ export default function AccountSecurityPanel() {
         ids.includes(s.id) ? { ...s, isActive: false, revokedAt: new Date().toISOString() } : s
       ));
     } catch (e) {
-      setMyError(e instanceof Error ? e.message : 'Revoke failed');
+      setMyError(faultMessage(e, 'Revoke failed'));
     }
   };
 

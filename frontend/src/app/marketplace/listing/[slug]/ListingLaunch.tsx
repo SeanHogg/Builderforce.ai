@@ -36,7 +36,7 @@ import {
   type CreationListing,
   type LaunchPayload,
 } from '@/lib/creationListings';
-
+import { faultMessage } from '@/lib/apiClient';
 export function ListingLaunch({ listing }: { listing: CreationListing }) {
   const t = useTranslations('marketplaceListing');
   const router = useRouter();
@@ -53,7 +53,7 @@ export function ListingLaunch({ listing }: { listing: CreationListing }) {
     try {
       setLaunch(await publicListingApi.launch(listing.slug, signedIn));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(faultMessage(cause));
     }
   }, [listing.slug, signedIn]);
 
@@ -82,7 +82,7 @@ export function ListingLaunch({ listing }: { listing: CreationListing }) {
         return;
       }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(faultMessage(cause));
     } finally {
       setBusy(false);
     }
@@ -109,7 +109,7 @@ export function ListingLaunch({ listing }: { listing: CreationListing }) {
         await load();
       })
       .catch((cause: unknown) => {
-        if (live) setError(cause instanceof Error ? cause.message : String(cause));
+        if (live) setError(faultMessage(cause));
       })
       .finally(() => {
         if (!live) return;
@@ -130,7 +130,7 @@ export function ListingLaunch({ listing }: { listing: CreationListing }) {
       const installed = await creationListingApi.install(listing.slug);
       router.push(`/create/${installed.sessionId}`);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(faultMessage(cause));
       setBusy(false);
     }
   }, [listing.slug, router]);

@@ -34,8 +34,9 @@ import {
 } from '@/lib/investorApi';
 import {
   buttonStyle, cardStyle, emptyStyle, errorStyle, gapChipStyle, inputStyle, labelStyle,
-  listRowStyle, listStyle, message, mutedStyle, primaryButtonStyle, rowStyle, sectionStyle, tokenStyle,
+  listRowStyle, listStyle, mutedStyle, primaryButtonStyle, rowStyle, sectionStyle, tokenStyle,
 } from './investorStyles';
+import { faultMessage } from '@/lib/apiClient';
 
 export function InvestorsView({
   detail,
@@ -81,7 +82,7 @@ export function InvestorsView({
         setPurpose('');
         onChanged();
       })
-      .catch((cause: unknown) => setError(message(cause, t('error.invite'))))
+      .catch((cause: unknown) => setError(faultMessage(cause, t('error.invite'))))
       .finally(() => setBusy(false));
   }, [companyId, email, expiresAt, name, onChanged, purpose, t]);
 
@@ -92,7 +93,7 @@ export function InvestorsView({
     investorApi.investors
       .revoke(companyId, grantId)
       .then(() => { setConfirming(null); onChanged(); })
-      .catch((cause: unknown) => setError(message(cause, t('error.revoke'))))
+      .catch((cause: unknown) => setError(faultMessage(cause, t('error.revoke'))))
       .finally(() => setBusy(false));
   }, [companyId, onChanged, t]);
 

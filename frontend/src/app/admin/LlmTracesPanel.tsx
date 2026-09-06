@@ -15,7 +15,7 @@ import { useSearchParams } from 'next/navigation';
 import { adminApi } from '@/lib/adminApi';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 interface Attempt {
   model: string;
   vendor: string;
@@ -130,7 +130,7 @@ export function LlmTracesPanel() {
       const data = await adminApi.listLlmTraces({ q: q.trim() || undefined, limit: 100 });
       setTraces(data.traces ?? []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('traces.loadTracesFailed'));
+      setError(faultMessage(e, t('traces.loadTracesFailed')));
     } finally {
       setLoading(false);
     }
@@ -143,7 +143,7 @@ export function LlmTracesPanel() {
       const data = await adminApi.getLlmTrace(traceId);
       setSelected(data.trace);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('traces.loadTraceFailed'));
+      setError(faultMessage(e, t('traces.loadTraceFailed')));
     } finally {
       setDetailLoading(false);
     }

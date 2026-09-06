@@ -23,7 +23,7 @@ import { Select } from '@/components/Select';
 import { useAuth } from '@/lib/AuthContext';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { feedbackApi, FEEDBACK_KINDS, type FeedbackKind } from '@/lib/feedbackApi';
-
+import { faultMessage } from '@/lib/apiClient';
 /** Routes that own the full viewport — the tab would collide with their chrome. */
 const HIDDEN_PREFIXES = ['/embed', '/login', '/register', '/onboarding'];
 
@@ -74,7 +74,7 @@ export function FeedbackTab() {
       });
       setDone(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('form.errorGeneric'));
+      setError(faultMessage(e, t('form.errorGeneric')));
     } finally {
       setSending(false);
     }

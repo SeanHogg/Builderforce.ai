@@ -27,7 +27,7 @@ import { errText, AdminError, AdminLoading } from '../adminShared';
 import { useAdminFormat } from '../adminShared';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultText } from '@/lib/apiClient';
 export default function UsagePanel() {
   const { fmtDateTime, fmtNum } = useAdminFormat();
   const fmt = useFormat();
@@ -414,7 +414,7 @@ export default function UsagePanel() {
           (hours != null ? t('usage.dailyTokenLimitReset', { hours }) : '')
         );
       } else if (err.code === 'agent_host_token_limit_exceeded') {
-        setUsageAiError(err.message);
+        setUsageAiError(faultText(err));
       } else {
         setUsageAiError(err.message || String(e));
       }
@@ -594,7 +594,7 @@ export default function UsagePanel() {
                   try {
                     setLlmUsage(await adminApi.llmUsage(days));
                   } catch (err) {
-                    setErrorMsg(err instanceof Error ? err.message : String(err));
+                    setErrorMsg(faultText(err));
                   } finally {
                     setLoading(false);
                   }

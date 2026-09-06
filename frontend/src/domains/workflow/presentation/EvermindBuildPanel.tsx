@@ -26,7 +26,7 @@ import { buildSparkline } from '@/lib/sparkline';
 import { downloadBlob } from '@/lib/download';
 import { Icon } from '@/components/ui/Icon';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -71,7 +71,7 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
       setResult(res);
       setRows(res.steps);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errUnknown'));
+      setError(faultMessage(e, t('errUnknown')));
     } finally {
       setRunning(false);
     }

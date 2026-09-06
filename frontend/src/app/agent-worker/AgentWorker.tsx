@@ -26,7 +26,7 @@ import PageContainer from '@/components/PageContainer';
 import { createBrowserAgentTransport } from '@/lib/browserRuntime/transport';
 import { runCodingDispatch, toResultPayload } from '@/lib/browserRuntime/coding';
 import { createCodingDeps } from '@/lib/browserRuntime/factory';
-import { getApiBaseUrl, getAuthHeaders } from '@/lib/apiClient';
+import { getApiBaseUrl, getAuthHeaders, faultMessage } from '@/lib/apiClient';
 
 /**
  * Default coding handler: for a repo-targeted dispatch, clone + edit + push
@@ -79,7 +79,7 @@ export function AgentWorker({
       const h: RunHandlers = handlers ?? { code: defaultCodeHandler(t) };
       setOutcomes(await runLoop(t, { handlers: h }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     } finally {
       setRunning(false);
     }

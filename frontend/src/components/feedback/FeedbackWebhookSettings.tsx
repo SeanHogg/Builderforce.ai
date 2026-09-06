@@ -31,7 +31,7 @@ import {
   type FeedbackIntegration,
   type FeedbackProviderOption,
 } from '@/lib/feedbackApi';
-
+import { faultMessage } from '@/lib/apiClient';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
   borderRadius: 'var(--radius-lg)', padding: 20,
@@ -82,7 +82,7 @@ export function FeedbackWebhookSettings({ collectorId }: { collectorId: string }
         setChoice((prev) => prev || r.providers[0]?.id || '');
         setError(null);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : t('webhooks.loadFailed')))
+      .catch((e) => setError(faultMessage(e, t('webhooks.loadFailed'))))
       .finally(() => setLoading(false));
   }, [collectorId, t]);
   useEffect(() => { load(); }, [load]);
@@ -93,7 +93,7 @@ export function FeedbackWebhookSettings({ collectorId }: { collectorId: string }
       setRevealed(await feedbackApi.integrations.connect(collectorId, provider));
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('webhooks.connectFailed'));
+      setError(faultMessage(e, t('webhooks.connectFailed')));
     } finally {
       setBusy(false);
     }
@@ -102,7 +102,7 @@ export function FeedbackWebhookSettings({ collectorId }: { collectorId: string }
   const setEnabled = async (provider: string, enabled: boolean) => {
     setBusy(true); setError(null);
     try { await feedbackApi.integrations.setEnabled(collectorId, provider, enabled); load(); }
-    catch (e) { setError(e instanceof Error ? e.message : t('webhooks.saveFailed')); }
+    catch (e) { setError(faultMessage(e, t('webhooks.saveFailed'))); }
     finally { setBusy(false); }
   };
 
@@ -110,7 +110,7 @@ export function FeedbackWebhookSettings({ collectorId }: { collectorId: string }
     if (!(await confirm(t('webhooks.confirmDisconnect')))) return;
     setBusy(true); setError(null);
     try { await feedbackApi.integrations.disconnect(collectorId, provider); load(); }
-    catch (e) { setError(e instanceof Error ? e.message : t('webhooks.saveFailed')); }
+    catch (e) { setError(faultMessage(e, t('webhooks.saveFailed'))); }
     finally { setBusy(false); }
   };
 

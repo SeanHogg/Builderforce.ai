@@ -5,7 +5,7 @@ import { adsApi, type AdAccount, type AdNetworkOption } from '@/lib/adsApi';
 import {
   getOrSetClientCached, invalidateClientCache, readClientCached,
 } from '@/infrastructure/http/readThrough';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * THE client read of this workspace's ad accounts — every paid-media surface asks here.
  *
@@ -76,7 +76,7 @@ export function useAdAccounts(): AdAccountsState {
     load()
       .then(notify)
       .catch((failure: unknown) => {
-        if (live) setError(failure instanceof Error ? failure.message : String(failure));
+        if (live) setError(faultMessage(failure));
       })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; subscribers.delete(notify); };

@@ -97,7 +97,7 @@ export function MemberProfileEditor({ kind, refId, name, tasks, onClose, onSaved
         setCalMsg(r.message ?? t('syncFailed'));
       }
     } catch (e) {
-      setCalMsg((e as Error).message);
+      setCalMsg(faultMessage(e));
     } finally {
       setSyncing(false);
     }
@@ -115,7 +115,7 @@ export function MemberProfileEditor({ kind, refId, name, tasks, onClose, onSaved
       onSaved?.();
       onClose();
     } catch (e) {
-      setError((e as Error).message);
+      setError(faultMessage(e));
     } finally {
       setSaving(false);
     }

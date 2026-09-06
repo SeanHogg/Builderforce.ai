@@ -32,7 +32,7 @@ import {
   type DisputeOutcome,
   type MediatorAuthority,
 } from '@/lib/disputesApi';
-
+import { faultMessage } from '@/lib/apiClient';
 /** Which side is looking. Decided by the surface that mounted this, from the token it
  *  holds — never guessed from the dispute row. */
 export type DisputeViewer = 'client' | 'freelancer';
@@ -103,7 +103,7 @@ export function DisputePanel({
     try {
       await work();
     } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : String(cause));
+      setNotice(faultMessage(cause));
     } finally {
       setBusy(false);
     }

@@ -24,7 +24,7 @@ import { MilestoneLinesEditor, MilestoneLinesPreview } from '@/components/freela
 import type { MilestoneDraft, MilestoneRow } from '@/lib/milestonesApi';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 // The "Find work" surface (open jobs to bid on, my proposals, my engagements) is now
 // a category of the marketplace rather than a standalone /freelancer/gigs page — same
 // shared search box, one merged surface, matching the Talent + Models consolidation.
@@ -138,7 +138,7 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
       setJobs(j); setProposals(p); setEngagements(e); setSaved(sv);
       setInvites(inv); setRecommended(rec);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load');
+      setError(faultMessage(err, 'Failed to load'));
     } finally {
       setLoading(false);
     }
@@ -149,7 +149,7 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
   const act = async (key: string, fn: () => Promise<void>) => {
     setBusy(key); setError(null);
     try { await fn(); await load(); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Action failed'); }
+    catch (e) { setError(faultMessage(e, 'Action failed')); }
     finally { setBusy(null); }
   };
 
@@ -207,7 +207,7 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
       setBidFor(null); setBid({ note: '', rate: '' }); setBidLines([]); setPublished(null);
       setScreening([]); setAnswers({});
       await load();
-    } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
+    } catch (e) { setError(faultMessage(e, 'Failed')); }
     finally { setBusy(null); }
   };
 
@@ -249,7 +249,7 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
         if (job) await openBid(job);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed');
+      setError(faultMessage(e, 'Failed'));
     } finally {
       setBusy(null);
     }

@@ -9,7 +9,7 @@ import { toolsApi } from '@/lib/builderforceApi';
 import { ToolResultView } from '@/components/tools/ToolResultView';
 import type { ToolResult, SavedToolRun } from '@/lib/tools';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18 };
 const btnSubtle: React.CSSProperties = {
   padding: '9px 16px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)',
@@ -64,7 +64,7 @@ export function DataDrivenPanel({ toolId, projectId, framework }: {
       toolsApi.runs(toolId, projectId).catch(() => [] as SavedToolRun[]),
     ])
       .then(([res, h]) => { setResult(res); setHistory(h); })
-      .catch((e) => setError(e instanceof Error ? e.message : t('loadFailed')))
+      .catch((e) => setError(faultMessage(e, t('loadFailed'))))
       .finally(() => setLoading(false));
   }, [allowed, toolId, projectId, days, framework, t]);
 

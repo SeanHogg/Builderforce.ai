@@ -20,7 +20,7 @@ import MarketingVisual from '@/components/account/MarketingVisual';
 import { loginSchema } from '@/lib/structured-data';
 import { LOGIN_MARKETING } from '@/lib/content';
 import { ssoDiscoveryApi } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 export default function LoginPageClient() {
   const router = useRouter();
   const t = useTranslations('login');
@@ -125,7 +125,7 @@ export default function LoginPageClient() {
       }
       await finishAndRedirect();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('loginFailed'));
+      setError(faultMessage(err, t('loginFailed')));
     } finally {
       setIsLoading(false);
     }
@@ -146,7 +146,7 @@ export default function LoginPageClient() {
     } catch (err) {
       // Dismissing the system prompt is a choice, not a failure to report.
       if (!isPasskeyCancellation(err)) {
-        setError(err instanceof Error ? err.message : t('passkeyFailed'));
+        setError(faultMessage(err, t('passkeyFailed')));
       }
     } finally {
       setPasskeyLoading(false);
@@ -162,7 +162,7 @@ export default function LoginPageClient() {
       await requestMagicLink(email, next);
       setMagicLinkSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('magicLinkFailed'));
+      setError(faultMessage(err, t('magicLinkFailed')));
     } finally {
       setMagicLinkLoading(false);
     }

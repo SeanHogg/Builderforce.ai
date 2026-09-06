@@ -36,7 +36,7 @@ import {
   type GameTargetsView,
 } from '@/lib/gameTargets';
 import styles from './CreationCanvas.module.css';
-
+import { faultMessage } from '@/lib/apiClient';
 export interface CanvasGamePanelProps {
   open: boolean;
   onClose: () => void;
@@ -66,7 +66,7 @@ export function CanvasGamePanel({ open, onClose, projectId, game, onNotice }: Ca
       if (roblox?.robloxUniverseId) setUniverseId(roblox.robloxUniverseId);
       if (roblox?.robloxPlaceId) setPlaceId(roblox.robloxPlaceId);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(faultMessage(cause));
     }
   }, [projectId]);
 
@@ -90,7 +90,7 @@ export function CanvasGamePanel({ open, onClose, projectId, game, onNotice }: Ca
         onNotice(await work());
         await load();
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : String(cause));
+        setError(faultMessage(cause));
       } finally {
         setBusy(null);
       }

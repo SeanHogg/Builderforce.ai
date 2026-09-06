@@ -8,7 +8,7 @@ import { Button } from '@/components/ui';
 import { NavIcon } from '@/components/navigation/NavIcon';
 import { useConsumption } from '@/lib/useConsumption';
 import { ConsumptionMeterCard } from '@/components/UsageMeter';
-
+import { faultText } from '@/lib/apiClient';
 // The starting set for a new workspace: make the work, see the work, write it
 // down. The RUN seats stay listed and switched off until there is a business to
 // run — dim is an invitation, absent is a secret.
@@ -48,7 +48,7 @@ export default function NavigationFeaturesSettings() {
       await save(selected);
       setNotice(t('saved'));
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : t('saveFailed'));
+      setNotice(faultText(error, t('saveFailed')));
     } finally {
       setSaving(false);
     }

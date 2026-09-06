@@ -25,6 +25,9 @@
 - `InlineNameForm.tsx` declares `'use client'`. The `useClientFiles` baseline is TIGHTENED 938 → 935 (the
   real count including this +1; the review passes had left four points of slack), with the argument written
   into the ratchet's changelog in `check-frontend-architecture.mjs`.
+- The root-closure ratchet (`check:root-closure`) counted those two directive lines as growth (482 files /
+  120667 lines against 120665): `InlineNameForm` sits in the root layout's static closure through the `ui`
+  barrel. Baseline set to the CI-measured 482 / 120667 — same file count, +2 lines, no new import.
 
 ## ✅ RESOLVED 2026-09-06 — "Commit and push to main": an @-addressed agent had no git tool, and the Brain was told to refuse
 

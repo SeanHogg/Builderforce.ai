@@ -54,7 +54,7 @@ import {
   tdMutedStyle,
 } from '@/components/dataTableStyles';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * AI Manager — the per-project backlog manager surface. It reads the manager
  * overview (config + effective policy + stats + ranked backlog + activity feed),
@@ -198,7 +198,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       setCloudAgents(runTargets.cloudAgents);
       setMembers(membersData);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('error.body'));
+      setError(faultMessage(e, t('error.body')));
     } finally {
       setLoading(false);
     }
@@ -213,7 +213,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       await managerApi.update(projectId, patch);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('error.body'));
+      setError(faultMessage(e, t('error.body')));
     } finally {
       setSaving(false);
     }
@@ -266,7 +266,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       started = res.started;
       if (!started) setError(t('disabledNotice'));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('error.body'));
+      setError(faultMessage(e, t('error.body')));
     }
     if (started) void streamUntilDone(baseline);
     else setRunning(false);
@@ -310,7 +310,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       });
       router.push(`/create/${created.session.id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('error.body'));
+      setError(faultMessage(e, t('error.body')));
       setOpeningCanvas(false);
     }
   }, [data, memberName, openingCanvas, projectId, router, t]);
@@ -334,7 +334,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       setCoachExpiryDays('');
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('error.body'));
+      setError(faultMessage(e, t('error.body')));
     } finally {
       setCoaching(false);
     }
@@ -346,7 +346,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       await managerApi.dismissDirective(projectId, id, status);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('error.body'));
+      setError(faultMessage(e, t('error.body')));
     }
   }, [projectId, load, t]);
 

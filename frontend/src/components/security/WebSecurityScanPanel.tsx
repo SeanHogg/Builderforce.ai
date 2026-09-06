@@ -17,7 +17,7 @@ import {
   type AdvisoryFeedOption,
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -137,7 +137,7 @@ export function WebSecurityScanPanel() {
         setTarget((prev) => prev || cfg.targetUrl || '');
         setScans(list);
       })
-      .catch((e: Error) => setError(e.message))
+      .catch((e: Error) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   };
   useEffect(() => { load(); }, []);
@@ -149,7 +149,7 @@ export function WebSecurityScanPanel() {
       setSavedTarget(res.targetUrl);
       if (res.targetUrl) setTarget(res.targetUrl);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setError(faultMessage(e, 'Save failed'));
     } finally {
       setSaving(false);
     }
@@ -163,7 +163,7 @@ export function WebSecurityScanPanel() {
       setSavedTarget(res.targetUrl);
       securityAgentApi.listWebScans().then(setScans).catch(() => {});
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Scan failed');
+      setError(faultMessage(e, 'Scan failed'));
     } finally {
       setRunning(false);
     }

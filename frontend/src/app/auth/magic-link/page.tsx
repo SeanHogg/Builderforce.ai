@@ -6,7 +6,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { AUTH_API_URL, persistSession, resolveAndSelectTenant } from '@/lib/auth';
 import type { AuthUser } from '@/lib/types';
-
+import { faultText } from '@/lib/apiClient';
 export default function MagicLinkVerifyPage() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
@@ -32,7 +32,7 @@ export default function MagicLinkVerifyPage() {
       })
       .catch((err: unknown) => {
         setErrorMsg(
-          err instanceof Error ? err.message : 'This magic link is invalid or has expired.',
+          faultText(err, 'This magic link is invalid or has expired.'),
         );
         setStatus('error');
       });

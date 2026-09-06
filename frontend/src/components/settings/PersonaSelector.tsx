@@ -15,7 +15,7 @@ import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { PERSONAS, LENS_ROUTES, lensesFor, type Persona } from '@/lib/lensPersona';
 import { memberPersonasApi } from '@/lib/personaCadenceApi';
-
+import { faultText } from '@/lib/apiClient';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20,
 };
@@ -68,7 +68,7 @@ export default function PersonaSelector() {
       setPrimary(r.primary);
       setNotice(t('saved'));
     } catch (e) {
-      setNotice(e instanceof Error ? e.message : t('saveFailed'));
+      setNotice(faultText(e, t('saveFailed')));
     } finally {
       setSaving(false);
     }

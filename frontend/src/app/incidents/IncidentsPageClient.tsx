@@ -242,7 +242,7 @@ function CreateIncidentPanel({ t, tc, canManage, open, onClose, onCreated }: Sec
       });
       onCreated();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Create failed');
+      setError(faultMessage(e, 'Create failed'));
     } finally {
       setSaving(false);
     }
@@ -310,7 +310,7 @@ function IncidentDetailPanel({ t, tc, canManage, incidentId, onClose, onChanged 
   const run = async (fn: () => unknown) => {
     setBusy(true); setError(null);
     try { await fn(); load(); onChanged(); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Action failed'); }
+    catch (e) { setError(faultMessage(e, 'Action failed')); }
     finally { setBusy(false); }
   };
 
@@ -589,7 +589,7 @@ function RcaSection({ t, tc, canManage, incident, onPublished }: SectionProps & 
       });
       onPublished();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Publish failed');
+      setError(faultMessage(e, 'Publish failed'));
     } finally {
       setSaving(false);
     }
@@ -709,7 +709,7 @@ function WorkflowRunsSection({ t, tc, canManage, incidentId }: SectionProps & { 
       await incidentsApi.runWorkflow(incidentId, { definitionId: selectedDef });
       setSelectedDef('');
       loadRuns();
-    } catch (e) { setError(e instanceof Error ? e.message : 'Run failed'); }
+    } catch (e) { setError(faultMessage(e, 'Run failed')); }
     finally { setBusy(false); }
   };
 
@@ -790,14 +790,14 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
       await incidentsApi.createRotation({ name: name.trim(), description: description.trim() || undefined, rotationKind });
       setCreateOpen(false); setName(''); setDescription(''); setRotationKind('manual');
       load();
-    } catch (e) { setError(e instanceof Error ? e.message : 'Create failed'); }
+    } catch (e) { setError(faultMessage(e, 'Create failed')); }
     finally { setSaving(false); }
   };
 
   const removeRotation = async (r: OnCallRotation) => {
     if (!(await confirm({ message: t('deleteRotationConfirm', { name: r.name }), destructive: true }))) return;
     try { await incidentsApi.removeRotation(r.id); load(); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Delete failed'); }
+    catch (e) { setError(faultMessage(e, 'Delete failed')); }
   };
 
   const addMember = async (r: OnCallRotation) => {
@@ -807,13 +807,13 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
       await incidentsApi.addRotationMember(r.id, { memberRef: d.memberRef.trim(), displayName: d.displayName.trim() || undefined });
       setMemberDraft((prev) => ({ ...prev, [r.id]: { displayName: '', memberRef: '' } }));
       load();
-    } catch (e) { setError(e instanceof Error ? e.message : 'Add failed'); }
+    } catch (e) { setError(faultMessage(e, 'Add failed')); }
   };
 
   const removeMember = async (r: OnCallRotation, memberId: string) => {
     if (!(await confirm({ message: t('deleteMemberConfirm'), destructive: true }))) return;
     try { await incidentsApi.removeRotationMember(r.id, memberId); load(); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Delete failed'); }
+    catch (e) { setError(faultMessage(e, 'Delete failed')); }
   };
 
   return (
@@ -942,14 +942,14 @@ function EscalationSection({ t, tc, canManage }: SectionProps) {
       });
       setCreateOpen(false); setName(''); setDescription(''); setMatchSeverity('');
       load();
-    } catch (e) { setError(e instanceof Error ? e.message : 'Create failed'); }
+    } catch (e) { setError(faultMessage(e, 'Create failed')); }
     finally { setSaving(false); }
   };
 
   const removePolicy = async (p: EscalationPolicy) => {
     if (!(await confirm({ message: t('deletePolicyConfirm', { name: p.name }), destructive: true }))) return;
     try { await incidentsApi.removePolicy(p.id); load(); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Delete failed'); }
+    catch (e) { setError(faultMessage(e, 'Delete failed')); }
   };
 
   const addLevel = async (p: EscalationPolicy) => {
@@ -967,13 +967,13 @@ function EscalationSection({ t, tc, canManage }: SectionProps) {
       });
       setLevelDraft((prev) => ({ ...prev, [p.id]: emptyLevel }));
       load();
-    } catch (e) { setError(e instanceof Error ? e.message : 'Add failed'); }
+    } catch (e) { setError(faultMessage(e, 'Add failed')); }
   };
 
   const removeLevel = async (levelId: string) => {
     if (!(await confirm({ message: t('deleteLevelConfirm'), destructive: true }))) return;
     try { await incidentsApi.removeLevel(levelId); load(); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Delete failed'); }
+    catch (e) { setError(faultMessage(e, 'Delete failed')); }
   };
 
   const channelsLabel = (lv: EscalationPolicy['levels'][number]) => {
@@ -1124,14 +1124,14 @@ function ContactsSection({ t, tc, canManage }: SectionProps) {
       if (editing) await incidentsApi.updateContact(editing.id, draft);
       else await incidentsApi.createContact({ ...draft, name: draft.name.trim() });
       setPanelOpen(false); load();
-    } catch (e) { setError(e instanceof Error ? e.message : 'Save failed'); }
+    } catch (e) { setError(faultMessage(e, 'Save failed')); }
     finally { setSaving(false); }
   };
 
   const remove = async (c: BusinessContact) => {
     if (!(await confirm({ message: t('deleteContactConfirm', { name: c.name }), destructive: true }))) return;
     try { await incidentsApi.removeContact(c.id); load(); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Delete failed'); }
+    catch (e) { setError(faultMessage(e, 'Delete failed')); }
   };
 
   return (

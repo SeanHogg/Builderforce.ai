@@ -149,7 +149,7 @@ function BoardsSection({ t, tc, canManage }: { t: T; tc: T; canManage: boolean }
       load();
       setSelectedId(board.id);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Create failed');
+      setError(faultMessage(e, 'Create failed'));
     } finally {
       setCreating(false);
     }
@@ -262,7 +262,7 @@ function BoardCanvas({ t, tc, canManage, boardId, onBack }: { t: T; tc: T; canMa
       await monitoringApi.updateBoard(boardId, { imageKey: key, imageWidth: dims.width, imageHeight: dims.height });
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('uploadFailed'));
+      setError(faultMessage(e, t('uploadFailed')));
     } finally {
       setUploading(false);
     }
@@ -332,7 +332,7 @@ function BoardCanvas({ t, tc, canManage, boardId, onBack }: { t: T; tc: T; canMa
       await monitoringApi.deleteBoard(boardId);
       onBack();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Delete failed');
+      setError(faultMessage(e, 'Delete failed'));
     }
   };
 
@@ -674,7 +674,7 @@ function MonitorPanel({
       else if (monitorId) await monitoringApi.updateMonitor(monitorId, body);
       onChanged();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setError(faultMessage(e, 'Save failed'));
     } finally {
       setSaving(false);
     }
@@ -687,7 +687,7 @@ function MonitorPanel({
       await monitoringApi.deleteMonitor(monitorId);
       onChanged();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Delete failed');
+      setError(faultMessage(e, 'Delete failed'));
     }
   };
 
@@ -702,7 +702,7 @@ function MonitorPanel({
         setCurrentIncidentId(r.monitor.currentIncidentId);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Signal failed');
+      setError(faultMessage(e, 'Signal failed'));
     }
   };
 

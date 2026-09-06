@@ -20,7 +20,7 @@ import {
 import { getStoredTenant } from '@/lib/auth';
 import { useConsumption } from '@/lib/useConsumption';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Integrations gallery — the workspace-level home for every external system.
  * Cards derive from the board-provider catalog (single source of truth) plus the
@@ -273,7 +273,7 @@ function ConnectionsTab({ provider, onChanged, t }: { provider: string; t: Retur
   const syncNow = async (id: string) => {
     setSyncing(id); setMsg(null);
     try { await boardConnectionsApi.sync(id); setMsg(t('connections.syncQueued')); load(); }
-    catch (e) { setMsg(e instanceof Error ? e.message : t('connections.syncFailed')); }
+    catch (e) { setMsg(faultMessage(e, t('connections.syncFailed'))); }
     finally { setSyncing(null); }
   };
   const remove = async (id: string) => {

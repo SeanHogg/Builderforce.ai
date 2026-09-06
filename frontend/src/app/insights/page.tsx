@@ -49,7 +49,7 @@ import {
   type SavedDashboard,
   type WidgetViz,
 } from '@/lib/dashboardsApi';
-
+import { faultMessage } from '@/lib/apiClient';
 const VIZ_OPTIONS: WidgetViz[] = ['stat', 'bar', 'line', 'gauge'];
 
 /** The Ask-a-question card is a registered widget; the home page always shows it. */
@@ -134,7 +134,7 @@ export default function InsightsHomePage() {
       setMetrics(cat.metrics);
       if (cat.metrics.length && !pickMetric) setPickMetric(cat.metrics[0].key);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     }
   }, [pickMetric]);
 
@@ -142,7 +142,7 @@ export default function InsightsHomePage() {
 
   const loadData = useCallback(async (id: number) => {
     try { setData(await dashboardsApi.data(id)); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setError(faultMessage(e)); }
   }, []);
 
   useEffect(() => {
@@ -158,7 +158,7 @@ export default function InsightsHomePage() {
       setNewName('');
       await reload();
       setView(d.id);
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { setError(faultMessage(e)); }
   };
   /**
    * Materialise the curated Executive dashboard.
@@ -176,27 +176,27 @@ export default function InsightsHomePage() {
       const { dashboardId } = await dashboardsApi.applyPreset('executive');
       await reload();
       setView(dashboardId);
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { setError(faultMessage(e)); }
     finally { setSeeding(false); }
   };
   const deleteDashboard = async (id: number) => {
     try { await dashboardsApi.remove(id); setView('me'); await reload(); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setError(faultMessage(e)); }
   };
   const addMetricWidget = async () => {
     if (typeof view !== 'number' || !pickMetric) return;
     try { await dashboardsApi.addWidget(view, { metricKey: pickMetric, viz: pickViz }); await reload(); await loadData(view); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setError(faultMessage(e)); }
   };
   const addRegistryWidget = async () => {
     if (typeof view !== 'number' || !pickWidget) return;
     try { await dashboardsApi.addWidget(view, { widgetKey: pickWidget }); await reload(); await loadData(view); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setError(faultMessage(e)); }
   };
   const removeWidget = async (widgetId: number) => {
     if (typeof view !== 'number') return;
     try { await dashboardsApi.removeWidget(view, widgetId); await reload(); await loadData(view); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setError(faultMessage(e)); }
   };
 
   const tabStyle = (on: boolean): React.CSSProperties => ({

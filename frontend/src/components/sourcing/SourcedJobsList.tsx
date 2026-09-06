@@ -12,7 +12,7 @@ import { useFormat } from '@/i18n/useFormat';
 import { useOptionalAuth } from '@/lib/AuthContext';
 import { fetchSourcedListings, type SourcedJobListing } from '@/lib/sourcingApi';
 import styles from './sourcing.module.css';
-
+import { faultText } from '@/lib/apiClient';
 /**
  * What the feeds brought in.
  *
@@ -42,7 +42,7 @@ export function SourcedJobsList() {
     setLoading(true);
     fetchSourcedListings(q)
       .then((next) => { setRows(next); setError(''); })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : t('listings.failed')))
+      .catch((cause) => setError(faultText(cause, t('listings.failed'))))
       .finally(() => setLoading(false));
   }, [t]);
 

@@ -27,7 +27,7 @@ import { Button } from '@/components/ui';
 import { getStoredUser, getStoredWebToken, updateMyDisplayName } from '@/lib/auth';
 import { uploadMyAvatar } from '@/lib/freelance/talentProfile';
 import { initialsOf } from '@/lib/initials';
-
+import { faultText } from '@/lib/apiClient';
 /** Initials are the fallback identity — legible at any size, unlike a title. */
 const initials = initialsOf;
 
@@ -116,7 +116,7 @@ export function ProfileIdentityCard({
       await updateMyDisplayName(token, ownName);
       setNotice(t('saved'));
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : t('saveFailed'));
+      setNotice(faultText(error, t('saveFailed')));
     } finally {
       setSaving(false);
     }
@@ -132,7 +132,7 @@ export function ProfileIdentityCard({
       if (onAvatarChange) onAvatarChange(uploaded);
       else setOwnAvatar(uploaded);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : t('avatarFailed'));
+      setNotice(faultText(error, t('avatarFailed')));
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';

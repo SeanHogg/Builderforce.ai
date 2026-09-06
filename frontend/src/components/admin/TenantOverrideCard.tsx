@@ -2,7 +2,7 @@
 
 import { ReactNode, useState } from 'react';
 import { useTranslations } from 'next-intl';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * The scaffold every per-tenant superadmin override wears: a bordered card, a
  * title with the current effective value beside it, a row of mode controls, one
@@ -52,7 +52,7 @@ export function TenantOverrideCard({ title, current, children, onSave, fallbackE
     try {
       await onSave();
     } catch (e) {
-      setError(e instanceof Error ? e.message : fallbackError);
+      setError(faultMessage(e, fallbackError));
     } finally {
       setSaving(false);
     }

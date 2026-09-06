@@ -24,7 +24,7 @@ import {
   type DevexTemplate, type DevexCampaign, type DevexQuestion,
   type DevexQuestionType, type DevexDimension, type DevexAnswerMap, type DevexAnswerValue,
 } from '@/lib/devexApi';
-
+import { faultMessage } from '@/lib/apiClient';
 const inputStyle: React.CSSProperties = {
   padding: '8px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.85rem', width: '100%',
@@ -95,7 +95,7 @@ function TemplateAuthor({ onCreated }: { onCreated: () => void }) {
       setName(''); setDescription(''); setQuestions([newQuestion()]);
       onCreated();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(faultMessage(e));
     } finally {
       setBusy(false);
     }
@@ -213,7 +213,7 @@ function CampaignLauncher({ templates, onLaunched }: { templates: DevexTemplate[
       setTitle(''); setTemplateId(''); setPeriodMonth('');
       onLaunched();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(faultMessage(e));
     } finally {
       setBusy(false);
     }
@@ -336,7 +336,7 @@ function RespondForm({
       setDone(true);
       setTimeout(onDone, 800);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(faultMessage(e));
     } finally {
       setBusy(false);
     }

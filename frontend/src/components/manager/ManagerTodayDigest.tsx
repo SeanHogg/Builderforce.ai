@@ -12,7 +12,7 @@ import { managerApi, type ManagerDailyDigest, type DigestContributor } from '@/l
 import { isManagerActionType } from '@/lib/managerActions';
 import { ticketHref } from '@/lib/ticketHref';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * TODAY — the answer to "what did you and the team accomplish today?"
  *
@@ -84,7 +84,7 @@ export function ManagerTodayDigest({ projectId }: ManagerTodayDigestProps) {
     try {
       setData(await managerApi.digest(projectId));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('error'));
+      setError(faultMessage(e, t('error')));
     } finally {
       setLoading(false);
     }

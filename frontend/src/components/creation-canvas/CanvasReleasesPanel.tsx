@@ -67,7 +67,7 @@ import {
 } from '@/lib/creationListings.launch';
 import styles from './CreationCanvas.module.css';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 export interface CanvasReleasesPanelProps {
   open: boolean;
   onClose: () => void;
@@ -151,7 +151,7 @@ export function CanvasReleasesPanel({
           setDelivery(found.delivery);
         }
       } catch (cause) {
-        if (live) setError(cause instanceof Error ? cause.message : String(cause));
+        if (live) setError(faultMessage(cause));
       }
     })();
     return () => { live = false; };
@@ -176,7 +176,7 @@ export function CanvasReleasesPanel({
       await loadRail();
       onNotice(t('noticeStaged', { version: next.version }));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(faultMessage(cause));
     } finally {
       setBusy(false);
     }
@@ -234,7 +234,7 @@ export function CanvasReleasesPanel({
       await loadRail();
       onNotice(t('noticePublished', { version: listing.version }));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(faultMessage(cause));
     } finally {
       setBusy(false);
     }
@@ -272,7 +272,7 @@ export function CanvasReleasesPanel({
       await loadRail();
       onNotice(t('noticeReverted', { version: result.version, from: release.version }));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(faultMessage(cause));
     } finally {
       setBusy(false);
     }

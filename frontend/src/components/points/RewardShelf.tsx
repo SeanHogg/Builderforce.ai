@@ -6,7 +6,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { redeemReward } from '@/lib/pointsApi';
 import { usePoints } from '@/lib/usePoints';
 import styles from './points.module.css';
-
+import { faultText } from '@/lib/apiClient';
 /**
  * What the points buy, and the one button that spends them.
  *
@@ -45,7 +45,7 @@ export function RewardShelf() {
       await redeemReward(skuId);
       await refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('rewards.failed'));
+      setError(faultText(cause, t('rewards.failed')));
     } finally {
       setBusyId(null);
     }

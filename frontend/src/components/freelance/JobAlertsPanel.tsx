@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { createJobAlert, deleteJobAlert, listJobAlerts, updateJobAlert, type JobAlert } from '@/lib/freelance/jobSeeker';
-
+import { faultMessage } from '@/lib/apiClient';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
   borderRadius: 'var(--radius-lg)', padding: 18,
@@ -40,7 +40,7 @@ export function JobAlertsPanel() {
     try {
       setAlerts(await listJobAlerts());
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('loadFailed'));
+      setError(faultMessage(err, t('loadFailed')));
     } finally {
       setLoading(false);
     }
@@ -51,7 +51,7 @@ export function JobAlertsPanel() {
   const act = async (key: string, fn: () => Promise<unknown>) => {
     setBusy(key); setError(null);
     try { await fn(); await load(); }
-    catch (err) { setError(err instanceof Error ? err.message : t('actionFailed')); }
+    catch (err) { setError(faultMessage(err, t('actionFailed'))); }
     finally { setBusy(null); }
   };
 

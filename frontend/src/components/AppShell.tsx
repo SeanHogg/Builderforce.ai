@@ -30,6 +30,16 @@ const CanvasStage = dynamic(
   () => import('./canvas/CanvasStage').then((module) => module.CanvasStage),
   { ssr: false },
 );
+/**
+ * Loaded off the first paint for the same reason as the stage: it renders
+ * nothing for a signed-in person and for a guest until a read on this route
+ * has been refused, so it must not cost every visitor its parse. `ssr: false`
+ * because the wall it reads is written by the browser's transport.
+ */
+const GuestAccountPrompt = dynamic(
+  () => import('./guest/GuestAccountPrompt').then((module) => module.GuestAccountPrompt),
+  { ssr: false },
+);
 
 function isProjectIdPage(pathname: string | null): boolean {
   return pathname != null && /^\/projects\/[^/]+$/.test(pathname);
@@ -85,6 +95,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // Still `stageHosted`: the shells that have no stage at all (the embed tree,
   // marketing chrome) must not sprout one.
   const panelHosted = (canvas?.stageHosted ?? false) && panelOpen(pathname ?? '');
+  // The page, with the ONE catch-all invitation above it: a signed-out visitor
+  // whose read on this route was refused sees why an account matters where the
+  // content would have been. It decides its own visibility (see its note) and
+  // stands down whenever a section has already said it inline. Built once so
+  // the three branches below cannot disagree about whether it is there.
+  const page = (
+    <>
+      <GuestAccountPrompt placement="shell" />
+      {children}
+    </>
+  );
 
   return (
     <ReferenceChromeProvider>
@@ -145,7 +166,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <CanvasStage />
                 {panelHosted ? (
                   <ShellPanel>
-                    {children}
+                    {page}
                   </ShellPanel>
                 ) : (
                   // Either a stage route — whose page component renders nothing,
@@ -154,14 +175,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   // the stage; neither is allowed to drop it.
                   <div className={onStage ? 'stage-split__registrar' : 'stage-split__full'}>
                     {!onStage && !isFullScreenRoute(pathname) && <ShellIndex />}
-                    {children}
+                    {page}
                   </div>
                 )}
               </div>
             ) : (
               <>
                 {!isFullScreenRoute(pathname) && <ShellIndex />}
-                {children}
+                {page}
               </>
             )}
           </main>

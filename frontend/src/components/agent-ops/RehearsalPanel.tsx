@@ -15,7 +15,7 @@ import {
   type RehearsalComparison,
 } from '@/lib/agentOpsApi';
 import { button, card, cardGrid, chip, emptyState, input, mono, muted, option, sectionTitle, table, tableScroll, td, th } from './agentOpsStyles';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Rehearsal — run an agent for real, and let nothing escape.
  *
@@ -57,7 +57,7 @@ export function RehearsalPanel() {
       });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('genericError'));
+      setError(faultMessage(err, t('genericError')));
     } finally {
       setRunning(false);
     }

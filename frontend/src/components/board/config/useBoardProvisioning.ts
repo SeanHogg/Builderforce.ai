@@ -31,7 +31,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { usePermission } from '@/lib/rbac';
 import { boardsApi, type Board } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 export function useBoardProvisioning({
   open,
   board,
@@ -66,7 +66,7 @@ export function useBoardProvisioning({
       boardsApi
         .create({ projectId, name: t('boardNameDefault', { name: projectName ?? t('projectFallback') }) })
         .then(() => reload())
-        .catch((e) => setProvisionError(e instanceof Error ? e.message : t('errCreateBoard')))
+        .catch((e) => setProvisionError(faultMessage(e, t('errCreateBoard'))))
         .finally(() => setProvisioning(false));
       return;
     }
@@ -76,7 +76,7 @@ export function useBoardProvisioning({
       boardsApi.swimlanes
         .ensureDefaults(board.id)
         .then(() => reload())
-        .catch((e) => setProvisionError(e instanceof Error ? e.message : t('errSetupLanes')))
+        .catch((e) => setProvisionError(faultMessage(e, t('errSetupLanes'))))
         .finally(() => setProvisioning(false));
     }
   }, [open, loading, error, board, laneCount, provisioning, provisionError, projectId, projectName, reload, t, canWrite]);

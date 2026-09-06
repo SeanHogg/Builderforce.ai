@@ -59,7 +59,7 @@ import {
   type QaTest,
 } from '@/lib/qa/api';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 // Authenticated nav routes worth smoke-testing the Builderforce app itself
 // (self-test crawl seed when no project is selected).
 const SELF_TEST_ROUTES = [
@@ -121,7 +121,7 @@ export function QaContent() {
         setRouting(null);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('loadFailed'));
+      setError(faultMessage(e, t('loadFailed')));
     }
   }, [projectId]);
 
@@ -130,7 +130,7 @@ export function QaContent() {
   const run = useCallback(async (key: string, fn: () => Promise<unknown>) => {
     setBusy(key); setError(null);
     try { await fn(); await reload(); }
-    catch (e) { setError(e instanceof Error ? e.message : t('actionFailed')); }
+    catch (e) { setError(faultMessage(e, t('actionFailed'))); }
     finally { setBusy(null); }
   }, [reload]);
 
@@ -425,7 +425,7 @@ function FindingsPanel({ explorationId, busy, onRun }: {
       const res = await fetchExploration(explorationId);
       setFindings(res.findings ?? []);
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : t('findingsLoadFailed'));
+      setLoadError(faultMessage(e, t('findingsLoadFailed')));
     }
   }, [explorationId]);
 

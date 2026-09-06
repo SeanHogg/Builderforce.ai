@@ -37,7 +37,7 @@ import { emptyPollTally, type PollTally } from '@builderforce/creation-canvas-co
 import { pollFormatOf, pollGridOf, pollJoinUrl, pollPublishBody } from '@/lib/pollObject';
 import type { CreationNodeData } from './types';
 import styles from './CanvasFacilitateSurface.module.css';
-
+import { faultMessage } from '@/lib/apiClient';
 /** How often the count is re-read while this surface is open. Matched to the
  *  participant's interval so the room and the board are never more than one tick apart —
  *  two different rates is two answers to "how many have voted". */
@@ -91,7 +91,7 @@ export function CanvasFacilitateSurface({ data, onEdit, onExit, objectId }: Canv
       setResultsLive(view.poll.showResultsLive);
       writeBack(view.tally);
     } catch (readError) {
-      setError(readError instanceof Error ? readError.message : t('readFailed'));
+      setError(faultMessage(readError, t('readFailed')));
     }
   }, [questionSetId, t, writeBack]);
 
@@ -109,7 +109,7 @@ export function CanvasFacilitateSurface({ data, onEdit, onExit, objectId }: Canv
       setOpen(true);
       onEdit({ questionSetId: result.questionSetId, joinUrl: url, status: t('statusOpen') } as Partial<CreationNodeData>);
     } catch (publishError) {
-      setError(publishError instanceof Error ? publishError.message : t('publishFailed'));
+      setError(faultMessage(publishError, t('publishFailed')));
     } finally {
       setBusy(false);
     }
@@ -131,7 +131,7 @@ export function CanvasFacilitateSurface({ data, onEdit, onExit, objectId }: Canv
       }
       void read();
     } catch (steerError) {
-      setError(steerError instanceof Error ? steerError.message : t('steerFailed'));
+      setError(faultMessage(steerError, t('steerFailed')));
     } finally {
       setBusy(false);
     }

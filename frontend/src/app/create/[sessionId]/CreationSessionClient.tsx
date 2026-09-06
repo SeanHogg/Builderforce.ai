@@ -10,7 +10,7 @@ import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 import { readModelComparison } from '@/lib/modelComparisonRequest';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 import { UpgradeModal } from '@/components/UpgradeModal';
-
+import { faultMessage } from '@/lib/apiClient';
 const BUILD_TICKET_KINDS = new Set(['portfolio', 'objective', 'initiative', 'roadmap', 'spec', 'epic', 'gap', 'task']);
 
 function buildTicket(raw: string | null): { kind: string; ref: string } | null {
@@ -75,7 +75,7 @@ export default function CreationSessionClient({ sessionId }: { sessionId: string
           setPlanError(error);
           return;
         }
-        setClaimError(error instanceof Error ? error.message : t('noticeClaimFailed'));
+        setClaimError(faultMessage(error, t('noticeClaimFailed')));
       });
   }, [hasTenant, isAuthenticated, local, router, sessionId, t]);
 

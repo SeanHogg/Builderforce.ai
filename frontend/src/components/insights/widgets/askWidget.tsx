@@ -39,7 +39,7 @@ import { WidgetMuted as Muted } from '@/components/widgets/widgetBody';
 import type { ComponentDef } from '@/lib/components/types';
 import { dashboardsApi, type ComposedAnswer, type QueryAnswer } from '@/lib/dashboardsApi';
 import { useInsightFormat, type InsightFormatters } from '../format';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * THE REGISTRY EDGE IS ASYNC ON PURPOSE.
  *
@@ -172,7 +172,7 @@ function AskCard() {
     try {
       setAnswer(await dashboardsApi.query(question.trim()));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     } finally {
       setAsking(false);
     }

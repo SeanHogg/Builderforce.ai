@@ -43,7 +43,7 @@ import {
   type ResolvedGuidedStep,
   type ScheduleAnswer,
 } from '@/lib/templates/api';
-
+import { faultMessage } from '@/lib/apiClient';
 const fieldStyle: React.CSSProperties = {
   width: '100%',
   padding: '10px 12px',
@@ -224,7 +224,7 @@ export function GuidedSetupPanel({ templateKey, templateName, open, onClose }: {
     try {
       setPlan(await templatesApi.setup(templateKey, nextAnswers, nextTouched));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('setupFailed'));
+      setError(faultMessage(e, t('setupFailed')));
     } finally {
       setLoading(false);
     }
@@ -269,7 +269,7 @@ export function GuidedSetupPanel({ templateKey, templateName, open, onClose }: {
         void refresh(answers, plan?.steps.map((s) => s.step.id) ?? []);
         setError(t('setupIncomplete'));
       } else {
-        setError(e instanceof Error ? e.message : t('installFailed'));
+        setError(faultMessage(e, t('installFailed')));
       }
     } finally {
       setInstalling(false);

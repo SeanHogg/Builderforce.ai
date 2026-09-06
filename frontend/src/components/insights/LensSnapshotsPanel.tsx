@@ -20,7 +20,7 @@ import {
 } from '@/lib/personaCadenceApi';
 import { Select } from '@/components/Select';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20,
 };
@@ -59,7 +59,7 @@ export function LensSnapshotsPanel() {
       setCadences(r.cadences);
       if (!captureLens && r.snapshotableLenses.length) setCaptureLens(r.snapshotableLenses[0]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     } finally {
       setLoading(false);
     }
@@ -74,7 +74,7 @@ export function LensSnapshotsPanel() {
       await lensSnapshotsApi.capture(captureLens, captureCadence);
       await reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     } finally {
       setBusy(false);
     }
@@ -87,7 +87,7 @@ export function LensSnapshotsPanel() {
       const r = await lensSnapshotsApi.get(id);
       setPayload(r.snapshot.payload);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     }
   };
 

@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { useOptionalAuth } from '@/lib/AuthContext';
 import { learningApi, type CourseGate } from '@/lib/learningApi';
 import styles from './learning.module.css';
-
+import { faultText } from '@/lib/apiClient';
 /**
  * Every course, with this learner's locks on it.
  *
@@ -40,7 +40,7 @@ export function CourseCatalogue({
   const load = useCallback(() => {
     learningApi.gates()
       .then((res) => { setGates(res.gates); setError(''); })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : t('catalogue.failed')));
+      .catch((cause) => setError(faultText(cause, t('catalogue.failed'))));
   }, [t]);
 
   useEffect(() => {
@@ -52,7 +52,7 @@ export function CourseCatalogue({
     setBusyId(courseId);
     learningApi.completeCourse(courseId)
       .then(() => { setError(''); load(); })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : t('catalogue.completeFailed')))
+      .catch((cause) => setError(faultText(cause, t('catalogue.completeFailed'))))
       .finally(() => setBusyId(null));
   };
 

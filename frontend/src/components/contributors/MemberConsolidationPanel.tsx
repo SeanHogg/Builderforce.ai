@@ -93,7 +93,7 @@ export function MemberConsolidationPanel({
       onMerged?.();
       setReloadKey((k) => k + 1);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('mergeFailed'));
+      setError(faultMessage(e, t('mergeFailed')));
     } finally {
       setBusy(false);
     }

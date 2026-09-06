@@ -11,7 +11,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { boardsApi, kanbanApi, type Board } from '@/lib/builderforceApi';
 import type { TemplateSummary } from '@/lib/kanban';
 import { btnPrimary, btnSubtle, inputStyle, sectionPad } from './configStyles';
-
+import { faultMessage } from '@/lib/apiClient';
 export function SettingsTab({ board, projectId, onSaved }: { board: Board; projectId: number; onSaved: () => void }) {
   const t = useTranslations('boardConfig');
   const confirm = useConfirm();
@@ -42,7 +42,7 @@ export function SettingsTab({ board, projectId, onSaved }: { board: Board; proje
         setActiveTemplateId(roster.templateId);
         setSelectedTemplateId(roster.templateId);
       })
-      .catch((e) => { if (live) setTemplateError(e instanceof Error ? e.message : t('templateLoadError')); });
+      .catch((e) => { if (live) setTemplateError(faultMessage(e, t('templateLoadError'))); });
     return () => { live = false; };
   }, [projectId, t]);
 
@@ -63,7 +63,7 @@ export function SettingsTab({ board, projectId, onSaved }: { board: Board; proje
       setActiveTemplateId(selectedTemplateId);
       onSaved();
     } catch (e) {
-      setTemplateError(e instanceof Error ? e.message : t('templateApplyError'));
+      setTemplateError(faultMessage(e, t('templateApplyError')));
     } finally {
       setTemplateBusy(false);
     }

@@ -30,7 +30,7 @@ import {
   type EmailPreferences,
   type LifecycleToggle,
 } from '@/lib/emailPreferencesApi';
-
+import { faultMessage } from '@/lib/apiClient';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -106,7 +106,7 @@ export default function EmailPreferencesCard() {
     setLoading(true);
     emailPreferencesApi.get()
       .then((res) => { setPrefs(res.preferences); setLocale(res.locale); setError(null); })
-      .catch((e: Error) => setError(e.message))
+      .catch((e: Error) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, []);
 
@@ -127,7 +127,7 @@ export default function EmailPreferencesCard() {
       if (body.locale) setLocale(body.locale);
     } catch (e) {
       setPrefs(previous);
-      setError(e instanceof Error ? e.message : t('emailPrefs.error'));
+      setError(faultMessage(e, t('emailPrefs.error')));
     } finally {
       setBusy(false);
     }

@@ -19,7 +19,7 @@ import { Button } from '@/components/ui';
 import { TALENT_DISCIPLINES, TALENT_AVAILABILITIES } from '@/components/freelance/talentFields';
 import { useMyTalentProfile, invalidateMyTalentProfile } from '@/components/freelance/useMyTalentProfile';
 import { uploadMyResume, getResumeSuggestions } from '@/lib/freelance/talentProfile';
-
+import { faultMessage } from '@/lib/apiClient';
 const intro: React.CSSProperties = { margin: '0 0 14px', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' };
 const okText: React.CSSProperties = { fontSize: 'var(--font-size-small)', color: 'var(--success-text)' };
 const errText: React.CSSProperties = { fontSize: 'var(--font-size-small)', color: 'var(--coral-bright)' };
@@ -130,7 +130,7 @@ export function WizardResumeStep() {
       setFilename(res.resumeTitle);
       invalidateMyTalentProfile();
     } catch (err) {
-      setUploadError(err instanceof Error ? err.message : String(err));
+      setUploadError(faultMessage(err));
     } finally {
       setUploading(false);
     }
@@ -151,7 +151,7 @@ export function WizardResumeStep() {
       await save(next);
       setAutofilled(true);
     } catch (err) {
-      setUploadError(err instanceof Error ? err.message : String(err));
+      setUploadError(faultMessage(err));
     } finally {
       setAutofilling(false);
     }

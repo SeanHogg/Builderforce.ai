@@ -29,7 +29,7 @@ import {
 import { Select } from '@/components/Select';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18 };
 const input: React.CSSProperties = { background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: 13, outline: 'none', width: '100%' };
 const btn = (v: 'primary' | 'ghost' | 'danger'): React.CSSProperties => ({
@@ -112,7 +112,7 @@ export function TalentView() {
         listMyJobs().catch(() => []), listEmployerInvoices().catch(() => []),
       ]);
       setEngagements(e); setCards(tc); setJobs(j); setInvoices(inv);
-    } catch (err) { setError(err instanceof Error ? err.message : t('errLoad')); }
+    } catch (err) { setError(faultMessage(err, t('errLoad'))); }
     finally { setLoading(false); }
   }, [tenant]);
 
@@ -121,7 +121,7 @@ export function TalentView() {
   const act = async (key: string, fn: () => unknown) => {
     setBusy(key); setError(null);
     try { await fn(); await load(); }
-    catch (e) { setError(e instanceof Error ? e.message : t('errAction')); }
+    catch (e) { setError(faultMessage(e, t('errAction'))); }
     finally { setBusy(null); }
   };
 
@@ -144,33 +144,33 @@ export function TalentView() {
   const evalProposal = async (pid: string) => {
     setBusy(`ev:${pid}`); setError(null);
     try { const s = await evaluateProposal(pid); setPropScores((m) => ({ ...m, [pid]: s.overall100 })); }
-    catch (e) { setError(e instanceof Error ? e.message : t('errGeneric')); } finally { setBusy(null); }
+    catch (e) { setError(faultMessage(e, t('errGeneric'))); } finally { setBusy(null); }
   };
   const submitDecline = async (pid: string) => {
     setBusy(`pd:${pid}`); setError(null);
     try { await declineProposal(pid, declineMsg.trim() || undefined); setDeclineFor(null); setDeclineMsg(''); await load(); if (openJob) { const rows = await listJobProposals(openJob).catch(() => null); if (rows) setProposals((p) => ({ ...p, [openJob]: rows })); } }
-    catch (e) { setError(e instanceof Error ? e.message : t('errGeneric')); } finally { setBusy(null); }
+    catch (e) { setError(faultMessage(e, t('errGeneric'))); } finally { setBusy(null); }
   };
   const doSchedule = async (input: { title: string; kind: 'review' | 'interview'; jobId?: string; engagementId?: string }) => {
     setBusy(`mt:${input.jobId ?? input.engagementId}`); setError(null);
     try { await scheduleMeeting(input); }
-    catch (e) { setError(e instanceof Error ? e.message : t('errGeneric')); } finally { setBusy(null); }
+    catch (e) { setError(faultMessage(e, t('errGeneric'))); } finally { setBusy(null); }
   };
   const evalDeliverable = async (id: string) => {
     setBusy(`de:${id}`); setError(null);
     try { const s = await evaluateDeliverable(id); setDelivScores((m) => ({ ...m, [id]: s.overall100 })); }
-    catch (e) { setError(e instanceof Error ? e.message : t('errGeneric')); } finally { setBusy(null); }
+    catch (e) { setError(faultMessage(e, t('errGeneric'))); } finally { setBusy(null); }
   };
   const decideDeliverable = async (engagementId: string, id: string, status: 'accepted' | 'changes_requested') => {
     setBusy(`ds:${id}`); setError(null);
     try { await setDeliverableStatus(id, status); const rows = await listEngagementDeliverables(engagementId).catch(() => null); if (rows) setDeliverables((p) => ({ ...p, [engagementId]: rows })); }
-    catch (e) { setError(e instanceof Error ? e.message : t('errGeneric')); } finally { setBusy(null); }
+    catch (e) { setError(faultMessage(e, t('errGeneric'))); } finally { setBusy(null); }
   };
 
   const submitReview = async (engagementId: string) => {
     setBusy(`rev:${engagementId}`); setError(null);
     try { await reviewFreelancer(engagementId, reviewForm.rating, reviewForm.comment || undefined, reviewForm.wouldWorkAgain); setRateFor(null); setReviewForm({ rating: 5, comment: '', wouldWorkAgain: true }); await load(); }
-    catch (e) { setError(e instanceof Error ? e.message : t('errGeneric')); } finally { setBusy(null); }
+    catch (e) { setError(faultMessage(e, t('errGeneric'))); } finally { setBusy(null); }
   };
 
   const submitJob = async () => {
@@ -186,7 +186,7 @@ export function TalentView() {
       });
       setShowPost(false); setJob({ title: '', description: '', requirements: '', discipline: '', skills: '', postingType: 'project_bid', engagementType: 'fixed_bid', rateMin: '', rateMax: '' });
       await load();
-    } catch (e) { setError(e instanceof Error ? e.message : t('errGeneric')); } finally { setBusy(null); }
+    } catch (e) { setError(faultMessage(e, t('errGeneric'))); } finally { setBusy(null); }
   };
 
   if (!tenant) {

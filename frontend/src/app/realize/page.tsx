@@ -19,7 +19,7 @@ import {
   type RealizationTargetSummary,
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Realize — idea in, something a person can open out.
  *
@@ -471,7 +471,7 @@ export default function RealizePage() {
       setRecommendations(result.recommendations);
       setChosen(result.recommendations.find((r) => r.recommended)?.key ?? null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('readFailed'));
+      setError(faultMessage(e, t('readFailed')));
     } finally {
       setReading(false);
     }
@@ -503,7 +503,7 @@ export default function RealizePage() {
       setBuildResult(result);
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('buildFailed'));
+      setError(faultMessage(e, t('buildFailed')));
     } finally {
       setBuilding(false);
     }
@@ -520,7 +520,7 @@ export default function RealizePage() {
       setStrategy(found.strategy);
       setChallengeId(found.challengeId);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('readFailed'));
+      setError(faultMessage(e, t('readFailed')));
     }
   };
 
@@ -534,7 +534,7 @@ export default function RealizePage() {
       setRealization(updated);
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('abandonFailed'));
+      setError(faultMessage(e, t('abandonFailed')));
     } finally {
       setAbandoning(false);
     }

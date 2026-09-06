@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { Sparkline } from '@/components/charts/Sparkline';
 import { colorAt } from '@/components/charts/chartColors';
 import { creationSessionsApi, type AttributedOutcomes, type AttributedOutcomeSeries } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * The ATTRIBUTED half of the Idea→delivery panel.
  *
@@ -46,7 +46,7 @@ export function CanvasAttributedOutcomes({ sessionId }: CanvasAttributedOutcomes
     setError(null);
     creationSessionsApi.attributedOutcomes(sessionId)
       .then((r) => { if (live) setData(r); })
-      .catch((e: Error) => { if (live) setError(e.message); });
+      .catch((e: Error) => { if (live) setError(faultMessage(e)); });
     return () => { live = false; };
   }, [sessionId]);
 

@@ -21,7 +21,7 @@ import {
   type AttachedTeam,
 } from '@/lib/teams';
 import { btnPrimary, btnSubtle, inputStyle, sectionPad } from './configStyles';
-
+import { faultMessage } from '@/lib/apiClient';
 export function TeamsTab({ projectId }: { projectId: number }) {
   const t = useTranslations('boardConfig');
   const [allTeams, setAllTeams] = useState<TeamSummary[]>([]);
@@ -39,7 +39,7 @@ export function TeamsTab({ projectId }: { projectId: number }) {
       setAllTeams(all);
       setAttached(here);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errLoadTeams'));
+      setError(faultMessage(e, t('errLoadTeams')));
     } finally {
       setLoading(false);
     }
@@ -55,7 +55,7 @@ export function TeamsTab({ projectId }: { projectId: number }) {
     setBusy(true);
     setError(null);
     try { await fn(); await load(); }
-    catch (e) { setError(e instanceof Error ? e.message : t('errUpdate')); }
+    catch (e) { setError(faultMessage(e, t('errUpdate'))); }
     finally { setBusy(false); }
   };
 

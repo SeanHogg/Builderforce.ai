@@ -12,7 +12,7 @@ import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { mailboxApi, type MailboxConnection, type MailboxProviderInfo } from '@/lib/mailboxApi';
 import { button, listItem, listReset, muted, spread, Row } from './growthStyles';
-
+import { faultText } from '@/lib/apiClient';
 export function MailboxesSection() {
   const t = useTranslations('growth');
   const confirm = useConfirm();
@@ -54,7 +54,7 @@ export function MailboxesSection() {
       setNotice(successMessage);
       await reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('genericError'));
+      setError(faultText(e, t('genericError')));
     } finally {
       setBusy(false);
     }
@@ -68,7 +68,7 @@ export function MailboxesSection() {
       const { authUrl } = await mailboxApi.connect(provider, '/growth');
       window.location.href = authUrl;
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('genericError'));
+      setError(faultText(e, t('genericError')));
     }
   }, [t]);
 

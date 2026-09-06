@@ -23,7 +23,7 @@ import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { MatchScore, MatchSkills } from './MatchScore';
 import { inviteToJob, listSavedTalent, saveTalent, unsaveTalent } from '@/lib/freelance/invites';
 import { listJobRecommendations, type TalentMatch } from '@/lib/freelance/matching';
-
+import { faultMessage } from '@/lib/apiClient';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
   borderRadius: 'var(--radius-lg)', padding: 14, minWidth: 0,
@@ -66,7 +66,7 @@ export function TalentRecommendations({ jobId }: { jobId: string }) {
       setMatches(ranked);
       setShortlisted(new Set(saved.items.map((row) => row.freelancerUserId)));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('match.loadError'));
+      setError(faultMessage(e, t('match.loadError')));
     } finally {
       setLoading(false);
     }
@@ -86,7 +86,7 @@ export function TalentRecommendations({ jobId }: { jobId: string }) {
         setShortlisted((prev) => new Set(prev).add(userId));
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('shortlist.failed'));
+      setError(faultMessage(e, t('shortlist.failed')));
     } finally {
       setBusy(null);
     }
@@ -101,7 +101,7 @@ export function TalentRecommendations({ jobId }: { jobId: string }) {
       setMessageFor(null);
       setMessage('');
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('invite.failed'));
+      setError(faultMessage(e, t('invite.failed')));
     } finally {
       setBusy(null);
     }

@@ -14,7 +14,7 @@ import {
 } from '@/lib/builderforceApi';
 import { PROVIDER_META } from './IntegrationCredentialsManager';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Manage external board connections (project-management, ITSM, and incident
  * systems) for a project. Creating a connection immediately kicks off an
@@ -86,7 +86,7 @@ export function BoardConnectionsManager({ projectId, heading }: { projectId: num
       Promise.all([integrationsApi.list({ projectId }), integrationsApi.list({ scope: 'global' })]).then(([a, b]) => [...a, ...b]),
     ])
       .then(([conns, c]) => { setConnections(conns); setCreds(c); })
-      .catch((e) => setError(e instanceof Error ? e.message : t('loadError')))
+      .catch((e) => setError(faultMessage(e, t('loadError'))))
       .finally(() => setLoading(false));
   }, [projectId]);
 
@@ -116,7 +116,7 @@ export function BoardConnectionsManager({ projectId, heading }: { projectId: num
         .finally(load);
       resetForm(); setAdding(false); load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('createError'));
+      setError(faultMessage(e, t('createError')));
     } finally {
       setSaving(false);
     }

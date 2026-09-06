@@ -29,7 +29,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { rfpApi, type BrandPalette } from '@/lib/builderforceApi';
 import { FALLBACK_SWATCH_HEX, extractPaletteFromImage } from '@/lib/brandPalette';
-
+import { faultMessage } from '@/lib/apiClient';
 export interface BrandPaletteEditorProps {
   value: BrandPalette;
   onChange: (patch: Partial<BrandPalette>) => void;
@@ -70,7 +70,7 @@ export function BrandPaletteEditor({ value, onChange, hint, disabled }: BrandPal
       }, result.candidates);
       setNotice(t('brand.readFromSiteDone'));
     } catch (e) {
-      setNotice(e instanceof Error ? e.message : t('brand.readFailed'));
+      setNotice(faultMessage(e, t('brand.readFailed')));
     } finally {
       setBusy(null);
     }

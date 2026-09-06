@@ -23,7 +23,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { getProposalEvalLens, type ProposalEvalLens } from '@/lib/freelance/matching';
-
+import { faultMessage } from '@/lib/apiClient';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
   borderRadius: 'var(--radius-lg)', padding: 14, minWidth: 0,
@@ -48,7 +48,7 @@ export function ProposalEvalLensPanel({ jobId }: { jobId: string }) {
     setError(null);
     getProposalEvalLens(jobId)
       .then((result) => { if (!cancelled) setLens(result); })
-      .catch((e: Error) => { if (!cancelled) setError(e.message); })
+      .catch((e: Error) => { if (!cancelled) setError(faultMessage(e)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [jobId]);

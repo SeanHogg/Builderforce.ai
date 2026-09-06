@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePhone } from '@/lib/usePhone';
-
+import { faultText } from '@/lib/apiClient';
 /**
  * "Load a log, and reload it when the phone state moves."
  *
@@ -31,7 +31,7 @@ export function useLogFeed<T>(load: () => Promise<T[]>): { rows: T[]; error: str
     let active = true;
     load()
       .then((next) => { if (active) { setRows(next); setError(''); } })
-      .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : String(cause)); });
+      .catch((cause) => { if (active) setError(faultText(cause)); });
     return () => { active = false; };
     // `load` is a module-level function in every call site, so it is stable; the
     // snapshot identity is the real dependency.

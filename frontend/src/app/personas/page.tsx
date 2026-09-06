@@ -27,7 +27,7 @@ import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { PersonaAssignmentsContent } from '@/components/PersonaAssignmentsContent';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
-
+import { faultText } from '@/lib/apiClient';
 /** Map a server-owned persona (from GET /api/personas/mine) into the flat display
  *  shape the "My Personas" tab renders. `shared` = the persona is published (public). */
 function serverToUserPersona(p: PublicPersona): UserPersona {
@@ -138,7 +138,7 @@ export default function PersonasPage() {
         setStats(s);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load');
+      setError(faultText(e, 'Failed to load'));
     } finally {
       setLoading(false);
     }
@@ -155,7 +155,7 @@ export default function PersonasPage() {
       setInstalledSlugs((prev) => new Set([...prev, slug]));
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Assign failed');
+      setError(faultText(e, 'Assign failed'));
     }
   };
 
@@ -172,7 +172,7 @@ export default function PersonasPage() {
       const updated = await marketplaceStats.getStats('persona', [slug]).catch(() => ({}));
       setStats((s) => ({ ...s, ...updated }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unassign failed');
+      setError(faultText(e, 'Unassign failed'));
     }
   };
 
@@ -185,7 +185,7 @@ export default function PersonasPage() {
         [slug]: { ...prev, liked, likes: liked ? prev.likes + 1 : Math.max(0, prev.likes - 1) },
       }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Like failed');
+      setError(faultText(e, 'Like failed'));
     }
   };
 
@@ -215,7 +215,7 @@ export default function PersonasPage() {
       setTab('my-personas');
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('createFailed'));
+      setError(faultText(e, t('createFailed')));
     }
   };
 
@@ -226,7 +226,7 @@ export default function PersonasPage() {
       await personasApi.remove(id);
       setUserPersonas((prev) => prev.filter((p) => p.id !== id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('deleteFailed'));
+      setError(faultText(e, t('deleteFailed')));
     }
   };
 
@@ -244,7 +244,7 @@ export default function PersonasPage() {
       setUserPersonas((prev) => prev.map((u) => (u.id === p.id ? { ...u, shared: true } : u)));
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('publishFailed'));
+      setError(faultText(e, t('publishFailed')));
     } finally {
       setPublishingId(null);
     }

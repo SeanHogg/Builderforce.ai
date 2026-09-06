@@ -24,7 +24,7 @@ import { JobInvitesPanel } from '@/components/talent/JobInvitesPanel';
 import { ProposalEvalLensPanel } from '@/components/talent/ProposalEvalLensPanel';
 import { inviteToJob } from '@/lib/freelance/invites';
 import { listMyJobs, type JobPosting } from '@/lib/freelance/postings';
-
+import { faultMessage } from '@/lib/apiClient';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
   borderRadius: 'var(--radius-lg)', padding: 16, minWidth: 0,
@@ -59,7 +59,7 @@ export default function ShortlistClient() {
       setJobs(open);
       setJobId((current) => current || (open[0]?.id ?? ''));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('shortlist.loadError'));
+      setError(faultMessage(e, t('shortlist.loadError')));
     } finally {
       setLoading(false);
     }
@@ -78,7 +78,7 @@ export default function ShortlistClient() {
       await inviteToJob(jobId, { freelancerUserId });
       setNotice(t('invite.sentNotice'));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('invite.failed'));
+      setError(faultMessage(e, t('invite.failed')));
     }
   };
 

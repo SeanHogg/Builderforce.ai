@@ -7,7 +7,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { getTicketCoordination, releaseLease, type TicketCoordination } from '@/lib/agentOpsApi';
 import { button, card, chip, emptyState, input, mono, muted, sectionTitle, table, tableScroll, td, th } from './agentOpsStyles';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Coordination — what several agents working ONE ticket are doing to each other.
  *
@@ -33,7 +33,7 @@ export function CoordinationPanel() {
       setState(await getTicketCoordination(taskId));
     } catch (e) {
       setState(null);
-      setError(e instanceof Error ? e.message : t('genericError'));
+      setError(faultMessage(e, t('genericError')));
     } finally {
       setLoading(false);
     }

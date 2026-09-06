@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useRequireAuth } from '@/lib/useRequireAuth';
 import { getDefaultTenantId, setDefaultTenantId, clearDefaultTenantId, createTenant as apiCreateTenant, renameTenant as apiRenameTenant } from '@/lib/auth';
 import type { Tenant } from '@/lib/types';
-
+import { faultMessage } from '@/lib/apiClient';
 /** Auto-select tenant when there is only one or a default is set (BuilderForceAgentsLink-style). Returns the tenant to select or null. */
 function resolveAutoSelectTenant(list: Tenant[]): Tenant | null {
   if (list.length === 0) return null;
@@ -56,7 +56,7 @@ export default function TenantsPage() {
         setTenants(data);
       })
       .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : 'Failed to load tenants')
+        setError(faultMessage(err, 'Failed to load tenants'))
       )
       .finally(() => setIsLoading(false));
   }, [isAuthenticated, fetchTenants]);
@@ -85,7 +85,7 @@ export default function TenantsPage() {
       const next = searchParams.get('next') || '/dashboard';
       router.push(next);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to select tenant');
+      setError(faultMessage(err, 'Failed to select tenant'));
       setIsSelecting(null);
     }
   };
@@ -132,7 +132,7 @@ export default function TenantsPage() {
         router.replace(next);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create workspace');
+      setError(faultMessage(err, 'Failed to create workspace'));
     } finally {
       setIsCreating(false);
     }
@@ -163,7 +163,7 @@ export default function TenantsPage() {
       setTenants((prev) => prev.map((t) => (t.id === tenant.id ? { ...t, name: updated.name, slug: updated.slug ?? t.slug } : t)));
       cancelRename();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to rename workspace');
+      setError(faultMessage(err, 'Failed to rename workspace'));
     } finally {
       setIsRenaming(false);
     }

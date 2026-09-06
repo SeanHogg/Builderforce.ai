@@ -21,7 +21,7 @@ import { useTranslations } from 'next-intl';
 import { useOnboardingState, type ActiveTermsDoc } from '@/lib/onboarding';
 import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
 import RoleChoiceScreen from '@/components/account/RoleChoiceScreen';
-
+import { faultMessage } from '@/lib/apiClient';
 interface OnboardingGateProps {
   children: React.ReactNode;
   /** Surrounding shell (AppShell). Only invoked once the gate is past terms. */
@@ -90,7 +90,7 @@ function TermsAcceptanceScreen({ terms, onAccept }: TermsAcceptanceScreenProps) 
     try {
       await onAccept();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('acceptFailed'));
+      setError(faultMessage(e, t('acceptFailed')));
       setSubmitting(false);
     }
   };

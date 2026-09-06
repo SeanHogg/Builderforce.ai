@@ -26,7 +26,7 @@ import {
   type ReinforcementResponse,
 } from '@/lib/api';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultText } from '@/lib/apiClient';
 export default function PersonalityUsagePanel({
   agentId,
   canApply,
@@ -68,7 +68,7 @@ export default function PersonalityUsagePanel({
       setActiveSummary(ev.activeSummary);
       setReinf(rf);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errLoad'));
+      setError(faultText(e, t('errLoad')));
     }
   }, [agentId, t]);
 
@@ -92,7 +92,7 @@ export default function PersonalityUsagePanel({
       onApplied?.();
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errApply'));
+      setError(faultText(e, t('errApply')));
     } finally {
       setBusy(false);
     }
@@ -106,7 +106,7 @@ export default function PersonalityUsagePanel({
       await dismissTraitReinforcement(agentId, { deltas: proposal.deltas, rationale: proposal.rationale });
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errDismiss'));
+      setError(faultText(e, t('errDismiss')));
     } finally {
       setBusy(false);
     }

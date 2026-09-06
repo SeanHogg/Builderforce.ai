@@ -14,7 +14,7 @@ import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { taxApi, type TaxYearReport } from '@/lib/taxApi';
-
+import { faultText } from '@/lib/apiClient';
 const cardStyle: React.CSSProperties = {
   border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)',
   padding: 16, background: 'var(--bg-base)',
@@ -38,7 +38,7 @@ export function TaxReportPanel() {
         setYears(available);
         setYear(available[0] ?? new Date().getFullYear());
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : t('loadFailed'));
+        setError(faultText(cause, t('loadFailed')));
       } finally {
         setLoading(false);
       }
@@ -50,7 +50,7 @@ export function TaxReportPanel() {
     try {
       setReport(await taxApi.report(y));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('loadFailed'));
+      setError(faultText(cause, t('loadFailed')));
       setReport(null);
     } finally {
       setBusy(false);
@@ -65,7 +65,7 @@ export function TaxReportPanel() {
     try {
       await taxApi.downloadReportCsv(year, !showAll);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('exportFailed'));
+      setError(faultText(cause, t('exportFailed')));
     } finally {
       setBusy(false);
     }

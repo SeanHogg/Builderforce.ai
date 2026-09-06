@@ -32,7 +32,7 @@ import {
   type RenderedDocument,
 } from '@/lib/founderOpsApi';
 import styles from './CofounderMatching.module.css';
-
+import { faultMessage } from '@/lib/apiClient';
 /** One editable row of the `parties` table. Held as strings because it is a form —
  *  the number is parsed once, on the way out, rather than fought with on every
  *  keystroke. */
@@ -113,7 +113,7 @@ export function FounderPaperwork() {
       // The API refuses a missing required variable BY NAME. Surfaced verbatim,
       // because "founders, effectiveDate" is the actual next action and a generic
       // "please complete the form" is not.
-      setError(caught instanceof Error ? caught.message : t('failed'));
+      setError(faultMessage(caught, t('failed')));
     } finally {
       setBusy(false);
     }

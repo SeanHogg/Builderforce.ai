@@ -10,7 +10,7 @@ import {
   type ProjectBackendView,
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * The operating surface for a project's server-side half.
  *
@@ -109,7 +109,7 @@ export default function ProjectBackendPanel({ projectId }: { projectId: number }
       // the common case is one paste and one click.
       setSecretName((current) => current || next.missingSecrets[0] || '');
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('loadFailed'));
+      setError(faultMessage(e, t('loadFailed')));
     }
   }, [projectId, t]);
 
@@ -126,7 +126,7 @@ export default function ProjectBackendPanel({ projectId }: { projectId: number }
       setSecretValue('');
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('saveFailed'));
+      setError(faultMessage(e, t('saveFailed')));
     } finally {
       setBusy(false);
     }
@@ -141,7 +141,7 @@ export default function ProjectBackendPanel({ projectId }: { projectId: number }
       await projectBackendApi.materialize(projectId);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('saveFailed'));
+      setError(faultMessage(e, t('saveFailed')));
     } finally {
       setBusy(false);
     }
@@ -155,7 +155,7 @@ export default function ProjectBackendPanel({ projectId }: { projectId: number }
       await projectBackendApi.setStatus(projectId, paused ? 'paused' : 'active');
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('saveFailed'));
+      setError(faultMessage(e, t('saveFailed')));
     } finally {
       setBusy(false);
     }
@@ -169,7 +169,7 @@ export default function ProjectBackendPanel({ projectId }: { projectId: number }
       await projectBackendApi.deleteHandler(projectId, name);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('saveFailed'));
+      setError(faultMessage(e, t('saveFailed')));
     } finally {
       setBusy(false);
     }

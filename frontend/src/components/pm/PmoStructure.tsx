@@ -16,7 +16,7 @@ import { pmoFocusDomId } from '@seanhogg/builderforce-brain-embedded';
 import { ObjectiveCard } from './ObjectiveCard';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { windowState, windowStateLabelKey } from '@/lib/pm/planning';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * PMO management surface — the single place portfolios, initiatives, projects AND
  * OKR objectives live together (the OKRs tab was merged in so an objective sits
@@ -93,7 +93,7 @@ export function PmoStructure({ tree, onChange, focus }: { tree: PmoTree; onChang
     setBusy(true);
     setErr(null);
     try { await fn(); onChange(); reloadObjectives(); }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setErr(faultMessage(e)); }
     finally { setBusy(false); }
   };
 

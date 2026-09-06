@@ -26,8 +26,9 @@ import { shareDataRoom, type DataRoomShareResult, type DataRoomSummary } from '@
 import type { CompanyDetail } from '@/lib/investorApi';
 import {
   buttonStyle, cardStyle, emptyStyle, errorStyle, gapChipStyle, inputStyle, labelStyle,
-  listRowStyle, listStyle, message, mutedStyle, primaryButtonStyle, rowStyle, sectionStyle, tokenStyle,
+  listRowStyle, listStyle, mutedStyle, primaryButtonStyle, rowStyle, sectionStyle, tokenStyle,
 } from './investorStyles';
+import { faultMessage } from '@/lib/apiClient';
 
 export function DataRoomView({
   detail,
@@ -58,7 +59,7 @@ export function DataRoomView({
         setEmail('');
         onChanged();
       })
-      .catch((cause: unknown) => setError(message(cause, t('error.shareRoom'))))
+      .catch((cause: unknown) => setError(faultMessage(cause, t('error.shareRoom'))))
       .finally(() => setBusy(false));
   }, [email, name, onChanged, t]);
 

@@ -6,7 +6,7 @@ import { usePermission } from '@/lib/rbac';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { learningApi, xapiEndpoint, type LrsCredential } from '@/lib/learningApi';
 import styles from './learning.module.css';
-
+import { faultText } from '@/lib/apiClient';
 /**
  * The workspace's Learning Record Store credentials.
  *
@@ -41,7 +41,7 @@ export function LrsCredentialPanel() {
   const load = useCallback(() => {
     learningApi.lrsCredentials()
       .then((res) => { setCredentials(res.credentials); setError(''); })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : t('lrs.failed')));
+      .catch((cause) => setError(faultText(cause, t('lrs.failed'))));
   }, [t]);
 
   useEffect(() => {
@@ -58,7 +58,7 @@ export function LrsCredentialPanel() {
         setError('');
         load();
       })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : t('lrs.issueFailed')))
+      .catch((cause) => setError(faultText(cause, t('lrs.issueFailed'))))
       .finally(() => setBusy(false));
   };
 
@@ -73,7 +73,7 @@ export function LrsCredentialPanel() {
     setBusy(true);
     learningApi.revokeLrsCredential(credential.id)
       .then(() => { setError(''); load(); })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : t('lrs.revokeFailed')))
+      .catch((cause) => setError(faultText(cause, t('lrs.revokeFailed'))))
       .finally(() => setBusy(false));
   };
 

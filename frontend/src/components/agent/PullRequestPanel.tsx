@@ -14,7 +14,7 @@ import {
 } from '@/lib/builderforceApi';
 import { getMergeBlockReason } from './pullRequestMergeState';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * In-product Pull Request review for a task's run. Shows the recorded PR + its
  * LIVE provider state (status, mergeability, CI checks, diff stat) and an
@@ -177,7 +177,7 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
       load();
       onMerged?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Merge failed');
+      setError(faultMessage(e, 'Merge failed'));
     } finally {
       setMerging(false);
     }

@@ -52,7 +52,8 @@ import { InvestorsView } from './InvestorsView';
 import { DataRoomView } from './DataRoomView';
 import { DiligenceView } from './DiligenceView';
 import { PackView } from './PackView';
-import { errorStyle, labelStyle, message, mutedStyle, rowStyle, sectionStyle } from './investorStyles';
+import { errorStyle, labelStyle, mutedStyle, rowStyle, sectionStyle } from './investorStyles';
+import { faultMessage } from '@/lib/apiClient';
 
 /** The five per-company reads, stamped with the company they were read for. */
 interface CompanyBundle {
@@ -115,7 +116,7 @@ export default function InvestorClient() {
         setCompanyId((current) => current ?? rows[0]?.id ?? null);
         setError(null);
       })
-      .catch((cause: unknown) => setError(message(cause, t('error.companies'))))
+      .catch((cause: unknown) => setError(faultMessage(cause, t('error.companies'))))
       .finally(() => setLoading(false));
   }, [t]);
 
@@ -144,7 +145,7 @@ export default function InvestorClient() {
           packs: packsResult.status === 'fulfilled' ? packsResult.value : [],
           rooms: roomsResult.status === 'fulfilled' ? roomsResult.value : [],
         });
-        setError(detailResult.status === 'rejected' ? message(detailResult.reason, t('error.company')) : null);
+        setError(detailResult.status === 'rejected' ? faultMessage(detailResult.reason, t('error.company')) : null);
       });
     return () => { cancelled = true; };
   }, [allowed, companyId, revision, t]);

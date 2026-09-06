@@ -57,7 +57,7 @@ import { useModalityCopy, useRightTabLabels } from '@/lib/useModalityCopy';
 import { useVoiceStudio } from '@/lib/voiceStudio';
 import { VoiceOutput } from './builder/VoiceOutput';
 import { VoiceConfigPanel } from './builder/VoiceConfigPanel';
-
+import { faultMessage } from '@/lib/apiClient';
 interface IDEProps {
   project: Project;
   initialFiles: FileEntry[];
@@ -778,7 +778,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       if (previewUrl) await writeFileToContainer(selection.file, content).catch(() => { /* best-effort */ });
       setVisualSelection(null);
     } catch (error) {
-      setVisualError(error instanceof Error ? error.message : t('visualNoPreview'));
+      setVisualError(faultMessage(error, t('visualNoPreview')));
     }
   }, [project.id, previewUrl, t, visualDraft, visualSelection, writeFileToContainer]);
 
@@ -1024,7 +1024,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       prdReview.resolve(true);
       setPrdReview(null);
     } catch (e) {
-      setReviewError(e instanceof Error ? e.message : 'Failed to save PRD');
+      setReviewError(faultMessage(e, 'Failed to save PRD'));
     } finally {
       setReviewSaving(false);
     }
@@ -1046,7 +1046,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       tasksReview.resolve(true);
       setTasksReview(null);
     } catch (e) {
-      setReviewError(e instanceof Error ? e.message : 'Failed to add tasks');
+      setReviewError(faultMessage(e, 'Failed to add tasks'));
     } finally {
       setReviewSaving(false);
     }

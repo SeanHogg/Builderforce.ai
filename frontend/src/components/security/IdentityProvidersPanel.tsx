@@ -42,7 +42,7 @@ import {
 import { useConfirm } from '@/components/ConfirmProvider';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { RoleGate } from '@/components/RoleGate';
-
+import { faultMessage } from '@/lib/apiClient';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -173,7 +173,7 @@ export default function IdentityProvidersPanel() {
       setRegistrations(lti.registrations);
       setToolUrls(lti.tool);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     } finally {
       setLoading(false);
     }
@@ -231,7 +231,7 @@ export default function IdentityProvidersPanel() {
       setSsoDraft(null);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     } finally {
       setSaving(false);
     }
@@ -248,7 +248,7 @@ export default function IdentityProvidersPanel() {
       await ssoConnectionsApi.remove(connection.id);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     }
   };
 
@@ -260,7 +260,7 @@ export default function IdentityProvidersPanel() {
       setDomainDraft((prev) => ({ ...prev, [connectionId]: '' }));
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     }
   };
 
@@ -270,7 +270,7 @@ export default function IdentityProvidersPanel() {
       if (!result.verified) setError(t('domainNotFound', { record: result.recordName }));
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     }
   };
 
@@ -307,7 +307,7 @@ export default function IdentityProvidersPanel() {
       setLtiDraft(null);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     } finally {
       setSaving(false);
     }
@@ -324,7 +324,7 @@ export default function IdentityProvidersPanel() {
       await ltiRegistrationsApi.rotateKey(registration.id);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     }
   };
 
@@ -334,7 +334,7 @@ export default function IdentityProvidersPanel() {
       else await ltiRegistrationsApi.enable(registration.id);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     }
   };
 
@@ -432,7 +432,7 @@ export default function IdentityProvidersPanel() {
                           <button
                             type="button"
                             style={quietButton}
-                            onClick={() => void ssoConnectionsApi.removeDomain(domain.id).then(load).catch((e: Error) => setError(e.message))}
+                            onClick={() => void ssoConnectionsApi.removeDomain(domain.id).then(load).catch((e: Error) => setError(faultMessage(e)))}
                           >
                             {t('remove')}
                           </button>

@@ -25,7 +25,7 @@ import { salesApi } from '@/lib/salesApi';
 import { createTenant } from '@/lib/auth';
 import { buildSalesHubGraph } from '@/lib/sales/salesHubCanvas';
 import styles from './salesCanvasLauncher.module.css';
-
+import { faultMessage } from '@/lib/apiClient';
 export default function SalesCanvasLauncher() {
   const t = useTranslations('salesHub.launcher');
   const router = useRouter();
@@ -46,7 +46,7 @@ export default function SalesCanvasLauncher() {
           const tenant = existing[0] ?? await createTenant(webToken, t('workspaceName', { name: user.name || t('defaultOwner') }));
           await selectTenant(tenant);
         } catch (cause) {
-          setError(cause instanceof Error ? cause.message : t('workspaceFailed'));
+          setError(faultMessage(cause, t('workspaceFailed')));
         } finally {
           provisioningRef.current = false;
         }
@@ -77,7 +77,7 @@ export default function SalesCanvasLauncher() {
         await salesApi.setCanvas(created.session.id);
         router.replace(`/create/${created.session.id}`);
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : t('canvasFailed'));
+        setError(faultMessage(cause, t('canvasFailed')));
         canvasLaunchRef.current = false;
       }
     })();

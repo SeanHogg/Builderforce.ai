@@ -29,7 +29,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { signAsParty, signerView, type SignerView } from '@/lib/founderOpsApi';
 import styles from './SignerConsole.module.css';
-
+import { faultMessage } from '@/lib/apiClient';
 type State =
   | { status: 'loading' }
   | { status: 'ready'; view: SignerView }
@@ -79,7 +79,7 @@ export function SignerConsole({ token }: { token: string }) {
       });
       setSettled(decision === 'agree' ? 'agreed' : 'declined');
     } catch (decideError) {
-      setError(decideError instanceof Error ? decideError.message : t('failed'));
+      setError(faultMessage(decideError, t('failed')));
     } finally {
       setBusy(false);
     }

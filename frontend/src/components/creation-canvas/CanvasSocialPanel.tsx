@@ -31,7 +31,7 @@ import { authFieldsFor, connectorsApi, type ConnectorAuthField } from '@/lib/con
 import { resolvePublicMediaUrls } from '@/lib/canvasPublicMedia';
 import { NETWORK_GLYPHS } from '@/lib/networkGlyph';
 import { PanelTabs } from './PanelTabs';
-
+import { faultMessage } from '@/lib/apiClient';
 export interface CanvasSocialPanelProps {
   /** Put a live feed tile on the board. Same helper the canvas tools use. */
   onAddFeed: (filter: SocialFeedFilter) => Promise<void> | void;
@@ -90,7 +90,7 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
       // everywhere" — and unticking is cheaper than ticking five boxes.
       setSelected(accountList.accounts.filter((a) => a.ready).map((a) => a.id));
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : t('loadFailed'));
+      setError(faultMessage(failure, t('loadFailed')));
     } finally {
       setLoading(false);
     }
@@ -109,7 +109,7 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
       const detail = await connectorsApi.get(option.connectorKey);
       setFields(authFieldsFor(detail.manifest));
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : t('loadFailed'));
+      setError(faultMessage(failure, t('loadFailed')));
       setFields([]);
     }
   }, [t]);
@@ -128,7 +128,7 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
       setNotice(t('connected', { network: connecting.label }));
       await load();
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : t('connectFailed'));
+      setError(faultMessage(failure, t('connectFailed')));
     } finally {
       setBusy(false);
     }
@@ -141,7 +141,7 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
       await connectorsApi.removeConnection(account.id);
       await load();
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : t('disconnectFailed'));
+      setError(faultMessage(failure, t('disconnectFailed')));
     } finally {
       setBusy(false);
     }
@@ -154,7 +154,7 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
       await onAddFeed({});
       onClose();
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : t('feedFailed'));
+      setError(faultMessage(failure, t('feedFailed')));
     } finally {
       setBusy(false);
     }
@@ -219,7 +219,7 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
       setMediaObjectIds([]);
       setScheduledAt('');
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : t('publishFailed'));
+      setError(faultMessage(failure, t('publishFailed')));
     } finally {
       setBusy(false);
     }

@@ -14,7 +14,7 @@ import PageContainer from '@/components/PageContainer';
 import NotificationsPanel from '@/components/freelance/NotificationsPanel';
 import { submitDeliverable, listMyDeliverables, type Deliverable } from '@/lib/freelance/deliverables';
 import { listEngagementBoard, listEngagementTasks, requestReview, type EngagementBoard, type EngagementTask } from '@/lib/freelance/engagements';
-
+import { faultMessage } from '@/lib/apiClient';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18,
 };
@@ -65,7 +65,7 @@ export default function FreelancerWorkspacePage() {
       const rows = await listEngagementBoard();
       setBoards(rows);
       if (rows.length > 0) setSelected((s) => s ?? rows[0].engagementId);
-    } catch (e) { setError(e instanceof Error ? e.message : tg('workspace.loadError')); }
+    } catch (e) { setError(faultMessage(e, tg('workspace.loadError'))); }
     finally { setLoading(false); }
   }, [tg]);
 
@@ -77,7 +77,7 @@ export default function FreelancerWorkspacePage() {
         listMyDeliverables(engagementId).catch(() => []),
       ]);
       setTasks(ts); setMyDeliverables(ds); setReviewed({});
-    } catch (e) { setError(e instanceof Error ? e.message : tg('workspace.loadError')); }
+    } catch (e) { setError(faultMessage(e, tg('workspace.loadError'))); }
     finally { setTasksLoading(false); }
   }, [tg]);
 
@@ -88,7 +88,7 @@ export default function FreelancerWorkspacePage() {
     if (!selected) return;
     setBusy(`rev:${taskId}`); setError(null);
     try { await requestReview(selected, taskId); setReviewed((m) => ({ ...m, [taskId]: true })); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
+    catch (e) { setError(faultMessage(e, 'Failed')); }
     finally { setBusy(null); }
   };
 
@@ -100,7 +100,7 @@ export default function FreelancerWorkspacePage() {
       setProposeFor(null); setDraft({ title: '', body: '' });
       const ds = await listMyDeliverables(selected).catch(() => myDeliverables);
       setMyDeliverables(ds);
-    } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
+    } catch (e) { setError(faultMessage(e, 'Failed')); }
     finally { setBusy(null); }
   };
 

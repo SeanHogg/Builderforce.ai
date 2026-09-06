@@ -14,7 +14,7 @@ import {
 } from '@/lib/builderforceApi';
 import type { Project } from '@/lib/types';
 import { useConfirm } from '@/components/ConfirmProvider';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Migration wizard — connect → discover → map/combine projects → map item types
  * → map users → stage & review → import. Nothing lands in real projects/tasks/
@@ -95,7 +95,7 @@ export function MigrationWizard({ open, onClose, provider, providerLabel, creden
     setBusy(true);
     migrationsApi.get(initialRunId)
       .then((d) => { if (!cancelled) { setDetail(d); setStep(stepForStatus(d.run.status)); } })
-      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load migration run'); })
+      .catch((e) => { if (!cancelled) setError(faultMessage(e, 'Could not load migration run')); })
       .finally(() => { if (!cancelled) setBusy(false); });
     return () => { cancelled = true; };
   }, [open, initialRunId]);
@@ -117,7 +117,7 @@ export function MigrationWizard({ open, onClose, provider, providerLabel, creden
       setDetail(d);
       setStep('projects');
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('migration.discoveryFailed'));
+      setError(faultMessage(e, t('migration.discoveryFailed')));
     } finally { setBusy(false); }
   };
 
@@ -134,7 +134,7 @@ export function MigrationWizard({ open, onClose, provider, providerLabel, creden
       setDetail(d);
       setStep(next);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('migration.saveFailed'));
+      setError(faultMessage(e, t('migration.saveFailed')));
     } finally { setBusy(false); }
   };
 
@@ -152,7 +152,7 @@ export function MigrationWizard({ open, onClose, provider, providerLabel, creden
       setDetail(d);
       setStep('review');
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('migration.stageFailed'));
+      setError(faultMessage(e, t('migration.stageFailed')));
     } finally { setBusy(false); }
   };
 
@@ -167,7 +167,7 @@ export function MigrationWizard({ open, onClose, provider, providerLabel, creden
       setStep('import');
       onImported?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('migration.importFailed'));
+      setError(faultMessage(e, t('migration.importFailed')));
     } finally { setBusy(false); }
   };
 
@@ -181,7 +181,7 @@ export function MigrationWizard({ open, onClose, provider, providerLabel, creden
       setDetail((prev) => prev ? { ...prev, run } : prev);
       onImported?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('migration.rollbackFailed'));
+      setError(faultMessage(e, t('migration.rollbackFailed')));
     } finally { setBusy(false); }
   };
 

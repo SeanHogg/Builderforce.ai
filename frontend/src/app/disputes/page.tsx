@@ -36,7 +36,7 @@ import {
   type Dispute,
   type MediatorAuthority,
 } from '@/lib/disputesApi';
-
+import { faultMessage } from '@/lib/apiClient';
 export const runtime = 'edge';
 
 export default function WorkspaceDisputesPage() {
@@ -62,7 +62,7 @@ export default function WorkspaceDisputesPage() {
       setDisputes(view.disputes);
       setAuthority(view.mediatorAuthority);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(faultMessage(cause));
     } finally {
       setLoading(false);
     }

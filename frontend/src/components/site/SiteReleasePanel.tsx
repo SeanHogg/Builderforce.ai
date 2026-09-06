@@ -33,7 +33,7 @@ import {
 } from '@/lib/api';
 import { useFormat } from "@/i18n/useFormat";
 import { formatBytes } from '@/lib/formatBytes';
-
+import { faultMessage } from '@/lib/apiClient';
 interface SiteReleasePanelProps {
   projectId: number;
   /** Build the project and return its dist assets — the same builder publish uses. */
@@ -63,7 +63,7 @@ export function SiteReleasePanel({ projectId, onBuild }: SiteReleasePanelProps) 
       setNotice(t('releases.restored'));
       load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('releases.restoreFailed'));
+      setError(faultMessage(cause, t('releases.restoreFailed')));
     } finally {
       setBusy(null);
     }
@@ -78,7 +78,7 @@ export function SiteReleasePanel({ projectId, onBuild }: SiteReleasePanelProps) 
       const result = await packageApp(projectId, target, assets);
       setNotice(t('packaging.done', { directory: result.state.directory }));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('packaging.failed'));
+      setError(faultMessage(cause, t('packaging.failed')));
     } finally {
       setBusy(null);
     }

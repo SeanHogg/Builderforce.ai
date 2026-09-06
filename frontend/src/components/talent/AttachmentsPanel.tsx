@@ -21,7 +21,7 @@ import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import { formatBytes } from '@/lib/formatBytes';
 import type { PostingAttachment } from '@/lib/freelance/postings';
-
+import { faultMessage } from '@/lib/apiClient';
 export function AttachmentsPanel({
   attachments,
   readOnly = false,
@@ -48,7 +48,7 @@ export function AttachmentsPanel({
     setBusy(true);
     setError(null);
     try { await fn(); }
-    catch (e) { setError(e instanceof Error ? e.message : t('jobs.attachFailed')); }
+    catch (e) { setError(faultMessage(e, t('jobs.attachFailed'))); }
     finally { setBusy(false); }
   };
 

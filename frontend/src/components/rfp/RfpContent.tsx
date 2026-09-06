@@ -110,7 +110,7 @@ export default function RfpContent() {
       setBrandIsDefault(false);
       setBrandOpen(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setError(faultMessage(e, 'Save failed'));
     } finally {
       setSavingBrand(false);
     }
@@ -130,7 +130,7 @@ export default function RfpContent() {
       setPanelOpen(false);
       router.push(`/projects/rfp/${created.id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setError(faultMessage(e, 'Save failed'));
     } finally {
       setSaving(false);
     }

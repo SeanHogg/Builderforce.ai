@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { approvalsApi, type Approval, type ResolvedApproval } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * The canonical resolve UI for a human-in-the-loop request: approve/reject an
  * action, or answer a question/feedback with free text. Self-contained — it owns
@@ -43,7 +43,7 @@ export function ApprovalResolveControl({ approval, onResolved, compact = false }
       const updated = await approvalsApi.decide(approval.id, body);
       onResolved?.(updated);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to update request');
+      setError(faultMessage(e, 'Failed to update request'));
     } finally {
       setBusy(false);
     }

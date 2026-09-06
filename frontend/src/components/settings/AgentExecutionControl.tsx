@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { RoleGate } from '@/components/RoleGate';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { runtimeApi } from '@/lib/builderforceApi';
-
+import { faultText } from '@/lib/apiClient';
 export default function AgentExecutionControl() {
   const confirm = useConfirm();
   const [enabled, setEnabled] = useState<boolean | null>(null);
@@ -17,7 +17,7 @@ export default function AgentExecutionControl() {
       setEnabled(state.enabled);
       setNotice('');
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Could not load agent execution control.');
+      setNotice(faultText(error, 'Could not load agent execution control.'));
     }
   }, []);
 
@@ -45,7 +45,7 @@ export default function AgentExecutionControl() {
         setNotice('Agent execution is enabled.');
       }
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Could not update agent execution control.');
+      setNotice(faultText(error, 'Could not update agent execution control.'));
       await load();
     } finally {
       setSaving(false);

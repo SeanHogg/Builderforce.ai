@@ -36,6 +36,7 @@ import { fetchWithTransportReport, TRANSPORT_FAILURE_STATUS } from './errors/tra
 import { signalTermsGate } from './errors/termsGateEvent';
 import { LOCALE_HEADER, readLocaleCookie } from '@/i18n/config';
 import { guestReadResponse, resolveGuestRead } from '@/domains/guest/application/guestRead';
+import { noteSignedOutRead } from '@/domains/guest/application/guestWall';
 
 export function getApiBaseUrl(): string {
   return AUTH_API_URL;
@@ -217,9 +218,21 @@ export function isSignedOutFailure(error: unknown): boolean {
  * rather than a red box quoting a header name at someone who simply has no
  * account.
  */
-export function faultMessage(error: unknown): string | null {
+export function faultMessage(error: unknown, fallback?: string): string | null {
   if (!error || isSignedOutFailure(error)) return null;
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof Error) return error.message || fallback || error.message;
+  return fallback ?? String(error);
+}
+
+/**
+ * {@link faultMessage} for a surface whose "nothing to report" is the empty
+ * string rather than `null` — a `useState('')` notice, a status line, a
+ * custom `setNotice(text: string)`. Same rule, same silence for a signed-out
+ * read; only the sentinel differs, so those surfaces keep their own contract
+ * instead of each spelling `?? ''` beside the call.
+ */
+export function faultText(error: unknown, fallback?: string): string {
+  return faultMessage(error, fallback) ?? '';
 }
 
 /**
@@ -363,7 +376,12 @@ async function reportAndThrow(
   // Through the same unwrap as the toast: a caller that catches this reads the
   // nested code and details too, and never a raw numeric `code`.
   const { code, details } = flattenErrorBody(body);
-  throw new ApiRequestError(errorMessage(body, res), res.status, code, details, isAnonymousUnauthorized(res.status, hadToken));
+  const signedOut = isAnonymousUnauthorized(res.status, hadToken);
+  // The one fact a surface needs from a signed-out read — recorded here, where
+  // it is known, so `GuestAccountPrompt` can invite the visitor in without any
+  // surface having to recognise the rejection itself. See guestWall.
+  if (signedOut) noteSignedOutRead();
+  throw new ApiRequestError(errorMessage(body, res), res.status, code, details, signedOut);
 }
 
 /**

@@ -7,7 +7,7 @@ import { creationSessionsApi } from '@/lib/builderforceApi';
 import { useAuth } from '@/lib/AuthContext';
 import { signInHref } from '@/lib/auth';
 import { Button, ButtonLink, Surface } from '@/components/ui';
-
+import { faultText } from '@/lib/apiClient';
 const replaceLocation = (path: string) => window.location.replace(path);
 
 /**
@@ -49,7 +49,7 @@ export default function InvitationAcceptClient({ token, navigate = replaceLocati
       await selectTenant(invitedTenant);
       navigate(`/create/${sessionId}`);
     }).catch((error) => {
-      setStatus(error instanceof Error ? error.message : t('notAccepted'));
+      setStatus(faultText(error, t('notAccepted')));
       setFailed(true);
     });
   }, [authReady, fetchTenants, isAuthenticated, navigate, selectTenant, t, token]);

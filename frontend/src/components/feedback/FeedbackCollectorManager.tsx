@@ -20,7 +20,7 @@ import { feedbackApi, type FeedbackCollector, type CreateFeedbackCollectorResult
 import { FeedbackWebhookSettings } from './FeedbackWebhookSettings';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 const ingestBase = `${AUTH_API_URL}/api/feedback-ingest`;
 
 const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20 };
@@ -44,7 +44,7 @@ export function FeedbackCollectorManager() {
     setLoading(true);
     feedbackApi.collectors.list()
       .then((rows) => { setCollectors(rows); setError(null); })
-      .catch((e) => setError(e instanceof Error ? e.message : t('setup.loadFailed')))
+      .catch((e) => setError(faultMessage(e, t('setup.loadFailed'))))
       .finally(() => setLoading(false));
   }, [t]);
   useEffect(() => { load(); }, [load]);
@@ -71,7 +71,7 @@ export function FeedbackCollectorManager() {
       });
       setCreated(res); setName(''); load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('setup.createFailed'));
+      setError(faultMessage(e, t('setup.createFailed')));
     } finally {
       setCreating(false);
     }
@@ -139,7 +139,7 @@ function CollectorPanel({ collector, createdKey, projName, onChanged, setError }
   const patch = async (body: Parameters<typeof feedbackApi.collectors.update>[1]) => {
     setSaving(true); setError(null);
     try { await feedbackApi.collectors.update(collector.id, body); onChanged(); }
-    catch (e) { setError(e instanceof Error ? e.message : t('setup.saveFailed')); }
+    catch (e) { setError(faultMessage(e, t('setup.saveFailed'))); }
     finally { setSaving(false); }
   };
 

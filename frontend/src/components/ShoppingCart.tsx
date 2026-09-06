@@ -7,7 +7,7 @@ import { useCart, type CartItem } from '@/lib/CartContext';
 import { useAuth } from '@/lib/AuthContext';
 import { Icon } from '@/components/ui/Icon';
 import { useLocale, useTranslations } from 'next-intl';
-import { ApiRequestError, apiRequest } from '@/lib/apiClient';
+import { ApiRequestError, apiRequest, faultMessage } from '@/lib/apiClient';
 import { subscriptionCheckoutPayload } from '@/lib/subscriptionCart';
 import {
   marketplacePurchaseApi,
@@ -171,7 +171,7 @@ export default function ShoppingCart() {
       clearCart();
       setCheckoutSuccess(t('purchaseComplete', { count: marketplaceItems.length }));
       setCheckingOut(false);
-    } catch (error) { setCheckoutError(error instanceof Error ? error.message : t('checkoutFailed')); setCheckingOut(false); }
+    } catch (error) { setCheckoutError(faultMessage(error, t('checkoutFailed'))); setCheckingOut(false); }
   };
 
   return createPortal(

@@ -32,7 +32,7 @@ import {
   type ManagerDefaultsResponse,
   type ManagerDefaultsPatch,
 } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -61,7 +61,7 @@ function ManagerDefaultsInner() {
       setData(await managerApi.defaults());
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('managerDefaultsError'));
+      setError(faultMessage(e, t('managerDefaultsError')));
     } finally {
       setLoading(false);
     }
@@ -79,7 +79,7 @@ function ManagerDefaultsInner() {
       setData(await managerApi.updateDefaults(patch));
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('managerDefaultsError'));
+      setError(faultMessage(e, t('managerDefaultsError')));
       await load();
     } finally {
       setSaving(false);

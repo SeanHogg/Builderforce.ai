@@ -22,7 +22,7 @@ import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { Select } from '@/components/Select';
 import type { ImportedRepoFile } from '@/lib/builderforceApi';
-
+import { faultText } from '@/lib/apiClient';
 const MAX_ROWS = 300;
 
 /** A place the picker can list files from (a connected repo, or a ticket branch). */
@@ -58,7 +58,7 @@ export function RepoContextPicker({ sources, onPick, onClose }: {
     setLoading(true); setError(''); setFiles(null);
     source.load()
       .then((list) => { if (!live) return; cacheRef.current[source.id] = list; setFiles(list); })
-      .catch((e) => { if (live) setError(e instanceof Error ? e.message : t('error')); })
+      .catch((e) => { if (live) setError(faultText(e, t('error'))); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, [source, t]);

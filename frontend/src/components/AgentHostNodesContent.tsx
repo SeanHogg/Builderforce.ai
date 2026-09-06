@@ -48,7 +48,7 @@ export function AgentHostNodesContent({ agentHostId }: AgentHostNodesContentProp
       await agentHostNodesApi.unpair(agentHostId, node.id);
       setNodes((prev) => prev.filter((n) => n.id !== node.id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('unpairFailed'));
+      setError(faultMessage(e, t('unpairFailed')));
     } finally {
       setUnpairing(null);
     }

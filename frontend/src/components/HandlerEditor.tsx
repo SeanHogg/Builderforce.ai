@@ -10,7 +10,7 @@ import {
   type HandlerSpecDocument,
   type HandlerVerifyKind,
 } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Author one handler without leaving the browser.
  *
@@ -172,7 +172,7 @@ export default function HandlerEditor({ projectId, name, spec, onSaved, onCancel
       await onSaved();
     } catch (e) {
       // This is the api's parser talking — the same one the ingress uses.
-      setError(e instanceof Error ? e.message : t('saveFailed'));
+      setError(faultMessage(e, t('saveFailed')));
     } finally {
       setBusy(false);
     }

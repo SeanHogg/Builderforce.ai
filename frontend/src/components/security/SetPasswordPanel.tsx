@@ -4,7 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { useToast } from '@/components/ToastProvider';
-
+import { faultMessage } from '@/lib/apiClient';
 const MIN_LENGTH = 8;
 
 /**
@@ -33,7 +33,7 @@ export default function SetPasswordPanel() {
       await setPassword(password);
       toast.success(t('done'));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('failed'));
+      setError(faultMessage(e, t('failed')));
     } finally {
       setBusy(false);
     }

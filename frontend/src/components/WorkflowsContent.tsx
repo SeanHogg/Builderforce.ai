@@ -231,7 +231,7 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
       setInitialRunId(result.workflowId);
       setRunsForDef(d);
     } catch (e) {
-      setNotice(e instanceof Error ? e.message : t('failedStartRun'));
+      setNotice(faultMessage(e, t('failedStartRun')));
     } finally {
       setRunningId(null);
     }

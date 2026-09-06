@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { tasksApi, kanbanApi, pmoApi, type Objective, type TicketContext, type TicketObjective } from '@/lib/builderforceApi';
 import { usePermission } from '@/lib/rbac';
 import { Select } from '@/components/Select';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * The ticket drawer's CONTEXT header — the answer to "why does this matter and
  * how far along is it", above the fold, before any tab.
@@ -128,7 +128,7 @@ function LinkObjective({ taskId, onLinked }: { taskId: number; onLinked: () => v
     setError(null);
     pmoApi.objectives.addLink(choice, { linkKind: 'task', taskId })
       .then(() => { setChoice(''); onLinked(); })
-      .catch((e) => setError((e as Error).message))
+      .catch((e) => setError(faultMessage(e)))
       .finally(() => setBusy(false));
   }, [choice, taskId, onLinked]);
 
@@ -245,7 +245,7 @@ export function TicketContextStrip({ taskId, onOpenEpic, onOpenTab, onChanged }:
     let alive = true;
     tasksApi.context(taskId)
       .then((c) => { if (alive) { setCtx(c); setError(null); } })
-      .catch((e) => { if (alive) setError((e as Error).message); });
+      .catch((e) => { if (alive) setError(faultMessage(e)); });
     return () => { alive = false; };
   }, [taskId]);
 
@@ -258,7 +258,7 @@ export function TicketContextStrip({ taskId, onOpenEpic, onOpenTab, onChanged }:
     setCoordinating(true);
     kanbanApi.coordinate(taskId)
       .then(() => { load(); onChanged?.(); })
-      .catch((e) => setError((e as Error).message))
+      .catch((e) => setError(faultMessage(e)))
       .finally(() => setCoordinating(false));
   }, [taskId, load, onChanged]);
 

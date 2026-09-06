@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { reviewClient } from '@/lib/freelance/engagements';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Freelancer-side "Rate client" control — the reverse review direction. Self-contained
  * (owns its own panel + form + submit), so any engagement row can drop it in without
@@ -24,7 +24,7 @@ export function RateClientButton({ engagementId, clientName }: { engagementId: s
   const submit = async () => {
     setBusy(true); setError(null);
     try { await reviewClient(engagementId, rating, comment || undefined, again); setDone(true); setTimeout(() => setOpen(false), 900); }
-    catch (e) { setError((e as Error).message); }
+    catch (e) { setError(faultMessage(e)); }
     finally { setBusy(false); }
   };
 

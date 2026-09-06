@@ -7,7 +7,7 @@ import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { managerApi, type StallCensusResponse } from '@/lib/builderforceApi';
 import { ticketHref } from '@/lib/ticketHref';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * The AI Manager's STALL CENSUS and the systemic findings it raised from it.
  *
@@ -76,7 +76,7 @@ export function ManagerStallCensus({ projectId }: ManagerStallCensusProps) {
     try {
       setData(await managerApi.census(projectId));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('error'));
+      setError(faultMessage(e, t('error')));
     } finally {
       setLoading(false);
     }

@@ -24,7 +24,7 @@ import type {
   Discipline, JobRole, KanbanTemplate, TemplateSummary, TemplateLane, LaneRequirement, RequirementKind, RequirementGate,
 } from '@/lib/kanban';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
-
+import { faultMessage } from '@/lib/apiClient';
 type Tab = 'mine' | 'marketplace' | 'roles';
 
 const card: React.CSSProperties = {
@@ -66,7 +66,7 @@ export function KanbanTemplatesContent() {
       ]);
       setMine(m); setMarket(mk);
       await reloadRoles();
-    } catch (e) { setError((e as Error).message); }
+    } catch (e) { setError(faultMessage(e)); }
   }, [reloadRoles]);
 
   useEffect(() => { void reload(); }, [reload]);
@@ -79,7 +79,7 @@ export function KanbanTemplatesContent() {
   const openEditor = async (id: string) => {
     setError(null);
     try { setEditing(await kanbanApi.getTemplate(id)); }
-    catch (e) { setError((e as Error).message); }
+    catch (e) { setError(faultMessage(e)); }
   };
 
   const fork = async (id: string) => {
@@ -89,19 +89,19 @@ export function KanbanTemplatesContent() {
       const created = await kanbanApi.createTemplate({ name: `${src.name} (copy)`, forkFrom: id });
       await reload();
       setEditing(await kanbanApi.getTemplate(created.id));
-    } catch (e) { setError((e as Error).message); }
+    } catch (e) { setError(faultMessage(e)); }
   };
 
   const remove = async (id: string) => {
     setError(null);
     try { await kanbanApi.deleteTemplate(id); await reload(); }
-    catch (e) { setError((e as Error).message); }
+    catch (e) { setError(faultMessage(e)); }
   };
 
   const install = async (id: string) => {
     setError(null);
     try { await kanbanApi.installTemplate(id); await reload(); setTab('mine'); }
-    catch (e) { setError((e as Error).message); }
+    catch (e) { setError(faultMessage(e)); }
   };
 
   return (
@@ -245,7 +245,7 @@ function TemplateEditor({ template, roles, onClose, onSaved }: {
       const priceCents = priceUsd.trim() ? Math.round(parseFloat(priceUsd) * 100) : null;
       await kanbanApi.updateTemplate(template.id, { name, lanes, priceCents });
       await onSaved();
-    } catch (e) { setErr((e as Error).message); }
+    } catch (e) { setErr(faultMessage(e)); }
     finally { setSaving(false); }
   };
 
@@ -255,7 +255,7 @@ function TemplateEditor({ template, roles, onClose, onSaved }: {
       const priceCents = priceUsd.trim() ? Math.round(parseFloat(priceUsd) * 100) : null;
       await kanbanApi.publishTemplate(template.id, { published, visibility: 'public', priceCents });
       await onSaved();
-    } catch (e) { setErr((e as Error).message); }
+    } catch (e) { setErr(faultMessage(e)); }
   };
 
   return (

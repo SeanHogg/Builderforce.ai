@@ -16,7 +16,7 @@ import {
 } from '@/lib/builderforceApi';
 import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
-
+import { faultText } from '@/lib/apiClient';
 interface ArtifactAssignerProps {
   artifactType: ArtifactType;
   artifactSlug: string;
@@ -63,7 +63,7 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
         if (!c.length) setScope(p.length ? 'project' : t.length ? 'task' : 'host');
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('failedToLoad'));
+      setError(faultText(e, t('failedToLoad')));
     } finally {
       setLoading(false);
     }
@@ -141,7 +141,7 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
       setSelectedId('');
       setAssignmentsLoaded(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('assignFailed'));
+      setError(faultText(e, t('assignFailed')));
     } finally {
       setSaving(false);
     }
@@ -152,7 +152,7 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
       await artifactAssignments.unassign(artifactType, artifactSlug, s, scopeId);
       setAssignments((prev) => prev.filter((a) => !(a.scope === s && a.scopeId === scopeId)));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('unassignFailed'));
+      setError(faultText(e, t('unassignFailed')));
     }
   };
 

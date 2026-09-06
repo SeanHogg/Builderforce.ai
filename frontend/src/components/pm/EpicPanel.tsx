@@ -7,7 +7,7 @@ import { tasksApi, type Task, type TaskPriority, type WorkItemKind } from '@/lib
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useTaskStatusLabel } from '@/lib/taskStatusLabel';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Create/edit an Epic in a slide-out side panel. Shared by the Epics tree view
  * (the "New epic" button and clicking an epic row) so the Epic CRUD form lives
@@ -64,7 +64,7 @@ export function EpicPanel({ open, epic, projectId, onClose, onSaved }: EpicPanel
       onSaved();
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     } finally {
       setBusy(false);
     }
@@ -95,7 +95,7 @@ export function EpicPanel({ open, epic, projectId, onClose, onSaved }: EpicPanel
       onSaved();
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     } finally {
       setBusy(false);
     }

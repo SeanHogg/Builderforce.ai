@@ -16,7 +16,7 @@ import {
   type CeremonyJournalEvent,
   type CeremonyAttendance,
 } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * CeremonyHistoryPanel — the ceremonies that have ALREADY run.
  *
@@ -92,7 +92,7 @@ function AttendanceRow({
       onCorrected([...(d.participants ?? [])].sort((a, b) => a.turnOrder - b.turnOrder));
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errorCorrect'));
+      setError(faultMessage(e, t('errorCorrect')));
     } finally {
       setBusy(false);
     }
@@ -179,7 +179,7 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
         setMeetingId(d.session?.meetingId ?? null);
         setError(null);
       })
-      .catch((e: unknown) => { if (!cancelled) setError(e instanceof Error ? e.message : t('errorLoad')); })
+      .catch((e: unknown) => { if (!cancelled) setError(faultMessage(e, t('errorLoad'))); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [sessionId, t]);
@@ -254,7 +254,7 @@ export function CeremonyHistoryPanel({ projectId }: { projectId: number }) {
       setCursor(page.nextCursor);
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errorLoad'));
+      setError(faultMessage(e, t('errorLoad')));
     } finally {
       setLoading(false);
     }
@@ -273,7 +273,7 @@ export function CeremonyHistoryPanel({ projectId }: { projectId: number }) {
       setSessions((prev) => [...prev, ...page.sessions]);
       setCursor(page.nextCursor);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errorLoad'));
+      setError(faultMessage(e, t('errorLoad')));
     } finally {
       setLoadingMore(false);
     }

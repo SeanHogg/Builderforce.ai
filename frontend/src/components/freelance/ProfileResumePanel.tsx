@@ -7,7 +7,7 @@ import { Select } from '@/components/Select';
 import { ResumeDocumentView } from '@/components/resume/ResumeDocumentView';
 import { RESUME_TEMPLATES, masterResumeRevision, type ResumeTemplateId } from '@/lib/canvasResume';
 import { getMyResume, updateMyResume, uploadMyResume, getResumeSuggestions, type MyResume, type ResumePrivacyLevel, type ResumeSuggestions } from '@/lib/freelance/talentProfile';
-
+import { faultMessage } from '@/lib/apiClient';
 /** Who may see the résumé. Ordered widest → narrowest, which is how the label reads. */
 const PRIVACY_LEVELS: readonly ResumePrivacyLevel[] = ['public', 'recruiter_only', 'connections', 'private'];
 
@@ -45,7 +45,7 @@ export function ProfileResumePanel({ onAutofill, onLoaded }: {
       setResume(loaded);
       onLoaded?.(loaded);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('loadFailed'));
+      setError(faultMessage(err, t('loadFailed')));
     } finally {
       setLoading(false);
     }
@@ -62,7 +62,7 @@ export function ProfileResumePanel({ onAutofill, onLoaded }: {
       await load();
       setNotice(t('uploaded', { title: result.resumeTitle }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('uploadFailed'));
+      setError(faultMessage(err, t('uploadFailed')));
     } finally {
       setUploading(false);
       // Let the same file be chosen again after a failure.
@@ -80,7 +80,7 @@ export function ProfileResumePanel({ onAutofill, onLoaded }: {
       setResume(next);
       onLoaded?.(next);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('updateFailed'));
+      setError(faultMessage(err, t('updateFailed')));
     }
   };
 
@@ -92,7 +92,7 @@ export function ProfileResumePanel({ onAutofill, onLoaded }: {
       onAutofill?.(suggestions);
       setNotice(t('autofilled'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('autofillFailed'));
+      setError(faultMessage(err, t('autofillFailed')));
     } finally {
       setAutofilling(false);
     }

@@ -5,7 +5,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import { Select } from '@/components/Select';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { meetingsApi, type AvailabilityProfile, type AvailabilityWindow } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 function browserTz(): string {
   try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; }
 }
@@ -91,7 +91,7 @@ export function AvailabilityEditor({
       const saved = await meetingsApi.setMyAvailability({ timezone, windows: clean });
       onSaved(saved);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not save');
+      setError(faultMessage(e, 'Could not save'));
     } finally { setBusy(false); }
   }, [windows, timezone, onSaved]);
 

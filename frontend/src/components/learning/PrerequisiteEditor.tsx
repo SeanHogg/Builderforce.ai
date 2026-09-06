@@ -7,7 +7,7 @@ import {
   learningApi, type CourseInPath, type CoursePrerequisite, type LearningCourse,
 } from '@/lib/learningApi';
 import styles from './learning.module.css';
-
+import { faultText } from '@/lib/apiClient';
 /**
  * What a course requires before a learner may start it.
  *
@@ -42,7 +42,7 @@ export function PrerequisiteEditor({ courseId }: { courseId: number }) {
         setPaths(inPaths.paths);
         setError('');
       })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : t('prerequisites.failed')));
+      .catch((cause) => setError(faultText(cause, t('prerequisites.failed'))));
   }, [courseId, t]);
 
   useEffect(() => { load(); }, [load]);
@@ -56,7 +56,7 @@ export function PrerequisiteEditor({ courseId }: { courseId: number }) {
     setBusy(true);
     work
       .then(() => { setError(''); load(); })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : fallback))
+      .catch((cause) => setError(faultText(cause, fallback)))
       .finally(() => setBusy(false));
   };
 

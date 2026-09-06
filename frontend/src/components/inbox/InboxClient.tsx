@@ -19,7 +19,7 @@ import {
 } from '@/lib/mailboxApi';
 import styles from './InboxClient.module.css';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultText } from '@/lib/apiClient';
 type Folder = 'all' | 'unread' | 'attachments';
 const EMPTY_RULE: MailboxAutomationRuleInput = {
   name: '', enabled: true, fromContains: '', subjectContains: '', agentRef: null,
@@ -57,7 +57,7 @@ export function InboxClient() {
         setConnectionId(mailbox.connections.find((item) => item.status === 'connected')?.id ?? mailbox.connections[0]?.id ?? null);
         setAgents(ownedAgents);
       })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : t('loadFailed')))
+      .catch((cause) => setError(faultText(cause, t('loadFailed'))))
       .finally(() => setLoading(false));
   }, [t]);
 
@@ -75,7 +75,7 @@ export function InboxClient() {
       setMessages(result.messages);
       setSelected((current) => result.messages.find((message) => message.id === current?.id) ?? result.messages[0] ?? null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('loadFailed'));
+      setError(faultText(cause, t('loadFailed')));
     } finally { setLoading(false); }
   }, [connectionId, folder, query, t]);
 
@@ -101,7 +101,7 @@ export function InboxClient() {
     }
     if (!message.bodyText && connectionId != null) {
       try { setSelected(await mailboxApi.getMessage(connectionId, message.id)); }
-      catch (cause) { setError(cause instanceof Error ? cause.message : t('loadFailed')); }
+      catch (cause) { setError(faultText(cause, t('loadFailed'))); }
     }
   };
 
@@ -119,7 +119,7 @@ export function InboxClient() {
         { role: 'user', content: `${t('from')}: ${selected.from}\n${t('subject')}: ${selected.subject}\n\n${selected.bodyText || selected.snippet}` },
       ], { temperature: 0.3, maxTokens: 900 });
       setReply(result.content);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : t('draftFailed')); }
+    } catch (cause) { setError(faultText(cause, t('draftFailed'))); }
     finally { setBusy(false); }
   };
 
@@ -133,7 +133,7 @@ export function InboxClient() {
         html: htmlFromText(reply),
       });
       setReply(''); setNotice(t('sent')); window.setTimeout(() => setNotice(''), 3500);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : t('sendFailed')); }
+    } catch (cause) { setError(faultText(cause, t('sendFailed'))); }
     finally { setBusy(false); }
   };
 
@@ -143,7 +143,7 @@ export function InboxClient() {
     try {
       const created = await mailboxApi.createRule(connectionId, ruleDraft);
       setRules((current) => [...current, created]); setRuleDraft(EMPTY_RULE); setNotice(t('ruleSaved'));
-    } catch (cause) { setError(cause instanceof Error ? cause.message : t('ruleFailed')); }
+    } catch (cause) { setError(faultText(cause, t('ruleFailed'))); }
     finally { setBusy(false); }
   };
 
@@ -155,7 +155,7 @@ export function InboxClient() {
       setAgents((current) => [...current, agent]);
       setRuleDraft((current) => ({ ...current, agentRef: String(agent.id) }));
       setNewAgentName(''); setNotice(t('agentCreated'));
-    } catch (cause) { setError(cause instanceof Error ? cause.message : t('agentFailed')); }
+    } catch (cause) { setError(faultText(cause, t('agentFailed'))); }
     finally { setBusy(false); }
   };
 
@@ -165,7 +165,7 @@ export function InboxClient() {
       const result = await mailboxApi.runAutomation();
       if (connectionId != null) setExecutions((await mailboxApi.listAutomation(connectionId)).executions);
       setNotice(t('automationResult', result));
-    } catch (cause) { setError(cause instanceof Error ? cause.message : t('automationFailed')); }
+    } catch (cause) { setError(faultText(cause, t('automationFailed'))); }
     finally { setBusy(false); }
   };
 

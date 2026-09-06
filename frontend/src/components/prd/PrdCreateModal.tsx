@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { specsApi, type Spec } from '@/lib/builderforceApi';
 import { ChatMessageContent } from '../ChatMessageContent';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Shared "create a project-level PRD" modal (goal + markdown editor with live
  * preview). Used by both the project PRDs tab and the task PRD tab so the create
@@ -38,7 +38,7 @@ export function PrdCreateModal({
       const spec = await specsApi.create({ projectId, goal: goal.trim(), prd: prd.trim() || null, status: 'draft' });
       await onCreated(spec);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('createError'));
+      setError(faultMessage(err, t('createError')));
       setIsCreating(false);
     }
   };

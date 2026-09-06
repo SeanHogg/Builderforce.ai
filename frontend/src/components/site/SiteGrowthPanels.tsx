@@ -27,7 +27,7 @@ import {
   type SiteTrafficSummary,
 } from '@/lib/growthApi';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultText } from '@/lib/apiClient';
 // ---------------------------------------------------------------------------
 // Shared chrome
 // ---------------------------------------------------------------------------
@@ -151,7 +151,7 @@ export function SiteDomainPanel({ projectId }: { projectId: number }) {
       setState(next);
       setHostname(next.hostname ?? '');
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('genericError'));
+      setError(faultText(e, t('genericError')));
     } finally {
       setBusy(false);
     }
@@ -280,7 +280,7 @@ export function SiteFormsPanel({ projectId }: { projectId: number }) {
       setNewName('');
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('genericError'));
+      setError(faultText(e, t('genericError')));
     } finally {
       setBusy(false);
     }
@@ -296,7 +296,7 @@ export function SiteFormsPanel({ projectId }: { projectId: number }) {
       await siteDataApi.updateCollection(projectId, collection.id, patch);
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('genericError'));
+      setError(faultText(e, t('genericError')));
     } finally {
       setTogglingId(null);
     }

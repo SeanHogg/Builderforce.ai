@@ -6,7 +6,7 @@ import { adminApi, type LegalDocument } from '@/lib/adminApi';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
 import { unwrapMarkdownFence } from '@/lib/utils';
-
+import { faultText } from '@/lib/apiClient';
 export interface LegalEditorContext {
   docType: 'terms' | 'privacy';
   mode: 'edit' | 'new';
@@ -91,7 +91,7 @@ export function LegalEditorDrawer({ context, onClose, onPublished }: LegalEditor
       await onPublished();
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultText(e));
     } finally {
       setSaving(false);
     }

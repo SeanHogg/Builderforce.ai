@@ -24,7 +24,7 @@ import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { ExecutionTimelineChart } from './ExecutionTimelineChart';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -269,7 +269,7 @@ export function ObservabilityContent({
     setDirError(null);
     Promise.all([
       agentHosts.list().catch((e) => {
-        setDirError(e instanceof Error ? e.message : t('errLoadAgents'));
+        setDirError(faultMessage(e, t('errLoadAgents')));
         return [] as AgentHost[];
       }),
       // Registered workforce cloud agents (may not have run yet)…

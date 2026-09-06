@@ -27,7 +27,7 @@ import {
   type EarningsReport,
   type WithdrawalMethodsView,
 } from '@/lib/earningsApi';
-
+import { faultMessage } from '@/lib/apiClient';
 export const runtime = 'edge';
 
 export default function FreelancerEarningsPage() {
@@ -62,7 +62,7 @@ export default function FreelancerEarningsPage() {
       try {
         await Promise.all([loadReport(period), loadMethods()]);
       } catch (cause) {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
+        if (!cancelled) setError(faultMessage(cause));
       } finally {
         if (!cancelled) setLoading(false);
       }

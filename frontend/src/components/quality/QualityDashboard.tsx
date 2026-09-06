@@ -15,7 +15,7 @@ import { QualityStatsPanel } from './QualityStatsPanel';
 import { ErrorConsumptionCard } from './ErrorConsumptionCard';
 import { LEVELS, STATUSES, LEVEL_COLOR, STATUS_COLOR } from './qualityColors';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
 };
@@ -59,7 +59,7 @@ export function QualityDashboard() {
     qualityApi.groups
       .list({ projectId: currentProjectId, status: status || undefined, level: level || undefined, limit: PAGE })
       .then((p) => { setGroups(p.groups); setNextCursor(p.nextCursor); setError(null); })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load errors'))
+      .catch((e) => setError(faultMessage(e, 'Failed to load errors')))
       .finally(() => setLoading(false));
   }, [currentProjectId, status, level]);
 
@@ -69,7 +69,7 @@ export function QualityDashboard() {
     qualityApi.groups
       .list({ projectId: currentProjectId, status: status || undefined, level: level || undefined, limit: PAGE, cursor: nextCursor })
       .then((p) => { setGroups((prev) => [...prev, ...p.groups]); setNextCursor(p.nextCursor); })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load errors'))
+      .catch((e) => setError(faultMessage(e, 'Failed to load errors')))
       .finally(() => setLoadingMore(false));
   }, [nextCursor, currentProjectId, status, level]);
 

@@ -75,7 +75,7 @@ import {
 } from './CloudAgentFormFields';
 import { useRuntimeSurfaceBlocked } from './RuntimeSurfaceSelect';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultText } from '@/lib/apiClient';
 /**
  * Workforce → the unified directory of everyone in the workspace: human members,
  * pending invites, the tenant's cloud agents, hired marketplace agents, and
@@ -185,7 +185,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     try {
       setHosts(await agentHosts.list());
     } catch (e) {
-      setError(e instanceof Error ? e.message : tWf('errLoadRemote'));
+      setError(faultText(e, tWf('errLoadRemote')));
     } finally {
       setLoadingHosts(false);
     }
@@ -195,7 +195,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     setLoadingCloud(true);
     return listMyAgents()
       .then((list) => { setCloudAgents(list); return list; })
-      .catch((e) => { setError(e instanceof Error ? e.message : tWf('errLoadCloud')); return [] as PublishedAgent[]; })
+      .catch((e) => { setError(faultText(e, tWf('errLoadCloud'))); return [] as PublishedAgent[]; })
       .finally(() => setLoadingCloud(false));
   }, []);
 
@@ -225,7 +225,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
       setPendingInvites(inviteList);
     } catch (e) {
       if (isPlanLimitError(e)) setPlanError(e);
-      else setError(e instanceof Error ? e.message : tWf('errLoadMembers'));
+      else setError(faultText(e, tWf('errLoadMembers')));
     } finally {
       setLoadingPeople(false);
     }
@@ -286,7 +286,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
       await createCloudAgent(cloudAgentFormToInput(form));
       closeDialog(); loadCloud();
     } catch (e) {
-      setError(e instanceof Error ? e.message : tWf('errSaveFailed'));
+      setError(faultText(e, tWf('errSaveFailed')));
     } finally {
       setSaving(false);
     }
@@ -307,7 +307,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
         closeDialog();
         setPlanError(e);
       } else {
-        setError(e instanceof Error ? e.message : tWf('errRegisterFailed'));
+        setError(faultText(e, tWf('errRegisterFailed')));
       }
     } finally {
       setRegistering(false);
@@ -329,7 +329,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
       await deleteAgent(a.id);
       loadCloud();
     } catch (e) {
-      setError(e instanceof Error ? e.message : tWf('errDeleteFailed'));
+      setError(faultText(e, tWf('errDeleteFailed')));
     }
   };
 
@@ -342,7 +342,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
       await unhireAgent(agentId);
       await loadPurchased();
     } catch (e) {
-      setError(e instanceof Error ? e.message : tWf('errUnhireFailed'));
+      setError(faultText(e, tWf('errUnhireFailed')));
     } finally {
       setUnhiringId(null);
     }
@@ -357,7 +357,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
       setMembers((prev) => prev.filter((m) => m.id !== member.id));
     } catch (e) {
       if (isPlanLimitError(e)) setPlanError(e);
-      else setError(e instanceof Error ? e.message : tWf('errRemoveMember'));
+      else setError(faultText(e, tWf('errRemoveMember')));
     } finally {
       setRemovingMemberId(null);
       setConfirmRemove(null);
@@ -372,7 +372,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
       setMembers((prev) => prev.map((m) => (m.id === member.id ? { ...m, role } : m)));
     } catch (e) {
       if (isPlanLimitError(e)) setPlanError(e);
-      else setError(e instanceof Error ? e.message : tWf('errChangeRole'));
+      else setError(faultText(e, tWf('errChangeRole')));
     } finally {
       setChangingRoleId(null);
     }
@@ -385,7 +385,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
       await revokeInvitation(tenantToken, String(tenant.id), invite.id);
       setPendingInvites((prev) => prev.filter((i) => i.id !== invite.id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : tWf('errRevokeInvite'));
+      setError(faultText(e, tWf('errRevokeInvite')));
     } finally {
       setRevokingInviteId(null);
     }

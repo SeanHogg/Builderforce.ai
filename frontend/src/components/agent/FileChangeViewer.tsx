@@ -6,7 +6,7 @@ import { getLanguage } from '@/lib/utils';
 import { runtimeApi, type TaskFileContent } from '@/lib/builderforceApi';
 import { useEffect, useState } from 'react';
 import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Read-only Monaco viewer for one changed file in the Changes tab.
  *
@@ -51,7 +51,7 @@ export function FileChangeViewer({ taskId, path, height = 420 }: FileChangeViewe
     setData(null);
     runtimeApi.taskFileContent(taskId, path)
       .then((d) => { if (!cancelled) setData(d); })
-      .catch((e: unknown) => { if (!cancelled) setError(e instanceof Error ? e.message : t('loadFailed')); })
+      .catch((e: unknown) => { if (!cancelled) setError(faultMessage(e, t('loadFailed'))); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [taskId, path, t]);

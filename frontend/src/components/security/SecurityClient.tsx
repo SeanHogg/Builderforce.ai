@@ -28,7 +28,7 @@ import IdentityProvidersPanel from '@/components/security/IdentityProvidersPanel
 import LegalAgreementsPanel from '@/components/security/LegalAgreementsPanel';
 import { DestinationIndex, type IndexItem } from '@/components/shell/DestinationIndex';
 import PageContainer from '@/components/PageContainer';
-
+import { faultMessage } from '@/lib/apiClient';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -62,7 +62,7 @@ export default function SecurityClient() {
     setError(null);
     securityApi.listUsers(tenantId)
       .then(setUsers)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: Error) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   };
 
@@ -78,7 +78,7 @@ export default function SecurityClient() {
       const data = await securityApi.getUser(tenantId, userId);
       setUserSessions((prev) => ({ ...prev, [userId]: data.sessions }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load sessions');
+      setError(faultMessage(e, 'Failed to load sessions'));
     } finally {
       setLoadingSessions(null);
     }
@@ -98,7 +98,7 @@ export default function SecurityClient() {
         u.id === userId ? { ...u, activeSessions: Math.max(0, u.activeSessions - ids.length) } : u
       ));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Revoke failed');
+      setError(faultMessage(e, 'Revoke failed'));
     }
   };
 

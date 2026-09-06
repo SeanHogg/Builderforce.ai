@@ -24,7 +24,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { SkillAssignmentsContent } from '@/components/SkillAssignmentsContent';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
-
+import { faultText } from '@/lib/apiClient';
 function loadUserSkills(tenantId: string): UserSkill[] {
   if (typeof window === 'undefined') return [];
   try {
@@ -91,7 +91,7 @@ export default function SkillsPage() {
         setStats(s);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load');
+      setError(faultText(e, 'Failed to load'));
     } finally {
       setLoading(false);
     }
@@ -115,7 +115,7 @@ export default function SkillsPage() {
         return [...prev, { slug, name }];
       });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Assign failed');
+      setError(faultText(e, 'Assign failed'));
     }
   };
 
@@ -132,7 +132,7 @@ export default function SkillsPage() {
       const updated = await marketplaceStats.getStats('skill', [slug]).catch(() => ({}));
       setStats((s) => ({ ...s, ...updated }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unassign failed');
+      setError(faultText(e, 'Unassign failed'));
     }
   };
 
@@ -142,7 +142,7 @@ export default function SkillsPage() {
       const prev = stats[slug] ?? { likes: 0, installs: 0, liked: false };
       setStats((s) => ({ ...s, [slug]: { ...prev, liked, likes: liked ? prev.likes + 1 : Math.max(0, prev.likes - 1) } }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Like failed');
+      setError(faultText(e, 'Like failed'));
     }
   };
 

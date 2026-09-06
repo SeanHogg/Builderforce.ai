@@ -8,7 +8,7 @@ import { Select } from '@/components/Select';
 import { AnchoredPopover, Button, Icon, Surface, TextField, type IconName } from '@/components/ui';
 import { useModalDismiss } from '@/hooks/useModalDismiss';
 import styles from './SessionManagementControls.module.css';
-
+import { faultText } from '@/lib/apiClient';
 export interface ManagedSession {
   id: string;
   title: string;
@@ -86,7 +86,7 @@ export function SessionManagementControls({ session, mergeCandidates = [], onRen
       }
       setEditor(null);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t('failed'));
+      setError(faultText(reason, t('failed')));
     } finally {
       setBusy(false);
     }

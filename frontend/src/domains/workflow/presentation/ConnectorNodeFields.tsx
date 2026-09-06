@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { connectorsApi, type CatalogAction, type CatalogConnector } from '@/lib/connectorsApi';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * The `connector` node's editor — two pickers and an input template.
  *
@@ -78,7 +78,7 @@ export function ConnectorNodeFields({ config, setConfig, patchConfig }: Props) {
         if (!cancelled) setCatalog(rows);
       })
       .catch((e: unknown) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : t('loadFailed'));
+        if (!cancelled) setError(faultMessage(e, t('loadFailed')));
       });
     return () => {
       cancelled = true;

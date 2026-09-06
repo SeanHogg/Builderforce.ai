@@ -52,7 +52,7 @@ import {
   muted,
   sectionTitle,
 } from './portalStyles';
-
+import { faultMessage } from '@/lib/apiClient';
 type Tab = 'installed' | 'catalog' | 'publish' | 'earnings';
 
 const TABS = ['installed', 'catalog', 'publish', 'earnings'] as const;
@@ -133,7 +133,7 @@ export function DeveloperPortalContent() {
       setCatalog(cat);
       setPackages(p ? await developerApi.packages() : []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errors.load'));
+      setError(faultMessage(e, t('errors.load')));
     } finally {
       setLoading(false);
     }
@@ -161,7 +161,7 @@ export function DeveloperPortalContent() {
         await developerApi.completePlanCheckout(session);
         if (!cancelled) await load();
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : t('errors.action'));
+        if (!cancelled) setError(faultMessage(e, t('errors.action')));
       } finally {
         params.delete('extension');
         const query = params.toString();
@@ -183,7 +183,7 @@ export function DeveloperPortalContent() {
       await fn();
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errors.action'));
+      setError(faultMessage(e, t('errors.action')));
     } finally {
       setBusy(null);
     }

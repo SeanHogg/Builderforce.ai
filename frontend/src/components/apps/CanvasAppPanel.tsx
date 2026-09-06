@@ -41,7 +41,7 @@ import {
 import { AppAddressField } from './AppAddressField';
 import { AppAddress, AppStatement } from './AppStatement';
 import styles from './appPanels.module.css';
-
+import { faultMessage } from '@/lib/apiClient';
 export interface CanvasAppPanelProps {
   /**
    * The SERVER session id. A local board passes null/undefined and this renders
@@ -101,7 +101,7 @@ export function CanvasAppPanel({ sessionId }: CanvasAppPanelProps) {
       // next mount would make and there is no second version of the truth.
       setState(await embeddedAppsApi.sessionAppState(sessionId));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(faultMessage(cause));
     } finally {
       setBusy(false);
     }

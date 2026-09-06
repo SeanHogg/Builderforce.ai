@@ -25,7 +25,7 @@ import { connectorsApi, type ConnectorConnection } from '@/lib/connectorsApi';
 import {
   miroBoardToCanvas, type MiroBoardSummary, type MiroConnector, type MiroImportResult, type MiroItem,
 } from '@/lib/miroImport';
-
+import { faultMessage } from '@/lib/apiClient';
 /** 50 items a page × 40 pages = 2,000 items, comfortably past the largest real
  *  board and short of a runaway loop against a paginating API that never ends. */
 const MAX_PAGES = 40;
@@ -86,7 +86,7 @@ export function CanvasMiroPanel({ onImport, onClose, connectHref }: CanvasMiroPa
       const page = await call<MiroPage<MiroBoardSummary>>(connectionId, 'list_boards', { limit: PAGE_SIZE, sort: 'last_modified' });
       setBoards(page.data ?? []);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : t('loadFailed'));
+      setError(faultMessage(failure, t('loadFailed')));
     } finally {
       setLoading(false);
     }
@@ -124,7 +124,7 @@ export function CanvasMiroPanel({ onImport, onClose, connectHref }: CanvasMiroPa
       await onImport(miroBoardToCanvas(items, connectors), board);
       onClose();
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : t('importFailed', { name: board.name || board.id }));
+      setError(faultMessage(failure, t('importFailed', { name: board.name || board.id })));
     } finally {
       setBusyId(null);
       setProgress(null);

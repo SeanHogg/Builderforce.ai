@@ -13,12 +13,15 @@
  * `SectionError` decides its OWN visibility, which is the part that matters:
  * a rejection that only means "nobody is signed in" is not a failure and must
  * not paint a red box. A guest reading the sample workspace met
- * `Missing or malformed Authorization header` in exactly that box. The rule
- * lives in `faultMessage` so no call site can forget it — see apiClient.
+ * `Missing or malformed Authorization header` in exactly that box. What it
+ * shows instead is `GuestAccountPrompt` — the invitation, standing where the
+ * rows would have been. The recognition lives in `isSignedOutFailure` so no
+ * call site can forget it — see apiClient.
  */
 
 import type { CSSProperties } from 'react';
-import { faultMessage } from '@/lib/apiClient';
+import { faultMessage, isSignedOutFailure } from '@/lib/apiClient';
+import { GuestAccountPrompt } from '@/components/guest/GuestAccountPrompt';
 
 /**
  * What a card inside a data section looks like.
@@ -41,10 +44,12 @@ export function SectionLoading({ label }: { label: string }) {
 }
 
 /**
- * The failure, if there is one worth showing. Renders nothing for `null` and
- * nothing for a signed-out rejection, so a caller can mount it unconditionally.
+ * The failure, if there is one worth showing. Renders nothing for `null`, and
+ * for a signed-out rejection renders the invitation to take an account where
+ * the rows would have been, so a caller can mount it unconditionally.
  */
 export function SectionError({ error }: { error: unknown }) {
+  if (isSignedOutFailure(error)) return <GuestAccountPrompt />;
   const message = faultMessage(error);
   if (!message) return null;
   return (

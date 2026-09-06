@@ -10,7 +10,7 @@ import {
   type ChallengeBuildResult,
   type ChallengeSetupStep,
 } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Challenges — paste a brief, get a working system.
  *
@@ -321,7 +321,7 @@ export default function ChallengesPage() {
       setSelected(challenge);
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('readFailed'));
+      setError(faultMessage(e, t('readFailed')));
     } finally {
       setReading(false);
     }
@@ -337,7 +337,7 @@ export default function ChallengesPage() {
       setBuildResult(result);
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('buildFailed'));
+      setError(faultMessage(e, t('buildFailed')));
     } finally {
       setBuilding(false);
     }
@@ -351,7 +351,7 @@ export default function ChallengesPage() {
       setSelected(challenge);
       setBrief(challenge.brief);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('readFailed'));
+      setError(faultMessage(e, t('readFailed')));
     }
   };
 

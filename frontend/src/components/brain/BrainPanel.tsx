@@ -103,7 +103,7 @@ import { fetchLimbicBlock } from '@/lib/personalityApi';
 import { accountBrainPreferencesApi } from '@/lib/accountBrainPreferencesApi';
 import { AssigneeProfilesProvider } from '../workforce/AssigneeProfilesContext';
 import AssigneeHovercard from '../workforce/AssigneeHovercard';
-
+import { faultText } from '@/lib/apiClient';
 /**
  * Clock time for a message sent today, calendar date for anything older.
  *
@@ -680,7 +680,7 @@ export function BrainPanel({
       conv.reloadMessages();
       void chats.reload();
     } catch (e) {
-      conv.setError(e instanceof Error ? e.message : tBrain('consolidateFailed'));
+      conv.setError(faultText(e, tBrain('consolidateFailed')));
     } finally {
       setConsolidating(false);
     }
@@ -710,7 +710,7 @@ export function BrainPanel({
       conv.reloadMessages();
       void chats.reload();
     } catch (e) {
-      conv.setError(e instanceof Error ? e.message : tBrain('forkFailed'));
+      conv.setError(faultText(e, tBrain('forkFailed')));
     } finally {
       setForking(false);
     }

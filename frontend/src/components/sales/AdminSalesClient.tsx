@@ -29,7 +29,7 @@ import { Button } from '@/components/ui';
 import { SalesReportView } from '@/components/sales/SalesReportView';
 import { useMessageHub } from '@/components/messages/MessageHubContext';
 import { salesApi, type SalesAssociate, type SalesReport, type SalesReportWindow } from '@/lib/salesApi';
-
+import { faultText } from '@/lib/apiClient';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -56,14 +56,14 @@ export default function AdminSalesClient() {
   useEffect(() => {
     salesApi.associates()
       .then(({ associates: rows }) => setAssociates(rows))
-      .catch((cause) => setError(cause instanceof Error ? cause.message : t('loadFailed')));
+      .catch((cause) => setError(faultText(cause, t('loadFailed'))));
   }, [t]);
 
   const load = useCallback((associateId: string) => {
     setError('');
     salesApi.report(associateId || null)
       .then(({ report: row }) => setReport(row))
-      .catch((cause) => setError(cause instanceof Error ? cause.message : t('loadFailed')));
+      .catch((cause) => setError(faultText(cause, t('loadFailed'))));
   }, [t]);
 
   useEffect(() => { load(selected); }, [load, selected]);
@@ -76,7 +76,7 @@ export default function AdminSalesClient() {
       if (!result.sessionId) { setError(t('noCanvas')); return; }
       router.push(`/create/${result.sessionId}`);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('canvasFailed'));
+      setError(faultText(cause, t('canvasFailed')));
     } finally {
       setBusy(false);
     }

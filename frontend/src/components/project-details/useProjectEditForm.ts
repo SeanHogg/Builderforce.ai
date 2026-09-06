@@ -17,7 +17,7 @@ import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
 import { updateProject } from '@/lib/api';
 import { checkProjectKeyAvailable } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 /** `null` means "not asked" — the key is unchanged, so availability is not a question. */
 export type ProjectKeyStatus = 'idle' | 'checking' | 'available' | 'taken';
 
@@ -127,7 +127,7 @@ export function useProjectEditForm(
       onProjectUpdate?.(updated);
       setEditing(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('saveFailed'));
+      setError(faultMessage(err, t('saveFailed')));
     } finally {
       setSaving(false);
     }

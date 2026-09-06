@@ -32,7 +32,7 @@ import { useTranslations } from 'next-intl';
 import styles from './CreationCanvas.module.css';
 import { driveApi, type DriveConnection, type DriveItem, type DriveProviderStatus } from '@/lib/driveApi';
 import { formatBytes } from '@/lib/formatBytes';
-
+import { faultMessage } from '@/lib/apiClient';
 /** One step of the walk. The root has no id — each provider names it itself. */
 interface Crumb {
   id: string | null;
@@ -98,7 +98,7 @@ export function CanvasDriveBrowser({ onImport, onClose, returnTo }: CanvasDriveB
       setItems((current) => append ? [...current, ...listing.items] : listing.items);
       setCursor(listing.nextCursor);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : t('loadFailed'));
+      setError(faultMessage(failure, t('loadFailed')));
     } finally {
       setLoading(false);
     }
@@ -145,7 +145,7 @@ export function CanvasDriveBrowser({ onImport, onClose, returnTo }: CanvasDriveB
       await onImport(await driveApi.fetchFile(activeId, item));
       onClose();
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : t('openFailed', { name: item.name }));
+      setError(faultMessage(failure, t('openFailed', { name: item.name })));
     } finally {
       setBusyId(null);
     }

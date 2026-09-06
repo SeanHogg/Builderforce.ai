@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { ideRepoApi, type RepoSyncStatus } from '@/lib/api';
-
+import { faultText } from '@/lib/apiClient';
 interface GitHubDeployPanelProps {
   projectId: number;
   /** Subdomain the workflow should publish to; falls back to the project's own. */
@@ -46,7 +46,7 @@ export function GitHubDeployPanel({ projectId, subdomain }: GitHubDeployPanelPro
     try {
       setEnabled(await ideRepoApi.enableDeploys(projectId, subdomain ? { subdomain } : {}));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('deploy.enableFailed'));
+      setError(faultText(e, t('deploy.enableFailed')));
     } finally {
       setBusy(false);
     }

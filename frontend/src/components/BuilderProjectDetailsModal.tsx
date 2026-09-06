@@ -9,7 +9,7 @@ import { listIdeContainers, updateIdeProject } from '@/lib/api';
 import { workflowDefinitions, type WorkflowDefinitionSummary } from '@/lib/builderforceApi';
 import type { IdeProject, IdeContainerOption } from '@/lib/types';
 import { Icon } from '@/components/ui/Icon';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Builder project details — rename and (re)assign the parent Project.
  *
@@ -61,7 +61,7 @@ export function BuilderProjectDetailsModal({
       setWorkflowDefinitionId(fork.id);
       setNotice(t('workflowForked'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('saveFailed'));
+      setError(faultMessage(err, t('saveFailed')));
     } finally {
       setBusy(null);
     }
@@ -80,7 +80,7 @@ export function BuilderProjectDetailsModal({
       });
       setNotice(t('workflowRunStarted'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('saveFailed'));
+      setError(faultMessage(err, t('saveFailed')));
     } finally {
       setBusy(null);
     }
@@ -114,7 +114,7 @@ export function BuilderProjectDetailsModal({
       onSaved(updated);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('saveFailed'));
+      setError(faultMessage(err, t('saveFailed')));
     } finally {
       setSaving(false);
     }

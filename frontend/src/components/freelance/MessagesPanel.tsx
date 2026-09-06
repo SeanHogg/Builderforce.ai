@@ -12,7 +12,7 @@ import {
   type ConversationSummary, type ConversationMessage, type MessagingSide,
 } from '@/lib/messagingApi';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * In-platform messaging drawer — employer<->freelancer threads. ONE component both
  * sides share (the `side` prop swaps the web/tenant token + endpoints); it decides its
@@ -71,7 +71,7 @@ export function MessagesPanel({ open, onClose, side, context }: {
       setMessages(r.messages);
       await markConversationRead(side, id).catch(() => {});
       setItems((prev) => prev.map((c) => (c.id === id ? { ...c, unread: 0 } : c)));
-    } catch (e) { setError((e as Error).message); }
+    } catch (e) { setError(faultMessage(e)); }
     finally { setLoading(false); }
   }, [side]);
 
@@ -95,7 +95,7 @@ export function MessagesPanel({ open, onClose, side, context }: {
           await refreshList();
           if (alive) await openThread(id);
         }
-      } catch (e) { if (alive) setError((e as Error).message); }
+      } catch (e) { if (alive) setError(faultMessage(e)); }
     })();
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -132,13 +132,13 @@ export function MessagesPanel({ open, onClose, side, context }: {
       const r = await getConversationThread(side, selected);
       setMessages(r.messages);
       void refreshList();
-    } catch (e) { setError((e as Error).message); }
+    } catch (e) { setError(faultMessage(e)); }
     finally { setSending(false); }
   };
 
   const openAttachment = async (m: ConversationMessage) => {
     try { const url = await fetchConversationAttachment(side, m.id); window.open(url, '_blank', 'noopener'); }
-    catch (e) { setError((e as Error).message); }
+    catch (e) { setError(faultMessage(e)); }
   };
 
   const counterpartName = (c: ConversationSummary) =>

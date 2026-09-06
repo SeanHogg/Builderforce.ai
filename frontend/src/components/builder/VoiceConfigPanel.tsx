@@ -15,7 +15,7 @@ import { MicRecorder, type PcmAudio } from '@/lib/captureAudio';
 import { hasWebGPU } from '@/lib/voiceEngine';
 import type { VoiceStudio } from '@/lib/voiceStudio';
 import { ProjectEvermindPanel } from '@/components/builder/ProjectEvermindPanel';
-
+import { faultMessage } from '@/lib/apiClient';
 const section: React.CSSProperties = {
   padding: '14px 14px 16px',
   borderBottom: '1px solid var(--border-subtle)',
@@ -155,7 +155,7 @@ function CreateCloneForm({ voice }: { voice: VoiceStudio }) {
         setRecording(false);
       }
     } catch (e) {
-      setErr(e instanceof Error ? e.message : t('errMic'));
+      setErr(faultMessage(e, t('errMic')));
       setRecording(false);
     }
   };
@@ -169,7 +169,7 @@ function CreateCloneForm({ voice }: { voice: VoiceStudio }) {
       await voice.createClone({ name, consentAttested: consent, reference, recordedPcm });
       setName(''); setConsent(false); setReference(null); setRecordedPcm(null);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : t('errCreate'));
+      setErr(faultMessage(e, t('errCreate')));
     } finally {
       setBusy(false);
     }

@@ -95,7 +95,7 @@ export default function RfpDetailClient() {
       await rfpApi.generate(id);
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Generation failed');
+      setError(faultMessage(e, 'Generation failed'));
     } finally {
       setGenerating(false);
     }
@@ -149,7 +149,7 @@ export default function RfpDetailClient() {
       const name = `${request?.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'rfp'}-proposal.pdf`;
       await rfpApi.downloadPdf(latestId, name);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Download failed');
+      setError(faultMessage(e, 'Download failed'));
     } finally {
       setDownloading(false);
     }

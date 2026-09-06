@@ -10,7 +10,7 @@ import { useTranslations } from 'next-intl';
 import { purchaseNumber, searchAvailableNumbers, type AvailableNumber } from '@/lib/phoneApi';
 import { usePhone } from '@/lib/usePhone';
 import styles from './phone.module.css';
-
+import { faultText } from '@/lib/apiClient';
 /**
  * Finding and buying a line.
  *
@@ -46,7 +46,7 @@ export function NumberSearchPanel() {
     try {
       setResults(await searchAvailableNumbers({ areaCode: areaCode || undefined, contains: contains || undefined }));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('search.failed'));
+      setError(faultText(cause, t('search.failed')));
     } finally {
       setSearching(false);
     }
@@ -67,7 +67,7 @@ export function NumberSearchPanel() {
         setResults((rows) => rows?.filter((row) => row.e164 !== e164) ?? null);
         setError(t('search.taken'));
       } else {
-        setError(cause instanceof Error ? cause.message : t('search.buyFailed'));
+        setError(faultText(cause, t('search.buyFailed')));
       }
     } finally {
       setBusy(null);

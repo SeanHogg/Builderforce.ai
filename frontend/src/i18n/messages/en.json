@@ -27623,6 +27623,10 @@
         "account": "Create an account to unlock this.",
         "installTemplate": "Sign in to set this template up in a workspace."
       }
+    },
+    "wall": {
+      "title": "This view is yours once you have an account",
+      "body": "You are exploring Builderforce as a guest. Create a free account to see your own projects, team and agents here — and to keep everything you make."
     }
   },
   "employers": {

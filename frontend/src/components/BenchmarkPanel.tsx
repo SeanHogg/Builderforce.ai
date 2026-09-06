@@ -28,7 +28,7 @@ import {
   type PublishedEvermindModel,
 } from '@/lib/studioModelsApi';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 interface BenchmarkPanelProps {
   /** Optional initial corpus (e.g. text pulled from a project dataset). */
   initialCorpus?: string;
@@ -125,7 +125,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
         setResult(r as Scorecard);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('error'));
+      setError(faultMessage(e, t('error')));
     } finally {
       setRunning(false);
     }

@@ -22,7 +22,7 @@ import { isNavigationFeatureId } from '@/lib/navigationFeatures';
 import { useCart } from '@/lib/CartContext';
 import { calculateSubscriptionLine } from '@/lib/subscriptionCart';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 // The subscription shape and its two calls live in `lib/billingApi` — `/billing`
 // reads exactly the same three things, and a second copy of the fetch here is
 // what dropped the emulation and locale headers on this page.
@@ -116,7 +116,7 @@ export default function PricingPageClient() {
     try {
       setSub(await billingApi.subscription(tenantId));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errorLoad'));
+      setError(faultMessage(e, t('errorLoad')));
     } finally {
       setLoading(false);
     }

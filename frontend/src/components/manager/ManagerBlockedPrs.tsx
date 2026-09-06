@@ -7,7 +7,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import {
   tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle,
 } from '@/components/dataTableStyles';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * PULL REQUESTS WAITING ON A PERSON — and the one action that clears them.
  *
@@ -104,7 +104,7 @@ export default function ManagerBlockedPrs({ projectId, blockedPrs, total, onChan
       setClosedIds((prev) => new Set([...prev, ...res.closedIds]));
       onChanged?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('error.generic'));
+      setError(faultMessage(e, t('error.generic')));
     } finally {
       setBusy(false);
     }

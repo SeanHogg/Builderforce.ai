@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { growthApi, type SenderIdentity } from '@/lib/growthApi';
 import { button, input, listItem, listReset, muted, spread, Row } from './growthStyles';
-
+import { faultText } from '@/lib/apiClient';
 export function SendersSection() {
   const t = useTranslations('growth');
   const [senders, setSenders] = useState<SenderIdentity[]>([]);
@@ -31,7 +31,7 @@ export function SendersSection() {
       setNotice(successMessage);
       await reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('genericError'));
+      setError(faultText(e, t('genericError')));
     } finally {
       setBusy(false);
     }

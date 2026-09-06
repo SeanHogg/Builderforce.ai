@@ -20,7 +20,7 @@ import {
   listTrainingJobs,
 } from '@/lib/api';
 import { evaluateDatasetUse, normalizeClassifications, normalizeUsePolicy } from '@builderforce/creation-canvas-contract';
-import { getApiBaseUrl } from '@/lib/apiClient';
+import { getApiBaseUrl, faultText } from '@/lib/apiClient';
 import { downloadBlob } from '@/lib/download';
 import { hasWebGPUSupport } from '@seanhogg/builderforce-studio/capabilities';
 import { WebGPUTrainer, canTrainInBrowser, type BrowserLoRAArtifact, type TrainingDataMode, type TrainingStep } from '@/lib/webgpu-trainer';
@@ -330,7 +330,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
       const result = await testPublishedEvermindModel(publishedModel.slug, testPrompt.trim());
       setTestOutput(result.choices?.[0]?.message?.content || t('modelReturnedNoText'));
     } catch (error) {
-      setTestOutput(error instanceof Error ? error.message : String(error));
+      setTestOutput(faultText(error));
     }
   }, [publishedModel, testPrompt, t]);
 
@@ -346,7 +346,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
         topKAccuracy: (result.topKAccuracy * 100).toFixed(1),
         tokensPerSecond: result.tokensPerSecond?.toFixed(1) ?? '—',
       }));
-    } catch (error) { setBenchmarkOutput(error instanceof Error ? error.message : String(error)); }
+    } catch (error) { setBenchmarkOutput(faultText(error)); }
   }, [benchmarkCorpus, publishedModel, t]);
 
   const handleRollbackPublished = useCallback(async () => {

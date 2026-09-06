@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { fetchProject, updateProject } from '@/lib/api';
 import { projectAgents, type ProjectAgent } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 export interface GovernanceContentProps {
   projectId: number;
   /** When set, governance is read/written on this agent instead of the project. */
@@ -36,7 +36,7 @@ export function GovernanceContent({ projectId, agentAssignment, className, style
           if (!cancelled) setGovernance(project?.governance ?? '');
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load governance');
+        if (!cancelled) setError(faultMessage(e, 'Failed to load governance'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -63,7 +63,7 @@ export function GovernanceContent({ projectId, agentAssignment, className, style
       setGovernance(draft);
       setEditing(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save governance');
+      setError(faultMessage(e, 'Failed to save governance'));
     } finally {
       setSaving(false);
     }

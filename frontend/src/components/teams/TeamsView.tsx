@@ -27,7 +27,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { TeamChatButton } from '@/components/brain/TeamChatButton';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Workforce → Teams. Groups the workforce (agents AND humans) into named teams
  * and attaches a team to projects. Mirrors the other Workforce collection
@@ -153,7 +153,7 @@ export function TeamsView() {
     try {
       setTeams(await listTeams());
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errLoadTeams'));
+      setError(faultMessage(e, t('errLoadTeams')));
     } finally {
       setLoading(false);
     }
@@ -182,7 +182,7 @@ export function TeamsView() {
         ),
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errLoadTeam'));
+      setError(faultMessage(e, t('errLoadTeam')));
     } finally {
       setDetailLoading(false);
     }
@@ -200,7 +200,7 @@ export function TeamsView() {
       setNewName(''); setNewDesc(''); setCreateOpen(false);
       await loadTeams();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errCreate'));
+      setError(faultMessage(e, t('errCreate')));
     } finally {
       setCreating(false);
     }
@@ -213,7 +213,7 @@ export function TeamsView() {
       closeTeam();
       await loadTeams();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errDelete'));
+      setError(faultMessage(e, t('errDelete')));
     }
   };
 

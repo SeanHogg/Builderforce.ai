@@ -27,7 +27,7 @@ import {
   type SeatCapMode,
 } from '@/lib/spendLimits';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage, faultText } from '@/lib/apiClient';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -181,7 +181,7 @@ function TeamSpendInner() {
     if (!tenant) { setLoading(false); return; }
     getSpendLimits(tenant.id)
       .then(applyOverview)
-      .catch((e: Error) => setError(e.message))
+      .catch((e: Error) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, [tenant, applyOverview]);
 
@@ -195,7 +195,7 @@ function TeamSpendInner() {
       applyOverview(o);
       setNotice(t('spendSaved'));
     } catch (e) {
-      setNotice(e instanceof Error ? e.message : t('spendSaveFailed'));
+      setNotice(faultText(e, t('spendSaveFailed')));
     } finally {
       setSavingDefault(false);
     }
@@ -209,7 +209,7 @@ function TeamSpendInner() {
       applyOverview(o);
       setNotice(t('spendSaved'));
     } catch (e) {
-      setNotice(e instanceof Error ? e.message : t('spendSaveFailed'));
+      setNotice(faultText(e, t('spendSaveFailed')));
     }
   };
 

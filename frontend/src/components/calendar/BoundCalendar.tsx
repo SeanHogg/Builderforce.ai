@@ -20,7 +20,7 @@ import {
 } from '@/lib/calendar/calendarSources';
 import { Calendar } from './Calendar';
 import styles from './Calendar.module.css';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * A CALENDAR BOUND TO A SOURCE — the whole vertical slice, in one self-contained piece.
  *
@@ -118,7 +118,7 @@ export function BoundCalendar({
         // indistinguishable from a calendar with nothing in it, which is the reading
         // somebody would act on.
         setEvents([]);
-        setError(cause instanceof Error ? cause.message : t('readFailed'));
+        setError(faultMessage(cause, t('readFailed')));
       })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };

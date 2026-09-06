@@ -79,7 +79,7 @@ import { useTaskStatusLabel } from '@/lib/taskStatusLabel';
 import { TASK_PRIORITIES, taskPriorityBadgeClass } from '@/lib/taskPriority';
 import { WorkspaceAllowanceBanner } from '@/components/board/WorkspaceAllowanceBanner';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 type TaskView = 'board' | 'table' | 'calendar' | 'gantt';
 
 /** A rendered kanban column = a swimlane (board column). `status` is the lane key tasks sit in. */
@@ -451,7 +451,7 @@ export function TaskMgmtContent({
         setProjects(projs);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : tTask('errLoad'));
+      setError(faultMessage(e, tTask('errLoad')));
     } finally {
       if (!opts?.background) setLoading(false);
     }
@@ -853,7 +853,7 @@ export function TaskMgmtContent({
       }
       setShowModal(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : tTask('errSave'));
+      setError(faultMessage(e, tTask('errSave')));
     } finally {
       setSaving(false);
     }
@@ -868,7 +868,7 @@ export function TaskMgmtContent({
       setTasks((prev) => prev.filter((i) => i.id !== t.id));
       if (drawerTask?.id === t.id) setDrawerTask(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : tTask('errDelete'));
+      setError(faultMessage(e, tTask('errDelete')));
     }
   };
 
@@ -887,7 +887,7 @@ export function TaskMgmtContent({
       setTasks((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
       setDrawerTask((cur) => (cur && cur.id === updated.id ? updated : cur));
     } catch (e) {
-      setError(e instanceof Error ? e.message : tSchedule('rescheduleFailed'));
+      setError(faultMessage(e, tSchedule('rescheduleFailed')));
     }
   }, [tSchedule]);
 
@@ -904,7 +904,7 @@ export function TaskMgmtContent({
       setDrawerTask(updated);
       setEditingField(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : tTask('errSave'));
+      setError(faultMessage(e, tTask('errSave')));
     } finally {
       setFieldSaving(false);
     }
@@ -942,7 +942,7 @@ export function TaskMgmtContent({
       // the run-feed poll as the dropped-socket backstop; no client-side trigger.
       refreshRuns();
     } catch (e) {
-      setError(e instanceof Error ? e.message : tTask('errUpdate'));
+      setError(faultMessage(e, tTask('errUpdate')));
     }
   };
 
@@ -978,7 +978,7 @@ export function TaskMgmtContent({
       setTasks((prev) => prev.map((t) => (t.id === moved.id ? moved : t)));
       if (drawerTask?.id === id) setDrawerTask(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : tTask('errMove'));
+      setError(faultMessage(e, tTask('errMove')));
     }
   };
 

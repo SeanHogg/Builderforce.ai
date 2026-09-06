@@ -52,7 +52,7 @@ import { TaxCenter } from '@/components/tax/TaxCenter';
 import { useLocale } from 'next-intl';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultText } from '@/lib/apiClient';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -141,7 +141,7 @@ export default function BillingClient({ view = 'account' }: { view?: BillingView
       if (result.checkoutUrl) window.location.href = result.checkoutUrl;
       else setCard(await cardValidationApi.get(tenantId));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('cardFailed'));
+      setError(faultText(cause, t('cardFailed')));
     } finally {
       setBusy(false);
     }

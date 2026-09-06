@@ -3,7 +3,7 @@
 export const runtime = 'edge';
 
 import { useEffect, useState } from 'react';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * WebContainer "connect" page. Must be at exactly /webcontainer/connect (no trailing segment)
  * so that @webcontainer/api's setupConnect() recognises the pathname.
@@ -23,7 +23,7 @@ export default function WebContainerConnectPage() {
         if (!cancelled) setStatus('ok');
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : String(e));
+          setError(faultMessage(e));
           setStatus('error');
         }
       }

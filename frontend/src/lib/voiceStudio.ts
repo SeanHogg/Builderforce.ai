@@ -35,7 +35,7 @@ import {
   type SpeakerEmbedding,
 } from '@/lib/voiceEngine';
 import { fetchIdeProjectByStorage } from '@/lib/api';
-
+import { faultMessage } from '@/lib/apiClient';
 export interface CreateCloneInput {
   name: string;
   consentAttested: boolean;
@@ -108,7 +108,7 @@ export function useVoiceStudio(
       // Keep the selection valid: default to the first clone after a (re)load.
       setSelectedCloneId((cur) => (list.some((c) => c.id === cur) ? cur : (list[0]?.id ?? 0)));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load voice clones.');
+      setError(faultMessage(e, 'Failed to load voice clones.'));
     } finally {
       setLoading(false);
     }
@@ -136,7 +136,7 @@ export function useVoiceStudio(
       setResult(res);
       setAudioUrl(await narrationResultToObjectUrl(res));
     } catch (e) {
-      setUnavailable(e instanceof Error ? e.message : 'Synthesis failed.');
+      setUnavailable(faultMessage(e, 'Synthesis failed.'));
     } finally {
       setBusy(false);
     }

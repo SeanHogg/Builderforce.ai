@@ -8,7 +8,7 @@ import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { ApprovalResolveControl } from './ApprovalResolveControl';
 import { TicketDetailsPanel } from '@/components/task/TicketDetailsPanel';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Human-in-the-loop request queue — the portal side of the agent's `ask_human`
  * tool. Lists every request an agent has bubbled up (approvals, questions,
@@ -112,7 +112,7 @@ export function HumanRequestsView({
       setRows(approvals);
       if (lockedAgentHostId == null) setAgentHostList(agentHostsData);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load requests');
+      setError(faultMessage(e, 'Failed to load requests'));
     } finally {
       setLoading(false);
     }

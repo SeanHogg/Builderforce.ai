@@ -6,7 +6,7 @@ import { adminApi, type LegalDocVersion } from '@/lib/adminApi';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
 import { useAdminFormat } from '@/components/admin/adminShared';
-
+import { faultText } from '@/lib/apiClient';
 export interface LegalHistoryContext {
   docType: 'terms' | 'privacy';
 }
@@ -44,7 +44,7 @@ export function LegalHistoryDrawer({ context, onClose }: LegalHistoryDrawerProps
         setVersions(rows);
         setExpanded(rows.length ? rows[0].id : null);
       })
-      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : String(e)))
+      .catch((e) => !cancelled && setError(faultText(e)))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;

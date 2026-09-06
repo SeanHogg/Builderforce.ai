@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { cronApi, type CronJob } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -50,7 +50,7 @@ export function CronJobsContent({
       const list = await cronApi.list(agentHostId, projectId, projectAgentId);
       setJobs(list);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load cron jobs');
+      setError(faultMessage(e, 'Failed to load cron jobs'));
     } finally {
       setLoading(false);
     }
@@ -76,7 +76,7 @@ export function CronJobsContent({
       setFormProjectId(projectId != null ? String(projectId) : '');
       setShowCreate(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create cron job');
+      setError(faultMessage(e, 'Failed to create cron job'));
     } finally {
       setSaving(false);
     }
@@ -87,7 +87,7 @@ export function CronJobsContent({
       const updated = await cronApi.update(agentHostId, job.id, { enabled: !job.enabled });
       setJobs((prev) => prev.map((j) => (j.id === job.id ? updated : j)));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to update');
+      setError(faultMessage(e, 'Failed to update'));
     }
   };
 
@@ -96,7 +96,7 @@ export function CronJobsContent({
       await cronApi.delete(agentHostId, jobId);
       setJobs((prev) => prev.filter((j) => j.id !== jobId));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to delete');
+      setError(faultMessage(e, 'Failed to delete'));
     }
   };
 

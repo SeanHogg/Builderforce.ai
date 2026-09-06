@@ -93,19 +93,25 @@ export type { AvatarProps } from './ParticipantBadge';
 export { HealthRing, healthRingColor } from './HealthRing';
 export type { HealthRingProps } from './HealthRing';
 
-// The chat's "this turn left code on disk" bar — the count of uncommitted files and
-// a click through to each one's diff. Sits under the ticket rail; self-gating, so a
+// The chat's "this turn left code on disk" list — the drawer behind the ticket rail's
+// "Changes (N)" pill (a ChatTicketsExtension the host registers). Self-gating, so a
 // surface with no local working tree passes no changes and it never renders.
-export { PendingChangesBar, DEFAULT_PENDING_CHANGES_LABELS } from './pendingChanges/PendingChangesBar';
+export {
+  PendingChangesList,
+  DEFAULT_PENDING_CHANGES_LABELS,
+  resolvePendingChangesLabels,
+  pendingChangesSummary,
+} from './pendingChanges/PendingChangesList';
 export type {
-  PendingChangesBarProps,
+  PendingChangesListProps,
   PendingChangesLabels,
   PendingChangeVM,
   PendingChangeKind,
-} from './pendingChanges/PendingChangesBar';
+} from './pendingChanges/PendingChangesList';
 
 export { ChatTicketsPanel } from './chatTickets/ChatTicketsPanel';
 export type { ChatTicketsPanelProps } from './chatTickets/ChatTicketsPanel';
+export type { ChatTicketsExtension } from './chatTickets/types';
 export { useChatParticipants } from './chatTickets/useChatParticipants';
 export { useMentionAutocomplete } from './mention/MentionAutocomplete';
 export type { MentionAutocomplete, MentionLabels, UseMentionAutocompleteOptions } from './mention/MentionAutocomplete';

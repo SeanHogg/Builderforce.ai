@@ -27,7 +27,7 @@ import {
   type LlmProvider,
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * BYO (bring-your-own-provider) credentials. A workspace owner connects their OWN
  * frontier-model accounts — Anthropic, OpenAI, and/or Google — and the platform
@@ -722,7 +722,7 @@ function ProviderConnectionCard({
   const disconnect = useProviderDisconnect(t);
   const toast = useToast();
 
-  const loadDiagnostic = () => providerKeysApi.status(config.id).then(setDiagnostic).catch((e: Error) => setError(e.message));
+  const loadDiagnostic = () => providerKeysApi.status(config.id).then(setDiagnostic).catch((e: Error) => setError(faultMessage(e)));
   useEffect(() => { void loadDiagnostic(); }, [config.id, authType]);
 
   const testConnection = async () => {
@@ -760,7 +760,7 @@ function ProviderConnectionCard({
       onChange('api_key');
       setDraft('');
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errSaveKey'));
+      setError(faultMessage(e, t('errSaveKey')));
     } finally {
       setBusy(false);
     }
@@ -782,7 +782,7 @@ function ProviderConnectionCard({
         void pollForApproval(started.state, device.intervalSeconds);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errStartConnect'));
+      setError(faultMessage(e, t('errStartConnect')));
     } finally {
       setBusy(false);
     }
@@ -809,7 +809,7 @@ function ProviderConnectionCard({
         stopDeviceConnect();
         return 'stop';
       } catch (e) {
-        setError(e instanceof Error ? e.message : t('errConnectSubscription'));
+        setError(faultMessage(e, t('errConnectSubscription')));
         stopDeviceConnect();
         return 'stop';
       }
@@ -849,7 +849,7 @@ function ProviderConnectionCard({
         setError(t('errCodeExpired'));
         setConnecting(false); setPastedCode(''); setOauthState('');
       } else {
-        setError(e instanceof Error ? e.message : t('errConnectSubscription'));
+        setError(faultMessage(e, t('errConnectSubscription')));
       }
     } finally {
       setBusy(false);
@@ -861,7 +861,7 @@ function ProviderConnectionCard({
     try {
       if (await disconnect(config, authType)) onChange(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errRemove'));
+      setError(faultMessage(e, t('errRemove')));
     } finally {
       setBusy(false);
     }
@@ -1021,7 +1021,7 @@ function OllamaLocalConnectionCard({
   const disconnect = useProviderDisconnect(t);
   const toast = useToast();
 
-  const loadDiagnostic = () => providerKeysApi.status('ollama-local').then(setDiagnostic).catch((e: Error) => setError(e.message));
+  const loadDiagnostic = () => providerKeysApi.status('ollama-local').then(setDiagnostic).catch((e: Error) => setError(faultMessage(e)));
   useEffect(() => { void loadDiagnostic(); }, [configured]);
 
   const testConnection = async () => {
@@ -1051,7 +1051,7 @@ function OllamaLocalConnectionCard({
       onChange('api_key');
       setBaseUrl(''); setModel(''); setApiKey('');
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errSaveKey'));
+      setError(faultMessage(e, t('errSaveKey')));
     } finally {
       setBusy(false);
     }
@@ -1062,7 +1062,7 @@ function OllamaLocalConnectionCard({
     try {
       if (await disconnect(config, configured ? 'api_key' : null)) onChange(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errRemove'));
+      setError(faultMessage(e, t('errRemove')));
     } finally {
       setBusy(false);
     }
@@ -1182,7 +1182,7 @@ function OpenRouterConnectionsPanel({
   useEffect(() => {
     void openRouterConnectionsApi.catalog()
       .then((result) => setCatalog(result.data ?? []))
-      .catch((e: Error) => setError(e.message));
+      .catch((e: Error) => setError(faultMessage(e)));
   }, []);
 
   const begin = (connection?: OpenRouterConnection) => {
@@ -1226,7 +1226,7 @@ function OpenRouterConnectionsPanel({
       cancel();
       await onChanged();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('openRouter.saveError'));
+      setError(faultMessage(e, t('openRouter.saveError')));
     } finally {
       setBusy(false);
     }
@@ -1263,7 +1263,7 @@ function OpenRouterConnectionsPanel({
       await openRouterConnectionsApi.remove(connection.id);
       await onChanged();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('openRouter.removeError'));
+      setError(faultMessage(e, t('openRouter.removeError')));
     } finally {
       setBusy(false);
     }
@@ -1503,7 +1503,7 @@ export function ProviderKeysSettings({
         setOrder(refs);
         onLeaderChange?.(precedenceLeaderLabel(precedenceResult.entries, refs));
       })
-      .catch((e: Error) => setError(e.message))
+      .catch((e: Error) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   };
 
@@ -1524,7 +1524,7 @@ export function ProviderKeysSettings({
     try {
       await providerKeysApi.setPriority(next);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('precedence.errSave'));
+      setError(faultMessage(e, t('precedence.errSave')));
     }
   };
 

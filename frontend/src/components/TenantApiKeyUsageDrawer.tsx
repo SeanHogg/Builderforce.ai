@@ -4,7 +4,7 @@ import { Select } from '@/components/Select';
 
 import { useEffect, useState } from 'react';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Per-key usage drawer — shared between the owner self-service flow
  * (`/settings/api-keys`) and the superadmin mint-on-behalf tab. Both render
@@ -88,7 +88,7 @@ export function TenantApiKeyUsageDrawer({ expanded, load }: Props) {
     setError(null);
     load({ days, page, limit: 50 })
       .then((r) => !cancelled && setData(r))
-      .catch((e: Error) => !cancelled && setError(e.message))
+      .catch((e: Error) => !cancelled && setError(faultMessage(e)))
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
   }, [expanded, days, page, load]);

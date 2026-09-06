@@ -28,7 +28,7 @@ import { ToolResultView } from '@/components/tools/ToolResultView';
 import { trackToolRun } from '@/lib/marketingApi';
 import { documentsComplete, type ToolDefinition, type ToolResult } from '@/lib/tools';
 import { getStoredUser } from '@/lib/auth';
-
+import { faultMessage } from '@/lib/apiClient';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
   borderRadius: 'var(--radius-lg)', padding: 18,
@@ -93,7 +93,7 @@ export function AnalyzerRunner({ definition, embedded = false, initialValues, on
       // The DOCUMENTS never travel with it — only the tool id and the result.
       if (!isAuthed) trackToolRun(definition.id, {}, res);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('runFailed'));
+      setError(faultMessage(e, t('runFailed')));
     } finally {
       setRunning(false);
     }

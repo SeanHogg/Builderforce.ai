@@ -41,7 +41,7 @@ import {
   type EntityScope,
 } from '@/lib/kernel/kernelApi';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 const PAGE_SIZE = 25;
 /** Enough columns to identify a row, few enough to stay readable on a phone.
  *  The full row is the detail form, which is one click away. */
@@ -222,7 +222,7 @@ export function EntityBrowser({ scope, locale = 'en' }: { scope: EntityScope; lo
       setEditing(null);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('saveFailed'));
+      setError(faultMessage(e, t('saveFailed')));
     } finally {
       setBusy(false);
     }
@@ -236,7 +236,7 @@ export function EntityBrowser({ scope, locale = 'en' }: { scope: EntityScope; lo
       await archiveEntityRow(scope, current.name, idOf(row));
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('saveFailed'));
+      setError(faultMessage(e, t('saveFailed')));
     } finally {
       setBusy(false);
     }

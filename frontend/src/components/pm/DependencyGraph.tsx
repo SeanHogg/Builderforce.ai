@@ -31,7 +31,7 @@ import { PmEmpty, PmError } from './pmShared';
 import { Select } from '@/components/Select';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useTaskStatusLabel } from '@/lib/taskStatusLabel';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Task dependency / epic-flow graph. Nodes are tasks; solid edges are precedence
  * dependencies (predecessor → successor); dashed edges are epic → child
@@ -197,7 +197,7 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
       setPredId(''); setSuccId('');
       reload();
     } catch (e) {
-      setFormError(e instanceof Error ? e.message : String(e));
+      setFormError(faultMessage(e));
     } finally {
       setBusy(false);
     }

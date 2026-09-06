@@ -85,7 +85,7 @@ export default function FactsPageClient() {
       setPanelOpen(false);
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setError(faultMessage(e, 'Save failed'));
     } finally {
       setSaving(false);
     }
@@ -93,7 +93,7 @@ export default function FactsPageClient() {
 
   const remove = async (f: Fact) => {
     try { await factsApi.remove(f.id); setFacts((prev) => prev.filter((x) => x.id !== f.id)); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Delete failed'); }
+    catch (e) { setError(faultMessage(e, 'Delete failed')); }
   };
 
   const hasFilters = useMemo(() => !!(q || subject || predicate), [q, subject, predicate]);

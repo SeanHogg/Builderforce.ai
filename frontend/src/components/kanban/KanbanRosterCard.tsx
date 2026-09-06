@@ -16,7 +16,7 @@ import { usePermission } from '@/lib/rbac';
 import type { RecommendedRoster, TemplateSummary, FlaggedTicket, RosterRole, AssigneeKind } from '@/lib/kanban';
 import { RoleAssigneePicker, useAssignableWorkforce } from '@/components/workforce/RoleAssigneePicker';
 import { Select } from '@/components/Select';
-
+import { faultMessage } from '@/lib/apiClient';
 const chip = (bg: string, fg: string): React.CSSProperties => ({
   display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 'var(--radius-full)',
   fontSize: 11, fontWeight: 600, background: bg, color: fg,
@@ -47,7 +47,7 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
       setRoster(rost);
       setFlagged(flg);
     } catch (e) {
-      setError((e as Error).message);
+      setError(faultMessage(e));
     }
   }, [projectId]);
 
@@ -59,7 +59,7 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
     try {
       await kanbanApi.applyTemplate(projectId, templateId);
       await load();
-    } catch (e) { setError((e as Error).message); }
+    } catch (e) { setError(faultMessage(e)); }
     finally { setBusy(false); }
   };
 
@@ -80,7 +80,7 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
       // The new agent joins the assignable pool the picker reads.
       workforce.reload();
       await load();
-    } catch (e) { setError((e as Error).message); }
+    } catch (e) { setError(faultMessage(e)); }
     finally { setCreating(null); }
   };
 
@@ -90,7 +90,7 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
       await kanbanApi.assignRole({ roleKey, ...a, projectId });
       setAssigningRole(null);
       await load();
-    } catch (e) { setError((e as Error).message); }
+    } catch (e) { setError(faultMessage(e)); }
     finally { setAssignBusy(false); }
   };
 
@@ -99,7 +99,7 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
     try {
       await kanbanApi.unassignRole(assignmentId);
       await load();
-    } catch (e) { setError((e as Error).message); }
+    } catch (e) { setError(faultMessage(e)); }
   };
 
   const cardStyle: React.CSSProperties = {

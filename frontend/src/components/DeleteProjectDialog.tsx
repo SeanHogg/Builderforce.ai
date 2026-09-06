@@ -6,7 +6,7 @@ import React, { useEffect, useState } from 'react';
 import type { Project } from '@/lib/types';
 import { fetchProjects } from '@/lib/api';
 import { tasksApi } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 export interface DeleteProjectDialogProps {
   /** The project to delete; null keeps the dialog closed. */
   project: Project | null;
@@ -68,7 +68,7 @@ export function DeleteProjectDialog({ project, onCancel, onConfirm }: DeleteProj
         setDisposition(others.length === 0 ? 'delete' : 'move');
         setMoveTargetId(others[0] ? String(others[0].id) : '');
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load tasks');
+        if (!cancelled) setError(faultMessage(e, 'Failed to load tasks'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -98,7 +98,7 @@ export function DeleteProjectDialog({ project, onCancel, onConfirm }: DeleteProj
       }
       onConfirm(project);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to move tasks');
+      setError(faultMessage(e, 'Failed to move tasks'));
       setBusy(false);
     }
   };

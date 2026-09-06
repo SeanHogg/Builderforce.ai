@@ -183,7 +183,7 @@ export default function PublishGigClient() {
     try {
       setTasks(await tasksApi.list(projectId));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     } finally {
       setLoading(false);
     }
@@ -228,7 +228,7 @@ export default function PublishGigClient() {
       });
       setPublished((prev) => ({ ...prev, [task.id]: result.jobId }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     } finally {
       setPublishing(null);
     }

@@ -14,7 +14,7 @@ import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { listSavedTalent, unsaveTalent, type SavedTalentEntry } from '@/lib/freelance/invites';
-
+import { faultMessage } from '@/lib/apiClient';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
   borderRadius: 'var(--radius-lg)', padding: 14, minWidth: 0,
@@ -38,7 +38,7 @@ export function ShortlistPanel({ onInvite }: { onInvite?: (entry: SavedTalentEnt
       setItems(result.items);
       setLists(result.lists);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('shortlist.loadError'));
+      setError(faultMessage(e, t('shortlist.loadError')));
     } finally {
       setLoading(false);
     }
@@ -53,7 +53,7 @@ export function ShortlistPanel({ onInvite }: { onInvite?: (entry: SavedTalentEnt
       await unsaveTalent(entry.freelancerUserId, entry.listName);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('shortlist.failed'));
+      setError(faultMessage(e, t('shortlist.failed')));
     } finally {
       setBusy(null);
     }

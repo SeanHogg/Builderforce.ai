@@ -6,7 +6,7 @@ import { Select } from '@/components/Select';
 import type { TrackerRow } from '@/lib/builderforceApi';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { roadmapClient, ROADMAP_HORIZONS, ROADMAP_STATUSES, rstr } from '@/lib/pm/roadmap';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Create/edit a roadmap item. Shared by RoadmapTimeline (add / click a card) and
  * RoadmapGantt (click a bar) so the roadmap CRUD form is defined once. A null
@@ -56,7 +56,7 @@ export function RoadmapItemPanel({ open, item, projectId, onClose, onSaved }: Ro
       onSaved();
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     } finally {
       setBusy(false);
     }

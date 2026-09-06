@@ -12,7 +12,7 @@ import {
   deleteJobSource, fetchJobSources, saveJobSource, syncJobSource, type JobBoardSource,
 } from '@/lib/sourcingApi';
 import styles from './sourcing.module.css';
-
+import { faultText } from '@/lib/apiClient';
 /**
  * The feeds a workspace pulls jobs from — add, sync, remove.
  *
@@ -69,7 +69,7 @@ export function JobSourcesPanel() {
       setName(''); setUrl(''); setItemsPath(''); setApiKey('');
       load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('sources.saveFailed'));
+      setError(faultText(cause, t('sources.saveFailed')));
     } finally { setBusy(null); }
   };
 
@@ -83,7 +83,7 @@ export function JobSourcesPanel() {
       else setNotice(t('sources.synced', { fetched: result.fetched, written: result.written }));
       load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('sources.syncFailed', { detail: '' }));
+      setError(faultText(cause, t('sources.syncFailed', { detail: '' })));
     } finally { setBusy(null); }
   };
 
@@ -100,7 +100,7 @@ export function JobSourcesPanel() {
       await deleteJobSource(source.id);
       load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('sources.removeFailed'));
+      setError(faultText(cause, t('sources.removeFailed')));
     } finally { setBusy(null); }
   };
 

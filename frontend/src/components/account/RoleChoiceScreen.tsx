@@ -6,7 +6,7 @@ import { REGISTER_MARKETING } from '@/lib/content';
 import MarketingVisual from './MarketingVisual';
 import AccountTypeChooser, { type AccountType } from './AccountTypeChooser';
 import { Icon } from '@/components/ui/Icon';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Full-screen, blocking role chooser shown by the onboarding gate to an account
  * that was provisioned via OAuth / magic-link and never picked Build vs Hired on
@@ -34,7 +34,7 @@ export default function RoleChoiceScreen({
     try {
       await onSelect(selected, ageAttested);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('error'));
+      setError(faultMessage(e, t('error')));
       setSubmitting(false);
     }
   };

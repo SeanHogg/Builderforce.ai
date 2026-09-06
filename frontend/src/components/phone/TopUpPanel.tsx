@@ -12,7 +12,7 @@ import { formatCents } from '@/lib/canvasMoney';
 import { completeTopUp, fetchTopUpPacks, startTopUp, type TopUpPack } from '@/lib/phoneApi';
 import { usePhone } from '@/lib/usePhone';
 import styles from './phone.module.css';
-
+import { faultText } from '@/lib/apiClient';
 /**
  * Buying credit — and settling the payment the processor redirected back with.
  *
@@ -51,7 +51,7 @@ export function TopUpPanel() {
         setNotice(t('topUp.credited', { amount: formatCents(result.creditedCents, { locale }) }));
         await refresh();
       })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : t('topUp.failed')));
+      .catch((cause) => setError(faultText(cause, t('topUp.failed'))));
   }, [sessionId, settled, refresh, t, locale]);
 
   const buy = useCallback(async (packId: string) => {
@@ -62,7 +62,7 @@ export function TopUpPanel() {
       // wants to open checkout in a new tab can.
       window.location.assign(await startTopUp(packId));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('topUp.failed'));
+      setError(faultText(cause, t('topUp.failed')));
       setBusy(null);
     }
   }, [t]);

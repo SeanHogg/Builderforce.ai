@@ -416,7 +416,7 @@ import { normalizeModelComparisonIds } from '@/lib/modelComparisonRequest';
 import { authoredWebsiteProblem, patchWebsiteHero, websiteHeroFrom, websiteThemeFrom } from './websiteWysiwyg';
 import { builtinAgentSurfaceHref, type BuiltinAgentSurfaceIntent } from '@/lib/team/builtinAgentSurface';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage, faultText } from '@/lib/apiClient';
 const Canvas3DView = dynamic(
   () => import('@/components/canvas/Canvas3DView')
     .then((module) => module.Canvas3DView as ComponentType<Canvas3DViewProps<CreationFlowNode>>),
@@ -2052,7 +2052,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!shareOpen || persistence !== 'server' || sessionRole !== 'owner') return;
     void creationSessionsApi.invitations.list(sessionId)
       .then((result) => setPendingInvitations(result.invitations.filter((invitation) => !invitation.acceptedAt && !invitation.revokedAt)))
-      .catch((error) => setNotice(error instanceof Error ? error.message : t('noticeInvitationsFailed')));
+      .catch((error) => setNotice(faultText(error, t('noticeInvitationsFailed'))));
   }, [persistence, sessionId, sessionRole, shareOpen]);
 
   useEffect(() => {
@@ -2115,7 +2115,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         noteSaveState();
       }).catch((error) => {
         void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelation.current, action: 'session.open', phase: 'failed', durationMs: performance.now() - openedAt }).catch(() => undefined);
-        setNotice(error instanceof Error ? error.message : t('noticeLoadSessionFailed'));
+        setNotice(faultText(error, t('noticeLoadSessionFailed')));
       }).finally(() => setLoadingSession(false));
     } catch { hydrated.current = true; }
   }, [persistence, sessionId, setEdges, setNodes]);
@@ -2825,7 +2825,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         setNotice(t('noticeDealMoved', { stage }));
       })
       .catch((error: unknown) => {
-        setNotice(error instanceof Error ? error.message : t('noticeDealNotMoved'));
+        setNotice(faultText(error, t('noticeDealNotMoved')));
       });
   }, [cardsEditable, setNodes, t]);
 
@@ -2869,7 +2869,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         await creationSessionsApi.lock(sessionId, lockedObjectId, action);
         if (!stopped) setLockBlocked(false);
       } catch (error) {
-        if (!stopped) { setLockBlocked(true); setNotice(error instanceof Error ? error.message : t('noticeObjectLocked')); }
+        if (!stopped) { setLockBlocked(true); setNotice(faultText(error, t('noticeObjectLocked'))); }
       }
     };
     void acquire('acquire');
@@ -2942,7 +2942,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ? t('datasetImportedWithPii', { name: file.name, rows: fmt.number(rows.length), columns: columns.length, pii: governance.piiColumns })
         : t('datasetImported', { name: file.name, rows: fmt.number(rows.length), columns: columns.length }));
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : t('datasetImportFailed'));
+      setNotice(faultText(error, t('datasetImportFailed')));
     }
   }, [datasetRowLimit, importLabel, selectedId, setNodes, t]);
 
@@ -3933,7 +3933,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       void creationSessionsApi.templates.create({ name: preset.name, description: 'Reusable Canvas frame', category: 'Frame', visibility: 'private', graph }).then(() => {
         setNotice(t('noticeFrameSavedAccount'));
         return creationSessionsApi.templates.list();
-      }).then((result) => setServerTemplates(result.templates)).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeSaveTemplateFailed')));
+      }).then((result) => setServerTemplates(result.templates)).catch((error) => setNotice(faultText(error, t('noticeSaveTemplateFailed'))));
       return;
     }
     setFramePresets((current) => { const next = [...current.filter((item) => item.name !== preset.name), preset].slice(-20); localStorage.setItem('builderforce:create-frame-presets', JSON.stringify(next)); return next; });
@@ -3949,7 +3949,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const flow = flowFromSession(detail);
       setNodes(flow.nodes); setEdges(flow.edges); setPersistedObjectIds(new Set(flow.nodes.map((node) => node.id))); setTemplateOpen(false); setNotice(t('noticeTemplateAdded', { name: template.name }));
       window.setTimeout(() => void flowRef.current?.fitView({ nodes: result.objectIds.map((id) => ({ id })), padding: .2, duration: 400 }), 0);
-    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeTemplateFailed')));
+    }).catch((error) => setNotice(faultText(error, t('noticeTemplateFailed'))));
   }, [canEdit, persistence, sessionId, setEdges, setNodes]);
 
   const createBranch = useCallback(() => {
@@ -3957,7 +3957,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNotice(t('noticeCreatingBranch'));
     void creationSessionsApi.branch(sessionId, `${title} — branch`).then(async ({ session }) => {
       canvasNavigate(`/create/${session.id}`);
-    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeCreateBranchFailed')));
+    }).catch((error) => setNotice(faultText(error, t('noticeCreateBranchFailed'))));
   }, [persistence, requireAccount, sessionId, title]);
 
   const prepareMerge = useCallback(() => {
@@ -3973,7 +3973,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       });
       setMergeReview({ parentId: branchParentId, parentRevision: detail.session.canvasRevision, parentNodes: parent.nodes, parentEdges: parent.edges, items });
       setNotice(t('noticeDecisionsReady', { count: items.length }));
-    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeCompareBranchFailed')));
+    }).catch((error) => setNotice(faultText(error, t('noticeCompareBranchFailed'))));
   }, [branchParentId, nodes, persistence]);
 
   const applyMerge = useCallback(() => {
@@ -3990,7 +3990,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const retainedEdges = mergeReview.parentEdges.filter((edge) => parentOnly.has(edge.source) || parentOnly.has(edge.target));
     const graph = persistedGraphFromBoard({ nodes: merged, edges: [...retainedEdges, ...branchEdges] });
     setNotice(t('noticeApplyingMerge'));
-    void creationSessionsApi.saveGraph(mergeReview.parentId, { ...graph, expectedRevision: mergeReview.parentRevision }).then(() => { canvasNavigate(`/create/${mergeReview.parentId}`); }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeMergeFailed')));
+    void creationSessionsApi.saveGraph(mergeReview.parentId, { ...graph, expectedRevision: mergeReview.parentRevision }).then(() => { canvasNavigate(`/create/${mergeReview.parentId}`); }).catch((error) => setNotice(faultText(error, t('noticeMergeFailed'))));
   }, [edges, mergeReview]);
 
   const expandProject = useCallback(() => {
@@ -4043,7 +4043,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         setEdges((current) => [...current, ...additions.map((node) => ({ id: crypto.randomUUID(), source: project.id, target: node.id, type: 'smoothstep', label: node.data.kind }))]);
         setNotice(additions.length ? `${additions.length} related project items added` : t('noticeLensAlreadyExpanded'));
         trackActivity('creation_project_expanded', { sessionId, metadata: { clientSurface: canvasSurface(), projectId } });
-      }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeExpandProjectFailed')));
+      }).catch((error) => setNotice(faultText(error, t('noticeExpandProjectFailed'))));
       return;
     }
     // A SECTION, not a legacy `workflow` card: the canvas IS the workflow. Sized so
@@ -4127,7 +4127,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       openNodeInspector(comparison.id);
       setNotice(t('noticeComparisonAdded'));
       trackActivity('creation_projects_compared', { sessionId, metadata: { clientSurface: canvasSurface(), projectCount: projectNodes.length } });
-    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeCompareProjectsFailed')));
+    }).catch((error) => setNotice(faultText(error, t('noticeCompareProjectsFailed'))));
   }, [nodes, openNodeInspector, persistence, requireAccount, setEdges, setNodes]);
 
   const loadProjectQuality = useCallback(() => {
@@ -4169,7 +4169,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       void creationSessionsApi.recordOutcome(sessionId, { correlationId: validationCorrelationId, action: 'artifact.validate', phase: 'validated', projectId: Number(projectId), artifactId: project.id, durationMs: performance.now() - validationStartedAt, metricKey: 'validation_pass', metricValue: Number(quality.result.score ?? 0) >= 70 ? 1 : 0, unit: 'boolean', metadata: { score: quality.result.score, diagnosticCount: diagnostics.length } }).catch(() => undefined);
     }).catch((error) => {
       void creationSessionsApi.recordOutcome(sessionId, { correlationId: validationCorrelationId, action: 'artifact.validate', phase: 'failed', projectId: Number(projectId), artifactId: project.id, durationMs: performance.now() - validationStartedAt }).catch(() => undefined);
-      setNotice(error instanceof Error ? error.message : t('noticeLoadQualityFailed'));
+      setNotice(faultText(error, t('noticeLoadQualityFailed')));
     });
   }, [nodes, persistence, requireAccount, selectedNode, setEdges, setNodes]);
 
@@ -4281,7 +4281,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     void Promise.all([getProjectEvermindHead(projectId), getProjectEvermindContributions(projectId)]).then(([head, activity]) => {
       setEvermindLiveByNodeId((current) => ({ ...current, [evermindNodeId]: projectEvermindNodePatch(head, activity) }));
       setNotice(t('noticeEvermindAttached'));
-    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeLoadEvermindFailed')));
+    }).catch((error) => setNotice(faultText(error, t('noticeLoadEvermindFailed'))));
   }, [nodes, selectedNode, setEdges, setNodes]);
 
   const expandEvermindPipeline = useCallback(() => {
@@ -4376,7 +4376,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNodes((current) => existing ? current.map((node) => node.id === existing.id ? evaluation : node) : [...current, evaluation]);
       setEdges((current) => current.some((edge) => edge.source === target.id && edge.target === evaluation.id) ? current : [...current, { id: crypto.randomUUID(), source: target.id, target: evaluation.id, type: 'smoothstep', label: 'evaluated by', animated: true }]);
       setNotice(t('noticeEvermindEvalComplete', { score: (result.score * 100).toFixed(0) }));
-    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeEvermindEvalFailed')));
+    }).catch((error) => setNotice(faultText(error, t('noticeEvermindEvalFailed'))));
   }, [nodes, selectedNode, setEdges, setNodes]);
 
   const startStandup = useCallback(() => {
@@ -4402,7 +4402,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const ceremonyId = result.session?.id;
         applyStandup(ceremonyId ? `ceremony:${ceremonyId}` : undefined);
         setNotice(ceremonyId ? t('noticeStandupStarted') : t('noticeStandupFramePrepared'));
-      }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeStartStandupFailed')));
+      }).catch((error) => setNotice(faultText(error, t('noticeStartStandupFailed'))));
       return;
     }
     applyStandup();
@@ -9906,7 +9906,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         }),
       ]);
       setNotice(t('flowStep.opened', { count: stepNodes.length }));
-    }).catch((error: Error) => setNotice(error.message));
+    }).catch((error: Error) => setNotice(faultText(error)));
   }, [connectionKind, setEdges, setNodes, setNotice, t]);
 
   /**
@@ -9996,7 +9996,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNotice(t('flowStep.opening'));
       void workflowDefinitions.get(definitionId)
         .then((detail) => placeFlow(boardFlowFromDefinition(detail.definition, target.position), detail.name, detail.id))
-        .catch((error: Error) => setNotice(error.message));
+        .catch((error: Error) => setNotice(faultText(error)));
       return;
     }
     // Never built, so there is no saved graph and the authored list IS the flow. A step
@@ -10123,7 +10123,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         setNodes((current) => current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, resourceId: `agent:${saved.id}`, status: 'Configured' } } : node));
         setNotice(ref ? t('agentSettingsSaved') : t('agentCreatedReady'));
       })
-      .catch((error) => setNotice(error instanceof Error ? error.message : t('agentSettingsSaveFailed')));
+      .catch((error) => setNotice(faultText(error, t('agentSettingsSaveFailed'))));
   }, [persistence, requireAccount, selectedNode, setNodes, t]);
 
   /**
@@ -10284,7 +10284,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         setBuildFocus({ nodeId: target.id, storageProjectId: ide.storageProjectId });
         setNotice(t('build.created'));
       })
-      .catch((error) => setNotice(error instanceof Error ? error.message : t('build.createFailed')))
+      .catch((error) => setNotice(faultText(error, t('build.createFailed'))))
       .finally(() => setCreatingBuild(false));
   }, [creatingBuild, edges, nodes, persistence, requireAccount, selectedNode, setNodes, t]);
 
@@ -10315,7 +10315,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         : node));
       setNotice(t('build.workspaceDeleted'));
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : t('build.deleteWorkspaceFailed'));
+      setNotice(faultText(error, t('build.deleteWorkspaceFailed')));
     }
   }, [confirm, nodes, setNodes, t]);
 
@@ -10817,7 +10817,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       } as Partial<CreationNodeData>);
       setNotice(next.status === 'open' ? tPoll('noticeVotingOpen') : tPoll('noticeVotingClosed'));
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : tPoll('publishFailed'));
+      setNotice(faultText(error, tPoll('publishFailed')));
     }
   }, [persistence, requireAccount, setSurface, tPoll, updateNodeData]);
 
@@ -10880,7 +10880,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // surface where an agent is most likely to have just rewritten half the board.
     if (persistence !== 'server') { setLocalCheckpoints(localCheckpointSummaries(sessionId)); return; }
     void creationSessionsApi.history.list(sessionId).then((result) => setHistory(result.snapshots))
-      .catch((error) => setNotice(error instanceof Error ? error.message : t('noticeLoadHistoryFailed')));
+      .catch((error) => setNotice(faultText(error, t('noticeLoadHistoryFailed'))));
   }, [persistence, sessionId]);
 
   const restoreLocalCheckpoint = useCallback((checkpointId: string) => {
@@ -10904,7 +10904,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setEdges(restored.edges);
       setHistoryOpen(false);
       setNotice(t('noticeRevisionRestored', { revision: targetRevision }));
-    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeRestoreRevisionFailed')));
+    }).catch((error) => setNotice(faultText(error, t('noticeRestoreRevisionFailed'))));
   }, [canEdit, persistence, sessionId, setEdges, setNodes]);
 
   /**
@@ -10936,7 +10936,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setCheckpointName('');
       setNotice(t('noticeCheckpointSaved', { label }));
       return creationSessionsApi.history.list(sessionId);
-    }).then((result) => setHistory(result.snapshots)).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeSaveCheckpointFailed')));
+    }).then((result) => setHistory(result.snapshots)).catch((error) => setNotice(faultText(error, t('noticeSaveCheckpointFailed'))));
   }, [canEdit, checkpointName, edges, nodes, persistence, sessionId, t]);
 
   const exportSession = useCallback(() => {
@@ -10954,7 +10954,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     void creationSessionsApi.export(sessionId).then((payload) => {
       downloadJson(payload, filename);
       setNotice(t('noticeExportDownloaded'));
-    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeExportFailed')));
+    }).catch((error) => setNotice(faultText(error, t('noticeExportFailed'))));
   }, [edges, nodes, persistence, sessionId, timeline, title]);
 
   const minimapColor = useCallback((node: CreationFlowNode) => {
@@ -11346,7 +11346,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setOutcomeMetricsLoading(true);
     void creationSessionsApi.outcomeMetrics(sessionId)
       .then(setOutcomeMetrics)
-      .catch((error) => setOutcomeMetricsError(error instanceof Error ? error.message : t('noticeOutcomeMetricsFailed')))
+      .catch((error) => setOutcomeMetricsError(faultMessage(error, t('noticeOutcomeMetricsFailed'))))
       .finally(() => setOutcomeMetricsLoading(false));
   }, [persistence, sessionId]);
 
@@ -11769,13 +11769,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           the bar on every surface and in both auth states, and a second copy in
           this panel would be one decision with two homes. */}
     </> : <button disabled={sharedRoom.busy} onClick={() => void sharedRoom.start()}>{sharedRoom.busy ? t('sharedStarting') : t('sharedStart')}</button>) : <>
-      <div><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder={t('emailPlaceholder')} /><select aria-label={t('invitationRole')} value={inviteRole} onChange={(event) => setInviteRole(event.target.value as CreationSessionSummary['role'])}><option value="viewer">{t('roleViewer')}</option><option value="commenter">{t('roleCommenter')}</option><option value="editor">{t('roleEditor')}</option><option value="runner">{t('roleRunner')}</option><option value="owner">{t('roleOwner')}</option></select><button disabled={!inviteEmail.trim()} onClick={() => { void creationSessionsApi.invite(sessionId, { email: inviteEmail.trim() }, inviteRole).then(async (result) => { if ('acceptPath' in result) { await copyTextToClipboard(`${canvasWebOrigin()}${result.acceptPath}`); setPendingInvitations((current) => [...current.filter((item) => item.id !== result.invitationId), { id: result.invitationId, email: result.email, role: result.role as CreationSessionSummary['role'], expiresAt: result.expiresAt, acceptedAt: null, revokedAt: null, createdAt: new Date().toISOString() }]); setNotice(result.emailSent ? t('invitationEmailed') : t('invitationSavedLinkCopied')); } else { const detail = await creationSessionsApi.get(sessionId); setAllMembers(detail.members); setNotice(result.emailSent ? t('collaboratorInvitedEmail') : t('collaboratorInvited')); } setInviteEmail(''); }).catch((error) => setNotice(error instanceof Error ? error.message : t('inviteFailed'))); }}>{t('invite')}</button></div>
+      <div><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder={t('emailPlaceholder')} /><select aria-label={t('invitationRole')} value={inviteRole} onChange={(event) => setInviteRole(event.target.value as CreationSessionSummary['role'])}><option value="viewer">{t('roleViewer')}</option><option value="commenter">{t('roleCommenter')}</option><option value="editor">{t('roleEditor')}</option><option value="runner">{t('roleRunner')}</option><option value="owner">{t('roleOwner')}</option></select><button disabled={!inviteEmail.trim()} onClick={() => { void creationSessionsApi.invite(sessionId, { email: inviteEmail.trim() }, inviteRole).then(async (result) => { if ('acceptPath' in result) { await copyTextToClipboard(`${canvasWebOrigin()}${result.acceptPath}`); setPendingInvitations((current) => [...current.filter((item) => item.id !== result.invitationId), { id: result.invitationId, email: result.email, role: result.role as CreationSessionSummary['role'], expiresAt: result.expiresAt, acceptedAt: null, revokedAt: null, createdAt: new Date().toISOString() }]); setNotice(result.emailSent ? t('invitationEmailed') : t('invitationSavedLinkCopied')); } else { const detail = await creationSessionsApi.get(sessionId); setAllMembers(detail.members); setNotice(result.emailSent ? t('collaboratorInvitedEmail') : t('collaboratorInvited')); } setInviteEmail(''); }).catch((error) => setNotice(faultText(error, t('inviteFailed')))); }}>{t('invite')}</button></div>
       {sessionRole === 'owner' && <div aria-label={t('sessionMembers')}>{allMembers.map((member) => <div key={member.userId} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
         <span>{member.displayName || t('collaborator')}{member.userId === currentUserId ? ` ${t('youSuffix')}` : ''}</span>
-        <select aria-label={t('roleFor', { name: member.displayName || member.userId })} value={member.role} onChange={(event) => { const role = event.target.value as CreationSessionSummary['role']; void creationSessionsApi.members.update(sessionId, member.userId, role).then(() => setAllMembers((current) => current.map((item) => item.userId === member.userId ? { ...item, role } : item))).catch((error) => setNotice(error instanceof Error ? error.message : t('roleUpdateFailed'))); }}><option value="viewer">{t('roleViewer')}</option><option value="commenter">{t('roleCommenter')}</option><option value="editor">{t('roleEditor')}</option><option value="runner">{t('roleRunner')}</option><option value="owner">{t('roleOwner')}</option></select>
-        <button type="button" disabled={member.userId === currentUserId} aria-label={t('removeMember', { name: member.displayName || t('member') })} onClick={() => { void creationSessionsApi.members.remove(sessionId, member.userId).then(() => setAllMembers((current) => current.filter((item) => item.userId !== member.userId))).catch((error) => setNotice(error instanceof Error ? error.message : t('memberRemovalFailed'))); }}>×</button>
+        <select aria-label={t('roleFor', { name: member.displayName || member.userId })} value={member.role} onChange={(event) => { const role = event.target.value as CreationSessionSummary['role']; void creationSessionsApi.members.update(sessionId, member.userId, role).then(() => setAllMembers((current) => current.map((item) => item.userId === member.userId ? { ...item, role } : item))).catch((error) => setNotice(faultText(error, t('roleUpdateFailed')))); }}><option value="viewer">{t('roleViewer')}</option><option value="commenter">{t('roleCommenter')}</option><option value="editor">{t('roleEditor')}</option><option value="runner">{t('roleRunner')}</option><option value="owner">{t('roleOwner')}</option></select>
+        <button type="button" disabled={member.userId === currentUserId} aria-label={t('removeMember', { name: member.displayName || t('member') })} onClick={() => { void creationSessionsApi.members.remove(sessionId, member.userId).then(() => setAllMembers((current) => current.filter((item) => item.userId !== member.userId))).catch((error) => setNotice(faultText(error, t('memberRemovalFailed')))); }}>×</button>
       </div>)}{!!pendingInvitations.length && <div aria-label={t('pendingInvitations')} style={{ marginTop: 10 }}><strong>{t('pendingInvitations')}</strong>{pendingInvitations.map((invitation) => <div key={invitation.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
-        <span>{invitation.email}</span><small>{invitation.role}</small><button type="button" aria-label={t('revokeInvitation', { email: invitation.email })} onClick={() => { void creationSessionsApi.invitations.revoke(sessionId, invitation.id).then(() => { setPendingInvitations((current) => current.filter((item) => item.id !== invitation.id)); setNotice(t('invitationRevoked')); }).catch((error) => setNotice(error instanceof Error ? error.message : t('invitationRevokeFailed'))); }}>×</button>
+        <span>{invitation.email}</span><small>{invitation.role}</small><button type="button" aria-label={t('revokeInvitation', { email: invitation.email })} onClick={() => { void creationSessionsApi.invitations.revoke(sessionId, invitation.id).then(() => { setPendingInvitations((current) => current.filter((item) => item.id !== invitation.id)); setNotice(t('invitationRevoked')); }).catch((error) => setNotice(faultText(error, t('invitationRevokeFailed')))); }}>×</button>
       </div>)}</div>}</div>}
     </>}
     <small>{t('accessLabel', { access: persistence === 'local' ? (inRoom ? t('sharedAnyoneWithLink') : t('privateOnDevice')) : inviteRole })}</small>
@@ -12127,7 +12127,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 setClaimingDraft(true);
                 void claimLocalDraft(sessionId)
                   .then((claimed) => { if (claimed) canvasNavigate(`/create/${claimed.sessionId}`); else setNotice(t('noticeSaveToAccountFailed')); })
-                  .catch((error) => setNotice(error instanceof Error ? error.message : t('noticeSaveToAccountFailed')))
+                  .catch((error) => setNotice(faultText(error, t('noticeSaveToAccountFailed'))))
                   .finally(() => { setClaimingDraft(false); setAccountGate(null); });
               }}>{claimingDraft ? t('noticeSavingToAccount') : t('gateSaveToAccount')}</button>
             </div>
@@ -12875,7 +12875,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
       onChange(canvasPatch);
       setActionStatus(taskId != null && persistence === 'server' ? t('taskUpdated') : t('taskUpdatedLocal'));
     } catch (error) {
-      setActionStatus(error instanceof Error ? error.message : t('taskUpdateFailed'));
+      setActionStatus(faultText(error, t('taskUpdateFailed')));
     }
   };
   // What this frame holds, through the SAME containment the board draws with — not a
@@ -12947,7 +12947,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
           fetchedAt: new Date().toISOString(), status: 'Live',
         });
         setActionStatus('');
-      }).catch((error) => setActionStatus(error instanceof Error ? error.message : t('taskUpdateFailed')));
+      }).catch((error) => setActionStatus(faultText(error, t('taskUpdateFailed'))));
     },
   };
   /**
@@ -12981,7 +12981,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
     <div className={styles.inspectorTabs}><button className={tab === 'details' ? styles.activeTab : ''} onClick={() => setTab('details')}>{t('details')}</button><button className={tab === 'activity' ? styles.activeTab : ''} onClick={() => setTab('activity')}>{t('activity')}</button></div>
     <div className={styles.inspectorBody}>
       {tab === 'details' ? <fieldset className={styles.inspectorFields} disabled={!editable}>
-      {node.data.redacted === true && <><p className={styles.inspectorHint}>{t('redactedObject')}</p><button type="button" className={styles.fullButton} disabled={persistence !== 'server' || !!accessStatus} onClick={() => { setAccessStatus(t('requesting')); void creationSessionsApi.requestObjectAccess(sessionId, node.id).then(() => setAccessStatus(t('accessRequested'))).catch((error) => setAccessStatus(error instanceof Error ? error.message : t('requestFailed'))); }}>{accessStatus || t('requestAccess')}</button></>}
+      {node.data.redacted === true && <><p className={styles.inspectorHint}>{t('redactedObject')}</p><button type="button" className={styles.fullButton} disabled={persistence !== 'server' || !!accessStatus} onClick={() => { setAccessStatus(t('requesting')); void creationSessionsApi.requestObjectAccess(sessionId, node.id).then(() => setAccessStatus(t('accessRequested'))).catch((error) => setAccessStatus(faultText(error, t('requestFailed')))); }}>{accessStatus || t('requestAccess')}</button></>}
       {/* A built-in seat's name is locked here too, not only on the compact Persona
           panel — the object edited at either width must agree on what is actually
           editable, or renaming it from the wide reading would silently undo the lock
@@ -13878,7 +13878,7 @@ function ActivityInspector({ sessionId, objectId, data, persistence, role, membe
       setActivity(activityResult.activity.filter((item) => !item.objectId || item.objectId === objectId));
       setStatus(commentResult.comments.length || activityResult.activity.length ? '' : t('noticeNoActivityYet'));
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : t('noticeLoadActivityFailed'));
+      setStatus(faultText(error, t('noticeLoadActivityFailed')));
     }
   }, [objectId, persistence, sessionId]);
 
@@ -13895,12 +13895,12 @@ function ActivityInspector({ sessionId, objectId, data, persistence, role, membe
       setDraft('');
       setStatus('Comment posted');
       void reload();
-    }).catch((error) => setStatus(error instanceof Error ? error.message : t('noticePostCommentFailed')));
+    }).catch((error) => setStatus(faultText(error, t('noticePostCommentFailed'))));
   };
 
   const resolve = (comment: CreationSessionComment) => {
     void creationSessionsApi.comments.resolve(sessionId, comment.id, !comment.resolvedAt).then(() => void reload())
-      .catch((error) => setStatus(error instanceof Error ? error.message : t('commentUpdateFailed')));
+      .catch((error) => setStatus(faultText(error, t('commentUpdateFailed'))));
   };
 
   if (persistence === 'local') return <div className={styles.activityEmpty}><strong>{t('collaborationStartsOnSave')}</strong><p>{t('collaborationStartsHint')}</p></div>;

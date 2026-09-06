@@ -19,7 +19,7 @@ import {
   type ResumeReviewThread,
 } from '@/lib/careerAiApi';
 import { GradedRow, QuotedLine, fieldStyle, labelStyle, stackStyle, statusTone, textAreaStyle } from './careerAiShared';
-
+import { faultMessage } from '@/lib/apiClient';
 const STATUSES: readonly ResumeReviewStatus[] = ['open', 'in_review', 'answered', 'closed'];
 const MIN_RESUME = 40;
 
@@ -42,7 +42,7 @@ export function ReviewQueuePanel() {
       setQueue(response.reviews);
       setError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t('error.failed'));
+      setError(faultMessage(caught, t('error.failed')));
     } finally {
       setLoading(false);
     }
@@ -56,7 +56,7 @@ export function ReviewQueuePanel() {
     try {
       await work();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t('error.failed'));
+      setError(faultMessage(caught, t('error.failed')));
     } finally {
       setBusy(false);
     }

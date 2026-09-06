@@ -33,7 +33,7 @@ import { pollAnswerIsEmpty } from '@builderforce/creation-canvas-contract';
 import { PollAnswerControl } from './PollAnswerControl';
 import { PollResults } from './PollResults';
 import styles from './PollJoin.module.css';
-
+import { faultMessage } from '@/lib/apiClient';
 /** How often the room's count is re-read while the tab is visible. Four seconds is
  *  under the threshold at which a facilitator says "is this thing working" and well
  *  over the rate at which a bounded indexed read costs anything. */
@@ -100,7 +100,7 @@ export function PollJoin({ slug }: { slug: string }) {
       setChanging(false);
       setState({ status: 'ready', view: { ...view, tally: result.tally, resultsVisible: result.resultsVisible } });
     } catch (voteError) {
-      setError(voteError instanceof Error ? voteError.message : t('voteFailed'));
+      setError(faultMessage(voteError, t('voteFailed')));
     } finally {
       setSending(false);
     }

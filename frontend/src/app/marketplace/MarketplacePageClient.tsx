@@ -55,7 +55,7 @@ import { ModelsExplorer } from './ModelsExplorer';
 import MarketplaceGigsSection from './MarketplaceGigsSection';
 import { signInHref } from '@/lib/auth';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
-
+import { faultMessage } from '@/lib/apiClient';
 // Human freelancers ("Talent"), the live model catalog ("Models"), and open work to
 // bid on ("Gigs") are categories of the marketplace rather than standalone
 // /talent, /models, and /freelancer/gigs pages — same search box, one merged surface.
@@ -294,7 +294,7 @@ export default function MarketplacePageClient() {
       setPublishSuccess(true);
       setSkillForm({ name: '', slug: '', description: '', category: '', version: '1.0.0', repoUrl: '', price: '0', pricingModel: 'flat_fee', priceUnit: '' });
     } catch (e) {
-      setPublishError(e instanceof Error ? e.message : tm('publish.failed'));
+      setPublishError(faultMessage(e, tm('publish.failed')));
     } finally {
       setPublishing(false);
     }

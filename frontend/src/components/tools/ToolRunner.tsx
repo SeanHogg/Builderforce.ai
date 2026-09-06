@@ -35,7 +35,7 @@ import { trackToolRun } from '@/lib/marketingApi';
 import { defaultInput, answersComplete, type ToolDefinition, type ToolResult } from '@/lib/tools';
 import { getStoredUser, getStoredTenantToken } from '@/lib/auth';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
-
+import { faultMessage, faultText } from '@/lib/apiClient';
 const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18 };
 const fieldInput: React.CSSProperties = {
   padding: '9px 12px', fontSize: 'var(--font-size-body)', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
@@ -106,7 +106,7 @@ export default function ToolRunner({
         setInput(initialInput && Object.keys(initialInput).length ? initialInput : defaultInput(d));
         onDefinitionLoad?.(d);
       })
-      .catch((e: Error) => { if (active) setError(e.message); });
+      .catch((e: Error) => { if (active) setError(faultMessage(e)); });
     return () => { active = false; };
     // The definition is keyed by the tool alone. `initialInput` / `onDefinitionLoad`
     // are deliberately out: both change identity on every host render, and a
@@ -134,7 +134,7 @@ export default function ToolRunner({
       // their result and we can target them with a sign-up. Authed users are known.
       if (!isAuthed) trackToolRun(toolId, input, res);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to run');
+      setError(faultMessage(e, 'Failed to run'));
     } finally {
       setComputing(false);
     }
@@ -146,7 +146,7 @@ export default function ToolRunner({
       await toolsApi.save(toolId, input, projectId);
       setSaveState('saved'); setSaveMsg(projectId != null ? t('savedProject') : t('saved'));
     } catch (e) {
-      setSaveState('error'); setSaveMsg(e instanceof Error ? e.message : t('saveFailed'));
+      setSaveState('error'); setSaveMsg(faultText(e, t('saveFailed')));
     }
   };
 

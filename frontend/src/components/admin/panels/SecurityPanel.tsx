@@ -22,7 +22,7 @@ import { downloadText } from '@/lib/download';
 import { Select } from '@/components/Select';
 import { AdminError, errText } from '../adminShared';
 import { useAdminFormat } from '../adminShared';
-
+import { faultText } from '@/lib/apiClient';
 export default function SecurityPanel() {
   const { fmtDateTime } = useAdminFormat();
   const t = useTranslations('admin');
@@ -201,7 +201,7 @@ export default function SecurityPanel() {
                         setErrorMsg(t('security.scanQrInstruction'));
                         handleSecurityUserSelect(securityUserId);
                       } catch (e) {
-                        setErrorMsg(e instanceof Error ? e.message : String(e));
+                        setErrorMsg(faultText(e));
                       }
                     }}
                   >
@@ -239,7 +239,7 @@ export default function SecurityPanel() {
                             setErrorMsg('');
                             handleSecurityUserSelect(securityUserId);
                           } catch (e) {
-                            setErrorMsg(e instanceof Error ? e.message : String(e));
+                            setErrorMsg(faultText(e));
                           }
                         }}
                       >
@@ -284,7 +284,7 @@ export default function SecurityPanel() {
                             setSecurityRecoveryCode('');
                             handleSecurityUserSelect(securityUserId);
                           } catch (e) {
-                            setErrorMsg(e instanceof Error ? e.message : String(e));
+                            setErrorMsg(faultText(e));
                           }
                         }}
                       >
@@ -315,7 +315,7 @@ export default function SecurityPanel() {
                             setSecurityRecoveryCodes(r.recoveryCodes ?? []);
                             handleSecurityUserSelect(securityUserId);
                           } catch (e) {
-                            setErrorMsg(e instanceof Error ? e.message : String(e));
+                            setErrorMsg(faultText(e));
                           }
                         }}
                       >
@@ -356,7 +356,7 @@ export default function SecurityPanel() {
                         await adminApi.securityRevokeAllSessions(securityTenantId!, securityUserId!);
                         handleSecurityUserSelect(securityUserId);
                       } catch (e) {
-                        setErrorMsg(e instanceof Error ? e.message : String(e));
+                        setErrorMsg(faultText(e));
                       }
                     }}
                   >
@@ -393,7 +393,7 @@ export default function SecurityPanel() {
                                   await adminApi.securityRevokeSession(securityTenantId!, securityUserId!, s.id);
                                   handleSecurityUserSelect(securityUserId);
                                 } catch (e) {
-                                  setErrorMsg(e instanceof Error ? e.message : String(e));
+                                  setErrorMsg(faultText(e));
                                 }
                               }}
                             >
@@ -438,7 +438,7 @@ export default function SecurityPanel() {
                                   await adminApi.securityRevokeToken(securityTenantId!, securityUserId!, tok.jti);
                                   handleSecurityUserSelect(securityUserId);
                                 } catch (e) {
-                                  setErrorMsg(e instanceof Error ? e.message : String(e));
+                                  setErrorMsg(faultText(e));
                                 }
                               }}
                             >

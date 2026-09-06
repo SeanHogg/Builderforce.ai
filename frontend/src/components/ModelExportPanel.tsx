@@ -22,7 +22,7 @@ import {
   type PublishedEvermindModel,
   type EvermindExportFormat,
 } from '@/lib/studioModelsApi';
-
+import { faultMessage } from '@/lib/apiClient';
 export function ModelExportPanel() {
   const t = useTranslations('modelExport');
   const [models, setModels] = useState<PublishedEvermindModel[] | null>(null);
@@ -59,7 +59,7 @@ export function ModelExportPanel() {
       const filename = await exportPublishedModel(selectedSlug, format, fp16Supported && fp16);
       setDone(filename);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('error'));
+      setError(faultMessage(e, t('error')));
     } finally {
       setBusy(false);
     }

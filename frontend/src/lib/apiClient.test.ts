@@ -14,7 +14,8 @@ vi.mock('@/i18n/config', () => ({
   readLocaleCookie: vi.fn(() => 'en'),
 }));
 
-import { apiRequest, apiRequestStream } from './apiClient';
+import { apiRequest, apiRequestStream, faultMessage, faultText, isSignedOutFailure } from './apiClient';
+import { readGuestWall, resetGuestWall } from '@/domains/guest/application/guestWall';
 import { getStoredTenantToken } from './auth';
 import { onTermsGate } from './errors/termsGateEvent';
 import {
@@ -292,5 +293,55 @@ describe('a request that never reached a server', () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
     await expect(apiRequestStream('/api/brain/stream', { method: 'POST' }))
       .rejects.toBeInstanceOf(ApiTransportError);
+  });
+});
+
+describe('a read refused for want of a credential', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetGuestWall();
+  });
+
+  it('is not a fault: faultMessage answers null and faultText the empty string', async () => {
+    vi.mocked(getStoredTenantToken).mockReturnValueOnce(null);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(missingAuthHeaderResponse());
+
+    const rejection = await apiRequest('/api/investor/companies').catch((e: unknown) => e);
+    expect(isSignedOutFailure(rejection)).toBe(true);
+    expect(faultMessage(rejection)).toBeNull();
+    expect(faultMessage(rejection, 'Companies could not be loaded.')).toBeNull();
+    expect(faultText(rejection, 'Companies could not be loaded.')).toBe('');
+  });
+
+  it('records the wall on the route it was met, so the invitation can stand there', async () => {
+    window.history.replaceState(null, '', '/investor?tab=pack');
+    vi.mocked(getStoredTenantToken).mockReturnValueOnce(null);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(missingAuthHeaderResponse());
+
+    await expect(apiRequest('/api/investor/companies')).rejects.toThrow('Missing or malformed Authorization header');
+    expect(readGuestWall().pathname).toBe('/investor');
+  });
+
+  it('leaves the wall alone for an EXPIRED session — that is a redirect, not an invitation', async () => {
+    window.history.replaceState(null, '', '/investor');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(missingAuthHeaderResponse());
+
+    const rejection = await apiRequest('/api/investor/companies').catch((e: unknown) => e);
+    expect(isSignedOutFailure(rejection)).toBe(false);
+    expect(faultMessage(rejection)).toBe('Missing or malformed Authorization header');
+    expect(readGuestWall().pathname).toBeNull();
+  });
+});
+
+describe('faultMessage and faultText', () => {
+  it('prefer the error message, fall back when it is empty, and stringify the rest', () => {
+    expect(faultMessage(new Error('Boom'), 'Fallback')).toBe('Boom');
+    expect(faultMessage(new Error(''), 'Fallback')).toBe('Fallback');
+    expect(faultMessage(new Error(''))).toBe('');
+    expect(faultMessage('plain', 'Fallback')).toBe('Fallback');
+    expect(faultMessage('plain')).toBe('plain');
+    expect(faultMessage(null)).toBeNull();
+    expect(faultText(null)).toBe('');
+    expect(faultText(new Error('Boom'))).toBe('Boom');
   });
 });

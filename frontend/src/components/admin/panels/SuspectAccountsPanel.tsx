@@ -23,7 +23,7 @@ import { useTranslations } from 'next-intl';
 import { adminApi, type AdminSuspectAccount } from '@/lib/adminApi';
 import { AdminError, AdminLoading, AdminPanelHeader, useAdminData, useAdminFormat } from '@/components/admin/adminShared';
 import { useConfirm } from '@/components/ConfirmProvider';
-
+import { faultMessage } from '@/lib/apiClient';
 export default function SuspectAccountsPanel() {
   const t = useTranslations('admin.suspectAccounts');
   const { fmtDateTime } = useAdminFormat();
@@ -60,7 +60,7 @@ export default function SuspectAccountsPanel() {
       setSelected(new Set());
       reload();
     } catch (caught) {
-      setFailure(caught instanceof Error ? caught.message : String(caught));
+      setFailure(faultMessage(caught));
     } finally {
       setBusy(false);
     }

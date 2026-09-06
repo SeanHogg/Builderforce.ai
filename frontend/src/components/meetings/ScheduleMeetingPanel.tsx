@@ -7,7 +7,7 @@ import { Select } from '@/components/Select';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { listWorkforceDirectory, listTeams, type WorkforceOption, type TeamSummary } from '@/lib/teams';
 import { meetingsApi, type MeetingDetail, type MeetingKind, type TimeSlot } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 const KINDS: MeetingKind[] = ['standup', 'planning', 'retrospective', 'adhoc', 'direct', 'interview', 'review'];
 /** Kinds the backend backs with a team chat by default (mirrors TEAM_CEREMONY_KINDS
  *  server-side) — used only to seed the toggle; the explicit choice always wins. */
@@ -109,7 +109,7 @@ export function ScheduleMeetingPanel({
       const { slots: found } = await meetingsApi.suggest(humanRefs, durationMinutes, from.toISOString(), to.toISOString(), 6);
       setSlots(found);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not find a time');
+      setError(faultMessage(e, 'Could not find a time'));
     } finally { setFinding(false); }
   }, [humanRefs, durationMinutes]);
 
@@ -136,7 +136,7 @@ export function ScheduleMeetingPanel({
       setTitle(''); setScheduledAt(''); setSelected(new Set()); setKind('adhoc'); setSlots(null);
       setLinkChatTouched(false); setTeamId(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not create meeting');
+      setError(faultMessage(e, 'Could not create meeting'));
     } finally { setBusy(false); }
   }, [others, selected, kind, title, projectId, scheduled, scheduledAt, durationMinutes, videoEnabled, linkChat, teamId, user, onCreated, onClose]);
 

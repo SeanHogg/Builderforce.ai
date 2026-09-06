@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { useAvailableForHire, useIsFreelancer } from '@/lib/rbac';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * Settings card that lets an EXISTING builder opt in to being hired talent — publish
  * a for-hire profile and pick up gigs while keeping the full builder shell. Decides
@@ -51,7 +51,7 @@ export default function ForHireCard() {
     try {
       await setAvailableForHire(next);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('forHire.error'));
+      setError(faultMessage(e, t('forHire.error')));
     } finally {
       setBusy(false);
     }

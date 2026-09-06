@@ -14,7 +14,7 @@ import { RatingStars } from './RatingStars';
 import { RatingSummaryCard } from './RatingSummaryCard';
 import { ReviewList } from './ReviewList';
 import styles from './employers.module.css';
-
+import { faultText } from '@/lib/apiClient';
 /**
  * One employer: what it scores, what people said, and the form to say something.
  *
@@ -56,7 +56,7 @@ export function EmployerReviewPanel({ employerId }: { employerId: number }) {
           setAxisScores(next.mine.subRatings ?? {});
         }
       })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : t('detail.failed')));
+      .catch((cause) => setError(faultText(cause, t('detail.failed'))));
   }, [employerId, t]);
 
   useEffect(() => { load(); }, [load]);
@@ -74,7 +74,7 @@ export function EmployerReviewPanel({ employerId }: { employerId: number }) {
       setNotice(t('form.submittedPending'));
       load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('form.failed'));
+      setError(faultText(cause, t('form.failed')));
     } finally { setBusy(false); }
   };
 
@@ -92,7 +92,7 @@ export function EmployerReviewPanel({ employerId }: { employerId: number }) {
       setRating(0); setTitle(''); setBody(''); setAxisScores({});
       load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('form.withdrawFailed'));
+      setError(faultText(cause, t('form.withdrawFailed')));
     } finally { setBusy(false); }
   };
 

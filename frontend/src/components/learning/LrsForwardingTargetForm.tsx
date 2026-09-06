@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { learningApi } from '@/lib/learningApi';
 import styles from './learning.module.css';
-
+import { faultText } from '@/lib/apiClient';
 /**
  * Point this LRS at somebody else's.
  *
@@ -42,7 +42,7 @@ export function LrsForwardingTargetForm({ onAdded }: { onAdded?: () => void }) {
         setError(''); setOpen(false);
         onAdded?.();
       })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : t('target.failed')))
+      .catch((cause) => setError(faultText(cause, t('target.failed'))))
       .finally(() => setBusy(false));
   };
 

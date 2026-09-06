@@ -30,7 +30,7 @@ import {
   type MilestoneStatus, type WorkGate,
 } from '@/lib/milestonesApi';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
   borderRadius: 'var(--radius-lg)', padding: 16,
@@ -318,7 +318,7 @@ function useSchedule<T>(read: () => Promise<T>) {
   const load = useCallback(async () => {
     setLoading(true);
     try { setData(await read()); setError(null); }
-    catch (err) { setError(err instanceof Error ? err.message : t('loadFailed')); }
+    catch (err) { setError(faultMessage(err, t('loadFailed'))); }
     finally { setLoading(false); }
     // `read` is in the deps rather than suppressed: every caller passes a
     // useCallback-stabilised reader keyed on the id it closes over, so this reloads when
@@ -331,7 +331,7 @@ function useSchedule<T>(read: () => Promise<T>) {
   const act = async (key: string, fn: () => Promise<unknown>) => {
     setBusy(key); setError(null);
     try { await fn(); await load(); }
-    catch (err) { setError(err instanceof Error ? err.message : t('actionFailed')); }
+    catch (err) { setError(faultMessage(err, t('actionFailed'))); }
     finally { setBusy(null); }
   };
 

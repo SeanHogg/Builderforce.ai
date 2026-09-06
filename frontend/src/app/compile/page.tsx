@@ -11,7 +11,7 @@ import {
   type CompileSurface,
   type DeployPlan,
 } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * The plain-language front door to the compile primitive: type a need in prose,
  * the platform compiles it into an `AgentSpec`, resolves the deploy plan for the
@@ -97,7 +97,7 @@ export default function CompilePage() {
       setSpec(res.spec);
       setPlan(res.plan ?? null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errorGeneric'));
+      setError(faultMessage(e, t('errorGeneric')));
     } finally {
       setBusy(null);
     }
@@ -113,7 +113,7 @@ export default function CompilePage() {
       setOutput(res.output ?? '');
       if (res.error) setError(res.error);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('errorGeneric'));
+      setError(faultMessage(e, t('errorGeneric')));
     } finally {
       setBusy(null);
     }

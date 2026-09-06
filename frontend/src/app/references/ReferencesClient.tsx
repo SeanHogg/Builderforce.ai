@@ -20,7 +20,7 @@ import {
   type ReferenceShare,
   type ReferenceStatus,
 } from '@/lib/referencesApi';
-
+import { faultMessage } from '@/lib/apiClient';
 const STATUSES: readonly ReferenceStatus[] = ['draft', 'requested', 'confirmed', 'declined'];
 
 const field: React.CSSProperties = {
@@ -55,7 +55,7 @@ export default function ReferencesClient() {
       setReferences(list);
       setShares(shareList);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('loadFailed'));
+      setError(faultMessage(e, t('loadFailed')));
     } finally {
       setLoading(false);
     }
@@ -66,7 +66,7 @@ export default function ReferencesClient() {
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true); setError(null);
     try { await fn(); await load(); }
-    catch (e) { setError(e instanceof Error ? e.message : t('actionFailed')); }
+    catch (e) { setError(faultMessage(e, t('actionFailed'))); }
     finally { setBusy(false); }
   };
 

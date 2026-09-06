@@ -27623,6 +27623,10 @@
         "account": "Crea una cuenta para desbloquear esto.",
         "installTemplate": "Inicia sesión para configurar esta plantilla en un espacio de trabajo."
       }
+    },
+    "wall": {
+      "title": "Esta vista será tuya en cuanto tengas una cuenta",
+      "body": "Estás explorando Builderforce como invitado. Crea una cuenta gratis para ver aquí tus propios proyectos, equipo y agentes, y para conservar todo lo que hagas."
     }
   },
   "employers": {

@@ -37,7 +37,7 @@ import {
   type LadderRung,
   type WorklistEntry,
 } from '@/lib/founderOpsApi';
-
+import { faultText } from '@/lib/apiClient';
 export interface CollectionsWorklistProps {
   /** Told when a chase was sent, so the receivables list beside this can refresh. */
   onChased?: () => void;
@@ -72,7 +72,7 @@ export function CollectionsWorklist({ onChased }: CollectionsWorklistProps) {
       setLadder(rungs);
       setError('');
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('loadFailed'));
+      setError(faultText(cause, t('loadFailed')));
     } finally {
       setLoading(false);
     }
@@ -87,7 +87,7 @@ export function CollectionsWorklist({ onChased }: CollectionsWorklistProps) {
       await load();
       onChased?.();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('sendFailed'));
+      setError(faultText(cause, t('sendFailed')));
     } finally {
       setBusy('');
     }

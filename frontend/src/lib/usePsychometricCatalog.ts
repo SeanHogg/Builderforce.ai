@@ -14,7 +14,7 @@ import { psychometric as psychometricApi } from '@/lib/builderforceApi';
 import { useAuth } from '@/lib/AuthContext';
 import type { PsychometricCatalog } from '@/lib/psychometric';
 import { getOrSetClientCached } from '@/infrastructure/http/readThrough';
-
+import { faultText } from '@/lib/apiClient';
 // Keyed by tenant id: the frameworks/questions are static, but `entitled` is
 // per-tenant, so a tenant switch must NOT reuse another tenant's entitlement.
 const CACHE_PREFIX = 'psychometric-catalog:';
@@ -45,7 +45,7 @@ export function usePsychometricCatalog(): UsePsychometricCatalog {
     setError('');
     loadPsychometricCatalog(tenantKey)
       .then((c) => { if (alive) setCatalog(c); })
-      .catch((e) => { if (alive) setError(e instanceof Error ? e.message : 'Failed to load catalog'); })
+      .catch((e) => { if (alive) setError(faultText(e, 'Failed to load catalog')); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [tenantKey]);

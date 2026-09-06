@@ -10,7 +10,7 @@
 import { useEffect, useState } from 'react';
 import { llmApi, type ModelAnalyticsResponse } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
-
+import { faultMessage } from '@/lib/apiClient';
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -49,7 +49,7 @@ export function ModelRoutingAnalytics() {
     llmApi
       .modelAnalytics(scope)
       .then((res) => { if (!cancelled) setData(res); })
-      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load analytics'); })
+      .catch((e) => { if (!cancelled) setError(faultMessage(e, 'Failed to load analytics')); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [scope]);

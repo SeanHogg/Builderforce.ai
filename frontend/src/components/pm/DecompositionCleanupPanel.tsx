@@ -13,7 +13,7 @@ import {
   type CleanupGroup,
   type CleanupSelection,
 } from '@/lib/builderforceApi';
-
+import { faultMessage } from '@/lib/apiClient';
 /**
  * The decomposition-cleanup REVIEW.
  *
@@ -63,7 +63,7 @@ export function DecompositionCleanupPanel({
       // they never saw the current state of.
       setSelected(new Set());
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     }
   }, [projectId]);
 
@@ -115,7 +115,7 @@ export function DecompositionCleanupPanel({
       await load();
       onApplied?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(faultMessage(e));
     } finally {
       setBusy(false);
     }

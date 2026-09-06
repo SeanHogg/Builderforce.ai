@@ -28,7 +28,7 @@ import {
   type PayoutProviderDescriptor,
   type PayoutProviderName,
 } from '@/lib/payoutsApi';
-
+import { faultText } from '@/lib/apiClient';
 export interface PayoutConnectionsProps {
   /** Where the consent round trip returns to. */
   returnTo: string;
@@ -67,7 +67,7 @@ export function PayoutConnections({ returnTo, search = '', onChanged }: PayoutCo
       setProviders(result.providers);
       setAccounts(result.connections);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('loadFailed'));
+      setError(faultText(cause, t('loadFailed')));
     } finally {
       setLoading(false);
     }
@@ -89,7 +89,7 @@ export function PayoutConnections({ returnTo, search = '', onChanged }: PayoutCo
       const { authUrl } = await payoutsApi.connectUrl(provider.name, returnTo);
       window.location.href = authUrl;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('connectFailed'));
+      setError(faultText(cause, t('connectFailed')));
       setBusy(false);
     }
   };
@@ -102,7 +102,7 @@ export function PayoutConnections({ returnTo, search = '', onChanged }: PayoutCo
       setFormProvider(null); setDraft({});
       await refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('connectFailed'));
+      setError(faultText(cause, t('connectFailed')));
     } finally {
       setBusy(false);
     }
@@ -111,7 +111,7 @@ export function PayoutConnections({ returnTo, search = '', onChanged }: PayoutCo
   const act = async (run: () => Promise<unknown>) => {
     setBusy(true); setError('');
     try { await run(); await refresh(); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : t('actionFailed')); }
+    catch (cause) { setError(faultText(cause, t('actionFailed'))); }
     finally { setBusy(false); }
   };
 

@@ -32,7 +32,7 @@ import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { RoleGate } from '@/components/RoleGate';
-
+import { faultMessage } from '@/lib/apiClient';
 const EFFECTS: PolicyGateEffect[] = ['inject-directive', 'require-approval', 'block'];
 
 const cardStyle: React.CSSProperties = {
@@ -152,7 +152,7 @@ export default function PolicyPacksPanel() {
     setError(null);
     Promise.all([policyPacksApi.list(), policyPacksApi.effective()])
       .then(([list, eff]) => { setPacks(list); setEffective(eff); })
-      .catch((e: Error) => setError(e.message))
+      .catch((e: Error) => setError(faultMessage(e)))
       .finally(() => setLoading(false));
   }, []);
 
@@ -175,7 +175,7 @@ export default function PolicyPacksPanel() {
       await fn();
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('genericError'));
+      setError(faultMessage(e, t('genericError')));
     } finally {
       setSaving(false);
     }
