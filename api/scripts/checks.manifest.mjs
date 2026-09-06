@@ -32,6 +32,9 @@ export default [
   // the shared baseline in scripts/silent-catches.baseline.json. api's chain runs
   // the full sweep; frontend's runs only its own tree for fast local feedback.
   ['check:silent-catches', '../../scripts/check-silent-catches.mjs'],
+  // Per-file ratchet over raw `c.req.json` reads; parseBody (requestBody.ts) is the
+  // one validated read. Seeded 2026-09-06; the counts can only fall.
+  ['check:unvalidated-bodies', 'check-unvalidated-bodies.mjs'],
   ['check:dispatch-budget', 'check-dispatch-budget.mjs'],
   ['check:pinned-defects', 'check-pinned-defects.mjs'],
   ['check:prompt-tools', 'check-prompt-tool-names.mjs'],

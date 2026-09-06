@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { TenantService } from '../../application/tenant/TenantService';
+import { revokeSessionTokens } from '../../application/auth/sessionRevocation';
 import {
   acceptInvitation,
   acceptInvitationStatement,
@@ -1455,15 +1456,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const isMember = await assertTenantMember(db, tenantId, userId);
     if (!isMember) return c.json({ error: 'User is not an active member of this tenant' }, 404);
 
-    await db
-      .update(authUserSessions)
-      .set({ isActive: false, revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authUserSessions.id, sessionId), eq(authUserSessions.userId, userId)));
-
-    await db
-      .update(authTokens)
-      .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authTokens.userId, userId), eq(authTokens.tenantId, tenantId), eq(authTokens.sessionId, sessionId), isNull(authTokens.revokedAt)));
+    await revokeSessionTokens(db, c.env, { userId, sessionId, tenantId });
 
     return c.json({ ok: true });
   });
@@ -1480,15 +1473,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const isMember = await assertTenantMember(db, tenantId, userId);
     if (!isMember) return c.json({ error: 'User is not an active member of this tenant' }, 404);
 
-    await db
-      .update(authUserSessions)
-      .set({ isActive: false, revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authUserSessions.userId, userId), eq(authUserSessions.isActive, true)));
-
-    await db
-      .update(authTokens)
-      .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authTokens.userId, userId), eq(authTokens.tenantId, tenantId), isNull(authTokens.revokedAt)));
+    await revokeSessionTokens(db, c.env, { userId, tenantId });
 
     return c.json({ ok: true });
   });
@@ -1506,10 +1491,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const isMember = await assertTenantMember(db, tenantId, userId);
     if (!isMember) return c.json({ error: 'User is not an active member of this tenant' }, 404);
 
-    await db
-      .update(authTokens)
-      .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authTokens.userId, userId), eq(authTokens.tenantId, tenantId), eq(authTokens.jti, jti), isNull(authTokens.revokedAt)));
+    await revokeSessionTokens(db, c.env, { userId, jti, tenantId });
 
     return c.json({ ok: true });
   });

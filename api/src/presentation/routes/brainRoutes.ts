@@ -27,7 +27,6 @@ import { handleAssetSign, handleAssetUpload, handleTenantAssetRead } from './ass
 import type { Env, HonoEnv } from '../../env';
 import type { BrainService, BrainTraceEventInput } from '../../application/brain/BrainService';
 import { learnFromPersistedTurns } from '../../application/brain/brainEvermindLearning';
-import { resolveAddressedAgentPersona } from '../../application/brain/addressedAgentPersona';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { brainChatRoomName } from '../../infrastructure/relay/broadcastRoom';
@@ -645,22 +644,6 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       return c.json({ error: result.error }, notFound ? 404 : result.error === 'LLM not configured' ? 503 : 400);
     }
     return c.json({ message: result }, 201);
-  });
-
-  // GET /chats/:id/agent-persona?agentRef=&q= — the addressed agent's compiled persona,
-  // for a client that runs the agent's turn ITSELF (the editor, which has the file/git
-  // tools the server-side reply above does not). Same chat-access rule as agent-reply;
-  // same persona lowering, so the agent speaks with one voice on either side.
-  router.get('/chats/:id/agent-persona', async (c) => {
-    const id = parseId(c.req.param('id'));
-    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
-    const agentRef = c.req.query('agentRef')?.trim();
-    if (!agentRef) return c.json({ error: 'agentRef is required' }, 400);
-    const chat = await brainService.getChat(id, c.get('tenantId') as number, c.get('userId') as string);
-    if (!chat) return c.json({ error: 'Chat not found' }, 404);
-    // Never a 404 past the chat gate: a participant the resolver does not know still
-    // answers under its name (empty directives), as the server-side reply would.
-    return c.json(await resolveAddressedAgentPersona(c.env as Env, c.get('tenantId') as number, agentRef, c.req.query('q') ?? undefined));
   });
 
   // POST /fetch-url — fetch an external URL/file/website server-side (CORS-free)

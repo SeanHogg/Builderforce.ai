@@ -4,6 +4,7 @@
  * Uses tenant JWT from auth.
  */
 
+import type { EMBEDDED_CAPABILITY_KEYS } from './embeddedCapabilities';
 import { attachEvermindLearn, subscribeToChatMessages } from '@seanhogg/builderforce-brain-embedded';
 import { AUTH_API_URL, getStoredTenantToken } from './auth';
 import { apiSocketUrl } from './apiSocket';
@@ -5395,20 +5396,14 @@ export const tenantApiKeysApi = {
 // ---------------------------------------------------------------------------
 
 export type EmbedCapabilityKey = 'product' | 'agile' | 'security';
-export type CustomerEmbedFeatureKey =
-  | 'usage_tracking'
-  | 'support_widget'
-  | 'feedback_widget'
-  | 'heatmaps'
-  | 'feature_management'
-  | 'terms_gate'
-  | 'sourcing'
-  | 'lead_forms'
-  | 'push_notifications'
-  | 'onboarding'
-  | 'cookie_consent'
-  | 'hr_widget'
-  | 'status_page';
+/**
+ * The customer-site capability keys the API accepts at `/api/embed/features/<key>`.
+ *
+ * Read off the presentation registry (`lib/embeddedCapabilities.ts`) rather than
+ * retyped as thirteen literals: the registry is where a capability is added, and a
+ * union kept by hand here was the second list that could disagree with it.
+ */
+export type CustomerEmbedFeatureKey = (typeof EMBEDDED_CAPABILITY_KEYS)[number];
 
 export interface CustomerEmbedFeatureConfig {
   enabled: boolean;

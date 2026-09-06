@@ -28,13 +28,16 @@ import type { HonoEnv, Env } from '../../env';
 import {
   bookInterviewSlot, interviewPanelRefs, interviewTenantId, readBookingOffer,
 } from '../../application/hiring/interviewScheduling';
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { parseBody, z, zNonEmptyString } from './requestBody';
 
 /**
  * A booking token is 64 hex characters. Checking the SHAPE before touching the database
  * turns a scan for valid tokens into a request that never reaches Postgres.
  */
 const TOKEN_RE = /^[0-9a-f]{32,128}$/i;
+
+/** The one write the token permits: choosing one of the offered start times. */
+const BookBody = z.object({ startISO: zNonEmptyString });
 
 export function createCandidateBookingRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
@@ -45,54 +48,37 @@ export function createCandidateBookingRoutes(db: Db): Hono<HonoEnv> {
     // distinguishable response would let a caller sort guessed tokens into interesting
     // and uninteresting.
     if (!TOKEN_RE.test(token)) return c.json({ error: 'This booking link is no longer valid.' }, 404);
-    try {
-      const offer = await readBookingOffer(db, token);
-      if (!offer) return c.json({ error: 'This booking link is no longer valid.' }, 404);
-      return c.json({
-        slots: offer.slots,
-        durationMinutes: offer.durationMinutes,
-        timezone: offer.candidateTimezone,
-        booked: Boolean(offer.bookedAt),
-        bookedAt: offer.bookedAt,
-        expiresAt: offer.expiresAt,
-      });
-    } catch (error) {
-      reportCaughtError(error, { source: 'candidateBooking', operation: 'read' });
-      return c.json({ error: 'Could not load this booking link.' }, 500);
-    }
+    const offer = await readBookingOffer(db, token);
+    if (!offer) return c.json({ error: 'This booking link is no longer valid.' }, 404);
+    return c.json({
+      slots: offer.slots,
+      durationMinutes: offer.durationMinutes,
+      timezone: offer.candidateTimezone,
+      booked: Boolean(offer.bookedAt),
+      bookedAt: offer.bookedAt,
+      expiresAt: offer.expiresAt,
+    });
   });
 
   r.post('/:token/book', async (c) => {
     const token = c.req.param('token');
     if (!TOKEN_RE.test(token)) return c.json({ error: 'This booking link is no longer valid.' }, 404);
-    let startISO = '';
-    try {
-      const body = await c.req.json<{ startISO?: unknown }>();
-      startISO = typeof body?.startISO === 'string' ? body.startISO : '';
-    } catch {
-      return c.json({ error: 'Choose a time.' }, 400);
+    const { startISO } = await parseBody(c, BookBody);
+
+    const offer = await readBookingOffer(db, token);
+    if (!offer) return c.json({ error: 'This booking link is no longer valid.' }, 404);
+
+    const tenantId = await interviewTenantId(db, offer.interviewId);
+    const refs = tenantId ? await interviewPanelRefs(db, tenantId, offer.interviewId) : [];
+
+    const result = await bookInterviewSlot(db, c.env as Env, token, startISO, refs);
+    if (!result.ok) {
+      // 409 for a slot that is gone, 400 for a time that was never on offer: the first
+      // means "try another", the second means the client is out of step with the offer
+      // and should reload.
+      return c.json({ error: result.error, code: result.code }, result.code === 'not-offered' ? 400 : 409);
     }
-    if (!startISO) return c.json({ error: 'Choose a time.' }, 400);
-
-    try {
-      const offer = await readBookingOffer(db, token);
-      if (!offer) return c.json({ error: 'This booking link is no longer valid.' }, 404);
-
-      const tenantId = await interviewTenantId(db, offer.interviewId);
-      const refs = tenantId ? await interviewPanelRefs(db, tenantId, offer.interviewId) : [];
-
-      const result = await bookInterviewSlot(db, c.env as Env, token, startISO, refs);
-      if (!result.ok) {
-        // 409 for a slot that is gone, 400 for a time that was never on offer: the first
-        // means "try another", the second means the client is out of step with the offer
-        // and should reload.
-        return c.json({ error: result.error, code: result.code }, result.code === 'not-offered' ? 400 : 409);
-      }
-      return c.json({ booked: true, scheduledAt: result.scheduledAt });
-    } catch (error) {
-      reportCaughtError(error, { source: 'candidateBooking', operation: 'book' });
-      return c.json({ error: 'Could not complete the booking.' }, 500);
-    }
+    return c.json({ booked: true, scheduledAt: result.scheduledAt });
   });
 
   return r;

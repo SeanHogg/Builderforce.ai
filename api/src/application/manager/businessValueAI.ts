@@ -9,7 +9,7 @@
  * backfill must always complete and never block the sweep on model availability.
  */
 import type { Env } from '../../env';
-import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
+import { completeJson, jsonSchemaFormat } from '../llm/completeJson';
 import { deriveRiceScore, type ScoredValue } from './businessValue';
 
 const SYSTEM_PROMPT =
@@ -18,25 +18,42 @@ const SYSTEM_PROMPT =
   'confidence (0-1 = certainty), effort (1-10 = relative build cost), and a <=12-word rationale. ' +
   'Reply with JSON only.';
 
-const RESPONSE_SCHEMA = {
-  type: 'json_schema' as const,
-  json_schema: {
-    name: 'ticket_business_value',
-    strict: true,
-    schema: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['reach', 'impact', 'confidence', 'effort', 'rationale'],
-      properties: {
-        reach: { type: 'number', minimum: 0, maximum: 10 },
-        impact: { type: 'number', minimum: 0, maximum: 5 },
-        confidence: { type: 'number', minimum: 0, maximum: 1 },
-        effort: { type: 'number', minimum: 1, maximum: 10 },
-        rationale: { type: 'string' },
-      },
-    },
+const RESPONSE_SCHEMA = jsonSchemaFormat('ticket_business_value', {
+  type: 'object',
+  additionalProperties: false,
+  required: ['reach', 'impact', 'confidence', 'effort', 'rationale'],
+  properties: {
+    reach: { type: 'number', minimum: 0, maximum: 10 },
+    impact: { type: 'number', minimum: 0, maximum: 5 },
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
+    effort: { type: 'number', minimum: 1, maximum: 10 },
+    rationale: { type: 'string' },
   },
-};
+});
+
+interface RiceReply {
+  reach: number;
+  impact: number;
+  confidence: number;
+  effort: number;
+  rationale: unknown;
+}
+
+/** Coerce the four RICE numbers; a missing or non-finite one refuses the reply. */
+function readRice(value: unknown): RiceReply | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const obj = value as Record<string, unknown>;
+  const num = (v: unknown): number | null => {
+    const n = typeof v === 'number' ? v : Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const reach = num(obj.reach);
+  const impact = num(obj.impact);
+  const confidence = num(obj.confidence);
+  const effort = num(obj.effort);
+  if (reach == null || impact == null || confidence == null || effort == null) return null;
+  return { reach, impact, confidence, effort, rationale: obj.rationale };
+}
 
 /**
  * RICE-score one ticket with the model. Returns a {@link ScoredValue} (source 'ai')
@@ -63,40 +80,24 @@ export async function scoreBusinessValueAI(
       ? `${SYSTEM_PROMPT}\n\nYou are scoring AS this manager — let your persona shape the estimate:\n${personaDirective.trim()}`
       : SYSTEM_PROMPT;
 
-    const result = await ideProxy(env).complete({
-      messages: [
-        { role: 'system', content: systemContent },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0,
-      max_tokens: 200,
-      response_format: RESPONSE_SCHEMA,
-      useCase: 'business_value_scoring',
-    });
-
-    if (result.response.status >= 400) return null;
-    const { content } = await readProxyChoice(result);
-    if (!content) return null;
-
-    let obj: Record<string, unknown>;
-    try {
-      obj = JSON.parse(content) as Record<string, unknown>;
-    } catch {
-      return null;
-    }
-    const num = (v: unknown): number | null => {
-      const n = typeof v === 'number' ? v : Number(v);
-      return Number.isFinite(n) ? n : null;
-    };
-    const reach = num(obj.reach);
-    const impact = num(obj.impact);
-    const confidence = num(obj.confidence);
-    const effort = num(obj.effort);
-    if (reach == null || impact == null || confidence == null || effort == null) return null;
+    const out = await completeJson(
+      { kind: 'ide', env },
+      {
+        system: systemContent,
+        user: userPrompt,
+        schema: RESPONSE_SCHEMA,
+        temperature: 0,
+        maxTokens: 200,
+        useCase: 'business_value_scoring',
+      },
+      readRice,
+    );
+    if (!out.ok) return null;
+    const { reach, impact, confidence, effort, rationale: rawRationale } = out.value;
 
     const score = deriveRiceScore({ reach, impact, confidence, effort });
-    const rationale = typeof obj.rationale === 'string' && obj.rationale.trim()
-      ? obj.rationale.trim().slice(0, 160)
+    const rationale = typeof rawRationale === 'string' && rawRationale.trim()
+      ? rawRationale.trim().slice(0, 160)
       : `RICE-scored (R${reach}·I${impact}·C${confidence}÷E${effort}).`;
     return { score, rationale, source: 'ai' };
   } catch {

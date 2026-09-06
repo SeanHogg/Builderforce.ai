@@ -35,6 +35,24 @@ import { getMissingIntegrationRecommendations } from '../../application/integrat
 import { limitParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
+import { parseBody, z, zNonEmptyString, zOptionalString, zPositiveInt } from './requestBody';
+
+/** POST / — the provider is checked against the live registry below, not a static enum. */
+const CreateCredentialBody = z.object({
+  provider: zNonEmptyString,
+  name: zNonEmptyString,
+  baseUrl: zOptionalString,
+  projectId: zPositiveInt.nullable().optional(),
+  credentials: z.record(z.string(), z.unknown()),
+});
+
+/** PATCH /:id — every field optional; `baseUrl: null` clears it, absent leaves it. */
+const PatchCredentialBody = z.object({
+  name: zNonEmptyString.optional(),
+  baseUrl: z.string().nullable().optional(),
+  credentials: z.record(z.string(), z.unknown()).optional(),
+  isEnabled: z.boolean().optional(),
+});
 
 /**
  * Credential providers accepted by this endpoint come from ONE registry
@@ -71,17 +89,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
   // POST /api/integrations
   router.post('/', manager, async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{
-      provider: string;
-      name: string;
-      baseUrl?: string;
-      projectId?: number | null;
-      credentials: Record<string, unknown>;
-    }>();
-
-    if (!body.provider || !body.name || !body.credentials) {
-      return c.json({ error: 'provider, name, and credentials are required' }, 400);
-    }
+    const body = await parseBody(c, CreateCredentialBody);
 
     if (!isConnectableProvider(body.provider)) {
       return c.json({ error: `provider must be one of: ${CONNECTABLE_PROVIDERS.join(', ')}` }, 400);
@@ -226,16 +234,11 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
       .where(and(eq(integrationCredentials.id, id), eq(integrationCredentials.tenantId, tenantId)));
     if (!existing) return c.json({ error: 'Integration not found' }, 404);
 
-    const body = await c.req.json<{
-      name?: string;
-      baseUrl?: string | null;
-      credentials?: Record<string, unknown>;
-      isEnabled?: boolean;
-    }>();
+    const body = await parseBody(c, PatchCredentialBody);
 
     let credentialsEnc = existing.credentialsEnc;
     let iv = existing.iv;
-    const rotated = !!body.credentials;
+    const rotated = body.credentials !== undefined;
     if (body.credentials) {
       const encrypted = await encryptCredentials(body.credentials, encryptionSecret, tenantId);
       credentialsEnc = encrypted.enc;
@@ -245,8 +248,8 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
     const [updated] = await db
       .update(integrationCredentials)
       .set({
-        name:           body.name?.trim() ?? existing.name,
-        baseUrl:        'baseUrl' in body ? (body.baseUrl ?? null) : existing.baseUrl,
+        name:           body.name ?? existing.name,
+        baseUrl:        body.baseUrl !== undefined ? body.baseUrl : existing.baseUrl,
         credentialsEnc,
         iv,
         isEnabled:      body.isEnabled ?? existing.isEnabled,
@@ -298,7 +301,9 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
     if (!row) return c.json({ error: 'Integration not found' }, 404);
 
     const creds = await decryptCredentials(row.credentialsEnc, row.iv, encryptionSecret, tenantId);
-    if (!creds) return c.json({ error: 'Failed to decrypt credentials' }, 500);
+    // A stored credential that no longer decrypts is a server-side invariant
+    // failure (rotated secret, corrupt ciphertext) — reported, never described.
+    if (!creds) throw new Error(`integration_credentials row ${id} did not decrypt`);
 
     const result = await testProviderCredential(row.provider, creds, row.baseUrl);
 

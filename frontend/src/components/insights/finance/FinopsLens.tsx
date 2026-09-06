@@ -33,6 +33,7 @@ import {
 } from '@/lib/finopsApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { AuditReportRunsList } from './AuditReportRunsList';
 // 'finops.manage' is added to the RBAC capability map by the orchestrator-owned
 // rbac.ts merge; cast keeps this client typesafe until that lands.
 export const FINOPS_CAP = 'finops.manage' as Capability;
@@ -346,6 +347,8 @@ function AuditSection({ t }: { t: ReturnType<typeof useTranslations> }) {
   const [report, setReport] = useState<AuditReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Bumped after every completed export so the run log below re-reads.
+  const [runsKey, setRunsKey] = useState(0);
 
   const load = useCallback(async (p: string) => {
     setLoading(true);
@@ -361,6 +364,15 @@ function AuditSection({ t }: { t: ReturnType<typeof useTranslations> }) {
 
   useEffect(() => { void load(period); }, [load, period]);
 
+  const exportReport = async (format: 'csv' | 'json') => {
+    try {
+      await downloadAuditReport(format, period);
+      setRunsKey((k) => k + 1);
+    } catch (e) {
+      setError(faultMessage(e));
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ ...card, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -370,15 +382,17 @@ function AuditSection({ t }: { t: ReturnType<typeof useTranslations> }) {
             style={{ padding: 6, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }} />
         </label>
         <div style={{ flex: 1 }} />
-        <button onClick={() => void downloadAuditReport('csv', period)}
+        <button onClick={() => void exportReport('csv')}
           style={{ padding: '8px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 600 }}>
           {t('audit.exportCsv')}
         </button>
-        <button onClick={() => void downloadAuditReport('json', period)}
+        <button onClick={() => void exportReport('json')}
           style={{ padding: '8px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 600 }}>
           {t('audit.exportJson')}
         </button>
       </div>
+
+      <AuditReportRunsList refreshKey={runsKey} />
 
       {error && <div style={{ ...card, color: 'var(--danger)' }}>{error}</div>}
       {loading && <div style={card}>{t('loading')}</div>}

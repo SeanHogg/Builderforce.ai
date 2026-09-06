@@ -2,10 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { FOUNDER_OBJECT_KINDS, isFounderObjectKind, CREATION_OBJECT_KINDS } from '@builderforce/creation-canvas-contract';
 import {
   FOUNDER_BOOKKEEPING_FIELDS, FOUNDER_FIELD_NAMES, FOUNDER_OBJECT_SPECS,
-  allFounderFieldGuidance, founderFieldGuidance, founderMutableFields, founderObjectSpec,
-  resolveCounterpartyAccount,
+  counterpartyAccountField, founderMutableFields,
 } from './founderObjects';
-import { makeSpecDeriveBoard, specFieldValue } from './specObjects';
+import { makeSpecDeriveBoard, specFieldGuidance, specFieldValue, specObjectSpec, specSetGuidance } from './specObjects';
 import {
   createDefaultCreationData, creationObjectAiContext, creationObjectContentFields,
   creationObjectDefinition, creationObjectMutableFields, emptyShellProblem,
@@ -151,21 +150,21 @@ describe('the empty-shell rule', () => {
 
 describe('model-facing guidance', () => {
   it('documents every field of a kind', () => {
-    const guidance = founderFieldGuidance('competitor');
-    for (const field of founderObjectSpec('competitor')!.fields) expect(guidance).toContain(field.name);
+    const guidance = specFieldGuidance('competitor');
+    for (const field of specObjectSpec('competitor')!.fields) expect(guidance).toContain(field.name);
   });
 
   it('names the geocoder on the field that needs real coordinates', () => {
     // A guessed lat/lng puts a rival in the ocean and silently poisons every coverage gap.
-    expect(founderFieldGuidance('competitor')).toContain('builtin_geo_geocode');
+    expect(specFieldGuidance('competitor')).toContain('builtin_geo_geocode');
   });
 
   it('points the live metric at the tool that refreshes it', () => {
-    expect(founderFieldGuidance('liveMetric')).toContain('canvas_refresh_live_metric');
+    expect(specFieldGuidance('liveMetric')).toContain('canvas_refresh_live_metric');
   });
 
   it('covers every kind in the combined guidance', () => {
-    const all = allFounderFieldGuidance();
+    const all = specSetGuidance('founder');
     for (const kind of FOUNDER_OBJECT_KINDS) expect(all).toContain(kind);
   });
 
@@ -205,21 +204,21 @@ describe('render specs', () => {
 
 describe('the counterparty resolver', () => {
   const ACME = { kind: 'account', title: 'Acme Holdings Ltd', relationship: 'customer', owner: 'Jane Lee', alsoKnownAs: ['Acme', 'Acme Holdings'] };
+  // The resolver is reached the way the board reaches it: through the derived field
+  // `counterpartyAccountField` declares, evaluated against a real board.
+  const resolveVia = (customer: string) => specFieldValue(counterpartyAccountField('customer'), { kind: 'invoice', title: 'INV-1', customer }, makeSpecDeriveBoard([ACME]));
 
   it('matches an account by title, case- and space-insensitively', () => {
-    const board = makeSpecDeriveBoard([ACME]);
-    expect(resolveCounterpartyAccount('  acme holdings ltd  ', board)).toBe(ACME);
+    expect(String(resolveVia('  acme holdings ltd  '))).toContain('Linked to `account` "Acme Holdings Ltd"');
   });
 
   it('falls back to an alias in alsoKnownAs', () => {
-    const board = makeSpecDeriveBoard([ACME]);
-    expect(resolveCounterpartyAccount('Acme', board)).toBe(ACME);
+    expect(String(resolveVia('Acme'))).toContain('Linked to `account` "Acme Holdings Ltd"');
   });
 
   it('resolves nothing for an empty label or an unmatched name', () => {
-    const board = makeSpecDeriveBoard([ACME]);
-    expect(resolveCounterpartyAccount('', board)).toBeNull();
-    expect(resolveCounterpartyAccount('Some Other Company', board)).toBeNull();
+    expect(resolveVia('')).toBeUndefined();
+    expect(String(resolveVia('Some Other Company'))).toContain('No `account` matches');
   });
 
   it('is never authorable — the resolution is read-only', () => {
@@ -229,7 +228,7 @@ describe('the counterparty resolver', () => {
       { sourceField: 'counterparty', hostKind: 'contract' },
     ] as const;
     for (const { sourceField, hostKind } of HOSTS) {
-      const field = founderObjectSpec(hostKind)!.fields.find((entry) => entry.name === `${sourceField}Account`);
+      const field = specObjectSpec(hostKind)!.fields.find((entry) => entry.name === `${sourceField}Account`);
       expect(field?.derived, `${hostKind}.${sourceField}Account must be derived`).toBe(true);
       expect(founderMutableFields(hostKind)).not.toContain(`${sourceField}Account`);
     }
@@ -237,7 +236,7 @@ describe('the counterparty resolver', () => {
 
   it('reports what it linked to, and nudges to author the account when nothing matches', () => {
     const invoice = { kind: 'invoice', title: 'INV-1', customer: 'Acme Holdings Ltd' };
-    const field = founderObjectSpec('invoice')!.fields.find((entry) => entry.name === 'customerAccount')!;
+    const field = specObjectSpec('invoice')!.fields.find((entry) => entry.name === 'customerAccount')!;
     expect(String(specFieldValue(field, invoice, makeSpecDeriveBoard([ACME, invoice])))).toContain('Acme Holdings Ltd');
     expect(String(specFieldValue(field, invoice, makeSpecDeriveBoard([ACME, invoice])))).toContain('Jane Lee');
     expect(String(specFieldValue(field, { ...invoice, customer: 'Nobody Ltd' }, makeSpecDeriveBoard([ACME])))).toContain('author one');
@@ -255,7 +254,7 @@ describe('the counterparty resolver', () => {
     // The read-time fallback the roadmap calls for: a plain string with no account on
     // the board yet still renders the honest "not linked" state rather than throwing
     // or silently omitting the section.
-    const field = founderObjectSpec('bill')!.fields.find((entry) => entry.name === 'vendorAccount')!;
+    const field = specObjectSpec('bill')!.fields.find((entry) => entry.name === 'vendorAccount')!;
     const legacyBill = { kind: 'bill', title: 'B-1', vendor: 'Some Supplier Inc' };
     expect(String(specFieldValue(field, legacyBill, makeSpecDeriveBoard([legacyBill])))).toContain('No `account` matches');
   });
@@ -295,7 +294,7 @@ describe('contract obligations', () => {
     contractRef: 'MSA-ACME-2026', obligationRef: 'ONBOARDING', amount: 5000, dueAt: '2026-09-20', recurring: 'none',
   };
 
-  const fieldOn = (kind: string, name: string) => founderObjectSpec(kind)!.fields.find((entry) => entry.name === name)!;
+  const fieldOn = (kind: string, name: string) => specObjectSpec(kind)!.fields.find((entry) => entry.name === name)!;
   const coverage = (objects: readonly Record<string, unknown>[]) =>
     String(specFieldValue(fieldOn('contract', 'obligationCoverage'), MSA, makeSpecDeriveBoard([...objects])) ?? '');
 

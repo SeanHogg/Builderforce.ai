@@ -28,6 +28,19 @@ import {
   isTenantApiScope,
 } from '../../application/llm/tenantApiKeyService';
 import { limitParam } from './queryParams';
+import { parseBody, z } from './requestBody';
+
+/** Origins arrive as a list of strings (or null = server-only); `normalizeOrigins` shapes them. */
+const OriginsField = z.array(z.string()).nullable().optional();
+const MintKeyBody = z.object({
+  name: z.string().optional(),
+  allowedOrigins: OriginsField,
+  scopes: z.array(z.string()).optional(),
+});
+const PatchKeyBody = z.object({
+  name: z.string().optional(),
+  allowedOrigins: OriginsField,
+});
 
 /**
  * Normalize a caller-supplied origins array — trim, drop empties, enforce
@@ -67,11 +80,10 @@ export function createTenantApiKeyRoutes(db: Db): Hono<HonoEnv> {
   router.post('/', requirePermission(PERMISSIONS.APIKEY_ROTATE), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId   = c.get('userId') as string;
-    const body     = await c.req.json<{ name?: string; allowedOrigins?: string[] | null; scopes?: unknown }>()
-      .catch(() => ({} as { name?: string; allowedOrigins?: string[] | null; scopes?: unknown }));
+    const body     = await parseBody(c, MintKeyBody);
     const name     = (body.name ?? '').trim() || 'Tenant API Key';
     const allowedOrigins = normalizeOrigins(body.allowedOrigins);
-    const scopes   = Array.isArray(body.scopes) ? body.scopes.filter(isTenantApiScope) : null;
+    const scopes   = body.scopes ? body.scopes.filter(isTenantApiScope) : null;
 
     const minted = await mintTenantApiKey(db, { tenantId, name, createdByUserId: userId, allowedOrigins, scopes });
     return c.json(minted, 201);
@@ -99,8 +111,7 @@ export function createTenantApiKeyRoutes(db: Db): Hono<HonoEnv> {
   router.patch('/:keyId', requirePermission(PERMISSIONS.APIKEY_ROTATE), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const keyId    = c.req.param('keyId');
-    const body     = await c.req.json<{ name?: string; allowedOrigins?: string[] | null }>()
-      .catch(() => ({} as { name?: string; allowedOrigins?: string[] | null }));
+    const body     = await parseBody(c, PatchKeyBody);
 
     const updated = await updateTenantApiKey(db, {
       tenantId,

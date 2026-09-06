@@ -1,3 +1,33 @@
+## ✅ RESOLVED 2026-09-06 — VSIX: the "uncommitted changes" block above the ticket rail pushed the rail under the header; it is now a "Changes (N)" pill IN the rail
+
+**Symptom.** In the VS Code chat, the pending-changes notice (shipped as `PendingChangesBar`, a
+separate block mounted between the header and the ticket rail) sat on top of the rail. With linked
+work the rail's top edge (the "N tickets · % · done/total" header) was clipped behind the header bar,
+and on a big working tree (300+ files) the block itself was a wall.
+
+**Root cause.** Two rail-level signals stacked as two blocks. The rail already had the right home
+for a count — its pill row (Link ticket · Agents (N) · People (N) · Merge) — but the shared
+`ChatTicketsPanel` had no way for a host to add a pill without growing an editor-only branch.
+
+**Fix (brain-ui 2026.9.2 · VSIX 2026.9.19).**
+- `ChatTicketsPanel` takes `extensions?: ChatTicketsExtension[]` — registry DATA
+  (`{ key, icon, label, count, title, render }`): each entry is a pill appended to the action row and
+  the drawer it opens, sharing the panel's one open-drawer state. A withdrawn extension (tree went
+  clean) folds its drawer up. Built-in keys are guarded (`isBuiltinPanel`).
+- `PendingChangesBar` → `PendingChangesList` (`packages/brain-ui/src/pendingChanges/`): the drawer
+  body only (hint · Review · per-file diff rows, list capped at `min(40vh, 280px)` with its own scroll
+  since the rail sits above the transcript). The bar shell (summary heading, expander) is deleted; the
+  count is the pill's. `resolvePendingChangesLabels` + `pendingChangesSummary` are the one place the
+  label bundle merges and the "N uncommitted changes" sentence is built.
+- VSIX `webview/src/PendingChangesPanel.tsx` → `usePendingChangesExtension.tsx`: subscribes to the
+  host's live change set, returns the `ChatTicketsExtension` (or `null` on a clean tree — no
+  "Changes (0)"), and routes open/review over the bridge to the SAME commands the Changes sidebar
+  uses. `App.tsx` passes it to the rail; the separate mount is gone.
+- Labels: `changes.pill` (= the Changes sidebar's word — Änderungen / Cambios / Modifications / 更改)
+  added, `changes.expand`/`changes.collapse` and their five l10n strings deleted (no readers).
+- Also fixed on the way: `aggregateTicketHealth.test.ts` imported a non-existent `ChatTicketNode`
+  type, so `tsc --noEmit` in brain-ui had been red.
+
 ## ✅ RESOLVED 2026-09-06 — A signed-out visitor met `Missing or malformed Authorization header` in a red box; now they meet the invitation to take an account
 
 **Symptom.** `/investor?tab=pack` (and every sibling surface whose read has no sample-workspace fixture)

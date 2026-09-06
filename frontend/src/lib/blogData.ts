@@ -82,6 +82,7 @@ import creationCanvasFunctionalityGuide from '@/content/blog/creation-canvas-fun
 // arc, because the method is what makes the set a corpus rather than a pile.
 import gradeTheProof from '@/content/blog/grade-the-proof-and-close-the-loop.md';
 import runYourAppOnTheCanvas from '@/content/blog/run-your-app-on-the-canvas.md';
+import importYourRecords from '@/content/blog/import-your-records.md';
 import shipFromTheEditor from '@/content/blog/ship-from-the-editor-commit-branch-pull-request.md';
 import seeWhatTheAgentChanged from '@/content/blog/see-what-the-agent-changed-before-you-commit.md';
 import canvasChromeRedesign from '@/content/blog/the-canvas-gave-the-screen-back-to-the-board.md';
@@ -227,6 +228,7 @@ export const BLOG_POSTS: BlogPost[] = [
   buildPost('ship-from-the-editor-commit-branch-pull-request', shipFromTheEditor),
   buildPost('see-what-the-agent-changed-before-you-commit', seeWhatTheAgentChanged),
   buildPost('grade-the-proof-and-close-the-loop', gradeTheProof),
+  buildPost('import-your-records', importYourRecords),
   buildPost('run-your-app-on-the-canvas', runYourAppOnTheCanvas),
   buildPost('the-canvas-gave-the-screen-back-to-the-board', canvasChromeRedesign),
   buildPost('build-a-3d-world-in-the-browser', build3dWorld),

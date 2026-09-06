@@ -26,7 +26,7 @@ import {
   type TabularTimeGrain,
 } from './canvasTabularData';
 import { slugify } from '@builderforce/creation-canvas-contract';
-import { evaluateExpression, expressionReferences, isFormulaError, parseExpression, type FormulaError } from './canvasFormula';
+import { evaluateFormula, expressionReferences, isFormulaError, parseExpression, type FormulaError } from './canvasFormula';
 
 export const METRIC_FORMATS = ['number', 'currency', 'percent', 'duration'] as const;
 export type MetricFormat = typeof METRIC_FORMATS[number];
@@ -369,8 +369,6 @@ export function computeDerivedMetric(
   });
 
   if (!definition.expression) return base('This metric has no expression');
-  const ast = parseExpression(definition.expression);
-  if (isFormulaError(ast)) return base(ast.message);
 
   // Cycle guard. `a = b + 1` and `b = a + 1` is a mistake a model makes readily, and
   // without this it is a stack overflow rather than a message.
@@ -411,7 +409,10 @@ export function computeDerivedMetric(
     operands.push(entry);
   }
 
-  const result = evaluateExpression(ast, { name: resolve });
+  // Parse and evaluate in ONE call: a parse failure and an evaluation failure are the
+  // same answer to the reader ("this expression did not produce a number, because …"),
+  // and `evaluateFormula` is the single implementation of that pipeline.
+  const result = evaluateFormula(definition.expression, { name: resolve });
   if (isFormulaError(result)) return base(result.message);
   const value = typeof result === 'number' ? result : Number(result);
   if (!Number.isFinite(value)) return base('The expression did not produce a number');

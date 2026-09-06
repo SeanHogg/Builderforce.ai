@@ -60,7 +60,12 @@ export function createToolRoutes(
   const router = new Hono<HonoEnv>();
 
   // Public definitions need no cache (static in-memory data, no DB round-trip).
-  router.get('/', (c) => c.json({ tools: toolService.list(toolLocale(c.req)) }));
+  // `localization` says which language the summaries actually came back in, so a
+  // client is never left guessing whether the list degraded to English.
+  router.get('/', (c) => {
+    const locale = toolLocale(c.req);
+    return c.json({ tools: toolService.list(locale), localization: toolService.toolLocalization(locale) });
+  });
 
   // ── System audits (SOC 2, Architecture, Quality, PM Vision) — the onboarding
   //    "run an audit → get a report" surface. Registered before `/:id` so the

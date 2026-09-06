@@ -10,7 +10,7 @@ import {
   listPublicPromptSlugs,
   listPublishedSkillSlugs,
 } from '@/lib/marketplaceSeo';
-import { indexableTeaserRoutes } from '@/lib/routeMarketing';
+import { detailRoutes, indexableTeaserRoutes, marketedRoutes } from '@/lib/routeMarketing';
 import { getSalaryDirectory } from '@/lib/salary';
 import { legalDocHref } from '@/lib/legalDocs';
 
@@ -94,12 +94,36 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // out. `indexableTeaserRoutes()` also drops the operator-only routes (admin,
   // workspaces, settings, agent worker), which keep their teaser but must not
   // be indexed.
-  const teaserPages: MetadataRoute.Sitemap = indexableTeaserRoutes().map((route) => ({
+  //
+  // A route the static list above already names is submitted ONCE — the static row
+  // wins, because it carries the hand-set cadence — and a route with a DETAILS
+  // overlay (highlights, FAQ, its own SEO description) outranks the generic teaser:
+  // it is a richer landing page, and the registry is what says so.
+  const staticUrls = new Set(staticPages.map((page) => page.url));
+  const detailed = new Set(detailRoutes());
+  const teaserRoutes = indexableTeaserRoutes().filter((route) => !staticUrls.has(`${BASE}${route}`));
+  const teaserPages: MetadataRoute.Sitemap = teaserRoutes.map((route) => ({
     url: `${BASE}${route}`,
     lastModified: now,
     changeFrequency: 'monthly' as const,
-    priority: 0.6,
+    priority: detailed.has(route) ? 0.7 : 0.6,
   }));
+
+  // The catalog INDEX pages (`/skills`, `/personas`, `/prompts`) are listed exactly
+  // once, from whichever source already carries them: the static list, the marketed
+  // registry (`marketedRoutes`), or the destination teasers. One that none of the
+  // three names is added here, so a catalog index can never be reachable only by
+  // in-page link — and never submitted twice.
+  const marketed = new Set(marketedRoutes());
+  const listedTeasers = new Set(teaserRoutes);
+  const catalogIndexPages: MetadataRoute.Sitemap = ['/skills', '/personas', '/prompts']
+    .filter((route) => !staticUrls.has(`${BASE}${route}`) && !marketed.has(route) && !listedTeasers.has(route))
+    .map((route) => ({
+      url: `${BASE}${route}`,
+      lastModified: now,
+      changeFrequency: 'weekly' as const,
+      priority: 0.6,
+    }));
 
   const blogPages: MetadataRoute.Sitemap = BLOG_POSTS.map((post) => ({
     url: `${BASE}/blog/${post.slug}`,
@@ -147,9 +171,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   //    canonicalises to the marketplace URL, so only the BUILT-IN skills — which
   //    have no marketplace row at all — are listed under `/skills/`.
   //  · The `/skills`, `/personas` and `/prompts` INDEX pages are not listed
-  //    here: `/skills` and `/personas` arrive via `indexableTeaserRoutes()` (they
-  //    keep their marketing teaser and stay outside `PUBLIC_SHELL_PREFIXES`),
-  //    and `/prompts` is already in `staticPages`.
+  //    here: `catalogIndexPages` above submits each exactly once, from whichever
+  //    of the static list, the marketed registry or the destination teasers
+  //    already carries it.
   const [personaSlugs, promptSlugs, agentIds] = await Promise.all([
     listPublicPersonaSlugs(),
     listPublicPromptSlugs(),
@@ -220,7 +244,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
 
   return [
-    ...staticPages, ...teaserPages, ...blogPages, ...comparePages,
+    ...staticPages, ...teaserPages, ...catalogIndexPages, ...blogPages, ...comparePages,
     ...integrationPages, ...marketplacePages, ...catalogPages, ...talentPages,
     ...salaryPages,
   ];

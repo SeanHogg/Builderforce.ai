@@ -48,6 +48,7 @@ import {
   type RoundModel,
 } from '@/lib/founderOpsApi';
 import type { CanvasFounderOpsContext } from '@/lib/canvasFounderOpsTools';
+import { capTablePercentBalance } from '@/lib/founderObjects';
 
 /** Cap on grants authored in one sync. A board is a working surface; a company
  *  past this many certificates wants the entity browser, not more cards. */
@@ -70,6 +71,26 @@ const integer = (value: number): string => fmt.number(Math.round(value));
 /** The `capTable` fields one projection writes. Every one is `derived` on the
  *  spec, so this function is the ONLY writer of them. */
 export function capTableFieldsFrom(table: CapTable): Record<string, unknown> {
+  const holders = table.holders.map((holder) => ({
+    holder: holder.holderName,
+    shareClass: holder.shareClassName,
+    instrument: holder.instrument,
+    shares: holder.shares,
+    vested: holder.vested,
+    percent: holder.percentFullyDiluted,
+  }));
+  // The balance is asserted by the ONLY writer of the percent column, before the
+  // summary and warning are composed from it — so a projection whose percentages
+  // do not reach 100 including the pool says so on the card it writes, instead of
+  // leaving a reader to add up a column that was never checked.
+  const percents = table.eventCount ? capTablePercentBalance(holders, table.poolUnallocated, table.fullyDiluted) : null;
+  const unbalanced = percents && !percents.balanced
+    ? `Holder percentages total ${percents.total}% including the unallocated pool, not 100 — the ledger and the authorised counts disagree, which is a real condition to investigate rather than a rounding error.`
+    : null;
+  const overAllocated = table.poolOverAllocated
+    ? 'More options have been granted than the pool authorises. That is a real condition, not a rounding error — the board has to authorise the difference.'
+    : null;
+  const warning = [overAllocated, unbalanced].filter((line): line is string => line !== null).join(' ');
   return {
     companyRef: table.companyRef,
     asOf: table.asOf.slice(0, 10),
@@ -78,14 +99,7 @@ export function capTableFieldsFrom(table: CapTable): Record<string, unknown> {
     fullyDiluted: table.fullyDiluted,
     poolAuthorized: table.poolAuthorized,
     poolUnallocated: table.poolUnallocated,
-    holders: table.holders.map((holder) => ({
-      holder: holder.holderName,
-      shareClass: holder.shareClassName,
-      instrument: holder.instrument,
-      shares: holder.shares,
-      vested: holder.vested,
-      percent: holder.percentFullyDiluted,
-    })),
+    holders,
     convertibles: table.convertibles.map((instrument) => ({
       reference: instrument.reference,
       holder: instrument.holderName,
@@ -101,11 +115,10 @@ export function capTableFieldsFrom(table: CapTable): Record<string, unknown> {
           ? `, and ${table.convertibles.length} convertible${table.convertibles.length === 1 ? '' : 's'} worth ${integer(table.convertiblePrincipal)} still to price. `
           : '. ')
         + `Folded from ${integer(table.eventCount)} ledger event${table.eventCount === 1 ? '' : 's'} as of ${table.asOf.slice(0, 10)} — this card is a VIEW of the ledger, not a second copy, so change it by recording an event rather than by editing a row.`
+        + (unbalanced ? ' The percentages do not balance — see the warning.' : '')
       : 'No ownership events recorded for this company yet. Record the founders\' issuance first — every figure on this card is folded from the ledger, so an empty ledger means an empty table rather than a company owning nothing.'
       ,
-    ...(table.poolOverAllocated
-      ? { warning: 'More options have been granted than the pool authorises. That is a real condition, not a rounding error — the board has to authorise the difference.' }
-      : {}),
+    ...(warning ? { warning } : {}),
   };
 }
 

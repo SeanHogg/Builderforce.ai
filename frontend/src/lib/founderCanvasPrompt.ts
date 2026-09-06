@@ -25,7 +25,10 @@
  * tested on its own, and the assembler stays a page of control flow.
  */
 
-import { allFounderFieldGuidance } from './founderObjects';
+import { specSetGuidance } from './specObjects';
+// The founder vocabulary registers itself as an import side effect; the guidance below
+// is read from the registry, so the registration has to have happened first.
+import './founderObjects';
 
 /**
  * The block, built fresh so the FIELD CONTRACT section always reflects the registry.
@@ -53,5 +56,5 @@ NUMBERS THAT GO STALE. A runway, burn, pipeline, lead or headcount figure typed 
 NEVER INVENT A FIGURE. Every founder object carries \`sources\`. A competitor's revenue, a segment's size, a rival's pricing: cite where it came from, or write what the source actually said ("not disclosed"). An invented precise number in a competitive analysis is worse than an absent one, because the user will act on it.
 
 FIELD CONTRACT — author these fields, not a title:
-${allFounderFieldGuidance()}`;
+${specSetGuidance('founder')}`;
 }

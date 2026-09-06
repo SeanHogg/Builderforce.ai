@@ -63,6 +63,7 @@ import { createPmoRoutes }         from './presentation/routes/pmoRoutes';
 import { createDiscoveryRoutes }   from './presentation/routes/discoveryRoutes';
 import { createTimeRoutes }        from './presentation/routes/timeRoutes';
 import { createInsightsRoutes }    from './presentation/routes/insightsRoutes';
+import { createImportRoutes }      from './presentation/routes/importRoutes';
 import { createAiImpactRoutes }    from './presentation/routes/aiImpactRoutes';
 import { createAutonomyRoutes }    from './presentation/routes/autonomyRoutes';
 import { createBenchmarkingRoutes } from './presentation/routes/benchmarkingRoutes';
@@ -573,6 +574,12 @@ export function buildApp(env: Env): Hono<HonoEnv> {
           post: { summary: 'Store a team memory entry', operationId: 'postTeamMemory', tags: ['Teams'] },
           get:  { summary: 'Get recent team memory entries', operationId: 'getTeamMemory', tags: ['Teams'] },
         },
+        '/api/import/kinds': {
+          get: { summary: 'List importable record kinds and their columns', operationId: 'listImportKinds', tags: ['Import'] },
+        },
+        '/api/import/{kind}': {
+          post: { summary: 'Import rows into a record kind (dryRun validates only)', operationId: 'importRows', tags: ['Import'] },
+        },
       },
     };
     return c.json(doc);
@@ -901,6 +908,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/discovery', createDiscoveryRoutes(db));
   app.route('/api/time',     createTimeRoutes(db));
   app.route('/api/insights',   createInsightsRoutes(db));
+  // Record import — THE import surface (the /import page's guided wizard + bulk
+  // file, and the Brain's board_data.* tools). Moved off /api/insights/import so
+  // the contract has one home.
+  app.route('/api/import',     createImportRoutes(db));
   // Additional insight lenses (each is its own router mounted on the same prefix;
   // Hono merges them — distinct subpaths, each carries its own authMiddleware).
   app.route('/api/insights',   createAiImpactRoutes(db));

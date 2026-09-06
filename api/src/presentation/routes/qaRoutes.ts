@@ -78,16 +78,16 @@ import {
   defaultFindingSeverity,
   findingFingerprint,
   inferPersonaRole,
+  QA_FINDING_TYPES,
+  QA_SEVERITIES,
+  QA_STEP_ACTIONS,
   type QaCredentialPublic,
-  type QaExplorationOutcome,
-  type QaFindingReport,
-  type QaFindingType,
   type QaHeatZone,
-  type QaRunReport,
   type QaStep,
   shortHash,
   toSlug,
 } from '../../application/qa/qaTypes';
+import { parseBody, z, zNonEmptyString, zOptionalString, zPositiveInt } from './requestBody';
 import { decryptSecretFromStorage, encryptSecretForStorage } from '../../infrastructure/auth/MfaService';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { writeAdminAudit } from '../../infrastructure/audit/adminAudit';
@@ -101,16 +101,189 @@ import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 const MAX_EVENT_BATCH = 200;
 
-interface IncomingEvent {
-  seq?: number;
-  type: string;
-  route?: string;
-  selector?: string;
-  label?: string;
-  value?: string;
-  meta?: unknown;
-  ts?: string;
-}
+// ── Request bodies ───────────────────────────────────────────────────────────
+
+const JourneyEvent = z.object({
+  seq: z.number().optional(),
+  type: z.string(),
+  route: z.string().optional(),
+  selector: z.string().optional(),
+  label: z.string().optional(),
+  value: z.string().optional(),
+  meta: z.unknown().optional(),
+  ts: z.string().optional(),
+});
+/** The capture client posts either a bare event array or `{ sessionId, projectId, events }`. */
+const EventsBody = z.union([
+  z.array(JourneyEvent),
+  z.object({
+    sessionId: z.string().optional(),
+    projectId: z.union([z.number(), z.string()]).nullable().optional(),
+    events: z.array(JourneyEvent).optional(),
+  }),
+]);
+
+const QaStepBody = z.object({
+  action: z.enum(QA_STEP_ACTIONS),
+  selector: z.string().optional(),
+  route: z.string().optional(),
+  value: z.string().optional(),
+  assertion: z.string().optional(),
+  label: z.string().optional(),
+  heat: z.number().optional(),
+});
+
+const AggregateBody = z.object({
+  sinceDays: z.number().optional(),
+  minRoutes: z.number().optional(),
+  maxFlows: z.number().optional(),
+  projectId: zPositiveInt.optional(),
+  maxEvents: z.number().optional(),
+});
+
+const CrawlBody = z.object({
+  routes: z.array(z.string().startsWith('/')).min(1, 'routes[] (absolute paths) required'),
+  name: zOptionalString,
+  projectId: zPositiveInt.optional(),
+});
+
+const ManualFlowBody = z.object({
+  name: zNonEmptyString,
+  startRoute: zOptionalString,
+  steps: z.array(QaStepBody),
+  description: zOptionalString,
+  projectId: zPositiveInt.optional(),
+  personaRole: zOptionalString,
+});
+
+const GenerateBody = z.object({ flowId: zNonEmptyString });
+
+const TestPatchBody = z.object({
+  status: z.string().optional(),
+  credentialId: z.string().nullable().optional(),
+});
+
+const RunStepReport = z.object({
+  seq: z.number().int(),
+  action: z.string(),
+  selector: z.string().optional(),
+  status: z.enum(['passed', 'failed', 'skipped']),
+  durationMs: z.number().optional(),
+  errorMessage: z.string().optional(),
+  screenshotKey: z.string().optional(),
+});
+/** `QaRunReport` (qaTypes) as a schema — the CI harness's execution report. */
+const RunReportBody = z.object({
+  testId: z.string().nullable().optional(),
+  testSlug: z.string().nullable().optional(),
+  projectId: zPositiveInt.nullable().optional(),
+  credentialId: z.string().nullable().optional(),
+  targetId: z.string().nullable().optional(),
+  status: z.enum(['passed', 'failed', 'error', 'skipped']),
+  browser: z.string().optional(),
+  targetUrl: z.string().optional(),
+  commitSha: z.string().optional(),
+  runKey: z.string().optional(),
+  durationMs: z.number().optional(),
+  errorMessage: z.string().optional(),
+  logs: z.string().optional(),
+  screenshotKeys: z.array(z.string()).optional(),
+  steps: z.array(RunStepReport).optional(),
+});
+
+const TargetCreateBody = z.object({
+  name: zNonEmptyString,
+  baseUrl: zNonEmptyString,
+  isDefault: z.boolean().optional(),
+});
+const TargetPatchBody = z.object({
+  name: z.string().optional(),
+  baseUrl: z.string().optional(),
+  isDefault: z.boolean().optional(),
+  status: z.string().optional(),
+});
+
+const CredentialCreateBody = z.object({
+  label: zNonEmptyString,
+  role: zOptionalString,
+  username: zNonEmptyString,
+  password: zNonEmptyString,
+  loginUrl: zOptionalString,
+  loginSelectors: z.unknown().optional(),
+});
+const CredentialPatchBody = z.object({
+  label: z.string().optional(),
+  role: z.string().optional(),
+  username: z.string().optional(),
+  password: z.string().optional(),
+  loginUrl: z.string().optional(),
+  status: z.string().optional(),
+});
+
+const ExplorationCreateBody = z.object({
+  projectId: zPositiveInt.optional(),
+  targetId: z.string().optional(),
+  credentialId: z.string().optional(),
+  heatBudget: z.number().optional(),
+  sinceDays: z.number().optional(),
+});
+
+const ExplorationClaimBody = z.object({
+  explorationId: z.string().optional(),
+  projectId: zPositiveInt.optional(),
+});
+
+/** `QaFindingReport` (qaTypes) as a schema. `type` defaults to `console` downstream. */
+const FindingReport = z.object({
+  type: z.enum(QA_FINDING_TYPES).optional(),
+  severity: z.enum(QA_SEVERITIES).optional(),
+  route: z.string().nullable().optional(),
+  selector: z.string().nullable().optional(),
+  message: z.string(),
+  detail: z.string().nullable().optional(),
+  heat: z.number().optional(),
+  screenshotKey: z.string().nullable().optional(),
+});
+const FindingsBody = z.object({ findings: z.array(FindingReport).optional() });
+
+/** `QaExplorationOutcome` (qaTypes) as a schema; every field is a patch, so all optional. */
+const ExplorationOutcomeBody = z.object({
+  status: z.enum(['running', 'passed', 'failed', 'error']).optional(),
+  zonesExplored: z.number().int().optional(),
+  browser: z.string().optional(),
+  targetUrl: z.string().optional(),
+  commitSha: z.string().optional(),
+  runKey: z.string().optional(),
+  summary: z.string().optional(),
+  errorMessage: z.string().optional(),
+});
+
+const zCron = z.string().refine(isValidCron, 'A valid cron expression is required');
+const ScheduleCreateBody = z.object({
+  cron: zCron,
+  timezone: zOptionalString,
+  targetId: z.string().optional(),
+  credentialId: z.string().optional(),
+  heatBudget: z.number().optional(),
+  sinceDays: z.number().optional(),
+  enabled: z.boolean().optional(),
+});
+const SchedulePatchBody = z.object({
+  cron: zCron.optional(),
+  timezone: z.string().optional(),
+  enabled: z.boolean().optional(),
+  targetId: z.string().nullable().optional(),
+  credentialId: z.string().nullable().optional(),
+  heatBudget: z.number().optional(),
+  sinceDays: z.number().optional(),
+});
+
+const RoutingSettingsBody = z.object({
+  enabled: z.boolean().optional(),
+  minSeverity: z.enum(QA_SEVERITIES).optional(),
+  targetLaneKey: z.string().nullable().optional(),
+  maxPerBatch: z.number().optional(),
+});
 
 function parseSteps(raw: string | null): QaStep[] {
   if (!raw) return [];
@@ -155,13 +328,8 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
     const segmentId = c.get('segmentId') as string | undefined;
     const userId    = c.get('userId') as string | undefined;
 
-    let body: { sessionId?: string; projectId?: number | string | null; events?: IncomingEvent[] };
-    try {
-      const json = await c.req.json();
-      body = Array.isArray(json) ? { events: json } : json;
-    } catch {
-      return c.json({ error: 'Invalid JSON body' }, 400);
-    }
+    const json = await parseBody(c, EventsBody);
+    const body = Array.isArray(json) ? { events: json } : json;
 
     const sessionId = (body.sessionId ?? c.req.query('sessionId') ?? '').slice(0, 64);
     // The site-under-test this batch was captured on. Absent = the Builderforce
@@ -175,14 +343,13 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
     if (projectId !== null && !(await projectInTenant(db, tenantId, projectId))) {
       return c.json({ error: 'Project not found' }, 404);
     }
-    const events = Array.isArray(body.events) ? body.events : [];
+    const events = body.events ?? [];
     if (!sessionId) return c.json({ error: 'sessionId is required' }, 400);
     if (events.length === 0) return c.json({ inserted: 0 });
     if (events.length > MAX_EVENT_BATCH) return c.json({ error: `Batch too large (max ${MAX_EVENT_BATCH})` }, 400);
 
     const now = new Date();
     const rows = events
-      .filter((e) => typeof e?.type === 'string')
       .map((e, i) => ({
         tenantId,
         segmentId,
@@ -228,7 +395,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
   router.post('/flows/aggregate', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId  = c.get('tenantId') as number;
     const segmentId = c.get('segmentId') as string | undefined;
-    const body = await c.req.json().catch(() => ({})) as { sinceDays?: number; minRoutes?: number; maxFlows?: number; projectId?: number; maxEvents?: number };
+    const body = await parseBody(c, AggregateBody);
     const result = await new QaFlowService(db).aggregate(tenantId, segmentId, body);
     return c.json(result);
   });
@@ -237,9 +404,8 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
   router.post('/flows/crawl', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId  = c.get('tenantId') as number;
     const segmentId = c.get('segmentId') as string | undefined;
-    const body = await c.req.json().catch(() => ({})) as { routes?: string[]; name?: string; projectId?: number };
-    const routes = (body.routes ?? []).filter((r) => typeof r === 'string' && r.startsWith('/'));
-    if (routes.length === 0) return c.json({ error: 'routes[] (absolute paths) required' }, 400);
+    const body = await parseBody(c, CrawlBody);
+    const routes = body.routes;
 
     const steps: QaStep[] = [];
     for (const route of routes) {
@@ -269,8 +435,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
   router.post('/flows', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId  = c.get('tenantId') as number;
     const segmentId = c.get('segmentId') as string | undefined;
-    const body = await c.req.json().catch(() => ({})) as { name?: string; startRoute?: string; steps?: QaStep[]; description?: string; projectId?: number; personaRole?: string };
-    if (!body.name || !Array.isArray(body.steps)) return c.json({ error: 'name and steps[] required' }, 400);
+    const body = await parseBody(c, ManualFlowBody);
     const slug = `manual-${toSlug(body.name)}-${shortHash(JSON.stringify(body.steps))}`;
     const now = new Date();
     const [flow] = await db
@@ -311,8 +476,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
     const tenantId  = c.get('tenantId') as number;
     const segmentId = c.get('segmentId') as string | undefined;
     const userId    = c.get('userId') as string | undefined;
-    const body = await c.req.json().catch(() => ({})) as { flowId?: string };
-    if (!body.flowId) return c.json({ error: 'flowId required' }, 400);
+    const body = await parseBody(c, GenerateBody);
 
     const [flow] = await db
       .select()
@@ -410,7 +574,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
   // Update status and/or reassign the persona credential (human override).
   router.patch('/tests/:id', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json().catch(() => ({})) as { status?: string; credentialId?: string | null };
+    const body = await parseBody(c, TestPatchBody);
     if (body.status === undefined && body.credentialId === undefined) return c.json({ error: 'status or credentialId required' }, 400);
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (body.status !== undefined) patch.status = body.status;
@@ -428,8 +592,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
   router.post('/runs', async (c) => {
     const tenantId  = c.get('tenantId') as number;
     const segmentId = c.get('segmentId') as string | undefined;
-    const report = await c.req.json().catch(() => null) as QaRunReport | null;
-    if (!report || typeof report.status !== 'string') return c.json({ error: 'Invalid run report' }, 400);
+    const report = await parseBody(c, RunReportBody);
 
     // Resolve the test by id or slug; inherit project/credential from it when
     // the harness didn't supply them.
@@ -534,8 +697,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
     const tenantId  = c.get('tenantId') as number;
     const segmentId = c.get('segmentId') as string | undefined;
     const projectId = Number(c.req.param('projectId'));
-    const body = await c.req.json().catch(() => ({})) as { name?: string; baseUrl?: string; isDefault?: boolean };
-    if (!body.name || !body.baseUrl) return c.json({ error: 'name and baseUrl required' }, 400);
+    const body = await parseBody(c, TargetCreateBody);
     const [target] = await db
       .insert(qaTargets)
       .values({ tenantId, segmentId, projectId, name: body.name, baseUrl: body.baseUrl, isDefault: body.isDefault ?? false, updatedAt: new Date() })
@@ -545,7 +707,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
 
   router.patch('/targets/:id', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json().catch(() => ({})) as { name?: string; baseUrl?: string; isDefault?: boolean; status?: string };
+    const body = await parseBody(c, TargetPatchBody);
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     for (const k of ['name', 'baseUrl', 'isDefault', 'status'] as const) if (body[k] !== undefined) patch[k] = body[k];
     const [target] = await db
@@ -585,8 +747,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
     const tenantId  = c.get('tenantId') as number;
     const segmentId = c.get('segmentId') as string | undefined;
     const projectId = Number(c.req.param('projectId'));
-    const body = await c.req.json().catch(() => ({})) as { label?: string; role?: string; username?: string; password?: string; loginUrl?: string; loginSelectors?: unknown };
-    if (!body.label || !body.username || !body.password) return c.json({ error: 'label, username, password required' }, 400);
+    const body = await parseBody(c, CredentialCreateBody);
     const secretEnc = await encryptSecretForStorage(body.password, credentialKey(c.env));
     const [cred] = await db
       .insert(qaCredentials)
@@ -597,13 +758,13 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
         status: 'active', updatedAt: new Date(),
       })
       .returning();
-    if (!cred) return c.json({ error: 'Failed to create credential' }, 500);
+    if (!cred) throw new Error('qa_credentials insert returned no row');
     return c.json({ credential: toPublicCredential(cred) }, 201);
   });
 
   router.patch('/credentials/:id', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json().catch(() => ({})) as { label?: string; role?: string; username?: string; password?: string; loginUrl?: string; status?: string };
+    const body = await parseBody(c, CredentialPatchBody);
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     for (const k of ['label', 'role', 'username', 'loginUrl', 'status'] as const) if (body[k] !== undefined) patch[k] = body[k];
     if (body.password) patch.secretEnc = await encryptSecretForStorage(body.password, credentialKey(c.env));
@@ -639,12 +800,9 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
       .where(and(eq(qaCredentials.id, c.req.param('id')), eq(qaCredentials.tenantId, tenantId)))
       .limit(1);
     if (!cred) return c.json({ error: 'Credential not found' }, 404);
-    let password: string;
-    try {
-      password = await decryptSecretFromStorage(cred.secretEnc, credentialKey(c.env));
-    } catch {
-      return c.json({ error: 'Credential secret could not be decrypted' }, 500);
-    }
+    // A secret that no longer decrypts (rotated key, corrupt row) is an invariant
+    // failure the global handler reports; the caller never sees the crypto error.
+    const password = await decryptSecretFromStorage(cred.secretEnc, credentialKey(c.env));
     // This endpoint returns a decrypted plaintext site password — the most
     // sensitive read in the system. Record who fetched which credential [1553].
     await writeAdminAudit(db, 'QA_CREDENTIAL_SECRET_VIEWED', userId ?? null, {
@@ -797,11 +955,9 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
     const tenantId  = c.get('tenantId') as number;
     const segmentId = c.get('segmentId') as string | undefined;
     const userId    = c.get('userId') as string | undefined;
-    const body = await c.req.json().catch(() => ({})) as {
-      projectId?: number; targetId?: string; credentialId?: string; heatBudget?: number; sinceDays?: number;
-    };
+    const body = await parseBody(c, ExplorationCreateBody);
 
-    const projectId = body.projectId != null ? Number(body.projectId) : null;
+    const projectId = body.projectId ?? null;
     const heatBudget = Math.min(Math.max(1, body.heatBudget ?? 20), 100);
     const sinceDays = Math.min(Math.max(1, body.sinceDays ?? 30), 180);
 
@@ -914,13 +1070,13 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
   // { exploration: null } when there's nothing to do.
   router.post('/explorations/claim', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json().catch(() => ({})) as { explorationId?: string; projectId?: number };
+    const body = await parseBody(c, ExplorationClaimBody);
 
     // Pick the candidate id (explicit, else oldest queued).
     let candidateId = body.explorationId ?? null;
     if (!candidateId) {
       const conditions = [eq(qaExplorations.tenantId, tenantId), eq(qaExplorations.status, 'queued')];
-      if (body.projectId != null) conditions.push(eq(qaExplorations.projectId, Number(body.projectId)));
+      if (body.projectId != null) conditions.push(eq(qaExplorations.projectId, body.projectId));
       const [next] = await db.select({ id: qaExplorations.id }).from(qaExplorations)
         .where(and(...conditions)).orderBy(asc(qaExplorations.createdAt)).limit(1);
       candidateId = next?.id ?? null;
@@ -993,15 +1149,15 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
       .where(and(eq(qaExplorations.id, c.req.param('id')), eq(qaExplorations.tenantId, tenantId))).limit(1);
     if (!exploration) return c.json({ error: 'Exploration not found' }, 404);
 
-    const body = await c.req.json().catch(() => ({})) as { findings?: QaFindingReport[] };
-    const incoming = Array.isArray(body.findings) ? body.findings.slice(0, 500) : [];
+    const body = await parseBody(c, FindingsBody);
+    const incoming = (body.findings ?? []).slice(0, 500);
     if (incoming.length === 0) return c.json({ inserted: 0 });
 
     const now = new Date();
     const rows = incoming
-      .filter((f) => f && typeof f.message === 'string' && f.message.length > 0)
+      .filter((f) => f.message.length > 0)
       .map((f) => {
-        const type = (f.type ?? 'console') as QaFindingType;
+        const type = f.type ?? 'console';
         const heat = typeof f.heat === 'number' ? f.heat : 0;
         return {
           explorationId: exploration.id, tenantId, segmentId,
@@ -1081,7 +1237,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
       .where(and(eq(qaExplorations.id, c.req.param('id')), eq(qaExplorations.tenantId, tenantId))).limit(1);
     if (!exploration) return c.json({ error: 'Exploration not found' }, 404);
 
-    const body = await c.req.json().catch(() => ({})) as QaExplorationOutcome;
+    const body = await parseBody(c, ExplorationOutcomeBody);
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (body.status !== undefined) patch.status = body.status;
     if (body.zonesExplored !== undefined) patch.zonesExplored = body.zonesExplored;
@@ -1128,12 +1284,11 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
       return c.json({ error: 'This finding has no project — self-test findings cannot create board tasks.' }, 400);
     }
 
-    try {
-      const { taskId, plain, deduped } = await findingRouter.createTaskFromFinding(finding, tenantId, { env: c.env as Env });
-      return c.json({ task: plain, deduped, finding: { ...finding, status: 'task_created', taskId } }, 201);
-    } catch (err) {
-      return c.json({ error: err instanceof Error ? err.message : 'Failed to create task' }, 400);
-    }
+    // createTaskFromFinding throws typed domain errors (ValidationError /
+    // ConflictError) for the caller's mistakes; anything else is an invariant
+    // failure for the global handler, not a 400 wearing its message.
+    const { taskId, plain, deduped } = await findingRouter.createTaskFromFinding(finding, tenantId, { env: c.env as Env });
+    return c.json({ task: plain, deduped, finding: { ...finding, status: 'task_created', taskId } }, 201);
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1158,10 +1313,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
     const segmentId = c.get('segmentId') as string | undefined;
     const userId    = c.get('userId') as string | undefined;
     const projectId = Number(c.req.param('projectId'));
-    const body = await c.req.json().catch(() => ({})) as {
-      cron?: string; timezone?: string; targetId?: string; credentialId?: string; heatBudget?: number; sinceDays?: number; enabled?: boolean;
-    };
-    if (!body.cron || !isValidCron(body.cron)) return c.json({ error: 'A valid cron expression is required' }, 400);
+    const body = await parseBody(c, ScheduleCreateBody);
     const timezone = body.timezone ?? 'UTC';
     const [schedule] = await db
       .insert(qaSchedules)
@@ -1181,10 +1333,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
 
   router.patch('/schedules/:id', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json().catch(() => ({})) as {
-      cron?: string; timezone?: string; enabled?: boolean; targetId?: string | null; credentialId?: string | null; heatBudget?: number; sinceDays?: number;
-    };
-    if (body.cron !== undefined && !isValidCron(body.cron)) return c.json({ error: 'Invalid cron expression' }, 400);
+    const body = await parseBody(c, SchedulePatchBody);
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     for (const k of ['cron', 'timezone', 'enabled', 'targetId', 'credentialId', 'heatBudget', 'sinceDays'] as const) {
       if (body[k] !== undefined) patch[k] = body[k];
@@ -1239,12 +1388,9 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
     const segmentId = c.get('segmentId') as string | undefined;
     const userId    = c.get('userId') as string | undefined;
     const projectId = Number(c.req.param('projectId'));
-    const body = await c.req.json().catch(() => ({})) as {
-      enabled?: boolean; minSeverity?: string; targetLaneKey?: string | null; maxPerBatch?: number;
-    };
-    const minSeverity = body.minSeverity && ['low', 'medium', 'high', 'critical'].includes(body.minSeverity)
-      ? body.minSeverity : ROUTING_DEFAULTS.minSeverity;
-    const targetLaneKey = body.targetLaneKey ? String(body.targetLaneKey).slice(0, 120) : null;
+    const body = await parseBody(c, RoutingSettingsBody);
+    const minSeverity = body.minSeverity ?? ROUTING_DEFAULTS.minSeverity;
+    const targetLaneKey = body.targetLaneKey ? body.targetLaneKey.slice(0, 120) : null;
     const maxPerBatch = Math.min(Math.max(1, Math.trunc(body.maxPerBatch ?? ROUTING_DEFAULTS.maxPerBatch)), 50);
 
     // Ownership gate: projects.id is an enumerable serial and qaRoutingSettings.projectId
@@ -1262,7 +1408,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
         set: { enabled: body.enabled ?? false, minSeverity, targetLaneKey, maxPerBatch, updatedAt: now },
       })
       .returning();
-    if (!row) return c.json({ error: 'Failed to save routing settings' }, 500);
+    if (!row) throw new Error('qa_routing_settings upsert returned no row');
     return c.json({ settings: { enabled: row.enabled, minSeverity: row.minSeverity, targetLaneKey: row.targetLaneKey, maxPerBatch: row.maxPerBatch } });
   });
 

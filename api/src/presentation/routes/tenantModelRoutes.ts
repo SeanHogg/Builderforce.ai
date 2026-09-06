@@ -18,10 +18,23 @@ import {
   createTenantModel,
   updateTenantModel,
   deleteTenantModel,
-  type TenantModelInput,
 } from '../../application/llm/tenantModelService';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
+import { parseBody, z, zNonEmptyString } from './requestBody';
+
+/** The editable fields of a tenant model (`TenantModelInput`); create requires `name`. */
+const ModelPatchBody = z.object({
+  name: zNonEmptyString.optional(),
+  baseModel: z.string().nullable().optional(),
+  systemPrompt: z.string().nullable().optional(),
+  params: z.record(z.string(), z.unknown()).nullable().optional(),
+  personaId: z.string().nullable().optional(),
+  providerKey: z.string().nullable().optional(),
+  trainedModelRef: z.string().nullable().optional(),
+  visibility: z.enum(['private', 'tenant']).optional(),
+});
+const ModelCreateBody = ModelPatchBody.extend({ name: zNonEmptyString });
 
 export function createTenantModelRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -36,17 +49,16 @@ export function createTenantModelRoutes(db: Db): Hono<HonoEnv> {
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
-    const body = await c.req.json<Partial<TenantModelInput>>().catch((): Partial<TenantModelInput> => ({}));
-    if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
-    const model = await createTenantModel(c.env as Env, db, tenantId, userId ?? null, body as TenantModelInput);
-    if (!model) return c.json({ error: 'Failed to create model' }, 500);
+    const body = await parseBody(c, ModelCreateBody);
+    const model = await createTenantModel(c.env as Env, db, tenantId, userId ?? null, body);
+    if (!model) throw new Error('tenant_models insert returned no row');
     return c.json(model, 201);
   });
 
   router.patch('/:id', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const body = await c.req.json<Partial<TenantModelInput>>().catch((): Partial<TenantModelInput> => ({}));
+    const body = await parseBody(c, ModelPatchBody);
     const model = await updateTenantModel(c.env as Env, db, tenantId, id, body);
     if (!model) return c.json({ error: 'Model not found' }, 404);
     return c.json(model);

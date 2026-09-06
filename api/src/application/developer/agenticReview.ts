@@ -47,7 +47,7 @@
  * review is visible to a buyer rather than laundered into an approval.
  */
 
-import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
+import { completeJson, jsonSchemaFormat } from '../llm/completeJson';
 import { resolvePolicyGates } from '../governance/policyPackService';
 import { BUILTIN_AGENTS } from '../agent/provisionBuiltinAgents';
 import { SENSITIVE_SCOPES } from './extensionContract';
@@ -68,37 +68,30 @@ const SECURITY_PERSONA =
   BUILTIN_AGENTS.find((a) => a.kind === 'security')?.bio ??
   'You audit software against security and compliance criteria and report only what the evidence supports.';
 
-const RESPONSE_SCHEMA = {
-  type: 'json_schema' as const,
-  json_schema: {
-    name: 'extension_governance_verdict',
-    strict: true,
-    schema: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['verdict', 'reasons'],
-      properties: {
-        verdict: { type: 'string', enum: ['approve', 'flag', 'block'] },
-        reasons: {
-          type: 'array',
-          items: {
-            type: 'object',
-            additionalProperties: false,
-            required: ['code', 'severity', 'message'],
-            properties: {
-              // A stable machine name, so a dashboard can group refusals and a
-              // re-review can be compared against the last one — the same
-              // property `ReviewFinding.check` has, for the same reason.
-              code: { type: 'string' },
-              severity: { type: 'string', enum: ['warn', 'fail'] },
-              message: { type: 'string' },
-            },
-          },
+const RESPONSE_SCHEMA = jsonSchemaFormat('extension_governance_verdict', {
+  type: 'object',
+  additionalProperties: false,
+  required: ['verdict', 'reasons'],
+  properties: {
+    verdict: { type: 'string', enum: ['approve', 'flag', 'block'] },
+    reasons: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['code', 'severity', 'message'],
+        properties: {
+          // A stable machine name, so a dashboard can group refusals and a
+          // re-review can be compared against the last one — the same
+          // property `ReviewFinding.check` has, for the same reason.
+          code: { type: 'string' },
+          severity: { type: 'string', enum: ['warn', 'fail'] },
+          message: { type: 'string' },
         },
       },
     },
   },
-};
+});
 
 const SYSTEM_PROMPT = [
   SECURITY_PERSONA,
@@ -210,34 +203,31 @@ export const agenticStage: ReviewStage = {
     }
 
     const prompt = describeSubmission(ctx, directives);
-    let content = '';
-    try {
-      const result = await ideProxy(ctx.env).complete({
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: prompt },
-        ],
+    const out = await completeJson<GovernanceVerdict>(
+      { kind: 'ide', env: ctx.env },
+      {
+        system: SYSTEM_PROMPT,
+        user: prompt,
+        schema: RESPONSE_SCHEMA,
         temperature: 0,
-        max_tokens: 900,
-        response_format: RESPONSE_SCHEMA,
+        maxTokens: 900,
         useCase: 'extension_governance_review',
-      });
-      if (result.response.status >= 400) {
-        return skipped('agentic', `the governance reviewer was unavailable (gateway ${result.response.status}) — this submission was not judged`, started);
+      },
+      (value) => (value && typeof value === 'object' && !Array.isArray(value) ? (value as GovernanceVerdict) : null),
+    );
+    if (!out.ok) {
+      switch (out.reason) {
+        case 'gateway':
+          return out.status !== undefined
+            ? skipped('agentic', `the governance reviewer was unavailable (gateway ${out.status}) — this submission was not judged`, started)
+            : skipped('agentic', `the governance reviewer could not be reached: ${out.detail || 'unknown error'}`, started);
+        case 'empty':
+          return skipped('agentic', 'the governance reviewer returned nothing — this submission was not judged', started);
+        default:
+          return skipped('agentic', 'the governance reviewer\'s answer was not valid JSON — this submission was not judged', started);
       }
-      content = (await readProxyChoice(result)).content;
-    } catch (error) {
-      return skipped('agentic', `the governance reviewer could not be reached: ${error instanceof Error ? error.message : 'unknown error'}`, started);
     }
-
-    if (!content) return skipped('agentic', 'the governance reviewer returned nothing — this submission was not judged', started);
-
-    let parsed: GovernanceVerdict;
-    try {
-      parsed = JSON.parse(content) as GovernanceVerdict;
-    } catch {
-      return skipped('agentic', 'the governance reviewer\'s answer was not valid JSON — this submission was not judged', started);
-    }
+    const parsed = out.value;
 
     const reasons = (parsed.reasons ?? [])
       .map((r) => ({

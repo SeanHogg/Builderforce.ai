@@ -1217,6 +1217,7 @@ export class BrainService {
     const nameToTool = new Map(toolEntries.map((t) => [t.name, t.tool]));
     const toolToName = new Map(toolEntries.map((t) => [t.tool, t.name]));
     const nameFor = (toolId: string): string | null => toolToName.get(toolId) ?? null;
+    const executeAsMe = nameFor('chats.execute_as_agent');
     // Advertise the platform tools PLUS the conversational `ask_user` tool (injected
     // here, intercepted below as a terminal turn — see ASK_USER_TOOL_SPEC).
     const tools = [
@@ -1237,10 +1238,13 @@ export class BrainService {
       ...(isManagerChat && projectHint != null ? [accountabilityFraming(projectHint, nameFor)] : []),
       `Reply AS ${agentName} — first person, concise, helpful, no preamble and no "${agentName}:" label. `,
       `You may use the provided tools to read or update the team's work (projects, tasks, specs, OKRs, knowledge) when it helps answer or act on the request. After using tools, summarise what you found or did. `,
-      // This reply runs on the server with platform tools only. Say so when it matters:
-      // an agent asked to edit/commit/push from here used to answer "I have no git
-      // tool" as if that were the end of it, while the editor that asked has the tool.
-      `You have NO file, shell or git tools in this reply — you cannot read, edit, commit or push code from here. If asked to, say that plainly in one line and name the route that can: in the editor, send the request to the Brain without addressing an agent (it runs with the workspace's file and git tools), or dispatch it as a task assigned to a cloud agent, which ships as a pull request. `,
+      // This reply runs on the Worker with no working tree; the agent's clone, shell and
+      // git live in its RUNTIME. An instruction that needs them is HANDED to that runtime
+      // through `chats.execute_as_agent` — the agent used to answer "I don't have git
+      // commit/push tools", true of this reply and false of the agent.
+      ...(executeAsMe
+        ? [`This reply itself has NO file, shell or git tools — your working tree, shell and git live in YOUR RUNTIME. When the user asks you to do repository work (edit, build, test, merge, commit, push, ship), call ${executeAsMe}(chatId=${chatId}, directive=<their instruction, verbatim>): it steers your live run, resumes a paused one, or starts a follow-up run on the same branch your previous run left its changes on, and that run narrates here. NEVER reply that you lack a git or file tool. After the call, report what happened (steered / resumed / a new run and its id, or that it awaits approval) and where to watch it. `]
+        : [`You have NO file, shell or git tools in this reply. If asked for repository work, say so in one line and point to the ticket's run (the Output tab's Send starts a follow-up run on your branch). `]),
       // The agent IS a participant in this chat (chatId is known here, not to the model) —
       // tell it the id so it can tie work items to THIS conversation. Named by ADVERTISED
       // name for the same reason as above; dropped entirely when the tools are not offered.
@@ -1518,6 +1522,10 @@ export class BrainService {
           out = await callBuiltinTool(this.db, {
             tenantId, tool: toolId, arguments: argObj as Record<string, unknown>, env,
             userId, role: opts?.role as never, authToken: opts?.authToken, executionCtx: opts?.executionCtx,
+            // The reply IS this agent acting: the ref is what lets a tool act "as me"
+            // (`chats.execute_as_agent` hands work to this agent's own runtime) and what
+            // credits a replayed write to the agent rather than to the person who asked.
+            agentRef: input.agentRef,
           });
         } catch (e) {
           isError = true;

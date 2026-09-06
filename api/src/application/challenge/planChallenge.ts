@@ -21,6 +21,7 @@
 import { parseHandlerSpec } from '../backend/handlerSpec';
 import type { BackendStrategyKey } from '../backend/hostingStrategy';
 import type { LlmComplete } from '../compile';
+import { completeJson } from '../llm/completeJson';
 import { BUILTIN_CONNECTOR_LIST } from '../connectors/defaults';
 import type { BlueprintTask, RequiredConnector, RequiredSecret } from './blueprint';
 import { matchBlueprint } from './blueprints';
@@ -125,16 +126,9 @@ function connectorCatalogPrompt(spec: ChallengeSpec): string {
 const asStrings = (v: unknown, cap = 12): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).map((s) => s.trim()).slice(0, cap) : [];
 
-function parseJsonObject(raw: string): Record<string, unknown> | null {
-  const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) return null;
-  try {
-    const parsed = JSON.parse(match[0]);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
-}
+/** The design must be an object; an array or scalar reply is refused. */
+const asObject = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 
 /** File-name-safe handler key. */
 function handlerFileName(name: string, index: number): string {
@@ -226,34 +220,34 @@ export async function planChallenge(spec: ChallengeSpec, briefText: string, llm?
   // but risk there. Only the generic path asks for one.
   if (blueprint.key !== 'generic' || !llm) return base;
 
-  let designed: Record<string, unknown> | null = null;
-  try {
-    const reply = await llm([
-      { role: 'system', content: DESIGN_SYSTEM },
-      {
-        role: 'user',
-        content: [
-          `GOAL: ${spec.goal}`,
-          `CAPABILITIES: ${spec.capabilities.join(', ') || '(none extracted)'}`,
-          `INTEGRATIONS: ${spec.integrations.join(', ') || '(none named)'}`,
-          `CONSTRAINTS:\n${spec.constraints.map((c) => `- ${c}`).join('\n') || '- (none stated)'}`,
-          `SUCCESS CRITERIA:\n${spec.successCriteria.map((c) => `- ${c}`).join('\n') || '- (none stated)'}`,
-          '',
-          'ALLOWED CONNECTORS (key: actions):',
-          connectorCatalogPrompt(spec),
-          '',
-          'BRIEF:',
-          briefText.slice(0, 8_000),
-        ].join('\n'),
-      },
-    ]);
-    designed = parseJsonObject(reply);
-  } catch {
-    designed = null;
-  }
-  if (!designed) {
+  const out = await completeJson(
+    { kind: 'text', llm: (system, user) => llm([{ role: 'system', content: system }, { role: 'user', content: user }]) },
+    {
+      system: DESIGN_SYSTEM,
+      user: [
+        `GOAL: ${spec.goal}`,
+        `CAPABILITIES: ${spec.capabilities.join(', ') || '(none extracted)'}`,
+        `INTEGRATIONS: ${spec.integrations.join(', ') || '(none named)'}`,
+        `CONSTRAINTS:\n${spec.constraints.map((c) => `- ${c}`).join('\n') || '- (none stated)'}`,
+        `SUCCESS CRITERIA:\n${spec.successCriteria.map((c) => `- ${c}`).join('\n') || '- (none stated)'}`,
+        '',
+        'ALLOWED CONNECTORS (key: actions):',
+        connectorCatalogPrompt(spec),
+        '',
+        'BRIEF:',
+        briefText.slice(0, 8_000),
+      ].join('\n'),
+      // Budget and slug are informational for a `text` dispatch — the injected
+      // completion owns its own limits.
+      maxTokens: 4000,
+      useCase: 'challenge_plan_design',
+    },
+    asObject,
+  );
+  if (!out.ok) {
     return { ...base, handlerWarnings: ['The design step did not return a usable plan; the workspace skeleton was used instead.'] };
   }
+  const designed = out.value;
 
   const handlers: Record<string, unknown> = { ...base.handlers };
   const warnings: string[] = [];

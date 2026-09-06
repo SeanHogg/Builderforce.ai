@@ -11,6 +11,7 @@
  * engine exists to prevent.
  */
 import { useTranslations } from 'next-intl';
+import { offerStatusLabelKey } from './atsLabels';
 import { useFormat } from '@/i18n/useFormat';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle } from '@/components/dataTableStyles';
 import type { AtsOffer } from '@/lib/hiringApi';
@@ -66,7 +67,7 @@ export function OffersPanel({ offers, loading, onOpenCandidate }: OffersPanelPro
               <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: 12 }}>{offer.candidateRef.slice(0, 8)}…</td>
               <td style={tdStyle}>{offer.baseSalary ? `${offer.currency} ${offer.baseSalary}` : t('offer.noSalary')}</td>
               <td style={tdStyle}>
-                <span style={chipStyle}>{t(`offer.status.${offer.status}` as never)}</span>
+                <span style={chipStyle}>{offerStatusLabelKey(offer.status) ? t(offerStatusLabelKey(offer.status)!) : offer.status}</span>
               </td>
               <td style={tdStyle}>{offer.sentAt ? fmt.date(offer.sentAt) : '—'}</td>
             </tr>

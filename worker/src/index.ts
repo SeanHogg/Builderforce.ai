@@ -14,6 +14,10 @@ interface Env {
    *  JWT_SECRET. Set via `wrangler secret put JWT_SECRET` in worker/. The data
    *  routes fail closed (503) without it. See lib/auth.ts. */
   JWT_SECRET?: string;
+  /** The api's cache namespace, bound here so the session-introspection verdict
+   *  the worker caches is the key the api's revoke path deletes. See wrangler.toml
+   *  and lib/sessionIntrospection.ts. */
+  AUTH_CACHE_KV?: KVNamespace;
 }
 
 const app = new Hono<{ Bindings: Env }>();

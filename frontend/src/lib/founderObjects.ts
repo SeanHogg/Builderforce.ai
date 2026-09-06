@@ -15,7 +15,7 @@
  * This module is the single source
  * for:
  *   • the node body           — `SpecObjectBody` renders these sections generically
- *   • the AI field contract   — `founderFieldGuidance()` documents them to the model
+ *   • the AI field contract   — `specFieldGuidance()` documents them to the model
  *   • the registry            — `createData`, mutable fields and context fields are
  *                               DERIVED from `fields`, so a field cannot be authorable
  *                               and unreadable at the same time
@@ -36,6 +36,7 @@
  */
 
 import { scoreExperiment, type ExperimentVariantInput } from './canvasInference';
+import { percentBalance } from './canvasMoney';
 import {
   ACCELERATION_KINDS,
   ACCOUNT_RELATIONSHIPS,
@@ -170,7 +171,7 @@ export const COUNTERPARTY_HINT = 'The legal name of the counterparty, as it appe
  * `alsoKnownAs` — the list that exists precisely so a second account is not created for
  * a company already on the board under a different name.
  */
-export function resolveCounterpartyAccount(label: unknown, board: SpecDeriveBoard): Record<string, unknown> | null {
+function resolveCounterpartyAccount(label: unknown, board: SpecDeriveBoard): Record<string, unknown> | null {
   const name = typeof label === 'string' ? label.trim() : '';
   if (!name) return null;
   const direct = board.byRef('account', name);
@@ -180,6 +181,30 @@ export function resolveCounterpartyAccount(label: unknown, board: SpecDeriveBoar
     const aliases = Array.isArray(account.alsoKnownAs) ? account.alsoKnownAs : [];
     return aliases.some((alias) => typeof alias === 'string' && alias.trim().toLowerCase() === key);
   }) ?? null;
+}
+
+/**
+ * Do a cap table's percentages balance, INCLUDING the pool?
+ *
+ * `capTable.holders[].percent` is each holding's share of the fully diluted total, so
+ * the holders alone never reach 100 while any pool is unallocated — the pool is the
+ * missing row, and it is added here as one so the question asked is the one the
+ * spec's prose states ("must total ~100 including the pool"). Null when no row
+ * carries a percent at all: a board saved before the column existed is not judged.
+ *
+ * The ONE check, read by the card's `ownershipCheck` derive and by the projection
+ * that writes the column (`capTableFieldsFrom`), so the writer and the reader
+ * cannot disagree about what "balanced" means.
+ */
+export function capTablePercentBalance(
+  holders: readonly Record<string, unknown>[],
+  poolUnallocated: number,
+  fullyDiluted: number,
+): ReturnType<typeof percentBalance> | null {
+  const holderPercents = percentBalance(holders, 'percent');
+  if (!holderPercents.counted) return null;
+  const poolPercent = fullyDiluted > 0 ? (poolUnallocated / fullyDiluted) * 100 : 0;
+  return percentBalance([...holders, { percent: poolPercent }], 'percent');
 }
 
 /**
@@ -862,7 +887,7 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
         // rows printed directly beneath it, so it cannot disagree with them — and
         // it names the convertible overhang the percentages deliberately exclude,
         // which is the honest reading a typed table could never give.
-        hint: 'COMPUTED. Whether the folded holdings account for the fully diluted total, and what is outstanding beside them.',
+        hint: 'COMPUTED. Whether the folded holdings account for the fully diluted total, whether the percent column itself totals 100 including the pool, and what is outstanding beside them.',
         derive: (data) => {
           const fullyDiluted = deriveNumber(data.fullyDiluted);
           const holders = deriveRows(data.holders);
@@ -875,9 +900,18 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
           const note = overhang
             ? ` ${overhang} convertible${overhang === 1 ? '' : 's'} outstanding — not priced into these percentages until a round converts them.`
             : '';
+          // The PERCENT column is checked as its own question. Shares answer "does the
+          // ledger reach the authorised count"; the percentages are what a reader adds
+          // up, and the spec's own prose promises that when they do not reach ~100 the
+          // card SAYS so rather than nudging a number. Legacy rows without a percent
+          // column are not judged — nothing to add.
+          const percents = capTablePercentBalance(holders, unallocated, fullyDiluted);
+          const percentNote = percents && !percents.balanced
+            ? ` The percent column totals ${percents.total}% including the unallocated pool, not 100 — the percentages do not balance.`
+            : '';
           return balanced
-            ? `Holders and the unallocated pool account for ${accounted}% of the fully diluted total.${note}`
-            : `Holders and the unallocated pool account for only ${accounted}% of the fully diluted total — the ledger and the authorised counts disagree, which is a real condition to investigate rather than a rounding error.${note}`;
+            ? `Holders and the unallocated pool account for ${accounted}% of the fully diluted total.${percentNote}${note}`
+            : `Holders and the unallocated pool account for only ${accounted}% of the fully diluted total — the ledger and the authorised counts disagree, which is a real condition to investigate rather than a rounding error.${percentNote}${note}`;
         },
       },
       SUMMARY_FIELD,
@@ -1465,14 +1499,6 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
   },
 ];
 
-const SPEC_BY_KIND: ReadonlyMap<string, FounderObjectSpec> = new Map(
-  FOUNDER_OBJECT_SPECS.map((spec) => [spec.kind, spec]),
-);
-
-export function founderObjectSpec(kind: string): FounderObjectSpec | null {
-  return SPEC_BY_KIND.get(kind) ?? null;
-}
-
 /**
  * Every field name any founder object owns, deduplicated.
  *
@@ -1509,27 +1535,6 @@ export const FOUNDER_BOOKKEEPING_FIELDS: readonly string[] = [
  */
 export function founderMutableFields(kind: FounderObjectKind): readonly string[] {
   return specMutableFields(kind);
-}
-
-/**
- * Model-facing documentation for one founder kind: what each field is and what good
- * content looks like. Injected into `canvas_add_object`'s description so the model is
- * told the shape at the moment it authors one, rather than in a prompt paragraph that
- * drifts from the registry.
- */
-export function founderFieldGuidance(kind: FounderObjectKind): string {
-  const spec = SPEC_BY_KIND.get(kind);
-  if (!spec) return '';
-  const lines = spec.fields.map((field) => {
-    const columns = field.columns ? ` Columns: ${field.columns.join(', ')}.` : '';
-    return `• ${field.name} — ${field.hint}${columns}`;
-  });
-  return `${spec.kind}:\n${lines.join('\n')}`;
-}
-
-/** Guidance for every founder kind, for the one place the whole vocabulary is taught. */
-export function allFounderFieldGuidance(): string {
-  return FOUNDER_OBJECT_SPECS.map((spec) => founderFieldGuidance(spec.kind)).join('\n\n');
 }
 
 /**

@@ -127,6 +127,13 @@ export interface CanvasResumeRevision {
   /** True when `markdown` has been edited since `document` was last derived from it. */
   structuredStale?: boolean;
   templateId: ResumeTemplateId;
+  /**
+   * A Hired template descriptor (v1.0–v1.2) the revision arrived with, verbatim.
+   * The renderer validates it into a template at read time and falls back to
+   * `templateId` when it cannot; it is kept raw so a later descriptor version is
+   * migrated by the reader rather than lost at import.
+   */
+  templateDescriptor?: Record<string, unknown>;
   pageSize: ResumePageSize;
   orientation: ResumeOrientation;
   /** The immutable uploaded file this revision came from. Never exposed publicly. */
@@ -170,6 +177,7 @@ export function createResumeFamily(args: {
   markdown: string;
   document?: CanvasResumeDocument;
   templateId?: ResumeTemplateId;
+  templateDescriptor?: CanvasResumeRevision['templateDescriptor'];
   sourceFile?: CanvasResumeRevision['sourceFile'];
   now?: string;
   idFactory?: () => string;
@@ -187,6 +195,7 @@ export function createResumeFamily(args: {
     markdown: args.markdown.trim(),
     ...(args.document ? { document: deepClone(args.document), structuredStale: false } : {}),
     templateId,
+    ...(args.templateDescriptor ? { templateDescriptor: deepClone(args.templateDescriptor) } : {}),
     pageSize: 'a4',
     orientation: 'portrait',
     ...(args.sourceFile ? { sourceFile: deepClone(args.sourceFile) } : {}),

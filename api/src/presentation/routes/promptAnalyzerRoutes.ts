@@ -1,4 +1,3 @@
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Prompt Analyzer — /api/prompt-analyzer
  *
@@ -15,28 +14,24 @@ import { Hono } from 'hono';
 import { and, eq } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { promptLibraryEntries, promptLibraryVersions } from '../../infrastructure/database/schema';
-import { completeForTenant } from '../../application/llm/tenantProxy';
+import { completeJson } from '../../application/llm/completeJson';
+import { readProxyChoice } from '../../application/llm/LlmProxyService';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
-/** Pull the JSON object out of an LLM completion that may be fenced / prosey. */
-function extractJson(raw: string): { suggestion?: string; rationale?: string } | null {
-  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = (fenced?.[1] ?? raw).trim();
-  try {
-    const parsed = JSON.parse(candidate);
-    return typeof parsed === 'object' && parsed ? parsed : null;
-  } catch {
-    // A brace-delimited slice is the last resort before giving up.
-    const start = candidate.indexOf('{');
-    const end = candidate.lastIndexOf('}');
-    if (start >= 0 && end > start) {
-      try { return JSON.parse(candidate.slice(start, end + 1)); } catch (error) { /* fall through */ 
-        reportCaughtError(error, { source: "presentation/routes/promptAnalyzerRoutes.ts", operation: "extractJson" });
-      }
-    }
-    return null;
-  }
+interface AnalyzerSuggestion {
+  suggestion?: string;
+  rationale?: string;
+}
+
+/** The model's answer as `{ suggestion, rationale }`, or null for anything that is not an object. */
+function readSuggestion(value: unknown): AnalyzerSuggestion | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  return {
+    ...(typeof raw.suggestion === 'string' ? { suggestion: raw.suggestion } : {}),
+    ...(typeof raw.rationale === 'string' ? { rationale: raw.rationale } : {}),
+  };
 }
 
 export function createPromptAnalyzerRoutes(db: Db): Hono<HonoEnv> {
@@ -89,42 +84,28 @@ export function createPromptAnalyzerRoutes(db: Db): Hono<HonoEnv> {
       '"""',
     ].filter(Boolean).join('\n');
 
-    let result;
-    try {
-      result = await completeForTenant(
-        c.env,
-        tenantId,
-        {
-          messages: [
-            { role: 'system', content: system },
-            { role: 'user', content: user },
-          ],
-          temperature: 0.4,
-        },
-        { meterUseCase: 'prompt_analyzer', userId: userId ?? null },
-      );
-    } catch (err) {
-      return c.json({ error: err instanceof Error ? err.message : 'analysis failed' }, 502);
+    // The prompt asks for JSON in prose, so no response_format: the gateway's
+    // conformance retry would otherwise fight a model that answers with a fenced
+    // block, and the reader below tolerates one anyway.
+    const out = await completeJson<AnalyzerSuggestion>(
+      { kind: 'tenant', env: c.env, tenantId, opts: { meterUseCase: 'prompt_analyzer', userId: userId ?? null } },
+      { system, user, temperature: 0.4, maxTokens: 4000, useCase: 'prompt_analyzer' },
+      readSuggestion,
+    );
+
+    if (!out.ok && out.reason === 'gateway') {
+      return c.json({ error: out.status ? `gateway ${out.status}` : 'analysis failed' }, 502);
     }
 
-    if (result.response.status >= 400) {
-      return c.json({ error: `gateway ${result.response.status}` }, 502);
-    }
-    const raw = (await result.response.json().catch(() => null)) as
-      | { choices?: Array<{ message?: { content?: unknown } }> }
-      | null;
-    const content = raw?.choices?.[0]?.message?.content;
-    const text = typeof content === 'string' ? content : '';
-    const parsed = extractJson(text);
-
-    const suggestion = parsed?.suggestion?.trim();
-    if (!suggestion) {
+    const suggestion = out.ok ? out.value.suggestion?.trim() : undefined;
+    if (!out.ok || !suggestion) {
       // No structured suggestion — return the raw text so the UI can still show it.
+      const text = out.ok ? (out.result ? (await readProxyChoice(out.result)).content : '') : (out.content ?? '');
       return c.json({ suggestion: text.trim(), rationale: null, stats, basedOnVersion: entry.currentVersion });
     }
     return c.json({
       suggestion,
-      rationale: parsed?.rationale?.trim() ?? null,
+      rationale: out.value.rationale?.trim() ?? null,
       stats,
       basedOnVersion: entry.currentVersion,
     });

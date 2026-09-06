@@ -50,6 +50,32 @@ export const INTEGRATION_SURFACES: readonly IntegrationSurface[] = [
   'connector', 'board', 'data', 'drive', 'mailbox', 'payout', 'ledger', 'extension',
 ];
 
+export function isIntegrationCategory(value: unknown): value is IntegrationCategory {
+  return typeof value === 'string' && (INTEGRATION_CATEGORIES as readonly string[]).includes(value);
+}
+
+export function isIntegrationSurface(value: unknown): value is IntegrationSurface {
+  return typeof value === 'string' && (INTEGRATION_SURFACES as readonly string[]).includes(value);
+}
+
+/**
+ * The `integrationsIndex.*` message key for a surface the API reported.
+ *
+ * The page renders whatever the API sends, and the API's vocabulary is the one that
+ * moves — a surface it gains before this file learns of it used to render its own
+ * dotted key as the card's sentence. A member gets its key; anything else gets the
+ * sentence for `connector`, which is true of every surface (each is callable from an
+ * agent) and never wrong in front of a buyer.
+ */
+export function integrationSurfaceLabelKey(surface: unknown): `surface.${IntegrationSurface}` {
+  return `surface.${isIntegrationSurface(surface) ? surface : 'connector'}`;
+}
+
+/** The `integrationsIndex.*` message key for a category; an unknown one is grouped as `other`. */
+export function integrationCategoryLabelKey(category: unknown): `category.${IntegrationCategory}` {
+  return `category.${isIntegrationCategory(category) ? category : 'other'}`;
+}
+
 export interface IntegrationCatalogEntry {
   id: string;
   name: string;

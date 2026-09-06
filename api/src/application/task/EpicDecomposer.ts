@@ -1,7 +1,7 @@
 import { Task } from '../../domain/task/Task';
 import { TaskPriority } from '../../domain/shared/types';
 import type { Env } from '../../env';
-import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
+import { completeJson, jsonSchemaFormat } from '../llm/completeJson';
 import { normalizeEstimateDays } from '../planning/scheduleWork';
 
 /**
@@ -117,39 +117,32 @@ const DECOMP_SYSTEM_PROMPT =
   'work that can genuinely run in parallel should say -1 so the plan is not needlessly serialised. ' +
   'Prefer FEWER, larger children over micro-tasks. Reply with JSON only.';
 
-const DECOMP_SCHEMA = {
-  type: 'json_schema' as const,
-  json_schema: {
-    name: 'epic_decomposition',
-    strict: true,
-    schema: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['isEpic', 'children'],
-      properties: {
-        isEpic: { type: 'boolean' },
-        children: {
-          type: 'array',
-          items: {
-            type: 'object',
-            additionalProperties: false,
-            required: ['title', 'description', 'priority', 'roleKey', 'estimateDays', 'dependsOnIndex'],
-            properties: {
-              title: { type: 'string' },
-              description: { type: 'string' },
-              priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] },
-              roleKey: { type: 'string', enum: [...CHILD_ROLE_KEYS] },
-              /** Whole working days for THIS child alone. */
-              estimateDays: { type: 'integer', minimum: 1, maximum: 20 },
-              /** 0-based index of the earlier sibling that must finish first; -1 = none. */
-              dependsOnIndex: { type: 'integer', minimum: -1 },
-            },
-          },
+const DECOMP_SCHEMA = jsonSchemaFormat('epic_decomposition', {
+  type: 'object',
+  additionalProperties: false,
+  required: ['isEpic', 'children'],
+  properties: {
+    isEpic: { type: 'boolean' },
+    children: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['title', 'description', 'priority', 'roleKey', 'estimateDays', 'dependsOnIndex'],
+        properties: {
+          title: { type: 'string' },
+          description: { type: 'string' },
+          priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] },
+          roleKey: { type: 'string', enum: [...CHILD_ROLE_KEYS] },
+          /** Whole working days for THIS child alone. */
+          estimateDays: { type: 'integer', minimum: 1, maximum: 20 },
+          /** 0-based index of the earlier sibling that must finish first; -1 = none. */
+          dependsOnIndex: { type: 'integer', minimum: -1 },
         },
       },
     },
   },
-};
+});
 
 const VALID_PRIORITIES = new Set<string>(['low', 'medium', 'high', 'urgent']);
 
@@ -170,20 +163,20 @@ export function llmEpicDecomposer(env: Env): EpicDecomposer {
           `Title: ${plain.title}\n` +
           (plain.description ? `Description: ${String(plain.description).slice(0, 4000)}\n` : '') +
           '\nAssess this work item.';
-        const result = await ideProxy(env).complete({
-          messages: [
-            { role: 'system', content: DECOMP_SYSTEM_PROMPT },
-            { role: 'user', content: userPrompt },
-          ],
-          temperature: 0,
-          max_tokens: 900,
-          response_format: DECOMP_SCHEMA,
-          useCase: 'epic_decomposition',
-        });
-        if (result.response.status >= 400) return heuristicEpicDecomposer.assess(task);
-        const { content } = await readProxyChoice(result);
-        if (!content) return heuristicEpicDecomposer.assess(task);
-        const obj = JSON.parse(content) as { isEpic?: unknown; children?: unknown };
+        const out = await completeJson<{ isEpic?: unknown; children?: unknown }>(
+          { kind: 'ide', env },
+          {
+            system: DECOMP_SYSTEM_PROMPT,
+            user: userPrompt,
+            schema: DECOMP_SCHEMA,
+            temperature: 0,
+            maxTokens: 900,
+            useCase: 'epic_decomposition',
+          },
+          (value) => (value && typeof value === 'object' && !Array.isArray(value) ? (value as { isEpic?: unknown; children?: unknown }) : null),
+        );
+        if (!out.ok) return heuristicEpicDecomposer.assess(task);
+        const obj = out.value;
         // Index-mapped, THEN filtered: dependsOnIndex refers to the model's own
         // numbering, so dropping an invalid child first would silently re-point every
         // later dependency at the wrong sibling. Positions are remapped after the drop.

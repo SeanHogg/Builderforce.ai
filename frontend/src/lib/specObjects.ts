@@ -479,8 +479,7 @@ export function allSpecObjectSpecs(): readonly SpecObjectSpec[] {
  * than a filter each consumer has to remember.
  */
 export function specFieldNames(): readonly string[] {
-  return [...new Set(allSpecObjectSpecs()
-    .flatMap((spec) => spec.fields.filter((field) => !field.restricted).map((field) => field.name)))];
+  return [...new Set(allSpecObjectSpecs().flatMap((spec) => specReadableFields(spec.kind)))];
 }
 
 /**
@@ -610,8 +609,14 @@ export function deadlineBearingKinds(): readonly string[] {
   return allSpecObjectSpecs().filter((spec) => spec.fields.some((field) => field.deadline)).map((spec) => spec.kind);
 }
 
-/** Every field a spec kind owns that Brain may READ — authored or derived, never
- *  restricted. See `SpecField.restricted` for why that is a third axis. */
+/**
+ * Every field a spec kind owns that Brain may READ — authored or derived, never
+ * restricted. See `SpecField.restricted` for why that is a third axis.
+ *
+ * THE per-kind read list: {@link specFieldNames} is its union across every kind, and
+ * the AI snapshot narrows a spec object's context back down to this — so an `invoice`
+ * never carries a `gradebook`'s `marks` slot just because both are spec kinds.
+ */
 export function specReadableFields(kind: string): readonly string[] {
   const spec = specObjectSpec(kind);
   return spec ? spec.fields.filter((field) => !field.restricted).map((field) => field.name) : [];

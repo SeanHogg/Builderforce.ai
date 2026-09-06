@@ -19,9 +19,7 @@ import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { commsBalance, commsStatement } from '../../application/phone/commsBalance';
-import {
-  COMMS_TOPUP_PACKS, CommsTopUpError, completeCommsTopUp, startCommsTopUp,
-} from '../../application/phone/commsTopUp';
+import { COMMS_TOPUP_PACKS, completeCommsTopUp, startCommsTopUp } from '../../application/phone/commsTopUp';
 import { DEFAULT_COMMS_RATES } from '../../application/phone/commsRates';
 import { applyCallStatus, callLog, placeCall } from '../../application/phone/phoneCalls';
 import { applySmsStatus, recordInboundSms, sendSms, smsLog } from '../../application/phone/phoneMessaging';
@@ -32,7 +30,34 @@ import { phonePlan } from '../../application/phone/phonePlan';
 import { authenticatePhoneWebhook } from '../../application/phone/phoneWebhookAuth';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { refusalResponse } from '../middleware/errorResponse';
+import { parseBody, z, zNonEmptyString, zOptionalString } from './requestBody';
 import { limitParam } from './queryParams';
+
+/**
+ * A phone refusal as an HTTP answer, declared as data.
+ *
+ * `addon_inactive` — the workspace has not bought Business Phone (or it lapsed). 403
+ * rather than 402: 402 means "top up your credit", and answering it here would send an
+ * operator to the top-up dialog for a problem topping up cannot fix.
+ * `vendor_refused` — the carrier said no; 502 because the fault is upstream, and the
+ * `detail` the result carries is the carrier's own word on why.
+ * Anything unlisted is the caller's mistake, which `refusalResponse` answers 400.
+ */
+const PHONE_REFUSAL_STATUS: Readonly<Record<string, number>> = {
+  addon_inactive: 403,
+  insufficient_credit: 402,
+  no_sending_number: 409,
+  number_taken: 409,
+  vendor_refused: 502,
+};
+
+const PurchaseNumberBody = z.object({ e164: zNonEmptyString, label: zOptionalString });
+/** The message text is content, not a field: it is required but never trimmed. */
+const SendSmsBody = z.object({ to: zNonEmptyString, body: z.string().min(1), from: zOptionalString });
+const PlaceCallBody = z.object({ to: zNonEmptyString, twimlUrl: zNonEmptyString, from: zOptionalString });
+const StartTopUpBody = z.object({ packId: zNonEmptyString, billingEmail: zOptionalString });
+const CompleteTopUpBody = z.object({ sessionId: zNonEmptyString });
 
 /** Twilio expects TwiML. An empty response is the documented way to say
  *  "received, do nothing" — anything else makes the carrier read our JSON as
@@ -98,16 +123,14 @@ export function createPhoneRoutes(db: Db): Hono<HonoEnv> {
 
   router.post('/numbers', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ e164?: string; label?: string }>().catch(() => ({} as { e164?: string; label?: string }));
-    if (!body.e164) return c.json({ error: 'e164 is required' }, 400);
-
+    const body = await parseBody(c, PurchaseNumberBody);
     const result = await purchaseNumber(db, c.env as Env, {
       tenantId, e164: body.e164, label: body.label,
       // The origin the carrier will call back on is THIS request's own origin, so
       // a staging workspace cannot end up with a number pointed at production.
       webhookBase: new URL(c.req.url).origin,
     });
-    if (!result.ok) return c.json({ error: result.reason, ...result }, refusalStatus(result.reason));
+    if (!result.ok) return refusalResponse(c, result.reason, PHONE_REFUSAL_STATUS, { ...result });
     return c.json(result);
   });
 
@@ -122,26 +145,22 @@ export function createPhoneRoutes(db: Db): Hono<HonoEnv> {
   // ── Sending ─────────────────────────────────────────────────────────────
   router.post('/sms', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ to?: string; body?: string; from?: string }>().catch(() => ({} as { to?: string; body?: string; from?: string }));
-    if (!body.to || !body.body) return c.json({ error: 'to and body are required' }, 400);
-
+    const body = await parseBody(c, SendSmsBody);
     const result = await sendSms(db, c.env as Env, {
       tenantId, to: body.to, body: body.body, from: body.from,
     });
-    if (!result.ok) return c.json({ error: result.reason, ...result }, refusalStatus(result.reason));
+    if (!result.ok) return refusalResponse(c, result.reason, PHONE_REFUSAL_STATUS, { ...result });
     return c.json(result);
   });
 
   router.post('/calls', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
-    const body = await c.req.json<{ to?: string; twimlUrl?: string; from?: string }>().catch(() => ({} as { to?: string; twimlUrl?: string; from?: string }));
-    if (!body.to || !body.twimlUrl) return c.json({ error: 'to and twimlUrl are required' }, 400);
-
+    const body = await parseBody(c, PlaceCallBody);
     const result = await placeCall(db, c.env as Env, {
       tenantId, to: body.to, twimlUrl: body.twimlUrl, from: body.from, actorRef: userId ?? null,
     });
-    if (!result.ok) return c.json({ error: result.reason, ...result }, refusalStatus(result.reason));
+    if (!result.ok) return refusalResponse(c, result.reason, PHONE_REFUSAL_STATUS, { ...result });
     return c.json(result);
   });
 
@@ -157,49 +176,29 @@ export function createPhoneRoutes(db: Db): Hono<HonoEnv> {
   // a phone product that stops working the moment the owner is on holiday.
   router.get('/topup/packs', async (c) => c.json({ packs: COMMS_TOPUP_PACKS }));
 
+  //
+  // A `CommsTopUpError` carries its own 4xx `status`, which is exactly the rule
+  // `statusOf` applies in the global handler — so neither handler catches it.
   router.post('/topup', requireRole(TenantRole.MANAGER), async (c) => {
-    const body = await c.req.json<{ packId?: string; billingEmail?: string }>().catch(() => ({} as { packId?: string; billingEmail?: string }));
-    if (!body.packId) return c.json({ error: 'packId is required' }, 400);
-    try {
-      return c.json(await startCommsTopUp(c.env as Env, {
-        tenantId: c.get('tenantId') as number,
-        userId: c.get('userId') as string,
-        packId: body.packId,
-        billingEmail: body.billingEmail ?? null,
-        appUrl: (c.env as Env).APP_URL ?? new URL(c.req.url).origin,
-      }));
-    } catch (error) {
-      if (error instanceof CommsTopUpError) return c.json({ error: error.message }, error.status);
-      throw error;
-    }
+    const body = await parseBody(c, StartTopUpBody);
+    return c.json(await startCommsTopUp(c.env as Env, {
+      tenantId: c.get('tenantId') as number,
+      userId: c.get('userId') as string,
+      packId: body.packId,
+      billingEmail: body.billingEmail ?? null,
+      appUrl: (c.env as Env).APP_URL ?? new URL(c.req.url).origin,
+    }));
   });
 
   router.post('/topup/complete', requireRole(TenantRole.MANAGER), async (c) => {
-    const body = await c.req.json<{ sessionId?: string }>().catch(() => ({} as { sessionId?: string }));
-    if (!body.sessionId) return c.json({ error: 'sessionId is required' }, 400);
-    try {
-      return c.json(await completeCommsTopUp(db, c.env as Env, {
-        tenantId: c.get('tenantId') as number,
-        checkoutSessionId: body.sessionId,
-      }));
-    } catch (error) {
-      if (error instanceof CommsTopUpError) return c.json({ error: error.message }, error.status);
-      throw error;
-    }
+    const body = await parseBody(c, CompleteTopUpBody);
+    return c.json(await completeCommsTopUp(db, c.env as Env, {
+      tenantId: c.get('tenantId') as number,
+      checkoutSessionId: body.sessionId,
+    }));
   });
 
   return router;
-}
-
-function refusalStatus(reason: string): 402 | 403 | 409 | 502 | 400 {
-  // The workspace has not bought Business Phone (or it lapsed). 403 rather than
-  // 402: 402 means "top up your credit", and answering it here would send an
-  // operator to the top-up dialog for a problem topping up cannot fix.
-  if (reason === 'addon_inactive') return 403;
-  if (reason === 'insufficient_credit') return 402;
-  if (reason === 'no_sending_number' || reason === 'number_taken') return 409;
-  if (reason === 'vendor_refused') return 502;
-  return 400;
 }
 
 /**

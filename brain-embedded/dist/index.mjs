@@ -1457,23 +1457,6 @@ function resolveRecipient(choice, mention) {
   if (choice === "brain") return null;
   return choice ?? mention;
 }
-function withAuthoredBy(metadata, author) {
-  if (!author) return metadata;
-  let base = {};
-  if (metadata) {
-    try {
-      const parsed = JSON.parse(metadata);
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) base = parsed;
-    } catch {
-    }
-  }
-  return JSON.stringify({ ...base, [AUTHORED_BY_META_KEY]: author });
-}
-function addressedAgentSystemPrompt(persona, agent, hostPrompt) {
-  const framing = `You have been addressed directly as ${agent.name} in this multi-party chat. Reply AS ${agent.name} \u2014 first person, no "${agent.name}:" label. The tools available to you are the tools of the surface you are running on right now; the instructions below say what they are and how to use them, and they apply to you in full.`;
-  const who = persona.directives.trim() || `You are ${agent.name}, a member of this team's chat.`;
-  return [who, framing, hostPrompt].join("\n\n");
-}
 
 // ../packages/agent-stall/src/requestIntent.ts
 var CHANGE_VERB = /\b(add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show|bump|revert|restore|install|upgrade|downgrade|rewrite|extract|split|merge)\b/i;
@@ -3430,7 +3413,6 @@ async function autoLinkCreatedItem(chatId, c, persistence, runTool, toolName, ou
 async function runLoop(chatId, c, req) {
   const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, routingMode, pickFallbackModel, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
   const convo = c.transcript;
-  const persistMeta = (r) => withAuthoredBy(provenanceMetadata(r), req.authoredBy);
   const allTools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0;
   const usedTools = /* @__PURE__ */ new Set();
   const runMode = normalizeChatMode(req.chatMode ?? "work");
@@ -3717,7 +3699,7 @@ ${continuationDirective()}`;
       });
       const narration = result.text.trim();
       if (narration) {
-        const meta = persistMeta(result);
+        const meta = provenanceMetadata(result);
         const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: result.text, ...meta ? { metadata: meta } : {} }]);
         recordAppended(c, narrationMsg);
       }
@@ -3835,7 +3817,7 @@ ${continuationDirective()}`;
       const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
       const narration = result.text.trim();
       if (narration) {
-        const meta = persistMeta(result);
+        const meta = provenanceMetadata(result);
         const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: narration, ...meta ? { metadata: meta } : {} }]);
         recordAppended(c, narrationMsg);
       }
@@ -3854,7 +3836,7 @@ ${continuationDirective()}`;
     }
     const finalText = result.text.trim() || "No response.";
     convo.push({ role: "assistant", content: finalText });
-    const finalMeta = persistMeta(result);
+    const finalMeta = provenanceMetadata(result);
     const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText, ...finalMeta ? { metadata: finalMeta } : {} }]);
     c.streamingText = "";
     recordAppended(c, assistantMsg);
@@ -3942,7 +3924,7 @@ ${continuationDirective()}`;
       const closingText = closing.text.trim();
       if (closingText) {
         convo.push({ role: "assistant", content: closingText });
-        const meta = persistMeta(closing);
+        const meta = provenanceMetadata(closing);
         const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: closingText, ...meta ? { metadata: meta } : {} }]);
         c.streamingText = "";
         recordAppended(c, assistantMsg);
@@ -3989,7 +3971,6 @@ function useBrainConversation(options) {
     toolSpecs,
     runTool,
     needsConfirm,
-    runAddressedAgentLocally,
     ensureChatId,
     onActivity,
     onFirstUserTurn,
@@ -4140,26 +4121,13 @@ ${refs}`;
         onActivity?.(id);
         if (messages.length === 0) onFirstUserTurn?.(id, trimmed);
         if (addressedTo) {
-          if (addressedTo.kind === "agent") {
-            const persona = runAddressedAgentLocally && persistence.resolveAgentPersona ? await persistence.resolveAgentPersona(id, { agentRef: addressedTo.ref, query: trimmed }).catch(() => null) : null;
-            if (persona) {
-              const base = buildRequest(seedFrom(messages), modelContent);
-              await startRun(id, {
-                ...base,
-                resolvedSystemPrompt: addressedAgentSystemPrompt(persona, addressedTo, base.resolvedSystemPrompt),
-                // The agent's own pinned model is part of who it is — unless the user
-                // deliberately picked one for this conversation.
-                ...persona.model && !modelStrict ? { model: persona.model } : {},
-                authoredBy: addressedTo
-              });
-            } else if (persistence.requestAgentReply) {
-              try {
-                const reply = await persistence.requestAgentReply(id, { agentRef: addressedTo.ref, agentName: addressedTo.name });
-                setMessages((prev) => [...prev, reply]);
-                onActivity?.(id);
-              } catch (e) {
-                setLocalError(e instanceof Error ? e.message : "The agent could not reply.");
-              }
+          if (addressedTo.kind === "agent" && persistence.requestAgentReply) {
+            try {
+              const reply = await persistence.requestAgentReply(id, { agentRef: addressedTo.ref, agentName: addressedTo.name });
+              setMessages((prev) => [...prev, reply]);
+              onActivity?.(id);
+            } catch (e) {
+              setLocalError(e instanceof Error ? e.message : "The agent could not reply.");
             }
           }
           return true;
@@ -4174,7 +4142,7 @@ ${refs}`;
         setLocalSending(false);
       }
     },
-    [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity, onFirstUserTurn, runAddressedAgentLocally, modelStrict]
+    [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity, onFirstUserTurn]
   );
   useEffect6(() => {
     if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
@@ -5144,7 +5112,6 @@ export {
   activityIcon,
   activityTarget,
   activityTone,
-  addressedAgentSystemPrompt,
   allowanceState,
   announcesUntakenAction,
   applyRemoteRun,
@@ -5306,7 +5273,6 @@ export {
   useRegisterBrainActions,
   useToolConfirmationGate,
   withAdvisory,
-  withAuthoredBy,
   withDirectedMetadata,
   withProvenanceMetadata,
   workItemLinkFromCreate

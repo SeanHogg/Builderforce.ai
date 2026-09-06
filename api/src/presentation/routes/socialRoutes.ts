@@ -23,6 +23,11 @@
  * Connecting an account is NOT here: a social account is a connector connection, so
  * it is created, tested and edited through `/api/connectors` like every other one.
  * A second connect flow would mean a second credential store.
+ *
+ * ── ERRORS ───────────────────────────────────────────────────────────────────
+ * `SocialCampaignError` carries the status the service decided on (400 / 404 / 409,
+ * 500 for an invariant failure); the global handler renders it through `statusOf`,
+ * so no campaign handler catches anything.
  */
 
 import { Hono } from 'hono';
@@ -44,17 +49,39 @@ import {
   getSocialCampaign,
   listSocialCampaigns,
   runSocialCampaignBatch,
-  SocialCampaignError,
   updateSocialCampaign,
 } from '../../application/social/socialCampaignService';
+import { parseBody, z, zNonEmptyString, zOptionalString, zPositiveInt } from './requestBody';
 
-function campaignFailure(error: unknown): { message: string; status: 400 | 404 | 409 | 500 } {
-  if (error instanceof SocialCampaignError) {
-    const status = error.status === 404 ? 404 : error.status === 409 ? 409 : error.status === 500 ? 500 : 400;
-    return { message: error.message, status };
-  }
-  return { message: error instanceof Error ? error.message : 'That campaign could not be processed.', status: 500 };
-}
+const PublishBody = z.object({
+  connectionId: zOptionalString,
+  network: zOptionalString,
+  text: zNonEmptyString,
+  linkUrl: zOptionalString,
+  mediaUrls: z.array(z.string()).optional(),
+});
+
+const CreateCampaignBody = z.object({
+  name: zNonEmptyString,
+  body: z.string().default(''),
+  linkUrl: z.string().optional(),
+  mediaUrls: z.array(z.string()).optional(),
+  variants: z.record(z.string(), z.string()).optional(),
+  connectionIds: z.array(z.string()).optional(),
+  scheduledAt: z.string().nullable().optional(),
+  projectId: zPositiveInt.nullable().optional(),
+  sessionId: z.string().nullable().optional(),
+});
+
+const UpdateCampaignBody = z.object({
+  name: z.string().optional(),
+  body: z.string().optional(),
+  linkUrl: z.string().optional(),
+  mediaUrls: z.array(z.string()).optional(),
+  variants: z.record(z.string(), z.string()).optional(),
+  /** `null` clears the schedule; absent leaves it alone. */
+  scheduledAt: z.string().nullable().optional(),
+});
 
 export function createSocialRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
@@ -95,11 +122,7 @@ export function createSocialRoutes(db: Db): Hono<HonoEnv> {
   // POST /publish — one post, one account. Manager-gated: it speaks as the brand.
   r.post('/publish', manager, async (c) => {
     const { env, tenantId } = ctx(c);
-    const body = await c.req.json().catch(() => ({})) as {
-      connectionId?: string; network?: string; text?: string; linkUrl?: string; mediaUrls?: string[];
-    };
-    const text = (body.text ?? '').trim();
-    if (!text) return c.json({ error: 'A post needs some text.' }, 400);
+    const body = await parseBody(c, PublishBody);
 
     const resolved = await resolveSocialAccount(db, env, tenantId, {
       connectionId: body.connectionId ?? null,
@@ -108,9 +131,9 @@ export function createSocialRoutes(db: Db): Hono<HonoEnv> {
     if (!resolved.ok) return c.json({ error: resolved.error }, 409);
 
     const outcome = await publishSocialPost(db, env, tenantId, resolved.account, {
-      text,
+      text: body.text,
       ...(body.linkUrl ? { linkUrl: body.linkUrl } : {}),
-      ...(Array.isArray(body.mediaUrls) && body.mediaUrls.length ? { mediaUrls: body.mediaUrls.map(String) } : {}),
+      ...(body.mediaUrls?.length ? { mediaUrls: body.mediaUrls } : {}),
     }, 'user');
     if (!outcome.ok) return c.json({ error: outcome.error, retryable: outcome.retryable }, 502);
     return c.json({
@@ -146,55 +169,40 @@ export function createSocialRoutes(db: Db): Hono<HonoEnv> {
 
   r.post('/campaigns', manager, async (c) => {
     const { env, tenantId } = ctx(c);
-    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-    try {
-      const created = await createSocialCampaign(db, env, tenantId, {
-        name: String(body.name ?? ''),
-        body: String(body.body ?? ''),
-        ...(body.linkUrl != null ? { linkUrl: String(body.linkUrl) } : {}),
-        ...(Array.isArray(body.mediaUrls) ? { mediaUrls: body.mediaUrls.map(String) } : {}),
-        ...(body.variants && typeof body.variants === 'object' ? { variants: body.variants as Record<string, string> } : {}),
-        ...(Array.isArray(body.connectionIds) ? { connectionIds: body.connectionIds.map(String) } : {}),
-        ...(body.scheduledAt != null ? { scheduledAtISO: String(body.scheduledAt) } : {}),
-        ...(body.projectId != null ? { projectId: Number(body.projectId) } : {}),
-        ...(body.sessionId != null ? { sessionId: String(body.sessionId) } : {}),
-      });
-      return c.json(created, 201);
-    } catch (error) {
-      const failure = campaignFailure(error);
-      return c.json({ error: failure.message }, failure.status);
-    }
+    const body = await parseBody(c, CreateCampaignBody);
+    const created = await createSocialCampaign(db, env, tenantId, {
+      name: body.name,
+      body: body.body,
+      ...(body.linkUrl != null ? { linkUrl: body.linkUrl } : {}),
+      ...(body.mediaUrls ? { mediaUrls: body.mediaUrls } : {}),
+      ...(body.variants ? { variants: body.variants } : {}),
+      ...(body.connectionIds ? { connectionIds: body.connectionIds } : {}),
+      ...(body.scheduledAt != null ? { scheduledAtISO: body.scheduledAt } : {}),
+      ...(body.projectId != null ? { projectId: body.projectId } : {}),
+      ...(body.sessionId != null ? { sessionId: body.sessionId } : {}),
+    });
+    return c.json(created, 201);
   });
 
   r.patch('/campaigns/:id', manager, async (c) => {
     const { env, tenantId } = ctx(c);
-    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-    try {
-      const accounts = await listSocialAccounts(db, env, tenantId);
-      const campaign = await updateSocialCampaign(db, env, tenantId, Number(c.req.param('id')), {
-        ...(body.name != null ? { name: String(body.name) } : {}),
-        ...(body.body != null ? { body: String(body.body) } : {}),
-        ...(body.linkUrl != null ? { linkUrl: String(body.linkUrl) } : {}),
-        ...(Array.isArray(body.mediaUrls) ? { mediaUrls: body.mediaUrls.map(String) } : {}),
-        ...(body.variants && typeof body.variants === 'object' ? { variants: body.variants as Record<string, string> } : {}),
-        ...(body.scheduledAt !== undefined ? { scheduledAtISO: body.scheduledAt == null ? null : String(body.scheduledAt) } : {}),
-      }, accounts);
-      return c.json({ campaign });
-    } catch (error) {
-      const failure = campaignFailure(error);
-      return c.json({ error: failure.message }, failure.status);
-    }
+    const body = await parseBody(c, UpdateCampaignBody);
+    const accounts = await listSocialAccounts(db, env, tenantId);
+    const campaign = await updateSocialCampaign(db, env, tenantId, Number(c.req.param('id')), {
+      ...(body.name !== undefined ? { name: body.name } : {}),
+      ...(body.body !== undefined ? { body: body.body } : {}),
+      ...(body.linkUrl !== undefined ? { linkUrl: body.linkUrl } : {}),
+      ...(body.mediaUrls !== undefined ? { mediaUrls: body.mediaUrls } : {}),
+      ...(body.variants !== undefined ? { variants: body.variants } : {}),
+      ...(body.scheduledAt !== undefined ? { scheduledAtISO: body.scheduledAt } : {}),
+    }, accounts);
+    return c.json({ campaign });
   });
 
   r.delete('/campaigns/:id', manager, async (c) => {
     const { tenantId } = ctx(c);
-    try {
-      await deleteSocialCampaign(db, tenantId, Number(c.req.param('id')));
-      return c.json({ deleted: true });
-    } catch (error) {
-      const failure = campaignFailure(error);
-      return c.json({ error: failure.message }, failure.status);
-    }
+    await deleteSocialCampaign(db, tenantId, Number(c.req.param('id')));
+    return c.json({ deleted: true });
   });
 
   /**
@@ -205,17 +213,12 @@ export function createSocialRoutes(db: Db): Hono<HonoEnv> {
    */
   r.post('/campaigns/:id/publish', manager, async (c) => {
     const { env, tenantId } = ctx(c);
-    try {
-      const result = await runSocialCampaignBatch(db, env, tenantId, Number(c.req.param('id')), 'user');
-      const accounts = await listSocialAccounts(db, env, tenantId);
-      return c.json({
-        ...result,
-        campaign: await getSocialCampaign(db, tenantId, result.campaignId, accounts),
-      });
-    } catch (error) {
-      const failure = campaignFailure(error);
-      return c.json({ error: failure.message }, failure.status);
-    }
+    const result = await runSocialCampaignBatch(db, env, tenantId, Number(c.req.param('id')), 'user');
+    const accounts = await listSocialAccounts(db, env, tenantId);
+    return c.json({
+      ...result,
+      campaign: await getSocialCampaign(db, tenantId, result.campaignId, accounts),
+    });
   });
 
   return r;

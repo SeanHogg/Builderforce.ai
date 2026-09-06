@@ -36,7 +36,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { startArchitectAnalysis } from '../repos/architectRunner';
 import type { TaskService } from '../task/TaskService';
-import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
+import { completeJson, jsonSchemaFormat } from '../llm/completeJson';
 import { recordProxyUsage } from '../llm/usageLedger';
 import { findBuiltinAgentRef, personaDirectiveFor } from './rfpAgents';
 import { computeRfpCostModel, RFP_COST_DEFAULTS } from './rfpCost';
@@ -52,6 +52,56 @@ import { loadProjectInTenant } from '../project/projectOwnership';
 
 const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
 const MILLICENTS_PER_USD = 100_000;
+
+/** A plain object, or null — the shape every structured reply here must have. */
+const asObject = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+
+const PORTFOLIO_MATCHES_SCHEMA = jsonSchemaFormat('portfolio_matches', {
+  type: 'object', additionalProperties: false, required: ['matches'],
+  properties: {
+    matches: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false, required: ['projectId', 'score', 'rationale'],
+        properties: {
+          projectId: { type: 'number' },
+          score: { type: 'number', minimum: 0, maximum: 1 },
+          rationale: { type: 'string' },
+        },
+      },
+    },
+  },
+});
+
+const RFP_NARRATIVE_SCHEMA = jsonSchemaFormat('rfp_narrative', {
+  type: 'object', additionalProperties: false,
+  required: ['executiveSummary', 'phases', 'risks', 'dependencies'],
+  properties: {
+    executiveSummary: { type: 'string' },
+    phases: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false, required: ['name', 'weeks', 'milestones'],
+        properties: {
+          name: { type: 'string' }, weeks: { type: 'number', minimum: 1, maximum: 52 },
+          milestones: {
+            type: 'array',
+            items: { type: 'object', additionalProperties: false, required: ['name', 'offsetWeeks'], properties: { name: { type: 'string' }, offsetWeeks: { type: 'number', minimum: 0, maximum: 104 } } },
+          },
+        },
+      },
+    },
+    risks: {
+      type: 'array',
+      items: { type: 'object', additionalProperties: false, required: ['title', 'severity', 'mitigation'], properties: { title: { type: 'string' }, severity: { type: 'string', enum: ['low', 'medium', 'high'] }, mitigation: { type: 'string' } } },
+    },
+    dependencies: {
+      type: 'array',
+      items: { type: 'object', additionalProperties: false, required: ['title', 'type', 'note'], properties: { title: { type: 'string' }, type: { type: 'string', enum: ['internal', 'external', 'third_party'] }, note: { type: 'string' } } },
+    },
+  },
+});
 
 export interface RfpGenerateDeps {
   env: Env;
@@ -301,41 +351,22 @@ export async function matchPortfolio(
 
   try {
     const list = candidates.slice(0, 40).map((c) => `#${c.id} ${c.name}: ${(c.description ?? '').slice(0, 200)}`).join('\n');
-    const result = await ideProxy(env).complete({
-      messages: [
-        { role: 'system', content: 'You match an RFP to the most similar existing projects in a portfolio. Return the top matches (max 5) with a 0-1 similarity score and a <=16-word rationale. JSON only.' },
-        { role: 'user', content: `RFP requirements:\n${requirements.slice(0, 2000)}\n\nPortfolio projects:\n${list}` },
-      ],
-      temperature: 0,
-      max_tokens: 500,
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: 'portfolio_matches', strict: true,
-          schema: {
-            type: 'object', additionalProperties: false, required: ['matches'],
-            properties: {
-              matches: {
-                type: 'array',
-                items: {
-                  type: 'object', additionalProperties: false, required: ['projectId', 'score', 'rationale'],
-                  properties: {
-                    projectId: { type: 'number' },
-                    score: { type: 'number', minimum: 0, maximum: 1 },
-                    rationale: { type: 'string' },
-                  },
-                },
-              },
-            },
-          },
-        },
+    const out = await completeJson(
+      { kind: 'ide', env },
+      {
+        system: 'You match an RFP to the most similar existing projects in a portfolio. Return the top matches (max 5) with a 0-1 similarity score and a <=16-word rationale. JSON only.',
+        user: `RFP requirements:\n${requirements.slice(0, 2000)}\n\nPortfolio projects:\n${list}`,
+        schema: PORTFOLIO_MATCHES_SCHEMA,
+        temperature: 0,
+        maxTokens: 500,
+        useCase: 'rfp_portfolio_match',
       },
-      useCase: 'rfp_portfolio_match',
-    });
-    void recordProxyUsage(db, env, { tenantId, useCase: 'rfp_portfolio_match', result });
-    if (result.response.status < 400) {
-      const { content } = await readProxyChoice(result);
-      const parsed = JSON.parse(content) as { matches?: RfpPortfolioMatch[] };
+      asObject,
+    );
+    // Metered whenever the gateway answered at all — a 4xx/5xx still spent a call.
+    if (out.result) void recordProxyUsage(db, env, { tenantId, useCase: 'rfp_portfolio_match', result: out.result });
+    if (out.ok) {
+      const parsed = out.value as { matches?: RfpPortfolioMatch[] };
       const validIds = new Set(candidates.map((c) => c.id));
       const nameById = new Map(candidates.map((c) => [c.id, c.name]));
       const matches = (parsed.matches ?? [])
@@ -432,59 +463,24 @@ async function generateNarrative(
   const fallback = fallbackNarrative(requesterOrg, roster);
   try {
     const capsLine = roster.capabilities.length ? `Our relevant capabilities: ${roster.capabilities.join(', ')}.` : '';
-    const result = await ideProxy(deps.env).complete({
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You are co-authoring a pre-sales RFP response as a CTO and a Product Owner. Produce a concise executive summary (<=120 words), a phased delivery plan (each phase has a name, a duration in weeks, and milestones with an offset in weeks from the phase start), the key delivery risks (severity low|medium|high + a mitigation), and the external/third-party dependencies. Ground everything in the requirements and our stated capabilities — no invented product features. JSON only.\n\n' +
-            personaDirective,
-        },
-        { role: 'user', content: `Requesting organisation: ${requesterOrg || 'the client'}\n\nRFP requirements:\n${requirements.slice(0, 4000)}\n\n${capsLine}` },
-      ],
-      temperature: 0.3,
-      max_tokens: 1200,
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: 'rfp_narrative', strict: true,
-          schema: {
-            type: 'object', additionalProperties: false,
-            required: ['executiveSummary', 'phases', 'risks', 'dependencies'],
-            properties: {
-              executiveSummary: { type: 'string' },
-              phases: {
-                type: 'array',
-                items: {
-                  type: 'object', additionalProperties: false, required: ['name', 'weeks', 'milestones'],
-                  properties: {
-                    name: { type: 'string' }, weeks: { type: 'number', minimum: 1, maximum: 52 },
-                    milestones: {
-                      type: 'array',
-                      items: { type: 'object', additionalProperties: false, required: ['name', 'offsetWeeks'], properties: { name: { type: 'string' }, offsetWeeks: { type: 'number', minimum: 0, maximum: 104 } } },
-                    },
-                  },
-                },
-              },
-              risks: {
-                type: 'array',
-                items: { type: 'object', additionalProperties: false, required: ['title', 'severity', 'mitigation'], properties: { title: { type: 'string' }, severity: { type: 'string', enum: ['low', 'medium', 'high'] }, mitigation: { type: 'string' } } },
-              },
-              dependencies: {
-                type: 'array',
-                items: { type: 'object', additionalProperties: false, required: ['title', 'type', 'note'], properties: { title: { type: 'string' }, type: { type: 'string', enum: ['internal', 'external', 'third_party'] }, note: { type: 'string' } } },
-              },
-            },
-          },
-        },
+    const out = await completeJson(
+      { kind: 'ide', env: deps.env },
+      {
+        system:
+          'You are co-authoring a pre-sales RFP response as a CTO and a Product Owner. Produce a concise executive summary (<=120 words), a phased delivery plan (each phase has a name, a duration in weeks, and milestones with an offset in weeks from the phase start), the key delivery risks (severity low|medium|high + a mitigation), and the external/third-party dependencies. Ground everything in the requirements and our stated capabilities — no invented product features. JSON only.\n\n' +
+          personaDirective,
+        user: `Requesting organisation: ${requesterOrg || 'the client'}\n\nRFP requirements:\n${requirements.slice(0, 4000)}\n\n${capsLine}`,
+        schema: RFP_NARRATIVE_SCHEMA,
+        temperature: 0.3,
+        maxTokens: 1200,
+        useCase: 'rfp_narrative',
       },
-      useCase: 'rfp_narrative',
-    });
-    void recordProxyUsage(deps.db, deps.env, { tenantId, useCase: 'rfp_narrative', result });
-    if (result.response.status >= 400) return fallback;
-    const { content } = await readProxyChoice(result);
-    if (!content) return fallback;
-    const parsed = JSON.parse(content) as RawNarrative;
+      asObject,
+    );
+    // Metered whenever the gateway answered at all — a 4xx/5xx still spent a call.
+    if (out.result) void recordProxyUsage(deps.db, deps.env, { tenantId, useCase: 'rfp_narrative', result: out.result });
+    if (!out.ok) return fallback;
+    const parsed = out.value as unknown as RawNarrative;
     if (!parsed.executiveSummary || !Array.isArray(parsed.phases) || parsed.phases.length === 0) return fallback;
     return parsed;
   } catch {

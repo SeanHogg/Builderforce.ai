@@ -323,10 +323,8 @@ export {
   resolveRecipient,
   activeMentionToken,
   filterMentionCandidates,
-  withAuthoredBy,
-  addressedAgentSystemPrompt,
 } from './directedMessage';
-export type { DirectedRecipient, RecipientChoice, MentionToken, AddressedAgentPersona } from './directedMessage';
+export type { DirectedRecipient, RecipientChoice, MentionToken } from './directedMessage';
 
 // Per-reply model/account provenance (the "which LLM / whose account" chip)
 export {

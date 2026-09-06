@@ -94,3 +94,29 @@ export function scopeChangeEffect(axis: ScopeAxis, roomLive: boolean): ScopeChan
       return { canvas: 'swap', room: 'keep', workbench: 'keep', confirm: false };
   }
 }
+
+/**
+ * The surfaces a scope change can act on. Every one is optional because the surface
+ * may not exist where the switch happens — the marketing shell has no stage and no
+ * room — and an absent surface is simply nothing to close.
+ */
+export interface ScopeChangeSurfaces {
+  /** Close the mounted board (`ActiveCanvasValue.close`). */
+  closeCanvas?: (() => void) | undefined;
+  /** Leave the live call (`LiveSessionValue.leave`). */
+  leaveRoom?: (() => void) | undefined;
+}
+
+/**
+ * Carry out the board and room halves of a resolved effect.
+ *
+ * The workbench half is applied by `ProjectScopeContext.setProject`, which owns the
+ * URL the docked page re-fetches from; this is the other half, called by whichever
+ * surface performed the switch AFTER any confirm the effect asked for. Kept beside the
+ * table so "close on tenant, keep on project" is executed by one function and not
+ * re-read from `effect.canvas` at each switcher.
+ */
+export function applyScopeChangeEffect(effect: ScopeChangeEffect, surfaces: ScopeChangeSurfaces): void {
+  if (effect.canvas === 'close') surfaces.closeCanvas?.();
+  if (effect.room === 'leave') surfaces.leaveRoom?.();
+}

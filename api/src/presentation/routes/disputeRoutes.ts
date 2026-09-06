@@ -21,9 +21,9 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import {
+  DISPUTE_OUTCOMES,
   assignMediator,
   fileDisputeStatement,
-  isDisputeOutcome,
   listTenantDisputes,
   resolveMediatorAuthority,
   openDisputeCount,
@@ -32,24 +32,50 @@ import {
   withdrawDispute,
   type DisputeRefusal,
 } from '../../application/marketplace/disputes';
+import { refusalResponse } from '../middleware/errorResponse';
+import { parseBody, z, zNonEmptyString } from './requestBody';
 import { limitParam } from './queryParams';
 
 /**
- * A dispute refusal as an HTTP answer.
+ * An escrow or dispute refusal as an HTTP answer — declared ONCE, as data.
  *
- * The SAME mapping `freelancerRoutes` uses, and deliberately so: `DisputeRefusal`
+ * The SAME table `freelancerRoutes` uses, and deliberately so: `DisputeRefusal`
  * extends `EscrowRefusal`, so both doors onto the same machine must translate the same
  * code to the same status. A caller that got 409 from one and 400 from the other would
  * be looking at one subsystem with two error contracts.
+ *
+ * 409 for a state conflict, 403 for the wrong party — a freelancer told "404" about
+ * their own milestone would go looking for a bug, and one told "403" knows the action
+ * belongs to the client. `already_disputed` and `already_closed` are state conflicts in
+ * exactly the sense `wrong_status` is: the row moved on, and the caller should re-read
+ * rather than re-format their request. Anything unlisted (`unknown_action`,
+ * `no_amount`, `bad_split`) is the caller's mistake, which `refusalResponse` answers 400.
  */
-function refusalStatus(reason: DisputeRefusal): 400 | 403 | 404 | 409 {
-  if (reason === 'not_found') return 404;
-  if (reason === 'wrong_party' || reason === 'not_mediator') return 403;
-  if (reason === 'wrong_status' || reason === 'conflict'
-    || reason === 'already_disputed' || reason === 'already_closed'
-    || reason === 'not_disputed') return 409;
-  return 400;
-}
+export const ESCROW_REFUSAL_STATUS = {
+  not_found: 404,
+  wrong_party: 403,
+  not_mediator: 403,
+  wrong_status: 409,
+  conflict: 409,
+  already_disputed: 409,
+  already_closed: 409,
+  not_disputed: 409,
+} as const satisfies Partial<Record<DisputeRefusal, number>>;
+
+/** A party's filing. `asMediator` is a CLAIM the handler re-derives, never trusts. */
+const StatementBody = z.object({
+  position: zNonEmptyString,
+  evidence: z.unknown().optional(),
+  asMediator: z.boolean().optional(),
+});
+
+/** The ruling. `outcome` is the closed set the application layer defines, so an unknown
+ *  word is a 400 here rather than a `switch` fall-through somewhere that moves money. */
+const ResolveBody = z.object({
+  outcome: z.enum(DISPUTE_OUTCOMES),
+  splitFreelancerCents: z.number().int().nullable().optional(),
+  resolution: z.string().nullable().optional(),
+});
 
 export function createDisputeRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -110,10 +136,7 @@ export function createDisputeRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:id/statement', async (c) => {
     const id = disputeIdOf(c.req.param('id'));
     if (id === null) return c.json({ error: 'not_found' }, 404);
-    const body = await c.req.json<{ position?: string; evidence?: unknown; asMediator?: boolean }>()
-      .catch(() => ({} as { position?: string; evidence?: unknown; asMediator?: boolean }));
-    const position = String(body.position ?? '').trim();
-    if (!position) return c.json({ error: 'position is required' }, 400);
+    const body = await parseBody(c, StatementBody);
 
     // A mediator's reasoning is a filing like any other, but claiming to be one is not
     // something a request body may assert: the authority is re-derived here and a caller
@@ -126,12 +149,12 @@ export function createDisputeRoutes(db: Db): Hono<HonoEnv> {
       disputeId: id,
       party,
       authorRef: c.get('userId') as string,
-      position,
+      position: body.position,
       evidence: body.evidence,
     });
     return result.ok
       ? c.json({ dispute: result.dispute })
-      : c.json({ error: result.reason }, refusalStatus(result.reason));
+      : refusalResponse(c, result.reason, ESCROW_REFUSAL_STATUS);
   });
 
   /** POST /:id/mediate — take the dispute into mediation. */
@@ -146,15 +169,14 @@ export function createDisputeRoutes(db: Db): Hono<HonoEnv> {
     });
     return result.ok
       ? c.json({ dispute: result.dispute })
-      : c.json({ error: result.reason }, refusalStatus(result.reason));
+      : refusalResponse(c, result.reason, ESCROW_REFUSAL_STATUS);
   });
 
   /**
    * POST /:id/resolve — the RULING.
    *
-   * `outcome` is validated against the closed set before it reaches the application
-   * layer, so an unknown word is a 400 here rather than a `switch` fall-through
-   * somewhere that moves money. `splitFreelancerCents` is the freelancer's share only;
+   * `outcome` is validated against the closed set (`ResolveBody`) before it reaches the
+   * application layer. `splitFreelancerCents` is the freelancer's share only;
    * the client's is the remainder, computed by `awardFor` — two independently supplied
    * halves are two numbers that can fail to add up, and the pot they must add up to is
    * somebody's held money.
@@ -162,9 +184,7 @@ export function createDisputeRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:id/resolve', async (c) => {
     const id = disputeIdOf(c.req.param('id'));
     if (id === null) return c.json({ error: 'not_found' }, 404);
-    const body = await c.req.json<{ outcome?: unknown; splitFreelancerCents?: unknown; resolution?: unknown }>()
-      .catch(() => ({} as Record<string, unknown>));
-    if (!isDisputeOutcome(body.outcome)) return c.json({ error: 'unknown_outcome' }, 400);
+    const body = await parseBody(c, ResolveBody);
 
     const result = await resolveDispute(c.env as Env, db, {
       tenantId: c.get('tenantId') as number,
@@ -172,14 +192,14 @@ export function createDisputeRoutes(db: Db): Hono<HonoEnv> {
       mediatorUserId: c.get('userId') as string,
       authority: await authorityFor(c),
       outcome: body.outcome,
-      splitFreelancerCents: typeof body.splitFreelancerCents === 'number' ? body.splitFreelancerCents : null,
-      resolution: typeof body.resolution === 'string' ? body.resolution : null,
+      splitFreelancerCents: body.splitFreelancerCents ?? null,
+      resolution: body.resolution ?? null,
     });
     return result.ok
       // `settlement: 'manual'` on the returned dispute is not an error — the ledger is
       // correct either way and the surface says the transfer is pending an operator.
       ? c.json({ dispute: result.dispute })
-      : c.json({ error: result.reason }, refusalStatus(result.reason));
+      : refusalResponse(c, result.reason, ESCROW_REFUSAL_STATUS);
   });
 
   /** POST /:id/withdraw — the CLIENT calls off a dispute they raised. The application
@@ -194,7 +214,7 @@ export function createDisputeRoutes(db: Db): Hono<HonoEnv> {
     });
     return result.ok
       ? c.json({ dispute: result.dispute })
-      : c.json({ error: result.reason }, refusalStatus(result.reason));
+      : refusalResponse(c, result.reason, ESCROW_REFUSAL_STATUS);
   });
 
   return router;

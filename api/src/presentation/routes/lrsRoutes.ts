@@ -50,6 +50,8 @@ import {
   type DocumentScope,
 } from '../../application/learning/lrsDocuments';
 import { limitParam } from './queryParams';
+import { parseBody, z } from './requestBody';
+import { RequestValidationError } from '../../domain/shared/errors';
 
 /** Which query parameters each document resource reads. The whole difference
  *  between State, Activity Profile and Agent Profile is this table. */
@@ -129,11 +131,12 @@ export function createLrsRoutes(db: Db): Hono<HonoEnv> {
     const statementId = (c.req.query('statementId') ?? '').trim();
     if (!statementId) return c.json({ error: 'statementId is required on a PUT' }, 400);
 
-    const body = await c.req.json().catch(() => null);
-    if (Array.isArray(body)) return c.json({ error: 'a PUT stores exactly one statement' }, 400);
+    const read = await readStatementBody(c);
+    if (!read.ok) return c.json({ error: read.error, problems: read.problems }, 400);
+    if (Array.isArray(read.body)) return c.json({ error: 'a PUT stores exactly one statement' }, 400);
 
     const parsed = parseStatement(
-      { ...(body as Record<string, unknown> | null ?? {}), id: statementId },
+      { ...read.body, id: statementId },
       { now: new Date(), newId: () => crypto.randomUUID() },
     );
     if (!parsed.ok) return c.json({ error: 'invalid statement', problems: parsed.problems }, 400);
@@ -192,11 +195,32 @@ type ParsedBatch =
  * says a POST is all-or-nothing: storing the valid half and reporting the rest
  * leaves a client with no way to retry that does not duplicate what succeeded.
  */
-async function readStatements(c: Context<HonoEnv>): Promise<ParsedBatch> {
-  const body = await c.req.json().catch(() => null);
-  if (body === null) return { ok: false, error: 'a JSON body is required' };
+/** One statement object, or a batch of them — the two body shapes the standard allows. */
+const StatementObject = z.record(z.string(), z.unknown());
+const StatementsBody = z.union([StatementObject, z.array(StatementObject)]);
 
-  const incoming = Array.isArray(body) ? body : [body];
+/**
+ * The body as JSON, or the 400 the LRS answers with. Caught here rather than
+ * thrown to `app.onError` because the version-header middleware above only runs
+ * on a response that came back through it, and the standard requires the header
+ * on error responses too.
+ */
+async function readStatementBody(
+  c: Context<HonoEnv>,
+): Promise<{ ok: true; body: z.infer<typeof StatementsBody> } | { ok: false; error: string; problems: unknown }> {
+  try {
+    return { ok: true, body: await parseBody(c, StatementsBody) };
+  } catch (error) {
+    if (error instanceof RequestValidationError) return { ok: false, error: 'a JSON body is required', problems: error.issues };
+    throw error;
+  }
+}
+
+async function readStatements(c: Context<HonoEnv>): Promise<ParsedBatch> {
+  const read = await readStatementBody(c);
+  if (!read.ok) return read;
+
+  const incoming = Array.isArray(read.body) ? read.body : [read.body];
   if (incoming.length === 0) return { ok: true, statements: [] };
   if (incoming.length > MAX_STATEMENTS_PER_POST) {
     return { ok: false, error: `at most ${MAX_STATEMENTS_PER_POST} statements per request` };

@@ -46,7 +46,6 @@ import { routerToolSpecs, isRouterTool, handleRouterCall } from './toolRouter';
 import { setLastResolvedModel } from './lastResolvedModel';
 import { isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, linkedTicketsToComplete, isReadOnlyPlatformTool } from './chatWorkLinking';
 import { isCodeChangeTool, canChangeCodeHere, localToolsIn } from './localWorkspaceTools';
-import { withAuthoredBy, type DirectedRecipient } from './directedMessage';
 import { shippedToBaseBranch } from './shipVerification';
 import { toolActivity, activityTarget, type BrainRunActivity } from './runActivity';
 import { ReadCoverage, revisitAdvisory } from './readCoverage';
@@ -297,14 +296,6 @@ export interface BrainRunRequest {
    * than silently losing their ticket lineage.
    */
   chatMode?: ChatMode;
-  /**
-   * The invited agent this run answers AS — a turn the user addressed to a participant
-   * that the host runs itself (with its own tools) instead of asking the server to
-   * reply on the agent's behalf. Every assistant turn the run persists is attributed to
-   * them via `metadata.authoredBy`, so the transcript shows who spoke; the persona
-   * itself rides `resolvedSystemPrompt` (see `addressedAgentSystemPrompt`).
-   */
-  authoredBy?: DirectedRecipient;
   /**
    * Tool-iteration ceiling for THIS run (one iteration = one model turn, which may
    * batch several tool calls). Omit to use the shared default.
@@ -1367,10 +1358,6 @@ export { startRun as runBrainLoop };
 async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promise<void> {
   const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, routingMode, pickFallbackModel, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
   const convo = c.transcript;
-  // Metadata for every assistant turn THIS run persists: the model/account provenance,
-  // plus the participant it answers as when the turn was addressed to one. ONE helper so
-  // narration, the final answer and the forced-final synthesis can never disagree.
-  const persistMeta = (r: StreamChatResult): string | undefined => withAuthoredBy(provenanceMetadata(r), req.authoredBy);
   const allTools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined;
   // Tools this run has actually called — pinned into every later turn's selection
   // so a multi-step task never loses a tool it is mid-way through using.
@@ -1827,7 +1814,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       // empty (pure tool-call) turns persist nothing.
       const narration = result.text.trim();
       if (narration) {
-        const meta = persistMeta(result);
+        const meta = provenanceMetadata(result);
         const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: result.text, ...(meta ? { metadata: meta } : {}) }]);
         recordAppended(c, narrationMsg);
       }
@@ -2004,7 +1991,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       // same treatment a narration-before-tool-calls turn gets.
       const narration = result.text.trim();
       if (narration) {
-        const meta = persistMeta(result);
+        const meta = provenanceMetadata(result);
         const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: narration, ...(meta ? { metadata: meta } : {}) }]);
         recordAppended(c, narrationMsg);
       }
@@ -2028,7 +2015,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     // Final text — record in the transcript, persist, broadcast to mounted views.
     const finalText = result.text.trim() || 'No response.';
     convo.push({ role: 'assistant', content: finalText });
-    const finalMeta = persistMeta(result);
+    const finalMeta = provenanceMetadata(result);
     const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: finalText, ...(finalMeta ? { metadata: finalMeta } : {}) }]);
     c.streamingText = '';
     recordAppended(c, assistantMsg);
@@ -2140,7 +2127,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       const closingText = closing.text.trim();
       if (closingText) {
         convo.push({ role: 'assistant', content: closingText });
-        const meta = persistMeta(closing);
+        const meta = provenanceMetadata(closing);
         const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: closingText, ...(meta ? { metadata: meta } : {}) }]);
         c.streamingText = '';
         recordAppended(c, assistantMsg);

@@ -14,7 +14,7 @@
 
 import type { Env } from '../../env';
 import { ACTION_TYPES, type ActionType, normalizeActionType, learnedRoutingEnabled } from '@builderforce/learned-routing';
-import { ideProxy, readProxyChoice } from './LlmProxyService';
+import { completeJson, jsonSchemaFormat } from './completeJson';
 
 export interface TaskClassification {
   actionType: ActionType;
@@ -33,22 +33,15 @@ const SYSTEM_PROMPT =
   '`other` = none of the above. Respond with JSON only.';
 
 /** The strict JSON-schema the gateway enforces — a closed enum + a 0..1 confidence. */
-const RESPONSE_SCHEMA = {
-  type: 'json_schema' as const,
-  json_schema: {
-    name: 'task_action_type',
-    strict: true,
-    schema: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['action_type', 'confidence'],
-      properties: {
-        action_type: { type: 'string', enum: [...ACTION_TYPES] },
-        confidence: { type: 'number', minimum: 0, maximum: 1 },
-      },
-    },
+const RESPONSE_SCHEMA = jsonSchemaFormat('task_action_type', {
+  type: 'object',
+  additionalProperties: false,
+  required: ['action_type', 'confidence'],
+  properties: {
+    action_type: { type: 'string', enum: [...ACTION_TYPES] },
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
   },
-};
+});
 
 function coerceConfidence(v: unknown): number {
   const n = typeof v === 'number' ? v : Number(v);
@@ -72,28 +65,19 @@ export async function classifyTaskAction(
       (task.description ? `Description: ${task.description.slice(0, 4000)}\n` : '') +
       `\nClassify this ticket's primary action type.`;
 
-    const result = await ideProxy(env).complete({
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0,
-      max_tokens: 256,
-      response_format: RESPONSE_SCHEMA,
-      useCase: 'task_classification',
-    });
-
-    if (result.response.status >= 400) return { actionType: 'other', confidence: 0 };
-    const { content } = await readProxyChoice(result);
-    if (!content) return { actionType: 'other', confidence: 0 };
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(content);
-    } catch {
-      return { actionType: 'other', confidence: 0 };
-    }
-    const obj = parsed as { action_type?: unknown; confidence?: unknown } | null;
+    const out = await completeJson(
+      { kind: 'ide', env },
+      {
+        system: SYSTEM_PROMPT,
+        user: userPrompt,
+        schema: RESPONSE_SCHEMA,
+        temperature: 0,
+        maxTokens: 256,
+        useCase: 'task_classification',
+      },
+    );
+    if (!out.ok) return { actionType: 'other', confidence: 0 };
+    const obj = out.value as { action_type?: unknown; confidence?: unknown } | null;
     return {
       actionType: normalizeActionType(obj?.action_type),
       confidence: coerceConfidence(obj?.confidence),

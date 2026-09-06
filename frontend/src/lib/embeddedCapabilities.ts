@@ -1,9 +1,17 @@
-import type { CustomerEmbedFeatureKey } from './builderforceApi';
-
 export type EmbeddedCapabilityCategory = 'engage' | 'measure' | 'govern' | 'operate';
 
+/**
+ * A capability's key, as the API spells it (`/api/embed/features/<key>`).
+ *
+ * Derived from the registry rows below, so the union and the catalog cannot disagree:
+ * `builderforceApi`'s `CustomerEmbedFeatureKey` is this same union read back through
+ * {@link EMBEDDED_CAPABILITY_KEYS}, and adding a row here is the whole act of adding a
+ * key — there is no second list of thirteen literals to keep in step.
+ */
+export type EmbeddedCapabilityKey = (typeof CAPABILITY_ROWS)[number]['key'];
+
 export interface EmbeddedCapabilityDefinition {
-  key: CustomerEmbedFeatureKey;
+  key: EmbeddedCapabilityKey;
   icon: string;
   category: EmbeddedCapabilityCategory;
   apiName: string;
@@ -27,8 +35,8 @@ export interface EmbeddedCapabilityDefinition {
   benchmarkMonthlyUsd: number;
 }
 
-/** Canonical presentation registry for the customer-site embed control plane. */
-export const EMBEDDED_CAPABILITIES: readonly EmbeddedCapabilityDefinition[] = [
+/** The rows, `as const` so each `key` stays a literal the union above is read from. */
+const CAPABILITY_ROWS = [
   { key: 'feedback_widget', icon: 'message', category: 'engage', apiName: 'feedback', examples: 2, replaces: ['Canny', 'Productboard'], benchmarkMonthlyUsd: 79 },
   { key: 'support_widget', icon: 'message', category: 'engage', apiName: 'support', examples: 2, replaces: ['Intercom', 'Zendesk'], benchmarkMonthlyUsd: 99 },
   { key: 'lead_forms', icon: 'document', category: 'engage', apiName: 'forms', examples: 4, replaces: ['Typeform', 'HubSpot Forms'], benchmarkMonthlyUsd: 50 },
@@ -42,9 +50,13 @@ export const EMBEDDED_CAPABILITIES: readonly EmbeddedCapabilityDefinition[] = [
   { key: 'sourcing', icon: 'search', category: 'operate', apiName: 'sourcing', examples: 4, replaces: ['Apollo', 'Clearbit'], benchmarkMonthlyUsd: 99 },
   { key: 'hr_widget', icon: 'people', category: 'operate', apiName: 'hr', examples: 1, replaces: ['Workable', 'Greenhouse'], benchmarkMonthlyUsd: 149 },
   { key: 'status_page', icon: 'monitor', category: 'operate', apiName: 'status', examples: 2, replaces: ['Statuspage', 'Better Stack'], benchmarkMonthlyUsd: 29 },
-] as const;
+] as const satisfies readonly (Omit<EmbeddedCapabilityDefinition, 'key'> & { key: string })[];
 
-export const EMBEDDED_CAPABILITY_KEYS = EMBEDDED_CAPABILITIES.map(({ key }) => key);
+/** Canonical presentation registry for the customer-site embed control plane. */
+export const EMBEDDED_CAPABILITIES: readonly EmbeddedCapabilityDefinition[] = CAPABILITY_ROWS;
+
+/** Every capability key, in catalog order — the API's `CustomerEmbedFeatureKey` is read off this. */
+export const EMBEDDED_CAPABILITY_KEYS: readonly EmbeddedCapabilityKey[] = CAPABILITY_ROWS.map(({ key }) => key);
 
 /**
  * What the whole catalog is worth against the stack it displaces.
@@ -60,7 +72,7 @@ export const EMBEDDED_STACK_BENCHMARK_MONTHLY = EMBEDDED_CAPABILITIES
 export const EMBEDDED_REPLACED_TOOLS: readonly string[] =
   [...new Set(EMBEDDED_CAPABILITIES.flatMap((item) => item.replaces))];
 
-export function embeddedCapability(key: CustomerEmbedFeatureKey): EmbeddedCapabilityDefinition {
+export function embeddedCapability(key: EmbeddedCapabilityKey): EmbeddedCapabilityDefinition {
   return EMBEDDED_CAPABILITIES.find((item) => item.key === key) ?? EMBEDDED_CAPABILITIES[0];
 }
 
@@ -68,7 +80,7 @@ export function unifiedEmbedSnippet(publicKey: string): string {
   return `<script\n  src="https://cdn.builderforce.ai/embed/v1.js"\n  data-builderforce-key="${publicKey}"\n  async\n></script>`;
 }
 
-export function capabilitySnippet(key: CustomerEmbedFeatureKey): string {
+export function capabilitySnippet(key: EmbeddedCapabilityKey): string {
   const api = embeddedCapability(key).apiName;
   switch (key) {
     case 'usage_tracking':

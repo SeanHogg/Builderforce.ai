@@ -43,7 +43,7 @@ import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import { managerSystemicFindings, tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
+import { completeJson, jsonSchemaFormat } from '../llm/completeJson';
 import type { StallCause } from './stallTriage';
 import type { StallCensus, CensusCohort } from './stallCensus';
 
@@ -121,22 +121,24 @@ export const SYSTEMIC_DIAGNOSIS_PROMPT =
   + 'rather than instructing anyone to change it. '
   + 'Reply with JSON only.';
 
-const RESPONSE_SCHEMA = {
-  type: 'json_schema' as const,
-  json_schema: {
-    name: 'systemic_stall_finding',
-    strict: true,
-    schema: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['summary', 'remediation'],
-      properties: {
-        summary: { type: 'string' },
-        remediation: { type: 'string' },
-      },
-    },
+const RESPONSE_SCHEMA = jsonSchemaFormat('systemic_stall_finding', {
+  type: 'object',
+  additionalProperties: false,
+  required: ['summary', 'remediation'],
+  properties: {
+    summary: { type: 'string' },
+    remediation: { type: 'string' },
   },
-};
+});
+
+/** The two prose fields the model must fill; anything else is refused. */
+function readDiagnosis(value: unknown): { summary: string; remediation: string } | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const obj = value as Record<string, unknown>;
+  const summary = typeof obj.summary === 'string' ? obj.summary.trim() : '';
+  const remediation = typeof obj.remediation === 'string' ? obj.remediation.trim() : '';
+  return summary && remediation ? { summary, remediation } : null;
+}
 
 /**
  * One plain-English description per cause of what a LARGE cohort of it means, given to
@@ -226,24 +228,20 @@ export async function diagnoseSystemicCohort(
       ? `${SYSTEMIC_DIAGNOSIS_PROMPT}\n\nYou are diagnosing AS this manager — let your persona shape the judgement:\n${ctx.personaDirective.trim()}`
       : SYSTEMIC_DIAGNOSIS_PROMPT;
 
-    const result = await ideProxy(env).complete({
-      messages: [
-        { role: 'system', content: systemContent },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0,
-      max_tokens: 400,
-      response_format: RESPONSE_SCHEMA,
-      useCase: 'systemic_stall_diagnosis',
-    });
-    if (result.response.status >= 400) return null;
-    const { content } = await readProxyChoice(result);
-    if (!content) return null;
-
-    const obj = JSON.parse(content) as Record<string, unknown>;
-    const summary = typeof obj.summary === 'string' ? obj.summary.trim() : '';
-    const remediation = typeof obj.remediation === 'string' ? obj.remediation.trim() : '';
-    if (!summary || !remediation) return null;
+    const out = await completeJson(
+      { kind: 'ide', env },
+      {
+        system: systemContent,
+        user: userPrompt,
+        schema: RESPONSE_SCHEMA,
+        temperature: 0,
+        maxTokens: 400,
+        useCase: 'systemic_stall_diagnosis',
+      },
+      readDiagnosis,
+    );
+    if (!out.ok) return null;
+    const { summary, remediation } = out.value;
     // Fall back to the measured heuristic rather than file "raise the retry limit to 15"
     // as a work instruction. Returning null is what hands the cohort to
     // `heuristicFinding`, whose remediation is derived from CAUSE_BRIEF and can never

@@ -22,6 +22,7 @@ import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrast
 import { queryFacts, factsSchema, toFactRow } from '../../application/facts/factsQuery';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseBody, z, zNonEmptyString, zPositiveInt } from './requestBody';
 
 const SHORT_TTL = { kvTtlSeconds: 120, l1TtlMs: 15_000 };
 
@@ -40,14 +41,22 @@ function clampConfidence(raw: unknown): number | null {
   return Math.min(Math.max(n, 0), 1);
 }
 
-interface FactBody {
-  subject?: string;
-  predicate?: string;
-  object?: string;
-  source?: string | null;
-  confidence?: number | null;
-  projectId?: number | null;
-}
+/** PATCH body: every field optional; `null` clears source/confidence/projectId. */
+const FactPatchBody = z.object({
+  subject: zNonEmptyString.optional(),
+  predicate: zNonEmptyString.optional(),
+  object: zNonEmptyString.optional(),
+  source: z.string().nullable().optional(),
+  confidence: z.number().nullable().optional(),
+  projectId: zPositiveInt.nullable().optional(),
+});
+
+/** POST body: the triple is required. */
+const FactCreateBody = FactPatchBody.extend({
+  subject: zNonEmptyString,
+  predicate: zNonEmptyString,
+  object: zNonEmptyString,
+});
 
 export function createFactsRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -88,21 +97,18 @@ export function createFactsRoutes(db: Db): Hono<HonoEnv> {
   router.post('/', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
-    const body = await c.req.json<FactBody>().catch(() => ({} as FactBody));
-    if (!body.subject?.trim() || !body.predicate?.trim() || !body.object?.trim()) {
-      return c.json({ error: 'subject, predicate and object are required' }, 400);
-    }
+    const body = await parseBody(c, FactCreateBody);
     const [row] = await db.insert(facts).values({
       tenantId,
       projectId: body.projectId ?? null,
-      subject: body.subject.trim().slice(0, 255),
-      predicate: body.predicate.trim().slice(0, 255),
-      object: body.object.trim(),
+      subject: body.subject.slice(0, 255),
+      predicate: body.predicate.slice(0, 255),
+      object: body.object,
       source: body.source?.trim().slice(0, 255) || null,
       confidence: clampConfidence(body.confidence),
       createdBy: userId ?? null,
     }).returning();
-    if (!row) return c.json({ error: 'Failed to create fact' }, 500);
+    if (!row) throw new Error('facts insert returned no row');
     await bumpCacheVersion(c.env as Env, factsVersionKey(tenantId));
     return c.json(toFactRow(row), 201);
   });
@@ -111,12 +117,12 @@ export function createFactsRoutes(db: Db): Hono<HonoEnv> {
   router.patch('/:id', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const body = await c.req.json<FactBody>().catch(() => ({} as FactBody));
+    const body = await parseBody(c, FactPatchBody);
     const set: Record<string, unknown> = { updatedAt: new Date() };
-    if (body.subject !== undefined) set.subject = String(body.subject).trim().slice(0, 255);
-    if (body.predicate !== undefined) set.predicate = String(body.predicate).trim().slice(0, 255);
-    if (body.object !== undefined) set.object = String(body.object).trim();
-    if (body.source !== undefined) set.source = body.source?.toString().trim().slice(0, 255) || null;
+    if (body.subject !== undefined) set.subject = body.subject.slice(0, 255);
+    if (body.predicate !== undefined) set.predicate = body.predicate.slice(0, 255);
+    if (body.object !== undefined) set.object = body.object;
+    if (body.source !== undefined) set.source = body.source?.trim().slice(0, 255) || null;
     if (body.confidence !== undefined) set.confidence = clampConfidence(body.confidence);
     if (body.projectId !== undefined) set.projectId = body.projectId ?? null;
 

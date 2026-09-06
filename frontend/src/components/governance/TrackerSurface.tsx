@@ -27,11 +27,24 @@ export interface TrackerField {
   inList?: boolean;
 }
 
+/**
+ * An optional per-row detail action. A tracker whose rows have a child surface
+ * (a scan's findings) declares it in its config and TrackerSurface renders it
+ * generically: one button per row labelled by `labelKey` (a full next-intl key,
+ * NOT an English literal like the field labels), and `render` producing the
+ * detail surface — a SlideOutPanel, by convention — for the chosen row.
+ */
+export interface TrackerRowAction {
+  labelKey: string;
+  render: (row: TrackerRow, close: () => void) => React.ReactNode;
+}
+
 export interface TrackerSurfaceProps {
   title: string;
   /** Full API route for this tracker, e.g. '/api/product/mvp'. */
   apiBase: string;
   fields: TrackerField[];
+  rowAction?: TrackerRowAction;
 }
 
 /**
@@ -48,9 +61,13 @@ function cellText(fmt: Formatter, t: (key: string) => string, field: TrackerFiel
   return String(value);
 }
 
-export function TrackerSurface({ title, apiBase, fields }: TrackerSurfaceProps) {
+export function TrackerSurface({ title, apiBase, fields, rowAction }: TrackerSurfaceProps) {
   const fmt = useFormat();
   const tCommon = useTranslations('common');
+  const tTracker = useTranslations('governance.tracker');
+  // Root-namespace translator: `rowAction.labelKey` is a FULL key, so a tracker's
+  // detail action can live in whatever namespace owns that surface.
+  const tRoot = useTranslations();
   const api = useMemo(() => segmentTrackerClient(apiBase), [apiBase]);
   const listFields = fields.filter((f) => f.inList !== false && f.type !== 'textarea').slice(0, 5);
 
@@ -60,10 +77,11 @@ export function TrackerSurface({ title, apiBase, fields }: TrackerSurfaceProps) 
   const [form, setForm] = useState<Record<string, unknown> | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [actionRow, setActionRow] = useState<TrackerRow | null>(null);
 
   const load = () => {
     setLoading(true);
-    api.list().then(setRows).catch(() => setError('Could not load.')).finally(() => setLoading(false));
+    api.list().then(setRows).catch(() => setError(tTracker('loadFailed'))).finally(() => setLoading(false));
   };
   useEffect(load, [api]);
 
@@ -80,7 +98,7 @@ export function TrackerSurface({ title, apiBase, fields }: TrackerSurfaceProps) 
     if (!form) return;
     for (const f of fields) {
       if (f.required && (form[f.key] === '' || form[f.key] == null)) {
-        setError(`${f.label} is required`);
+        setError(tTracker('required', { field: f.label }));
         return;
       }
     }
@@ -95,7 +113,7 @@ export function TrackerSurface({ title, apiBase, fields }: TrackerSurfaceProps) 
       setEditingId(null);
       load();
     } catch {
-      setError('Save failed (manager role required for changes).');
+      setError(tTracker('saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -106,24 +124,24 @@ export function TrackerSurface({ title, apiBase, fields }: TrackerSurfaceProps) 
     try {
       await api.remove(id);
     } catch {
-      setError('Delete failed.');
+      setError(tTracker('deleteFailed'));
       load();
     }
   };
 
-  if (loading) return <div style={{ color: 'var(--text-secondary)' }}>Loading {title}…</div>;
+  if (loading) return <div style={{ color: 'var(--text-secondary)' }}>{tTracker('loadingTitle', { title })}</div>;
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div style={{ fontSize: 16, fontWeight: 600 }}>{title}</div>
-        {!form && <button onClick={openAdd} style={btn}>+ Add</button>}
+        {!form && <button onClick={openAdd} style={btn}>{tTracker('add')}</button>}
       </div>
       {error && <div role="alert" style={{ color: 'var(--error-text)', marginBottom: 8 }}>{error}</div>}
 
       {form ? (
         <div style={card}>
-          <div style={{ fontWeight: 600, marginBottom: 10 }}>{editingId ? 'Edit' : 'New'} {title}</div>
+          <div style={{ fontWeight: 600, marginBottom: 10 }}>{editingId ? tTracker('editTitle', { title }) : tTracker('newTitle', { title })}</div>
           <div style={{ display: 'grid', gap: 10, gridTemplateColumns: '1fr 1fr' }}>
             {fields.map((f) => (
               <label key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: 4, gridColumn: f.type === 'textarea' ? '1 / -1' : undefined }}>
@@ -133,12 +151,12 @@ export function TrackerSurface({ title, apiBase, fields }: TrackerSurfaceProps) 
             ))}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button onClick={save} disabled={saving} style={btn}>{saving ? 'Saving…' : 'Save'}</button>
-            <button onClick={() => { setForm(null); setEditingId(null); setError(null); }} style={btnGhost}>Cancel</button>
+            <button onClick={save} disabled={saving} style={btn}>{saving ? tCommon('saving') : tCommon('save')}</button>
+            <button onClick={() => { setForm(null); setEditingId(null); setError(null); }} style={btnGhost}>{tCommon('cancel')}</button>
           </div>
         </div>
       ) : rows.length === 0 ? (
-        <div style={{ color: 'var(--text-secondary)' }}>No entries yet.</div>
+        <div style={{ color: 'var(--text-secondary)' }}>{tTracker('noEntries')}</div>
       ) : (
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
@@ -156,14 +174,16 @@ export function TrackerSurface({ title, apiBase, fields }: TrackerSurfaceProps) 
                   </td>
                 ))}
                 <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  <button onClick={() => openEdit(row)} style={linkBtn}>Edit</button>
-                  <button onClick={() => remove(row.id)} style={{ ...linkBtn, color: 'var(--error-text)' }}>Delete</button>
+                  {rowAction && <button onClick={() => setActionRow(row)} style={linkBtn}>{tRoot(rowAction.labelKey)}</button>}
+                  <button onClick={() => openEdit(row)} style={linkBtn}>{tCommon('edit')}</button>
+                  <button onClick={() => remove(row.id)} style={{ ...linkBtn, color: 'var(--error-text)' }}>{tCommon('delete')}</button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
+      {rowAction && actionRow && rowAction.render(actionRow, () => setActionRow(null))}
     </div>
   );
 }

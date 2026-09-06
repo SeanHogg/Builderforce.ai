@@ -32,7 +32,12 @@ import { dispatchCloudRunForTask } from './runtimeRoutes';
 import { stampExecutionAuthority, humanDirected } from '../../application/runtime/executionAuthority';
 import { gatewayExtractor } from '../../application/llm/gatewayExtractor';
 import { completeForTenant } from '../../application/llm/tenantProxy';
+import { readProxyChoice } from '../../application/llm/LlmProxyService';
 import { MODALITIES } from '../../application/compile';
+import { failResponse } from '../middleware/errorResponse';
+import { parseBody, z, zOptionalString, zPositiveInt } from './requestBody';
+
+const SOURCE = 'presentation/routes/compileRoutes.ts';
 
 /** The modality adapters' LLM — the shared free-pool extractor. */
 const compileExtractor = (env: HonoEnv['Bindings']): LlmComplete =>
@@ -44,24 +49,38 @@ function knowledgeRecaller(db: Db, tenantId: number): RecallKnowledge {
   return (query, topK) => recallSops(db, tenantId, query, topK);
 }
 
-function isModality(m: unknown): m is Need['modality'] {
-  return typeof m === 'string' && (MODALITIES as readonly string[]).includes(m);
-}
+/**
+ * One need, admitted by its modality. The per-modality payload (`text`, `definition`,
+ * `findings`, …) is validated by the adapter that lowers it, so the shape stays open
+ * here — `z.looseObject` keeps every field the adapter reads.
+ */
+const NeedBody = z.looseObject({ modality: z.enum(MODALITIES) });
 
-/** Validate + normalise the request body's needs into a `Need[]`. */
-function readNeeds(body: { need?: unknown; needs?: unknown }): Need[] | { error: string } {
-  const raw = Array.isArray(body.needs) ? body.needs : body.need ? [body.need] : [];
-  if (raw.length === 0) return { error: 'need (or needs[]) is required' };
-  for (const n of raw) {
-    if (!n || typeof n !== 'object' || !isModality((n as { modality?: unknown }).modality)) {
-      return { error: `each need must have a modality of: ${MODALITIES.join(', ')}` };
-    }
-  }
-  return raw as Need[];
-}
+/** `need` OR `needs[]` — at least one. Shared by both routes. */
+const NeedsFields = {
+  need: NeedBody.optional(),
+  needs: z.array(NeedBody).optional(),
+  engineId: zOptionalString,
+};
+const needsPresent = (body: { need?: unknown; needs?: unknown[] }) => (body.needs?.length ?? 0) > 0 || !!body.need;
+const NEEDS_REQUIRED = { message: 'need (or needs[]) is required', path: ['need'] };
 
-function readSurface(v: unknown): AgentSurface | null {
-  return typeof v === 'string' && (DEPLOY_SURFACES as readonly string[]).includes(v) ? (v as AgentSurface) : null;
+const CompileBody = z.object({
+  ...NeedsFields,
+  deploy: z.enum(DEPLOY_SURFACES).optional(),
+  taskId: zPositiveInt.optional(),
+  cloudAgentRef: zOptionalString,
+  projectId: zPositiveInt.optional(),
+}).refine(needsPresent, NEEDS_REQUIRED);
+
+const CompileRunBody = z.object({
+  ...NeedsFields,
+  sample: zOptionalString,
+}).refine(needsPresent, NEEDS_REQUIRED);
+
+/** The admitted body's needs as the `Need[]` the compiler takes. */
+function readNeeds(body: { need?: unknown; needs?: unknown[] }): Need[] {
+  return (Array.isArray(body.needs) && body.needs.length > 0 ? body.needs : [body.need]) as Need[];
 }
 
 export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hono<HonoEnv> {
@@ -71,10 +90,8 @@ export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hon
   // Compile one or more needs → AgentSpec (+ optional deploy plan; + live dispatch
   // when a deploy surface is given and the run can be started server-side).
   router.post('/', async (c) => {
-    type Body = { need?: unknown; needs?: unknown; deploy?: unknown; engineId?: string; taskId?: number; cloudAgentRef?: string; projectId?: number };
-    const body = await c.req.json<Body>().catch((): Body => ({}));
+    const body = await parseBody(c, CompileBody);
     const needs = readNeeds(body);
-    if ('error' in needs) return c.json(needs, 400);
 
     let spec;
     try {
@@ -82,14 +99,11 @@ export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hon
         llm: compileExtractor(c.env),
         recallKnowledge: knowledgeRecaller(db, c.get('tenantId') as number),
       });
-    } catch (err) {
-      return c.json({ error: err instanceof Error ? err.message : 'compile failed' }, 502);
+    } catch (error) {
+      return failResponse(c, error, { source: SOURCE, operation: 'compile-needs' });
     }
 
-    const surface = readSurface(body.deploy);
-    if (body.deploy && !surface) {
-      return c.json({ error: `deploy surface must be one of: ${DEPLOY_SURFACES.join(', ')}` }, 400);
-    }
+    const surface = body.deploy;
     if (!surface) return c.json({ spec });
 
     // A cloud dispatcher that starts a run against a board task, carrying the spec's
@@ -126,10 +140,8 @@ export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hon
 
   // Compile → deploy(cloud-durable) → run a real first turn through the gateway.
   router.post('/run', async (c) => {
-    type Body = { need?: unknown; needs?: unknown; sample?: string; engineId?: string };
-    const body = await c.req.json<Body>().catch((): Body => ({}));
+    const body = await parseBody(c, CompileRunBody);
     const needs = readNeeds(body);
-    if ('error' in needs) return c.json(needs, 400);
 
     const tenantId = c.get('tenantId') as number;
 
@@ -139,8 +151,8 @@ export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hon
         llm: compileExtractor(c.env),
         recallKnowledge: knowledgeRecaller(db, tenantId),
       });
-    } catch (err) {
-      return c.json({ error: err instanceof Error ? err.message : 'compile failed' }, 502);
+    } catch (error) {
+      return failResponse(c, error, { source: SOURCE, operation: 'compile-needs' });
     }
 
     // A step-bearing spec (a process chart / a diagnostic's improvement flow) is a
@@ -157,15 +169,12 @@ export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hon
       });
     }
 
+    // The surface is chosen from the spec's OWN allow-list, so `deploy` refusing it
+    // is an invariant failure: it throws to the global handler.
     const surface: AgentSurface = (spec.surfaces?.find((s) => s === 'cloud-durable') ?? spec.surfaces?.[0] ?? 'cloud-durable') as AgentSurface;
-    let plan;
-    try {
-      plan = deploy(spec, surface, body.engineId ? { engineId: body.engineId } : {});
-    } catch (err) {
-      return c.json({ error: err instanceof Error ? err.message : 'deploy failed' }, 400);
-    }
+    const plan = deploy(spec, surface, body.engineId ? { engineId: body.engineId } : {});
 
-    const sample = (typeof body.sample === 'string' && body.sample.trim()) || 'Briefly introduce yourself and what you can do for me.';
+    const sample = body.sample ?? 'Briefly introduce yourself and what you can do for me.';
     try {
       // The compiled agent's first real turn → run on the tenant's connected BYO
       // account when present; the compiled `runInput.model` is honored only when it
@@ -180,13 +189,10 @@ export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hon
         useCase: 'agent_compile_run',
       }, { meterUseCase: 'agent_compile_run', explicitModel: plan.runInput.model });
       if (result.response.status >= 400) return c.json({ spec, plan, error: `gateway ${result.response.status}` }, 502);
-      const raw = (await result.response.json().catch(() => null)) as
-        | { choices?: Array<{ message?: { content?: unknown } }> }
-        | null;
-      const output = raw?.choices?.[0]?.message?.content;
-      return c.json({ spec, plan, output: typeof output === 'string' ? output : '' });
-    } catch (err) {
-      return c.json({ spec, plan, error: err instanceof Error ? err.message : 'run failed' }, 502);
+      const { content } = await readProxyChoice(result);
+      return c.json({ spec, plan, output: content });
+    } catch (error) {
+      return failResponse(c, error, { source: SOURCE, operation: 'run-compiled-agent' }, { spec, plan });
     }
   });
 

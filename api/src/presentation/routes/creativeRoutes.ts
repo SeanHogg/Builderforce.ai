@@ -29,9 +29,14 @@
  * Not cached: a generative call keyed on a free-text brief.
  */
 import { Hono, type Context } from 'hono';
+import { CANVAS_VIEWPORTS } from '@builderforce/creation-canvas-contract';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { failResponse } from '../middleware/errorResponse';
+import { parseBody, z, zNonEmptyString, zOptionalString } from './requestBody';
 import type { HonoEnv } from '../../env';
+import { ServiceUnavailableError } from '../../domain/shared/errors';
 import { ideProxy, readProxyChoice } from '../../application/llm/LlmProxyService';
+import { JSON_OBJECT_FORMAT, completeJson, type CompleteJsonFailureReason } from '../../application/llm/completeJson';
 import { tenantProxyForPlan } from '../../application/llm/tenantProxy';
 import {
   GEOMETRY_RESPONSE_SCHEMAS,
@@ -43,18 +48,20 @@ import {
   stlFromSolids,
 } from '../../application/creative/geometryService';
 import { normalizeGameDocument, validateGameDocument } from '../../application/game/gameDocument';
-import { composeStructured } from '../../application/game';
 import { ROBLOX_RESPONSE_SCHEMA, ROBLOX_SYSTEM_PROMPT, rbxlxFromSpec, readRobloxSpec } from '../../application/game/robloxPlace';
 import { findStockImages } from '../../application/creative/stockImageSearch';
 import {
   SCREENSHOT_REASON_STATUS,
   ScreenshotUnavailableError,
   captureWebScreenshotCached,
-  isScreenshotViewport,
 } from '../../application/web/webScreenshot';
 import { limitParam } from './queryParams';
 
-/** Every kind this route can generate, and what it produces. */
+/** Every kind this route can generate — the `kind` a `/generate` body may carry. */
+const CREATIVE_KINDS = ['cad', 'model3d', 'game', 'resume', 'podcast', 'template'] as const;
+type CreativeKind = (typeof CREATIVE_KINDS)[number];
+
+/** What each kind produces. `satisfies` keeps this table and {@link CREATIVE_KINDS} in step. */
 const KINDS = {
   cad: { artifactKind: 'cad', extension: 'dxf', mimeType: 'application/dxf', outputFormat: 'DXF' },
   model3d: { artifactKind: 'model3d', extension: 'stl', mimeType: 'model/stl', outputFormat: 'STL' },
@@ -62,9 +69,30 @@ const KINDS = {
   resume: { artifactKind: 'resume', extension: 'md', mimeType: 'text/markdown', outputFormat: 'Markdown' },
   podcast: { artifactKind: 'podcast-script', extension: 'md', mimeType: 'text/markdown', outputFormat: 'Markdown script' },
   template: { artifactKind: 'template', extension: 'json', mimeType: 'application/json', outputFormat: 'JSON' },
-} as const;
+} as const satisfies Record<CreativeKind, { artifactKind: string; extension: string; mimeType: string; outputFormat: string }>;
 
-type CreativeKind = keyof typeof KINDS;
+const SOURCE = 'presentation/routes/creativeRoutes.ts';
+
+const ScreenshotBody = z.object({
+  url: zNonEmptyString,
+  viewport: z.enum(CANVAS_VIEWPORTS).optional(),
+  fullPage: z.boolean().optional(),
+});
+
+const AttachmentReadBody = z.object({
+  sourceFileKey: zOptionalString,
+  fileName: zOptionalString,
+  dataUrl: zOptionalString,
+});
+
+const GenerateBody = z.object({
+  kind: z.enum(CREATIVE_KINDS),
+  title: zOptionalString,
+  brief: zNonEmptyString,
+  templateId: zOptionalString,
+  /** A game's platform. Only `roblox` changes the machine; anything else is the HTML game. */
+  platform: zOptionalString,
+});
 
 const AUTHORING_PROMPTS: Record<'game' | 'resume' | 'podcast' | 'template', string> = {
   // The touch, viewport and offline requirements are NOT decoration: this exact
@@ -98,11 +126,25 @@ const MAX_TOKENS: Record<CreativeKind, number> = {
   cad: 1600, model3d: 1600, game: 8000, resume: 2400, podcast: 3200, template: 1600,
 };
 
+/**
+ * What a `completeJson` failure says for the free-pool generators. `invalid` is
+ * per-kind (the validator's own sentence) and is mapped at the site.
+ */
+const GENERATOR_FAILURE: Record<Exclude<CompleteJsonFailureReason, 'invalid'>, string> = {
+  gateway: 'Creative generation is unavailable',
+  empty: 'The generator returned nothing',
+  unparseable: 'The generator did not return a readable spec',
+};
+
 function fileSafe(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'builderforce-artifact';
 }
 
-/** Models fence code even when told not to; the fence is not part of the file. */
+/**
+ * Models fence code even when told not to; the fence is not part of the file.
+ * For the TEXT deliverables only (a game, a résumé, a script) — a JSON reply goes
+ * through `completeJson`, whose reader strips its own fence.
+ */
 function stripFence(text: string): string {
   const fenced = /^\s*```[a-z]*\s*\n([\s\S]*?)\n?```\s*$/i.exec(text);
   return (fenced ? fenced[1]! : text).trim();
@@ -169,19 +211,9 @@ Rules:
 - Preserve every supported item and bullet.
 - Shape: { basics: { name, label, image, email, phone, url, summary, location: { address, postalCode, city, countryCode, region } }, work: [{ id, name, position, url, startDate, endDate, summary, highlights }], education: [{ id, institution, url, area, studyType, startDate, endDate, score, courses }], skills: [{ id, name, level, keywords }], volunteer: [], projects: [], awards: [], certificates: [], publications: [], languages: [], interests: [], references: [] }.`;
 
-function parsedJsonObject(raw: string): Record<string, unknown> | null {
-  const clean = stripFence(raw);
-  try {
-    const parsed = JSON.parse(clean) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
-  } catch {
-    const start = clean.indexOf('{'); const end = clean.lastIndexOf('}');
-    if (start < 0 || end <= start) return null;
-    try {
-      const parsed = JSON.parse(clean.slice(start, end + 1)) as unknown;
-      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
-    } catch { return null; }
-  }
+/** A `completeJson` validator that admits a plain object and refuses arrays and scalars. */
+function jsonObjectOnly(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 }
 
 function bytesBase64(buffer: ArrayBuffer): string {
@@ -205,7 +237,11 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
     try {
       return c.json({ results: await findStockImages(c.env, query, limit) });
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : 'Stock image search failed' }, 503);
+      // Unconfigured keys and a provider's own failure are both "not available here":
+      // a 503 the global handler reports, with the provider's text kept out of the body.
+      const unavailable = new ServiceUnavailableError('Stock image search is unavailable');
+      unavailable.cause = error;
+      throw unavailable;
     }
   });
 
@@ -228,13 +264,10 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
    * session costs one render rather than one per turn.
    */
   router.post('/screenshot', async (c) => {
-    type ShotBody = { url?: unknown; viewport?: unknown; fullPage?: unknown };
-    const body = await c.req.json<ShotBody>().catch(() => ({} as ShotBody));
-    const url = String(body.url ?? '').trim();
-    if (!url) return c.json({ error: 'url is required' }, 400);
-    const viewport = isScreenshotViewport(body.viewport) ? body.viewport : 'desktop';
+    const body = await parseBody(c, ScreenshotBody);
+    const viewport = body.viewport ?? 'desktop';
     try {
-      const shot = await captureWebScreenshotCached(c.env, url, { viewport, fullPage: body.fullPage === true });
+      const shot = await captureWebScreenshotCached(c.env, body.url, { viewport, fullPage: body.fullPage === true });
       return c.json(shot);
     } catch (error) {
       if (error instanceof ScreenshotUnavailableError) {
@@ -314,28 +347,35 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
     }
 
     const dataUrl = extractedText ? null : `data:${mimeType};base64,${bytesBase64(fileBytes)}`;
-    const content: unknown = extractedText
+    const content = extractedText
       ? `${RESUME_EXTRACTION_PROMPT}\n\nSOURCE RESUME:\n${extractedText}`
       : extension === 'pdf' || extension === 'doc' || extension === 'docx'
         ? [{ type: 'text', text: RESUME_EXTRACTION_PROMPT }, { type: 'file', file: { filename: fileName, file_data: dataUrl } }]
         : [{ type: 'text', text: RESUME_EXTRACTION_PROMPT }, { type: 'image_url', image_url: { url: dataUrl } }];
+
+    // Resolving the tenant's plan/credentials can throw; the completion itself cannot.
+    let proxy;
     try {
-      const { proxy } = await tenantProxyForPlan(c.env, c.get('tenantId'));
-      const result = await proxy.complete({
-        messages: [{ role: 'user', content } as never],
-        response_format: { type: 'json_object' },
-        temperature: 0,
-        max_tokens: 6000,
-        useCase: extractedText ? 'resume_structured_extraction' : 'resume_ocr',
-      });
-      if (result.response.status >= 400) return c.json({ error: 'Resume extraction is unavailable', sourceFileKey }, 502);
-      const choice = await readProxyChoice(result);
-      const document = parsedJsonObject(choice.content);
-      if (!document) return c.json({ error: 'Resume extraction returned invalid structured data', sourceFileKey }, 502);
-      return c.json({ document, sourceFileKey, provider: result.resolvedVendor, model: result.resolvedModel });
+      ({ proxy } = await tenantProxyForPlan(c.env, c.get('tenantId')));
     } catch (error) {
-      return c.json({ error: 'Resume extraction failed', detail: error instanceof Error ? error.message : String(error), sourceFileKey }, 502);
+      return failResponse(c, error, { source: SOURCE, operation: 'resolve-resume-extraction-proxy' }, { sourceFileKey });
     }
+    const out = await completeJson(
+      { kind: 'proxy', proxy },
+      {
+        system: '',
+        user: content,
+        schema: JSON_OBJECT_FORMAT,
+        maxTokens: 6000,
+        useCase: extractedText ? 'resume_structured_extraction' : 'resume_ocr',
+      },
+      jsonObjectOnly,
+    );
+    if (!out.ok) {
+      const error = out.reason === 'gateway' ? 'Resume extraction is unavailable' : 'Resume extraction returned invalid structured data';
+      return c.json({ error, sourceFileKey }, 502);
+    }
+    return c.json({ document: out.value, sourceFileKey, provider: out.result?.resolvedVendor ?? null, model: out.model });
   });
 
   /**
@@ -397,11 +437,10 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
    * `document` kind already holds.
    */
   router.post('/attachments/read', async (c) => {
-    type ReadBody = { sourceFileKey?: unknown; fileName?: unknown; dataUrl?: unknown };
-    const body = await c.req.json<ReadBody>().catch(() => ({} as ReadBody));
-    const sourceFileKey = String(body.sourceFileKey ?? '').trim();
-    const inlineDataUrl = String(body.dataUrl ?? '').trim();
-    const suppliedName = String(body.fileName ?? '').trim();
+    const body = await parseBody(c, AttachmentReadBody);
+    const sourceFileKey = body.sourceFileKey ?? '';
+    const inlineDataUrl = body.dataUrl ?? '';
+    const suppliedName = body.fileName ?? '';
 
     let bytes: ArrayBuffer;
     let fileName: string;
@@ -472,7 +511,7 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
         model: typeof choice.body?.model === 'string' ? choice.body.model : null,
       });
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : 'Reading this file failed', sourceFileKey: sourceFileKey || null }, 502);
+      return failResponse(c, error, { source: SOURCE, operation: 'read-attachment' }, { sourceFileKey: sourceFileKey || null });
     }
   });
 
@@ -482,16 +521,13 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
    * → { artifactKind, fileName, mimeType, outputFormat, content, provider, model, validationDetail, summary? }
    */
   router.post('/generate', async (c) => {
-    type GenerateBody = { kind?: unknown; title?: unknown; brief?: unknown; templateId?: unknown; platform?: unknown };
-    const body: GenerateBody = await c.req.json<GenerateBody>().catch(() => ({} as GenerateBody));
-    const kind = String(body.kind ?? '') as CreativeKind;
+    const body = await parseBody(c, GenerateBody);
+    const { kind } = body;
     const target = KINDS[kind];
-    if (!target) return c.json({ error: 'Unsupported creative kind', kind: String(body.kind ?? '') }, 400);
 
-    const title = String(body.title ?? '').trim().slice(0, 200) || kind;
-    const brief = String(body.brief ?? '').trim().slice(0, 8000);
-    if (!brief) return c.json({ error: 'A brief is required to generate this deliverable' }, 400);
-    const templateId = typeof body.templateId === 'string' ? body.templateId.trim().slice(0, 120) : '';
+    const title = (body.title ?? kind).slice(0, 200);
+    const brief = body.brief.slice(0, 8000);
+    const templateId = body.templateId?.slice(0, 120) ?? '';
     const stem = fileSafe(title);
 
     /**
@@ -509,23 +545,26 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
      * and a hand-written one opens to an error or to silently defaulted parts.
      */
     if (kind === 'game' && body.platform === 'roblox') {
-      let spec;
-      try {
-        spec = readRobloxSpec(
-          await composeStructured(c.env)({
-            system: ROBLOX_SYSTEM_PROMPT,
-            user: `Title: ${title}\nBrief: ${brief}`,
-            schema: ROBLOX_RESPONSE_SCHEMA,
-            maxTokens: 8000,
-            useCase: 'creative_game_roblox',
-          }),
-        );
-      } catch (err) {
-        return c.json({ error: 'Roblox place generation failed', detail: err instanceof Error ? err.message : String(err) }, 502);
+      const out = await completeJson(
+        { kind: 'ide', env: c.env },
+        {
+          system: ROBLOX_SYSTEM_PROMPT,
+          user: `Title: ${title}\nBrief: ${brief}`,
+          schema: ROBLOX_RESPONSE_SCHEMA,
+          temperature: 0.4,
+          maxTokens: 8000,
+          useCase: 'creative_game_roblox',
+        },
+        readRobloxSpec,
+      );
+      if (!out.ok) {
+        return c.json({
+          error: out.reason === 'invalid'
+            ? 'The generated Roblox place had no buildable parts or no server script, so it would open empty'
+            : GENERATOR_FAILURE[out.reason],
+        }, 502);
       }
-      if (!spec) {
-        return c.json({ error: 'The generated Roblox place had no buildable parts or no server script, so it would open empty' }, 502);
-      }
+      const spec = out.value;
       return c.json({
         artifactKind: 'roblox-place',
         fileName: `${stem}.rbxlx`,
@@ -543,64 +582,88 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
 
     const geometry = kind === 'cad' || kind === 'model3d';
     const userPrompt = `Title: ${title}\n${templateId ? `Template: ${templateId}\n` : ''}Brief: ${brief}`;
-
-    let result;
-    try {
-      result = await ideProxy(c.env).complete({
-        messages: [
-          { role: 'system', content: geometry ? GEOMETRY_SYSTEM_PROMPTS[kind] : AUTHORING_PROMPTS[kind] },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: geometry ? 0.2 : 0.7,
-        max_tokens: MAX_TOKENS[kind],
-        ...(geometry ? { response_format: GEOMETRY_RESPONSE_SCHEMAS[kind] } : {}),
-        ...(kind === 'template' ? { response_format: { type: 'json_object' as const } } : {}),
-        useCase: `creative_${kind}`,
-      });
-    } catch (err) {
-      return c.json({ error: 'Creative generation failed', detail: err instanceof Error ? err.message : String(err) }, 502);
-    }
-    if (result.response.status >= 400) return c.json({ error: 'Creative generation is unavailable' }, 502);
-    const { content } = await readProxyChoice(result);
-    if (!content.trim()) return c.json({ error: 'The generator returned nothing' }, 502);
-
-    const common = {
+    const common = (model: string | null) => ({
       artifactKind: target.artifactKind,
       fileName: `${stem}${kind === 'podcast' ? '-script' : ''}.${target.extension}`,
       mimeType: target.mimeType,
       outputFormat: target.outputFormat,
       provider: geometry ? 'builderforce-geometry' : 'builderforce-authoring',
-      model: result.resolvedModel,
-    };
+      model,
+    });
 
-    if (geometry) {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(content);
-      } catch {
-        return c.json({ error: 'The geometry generator did not return a readable spec' }, 502);
+    // ── JSON deliverables: a geometry SPEC (strict schema) or a template (any object) ──
+    if (geometry || kind === 'template') {
+      const out = await completeJson(
+        { kind: 'ide', env: c.env },
+        {
+          system: geometry ? GEOMETRY_SYSTEM_PROMPTS[kind] : AUTHORING_PROMPTS.template,
+          user: userPrompt,
+          schema: geometry ? GEOMETRY_RESPONSE_SCHEMAS[kind] : JSON_OBJECT_FORMAT,
+          temperature: geometry ? 0.2 : 0.7,
+          maxTokens: MAX_TOKENS[kind],
+          useCase: `creative_${kind}`,
+        },
+        jsonObjectOnly,
+      );
+      if (!out.ok) {
+        const unreadable = geometry
+          ? 'The geometry generator did not return a readable spec'
+          : 'The generated template was not valid JSON';
+        return c.json({ error: out.reason === 'unparseable' || out.reason === 'invalid' ? unreadable : GENERATOR_FAILURE[out.reason] }, 502);
       }
+
       if (kind === 'cad') {
-        const spec = readCadSpec(parsed);
+        const spec = readCadSpec(out.value);
         if (!spec) return c.json({ error: 'The generated profile was not a drawable outline' }, 502);
         return c.json({
-          ...common,
+          ...common(out.model),
           content: dxfFromProfile(spec),
           validationDetail: `Closed ${spec.outline.length}-point DXF profile with ${spec.holes?.length ?? 0} bore(s), generated from the brief and evaluated on the server`,
           summary: spec.summary ?? null,
         });
       }
-      const spec = readModel3dSpec(parsed);
-      if (!spec) return c.json({ error: 'The generated model had no buildable solids' }, 502);
-      const facets = facetCount(spec);
-      if (!facets) return c.json({ error: 'The generated model tessellated to nothing' }, 502);
+      if (kind === 'model3d') {
+        const spec = readModel3dSpec(out.value);
+        if (!spec) return c.json({ error: 'The generated model had no buildable solids' }, 502);
+        const facets = facetCount(spec);
+        if (!facets) return c.json({ error: 'The generated model tessellated to nothing' }, 502);
+        return c.json({
+          ...common(out.model),
+          content: stlFromSolids(stem, spec),
+          validationDetail: `Closed ${facets}-facet ASCII STL from ${spec.solids.length} primitive(s), generated from the brief and evaluated on the server`,
+          summary: spec.summary ?? null,
+        });
+      }
+      // A template is handed back as the JSON the model authored, re-serialised so
+      // the file is exactly the object that was validated — never a fenced reply.
+      const file = JSON.stringify(out.value, null, 2);
+      if (file.length < 40) return c.json({ error: 'The generated deliverable was too short to be usable' }, 502);
       return c.json({
-        ...common,
-        content: stlFromSolids(stem, spec),
-        validationDetail: `Closed ${facets}-facet ASCII STL from ${spec.solids.length} primitive(s), generated from the brief and evaluated on the server`,
-        summary: spec.summary ?? null,
+        ...common(out.model),
+        content: file,
+        validationDetail: `${target.outputFormat} deliverable generated from the brief and checked for shape (${file.length} characters)`,
+        summary: null,
       });
     }
+
+    // ── TEXT deliverables (a game, a résumé, a script): the reply IS the file ──
+    let result;
+    try {
+      result = await ideProxy(c.env).complete({
+        messages: [
+          { role: 'system', content: AUTHORING_PROMPTS[kind] },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.7,
+        max_tokens: MAX_TOKENS[kind],
+        useCase: `creative_${kind}`,
+      });
+    } catch (error) {
+      return failResponse(c, error, { source: SOURCE, operation: 'generate-creative-text' });
+    }
+    if (result.response.status >= 400) return c.json({ error: GENERATOR_FAILURE.gateway }, 502);
+    const { content } = await readProxyChoice(result);
+    if (!content.trim()) return c.json({ error: GENERATOR_FAILURE.empty }, 502);
 
     const file = stripFence(content);
     // The file has to BE what it claims to be. A refusal, an apology or a stray
@@ -615,17 +678,10 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
       const playable = validateGameDocument(file);
       if (!playable.ok) return c.json({ error: playable.reason }, 502);
     }
-    if (kind === 'template') {
-      try {
-        JSON.parse(file);
-      } catch {
-        return c.json({ error: 'The generated template was not valid JSON' }, 502);
-      }
-    }
     if (file.length < 40) return c.json({ error: 'The generated deliverable was too short to be usable' }, 502);
 
     return c.json({
-      ...common,
+      ...common(result.resolvedModel),
       content: kind === 'game' ? normalizeGameDocument(file, title) : file,
       validationDetail: kind === 'game'
         ? `Self-contained playable HTML game, checked for a script and for offline independence (${file.length} characters)`

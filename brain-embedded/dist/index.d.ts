@@ -148,122 +148,6 @@ interface ChatInputAttachment {
 type BrainModality = string;
 
 /**
- * Directed messages — addressing a chat turn to a participant, not the BRAIN.
- *
- * A BuilderForce chat is multi-party: alongside the BRAIN (the agent that
- * executes build/change requests) a chat can have other participants — invited
- * teammate agents and (in future) humans. Not every message is a directive for
- * the BRAIN to run: a user can @-tag a participant and simply talk to them. Such
- * a turn is a normal `user` message tagged with `{ addressedTo: {...} }` in its
- * metadata; the conversation loop reads that flag and does NOT start a BRAIN run
- * for it, while the transcript still shows who it was addressed to. An untagged
- * message (or one addressed to the BRAIN) runs the agent loop as before.
- *
- * This is the single source of truth for the convention, shared by the send path
- * (which skips the run), the auto-reply guard, and any surface that renders the
- * "→ recipient" badge.
- */
-/** A non-BRAIN participant a message can be addressed to. */
-interface DirectedRecipient {
-    /** 'agent' = an invited teammate agent; 'human' = an invited person. */
-    kind: 'agent' | 'human';
-    /** Stable id/ref of the participant (an agentRef, or a user id/handle). */
-    ref: string;
-    /** Display name shown in the composer chip + the transcript badge. */
-    name: string;
-}
-/** The metadata key that flags a user message as addressed to a participant. */
-declare const ADDRESSED_TO_META_KEY = "addressedTo";
-/** The metadata key that attributes an assistant turn to a specific participant
- *  (an invited agent that replied), rather than the default BRAIN. Mirrors
- *  {@link ADDRESSED_TO_META_KEY} on the answering side. */
-declare const AUTHORED_BY_META_KEY = "authoredBy";
-/** The participant that authored an assistant turn, or `null` for the BRAIN. */
-declare function parseMessageAuthor(msg: {
-    metadata?: string | null;
-}): DirectedRecipient | null;
-/**
- * Merge an `addressedTo` flag into a message's metadata object (preserving any
- * other keys, e.g. `attachments`). Returns a serialized string, or `undefined`
- * when there is nothing to store — ready to hand to `persistence.sendMessages`.
- */
-declare function withDirectedMetadata(recipient: DirectedRecipient | null | undefined, base?: Record<string, unknown>): string | undefined;
-/** The recipient a persisted message was addressed to, or `null` for the BRAIN. */
-declare function parseDirectedRecipient(msg: {
-    metadata?: string | null;
-}): DirectedRecipient | null;
-/** True when a message is addressed to a participant (so the BRAIN should NOT run for it). */
-declare function isDirectedToParticipant(msg: {
-    metadata?: string | null;
-}): boolean;
-/**
- * A composer's recipient choice: `null` = auto (follow any leading @mention),
- * `'brain'` = explicitly the BRAIN, or an explicit participant. An explicit
- * choice always wins over a typed @mention.
- */
-type RecipientChoice = DirectedRecipient | 'brain' | null;
-/** An in-progress "@mention" being typed at the caret — what a composer typeahead
- *  offers a picker for. */
-interface MentionToken {
-    /** The text typed after '@' (before the caret); '' right after typing '@'. */
-    query: string;
-    /** Index of the '@' character in the text. */
-    start: number;
-    /** Index just past the query (the caret position). */
-    end: number;
-}
-/**
- * Detect an in-progress "@mention" at the caret, for a composer typeahead. The
- * token is an '@' at the start of the text or right after whitespace, followed by
- * a run of non-whitespace, non-'@' characters, with the caret inside that run.
- * Returns null when the caret is not in such a token (so no picker should show).
- * Deliberately mirrors {@link mentionRecipient}'s `@([^\s@]+)` grammar so what the
- * typeahead offers and what a leading mention resolves to stay consistent.
- */
-declare function activeMentionToken(text: string, caret: number): MentionToken | null;
-/**
- * Filter + rank participants for a mention query — case-insensitive substring
- * match, name-start matches first. An empty query returns every participant (so
- * typing a bare '@' opens the full roster). Shared by every composer's typeahead.
- */
-declare function filterMentionCandidates(participants: DirectedRecipient[], query: string): DirectedRecipient[];
-/** Resolve a leading "@name" in composer text to one of `participants`, if any. */
-declare function mentionRecipient(text: string, participants: DirectedRecipient[]): DirectedRecipient | null;
-/**
- * The effective target of the next message: an explicit BRAIN pick wins (→ null,
- * runs the BRAIN); else an explicit participant; else a leading @mention; else the
- * BRAIN. Shared by every composer so routing is identical across surfaces.
- */
-declare function resolveRecipient(choice: RecipientChoice, mention: DirectedRecipient | null): DirectedRecipient | null;
-/**
- * What an invited agent brings to a turn a HOST runs itself: its compiled persona.
- *
- * The server's addressed-agent reply (`BrainService.agentReply`) runs under these
- * same directives but with platform tools only — it has no workspace. A host that HAS
- * one (the editor) fetches this and runs the turn in its own loop, so the agent gets
- * the host's tools; that is the difference between "I have no git tool" and a commit.
- */
-interface AddressedAgentPersona {
-    /** Persona + knowledge directives, compiled server-side from the agent's row. */
-    directives: string;
-    /** The agent's own pinned base model, or null when it follows the surface's pick. */
-    model?: string | null;
-}
-/**
- * Attribute a persisted assistant turn to a participant: merge `authoredBy` into
- * its metadata, keeping whatever else is there (the model/account provenance).
- * The read side is {@link parseMessageAuthor}; this is its only writer on a host.
- */
-declare function withAuthoredBy(metadata: string | undefined, author: DirectedRecipient | null | undefined): string | undefined;
-/**
- * The system prompt for a host-run addressed turn: the agent's persona FIRST (who is
- * speaking), then the host's own prompt (what this surface can do and how). Order
- * matters — the host prompt names the tools, and an instruction to use them must not
- * be overridden by a persona that knows nothing about the surface.
- */
-declare function addressedAgentSystemPrompt(persona: AddressedAgentPersona, agent: DirectedRecipient, hostPrompt: string): string;
-
-/**
  * The SINGLE source of truth for the composer's "Effort" control.
  *
  * Effort used to be prose-only (a system-prompt nudge), so picking Quick vs
@@ -668,18 +552,6 @@ interface BrainPersistenceAdapter {
         agentRef: string;
         agentName?: string;
     }): Promise<BrainMessage>;
-    /**
-     * The compiled persona of an invited agent participant — the SAME directives the
-     * server's addressed-agent reply runs under — so a host that HAS local tools (the
-     * editor) can run an addressed turn in its own loop, AS that agent, with those tools.
-     * The server reply has only platform tools: asked to "commit and push" it could only
-     * say it had no git tool, while the editor beside it had one. Optional: when absent
-     * (or when the host has no local tools) the turn goes to `requestAgentReply`.
-     */
-    resolveAgentPersona?(chatId: number, input: {
-        agentRef: string;
-        query?: string;
-    }): Promise<AddressedAgentPersona>;
     upload(file: File): Promise<{
         key: string;
         name: string;
@@ -1481,6 +1353,95 @@ interface UseBrainChats {
 declare function useBrainChats(options?: UseBrainChatsOptions): UseBrainChats;
 
 /**
+ * Directed messages — addressing a chat turn to a participant, not the BRAIN.
+ *
+ * A BuilderForce chat is multi-party: alongside the BRAIN (the agent that
+ * executes build/change requests) a chat can have other participants — invited
+ * teammate agents and (in future) humans. Not every message is a directive for
+ * the BRAIN to run: a user can @-tag a participant and simply talk to them. Such
+ * a turn is a normal `user` message tagged with `{ addressedTo: {...} }` in its
+ * metadata; the conversation loop reads that flag and does NOT start a BRAIN run
+ * for it, while the transcript still shows who it was addressed to. An untagged
+ * message (or one addressed to the BRAIN) runs the agent loop as before.
+ *
+ * This is the single source of truth for the convention, shared by the send path
+ * (which skips the run), the auto-reply guard, and any surface that renders the
+ * "→ recipient" badge.
+ */
+/** A non-BRAIN participant a message can be addressed to. */
+interface DirectedRecipient {
+    /** 'agent' = an invited teammate agent; 'human' = an invited person. */
+    kind: 'agent' | 'human';
+    /** Stable id/ref of the participant (an agentRef, or a user id/handle). */
+    ref: string;
+    /** Display name shown in the composer chip + the transcript badge. */
+    name: string;
+}
+/** The metadata key that flags a user message as addressed to a participant. */
+declare const ADDRESSED_TO_META_KEY = "addressedTo";
+/** The metadata key that attributes an assistant turn to a specific participant
+ *  (an invited agent that replied), rather than the default BRAIN. Mirrors
+ *  {@link ADDRESSED_TO_META_KEY} on the answering side. */
+declare const AUTHORED_BY_META_KEY = "authoredBy";
+/** The participant that authored an assistant turn, or `null` for the BRAIN. */
+declare function parseMessageAuthor(msg: {
+    metadata?: string | null;
+}): DirectedRecipient | null;
+/**
+ * Merge an `addressedTo` flag into a message's metadata object (preserving any
+ * other keys, e.g. `attachments`). Returns a serialized string, or `undefined`
+ * when there is nothing to store — ready to hand to `persistence.sendMessages`.
+ */
+declare function withDirectedMetadata(recipient: DirectedRecipient | null | undefined, base?: Record<string, unknown>): string | undefined;
+/** The recipient a persisted message was addressed to, or `null` for the BRAIN. */
+declare function parseDirectedRecipient(msg: {
+    metadata?: string | null;
+}): DirectedRecipient | null;
+/** True when a message is addressed to a participant (so the BRAIN should NOT run for it). */
+declare function isDirectedToParticipant(msg: {
+    metadata?: string | null;
+}): boolean;
+/**
+ * A composer's recipient choice: `null` = auto (follow any leading @mention),
+ * `'brain'` = explicitly the BRAIN, or an explicit participant. An explicit
+ * choice always wins over a typed @mention.
+ */
+type RecipientChoice = DirectedRecipient | 'brain' | null;
+/** An in-progress "@mention" being typed at the caret — what a composer typeahead
+ *  offers a picker for. */
+interface MentionToken {
+    /** The text typed after '@' (before the caret); '' right after typing '@'. */
+    query: string;
+    /** Index of the '@' character in the text. */
+    start: number;
+    /** Index just past the query (the caret position). */
+    end: number;
+}
+/**
+ * Detect an in-progress "@mention" at the caret, for a composer typeahead. The
+ * token is an '@' at the start of the text or right after whitespace, followed by
+ * a run of non-whitespace, non-'@' characters, with the caret inside that run.
+ * Returns null when the caret is not in such a token (so no picker should show).
+ * Deliberately mirrors {@link mentionRecipient}'s `@([^\s@]+)` grammar so what the
+ * typeahead offers and what a leading mention resolves to stay consistent.
+ */
+declare function activeMentionToken(text: string, caret: number): MentionToken | null;
+/**
+ * Filter + rank participants for a mention query — case-insensitive substring
+ * match, name-start matches first. An empty query returns every participant (so
+ * typing a bare '@' opens the full roster). Shared by every composer's typeahead.
+ */
+declare function filterMentionCandidates(participants: DirectedRecipient[], query: string): DirectedRecipient[];
+/** Resolve a leading "@name" in composer text to one of `participants`, if any. */
+declare function mentionRecipient(text: string, participants: DirectedRecipient[]): DirectedRecipient | null;
+/**
+ * The effective target of the next message: an explicit BRAIN pick wins (→ null,
+ * runs the BRAIN); else an explicit participant; else a leading @mention; else the
+ * BRAIN. Shared by every composer so routing is identical across surfaces.
+ */
+declare function resolveRecipient(choice: RecipientChoice, mention: DirectedRecipient | null): DirectedRecipient | null;
+
+/**
  * Did the run actually GET ANYWHERE?
  *
  * The A-vs-B triage in `brainTriage.ts` answers "why did a turn come back
@@ -2140,15 +2101,6 @@ interface UseBrainConversationOptions {
         name: string;
         args: unknown;
     }) => boolean;
-    /**
-     * Run a turn addressed to an invited AGENT in this host's own loop — under the
-     * agent's persona (`persistence.resolveAgentPersona`), with THIS host's tools — instead
-     * of asking the server to answer for it. Set by a host that has local workspace tools
-     * (the editor): the server-side reply has platform tools only, so "commit and push"
-     * addressed to an agent there could only end in "I have no git tool". The web Brain
-     * leaves it unset and keeps the server reply.
-     */
-    runAddressedAgentLocally?: boolean;
     /** Create-on-demand when sending without an active chat; returns the new chat id. */
     ensureChatId?: () => Promise<number | null>;
     /** Notify the host (chats hook) that this chat got new activity. */
@@ -2417,14 +2369,6 @@ interface BrainRunRequest {
      * than silently losing their ticket lineage.
      */
     chatMode?: ChatMode;
-    /**
-     * The invited agent this run answers AS — a turn the user addressed to a participant
-     * that the host runs itself (with its own tools) instead of asking the server to
-     * reply on the agent's behalf. Every assistant turn the run persists is attributed to
-     * them via `metadata.authoredBy`, so the transcript shows who spoke; the persona
-     * itself rides `resolvedSystemPrompt` (see `addressedAgentSystemPrompt`).
-     */
-    authoredBy?: DirectedRecipient;
     /**
      * Tool-iteration ceiling for THIS run (one iteration = one model turn, which may
      * batch several tool calls). Omit to use the shared default.
@@ -4537,4 +4481,4 @@ declare function pmoFocusDomId(kind: string, id: string): string;
  */
 declare function artifactRoutePath(kind: string, ref: string | null | undefined, projectId?: number | null): string;
 
-export { ADDRESSED_TO_META_KEY, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AddressedAgentPersona, type AgentDispatchActivity, type AllowanceState, type ArtifactKind, type AssembledToolCall, BASE_BRANCHES, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunActivity, type BrainRunDriver, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type CompletionMetadata, type ComposerDirectiveOptions, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GitShortStatus, type GlobalRunState, type ImageUrlContentPart, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, MAX_TOOL_RESULT_CHARS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MentionToken, type MessageProvenance, type ModelCategory, type ModelChoiceLabels, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, PMO_FOCUS_PARAM, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PersistedStep, type PreparedImage, type ProvenanceAccount, READ_FILE_RESULT_CHARS, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RepeatedTarget, type RoutedProduct, type RunMilestoneActivity, type RunMilestonePhase, type RunProgress, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNSCOPED_MUTATION_TOOLS, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, activeModelKey, activityIcon, activityTarget, activityTone, addressedAgentSystemPrompt, allowanceState, announcesUntakenAction, applyRemoteRun, artifactRoutePath, attachEvermindLearn, buildBrainTriageReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, canChangeCodeHere, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, computeRunProgress, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, createPayloadBudget, deriveChatTitle, describeLiveStep, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, displayModelName, effortProfile, extractXmlToolCalls, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, findTools, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, formatRunProgress, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, installRunDriver, isActivityMessage, isChatMode, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isLocalWorkspaceTool, isMalformedToolCall, isMutationTool, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, isTruncatedTurn, isUnscopedMutationTool, isUserConfiguredModelRef, lastConsolidationIndex, linkedTicketsToAdvance, linkedTicketsToComplete, localStorageConfirmationPersistence, localToolsIn, mcpActionsFrom, mentionRecipient, mergeRecoveredTrace, midRunNotice, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, parseByoUnresolved, parseChatActivity, parseDirectedRecipient, parseGitShortStatus, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, perMillionUsd, pmoFocusDomId, pmoFocusValue, premiumCostLabel, prepareImageDataUrl, productForPlan, productModelName, progressDuration, ratedTurnContext, ratedTurnTool, reasoningForRun, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, revealsModelId, revisitAdvisory, routerToolSpecs, routingQueryForTurn, startRun as runBrainLoop, runProgressVerdict, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, shortenTarget, stableStringify, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolActivity, toolExposureInTrace, toolNamesMentionedIn, toolSpecsFor, traceWithPersistedSteps, trimToolResult, turnInterruption, turnOptimizationDirective, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, useToolConfirmationGate, withAdvisory, withAuthoredBy, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArtifactKind, type AssembledToolCall, BASE_BRANCHES, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunActivity, type BrainRunDriver, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type CompletionMetadata, type ComposerDirectiveOptions, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GitShortStatus, type GlobalRunState, type ImageUrlContentPart, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, MAX_TOOL_RESULT_CHARS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MentionToken, type MessageProvenance, type ModelCategory, type ModelChoiceLabels, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, PMO_FOCUS_PARAM, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PersistedStep, type PreparedImage, type ProvenanceAccount, READ_FILE_RESULT_CHARS, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RepeatedTarget, type RoutedProduct, type RunMilestoneActivity, type RunMilestonePhase, type RunProgress, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNSCOPED_MUTATION_TOOLS, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, activeModelKey, activityIcon, activityTarget, activityTone, allowanceState, announcesUntakenAction, applyRemoteRun, artifactRoutePath, attachEvermindLearn, buildBrainTriageReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, canChangeCodeHere, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, computeRunProgress, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, createPayloadBudget, deriveChatTitle, describeLiveStep, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, displayModelName, effortProfile, extractXmlToolCalls, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, findTools, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, formatRunProgress, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, installRunDriver, isActivityMessage, isChatMode, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isLocalWorkspaceTool, isMalformedToolCall, isMutationTool, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, isTruncatedTurn, isUnscopedMutationTool, isUserConfiguredModelRef, lastConsolidationIndex, linkedTicketsToAdvance, linkedTicketsToComplete, localStorageConfirmationPersistence, localToolsIn, mcpActionsFrom, mentionRecipient, mergeRecoveredTrace, midRunNotice, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, parseByoUnresolved, parseChatActivity, parseDirectedRecipient, parseGitShortStatus, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, perMillionUsd, pmoFocusDomId, pmoFocusValue, premiumCostLabel, prepareImageDataUrl, productForPlan, productModelName, progressDuration, ratedTurnContext, ratedTurnTool, reasoningForRun, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, revealsModelId, revisitAdvisory, routerToolSpecs, routingQueryForTurn, startRun as runBrainLoop, runProgressVerdict, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, shortenTarget, stableStringify, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolActivity, toolExposureInTrace, toolNamesMentionedIn, toolSpecsFor, traceWithPersistedSteps, trimToolResult, turnInterruption, turnOptimizationDirective, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, useToolConfirmationGate, withAdvisory, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };

@@ -105,12 +105,8 @@ export function createBoardWebhookRoutes(db: Db): Hono<HonoEnv> {
     // Ops events (Sentry/PagerDuty = `incident` category) are NOT kanban tickets:
     // divert them into prod_incidents (the Quality lens) instead of the task board.
     if (getBoardProviderMeta(provider)?.category === 'incident') {
-      try {
-        const id = await ingestIncidentWebhook(db, c.env, conn, provider, normalized);
-        return c.json({ received: true, processed: true, decision: 'incident', incidentId: id }, 200);
-      } catch (err) {
-        return c.json({ error: err instanceof Error ? err.message : 'incident ingest failed' }, 500);
-      }
+      const id = await ingestIncidentWebhook(db, c.env, conn, provider, normalized);
+      return c.json({ received: true, processed: true, decision: 'incident', incidentId: id }, 200);
     }
 
     const ticket: NormalizedTicket = {
@@ -148,12 +144,8 @@ export function createBoardWebhookRoutes(db: Db): Hono<HonoEnv> {
       pollCursor: conn.pollCursor,
     };
 
-    try {
-      const decision = await engine.applyInboundTicket(storedConn, ticket, normalized.originatedLocally);
-      return c.json({ received: true, processed: true, decision: decision.decision, reason: decision.reason }, 200);
-    } catch (err) {
-      return c.json({ error: err instanceof Error ? err.message : 'ingest failed' }, 500);
-    }
+    const decision = await engine.applyInboundTicket(storedConn, ticket, normalized.originatedLocally);
+    return c.json({ received: true, processed: true, decision: decision.decision, reason: decision.reason }, 200);
   });
 
   return router;

@@ -42,7 +42,6 @@ import {
   type ChatCompletionMessage,
   type ChatMode,
   type ContentPart,
-  type DirectedRecipient,
   type EvermindRunHooks,
   type ModelFallbackSurface,
   type ReasoningIntent,
@@ -65,9 +64,6 @@ export interface WebviewRunStart {
   projectId?: number | null;
   chatMode?: ChatMode;
   maxIterations?: number;
-  /** The invited agent this turn answers AS (a directed turn run here, with the
-   *  workspace tools, rather than by the server); assistant turns are attributed to it. */
-  authoredBy?: DirectedRecipient;
   /** The panel's Auto-mode switch at start; `setAutoApprove` follows it live. */
   autoApprove: boolean;
   /** Whether this chat's project memory is switched on (recall + learn). */
@@ -281,7 +277,6 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
         projectId: p.projectId ?? null,
         ...(p.chatMode ? { chatMode: p.chatMode } : {}),
         ...(p.maxIterations ? { maxIterations: p.maxIterations } : {}),
-        ...(p.authoredBy ? { authoredBy: p.authoredBy } : {}),
       });
     } finally {
       flags.delete(chatId);

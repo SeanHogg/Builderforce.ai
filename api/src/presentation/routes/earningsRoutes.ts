@@ -46,14 +46,27 @@ import {
   type WithdrawalRefusal,
 } from '../../application/finance/withdrawalMethods';
 import { describePayoutProviders } from '../../application/payouts/payoutProviders';
+import { refusalResponse } from '../middleware/errorResponse';
+import { parseBody, z, zNonEmptyString } from './requestBody';
 import { boundedIntParam, limitParam } from './queryParams';
 
-/** A withdrawal refusal as an HTTP answer. */
-function refusalStatus(reason: WithdrawalRefusal): 400 | 404 | 500 {
-  if (reason === 'not_found') return 404;
-  if (reason === 'not_saved') return 500;
-  return 400;
-}
+/**
+ * A withdrawal refusal as an HTTP answer. `unknown_provider`, `wrong_connect_flow` and
+ * `missing_field` are the caller's mistake and fall through to `refusalResponse`'s 400.
+ * `not_saved` is NOT here: the credential passed validation and the service still wrote
+ * no row, which is an invariant failure the handler throws rather than maps.
+ */
+const WITHDRAWAL_REFUSAL_STATUS = {
+  not_found: 404,
+} as const satisfies Partial<Record<WithdrawalRefusal, number>>;
+
+/** A typed-credential destination. The field VALUES are validated by the application
+ *  layer against the provider's own declarations, so `fields` is free-form here. */
+const ConnectWithdrawalMethodBody = z.object({
+  provider: zNonEmptyString,
+  fields: z.record(z.string(), z.unknown()).optional(),
+  makeDefault: z.boolean().optional(),
+});
 
 /**
  * The workspace this caller's money and sealed credentials live in.
@@ -147,16 +160,15 @@ export function createWithdrawalMethodRoutes(db: Db): Hono<HonoEnv> {
   router.post('/', async (c) => {
     const tenantId = await ownTenant(db, c);
     if (tenantId === null) return c.json({ error: 'no_workspace' }, 404);
-    const body = await c.req.json<{ provider?: string; fields?: Record<string, unknown>; makeDefault?: boolean }>()
-      .catch(() => ({} as { provider?: string }));
+    const body = await parseBody(c, ConnectWithdrawalMethodBody);
     const result = await connectWithdrawalMethod(db, c.env as Env, { tenantId, userId: c.get('userId') as string }, {
-      provider: String(body.provider ?? ''),
-      fields: (body as { fields?: Record<string, unknown> }).fields ?? {},
-      makeDefault: (body as { makeDefault?: boolean }).makeDefault === true,
+      provider: body.provider,
+      fields: body.fields ?? {},
+      makeDefault: body.makeDefault === true,
     });
-    return result.ok
-      ? c.json({ method: result.method }, 201)
-      : c.json({ error: result.reason, field: result.field ?? null }, refusalStatus(result.reason));
+    if (result.ok) return c.json({ method: result.method }, 201);
+    if (result.reason === 'not_saved') throw new Error('withdrawal method was not saved');
+    return refusalResponse(c, result.reason, WITHDRAWAL_REFUSAL_STATUS, { field: result.field ?? null });
   });
 
   /** PUT /:id/default — exactly one destination is the default. */
@@ -168,7 +180,7 @@ export function createWithdrawalMethodRoutes(db: Db): Hono<HonoEnv> {
     const result = await setDefaultWithdrawalMethod(db, c.env as Env, { tenantId, userId: c.get('userId') as string }, id);
     return result.ok
       ? c.json({ method: result.method })
-      : c.json({ error: result.reason }, refusalStatus(result.reason));
+      : refusalResponse(c, result.reason, WITHDRAWAL_REFUSAL_STATUS);
   });
 
   /** DELETE /:id — remove a destination. Money already sent through it stays in the

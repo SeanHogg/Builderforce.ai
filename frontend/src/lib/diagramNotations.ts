@@ -267,11 +267,23 @@ export async function convertDiagramSource(
   from: CanvasDiagramFormat,
   to: CanvasDiagramFormat,
 ): Promise<DiagramConversion | null> {
-  const target = diagramNotation(to);
-  if (!target?.write) return null;
+  // Refuse before reading: a destination with no writer makes the parse wasted work.
+  if (!diagramNotation(to)?.write) return null;
   const graph = await readDiagramSource(from, source);
-  if (!graph) return null;
-  return conversionFromGraph(graph, target);
+  return graph ? convertGraph(graph, to) : null;
+}
+
+/**
+ * Write an already-read graph to a destination notation, by id.
+ *
+ * The one place "look the notation up, refuse it if it has no writer, then write"
+ * lives: {@link convertDiagramSource} is this behind a read, and the canvas's
+ * source-agnostic conversion (`canvasDiagramConvert`) is this behind an SVG or a
+ * Visio package. Two copies of the lookup had already appeared before it was named.
+ */
+export function convertGraph(graph: DiagramGraph, to: CanvasDiagramFormat): DiagramConversion | null {
+  const target = diagramNotation(to);
+  return target?.write ? conversionFromGraph(graph, target) : null;
 }
 
 /**

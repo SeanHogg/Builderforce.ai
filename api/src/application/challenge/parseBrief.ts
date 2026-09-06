@@ -16,6 +16,7 @@
  */
 
 import type { LlmComplete } from '../compile';
+import { completeJson } from '../llm/completeJson';
 import { normalizeCapabilities, type Capability } from './blueprint';
 
 export interface ChallengeSpec {
@@ -141,17 +142,9 @@ export function heuristicSpec(brief: string): ChallengeSpec {
 const asStrings = (v: unknown, cap = 12): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).map((s) => s.trim()).slice(0, cap) : [];
 
-/** Pull the first JSON object out of a model reply (tolerates code fences). */
-function parseJsonObject(raw: string): Record<string, unknown> | null {
-  const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) return null;
-  try {
-    const parsed = JSON.parse(match[0]);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
-}
+/** The extraction must be an object; an array or scalar reply is refused. */
+const asObject = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 
 /**
  * Extract a {@link ChallengeSpec}. The heuristic reading is computed first and
@@ -165,20 +158,18 @@ export async function parseBrief(brief: string, llm?: LlmComplete): Promise<Chal
   const base = heuristicSpec(brief);
   if (!llm || !brief.trim()) return base;
 
-  let extracted: Record<string, unknown> | null = null;
-  try {
-    // Long briefs are truncated rather than rejected: an RFP's first pages carry
-    // the requirements, and failing on length would be a worse answer than a
-    // slightly incomplete one.
-    const reply = await llm([
-      { role: 'system', content: SYSTEM },
-      { role: 'user', content: brief.slice(0, 12_000) },
-    ]);
-    extracted = parseJsonObject(reply);
-  } catch {
-    extracted = null;
-  }
-  if (!extracted) return base;
+  // Long briefs are truncated rather than rejected: an RFP's first pages carry
+  // the requirements, and failing on length would be a worse answer than a
+  // slightly incomplete one.
+  const out = await completeJson(
+    { kind: 'text', llm: (system, user) => llm([{ role: 'system', content: system }, { role: 'user', content: user }]) },
+    // Budget and slug are informational for a `text` dispatch — the injected
+    // completion owns its own limits.
+    { system: SYSTEM, user: brief.slice(0, 12_000), maxTokens: 2000, useCase: 'challenge_parse_brief' },
+    asObject,
+  );
+  if (!out.ok) return base;
+  const extracted = out.value;
 
   const union = (a: string[], b: string[], cap = 12): string[] => [...new Set([...a, ...b])].slice(0, cap);
 

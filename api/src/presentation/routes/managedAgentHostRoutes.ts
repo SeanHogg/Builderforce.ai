@@ -20,6 +20,13 @@ import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { TenantRole } from '../../domain/shared/types';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { parseBody, z, zNonEmptyString, zOptionalString } from './requestBody';
+
+const HostRequestBody = z.object({
+  agentHostName: zNonEmptyString,
+  region: zOptionalString,
+  notes: zOptionalString,
+});
 
 export function createManagedAgentHostRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -28,27 +35,20 @@ export function createManagedAgentHostRoutes(db: Db): Hono<HonoEnv> {
   // POST /api/managed-agent-hosts — submit a managed AgentHost hosting request
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{
-      agentHostName: string;
-      region?: string;
-      notes?: string;
-    }>();
-
-    const agentHostName = body.agentHostName?.trim();
-    if (!agentHostName) return c.json({ error: 'agentHostName is required' }, 400);
+    const body = await parseBody(c, HostRequestBody);
 
     const [inserted] = await db
       .insert(managedAgentHostRequests)
       .values({
         tenantId,
-        agentHostName,
-        region: body.region?.trim() || 'us-east',
-        notes: body.notes?.trim() || null,
+        agentHostName: body.agentHostName,
+        region: body.region ?? 'us-east',
+        notes: body.notes ?? null,
         status: 'pending',
       })
       .returning();
 
-    if (!inserted) return c.json({ error: 'Failed to create request' }, 500);
+    if (!inserted) throw new Error('managed_agent_host_requests insert returned no row');
 
     return c.json({
       request: inserted,

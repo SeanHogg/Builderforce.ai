@@ -1,4 +1,6 @@
+import { createElement } from 'react';
 import type { TrackerSurfaceProps } from './TrackerSurface';
+import { VulnerabilityFindingsPanel } from './VulnerabilityFindingsPanel';
 
 /**
  * The field schema for every generic tracker surface (governance + product).
@@ -151,6 +153,16 @@ export const TRACKER_CONFIGS: Record<string, TrackerSurfaceProps> = {
       { key: 'summary', label: 'Summary (JSON)', type: 'textarea', inList: false },
       { key: 'notes', label: 'Notes', type: 'textarea', inList: false },
     ],
+    // What the scan FOUND — the findings panel, opened per row.
+    rowAction: {
+      labelKey: 'governance.vulnFindings.openAction',
+      render: (row, close) => createElement(VulnerabilityFindingsPanel, {
+        scanId: row.id,
+        scanLabel: [row.scanType, row.repoRef].filter((v): v is string => typeof v === 'string' && v.length > 0).join(' · '),
+        open: true,
+        onClose: close,
+      }),
+    },
   },
 
   // ── Product Management ──────────────────────────────────────────────────────

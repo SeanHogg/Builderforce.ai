@@ -191,7 +191,7 @@ export const NAV_GROUPS: NavGroup[] = [
     // Surveys, custom Dashboards and DevFinOps are analytics/measurement surfaces,
     // so they live here as lenses of Insights rather than as their own top-level
     // sidebar items (keeping the "few primary destinations" rule above intact).
-    match: ['/insights', '/alerts', '/surveys', '/dashboards', '/finops'],
+    match: ['/insights', '/alerts', '/surveys', '/dashboards', '/finops', '/import'],
     tabKind: 'route',
     tabs: [
       // The composed, out-of-box HOME dashboard: the widgets the user PINNED from
@@ -227,6 +227,11 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: '/alerts', labelKey: 'tab.alerts', icon: '🔔' },
       // Periodic lens review snapshots (monthly/quarterly/annual cadence).
       { id: '/insights/snapshots', labelKey: 'tab.snapshots', icon: '🗓' },
+      // Record import — the manual board-deck datasets (headcount, positions, R&D
+      // financials, support/incidents/uptime, AI adoption) that the People, R&D,
+      // Quality and AI lenses above read. It is a tab HERE because that is where
+      // the imported rows show up; the page had no door at all before this.
+      { id: '/import', labelKey: 'tab.import', icon: '📥' },
     ],
   },
   {

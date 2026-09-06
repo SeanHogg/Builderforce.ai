@@ -12,7 +12,7 @@
  * spec that at least navigates the flow and asserts each route renders.
  */
 
-import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
+import { completeJson, JSON_OBJECT_FORMAT, type JsonDispatch } from '../llm/completeJson';
 import { TenantAiService } from '../llm/tenantProxy';
 import type { Env } from '../../env';
 import { playwrightSpec, type QaStep } from './qaTypes';
@@ -51,19 +51,11 @@ Hard requirements for the spec you output:
 Output ONLY a JSON object: {"spec": "<full .ts source>", "steps": [<normalized QaStep array you actually exercised>]}.
 Do not wrap the JSON in markdown fences.`;
 
-/** Strip ```...``` fences and pull the first balanced JSON object out of a string. */
-function parseModelJson(content: string): { spec?: string; steps?: QaStep[] } | null {
-  let s = content.trim();
-  const fence = /^```(?:json|ts|typescript)?\s*([\s\S]*?)```$/m.exec(s);
-  if (fence?.[1]) s = fence[1].trim();
-  const start = s.indexOf('{');
-  const end = s.lastIndexOf('}');
-  if (start === -1 || end <= start) return null;
-  try {
-    return JSON.parse(s.slice(start, end + 1));
-  } catch {
-    return null;
-  }
+/** The model's `{ spec, steps }` object; an array or scalar reply is refused. */
+function readModelJson(value: unknown): { spec?: string; steps?: QaStep[] } | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as { spec?: string; steps?: QaStep[] })
+    : null;
 }
 
 /**
@@ -172,39 +164,41 @@ export class QaGeneratorService extends TenantAiService {
       `Write the Playwright smoke test for this flow.`;
 
     try {
-      const request = {
-        messages: [
-          { role: 'system' as const, content: SYSTEM_PROMPT },
-          { role: 'user' as const, content: userPrompt },
-        ],
-        temperature: 0.2,
-        max_tokens: 2000,
-        response_format: { type: 'json_object' as const },
-        useCase: 'qa_test_generation',
-      };
-      // The tenant's own QA generation → base class runs it on their connected BYO
-      // account + meters usage. Without a tenant (should not happen in the product
-      // path) fall back to the operator pool.
-      const result = this.tenantId != null
-        ? await this.completeForTenant(this.tenantId, request, { meterUseCase: 'qa_test_generation' })
-        : await ideProxy(this.env).complete(request);
-
-      if (result.response.status >= 400) {
-        return { spec: fallbackSpec(input), steps: input.steps, model: result.resolvedModel ?? null };
+      // The tenant's own QA generation → runs on their connected BYO account +
+      // meters usage (`completeForTenant`, the same seam `TenantAiService` wraps).
+      // Without a tenant (should not happen in the product path) fall back to the
+      // operator pool.
+      const dispatch: JsonDispatch = this.tenantId != null
+        ? { kind: 'tenant', env: this.aiEnv, tenantId: this.tenantId, opts: { meterUseCase: 'qa_test_generation' } }
+        : { kind: 'ide', env: this.env };
+      const out = await completeJson(
+        dispatch,
+        {
+          system: SYSTEM_PROMPT,
+          user: userPrompt,
+          schema: JSON_OBJECT_FORMAT,
+          temperature: 0.2,
+          maxTokens: 2000,
+          useCase: 'qa_test_generation',
+        },
+        readModelJson,
+      );
+      const model = (out.ok ? out.result?.resolvedModel : out.result?.resolvedModel) ?? null;
+      if (!out.ok) {
+        return { spec: fallbackSpec(input), steps: input.steps, model };
       }
-      const { content } = await readProxyChoice(result);
-      const parsed = content ? parseModelJson(content) : null;
+      const parsed = out.value;
       // Validate the model output against the import allowlist + escape-hatch
       // denylist before accepting it [1067]. Any failure → deterministic
       // fallback, so a poisoned/hallucinated spec never reaches the CI runner.
-      const candidate = typeof parsed?.spec === 'string' ? parsed.spec : '';
+      const candidate = typeof parsed.spec === 'string' ? parsed.spec : '';
       const validation = validateSpec(candidate);
       const spec = validation.ok ? candidate : fallbackSpec(input);
       // Only trust the model's steps if its spec was trusted.
-      const steps = validation.ok && Array.isArray(parsed?.steps) && parsed.steps.length > 0
+      const steps = validation.ok && Array.isArray(parsed.steps) && parsed.steps.length > 0
         ? parsed.steps
         : input.steps;
-      return { spec, steps, model: result.resolvedModel ?? null };
+      return { spec, steps, model };
     } catch {
       return { spec: fallbackSpec(input), steps: input.steps, model: null };
     }

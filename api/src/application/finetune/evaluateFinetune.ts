@@ -10,7 +10,7 @@
  * pipeline's `worker/src/services/training.ts` judge (the two Workers can't share
  * runtime code), so both finetune paths score the same way.
  */
-import { readProxyChoice, type ChatCompletionRequest } from '../llm/LlmProxyService';
+import { completeJson, type JsonProxy } from '../llm/completeJson';
 
 /** One dataset row: an instruction (+ optional context) and its ideal output. */
 export interface FinetuneExample {
@@ -29,9 +29,7 @@ export interface FinetuneEvalResult {
 }
 
 /** Anything with a `.complete()` that returns a gateway `ProxyResult` (ideProxy / tenantProxy). */
-export interface FinetuneJudgeService {
-  complete(req: ChatCompletionRequest): Promise<{ response: Response }>;
-}
+export type FinetuneJudgeService = JsonProxy;
 
 const EVAL_SYSTEM_PROMPT = `You are an expert evaluator of fine-tuned language-model outputs.
 Given instructions with their expected outputs and the model's actual outputs, judge quality.
@@ -62,28 +60,20 @@ function defaultResult(): FinetuneEvalResult {
 }
 
 /**
- * Parse the judge's reply into a clamped, structured result. Tolerant of code
- * fences and surrounding prose; falls back to neutral scores on any parse failure
- * so the route never throws on a malformed judge response.
+ * Shape the judge's parsed reply into a clamped, structured result. Refuses a
+ * non-object reply (so the caller falls back to neutral scores); a missing field
+ * takes its neutral default rather than failing the whole verdict.
  */
-export function parseFinetuneEvaluation(text: string): FinetuneEvalResult {
-  if (!text) return defaultResult();
-  try {
-    const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
-    const start = cleaned.indexOf('{');
-    const end = cleaned.lastIndexOf('}');
-    if (start === -1 || end === -1) return defaultResult();
-    const parsed = JSON.parse(cleaned.slice(start, end + 1)) as Partial<FinetuneEvalResult>;
-    return {
-      score: clamp01(Number(parsed.score ?? 0.5)),
-      code_correctness: clamp01(Number(parsed.code_correctness ?? 0.5)),
-      reasoning_quality: clamp01(Number(parsed.reasoning_quality ?? 0.5)),
-      hallucination_rate: clamp01(Number(parsed.hallucination_rate ?? 0.1)),
-      details: String(parsed.details ?? 'No details provided.'),
-    };
-  } catch {
-    return defaultResult();
-  }
+export function readFinetuneEvaluation(value: unknown): FinetuneEvalResult | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const parsed = value as Partial<FinetuneEvalResult>;
+  return {
+    score: clamp01(Number(parsed.score ?? 0.5)),
+    code_correctness: clamp01(Number(parsed.code_correctness ?? 0.5)),
+    reasoning_quality: clamp01(Number(parsed.reasoning_quality ?? 0.5)),
+    hallucination_rate: clamp01(Number(parsed.hallucination_rate ?? 0.1)),
+    details: String(parsed.details ?? 'No details provided.'),
+  };
 }
 
 /**
@@ -110,18 +100,16 @@ Actual: ${outs[i] ?? '(no output)'}`).join('\n\n')}
 
 Provide scores for: overall quality (score), code correctness, reasoning quality, and hallucination rate.`;
 
-  try {
-    const result = await service.complete({
-      messages: [
-        { role: 'system', content: EVAL_SYSTEM_PROMPT },
-        { role: 'user', content: evaluationPrompt },
-      ],
-      stream: false,
-      max_tokens: maxTokens,
-    } as ChatCompletionRequest);
-    const { content } = await readProxyChoice(result);
-    return parseFinetuneEvaluation(content);
-  } catch {
-    return defaultResult();
-  }
+  const out = await completeJson(
+    { kind: 'proxy', proxy: service },
+    {
+      system: EVAL_SYSTEM_PROMPT,
+      user: evaluationPrompt,
+      temperature: 0,
+      maxTokens,
+      useCase: 'finetune_evaluation',
+    },
+    readFinetuneEvaluation,
+  );
+  return out.ok ? out.value : defaultResult();
 }

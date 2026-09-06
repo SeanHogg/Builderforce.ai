@@ -318,8 +318,52 @@ function collectMigrationColumns(sqlFiles) {
         if (addM) readClause(table, addM[1], file);
       }
     }
+
+    applyRenames(text, sql);
   }
   return { columns, fks };
+
+  /** Register `table.column` under a new name, keeping the original: the column set
+   *  is a UNION over time, so a pre-rename migration still resolves the old name. */
+  function alias(table, column, newTable, newColumn) {
+    const entry = columns.get(table)?.get(column);
+    if (!entry) return;
+    if (!columns.has(newTable)) columns.set(newTable, new Map());
+    if (!columns.get(newTable).has(newColumn)) columns.get(newTable).set(newColumn, entry);
+  }
+  function renameTable(oldT, newT) {
+    if (oldT === newT || !columns.has(oldT)) return;
+    for (const column of columns.get(oldT).keys()) alias(oldT, column, newT, column);
+  }
+  function replaceSubstr(a, b) {
+    for (const [table, cols] of [...columns]) {
+      for (const column of [...cols.keys()]) {
+        const newTable = table.split(a).join(b);
+        const newColumn = column.split(a).join(b);
+        if (newTable !== table || newColumn !== column) alias(table, column, newTable, newColumn);
+      }
+    }
+  }
+  /**
+   * Renames — the SAME directives and statements `check-schema-drift.mjs` reads.
+   * 0078 renamed every `*claw*` column to `*agent_host*` inside a DO block that
+   * loops over information_schema, so there is no literal `RENAME COLUMN` to
+   * parse; its `-- @schema-drift-rename-*` directives declare the transformation.
+   * Without this, a column that only ever existed under its renamed name (0442's
+   * `team_memory.agent_host_id`, created as `claw_id` in 0068a) resolved solely
+   * through the Drizzle fallback — and vanished from the union the moment the
+   * table was retired from the schema (1131).
+   */
+  function applyRenames(raw, stripped) {
+    for (const d of raw.matchAll(/--\s*@schema-drift-rename-table\s+([a-z_][a-z_0-9]*)\s*->\s*([a-z_][a-z_0-9]*)/gi))
+      renameTable(d[1].toLowerCase(), d[2].toLowerCase());
+    for (const d of raw.matchAll(/--\s*@schema-drift-rename-replace\s+([a-z_][a-z_0-9]*)\s*->\s*([a-z_][a-z_0-9]*)/gi))
+      replaceSubstr(d[1].toLowerCase(), d[2].toLowerCase());
+    for (const d of stripped.matchAll(/alter\s+table\s+(?:if\s+exists\s+)?["']?(\w+)["']?\s+rename\s+to\s+["']?(\w+)["']?/gi))
+      renameTable(d[1].toLowerCase(), d[2].toLowerCase());
+    for (const d of stripped.matchAll(/alter\s+table\s+(?:if\s+exists\s+)?["']?(\w+)["']?\s+rename\s+column\s+["']?(\w+)["']?\s+to\s+["']?(\w+)["']?/gi))
+      alias(d[1].toLowerCase(), d[2].toLowerCase(), d[1].toLowerCase(), d[3].toLowerCase());
+  }
 }
 
 const sqlTexts = files.map((f) => ({ file: f, text: readFileSync(join(migrationsDir, f), 'utf8') }));

@@ -23,10 +23,18 @@ import { TenantRole } from '../../domain/shared/types';
 import { scope } from './segmentTrackerRoutes';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { forecastAnomalyAcks } from '../../infrastructure/database/schema';
-import { computeForecast, isForecastMetric } from '../../application/insights/forecastSeries';
+import { computeForecast, isForecastMetric, FORECAST_METRICS } from '../../application/insights/forecastSeries';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { daysParam } from './queryParams';
+import { parseBody, z } from './requestBody';
+
+/** POST /forecast/ack body — metric + 'YYYY-MM-DD' anomaly day, optional note. */
+const AckBody = z.object({
+  metric: z.enum(FORECAST_METRICS),
+  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'day must be YYYY-MM-DD'),
+  note: z.string().optional(),
+});
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 
@@ -76,10 +84,7 @@ export function createForecastRoutes(db: Db): Hono<HonoEnv> {
   router.post('/forecast/ack', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_FEATURE), async (c) => {
     const { tenantId, segmentId } = scope(c);
     const userId = (c as unknown as { get(k: string): string | undefined }).get('userId') ?? null;
-    const body = await c.req.json<{ metric?: string; day?: string; note?: string }>().catch(() => ({} as { metric?: string; day?: string; note?: string }));
-    if (!isForecastMetric(body.metric) || !isIsoDay(body.day)) {
-      return c.json({ error: 'metric (cost|cycle_time|cfr|throughput) and day (YYYY-MM-DD) are required' }, 400);
-    }
+    const body = await parseBody(c, AckBody);
     await db
       .insert(forecastAnomalyAcks)
       .values({ tenantId, segmentId: segmentId || null, metric: body.metric, pointDay: body.day, note: body.note?.slice(0, 500) ?? null, ackedBy: userId })

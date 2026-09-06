@@ -43,6 +43,19 @@ export class SpecFetchError extends Error {
 }
 
 /**
+ * A spec that was read fine but cannot become a connector — not an object, no
+ * paths, nothing importable. The caller's document is wrong, so it is a 400 the
+ * caller should see verbatim; a bare `Error` here used to be answered as a 500.
+ */
+export class OpenApiImportError extends Error {
+  readonly status = 400;
+  constructor(message: string) {
+    super(message);
+    this.name = 'OpenApiImportError';
+  }
+}
+
+/**
  * Fetch a tenant-supplied OpenAPI spec by URL, server-side.
  *
  * This lives here rather than in the route because it is the same class of
@@ -272,12 +285,12 @@ export function manifestFromOpenApi(
   spec: unknown,
   opts: { key: string; name?: string; icon?: string; category?: string; fallbackBaseUrl?: string },
 ): OpenApiImportResult {
-  if (!isObj(spec)) throw new Error('The OpenAPI document is not a JSON object');
+  if (!isObj(spec)) throw new OpenApiImportError('The OpenAPI document is not a JSON object');
   const warnings: string[] = [];
 
   const info = isObj(spec.info) ? spec.info : {};
   const paths = isObj(spec.paths) ? spec.paths : {};
-  if (Object.keys(paths).length === 0) throw new Error('The OpenAPI document declares no paths');
+  if (Object.keys(paths).length === 0) throw new OpenApiImportError('The OpenAPI document declares no paths');
 
   const baseUrl = deriveBaseUrl(spec, opts.fallbackBaseUrl, warnings);
   const auth = deriveAuth(spec, warnings);
@@ -392,7 +405,7 @@ export function manifestFromOpenApi(
     }
   }
 
-  if (actions.length === 0) throw new Error('No importable operations were found in the document');
+  if (actions.length === 0) throw new OpenApiImportError('No importable operations were found in the document');
   if (totalOperations > actions.length) {
     warnings.push(
       `The spec declares ${totalOperations} operations; the first ${actions.length} were imported (a connector is capped at ${MAX_ACTIONS_PER_CONNECTOR} actions so it does not crowd out every other tool in the model's context).`,

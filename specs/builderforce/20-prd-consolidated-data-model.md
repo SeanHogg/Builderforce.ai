@@ -9,7 +9,7 @@
 > the data rather than from taste. See PRD 21 §4.
 
 > **Status:** Steps 0–3, step 5's access layer, and the kernel halves of 6–7 are built and green.
-> The target schema exists — `check-model-coverage.mjs` reports **363 / 363 (100%)** — the kernel is
+> The target schema exists — `check-model-coverage.mjs` reports **362 / 362 (100%)** — the kernel is
 > exposed once at `/api/objects`, the fifteen domain route groups are live at `/api/<domain>`, and
 > the fifteen domain surfaces render from ONE component at `/seat/<domain>`.
 > **Every one of the 333 consolidated tables now has a code path**: `check-table-adoption.mjs` went
@@ -32,9 +32,9 @@
 > distinct source tables, each mapped to its target and the move that takes it there. Zero
 > unaccounted.
 >
-> ### **1,206 declarations → 1,130 distinct names → 388 tables**
+> ### **1,206 declarations → 1,130 distinct names → 387 tables**
 >
-> **25 kernel + 363 domain**, across 15 domains, one owner each. The file above is the proof:
+> **25 kernel + 362 domain**, across 15 domains, one owner each. The file above is the proof:
 > 566 absorbed by a kernel primitive, 168 merged into a sibling, 24 into the canvas, 9 flattened,
 > and **363 distinct kept targets** — which is the domain count arrived at independently.
 > Of the 388, **371 are measured and reproducible**; the last 17 are the eleven named judgements
@@ -375,8 +375,14 @@ And the row is an *entity*, not a derived number: it carries a conversion pointe
 per-UTC-day guest allowance counter that is authoritative rather than computed, while `metric_facts`
 is by its own docstring "a derived number that was given its own DDL". What legitimately becomes a
 `metric_facts` row is the **daily aggregate over** these rows, not the rows. The map now files it
-`keep`, which is why the domain total reads 363 rather than 362. The same argument covers
+`keep`, which is why the domain total read 363 rather than 362 at the time. The same argument covers
 `marketing_session_prompts` (migration 0434), which hangs off the same pre-tenant `visitor_id`.
+
+**Retired after the fact — `team_memory` → `agent_memory`.** The cross-host memory feed was folded
+into the governed memory store by migration 0442 (every row became a tenant-scoped fact keyed
+`team:<host>:<run>`), `/api/teams/memory` has read and written `agent_memory` ever since, and 1131
+dropped the empty table. Its map row now reads `merged`, which brings the domain total back to 362
+and the schema to 387.
 
 **The three tables the machine kept, and should have.** `promo_projects` is a client creative
 *order*, not a project. `modules` is a permission module, `course_modules` a chapter.
@@ -413,7 +419,7 @@ against the target schema, plus one coverage proof.
 
 | Check | Invariant | Fails when |
 |---|---|---|
-| **Coverage** | Every one of the 1,130 source tables maps to a target | A capability was dropped silently. Current state: 1,130 mapped, **0 unaccounted**, and the 363 distinct `keep` targets reconcile with the domain roster row-for-row. |
+| **Coverage** | Every one of the 1,130 source tables maps to a target | A capability was dropped silently. Current state: 1,130 mapped, **0 unaccounted**, and the 362 distinct `keep` targets reconcile with the domain roster row-for-row. |
 | **Tenancy** | Every table carries `tenant_id NOT NULL` | 162 BurnRateOS models carry `company_id` and no tenant column; every gate in the platform runs on tenant. |
 | **Referential integrity** | Every polymorphic `(kind, id)` references `object` | A generic table can orphan rows the old per-entity table could not. |
 | **Shape lint** | No table outside the kernel implements a kernel shape | Someone adds `X_comments`. This is the rule from §0 as a test. |
@@ -450,7 +456,7 @@ stale-entry reporting — extracted from the pattern `check-tenant-scope.mjs` an
 | `check-tenant-column.mjs` | **72** tables with no tenant-scoping column |
 | `check-polymorphic-fk.mjs` | **3** `(kind, id)` pairs with no `objects` registry |
 | `check-domain-boundary.mjs` | **82** cross-module schema imports, including cycles |
-| `check-model-coverage.mjs` | 1,130 mapped · 0 unaccounted · 363 keeps + 25 kernel = 388 |
+| `check-model-coverage.mjs` | 1,130 mapped · 0 unaccounted · 362 keeps + 25 kernel = 387 |
 
 **The eight duplicate clusters inside this repo today, before any merge:**
 

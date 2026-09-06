@@ -2,9 +2,10 @@
 // already a client component, so the boundary is inherited and a second declaration here
 // would only add another file to the architecture ratchet's client-component tally — the
 // same reason `CanvasSessionActions` omits it.
+import { Fragment } from 'react';
 import { useTranslations } from 'next-intl';
 import { AddObjectIcon, ClosePaletteIcon, CollapseBarIcon, ExpandBarIcon, PromptIcon, RunCanvasIcon } from '@/components/canvas/CanvasCommands';
-import { canvasChromeShows } from '@/lib/canvasChrome';
+import { canvasChromeShows, canvasChromeSlotsIn, type CanvasChromeSlot } from '@/lib/canvasChrome';
 import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import type { CanvasSessionActionId } from '@/lib/canvasSessionActions';
 import { mergeRefs } from '@/lib/mergeRefs';
@@ -40,6 +41,12 @@ import styles from './CreationCanvas.module.css';
  * publishes Run / Preview·Code·Console / the viewport switcher into the contribution seam
  * and this bar draws whatever it finds. A surface added next year gets a bar for free, and
  * cannot get a SECOND bar, which is the failure this replaced.
+ *
+ * Nor is the ORDER of the bar decided here. `canvasChrome.ts` places each slot and, by
+ * declaring them in sequence, says what comes before what; this bar iterates
+ * `canvasChromeSlotsIn('bar')` and draws the content it holds for each slot that
+ * `canvasChromeShows` keeps. A fold therefore removes exactly the control slots and
+ * exactly in place — the roster does not jump because the glyphs beside it vanished.
  *
  * ── RUN ──────────────────────────────────────────────────────────────────────────
  * Run is the first control on the bar and it is the one thing here that is not
@@ -151,6 +158,85 @@ export function CanvasCommandBar({
   // Asked of the registry rather than listed here, for the same reason the session actions
   // ask it: a surface added later answers correctly without this file changing.
   const showsQuickAdd = showsActions && surface === 'graph';
+
+  /**
+   * What this bar holds for each slot. The registry says WHICH slots the bar has and in
+   * what order; this map says what each one draws here, and a slot with no entry (the
+   * runtime's two contributed halves) is drawn by the component that owns the seam.
+   */
+  const slotContent: Partial<Record<CanvasChromeSlot, React.ReactNode>> = {
+    /* The runtime's own report and controls, then the glyph clusters. One component,
+       drawn at the FIRST of the three slots it fills, because which of those survive a
+       collapse is one table and not three — it gates each of its halves itself, so it
+       is mounted whether or not the bar is folded. `surfaceControls` and `actions`
+       are therefore drawn by it, not by entries of their own. */
+    surfaceStatus: <CanvasSessionActions variant="bar" surface={surface} collapsed={collapsed} handlers={handlers} />,
+    actions: <>
+      {/* Run, when the surface does not run itself. Green rather than brand blue: it is
+          the only control on this bar that STARTS something, and the board's accent is
+          already spent on "which surface am I on".
+
+          The word on it is "Run" and its ACCESSIBLE NAME is "Run this canvas", which is
+          not padding: a board can carry objects with run buttons of their own — a
+          workflow widget offers "Run Fall campaign" — and a bare "Run" beside them is
+          ambiguous to anyone reading the page by its names rather than its layout. The
+          bar has the room to be specific; the button does not. */}
+      {onRun && <button
+        type="button"
+        className={styles.runButton}
+        data-testid="canvas-run"
+        aria-label={t('runCanvasLabel')}
+        title={t('runCanvasTitle')}
+        onClick={onRun}
+      ><RunCanvasIcon /><span>{t('runCanvas')}</span></button>}
+
+      {/* Moving around the board sits with acting on it. It used to be a second floating
+          rail pinned to the left edge — two toolbars over one canvas, each with its own
+          idea of which commands are "view" and which are "session". */}
+      {view}
+
+      {/* The prompt is a THING YOU CAN PUT AWAY now, so the bar has to be able to bring
+          it back — a close with no way back is the trap that keeps people from ever
+          pressing it. */}
+      {onTogglePrompt && <button
+        type="button"
+        className={styles.sessionActionButton}
+        data-testid="canvas-prompt-toggle"
+        aria-pressed={promptOpen}
+        aria-label={promptOpen ? t('hidePrompt') : t('showPrompt')}
+        title={promptOpen ? t('hidePrompt') : t('showPrompt')}
+        onClick={onTogglePrompt}
+      ><PromptIcon /></button>}
+
+      {extras}
+    </>,
+    /* Never folded. A collapsed roster is a team nobody can see is working, and this
+       bar IS what is left after a collapse — so if the avatars were anywhere else the
+       rule that keeps them would be a statement about an element that never folds. */
+    roster: <>
+      <span className={styles.commandBarDivider} aria-hidden />
+      {roster}
+      {team}
+      {/* Bring someone into THIS group — drawn as its trailing chip, not a worded
+          button in the corner beside it. See `chrome: 'roster'` in
+          `canvasSessionActions.ts` for why Share moved here. Its own positioned
+          box, because `inviteMenu` anchors `right:0` against whatever wraps this
+          button — it has to be this wrapper and not the bar itself, or the sheet
+          opens off the button that spawned it. */}
+      {showsActions && <span className={styles.rosterInviteAnchor} data-testid="canvas-roster-invite">
+        <CanvasSessionActions variant="roster" surface={surface} handlers={handlers} />
+        {inviteMenu}
+      </span>}
+    </>,
+    /* The doors out — Invite, Publish, ••• — behind their own divider so the group
+       reads apart from the roster beside it, the same way it always read apart from
+       the glyphs when it had a card of its own. `handoff` is `SLOT_KIND.control` in
+       `canvasChrome.ts`, so the registry folds it with the rest of the controls. */
+    handoff: handoff ? <>
+      <span className={styles.commandBarDivider} aria-hidden />
+      {handoff}
+    </> : null,
+  };
   // Own drag offset: this bar is one of the floating cards someone might want to pull
   // clear of the board, and it already owns the node `hostRef` measures, so the two
   // refs merge onto the same element rather than one hook borrowing the other's node.
@@ -169,76 +255,10 @@ export function CanvasCommandBar({
     >
       <PanelDragHandle isMoved={drag.isMoved} {...drag.handleProps} />
 
-      {/* Run, when the surface does not run itself. Green rather than brand blue: it is
-          the only control on this bar that STARTS something, and the board's accent is
-          already spent on "which surface am I on".
-
-          The word on it is "Run" and its ACCESSIBLE NAME is "Run this canvas", which is
-          not padding: a board can carry objects with run buttons of their own — a
-          workflow widget offers "Run Fall campaign" — and a bare "Run" beside them is
-          ambiguous to anyone reading the page by its names rather than its layout. The
-          bar has the room to be specific; the button does not. */}
-      {onRun && showsActions && <button
-        type="button"
-        className={styles.runButton}
-        data-testid="canvas-run"
-        aria-label={t('runCanvasLabel')}
-        title={t('runCanvasTitle')}
-        onClick={onRun}
-      ><RunCanvasIcon /><span>{t('runCanvas')}</span></button>}
-
-      {/* The surface's own report and controls, then the glyph clusters. One component,
-          because which of those survive a collapse is one table and not three. */}
-      <CanvasSessionActions variant="bar" surface={surface} collapsed={collapsed} handlers={handlers} />
-
-      {/* Moving around the board sits with acting on it. It used to be a second floating
-          rail pinned to the left edge — two toolbars over one canvas, each with its own
-          idea of which commands are "view" and which are "session". */}
-      {showsActions && view}
-
-      {/* The prompt is a THING YOU CAN PUT AWAY now, so the bar has to be able to bring
-          it back — a close with no way back is the trap that keeps people from ever
-          pressing it. */}
-      {onTogglePrompt && showsActions && <button
-        type="button"
-        className={styles.sessionActionButton}
-        data-testid="canvas-prompt-toggle"
-        aria-pressed={promptOpen}
-        aria-label={promptOpen ? t('hidePrompt') : t('showPrompt')}
-        title={promptOpen ? t('hidePrompt') : t('showPrompt')}
-        onClick={onTogglePrompt}
-      ><PromptIcon /></button>}
-
-      {extras}
-
-      {/* Never folded. A collapsed roster is a team nobody can see is working, and this
-          bar IS what is left after a collapse — so if the avatars were anywhere else the
-          rule that keeps them would be a statement about an element that never folds. */}
-      {canvasChromeShows('roster', collapsed) && <>
-        <span className={styles.commandBarDivider} aria-hidden />
-        {roster}
-        {team}
-        {/* Bring someone into THIS group — drawn as its trailing chip, not a worded
-            button in the corner beside it. See `chrome: 'roster'` in
-            `canvasSessionActions.ts` for why Share moved here. Its own positioned
-            box, because `inviteMenu` anchors `right:0` against whatever wraps this
-            button — it has to be this wrapper and not the bar itself, or the sheet
-            opens off the button that spawned it. */}
-        {showsActions && <span className={styles.rosterInviteAnchor} data-testid="canvas-roster-invite">
-          <CanvasSessionActions variant="roster" surface={surface} handlers={handlers} />
-          {inviteMenu}
-        </span>}
-      </>}
-
-      {/* The doors out — Invite, Publish, ••• — behind their own divider so the group
-          reads apart from the roster beside it, the same way it always read apart from
-          the glyphs when it had a card of its own. Folds away with the rest of the
-          controls: `handoff` is `SLOT_KIND.control` in `canvasChrome.ts`, same as
-          `actions`, so `showsActions` is the right gate rather than a new one. */}
-      {handoff && showsActions && <>
-        <span className={styles.commandBarDivider} aria-hidden />
-        {handoff}
-      </>}
+      {/* The bar, in the registry's order, keeping the registry's survivors. */}
+      {canvasChromeSlotsIn('bar')
+        .filter((slot) => canvasChromeShows(slot, collapsed))
+        .map((slot) => <Fragment key={slot}>{slotContent[slot]}</Fragment>)}
 
       {showsQuickAdd && <>
         <span className={styles.commandBarDivider} aria-hidden />

@@ -25,6 +25,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { TaskService } from '../task/TaskService';
 import type { Task } from '../../domain/task/Task';
 import { TaskPriority, TaskStatus, TaskType } from '../../domain/shared/types';
+import { ConflictError, ValidationError } from '../../domain/shared/errors';
 import {
   boards,
   qaFindings,
@@ -136,10 +137,10 @@ export class QaFindingRouter {
     opts?: { autoRouted?: boolean; env?: Env },
   ): Promise<CreatedFindingTask> {
     if (finding.projectId == null) {
-      throw new Error('This finding has no project — self-test findings cannot create board tasks.');
+      throw new ValidationError('This finding has no project — self-test findings cannot create board tasks.');
     }
     if (finding.taskId) {
-      throw new Error('A task already exists for this finding');
+      throw new ConflictError('A task already exists for this finding');
     }
 
     // Cross-exploration dedupe: the same recurring error captured in a later run

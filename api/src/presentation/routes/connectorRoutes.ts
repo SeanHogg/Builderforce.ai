@@ -15,14 +15,18 @@
  * Secrets are write-only over this API: they go in on create/update and never come
  * back out. `GET` returns the non-secret fields plus the NAMES of the keys that
  * have a value, which is enough to render "connected as acme.zendesk.com".
+ *
+ * ERRORS. `ConnectorServiceError`, `ConnectorCallError`, `SpecFetchError` and
+ * `OpenApiImportError` each carry their own status (and, for the service, the
+ * `details` list a validator produced); the global handler renders them through
+ * `statusOf`, so no handler here catches anything.
  */
 
-import { Hono, type Context } from 'hono';
+import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv, Env } from '../../env';
 import type { DbHandle as Db } from '../../application/shared/dbHandle';
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import {
   listConnectorsForTenant,
   resolveConnector,
@@ -39,27 +43,59 @@ import {
   testConnection,
   updateConnection,
   updateConnector,
-  ConnectorServiceError,
 } from '../../application/connectors/connectorService';
-import { executeConnectorAction, ConnectorCallError } from '../../application/connectors/connectorRuntime';
-import { manifestFromOpenApi, fetchOpenApiSpec, SpecFetchError } from '../../application/connectors/openapiImport';
+import { executeConnectorAction } from '../../application/connectors/connectorRuntime';
+import { manifestFromOpenApi, fetchOpenApiSpec } from '../../application/connectors/openapiImport';
 import { CONNECTOR_CATEGORIES } from '../../application/connectors/connectorManifest';
 import { connectorActionCatalog } from '../../application/connectors/connectorActionCatalog';
 import { limitParam } from './queryParams';
+import { parseBody, z, zNonEmptyString, zOptionalString } from './requestBody';
 
-function fail(c: Context<HonoEnv>, e: unknown) {
-  if (e instanceof SpecFetchError) {
-    return c.json({ error: e.message }, e.status as 400);
-  }
-  if (e instanceof ConnectorServiceError) {
-    return c.json({ error: e.message, ...(e.details ? { details: e.details } : {}) }, e.status as 400);
-  }
-  if (e instanceof ConnectorCallError) {
-    return c.json({ error: e.message }, e.status as 400);
-  }
-  reportCaughtError(e, { source: 'presentation/routes/connectorRoutes.ts', operation: 'handler' });
-  return c.json({ error: e instanceof Error ? e.message : 'Connector request failed' }, 500);
-}
+/** A free-form JSON object — a manifest, a credential bag, an action's input. */
+const zJsonObject = z.record(z.string(), z.unknown());
+
+const CreateConnectorBody = z.object({
+  manifest: zJsonObject,
+  publish: z.boolean().optional(),
+});
+
+const UpdateConnectorBody = z.object({
+  manifest: zJsonObject.optional(),
+  status: z.enum(['published', 'draft']).optional(),
+});
+
+const ImportOpenApiBody = z.object({
+  key: zNonEmptyString,
+  specUrl: zOptionalString,
+  spec: zJsonObject.optional(),
+  name: zOptionalString,
+  icon: zOptionalString,
+  category: zOptionalString,
+});
+
+const CreateConnectionBody = z.object({
+  connectorKey: zNonEmptyString,
+  name: zNonEmptyString,
+  credentials: zJsonObject.optional(),
+  baseUrlOverride: z.string().nullable().optional(),
+});
+
+const UpdateConnectionBody = z.object({
+  name: z.string().optional(),
+  enabled: z.boolean().optional(),
+  credentials: zJsonObject.optional(),
+  baseUrlOverride: z.string().nullable().optional(),
+});
+
+const TestConnectionBody = z.object({
+  actionKey: zOptionalString,
+  input: zJsonObject.optional(),
+});
+
+const RunActionBody = z.object({
+  input: zJsonObject.optional(),
+  connectionId: zOptionalString,
+});
 
 export function createConnectorRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -110,45 +146,31 @@ export function createConnectorRoutes(db: Db): Hono<HonoEnv> {
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string;
-    const body = await c.req
-      .json<{ manifest?: unknown; publish?: boolean }>()
-      .catch(() => ({}) as { manifest?: unknown; publish?: boolean });
-    if (!body.manifest) return c.json({ error: 'manifest is required' }, 400);
-    try {
-      const created = await createConnector(db, c.env as Env, {
-        tenantId, manifest: body.manifest, userId, publish: body.publish === true,
-      });
-      return c.json(created, 201);
-    } catch (e) { return fail(c, e); }
+    const body = await parseBody(c, CreateConnectorBody);
+    const created = await createConnector(db, c.env as Env, {
+      tenantId, manifest: body.manifest, userId, publish: body.publish === true,
+    });
+    return c.json(created, 201);
   });
 
   // PATCH /api/connectors/:id — edit the manifest and/or publish it.
   router.patch('/:id', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req
-      .json<{ manifest?: unknown; status?: 'published' | 'draft' }>()
-      .catch(() => ({}) as { manifest?: unknown; status?: 'published' | 'draft' });
-    if (body.status && body.status !== 'published' && body.status !== 'draft') {
-      return c.json({ error: 'status must be "published" or "draft"' }, 400);
-    }
-    try {
-      const updated = await updateConnector(db, c.env as Env, {
-        tenantId,
-        id: c.req.param('id'),
-        ...(body.manifest !== undefined ? { manifest: body.manifest } : {}),
-        ...(body.status ? { status: body.status } : {}),
-      });
-      return c.json(updated);
-    } catch (e) { return fail(c, e); }
+    const body = await parseBody(c, UpdateConnectorBody);
+    const updated = await updateConnector(db, c.env as Env, {
+      tenantId,
+      id: c.req.param('id'),
+      ...(body.manifest !== undefined ? { manifest: body.manifest } : {}),
+      ...(body.status ? { status: body.status } : {}),
+    });
+    return c.json(updated);
   });
 
   // DELETE /api/connectors/:id — remove a custom connector and its connections.
   router.delete('/:id', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    try {
-      const result = await deleteConnector(db, c.env as Env, { tenantId, id: c.req.param('id') });
-      return c.json({ ok: true, ...result });
-    } catch (e) { return fail(c, e); }
+    const result = await deleteConnector(db, c.env as Env, { tenantId, id: c.req.param('id') });
+    return c.json({ ok: true, ...result });
   });
 
   // ── OpenAPI import ─────────────────────────────────────────────────────
@@ -158,111 +180,86 @@ export function createConnectorRoutes(db: Db): Hono<HonoEnv> {
   // the remaining decisions (which actions matter, whether `mutates` is right for
   // this API) belong to a human, and a silent save would skip that review.
   router.post('/import/openapi', async (c) => {
-    const body = await c.req
-      .json<{ specUrl?: string; spec?: unknown; key?: string; name?: string; icon?: string; category?: string }>()
-      .catch(() => ({}) as { specUrl?: string; spec?: unknown; key?: string; name?: string; icon?: string; category?: string });
-    const key = (body.key ?? '').trim().toLowerCase();
-    if (!key) return c.json({ error: 'key is required' }, 400);
+    const body = await parseBody(c, ImportOpenApiBody);
+    const key = body.key.toLowerCase();
 
-    let spec = body.spec;
+    let spec: unknown = body.spec;
     let fallbackBaseUrl: string | undefined;
 
     if (!spec) {
-      const specUrl = (body.specUrl ?? '').trim();
-      if (!specUrl) return c.json({ error: 'Provide either specUrl or spec' }, 400);
+      if (!body.specUrl) return c.json({ error: 'Provide either specUrl or spec' }, 400);
       // The spec URL is tenant-supplied and fetched SERVER-SIDE, so the fetch lives
       // in the application layer beside the connector runtime's — same SSRF guard,
       // written once.
-      try {
-        const fetched = await fetchOpenApiSpec(specUrl);
-        spec = fetched.spec;
-        fallbackBaseUrl = fetched.baseUrl;
-      } catch (e) { return fail(c, e); }
+      const fetched = await fetchOpenApiSpec(body.specUrl);
+      spec = fetched.spec;
+      fallbackBaseUrl = fetched.baseUrl;
     }
 
-    try {
-      const result = manifestFromOpenApi(spec, {
-        key,
-        ...(body.name ? { name: body.name } : {}),
-        ...(body.icon ? { icon: body.icon } : {}),
-        ...(body.category ? { category: body.category } : {}),
-        ...(fallbackBaseUrl ? { fallbackBaseUrl } : {}),
-      });
-      return c.json(result);
-    } catch (e) { return fail(c, e); }
+    const result = manifestFromOpenApi(spec, {
+      key,
+      ...(body.name ? { name: body.name } : {}),
+      ...(body.icon ? { icon: body.icon } : {}),
+      ...(body.category ? { category: body.category } : {}),
+      ...(fallbackBaseUrl ? { fallbackBaseUrl } : {}),
+    });
+    return c.json(result);
   });
 
   // ── Connections ────────────────────────────────────────────────────────
   router.get('/connections/list', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const connectorKey = c.req.query('connectorKey');
-    try {
-      const connections = await listConnections(db, c.env as Env, {
-        tenantId, ...(connectorKey ? { connectorKey } : {}),
-      });
-      return c.json({ connections });
-    } catch (e) { return fail(c, e); }
+    const connections = await listConnections(db, c.env as Env, {
+      tenantId, ...(connectorKey ? { connectorKey } : {}),
+    });
+    return c.json({ connections });
   });
 
   router.post('/connections', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string;
-    const body = await c.req
-      .json<{ connectorKey?: string; name?: string; credentials?: Record<string, unknown>; baseUrlOverride?: string | null }>()
-      .catch(() => ({}) as { connectorKey?: string; name?: string; credentials?: Record<string, unknown>; baseUrlOverride?: string | null });
-    const connectorKey = (body.connectorKey ?? '').trim();
-    const name = (body.name ?? '').trim();
-    if (!connectorKey || !name) return c.json({ error: 'connectorKey and name are required' }, 400);
-    try {
-      const connection = await createConnection(db, c.env as Env, {
-        tenantId, connectorKey, name,
-        credentials: body.credentials ?? {},
-        baseUrlOverride: body.baseUrlOverride ?? null,
-        userId,
-      });
-      return c.json({ connection }, 201);
-    } catch (e) { return fail(c, e); }
+    const body = await parseBody(c, CreateConnectionBody);
+    const connection = await createConnection(db, c.env as Env, {
+      tenantId,
+      connectorKey: body.connectorKey,
+      name: body.name,
+      credentials: body.credentials ?? {},
+      baseUrlOverride: body.baseUrlOverride ?? null,
+      userId,
+    });
+    return c.json({ connection }, 201);
   });
 
   router.patch('/connections/:id', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req
-      .json<{ name?: string; enabled?: boolean; credentials?: Record<string, unknown>; baseUrlOverride?: string | null }>()
-      .catch(() => ({}) as { name?: string; enabled?: boolean; credentials?: Record<string, unknown>; baseUrlOverride?: string | null });
-    try {
-      const connection = await updateConnection(db, c.env as Env, {
-        tenantId, id: c.req.param('id'),
-        ...(body.name !== undefined ? { name: body.name } : {}),
-        ...(body.enabled !== undefined ? { enabled: body.enabled } : {}),
-        ...(body.credentials !== undefined ? { credentials: body.credentials } : {}),
-        ...(body.baseUrlOverride !== undefined ? { baseUrlOverride: body.baseUrlOverride } : {}),
-      });
-      return c.json({ connection });
-    } catch (e) { return fail(c, e); }
+    const body = await parseBody(c, UpdateConnectionBody);
+    const connection = await updateConnection(db, c.env as Env, {
+      tenantId, id: c.req.param('id'),
+      ...(body.name !== undefined ? { name: body.name } : {}),
+      ...(body.enabled !== undefined ? { enabled: body.enabled } : {}),
+      ...(body.credentials !== undefined ? { credentials: body.credentials } : {}),
+      ...(body.baseUrlOverride !== undefined ? { baseUrlOverride: body.baseUrlOverride } : {}),
+    });
+    return c.json({ connection });
   });
 
   router.delete('/connections/:id', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    try {
-      await deleteConnection(db, c.env as Env, { tenantId, id: c.req.param('id') });
-      return c.json({ ok: true });
-    } catch (e) { return fail(c, e); }
+    await deleteConnection(db, c.env as Env, { tenantId, id: c.req.param('id') });
+    return c.json({ ok: true });
   });
 
   // POST /api/connectors/connections/:id/test — verify credentials with a real read.
   router.post('/connections/:id/test', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req
-      .json<{ actionKey?: string; input?: Record<string, unknown> }>()
-      .catch(() => ({}) as { actionKey?: string; input?: Record<string, unknown> });
-    try {
-      const result = await testConnection(db, c.env as Env, {
-        tenantId, id: c.req.param('id'),
-        ...(body.actionKey ? { actionKey: body.actionKey } : {}),
-        ...(body.input ? { input: body.input } : {}),
-      });
-      return c.json(result);
-    } catch (e) { return fail(c, e); }
+    const body = await parseBody(c, TestConnectionBody);
+    const result = await testConnection(db, c.env as Env, {
+      tenantId, id: c.req.param('id'),
+      ...(body.actionKey ? { actionKey: body.actionKey } : {}),
+      ...(body.input ? { input: body.input } : {}),
+    });
+    return c.json(result);
   });
 
   // ── Manual invocation ──────────────────────────────────────────────────
@@ -273,23 +270,19 @@ export function createConnectorRoutes(db: Db): Hono<HonoEnv> {
   // tagged `actorKind: 'user'` so the log can tell the two apart.
   router.post('/:key/actions/:action', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req
-      .json<{ input?: Record<string, unknown>; connectionId?: string }>()
-      .catch(() => ({}) as { input?: Record<string, unknown>; connectionId?: string });
-    try {
-      const result = await executeConnectorAction({
-        db, env: c.env as Env, tenantId,
-        connectorKey: c.req.param('key'),
-        actionKey: c.req.param('action'),
-        input: body.input ?? {},
-        connectionId: body.connectionId ?? null,
-        actorKind: 'user',
-        // A draft is callable HERE (that is how you iterate on one) but never by an
-        // agent — listConnectorTools only advertises published connectors.
-        allowDraft: true,
-      });
-      return c.json(result);
-    } catch (e) { return fail(c, e); }
+    const body = await parseBody(c, RunActionBody);
+    const result = await executeConnectorAction({
+      db, env: c.env as Env, tenantId,
+      connectorKey: c.req.param('key'),
+      actionKey: c.req.param('action'),
+      input: body.input ?? {},
+      connectionId: body.connectionId ?? null,
+      actorKind: 'user',
+      // A draft is callable HERE (that is how you iterate on one) but never by an
+      // agent — listConnectorTools only advertises published connectors.
+      allowDraft: true,
+    });
+    return c.json(result);
   });
 
   // ── Audit ──────────────────────────────────────────────────────────────

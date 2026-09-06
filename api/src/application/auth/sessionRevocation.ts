@@ -14,11 +14,22 @@
  * Deliberately Hono-free: it takes a `Db` and returns data plus a list of pending
  * writes, leaving the caller to decide how to run them (the middlewares hand them
  * to `executionCtx.waitUntil`).
+ *
+ * It also owns the WRITE side — {@link revokeSessionTokens}. Eleven route
+ * handlers across `authRoutes`, `adminRoutes` and `tenantRoutes` each carried
+ * their own pair of `UPDATE auth_user_sessions` / `UPDATE auth_tokens`
+ * statements, and none of them told the legacy worker: it caches this module's
+ * verdict (via `GET /api/auth/introspect`) in the shared `AUTH_CACHE_KV`, so a
+ * revoke that only touched the database left the worker accepting the token
+ * until the cache expired. One use case, one invalidation, every site.
  */
 
-import { and, eq, gt, isNull, sql } from 'drizzle-orm';
+import { and, eq, gt, isNull, ne, sql, type SQL } from 'drizzle-orm';
+import { sessionIntrospectCacheKey } from '@builderforce/session-introspection';
+import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { authTokens, authUserSessions } from '../../infrastructure/database/schema';
+import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { UnauthorizedError } from '../../domain/shared/errors';
 
 /**
@@ -115,4 +126,89 @@ export function lastSeenWrites(db: Db, row: ActiveTokenRow, now = Date.now()): P
     );
   }
   return writes;
+}
+
+/**
+ * Which tokens (and sessions) a revoke names.
+ *
+ *   - `{ userId, sessionId }`       one session and every token minted under it;
+ *   - `{ userId, exceptSessionId }` every OTHER active session of the user —
+ *                                   "sign out everywhere else";
+ *   - `{ userId, jti }`             one token; its session survives;
+ *   - `{ userId }`                  every active session and token — force-logout;
+ *   - `{ jti }`                     one token by id regardless of holder — an
+ *                                   emulation token ending an impersonation.
+ *
+ * `tenantId` narrows the TOKEN update to one workspace's tokens (the admin and
+ * tenant-manager routes act on a member within a tenant, never across tenants);
+ * sessions are user-level and never tenant-scoped.
+ */
+export type RevokeSelector =
+  | { userId: string; sessionId: string; tenantId?: number }
+  | { userId: string; exceptSessionId: string }
+  | { userId: string; jti: string; tenantId?: number }
+  | { userId: string; tenantId?: number }
+  | { jti: string };
+
+/** The `auth_user_sessions` rows a selector deactivates — none for a single token. */
+function sessionPredicate(selector: RevokeSelector): SQL | undefined {
+  if ('jti' in selector) return undefined;
+  if ('sessionId' in selector) {
+    return and(eq(authUserSessions.id, selector.sessionId), eq(authUserSessions.userId, selector.userId));
+  }
+  if ('exceptSessionId' in selector) {
+    return and(
+      eq(authUserSessions.userId, selector.userId),
+      ne(authUserSessions.id, selector.exceptSessionId),
+      eq(authUserSessions.isActive, true),
+    );
+  }
+  return and(eq(authUserSessions.userId, selector.userId), eq(authUserSessions.isActive, true));
+}
+
+/** The live `auth_tokens` rows a selector revokes. */
+function tokenPredicate(selector: RevokeSelector): SQL {
+  const clauses: SQL[] = [isNull(authTokens.revokedAt)];
+  if ('userId' in selector) clauses.push(eq(authTokens.userId, selector.userId));
+  if ('tenantId' in selector && selector.tenantId !== undefined) clauses.push(eq(authTokens.tenantId, selector.tenantId));
+  if ('sessionId' in selector) clauses.push(eq(authTokens.sessionId, selector.sessionId));
+  // `ne` on a NULL session_id is NULL, so session-less tokens are deliberately
+  // NOT swept by "sign out everywhere else" — they were never part of a session.
+  if ('exceptSessionId' in selector) clauses.push(ne(authTokens.sessionId, selector.exceptSessionId));
+  if ('jti' in selector) clauses.push(eq(authTokens.jti, selector.jti));
+  // `and` is only undefined with zero clauses; the revokedAt clause is always present.
+  return and(...clauses) as SQL;
+}
+
+/**
+ * Revoke the sessions and tokens `selector` names, then drop each revoked jti's
+ * cached introspection verdict from the shared KV so the legacy worker stops
+ * honouring it within its L1 TTL rather than at `exp`.
+ *
+ * ONE statement per table. The token update `RETURNING jti` is what makes the
+ * invalidation exact: the cache key is per-jti, and enumerating the rows the
+ * database actually flipped is the only way to know which keys exist.
+ */
+export async function revokeSessionTokens(
+  db: Db,
+  env: Env | undefined,
+  selector: RevokeSelector,
+): Promise<{ revokedJtis: string[] }> {
+  const sessions = sessionPredicate(selector);
+  if (sessions) {
+    await db
+      .update(authUserSessions)
+      .set({ isActive: false, revokedAt: sql`now()`, lastSeenAt: sql`now()` })
+      .where(sessions);
+  }
+
+  const rows = await db
+    .update(authTokens)
+    .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
+    .where(tokenPredicate(selector))
+    .returning({ jti: authTokens.jti });
+
+  const revokedJtis = rows.map((row) => row.jti);
+  await Promise.all(revokedJtis.map((jti) => invalidateCached(env, sessionIntrospectCacheKey(jti))));
+  return { revokedJtis };
 }

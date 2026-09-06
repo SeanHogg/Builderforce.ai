@@ -10,7 +10,7 @@ import { TOOLS, getTool } from './toolDefinitions';
 import { TOOL_DATA_PROVIDERS, hasDataProvider } from './toolDataProviders';
 import { toSummary, toDefinition, type ToolSummary, type ToolDefinition, type ToolResult } from './toolTypes';
 import { applyMaturityFramework, maturityFramework, supportsMaturityFrameworks, type MaturityFrameworkId } from './maturityFrameworks';
-import { localizeTool, toolCopy, DEFAULT_TOOL_LOCALE, type ToolLocale } from './toolMessages';
+import { localizeTool, toolCatalog, toolCopy, DEFAULT_TOOL_LOCALE, TRANSLATED_TOOL_LOCALES, type ToolLocale } from './toolMessages';
 import { TOOL_LOCALES, resultCopy } from './resultCopy';
 import { storedFigures, storedResult, withFigures } from './storedToolResult';
 import { scoreQuestionnaire, scoreQuiz } from './toolTypes';
@@ -47,6 +47,24 @@ export function diagnosticName(toolId: string): string {
  *  analytics gauges) label a diagnostic without re-deriving the mapping. */
 export function diagnosticIcon(toolId: string): string {
   return EXTERNAL_DIAGNOSTIC_ICONS[toolId] ?? getTool(toolId)?.icon ?? '📊';
+}
+
+/**
+ * What language the tools in a response are actually in.
+ *
+ * `list` and `getDefinition` degrade to English for a locale with no catalog
+ * rather than failing — right for a public page, wrong to do SILENTLY, because
+ * the client then renders an English tool under a French chrome with no way to
+ * say so. This block is the honest half: the locale asked for, whether the
+ * content came back in it, and the locales it could have.
+ */
+export interface ToolLocalization {
+  locale: ToolLocale;
+  /** True when the content is served in `locale` — English needs no catalog,
+   *  every other locale needs one. */
+  translated: boolean;
+  /** The locales a catalog exists for; English is implied. */
+  translatedLocales: readonly ToolLocale[];
 }
 
 export interface SavedToolRun {
@@ -186,6 +204,16 @@ export class ToolService {
       reportCaughtError(error, { source: "application/tools/ToolService.ts", operation: "remediationTasksByProject" });
     }
     return byProject;
+  }
+
+  /** How `list` / `getDefinition` will answer for a locale — computed here, once,
+   *  so no route re-derives "is this locale translated" from the catalog itself. */
+  toolLocalization(locale: ToolLocale = DEFAULT_TOOL_LOCALE): ToolLocalization {
+    return {
+      locale,
+      translated: locale === DEFAULT_TOOL_LOCALE || toolCatalog(locale) !== undefined,
+      translatedLocales: TRANSLATED_TOOL_LOCALES,
+    };
   }
 
   /** Public — list every free tool (client-safe summaries + data-mode flag), in

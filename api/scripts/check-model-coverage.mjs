@@ -37,8 +37,10 @@ const srcDir = resolve(here, '..', 'src');
 const mapPath = resolve(here, '..', '..', 'specs', 'builderforce', 'data-model', 'source-to-target.tsv');
 
 /** The roster totals PRD 20 §3 enumerates. If the map stops agreeing with these,
- *  one of the two is wrong and the build should say so rather than pick a winner. */
-const EXPECTED = { rows: 1130, keeps: 363, kernel: 25, total: 388 };
+ *  one of the two is wrong and the build should say so rather than pick a winner.
+ *  362, not 363, since `team_memory` was folded into `agent_memory` (0442) and
+ *  dropped (1131) — its map row reads `merged`, and PRD 20 §3 says so. */
+const EXPECTED = { rows: 1130, keeps: 362, kernel: 25, total: 387 };
 const MOVES = new Set(['keep', 'merged', 'primitive', 'flatten', 'session']);
 
 if (!existsSync(mapPath)) {

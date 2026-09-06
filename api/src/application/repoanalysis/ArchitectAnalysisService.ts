@@ -13,7 +13,7 @@
  * reason the output is still parsed defensively and rendered into deterministic
  * Markdown, so even a weak model on the downgraded path produces a clean artifact.
  */
-import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
+import { completeJson } from '../llm/completeJson';
 import { artifactResponseFormat } from './artifactSchemas';
 import type { Env } from '../../env';
 import type {
@@ -280,28 +280,28 @@ export class ArchitectAnalysisService {
     if (!this.env.OPENROUTER_API_KEY?.trim()) {
       throw new ArtifactGenerationError(kind, 'LLM gateway not configured (OPENROUTER_API_KEY unset)');
     }
-    let result;
-    try {
-      result = await ideProxy(this.env).complete({
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
+    const out = await completeJson<Record<string, unknown>>(
+      { kind: 'ide', env: this.env },
+      {
+        system,
+        user,
+        schema: artifactResponseFormat(kind),
         temperature: 0.2,
-        max_tokens: MAX_TOKENS[kind],
-        response_format: artifactResponseFormat(kind),
+        maxTokens: MAX_TOKENS[kind],
         useCase: `repo_analysis_${kind}`,
-      });
-    } catch (err) {
-      throw new ArtifactGenerationError(kind, `gateway call failed: ${err instanceof Error ? err.message : String(err)}`);
+      },
+      (value) => (value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null),
+    );
+    if (!out.ok) {
+      if (out.reason === 'gateway') {
+        throw new ArtifactGenerationError(
+          kind,
+          out.status !== undefined ? `gateway returned ${out.status}` : `gateway call failed: ${out.detail}`,
+        );
+      }
+      throw new ArtifactGenerationError(kind, 'model returned unparseable JSON');
     }
-    if (result.response.status >= 400) {
-      throw new ArtifactGenerationError(kind, `gateway returned ${result.response.status}`);
-    }
-    const { content } = await readProxyChoice(result);
-    const json = content ? parseJsonObject(content) : null;
-    if (!json) throw new ArtifactGenerationError(kind, 'model returned unparseable JSON');
-    return { json, model: result.resolvedModel ?? null, tokens: result.usage?.totalTokens ?? 0 };
+    return { json: out.value, model: out.model, tokens: out.result?.usage?.totalTokens ?? 0 };
   }
 
   /** Render the evidence bundle into a compact, prompt-friendly block. */
@@ -343,21 +343,6 @@ export class ArchitectAnalysisService {
 
 const VALID_MODALITY = new Set(['designer', 'architect', 'developer']);
 
-
-/** Strip ```...``` fences and parse the first balanced JSON object. */
-function parseJsonObject(content: string): Record<string, unknown> | null {
-  let s = content.trim();
-  const fence = /^```(?:json)?\s*([\s\S]*?)```$/m.exec(s);
-  if (fence?.[1]) s = fence[1].trim();
-  const start = s.indexOf('{');
-  const end = s.lastIndexOf('}');
-  if (start === -1 || end <= start) return null;
-  try {
-    return JSON.parse(s.slice(start, end + 1)) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
 
 function fencedMermaid(code: unknown): string {
   const c = typeof code === 'string' ? code.trim() : '';

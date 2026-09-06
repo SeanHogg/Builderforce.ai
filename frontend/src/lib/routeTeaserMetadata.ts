@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { getTranslations } from 'next-intl/server';
-import { destinationForRoute, destinationPitchKey, getRouteMarketing, isNoindexTeaserRoute } from '@/lib/routeMarketing';
+import { destinationForRoute, getRouteMarketing, isNoindexTeaserRoute, teaserDestinationPitchKey } from '@/lib/routeMarketing';
 import { BRAND } from '@/lib/content';
 
 /**
@@ -34,7 +34,8 @@ export async function routeTeaserMetadata(pathname: string): Promise<Metadata> {
   ]);
 
   const surface = marketing?.title ?? (group ? tNav(group.labelKey) : t('generic.title'));
-  const pitch = marketing?.description ?? (group ? t(destinationPitchKey(group.id)) : t('generic.description'));
+  const pitchKey = group ? teaserDestinationPitchKey(group.id) : null;
+  const pitch = marketing?.description ?? (pitchKey ? t(pitchKey) : t('generic.description'));
   const description = marketing?.seoDescription ?? pitch;
   const title = `${surface} — ${BRAND.name}`;
 

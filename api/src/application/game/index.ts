@@ -19,7 +19,7 @@ import { resolveApiOrigin } from '../../env';
 import { projectGameTargets, projectSites, projects } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
+import { completeJson, type CompleteJsonRequest } from '../llm/completeJson';
 import { listProjectSecrets, loadProjectSecretValues, redactSecretValues } from '../secrets/projectSecrets';
 import { publishStaticSite } from '../ide/publishStaticSite';
 import { HOSTING_APEX } from '../ide/siteHosting';
@@ -121,23 +121,24 @@ export function buildGame(input: { title: string; brief: string; html: string })
  */
 export function composeStructured(env: Env): ComposeStructured {
   return async ({ system, user, schema, maxTokens, useCase }) => {
-    const result = await ideProxy(env).complete({
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-      temperature: 0.4,
-      max_tokens: maxTokens,
-      response_format: schema as never,
-      useCase,
-    });
-    if (result.response.status >= 400) throw new Error('The generator is unavailable');
-    const { content } = await readProxyChoice(result);
-    if (!content.trim()) throw new Error('The generator returned nothing');
-    try {
-      return JSON.parse(content) as unknown;
-    } catch {
-      throw new Error('The generator did not return a readable spec');
+    // A thin adapter: `completeJson` owns the call and the parse; this keeps the
+    // thrown messages the adapters and routes already show to a user.
+    const out = await completeJson(
+      { kind: 'ide', env },
+      {
+        system,
+        user,
+        schema: schema as CompleteJsonRequest['schema'],
+        temperature: 0.4,
+        maxTokens,
+        useCase,
+      },
+    );
+    if (out.ok) return out.value;
+    switch (out.reason) {
+      case 'gateway': throw new Error('The generator is unavailable');
+      case 'empty': throw new Error('The generator returned nothing');
+      default: throw new Error('The generator did not return a readable spec');
     }
   };
 }

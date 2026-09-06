@@ -19,6 +19,19 @@ import { verifyAgentHostApiKey } from '../../infrastructure/auth/agentHostAuth';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { limitParam, offsetParam } from './queryParams';
+import { parseBody, z, zNonEmptyString, zPositiveInt } from './requestBody';
+
+/** What the relay DO persists: a session key plus the messages seen since last flush. */
+const PersistMessagesBody = z.object({
+  sessionKey: zNonEmptyString,
+  projectId: zPositiveInt.optional(),
+  messages: z.array(z.object({
+    role: zNonEmptyString,
+    content: z.string(),
+    metadata: z.string().nullable().optional(),
+    seq: z.number().int(),
+  })).optional(),
+});
 
 export function createChatRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -39,16 +52,8 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
     const agentHost = await verifyAgentHostApiKey(db, agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
-    let body: { sessionKey: string; projectId?: number; messages: Array<{ role: string; content: string; metadata?: string; seq: number }> };
-    try {
-      body = await c.req.json();
-    } catch {
-      return c.json({ error: 'invalid_json' }, 400);
-    }
-
-    const { sessionKey, projectId, messages } = body;
-    if (!sessionKey) return c.json({ error: 'sessionKey is required' }, 400);
-    if (!Array.isArray(messages) || messages.length === 0) {
+    const { sessionKey, projectId, messages } = await parseBody(c, PersistMessagesBody);
+    if (!messages || messages.length === 0) {
       return c.json({ ok: true, inserted: 0 });
     }
 
@@ -78,14 +83,13 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
       session = inserted;
     }
 
-    if (!session) return c.json({ error: 'failed to upsert session' }, 500);
+    if (!session) throw new Error('chat_sessions insert returned no row');
 
     // Insert messages — ONE multi-row insert (neon-http has no interactive tx).
     // onConflictDoNothing keeps the idempotent "skip duplicates" behavior; the
     // returned rows are exactly those actually inserted, so `inserted` is accurate.
     let inserted = 0;
     const rows = messages
-      .filter((msg) => msg.role && typeof msg.content === 'string')
       .map((msg) => ({
         tenantId: agentHost.tenantId,
         agentHostId,

@@ -22,6 +22,10 @@ import { cancelRedemption, redeemPoints } from '../../application/points/redeemP
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { limitParam } from './queryParams';
+import { parseBody, z, zNonEmptyString } from './requestBody';
+import { refusalResponse } from '../middleware/errorResponse';
+
+const RedeemBody = z.object({ skuId: zNonEmptyString });
 
 /** Refusals the caller caused (400) vs. ones the server owes them (409/503). */
 const REFUSAL_STATUS: Record<string, 400 | 402 | 409 | 503> = {
@@ -54,11 +58,10 @@ export function createPointsRoutes(db: Db): Hono<HonoEnv> {
   router.post('/redeem', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{ skuId?: string }>().catch(() => ({ skuId: undefined }));
-    if (!body.skuId) return c.json({ error: 'skuId is required' }, 400);
+    const body = await parseBody(c, RedeemBody);
 
     const result = await redeemPoints(db, c.env as Env, { tenantId, userId, skuId: body.skuId });
-    if (!result.ok) return c.json({ error: result.reason }, REFUSAL_STATUS[result.reason] ?? 400);
+    if (!result.ok) return refusalResponse(c, result.reason, REFUSAL_STATUS);
     return c.json(result);
   });
 

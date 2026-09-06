@@ -28,6 +28,13 @@ BUILDERFORCE_API_BASE_URL = "https://api.builderforce.ai"
 binding = "STORAGE"
 bucket_name = "builderforce-storage"
 
+# AUTH_CACHE_KV — the api's cache namespace (api/wrangler.toml), bound here on purpose:
+# the worker caches the api's session-introspection verdict in it, and the api's
+# revoke path deletes that key, so a revoked session stops here within the L1 TTL.
+[[kv_namespaces]]
+binding = "AUTH_CACHE_KV"
+id = "ce66c3418ad64952b6847227962429d0"
+
 # explicit custom domain for the legacy IDE/data worker
 [[routes]]
 pattern = "worker.builderforce.ai"

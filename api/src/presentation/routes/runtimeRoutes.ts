@@ -44,6 +44,7 @@ import { resolveActorFromContext } from '../../application/activity/activityLog'
 import { unreadCountsForUser } from '../../application/brain/chatReadState';
 import { ExecutionStatus, TenantRole } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
+import { parseBody, z, zNonEmptyString, zPositiveInt } from './requestBody';
 import { millicentsToUsd } from '../../domain/shared/money';
 import { parseJsonArray } from '../../domain/shared/json';
 import type { Execution } from '../../domain/execution/Execution';
@@ -196,6 +197,37 @@ function parseOptionalNumber(value: string | undefined | null): number | null {
   if (!Number.isFinite(parsed)) return null;
   return parsed;
 }
+
+// ── Request bodies ───────────────────────────────────────────────────────────
+
+/** The container executor's delegated op; `args` is forwarded wholesale to the op handler. */
+const ContainerOpBody = z.object({
+  executionId: zPositiveInt,
+  token: zNonEmptyString,
+  op: zNonEmptyString,
+  args: z.record(z.string(), z.unknown()).optional(),
+});
+const SessionBody = z.object({ sessionId: z.string().optional() });
+/** Shared by the legacy `/tasks/submit` path and `/executions` — the same run start. */
+const SubmitRunBody = z.object({
+  taskId: zPositiveInt,
+  agentId: zPositiveInt.optional(),
+  agentRegistrationId: z.string().optional(),
+  agentHostId: zPositiveInt.nullable().optional(),
+  sessionId: z.string().optional(),
+  payload: z.string().optional(),
+});
+const ExecutionControlBody = z.object({ enabled: z.boolean() });
+const ResumeBody = z.object({ answer: z.string().optional() });
+const MessageBody = z.object({ text: z.string().optional() });
+const ExecutionStateBody = z.object({
+  status: z.enum(ExecutionStatus),
+  result: z.string().optional(),
+  errorMessage: z.string().optional(),
+  /** `normalizeCodeChanges` accepts a numeric string from older hosts. */
+  codeChanges: z.union([z.number(), z.string()]).optional(),
+});
+const BroadcastBody = z.object({ payload: z.string().optional() });
 
 function normalizeCodeChanges(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.floor(value));
@@ -1162,10 +1194,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // (HMAC of the execution id). The container delegates each LLM step / commit /
   // finalize here so metering, commit, and PR logic stay server-side (one impl).
   router.post('/internal/container-op', async (c) => {
-    const body = await c.req.json<{ executionId?: number; token?: string; op?: string; args?: Record<string, unknown> }>().catch(() => null);
-    if (!body || typeof body.executionId !== 'number' || typeof body.token !== 'string' || typeof body.op !== 'string') {
-      return c.json({ error: 'executionId, token and op are required' }, 400);
-    }
+    const body = await parseBody(c, ContainerOpBody);
     const ok = await verifyContainerRunToken(c.env.JWT_SECRET, body.executionId, body.token);
     if (!ok) return c.json({ error: 'invalid run token' }, 403);
     const ctx = await loadContainerRunContext(c.env as Env, db, body.executionId);
@@ -1217,21 +1246,14 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // Mints a session handle for a run the caller is about to submit — part of the
   // dispatch path, so it carries the same run-tier gate as the submit itself.
   router.post('/sessions', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
-    const body = await c.req.json<{ sessionId?: string }>().catch(() => ({} as any));
+    const body = await parseBody(c, SessionBody);
     const sessionId = body.sessionId ?? crypto.randomUUID();
     return c.json({ sessionId }, 201);
   });
 
   // STARTS a billable run (legacy BuilderForce Link submit path).
   router.post('/tasks/submit', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
-    const body = await c.req.json<{
-      taskId:   number;
-      agentId?: number;
-      agentRegistrationId?: string;
-      agentHostId?:  number | null;
-      sessionId?: string;
-      payload?: string;
-    }>();
+    const body = await parseBody(c, SubmitRunBody);
 
     const agentHostIdFromHeader = parseOptionalNumber(c.req.header('X-AgentHost-Id'));
 
@@ -1321,14 +1343,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
 
   // Submit a task for execution — the primary "start a billable run" entry point.
   router.post('/executions', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
-    const body = await c.req.json<{
-      taskId:   number;
-      agentId?: number;
-      agentRegistrationId?: string;
-      agentHostId?:  number | null;
-      sessionId?: string;
-      payload?: string;
-    }>();
+    const body = await parseBody(c, SubmitRunBody);
     const agentHostIdFromHeader = parseOptionalNumber(c.req.header('X-AgentHost-Id'));
 
     const [taskRow] = await db
@@ -1591,9 +1606,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   });
 
   router.put('/execution-control', requireRole(TenantRole.MANAGER) as never, async (c) => {
-    const body = await c.req.json<{ enabled?: unknown }>()
-      .catch(() => ({ enabled: undefined } as { enabled?: unknown }));
-    if (typeof body.enabled !== 'boolean') return c.json({ error: 'enabled must be a boolean' }, 400);
+    const body = await parseBody(c, ExecutionControlBody);
 
     const tenantId = c.get('tenantId');
     const [row] = await db.update(tenants)
@@ -2236,7 +2249,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         refusal: 'run_not_paused',
       }, 409);
     }
-    const body = await c.req.json<{ answer?: string }>().catch(() => ({} as { answer?: string }));
+    const body = await parseBody(c, ResumeBody);
     const answer = body.answer?.trim() || DEFAULT_RESUME_ANSWER;
     const tenantId = c.get('tenantId');
 
@@ -2306,7 +2319,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // brand-new billable one.
   router.post('/executions/:id/messages', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const id = Number(c.req.param('id'));
-    const body = await c.req.json<{ text?: string }>().catch(() => ({} as { text?: string }));
+    const body = await parseBody(c, MessageBody);
     const text = body.text?.trim();
     if (!text) return c.json({ error: 'text is required' }, 400);
 
@@ -2408,12 +2421,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   router.patch('/executions/:id/state', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const id = Number(c.req.param('id'));
     if (!(await loadOwnedExecution(c, runtimeService, id))) return c.json({ error: 'Execution not found' }, 404);
-    const body = await c.req.json<{
-      status:        ExecutionStatus;
-      result?:       string;
-      errorMessage?: string;
-      codeChanges?:  number;
-    }>();
+    const body = await parseBody(c, ExecutionStateBody);
     const execution = await runtimeService.update(id, body);
 
     // On a terminal transition (this is the self-hosted host callback path), drop
@@ -2725,7 +2733,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // dispatch in the file.
   router.post('/tasks/:taskId/broadcast', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const taskId = Number(c.req.param('taskId'));
-    const body = await c.req.json<{ payload?: string }>().catch((): { payload?: string } => ({}));
+    const body = await parseBody(c, BroadcastBody);
 
     const [taskRow] = await db
       .select({

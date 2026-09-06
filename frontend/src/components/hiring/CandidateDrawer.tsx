@@ -20,6 +20,7 @@
  */
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { decisionLabelKey, isEditableOfferStatus, isLiveOfferStatus, offerStatusLabelKey } from './atsLabels';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { RoleGate } from '@/components/RoleGate';
 import { Select } from '@/components/Select';
@@ -160,7 +161,7 @@ function DecisionSection({
             <label style={labelStyle} htmlFor="ats-decision">{t('decision.field')}</label>
             <Select id="ats-decision" value={decision} onChange={(event) => setDecision(event.target.value)} style={inputStyle}>
               {options.map((option) => (
-                <option key={option} value={option}>{t(`decision.kind.${option}` as never)}</option>
+                <option key={option} value={option}>{decisionLabelKey(option) ? t(decisionLabelKey(option)!) : option}</option>
               ))}
             </Select>
           </div>
@@ -191,7 +192,7 @@ function DecisionSection({
           {decisions.map((entry) => (
             <li key={entry.id} style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 8 }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <span style={chipStyle}>{t(`decision.kind.${entry.decision}` as never)}</span>
+                <span style={chipStyle}>{decisionLabelKey(entry.decision) ? t(decisionLabelKey(entry.decision)!) : entry.decision}</span>
                 <span style={mutedStyle}>{fmt.dateTime(entry.decidedAt)}</span>
               </div>
               {entry.rationale && <p style={{ fontSize: 'var(--font-size-small)', margin: '4px 0 0' }}>{entry.rationale}</p>}
@@ -222,7 +223,7 @@ function OfferSection({
   const [name, setName] = useState(candidateHeadline ?? '');
   const [email, setEmail] = useState('');
 
-  const live = offers.find((offer) => offer.status === 'draft' || offer.status === 'approved' || offer.status === 'sent');
+  const live = offers.find((offer) => isLiveOfferStatus(offer.status));
 
   return (
     <section style={cardStyle}>
@@ -232,7 +233,7 @@ function OfferSection({
         <div key={offer.id} style={{ borderTop: '1px solid var(--border-subtle)', marginTop: 10, paddingTop: 10 }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <strong style={{ fontSize: 'var(--font-size-small)' }}>{offer.title}</strong>
-            <span style={chipStyle}>{t(`offer.status.${offer.status}` as never)}</span>
+            <span style={chipStyle}>{offerStatusLabelKey(offer.status) ? t(offerStatusLabelKey(offer.status)!) : offer.status}</span>
             {offer.signatureRequestId !== null && <span style={chipStyle}>{t('offer.signatureRef', { id: offer.signatureRequestId })}</span>}
           </div>
           <p style={{ ...mutedStyle, margin: '4px 0 0' }}>
@@ -240,7 +241,7 @@ function OfferSection({
             {offer.startDate ? ` · ${t('offer.starts', { date: fmt.date(offer.startDate) })}` : ''}
           </p>
 
-          {(offer.status === 'draft' || offer.status === 'approved') && (
+          {isEditableOfferStatus(offer.status) && (
             <RoleGate capability="hiring.manage" variant="block" style={{ marginTop: 8 }}>
               <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
                 <div>

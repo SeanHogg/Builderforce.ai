@@ -7,7 +7,9 @@ import {
 import { pageMetadata } from '@/lib/seo';
 import { breadcrumbSchema } from '@/lib/structured-data';
 import { INTEGRATION_CAPABILITY_PROOF } from '@/lib/content';
-import { getIntegrationCatalog, leafPageFor, listingPageFor } from '@/lib/integrationCatalog';
+import {
+  getIntegrationCatalog, integrationCategoryLabelKey, integrationSurfaceLabelKey, leafPageFor, listingPageFor,
+} from '@/lib/integrationCatalog';
 
 export const runtime = 'edge';
 
@@ -33,7 +35,6 @@ export async function generateMetadata(): Promise<Metadata> {
  */
 export default async function IntegrationsIndexPage() {
   const t = await getTranslations('integrationsIndex');
-  const tCategory = await getTranslations('integrationsIndex.category');
 
   const groups = await getIntegrationCatalog();
 
@@ -48,7 +49,7 @@ export default async function IntegrationsIndexPage() {
   // — one array rendered as both, which is why the rail can never list a group
   // the page stopped having.
   const sections = [
-    ...groups.map((group) => ({ id: referenceAnchorId(group.category), label: tCategory(group.category) })),
+    ...groups.map((group) => ({ id: referenceAnchorId(group.category), label: t(integrationCategoryLabelKey(group.category)) })),
     ...(provenOnly.length > 0 ? [{ id: referenceAnchorId('proven'), label: t('provenCategory') }] : []),
   ];
 
@@ -68,7 +69,7 @@ export default async function IntegrationsIndexPage() {
             <ReferenceGroup
               key={group.category}
               id={referenceAnchorId(group.category)}
-              title={tCategory(group.category)}
+              title={t(integrationCategoryLabelKey(group.category))}
             >
               <ReferenceGrid>
                 {group.entries.map((entry) => {
@@ -88,7 +89,7 @@ export default async function IntegrationsIndexPage() {
                       title={entry.name}
                       badge={entry.publisher ? t('byPublisher', { publisher: entry.publisher.name }) : t(`direction.${entry.direction}`)}
                     >
-                      {leaf ? leaf.tagline : t(`surface.${entry.surfaces[0]}`)}
+                      {leaf ? leaf.tagline : t(integrationSurfaceLabelKey(entry.surfaces[0]))}
                     </ReferenceCard>
                   );
                 })}

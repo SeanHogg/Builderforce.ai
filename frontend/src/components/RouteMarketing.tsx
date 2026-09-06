@@ -4,7 +4,7 @@ import { Suspense, useEffect } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { destinationForRoute, destinationPitchKey, getRouteMarketing, isNoindexTeaserRoute } from '@/lib/routeMarketing';
+import { destinationForRoute, getRouteMarketing, isNoindexTeaserRoute, teaserDestinationPitchKey } from '@/lib/routeMarketing';
 import { PRODUCT_SECTIONS } from '@/lib/content';
 import { routeMarketingSchema } from '@/lib/structured-data';
 import { ButtonLink, Icon, Surface, surfaceClassName } from '@/components/ui';
@@ -46,7 +46,8 @@ function RouteMarketingContent({ pathname, tab }: { pathname: string; tab: strin
   const loginHref = signInHref(conversionVariant === 'manager' ? `${pathname}?tab=manager` : pathname);
   const surface = m?.title ?? (group ? tNav(group.labelKey) : t('generic.title'));
   const icon = m?.icon ?? group?.icon ?? '🔒';
-  const pitch = m?.description ?? (group ? t(destinationPitchKey(group.id)) : t('generic.description'));
+  const pitchKey = group ? teaserDestinationPitchKey(group.id) : null;
+  const pitch = m?.description ?? (pitchKey ? t(pitchKey) : t('generic.description'));
   const title = conversionVariant ? t(`${conversionVariant}.title`) : surface;
   const description = conversionVariant ? t(`${conversionVariant}.description`) : pitch;
   const metaDesc = conversionVariant ? t(`${conversionVariant}.seoDescription`) : m?.seoDescription ?? pitch;

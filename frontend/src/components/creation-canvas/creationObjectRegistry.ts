@@ -24,7 +24,7 @@ import { SELL_MOTION_OBJECT_SPECS } from '@/lib/sellMotionObjects';
 // above — and it is what gives `llm` a `derive` hook, so its projected monthly cost is
 // computed from its own rate card instead of typed on top of it.
 import { MODEL_OBJECT_SPECS } from '@/lib/modelObjects';
-import { specBookkeepingFields, specFieldNames, type SpecDeriveBoard } from '@/lib/specObjects';
+import { isSpecObjectKind, specBookkeepingFields, specFieldGuidance, specFieldNames, type SpecDeriveBoard } from '@/lib/specObjects';
 import {
   ACADEMIC_MUTABLE_FIELDS, ACADEMIC_REGISTRY, FOUNDER_MUTABLE_FIELDS, FOUNDER_REGISTRY,
   CAREER_MUTABLE_FIELDS, CAREER_REGISTRY,
@@ -893,7 +893,12 @@ export function emptyShellProblem(kind: CreationObjectKind, authored: Record<str
   const contentFields = creationObjectContentFields(kind);
   if (contentFields.length === 0) return null;
   if (contentFields.some((field) => isAuthored(authored[field]))) return null;
-  return `A ${kind} with only a title is an empty shell — it hands the work back to the user instead of doing it. Send the authored content in fields: ${contentFields.slice(0, 12).join(', ')}.`;
+  const problem = `A ${kind} with only a title is an empty shell — it hands the work back to the user instead of doing it. Send the authored content in fields: ${contentFields.slice(0, 12).join(', ')}.`;
+  // A spec kind is taught its shape HERE, at the moment it was authored wrong, rather
+  // than in the tool description for every kind on every turn: the registry's field
+  // documentation is ~2 KB per kind and ~225 KB across the vocabularies, and the model
+  // that sent a shell is the one that needs exactly this kind's contract now.
+  return isSpecObjectKind(kind) ? `${problem}\n\n${specFieldGuidance(kind)}` : problem;
 }
 
 /** Drop unknown and sensitive values before an LLM-authored patch reaches state. */

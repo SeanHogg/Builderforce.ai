@@ -24,6 +24,9 @@
  * PATCH  /api/governance/policy-gates/:gateId         – edit a gate (manager+)
  * DELETE /api/governance/policy-gates/:gateId         – delete a gate (manager+)
  * GET    /api/governance/policy-gates/effective       – resolved wire gates (preview)
+ *
+ * Vulnerability FINDINGS (what a tracked scan found) live in
+ * vulnerabilityFindingRoutes.ts, mounted under /vuln-scans/:scanId/findings.
  */
 
 import { Hono } from 'hono';
@@ -45,6 +48,7 @@ import {
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { createStakeholderAlignmentRoutes } from './stakeholderAlignmentRoutes';
+import { createVulnerabilityFindingRoutes } from './vulnerabilityFindingRoutes';
 
 const CONTROL_STATUSES = ['not_started', 'in_progress', 'ready', 'out_of_scope'] as const;
 type ControlStatus = (typeof CONTROL_STATUSES)[number];
@@ -288,6 +292,9 @@ export function createGovernanceRoutes(db: Db): Hono<HonoEnv> {
     return c.json(res);
   });
 
+  // What a scan FOUND — static `/:scanId/findings` subpaths, mounted before the
+  // tracker so they win over its `/:id`.
+  router.route('/vuln-scans', createVulnerabilityFindingRoutes(db));
   // Every other tracker is the same segment-scoped CRUD — one factory, mounted N times.
   mountTrackers(router, db, TRACKERS);
   router.route('/stakeholder-alignment', createStakeholderAlignmentRoutes(db));

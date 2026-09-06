@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { and, desc, eq, getTableColumns, gt, inArray, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, gt, inArray, isNull, or, sql } from 'drizzle-orm';
 import { AuthService } from '../../application/auth/AuthService';
 import { DeviceAuthService } from '../../application/auth/DeviceAuthService';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
@@ -53,6 +53,8 @@ import { getActiveLegalDoc } from '../../application/legal/legalDocsService';
 import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
 import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
 import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { revokeSessionTokens } from '../../application/auth/sessionRevocation';
+import { createSessionIntrospectRoutes } from './sessionIntrospectRoutes';
 import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
 import { coerceJsonArray } from '../../domain/shared/jsonColumn';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
@@ -235,6 +237,9 @@ async function replaceRecoveryCodes(db: Db, userId: string, codes: string[]) {
  */
 export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
+
+  // GET /api/auth/introspect — the legacy worker's session check; own module.
+  router.route('/', createSessionIntrospectRoutes());
 
   // POST /api/auth/newsletter/subscribers
   // Public endpoint used by marketing surfaces for subscribe/unsubscribe.
@@ -1555,22 +1560,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     const sessionId = c.req.param('sessionId');
     if (!sessionId) return c.json({ error: 'sessionId is required' }, 400);
 
-    await db
-      .update(authUserSessions)
-      .set({ isActive: false, revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authUserSessions.id, sessionId), eq(authUserSessions.userId, userId)));
-
-    await db
-      .update(authTokens)
-      .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(
-        and(
-          eq(authTokens.userId, userId),
-          eq(authTokens.sessionId, sessionId),
-          isNull(authTokens.revokedAt),
-        ),
-      )
-      .returning({ tenantId: authTokens.tenantId });
+    await revokeSessionTokens(db, c.env, { userId, sessionId });
 
     return c.json({ ok: true });
   });
@@ -1581,28 +1571,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     const currentSessionId = c.get('sessionId') as string | undefined;
     if (!currentSessionId) return c.json({ error: 'Current session is not identifiable' }, 400);
 
-    await db
-      .update(authUserSessions)
-      .set({ isActive: false, revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(
-        and(
-          eq(authUserSessions.userId, userId),
-          ne(authUserSessions.id, currentSessionId),
-          eq(authUserSessions.isActive, true),
-        ),
-      );
-
-    await db
-      .update(authTokens)
-      .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(
-        and(
-          eq(authTokens.userId, userId),
-          ne(authTokens.sessionId, currentSessionId),
-          isNull(authTokens.revokedAt),
-        ),
-      )
-      .returning({ tenantId: authTokens.tenantId });
+    await revokeSessionTokens(db, c.env, { userId, exceptSessionId: currentSessionId });
 
     return c.json({ ok: true });
   });
@@ -1644,11 +1613,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     const jti = c.req.param('jti');
     if (!jti) return c.json({ error: 'jti is required' }, 400);
 
-    await db
-      .update(authTokens)
-      .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authTokens.jti, jti), eq(authTokens.userId, userId), isNull(authTokens.revokedAt)))
-      .returning({ tenantId: authTokens.tenantId });
+    await revokeSessionTokens(db, c.env, { userId, jti });
 
     return c.json({ ok: true });
   });

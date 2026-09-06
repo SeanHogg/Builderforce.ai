@@ -5,12 +5,8 @@ vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')
   .realCatalogIntlMock((await import('@/i18n/messages/en.json')).default as Record<string, unknown>));
 
 import {
-  CANVAS_BAR_COLLAPSED_KEY,
-  canvasChromeKind,
-  canvasChromePlace,
   canvasChromeShows,
   canvasChromeSlotsIn,
-  canvasChromeStatusSlots,
   readCanvasBarCollapsed,
   writeCanvasBarCollapsed,
 } from '@/lib/canvasChrome';
@@ -51,17 +47,10 @@ describe('the canvas chrome rule', () => {
   /** The two halves of a runtime's contribution land on opposite sides on purpose: an
    *  app that is running has to keep saying so after its Run button is folded away. */
   it('splits a runtime\'s contribution across the rule rather than treating it as one thing', () => {
-    expect(canvasChromeKind('surfaceControls')).toBe('control');
-    expect(canvasChromeKind('surfaceStatus')).toBe('status');
+    expect(canvasChromeShows('surfaceControls', true)).toBe(false);
+    expect(canvasChromeShows('surfaceStatus', true)).toBe(true);
   });
 
-  /** Derived from the one table, so "what survives" can be described without redrawing
-   *  the bar — and so this list cannot drift from what `canvasChromeShows` returns. */
-  it('lists exactly the slots that survive', () => {
-    const survivors = canvasChromeStatusSlots();
-    expect([...survivors].sort()).toEqual(['roster', 'saveState', 'surfaceStatus']);
-    for (const slot of survivors) expect(canvasChromeShows(slot, true)).toBe(true);
-  });
   /**
    * PLACEMENT IS DATA TOO, and every slot has exactly one home.
    *
@@ -76,7 +65,6 @@ describe('the canvas chrome rule', () => {
     );
     // No slot in two regions.
     expect(new Set(placed).size).toBe(placed.length);
-    for (const slot of placed) expect(canvasChromeSlotsIn(canvasChromePlace(slot))).toContain(slot);
   });
 
   /**
@@ -86,11 +74,25 @@ describe('the canvas chrome rule', () => {
    * that never folds in the first place.
    */
   it('puts every surviving control-bar slot where a collapse can be seen to spare it', () => {
-    expect(canvasChromePlace('roster')).toBe('bar');
-    expect(canvasChromePlace('surfaceStatus')).toBe('bar');
-    for (const slot of canvasChromeSlotsIn('bar')) {
-      if (canvasChromeKind(slot) === 'status') expect(canvasChromeShows(slot, true)).toBe(true);
-    }
+    const bar = canvasChromeSlotsIn('bar');
+    expect(bar).toContain('roster');
+    expect(bar).toContain('surfaceStatus');
+    // Everything that survives a fold is in the bar — the one region a fold acts on.
+    const survivors = (['pill', 'chips', 'bar'] as const)
+      .flatMap((place) => canvasChromeSlotsIn(place))
+      .filter((slot) => canvasChromeShows(slot, true));
+    expect([...survivors].sort()).toEqual(['roster', 'saveState', 'surfaceStatus']);
+    for (const slot of survivors) if (slot !== 'saveState') expect(bar).toContain(slot);
+  });
+
+  /**
+   * THE REGISTRY IS THE ORDER. `CanvasCommandBar` draws the bar by iterating this
+   * list, so what the runtime reports comes first, the glyphs after it, the roster
+   * after those and the doors out last — stated once here, and asserted so a
+   * re-declared table cannot quietly reshuffle the bar.
+   */
+  it('declares the bar in the order it is drawn', () => {
+    expect(canvasChromeSlotsIn('bar')).toEqual(['surfaceStatus', 'surfaceControls', 'actions', 'roster', 'handoff']);
   });
 
   /** Publish shares a REGION with the glyphs now (both `bar`), but not a SLOT — a word
@@ -98,9 +100,10 @@ describe('the canvas chrome rule', () => {
    *  what lets the bar draw it behind its own divider rather than folding it into the
    *  same run as `actions`. */
   it('keeps the door out of the canvas a distinct slot from the buttons that act on it', () => {
-    expect(canvasChromePlace('handoff')).toBe('bar');
-    expect(canvasChromePlace('actions')).toBe('bar');
-    expect(canvasChromeKind('handoff')).toBe('control');
+    const bar = canvasChromeSlotsIn('bar');
+    expect(bar).toContain('handoff');
+    expect(bar).toContain('actions');
+    expect(canvasChromeShows('handoff', true)).toBe(false);
   });
 
   /**
@@ -125,7 +128,9 @@ describe('the collapsed session bar', () => {
   it('starts expanded and remembers the fold', () => {
     expect(readCanvasBarCollapsed()).toBe(false);
     writeCanvasBarCollapsed(true);
-    expect(window.localStorage.getItem(CANVAS_BAR_COLLAPSED_KEY)).toBe('true');
+    // The key is a contract with every board already saved in a browser: renaming it
+    // would expand every folded bar once. Spelled out here so that rename is a test.
+    expect(window.localStorage.getItem('builderforce:create:barCollapsed')).toBe('true');
     expect(readCanvasBarCollapsed()).toBe(true);
     writeCanvasBarCollapsed(false);
     expect(readCanvasBarCollapsed()).toBe(false);

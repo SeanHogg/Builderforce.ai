@@ -31,7 +31,7 @@ import type { EvermindRunHooks } from './evermindMemory';
 import type { ReasoningIntent } from './effort';
 import { prepareImageDataUrl } from './imagePrep';
 import { scopeToConsolidation } from './consolidation';
-import { withDirectedMetadata, isDirectedToParticipant, type DirectedRecipient, addressedAgentSystemPrompt } from './directedMessage';
+import { withDirectedMetadata, isDirectedToParticipant, type DirectedRecipient } from './directedMessage';
 import { buildBrainTriageReport, type BrainTraceEvent } from './brainTriage';
 import type { BrainRunActivity } from './runActivity';
 import { ratedTurnContext } from './turnRating';
@@ -99,15 +99,6 @@ export interface UseBrainConversationOptions {
    * Omit to run every requested tool immediately.
    */
   needsConfirm?: (req: { name: string; args: unknown }) => boolean;
-  /**
-   * Run a turn addressed to an invited AGENT in this host's own loop — under the
-   * agent's persona (`persistence.resolveAgentPersona`), with THIS host's tools — instead
-   * of asking the server to answer for it. Set by a host that has local workspace tools
-   * (the editor): the server-side reply has platform tools only, so "commit and push"
-   * addressed to an agent there could only end in "I have no git tool". The web Brain
-   * leaves it unset and keeps the server reply.
-   */
-  runAddressedAgentLocally?: boolean;
   /** Create-on-demand when sending without an active chat; returns the new chat id. */
   ensureChatId?: () => Promise<number | null>;
   /** Notify the host (chats hook) that this chat got new activity. */
@@ -271,7 +262,6 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     toolSpecs,
     runTool,
     needsConfirm,
-    runAddressedAgentLocally,
     ensureChatId,
     onActivity,
     onFirstUserTurn,
@@ -482,37 +472,16 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         // guard was already claimed above, and the effect below also skips it, so
         // a later reload won't answer it either.
         if (addressedTo) {
-          // An @agent participant actually answers. Where this host has the tools an
-          // agent needs (a workspace), the turn runs HERE under the agent's own persona
-          // — the same directives the server would use — so the agent can act on the
-          // workspace it was asked about; elsewhere the server replies on its behalf. A
-          // @human just gets the posted turn (they'll be notified out-of-band).
-          if (addressedTo.kind === 'agent') {
-            // A persona that cannot be fetched (an editor ahead of its API, a network
-            // blip) degrades to the server reply rather than stranding the turn: the
-            // user's message is already posted, and an answer from the server beats none.
-            const persona =
-              runAddressedAgentLocally && persistence.resolveAgentPersona
-                ? await persistence.resolveAgentPersona(id, { agentRef: addressedTo.ref, query: trimmed }).catch(() => null)
-                : null;
-            if (persona) {
-              const base = buildRequest(seedFrom(messages), modelContent);
-              await startRun(id, {
-                ...base,
-                resolvedSystemPrompt: addressedAgentSystemPrompt(persona, addressedTo, base.resolvedSystemPrompt),
-                // The agent's own pinned model is part of who it is — unless the user
-                // deliberately picked one for this conversation.
-                ...(persona.model && !modelStrict ? { model: persona.model } : {}),
-                authoredBy: addressedTo,
-              });
-            } else if (persistence.requestAgentReply) {
-              try {
-                const reply = await persistence.requestAgentReply(id, { agentRef: addressedTo.ref, agentName: addressedTo.name });
-                setMessages((prev) => [...prev, reply]);
-                onActivity?.(id);
-              } catch (e) {
-                setLocalError(e instanceof Error ? e.message : 'The agent could not reply.');
-              }
+          // An @agent participant actually answers: a chat-scoped run replies AS
+          // that agent and posts an assistant turn attributed to it. A @human just
+          // gets the posted turn (they'll be notified out-of-band).
+          if (addressedTo.kind === 'agent' && persistence.requestAgentReply) {
+            try {
+              const reply = await persistence.requestAgentReply(id, { agentRef: addressedTo.ref, agentName: addressedTo.name });
+              setMessages((prev) => [...prev, reply]);
+              onActivity?.(id);
+            } catch (e) {
+              setLocalError(e instanceof Error ? e.message : 'The agent could not reply.');
             }
           }
           return true;
@@ -530,7 +499,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         setLocalSending(false);
       }
     },
-    [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity, onFirstUserTurn, runAddressedAgentLocally, modelStrict],
+    [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity, onFirstUserTurn],
   );
 
   // Auto-reply when a chat loads with a trailing unanswered user message

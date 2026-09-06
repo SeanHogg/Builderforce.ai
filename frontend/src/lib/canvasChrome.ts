@@ -112,33 +112,32 @@ const SLOT_KIND: Readonly<Record<CanvasChromeSlot, CanvasChromeKind>> = {
 };
 
 /**
- * Where each slot floats.
+ * Where each slot floats — AND, within a region, the order it is drawn in.
  *
  * `roster` is in the BAR and not in the pill, which is the one placement worth arguing
  * about. Who is here is status, so it survives a collapse — and the collapsed bar is the
  * thing left on screen, so that is where the avatars have to be for the rule to mean
  * anything. Putting them in the pill would have kept them visible while making the
  * collapse rule a statement about an element that never folds.
+ *
+ * Declaration order is render order: `CanvasCommandBar` draws the bar by iterating
+ * {@link canvasChromeSlotsIn}('bar'), so the sequence the bar shows — what the runtime
+ * REPORTS, then its controls, then the glyphs, then who is here, then the doors out —
+ * is stated here once rather than re-read off a column of JSX. A slot added to this
+ * table is drawn in the place it is declared, or not drawn at all if the bar has no
+ * content for it, and either is visible in one file.
  */
 const SLOT_PLACE: Readonly<Record<CanvasChromeSlot, CanvasChromePlace>> = {
   saveState: 'pill',
-  roster: 'bar',
   surfaces: 'chips',
-  actions: 'bar',
-  handoff: 'bar',
-  surfaceControls: 'bar',
   surfaceStatus: 'bar',
+  surfaceControls: 'bar',
+  actions: 'bar',
+  roster: 'bar',
+  handoff: 'bar',
 };
 
-export function canvasChromeKind(slot: CanvasChromeSlot): CanvasChromeKind {
-  return SLOT_KIND[slot];
-}
-
-export function canvasChromePlace(slot: CanvasChromeSlot): CanvasChromePlace {
-  return SLOT_PLACE[slot];
-}
-
-/** Every slot that floats in one region, in declaration order. */
+/** Every slot that floats in one region, in declaration order — the region's render order. */
 export function canvasChromeSlotsIn(place: CanvasChromePlace): readonly CanvasChromeSlot[] {
   return (Object.keys(SLOT_PLACE) as CanvasChromeSlot[]).filter((slot) => SLOT_PLACE[slot] === place);
 }
@@ -152,13 +151,7 @@ export function canvasChromeShows(slot: CanvasChromeSlot, collapsed: boolean): b
   return !collapsed || SLOT_KIND[slot] === 'status';
 }
 
-/** Every slot that survives a collapse. Exported for the test that reads the rule back,
- *  and for anything that needs to describe the collapsed bar rather than draw it. */
-export function canvasChromeStatusSlots(): readonly CanvasChromeSlot[] {
-  return (Object.keys(SLOT_KIND) as CanvasChromeSlot[]).filter((slot) => SLOT_KIND[slot] === 'status');
-}
-
-export const CANVAS_BAR_COLLAPSED_KEY = 'builderforce:create:barCollapsed';
+const CANVAS_BAR_COLLAPSED_KEY = 'builderforce:create:barCollapsed';
 
 /**
  * Whether the bar was folded away last time. Persisted for the same reason a surface is:

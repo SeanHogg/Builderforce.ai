@@ -17,6 +17,7 @@
  */
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { kitStageLabelKey } from './atsLabels';
 import { RoleGate } from '@/components/RoleGate';
 import { Select } from '@/components/Select';
 import { useConfirm } from '@/components/ConfirmProvider';
@@ -165,7 +166,7 @@ function KitCard({
                   style={inputStyle}
                 >
                   {kinds.map((kind) => (
-                    <option key={kind} value={kind}>{t(`kits.kind.${kind}` as never)}</option>
+                    <option key={kind} value={kind}>{kitStageLabelKey(kind) ? t(kitStageLabelKey(kind)!) : kind}</option>
                   ))}
                 </Select>
               </div>

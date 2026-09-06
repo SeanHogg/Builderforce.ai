@@ -170,4 +170,11 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
 export const CHAT_SCOPED_AGENT_TOOLS: readonly string[] = [
   'chats.get_messages', 'chats.list_tickets', 'chats.link_ticket', 'chats.unlink_ticket',
   'chats.ticket_lineage', 'chats.list_agents',
+  // The addressed agent's hands. This reply runs on the Worker with no working tree;
+  // the agent's clone, shell and git live in its RUNTIME. This is how an instruction
+  // that needs them ("merge and push", "run the tests") reaches that runtime — it
+  // steers/resumes the agent's OWN run on a linked ticket or starts a follow-up on
+  // the same branch. It is NOT the unattended `executions.post_message`: the human
+  // asked in the chat, and the replayed routes keep their approval gate.
+  'chats.execute_as_agent',
 ];

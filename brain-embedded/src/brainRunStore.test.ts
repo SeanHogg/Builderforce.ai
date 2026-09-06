@@ -541,39 +541,3 @@ describe('what the model is handed for a large read (chat #99, the loop that nev
     expect(executed.filter((n) => n === 'read_file')).toHaveLength(1);
   });
 });
-
-describe('a run that answers AS an invited agent (BrainRunRequest.authoredBy)', () => {
-  it('attributes every assistant turn it persists to that agent, keeping the provenance', async () => {
-    const persisted: Array<{ role: string; content: string; metadata?: string }> = [];
-    const persistence = {
-      sendMessages: async (_chatId: number, msgs: Array<{ role: string; content: string; metadata?: string }>) => {
-        persisted.push(...msgs);
-        return msgs.map((m, i) => ({ id: i + 1, role: m.role, content: m.content, metadata: m.metadata ?? null, seq: i + 1, createdAt: '' }));
-      },
-    };
-    let turns = 0;
-    const stream: BrainStreamFn = async (opts) => {
-      turns += 1;
-      // Turn 1 narrates and calls a tool; turn 2 answers — so BOTH persist sites run.
-      if (turns === 1 && opts.tools) {
-        return { text: 'Looking.', toolCalls: [{ id: 'c1', name: 'read_file', args: '{}' }], finishReason: 'tool_calls', resolvedModel: 'm1' };
-      }
-      return { text: 'Done.', toolCalls: [], finishReason: 'stop', resolvedModel: 'm1' };
-    };
-    const bob = { kind: 'agent' as const, ref: '42', name: 'Bob Developer' };
-    await startRun(4300, {
-      resolvedSystemPrompt: 'sys',
-      tools: [{ type: 'function', function: { name: 'read_file', description: 'read', parameters: {} } }],
-      runTool: async () => ({ ok: true }),
-      stream,
-      persistence,
-      userTurn: 'ship it',
-      authoredBy: bob,
-    });
-    const assistant = persisted.filter((m) => m.role === 'assistant');
-    expect(assistant.length).toBeGreaterThanOrEqual(2);
-    for (const m of assistant) {
-      expect(JSON.parse(m.metadata!)).toMatchObject({ authoredBy: bob, provenance: { model: 'm1' } });
-    }
-  });
-});

@@ -3605,8 +3605,11 @@ export async function prepareCloudRun(
   const shellLine = opts?.shell
     ? 'Call git_sync_latest FIRST, before editing: your branch may have been created earlier and fallen behind the base branch, so working without syncing builds on stale code and your PR could revert newer work. ' +
       'You also have git_status / git_diff / git_history to inspect the repo, and git_undo / git_redo to back out or reapply a commit. ' +
-      'You HAVE a real shell: use run_command to install dependencies and run the project build, type-check, lint, and tests in the checked-out repo BEFORE you finish. Fix anything that fails. Only claim a check passed if you actually ran it and saw it pass; CI on the PR re-verifies.'
-    : 'You CANNOT run builds, type-checks, lint, or tests here — this executor has no shell. Those run in CI on the pull request your changes open, and that CI is the source of truth. There is NO run_code/run_command tool; if you want to acknowledge verification, call run_checks. NEVER state that a check passed, succeeded, is clean, or is resolved — you cannot run one. Write correct, complete code and finish with an honest summary.';
+      'You HAVE a real shell: use run_command to install dependencies and run the project build, type-check, lint, and tests in the checked-out repo BEFORE you finish. Fix anything that fails. Only claim a check passed if you actually ran it and saw it pass; CI on the PR re-verifies. ' +
+      // A human's explicit "merge/push to main" is their call: this surface has the clone
+      // and the push credential, so it does exactly that instead of substituting a PR.
+      "Your work normally ships as a pull request when you finish. If the human's directive EXPLICITLY asks you to merge into or push to the base branch (main), do exactly that with run_command — `git fetch origin`, merge your branch into the base branch, `git push origin <base>` — and report the resulting commit hash; do not substitute a pull request for an explicit instruction."
+    : 'You CANNOT run builds, type-checks, lint, or tests here — this executor has no shell. Those run in CI on the pull request your changes open, and that CI is the source of truth. There is NO run_code/run_command tool; if you want to acknowledge verification, call run_checks. NEVER state that a check passed, succeeded, is clean, or is resolved — you cannot run one. Write correct, complete code and finish with an honest summary. If asked to merge or push to the base branch, say plainly that this executor cannot push it: your work ships as the pull request the human merges.';
 
   // ── The run's context, as BLOCKS ────────────────────────────────────────────
   //

@@ -35,9 +35,20 @@ import { BLUEPRINTS } from '../../application/challenge/blueprints';
 import { HOSTING_STRATEGIES } from '../../application/backend';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { failResponse } from '../middleware/errorResponse';
+import { parseBody, z, zNonEmptyString, zPositiveInt } from './requestBody';
 
 /** Briefs longer than this are truncated at extraction; reject beyond it outright. */
 const MAX_BRIEF_CHARS = 60_000;
+
+const CreateChallengeBody = z.object({
+  brief: zNonEmptyString.max(MAX_BRIEF_CHARS, `brief exceeds ${MAX_BRIEF_CHARS} characters`),
+  projectId: zPositiveInt.nullable().optional(),
+});
+
+/** What a caller reads when the model could not turn the brief into a plan. The
+ *  model's own error text is a diagnostic and goes to the reporter, not here. */
+const BRIEF_UNREADABLE = 'The brief could not be read into a plan. The failure has been recorded — try again, or simplify the brief.';
 
 /** Read + plan one brief. Shared by create and replan so the two cannot drift. */
 async function readAndPlan(env: Env, brief: string): Promise<{ spec: ChallengeSpec; plan: ChallengePlan }> {
@@ -85,12 +96,8 @@ export function createChallengeRoutes(db: Db, runtimeService: RuntimeService): H
     c.json({ challenges: await listChallenges(db, c.get('tenantId') as number) }));
 
   router.post('/', async (c) => {
-    const body = await c.req.json<{ brief?: unknown; projectId?: unknown }>().catch(() => ({}) as never);
-    const brief = typeof body.brief === 'string' ? body.brief.trim() : '';
-    if (!brief) return c.json({ error: 'brief is required' }, 400);
-    if (brief.length > MAX_BRIEF_CHARS) {
-      return c.json({ error: `brief exceeds ${MAX_BRIEF_CHARS} characters` }, 400);
-    }
+    const body = await parseBody(c, CreateChallengeBody);
+    const brief = body.brief;
 
     const tenantId = c.get('tenantId') as number;
     let spec: ChallengeSpec;
@@ -99,12 +106,12 @@ export function createChallengeRoutes(db: Db, runtimeService: RuntimeService): H
       ({ spec, plan } = await readAndPlan(c.env as Env, brief));
     } catch (error) {
       reportCaughtError(error, { source: 'presentation/routes/challengeRoutes.ts', operation: 'create' });
-      return c.json({ error: error instanceof Error ? error.message : 'Could not read the brief' }, 502);
+      return c.json({ error: BRIEF_UNREADABLE }, 502);
     }
 
     const row = await createChallenge(db, {
       tenantId,
-      projectId: typeof body.projectId === 'number' ? body.projectId : null,
+      projectId: body.projectId ?? null,
       brief,
       spec,
       plan,
@@ -140,7 +147,7 @@ export function createChallengeRoutes(db: Db, runtimeService: RuntimeService): H
       return c.json({ challenge: toChallengeView(updated) });
     } catch (error) {
       reportCaughtError(error, { source: 'presentation/routes/challengeRoutes.ts', operation: 'replan' });
-      return c.json({ error: error instanceof Error ? error.message : 'Could not re-read the brief' }, 502);
+      return c.json({ error: BRIEF_UNREADABLE }, 502);
     }
   });
 
@@ -182,10 +189,13 @@ export function createChallengeRoutes(db: Db, runtimeService: RuntimeService): H
       });
       return c.json({ challenge: updated ? toChallengeView(updated) : null, result });
     } catch (error) {
-      reportCaughtError(error, { source: 'presentation/routes/challengeRoutes.ts', operation: 'build' });
-      const message = error instanceof Error ? error.message : 'Build failed';
-      await setChallengeStatus(db, tenantId, row.id, { status: 'failed', error: message });
-      return c.json({ error: message }, 500);
+      // The row keeps the real message (it is the operator's diagnostic); the
+      // caller gets the generic answer and the reporter gets the error.
+      await setChallengeStatus(db, tenantId, row.id, {
+        status: 'failed',
+        error: error instanceof Error ? error.message : 'Build failed',
+      });
+      return failResponse(c, error, { source: 'presentation/routes/challengeRoutes.ts', operation: 'build' });
     }
   });
 

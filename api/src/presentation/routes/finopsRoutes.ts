@@ -14,7 +14,8 @@
  *   PATCH /soc/controls/:id        update a control assertion                     [manager]
  *   GET   /soc/coverage            control-coverage summary (cached)              [manager]
  *   GET   /audit-report            assembled period report (cached)              [manager]
- *   GET   /audit-report/export     download the report as csv|json (not cached)   [manager]
+ *   GET   /audit-report/export     download as csv|json + log the run (not cached)[manager]  → auditReportRunRoutes
+ *   GET   /audit-report/runs       recent audit-report runs (cached)             [manager]  → auditReportRunRoutes
  */
 
 import { Hono } from 'hono';
@@ -37,7 +38,8 @@ import {
   DEFAULT_SOC_CONTROLS,
   type SocControlStatus,
 } from '../../application/finops/socControls';
-import { assembleAuditReport, auditReportToCsv } from '../../application/finops/auditReport';
+import { assembleAuditReport } from '../../application/finops/auditReport';
+import { createAuditReportRunRoutes } from './auditReportRunRoutes';
 import { daysParam, periodParam } from './queryParams';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
@@ -211,25 +213,8 @@ export function createFinopsRoutes(db: Db): Hono<HonoEnv> {
     return c.json(await getOrSetCached(env, key, () => assembleAuditReport(db, tenantId, segmentId, period), SHORT_TTL));
   });
 
-  // Export — not cached: a deliberate point-in-time snapshot for an auditor, like
-  // the compliance evidence-pack export.
-  router.get('/audit-report/export', requireRole(TenantRole.MANAGER), async (c) => {
-    const { tenantId, segmentId } = scope(c);
-    const now = Date.now();
-    const period = periodParam(c.req.query('period'), now);
-    const format = c.req.query('format') === 'json' ? 'json' : 'csv';
-    const report = await assembleAuditReport(db, tenantId, segmentId, period);
-    const stamp = new Date().toISOString().slice(0, 10);
-    if (format === 'json') {
-      return c.json(report);
-    }
-    return new Response(auditReportToCsv(report), {
-      headers: {
-        'content-type': 'text/csv; charset=utf-8',
-        'content-disposition': `attachment; filename="audit-report-${period}-${stamp}.csv"`,
-      },
-    });
-  });
+  // Export (uncached point-in-time snapshot, logged to audit_report_runs) + the run log.
+  router.route('/audit-report', createAuditReportRunRoutes(db));
 
   return router;
 }

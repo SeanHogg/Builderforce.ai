@@ -34,6 +34,8 @@ import {
 } from '../../application/ide/repoBridge';
 import { PUBLIC_LIST_CACHE_KEY } from './workforceRoutes';
 import { publicAgentScope } from '../../application/marketplace/publicAgentScope';
+import { completeJson } from '../../application/llm/completeJson';
+import { parseBody, z, zNonEmptyString, zOptionalString, zPositiveInt } from './requestBody';
 import {
   ideProxy,
   readProxyChoice,
@@ -224,22 +226,111 @@ async function fetchSeedableProject(db: Db, tenantId: number, id: number): Promi
   };
 }
 
-/** Parse AI response for dataset JSON array. */
-function parseDatasetResponse(text: string): { instruction: string; input: string; output: string }[] {
-  const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
-  const start = cleaned.indexOf('[');
-  const end = cleaned.lastIndexOf(']');
-  if (start === -1 || end === -1) throw new Error('AI response did not contain a valid JSON array');
-  const raw = JSON.parse(cleaned.slice(start, end + 1)) as unknown[];
-  return raw
+type DatasetExample = { instruction: string; input: string; output: string };
+
+/** The rows a generated dataset keeps: objects with a non-empty instruction and output. */
+function readDatasetExamples(value: unknown): DatasetExample[] | null {
+  if (!Array.isArray(value)) return null;
+  return value
     .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
-    .map(item => ({
+    .map((item) => ({
       instruction: String(item['instruction'] ?? ''),
       input: String(item['input'] ?? ''),
       output: String(item['output'] ?? ''),
     }))
-    .filter(ex => ex.instruction.length > 0 && ex.output.length > 0);
+    .filter((ex) => ex.instruction.length > 0 && ex.output.length > 0);
 }
+
+// ── Body schemas ───────────────────────────────────────────────────────────────
+// `projectId` arrives as a number OR a numeric string from the different IDE
+// clients; both read as the same positive integer (the rule `parseProjectIdInt`
+// applies to the path param).
+const zProjectId = z.union([zPositiveInt, z.string().trim().regex(/^[1-9]\d*$/)]).transform(Number);
+/** A key that must be PRESENT (`z.unknown()` alone admits an absent key). */
+const zPresent = z.unknown().refine((v) => v !== undefined, { message: 'Required' });
+
+const RestoreVersionBody = z.object({ path: zNonEmptyString, at: z.coerce.number() });
+const ImportRepoBody = z.object({ repoId: zNonEmptyString, ref: zOptionalString });
+const CommitBody = z.object({ repoId: zNonEmptyString, message: zOptionalString, branch: zOptionalString });
+const CreateRepoBody = z.object({
+  provider: zOptionalString,
+  name: zNonEmptyString,
+  private: z.boolean().optional(),
+  credentialId: zNonEmptyString,
+});
+const ImportDatasetBody = z.object({
+  projectId: zProjectId,
+  name: zNonEmptyString,
+  capabilityPrompt: zOptionalString,
+  /** The corpus itself: {instruction, input?, output} rows, as the trainer expects. */
+  examples: z.array(z.object({ instruction: z.string().optional(), input: z.string().optional(), output: z.string().optional() })),
+  classifications: z.unknown().optional(),
+  usePolicy: z.unknown().optional(),
+  sourceSessionId: z.string().optional(),
+  sourceObjectId: z.string().optional(),
+});
+const GenerateDatasetBody = z.object({
+  projectId: zProjectId,
+  capabilityPrompt: zNonEmptyString,
+  name: zNonEmptyString,
+  exampleCount: z.number().int().positive().optional(),
+});
+const CreateTrainingBody = z.object({
+  projectId: zProjectId,
+  datasetId: zOptionalString,
+  baseModel: zNonEmptyString,
+  loraRank: z.number().int().positive().optional(),
+  epochs: z.number().int().positive().optional(),
+  batchSize: z.number().int().positive().optional(),
+  learningRate: z.number().positive().optional(),
+});
+const UpdateTrainingBody = z.object({
+  status: z.string().optional(),
+  currentEpoch: z.number().optional(),
+  currentLoss: z.number().optional(),
+  r2ArtifactKey: z.string().optional(),
+  errorMessage: z.string().optional(),
+});
+const TrainingLogBody = z.object({
+  epoch: z.number().optional(),
+  step: z.number().optional(),
+  loss: z.number().optional(),
+  message: zNonEmptyString,
+});
+const PublishAgentBody = z.object({
+  project_id: zProjectId,
+  job_id: z.string().optional(),
+  name: zNonEmptyString,
+  title: z.string(),
+  bio: z.string(),
+  skills: z.array(z.string()).optional(),
+  base_model: zNonEmptyString,
+  lora_rank: z.number().optional(),
+  r2_artifact_key: z.string().optional(),
+  resume_md: z.string().optional(),
+  eval_score: z.number().optional(),
+  mamba_state: z.unknown().optional(),
+  package_version: z.string().optional(),
+});
+const MambaSnapshotBody = z.looseObject({ data: zPresent, dim: zPresent, order: zPresent, channels: zPresent, step: zPresent });
+const AgentChatBody = z.object({
+  messages: z.array(z.object({ role: z.string(), content: z.string() })).min(1),
+  stream: z.boolean().optional(),
+});
+const IngestKnowledgeBody = z.object({
+  text: z.string().optional(),
+  documents: z.array(z.object({ name: z.string().optional(), text: z.string().optional() })).optional(),
+});
+const ValidateAgentBody = z.object({
+  name: zNonEmptyString,
+  title: z.string().optional(),
+  bio: z.string().optional(),
+  skills: z.union([z.array(z.string()), z.string()]).optional(),
+  base_model: zNonEmptyString,
+  r2_artifact_key: z.string().nullable().optional(),
+  mamba_state: z.unknown().optional(),
+  prompt: z.string().optional(),
+});
 
 export function createIdeRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -407,10 +498,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
-    const body = await c.req.json<{ path?: unknown; at?: unknown }>().catch(() => ({} as { path?: unknown; at?: unknown }));
-    const path = typeof body.path === 'string' ? body.path : '';
-    const at = Number(body.at);
-    if (!path || !Number.isFinite(at)) return c.json({ error: 'path and at are both required.' }, 400);
+    const { path, at } = await parseBody(c, RestoreVersionBody);
     const result = await restoreWorkspaceVersion(bucket, projectId, path, at);
     if (!result.ok) return c.json({ error: result.reason }, result.status);
     await onCanvasWrite(c.env, projectId, path);
@@ -465,8 +553,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
-    const body = await c.req.json<{ repoId?: string; ref?: string }>().catch(() => ({} as { repoId?: string; ref?: string }));
-    if (!body.repoId) return c.json({ error: 'repoId is required' }, 400);
+    const body = await parseBody(c, ImportRepoBody);
     const result = await importRepoToWorkspace(c.env as Env, tenantId, projectId, body.repoId, body.ref);
     if (!result.ok) return c.json({ error: result.error }, result.status as 400);
     await invalidateCached(c.env as Env, repoStatusKey(projectId));
@@ -479,8 +566,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
-    const body = await c.req.json<{ repoId?: string; message?: string; branch?: string }>().catch(() => ({} as { repoId?: string; message?: string; branch?: string }));
-    if (!body.repoId) return c.json({ error: 'repoId is required' }, 400);
+    const body = await parseBody(c, CommitBody);
     const result = await commitWorkspaceToRepo(c.env as Env, tenantId, projectId, body.repoId, { message: body.message, branch: body.branch });
     if (!result.ok) return c.json({ error: result.error }, result.status as 400);
     await invalidateCached(c.env as Env, repoStatusKey(projectId));
@@ -493,9 +579,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
-    const body = await c.req.json<{ provider?: string; name?: string; private?: boolean; credentialId?: string }>().catch(() => ({} as { provider?: string; name?: string; private?: boolean; credentialId?: string }));
-    if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
-    if (!body.credentialId) return c.json({ error: 'credentialId is required' }, 400);
+    const body = await parseBody(c, CreateRepoBody);
     const result = await createRemoteRepo(c.env as Env, tenantId, projectId, {
       provider: body.provider, name: body.name, private: body.private, credentialId: body.credentialId,
     });
@@ -738,21 +822,8 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   router.post('/datasets/import', async (c) => {
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{
-      projectId: string | number;
-      name: string;
-      capabilityPrompt?: string;
-      /** The corpus itself: {instruction, input?, output} rows, as the trainer expects. */
-      examples: Array<{ instruction?: string; input?: string; output?: string }>;
-      classifications?: unknown;
-      usePolicy?: unknown;
-      sourceSessionId?: string;
-      sourceObjectId?: string;
-    }>();
-    if (body.projectId == null || !body.name || !Array.isArray(body.examples)) {
-      return c.json({ error: 'projectId, name and examples are required' }, 400);
-    }
-    const projectId = typeof body.projectId === 'number' ? body.projectId : parseProjectIdInt(String(body.projectId));
+    const body = await parseBody(c, ImportDatasetBody);
+    const projectId = body.projectId;
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
 
     const examples = body.examples
@@ -792,16 +863,8 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   router.post('/datasets/generate', async (c) => {
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{
-      projectId: string | number;
-      capabilityPrompt: string;
-      name: string;
-      exampleCount?: number;
-    }>();
-    if (body.projectId == null || !body.capabilityPrompt || !body.name) {
-      return c.json({ error: 'projectId, capabilityPrompt, and name are required' }, 400);
-    }
-    const projectId = typeof body.projectId === 'number' ? body.projectId : parseProjectIdInt(String(body.projectId));
+    const body = await parseBody(c, GenerateDatasetBody);
+    const projectId = body.projectId;
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
     const id = generateId();
     const exampleCount = Math.min(body.exampleCount ?? 50, 200);
@@ -832,31 +895,33 @@ export function createIdeRoutes(): Hono<HonoEnv> {
           const systemPrompt = `You are an expert AI trainer. Generate instruction-tuning examples. Return ONLY a valid JSON array of objects: {"instruction":"...","input":"...","output":"..."}. No other text.`;
           const userPrompt = `Generate ${exampleCount} diverse examples for: ${body.capabilityPrompt}. Return ONLY the JSON array.`;
           const datasetTraceId = newTraceId();
-          const datasetReqBody = {
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: userPrompt },
-            ],
-            stream: false,
-            max_tokens: 4096,
-          } as ChatCompletionRequest;
-          const result = await service.complete(datasetReqBody, undefined, datasetTraceId);
+          const generated = await completeJson(
+            { kind: 'proxy', proxy: service },
+            { system: systemPrompt, user: userPrompt, maxTokens: 4096, useCase: 'dataset_generation', traceId: datasetTraceId },
+            readDatasetExamples,
+          );
           // Diagnostic trace for dataset generation (surface `dataset-gen`) so training-
           // data synthesis is attributable in the superadmin trace view alongside chat.
-          logTrace(c.env, c.executionCtx, {
-            traceId: datasetTraceId, surface: 'dataset-gen',
-            tenantId: c.get('tenantId') ?? null,
-            userId: c.get('userId') ?? null,
-            result, streamed: false,
-            requestIp: c.req.header('cf-connecting-ip') ?? null,
-            origin: c.req.header('Origin') ?? null,
-            userAgent: c.req.header('User-Agent') ?? null,
-            requestBody: datasetReqBody as unknown as Record<string, unknown>,
-            responseBody: null, errorMessage: null,
-          });
-          const json = await result.response.json() as { choices?: Array<{ message?: { content?: string } }> };
-          const content = json.choices?.[0]?.message?.content ?? '';
-          const examples = parseDatasetResponse(content);
+          const traced = generated.result ?? null;
+          if (traced) {
+            logTrace(c.env, c.executionCtx, {
+              traceId: datasetTraceId, surface: 'dataset-gen',
+              tenantId: c.get('tenantId') ?? null,
+              userId: c.get('userId') ?? null,
+              result: traced, streamed: false,
+              requestIp: c.req.header('cf-connecting-ip') ?? null,
+              origin: c.req.header('Origin') ?? null,
+              userAgent: c.req.header('User-Agent') ?? null,
+              requestBody: { system: systemPrompt, user: userPrompt, max_tokens: 4096 },
+              responseBody: null, errorMessage: null,
+            });
+          }
+          if (!generated.ok) {
+            throw new Error(generated.reason === 'gateway'
+              ? `Dataset generation failed: ${generated.detail}`
+              : 'AI response did not contain a valid JSON array');
+          }
+          const examples = generated.value;
           const jsonl = examples.map(ex => JSON.stringify(ex)).join('\n');
           const r2Key = `datasets/${String(projectId)}/${id}.jsonl`;
           const bucket = r2(c);
@@ -903,17 +968,8 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   router.post('/training', async (c) => {
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{
-      projectId: string | number;
-      datasetId?: string;
-      baseModel: string;
-      loraRank?: number;
-      epochs?: number;
-      batchSize?: number;
-      learningRate?: number;
-    }>();
-    if (body.projectId == null || !body.baseModel) return c.json({ error: 'projectId and baseModel are required' }, 400);
-    const projectId = typeof body.projectId === 'number' ? body.projectId : parseProjectIdInt(String(body.projectId));
+    const body = await parseBody(c, CreateTrainingBody);
+    const projectId = body.projectId;
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
     // THE GOVERNANCE GATE, before the job row exists rather than before the run starts:
     // a queued job is already a decision somebody has to reverse, and a refusal recorded
@@ -948,13 +1004,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.put('/training/:id', async (c) => {
-    const body = await c.req.json<{
-      status?: string;
-      currentEpoch?: number;
-      currentLoss?: number;
-      r2ArtifactKey?: string;
-      errorMessage?: string;
-    }>();
+    const body = await parseBody(c, UpdateTrainingBody);
     const id = c.req.param('id');
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
@@ -990,8 +1040,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.post('/training/:id/logs', async (c) => {
-    const body = await c.req.json<{ epoch?: number; step?: number; loss?: number; message: string }>();
-    if (!body.message) return c.json({ error: 'message is required' }, 400);
+    const body = await parseBody(c, TrainingLogBody);
     const jobId = c.req.param('id');
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
@@ -1185,22 +1234,8 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   router.post('/agents', async (c) => {
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{
-      project_id: string | number;
-      job_id?: string;
-      name: string;
-      title: string;
-      bio: string;
-      skills?: string[];
-      base_model: string;
-      lora_rank?: number;
-      r2_artifact_key?: string;
-      resume_md?: string;
-      eval_score?: number;
-      mamba_state?: unknown;
-      package_version?: string;
-    }>();
-    const projectId = typeof body.project_id === 'number' ? body.project_id : parseProjectIdInt(String(body.project_id));
+    const body = await parseBody(c, PublishAgentBody);
+    const projectId = body.project_id;
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
     const id = generateId();
     const skillsJson = JSON.stringify(body.skills ?? []);
@@ -1294,11 +1329,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       .where(and(eq(ideAgents.id, agentId), eq(ideAgents.tenantId, tenantId)))
       .limit(1);
     if (!owner || !(await projectInTenant(db, tenantId, Number(owner.projectId)))) return c.json({ error: 'Agent not found' }, 404);
-    const snapshot = await c.req.json();
-    const required = ['data', 'dim', 'order', 'channels', 'step'];
-    for (const key of required) {
-      if (!(key in snapshot)) return c.json({ error: `Missing field: ${key}` }, 400);
-    }
+    const snapshot = await parseBody(c, MambaSnapshotBody);
     const [row] = await db.update(ideAgents).set({
       mambaState: snapshot,
       packageVersion: '2.0',
@@ -1317,10 +1348,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const agentId = c.req.param('id');
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ messages: Array<{ role: string; content: string }>; stream?: boolean }>();
-    if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
-      return c.json({ error: 'messages array is required' }, 400);
-    }
+    const body = await parseBody(c, AgentChatBody);
     if (!c.env.OPENROUTER_API_KEY?.trim()) {
       return c.json({ error: 'LLM not configured' }, 503);
     }
@@ -1444,7 +1472,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       .where(and(eq(ideAgents.id, agentId), eq(ideAgents.tenantId, tenantId)))
       .limit(1);
     if (!agent || !(await projectInTenant(db, tenantId, Number(agent.projectId)))) return c.json({ error: 'Agent not found' }, 404);
-    const body = await c.req.json<{ text?: string; documents?: Array<{ name?: string; text?: string }> }>();
+    const body = await parseBody(c, IngestKnowledgeBody);
     const docs = [
       ...(body.text?.trim() ? [{ text: body.text }] : []),
       ...((body.documents ?? []).filter((d): d is { name?: string; text: string } => Boolean(d?.text?.trim()))),
@@ -1463,20 +1491,8 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   // prompt builder as the live chat endpoint, so a green validate predicts live
   // behaviour rather than testing a different code path.
   router.post('/agents/validate', async (c) => {
-    const body = await c.req.json<{
-      name: string;
-      title?: string;
-      bio?: string;
-      skills?: string[] | string;
-      base_model: string;
-      r2_artifact_key?: string | null;
-      mamba_state?: unknown;
-      prompt?: string;
-    }>();
+    const body = await parseBody(c, ValidateAgentBody);
     if (!c.env.OPENROUTER_API_KEY?.trim()) return c.json({ ok: false, error: 'LLM not configured' }, 503);
-    if (!body.name?.trim() || !body.base_model?.trim()) {
-      return c.json({ ok: false, error: 'name and base_model are required' }, 400);
-    }
 
     const descriptor: AgentDescriptor = {
       name: body.name,
@@ -1494,8 +1510,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     try {
       const result = await ideProxy(c.env).complete({ messages, stream: false });
       const latencyMs = Date.now() - startMs;
-      const json = (await result.response.json()) as { choices?: Array<{ message?: { content?: string } }> };
-      const sample = json.choices?.[0]?.message?.content?.trim() ?? '';
+      const sample = (await readProxyChoice(result)).content;
       // The validation RAN; an empty/failed model response is a validation result
       // (ok:false), not a transport error — return 200 so the client reads it
       // uniformly and the publish gate stays closed.

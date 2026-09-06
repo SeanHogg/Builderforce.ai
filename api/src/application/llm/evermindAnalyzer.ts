@@ -24,7 +24,8 @@
  */
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { llmProxyForPlan, readProxyChoice } from './LlmProxyService';
+import { llmProxyForPlan } from './LlmProxyService';
+import { completeJson, JSON_OBJECT_FORMAT } from './completeJson';
 import { resolveTenantLlmCredentials } from './tenantProviderKeyService';
 import { resolveEvermindTeacherModel } from './evermindTeacher';
 import { assessTextCoherence } from './textCoherence';
@@ -149,17 +150,11 @@ const ANALYZER_SYSTEM =
   + '{"findings":[{"id":<number>,"verdict":"ok|incorrect|outdated|unusable|redundant","issue":"...","correction":"..."}]}. '
   + 'Include every id you were given exactly once.';
 
-/** Pull the first JSON object out of a model reply that may be fenced or prefaced. */
-function parseAnalyzerJson(raw: string): { findings?: unknown } | null {
-  const text = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
-  try {
-    return JSON.parse(text.slice(start, end + 1)) as { findings?: unknown };
-  } catch {
-    return null;
-  }
+/** The reply is usable only when it is an object carrying a `findings` array. */
+function readAnalyzerJson(value: unknown): { findings: unknown[] } | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const findings = (value as { findings?: unknown }).findings;
+  return Array.isArray(findings) ? { findings } : null;
 }
 
 function toVerdict(x: unknown): KnowledgeVerdict | null {
@@ -256,39 +251,35 @@ export async function analyzeProjectEvermindKnowledge(
       learned: excerpt(memoryText(m), MEMORY_EXCERPT_CHARS),
     }));
     try {
-      const result = await proxy.complete(
+      const out = await completeJson(
+        { kind: 'proxy', proxy },
         {
           ...(teacher.model ? { model: teacher.model } : {}),
-          messages: [
-            { role: 'system', content: ANALYZER_SYSTEM },
-            {
-              role: 'user',
-              content: `Project #${projectId} — Evermind v${contrib.version}. Audit these ${items.length} learned memories:
+          system: ANALYZER_SYSTEM,
+          user: `Project #${projectId} — Evermind v${contrib.version}. Audit these ${items.length} learned memories:
 
 `
-                + JSON.stringify(items, null, 1),
-            },
-          ],
+            + JSON.stringify(items, null, 1),
+          schema: JSON_OBJECT_FORMAT,
           temperature: 0.1,
-          max_tokens: ANALYZE_MAX_OUTPUT_TOKENS,
-          response_format: { type: 'json_object' },
+          maxTokens: ANALYZE_MAX_OUTPUT_TOKENS,
           useCase: 'task_execution',
-        } as never,
-        undefined,
-        undefined,
-        opts.signal,
+          ...(opts.signal ? { signal: opts.signal } : {}),
+        },
+        readAnalyzerJson,
       );
-      if (result.response.status >= 400) {
-        warnings.push(`HTTP ${result.response.status}`);
+      if (!out.ok) {
+        // A gateway status is reported as such; a dispatcher that threw carries its
+        // message; anything the reader refused is "unusable JSON" as before.
+        warnings.push(
+          out.reason === 'gateway'
+            ? (out.status !== undefined ? `HTTP ${out.status}` : out.detail)
+            : 'unusable JSON',
+        );
         continue;
       }
-      const { content } = await readProxyChoice(result);
-      const parsed = parseAnalyzerJson(content);
-      if (!parsed || !Array.isArray(parsed.findings)) {
-        warnings.push('unusable JSON');
-        continue;
-      }
-      resolvedModel = result.resolvedModel || teacher.model || resolvedModel;
+      const parsed = out.value;
+      resolvedModel = out.model || teacher.model || resolvedModel;
 
       const byId = new Map(batch.map((m) => [m.id, m]));
       for (const raw of parsed.findings) {

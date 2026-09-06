@@ -849,7 +849,7 @@ export const finopsSocControls = pgTable('finops_soc_controls', {
 /** Log of assembled audit-ready period reports (the report itself is computed live). */
 export const auditReportRuns = pgTable('audit_report_runs', {
   id:          serial('id').primaryKey(),
-  tenantId:    integer('tenant_id').notNull(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   periodMonth: varchar('period_month', { length: 7 }).notNull(),
   generatedBy: varchar('generated_by', { length: 36 }),
   summary:     jsonb('summary'),

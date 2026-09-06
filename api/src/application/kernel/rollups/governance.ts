@@ -25,8 +25,11 @@ const PASSING = sql.join(
   sql`, `,
 );
 
-/** Terminal finding states — a fixed finding is not an open one. */
-const CLOSED = sql`('resolved', 'fixed', 'closed', 'dismissed', 'accepted', 'false_positive')`;
+/** Terminal finding states — a fixed finding is not an open one. Covers both
+ *  registers' vocabularies: `qa_findings` (resolved/ignored) and
+ *  `vulnerability_findings` (VULNERABILITY_FINDING_STATUSES: fixed /
+ *  accepted_risk / false_positive). */
+const CLOSED = sql`('resolved', 'fixed', 'closed', 'dismissed', 'ignored', 'accepted', 'accepted_risk', 'false_positive')`;
 
 function findingRows(present: PresentTables) {
   const parts = [];

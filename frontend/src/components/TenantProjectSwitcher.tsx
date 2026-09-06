@@ -1,9 +1,14 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
+import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
+import { useOptionalLiveSession } from '@/lib/live/LiveSessionContext';
+import { applyScopeChangeEffect, scopeChangeEffect } from '@/lib/canvasScopePolicy';
+import { useConfirm } from '@/components/ConfirmProvider';
 import { useDismissable } from '@/lib/useDismissable';
 import { MenuDivider, MenuScroll, MenuSectionLabel, MenuSurface, menuItemStyle } from '@/components/workspace/MenuSurface';
 
@@ -26,16 +31,28 @@ function Chevron() {
  * Switching PROJECT is a filter: it never crosses an identity boundary, so an
  * open canvas and a live session are untouched by it. Switching WORKSPACE is an
  * identity change, which is why that action leaves via `/tenants` rather than
- * being a row in this menu.
+ * being a row in this menu — and why it is the one row here that may ask first.
+ *
+ * What either switch DOES to the board, the call and the docked page is not
+ * decided here: `scopeChangeEffect` (lib/canvasScopePolicy.ts) is resolved once
+ * per switch and its halves handed to the surfaces that react — the workbench
+ * half to `setProject`, the board/room half to `applyScopeChangeEffect`, and the
+ * confirm it asks for to the shared `useConfirm` modal.
  *
  * Outside the authenticated app shell (public/marketing shell, embed) there is
  * no ProjectScopeProvider, so it degrades to the plain workspace chip.
  */
 export function TenantProjectSwitcher() {
   const t = useTranslations('projectScope');
+  const tPolicy = useTranslations('scopePolicy');
   const { tenant, isAuthenticated } = useAuth();
   const scope = useOptionalProjectScope();
+  const canvas = useOptionalActiveCanvas();
+  const live = useOptionalLiveSession();
+  const confirm = useConfirm();
+  const router = useRouter();
   const { open, toggle, close, ref } = useDismissable<HTMLDivElement>();
+  const roomLive = live?.live ?? false;
 
   if (!isAuthenticated || !tenant) return null;
 
@@ -54,6 +71,35 @@ export function TenantProjectSwitcher() {
 
   const { projects, currentProjectId, currentProject, setProject } = scope;
   const projectLabel = currentProject ? currentProject.name : t('allProjects');
+
+  /** A project switch: resolved once, board/room applied here, workbench applied by the provider. */
+  const selectProject = (id: number | null) => {
+    const effect = scopeChangeEffect('project', roomLive);
+    applyScopeChangeEffect(effect, { closeCanvas: canvas?.close, leaveRoom: live?.leave });
+    setProject(id, effect);
+    close();
+  };
+
+  /**
+   * A workspace switch: the one identity change. With a live call it asks first —
+   * the switch ends the room for everyone on it — and only then closes the board,
+   * leaves the room and goes to the workspace picker.
+   */
+  const switchWorkspace = async () => {
+    close();
+    const effect = scopeChangeEffect('tenant', roomLive);
+    if (effect.confirm && effect.confirmKey) {
+      const confirmed = await confirm({
+        title: t('switchWorkspace'),
+        message: tPolicy(effect.confirmKey as 'leaveRoomOnTenantSwitch'),
+        confirmLabel: t('switchWorkspace'),
+        destructive: true,
+      });
+      if (!confirmed) return;
+    }
+    applyScopeChangeEffect(effect, { closeCanvas: canvas?.close, leaveRoom: live?.leave });
+    router.push('/tenants');
+  };
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
@@ -80,7 +126,7 @@ export function TenantProjectSwitcher() {
               type="button"
               role="menuitemradio"
               aria-checked={currentProjectId == null}
-              onClick={() => { setProject(null); close(); }}
+              onClick={() => selectProject(null)}
               style={menuItemStyle(currentProjectId == null)}
             >
               {t('allProjects')}
@@ -91,7 +137,7 @@ export function TenantProjectSwitcher() {
                 type="button"
                 role="menuitemradio"
                 aria-checked={currentProjectId === p.id}
-                onClick={() => { setProject(p.id); close(); }}
+                onClick={() => selectProject(p.id)}
                 style={menuItemStyle(currentProjectId === p.id)}
               >
                 {p.name}
@@ -102,7 +148,12 @@ export function TenantProjectSwitcher() {
             )}
           </MenuScroll>
           <MenuDivider />
-          <Link href="/tenants" role="menuitem" onClick={close} style={menuItemStyle(false)}>
+          <Link
+            href="/tenants"
+            role="menuitem"
+            onClick={(event) => { event.preventDefault(); void switchWorkspace(); }}
+            style={menuItemStyle(false)}
+          >
             {t('switchWorkspace')}
           </Link>
         </MenuSurface>

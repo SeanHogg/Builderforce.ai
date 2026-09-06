@@ -26,6 +26,7 @@ import { Hono } from 'hono';
 import { and, desc, eq, gt, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import { invalidateTenantPlan } from '../../application/tenant/tenantPlanCache';
+import { revokeSessionTokens } from '../../application/auth/sessionRevocation';
 import { screenshotConfigured } from '../../application/web/webScreenshot';
 import { credentialSecret } from '../../application/integrations/credentialCrypto';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
@@ -1208,15 +1209,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const isMember = await assertTenantMember(db, tenantId, userId);
     if (!isMember) return c.json({ error: 'User is not an active member of this tenant' }, 404);
 
-    await db
-      .update(authUserSessions)
-      .set({ isActive: false, revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authUserSessions.id, sessionId), eq(authUserSessions.userId, userId)));
-
-    await db
-      .update(authTokens)
-      .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(scopedToTenant(authTokens, tenantId, eq(authTokens.userId, userId), eq(authTokens.sessionId, sessionId), isNull(authTokens.revokedAt)));
+    await revokeSessionTokens(db, c.env, { userId, sessionId, tenantId });
 
     return c.json({ ok: true });
   });
@@ -1234,15 +1227,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const isMember = await assertTenantMember(db, tenantId, userId);
     if (!isMember) return c.json({ error: 'User is not an active member of this tenant' }, 404);
 
-    await db
-      .update(authUserSessions)
-      .set({ isActive: false, revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authUserSessions.userId, userId), eq(authUserSessions.isActive, true)));
-
-    await db
-      .update(authTokens)
-      .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(scopedToTenant(authTokens, tenantId, eq(authTokens.userId, userId), isNull(authTokens.revokedAt)));
+    await revokeSessionTokens(db, c.env, { userId, tenantId });
 
     return c.json({ ok: true });
   });
@@ -1261,10 +1246,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const isMember = await assertTenantMember(db, tenantId, userId);
     if (!isMember) return c.json({ error: 'User is not an active member of this tenant' }, 404);
 
-    await db
-      .update(authTokens)
-      .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(scopedToTenant(authTokens, tenantId, eq(authTokens.userId, userId), eq(authTokens.jti, jti), isNull(authTokens.revokedAt)));
+    await revokeSessionTokens(db, c.env, { userId, jti, tenantId });
 
     return c.json({ ok: true });
   });
@@ -3166,12 +3148,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       .where(eq(adminImpersonationSessions.id, sessionId));
 
     // Revoke the token JTI
-    if (session.tokenJti) {
-      await db
-        .update(authTokens)
-        .set({ revokedAt: now })
-        .where(eq(authTokens.jti, session.tokenJti));
-    }
+    if (session.tokenJti) await revokeSessionTokens(db, c.env, { jti: session.tokenJti });
 
     const durationMs = now.getTime() - (session.startedAt?.getTime() ?? now.getTime());
     const durationMin = Math.round(durationMs / 60_000);
@@ -3221,12 +3198,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       .where(eq(adminImpersonationSessions.id, sessionId));
 
     // Invalidate old token JTI if present
-    if (session.tokenJti) {
-      await db
-        .update(authTokens)
-        .set({ revokedAt: new Date() })
-        .where(eq(authTokens.jti, session.tokenJti));
-    }
+    if (session.tokenJti) await revokeSessionTokens(db, c.env, { jti: session.tokenJti });
 
     // Issue new emulation token with the new role
     const newToken = await signEmulationJwt(
@@ -3620,10 +3592,8 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const targetId = c.req.param('id');
     // Increment session_version (JWT-level invalidation for future tokens carrying sv)
     await db.update(users).set({ sessionVersion: sql`${users.sessionVersion} + 1` }).where(eq(users.id, targetId));
-    // Revoke all active auth tokens
-    await db.update(authTokens).set({ revokedAt: new Date() }).where(and(eq(authTokens.userId, targetId), isNull(authTokens.revokedAt)));
-    // Deactivate all sessions
-    await db.update(authUserSessions).set({ isActive: false, revokedAt: new Date() }).where(and(eq(authUserSessions.userId, targetId), eq(authUserSessions.isActive, true)));
+    // Revoke every active token and session — and the worker's cached verdicts.
+    await revokeSessionTokens(db, c.env, { userId: targetId });
     await writeAudit(db, 'USER_SESSIONS_REVOKED', actorId, {
       targetUserId: targetId,
       metadata: { method: 'force_logout' },
@@ -3685,10 +3655,10 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       .update(users)
       .set({ isSuspended: body.suspended, updatedAt: sql`now()` })
       .where(eq(users.id, targetId));
-    // Revoke all active tokens so suspended users are kicked immediately
-    if (body.suspended) {
-      await db.update(authTokens).set({ revokedAt: new Date() }).where(and(eq(authTokens.userId, targetId), isNull(authTokens.revokedAt)));
-    }
+    // Revoke every active token and session so suspended users are kicked
+    // immediately — including at the legacy worker, whose cached verdict the
+    // use case drops.
+    if (body.suspended) await revokeSessionTokens(db, c.env, { userId: targetId });
     await writeAudit(db, 'USER_STATUS_CHANGED', actorId, {
       targetUserId: targetId,
       metadata: { suspended: body.suspended },

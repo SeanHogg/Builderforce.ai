@@ -26,7 +26,7 @@
 import { canvasDiagram } from './canvasDocuments';
 import { canvasStrokes, strokesSvg } from './canvasDrawing';
 import {
-  DIAGRAM_TARGETS, conversionFromGraph, diagramNotation, readDiagramSource,
+  DIAGRAM_TARGETS, convertGraph, readDiagramSource,
   type CanvasDiagramFormat, type DiagramConversion, type DiagramNotation,
 } from './diagramNotations';
 import { readSvgShapes } from './diagramSvg';
@@ -125,9 +125,8 @@ export function diagramConvertTargets(source: DiagramConvertSource): DiagramNota
   return DIAGRAM_TARGETS.filter((notation) => notation.id !== source.from);
 }
 
-/** Write a resolved graph source to the destination notation. */
+/** Write a resolved graph source to the destination notation. An ASSET has no
+ *  graph to write, and says so with `null` rather than an empty file. */
 export function convertGraphSource(source: DiagramConvertSource, to: CanvasDiagramFormat): DiagramConversion | null {
-  const target = diagramNotation(to);
-  if (source.kind !== 'graph' || !target?.write) return null;
-  return conversionFromGraph(source.graph, target);
+  return source.kind === 'graph' ? convertGraph(source.graph, to) : null;
 }

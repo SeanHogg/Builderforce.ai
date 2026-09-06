@@ -75,7 +75,7 @@ export function createLegalDocumentRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
-  router.post('/', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
+  router.post('/', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const env = c.env as Env;
     const userId = (c.get('userId') as string | undefined) ?? null;
@@ -106,25 +106,25 @@ export function createLegalDocumentRoutes(db: Db): Hono<HonoEnv> {
       createdBy: userId,
     });
     return Response.json(result, { status: 201 });
-  }));
+  });
 
-  router.get('/:id', (c) => handle(async () => {
+  router.get('/:id', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const detail = await getLegalDocumentFile(db, tenantId, c.req.param('id'));
     return detail ? Response.json({ document: detail }) : Response.json({ error: 'No such legal document.' }, { status: 404 });
-  }));
+  });
 
-  router.get('/:id/download', (c) => handle(async () => {
+  router.get('/:id/download', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const env = c.env as Env;
     const actor = await resolveActorFromContext(env, db, c);
     const file = await downloadLegalDocumentFile(db, env, tenantId, c.req.param('id'), actor);
     return fileResponse(file.bytes, file.filename, file.mime);
-  }));
+  });
 
   /** Put this file in a data room, or take it out (0937). MANAGER, because it
    *  changes what an external firm holding a room link can read. */
-  router.post('/:id/data-room', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
+  router.post('/:id/data-room', requireRole(TenantRole.MANAGER), async (c) => {
     const body = await c.req.json<{ dataRoomId?: unknown }>();
     const raw = Number(body.dataRoomId);
     await setLegalDocumentDataRoom(
@@ -136,9 +136,9 @@ export function createLegalDocumentRoutes(db: Db): Hono<HonoEnv> {
       await resolveActorFromContext(c.env as Env, db, c),
     );
     return Response.json({ ok: true });
-  }));
+  });
 
-  router.post('/:id/share', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
+  router.post('/:id/share', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const env = c.env as Env;
     const userId = (c.get('userId') as string | undefined) ?? null;
@@ -153,17 +153,17 @@ export function createLegalDocumentRoutes(db: Db): Hono<HonoEnv> {
       createdBy: userId,
     });
     return Response.json(result, { status: 201 });
-  }));
+  });
 
-  router.post('/shares/:shareId/revoke', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
+  router.post('/shares/:shareId/revoke', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const env = c.env as Env;
     const actor = await resolveActorFromContext(env, db, c);
     await revokeLegalDocumentShare(db, env, tenantId, c.req.param('shareId'), actor);
     return Response.json({ ok: true });
-  }));
+  });
 
-  router.post('/:id/request-signature', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
+  router.post('/:id/request-signature', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const env = c.env as Env;
     const userId = (c.get('userId') as string | undefined) ?? null;
@@ -188,7 +188,7 @@ export function createLegalDocumentRoutes(db: Db): Hono<HonoEnv> {
       createdBy: userId,
     });
     return Response.json(result);
-  }));
+  });
 
   return router;
 }
@@ -233,22 +233,22 @@ export function createConsentRoutes(db: Db): Hono<HonoEnv> {
     return v;
   };
 
-  router.get('/consent/me', (c) => consent(async () =>
-    Response.json({ acceptances: await currentAcceptances(db, String(c.get('userId') ?? '')) })));
+  router.get('/consent/me', async (c) =>
+    Response.json({ acceptances: await currentAcceptances(db, String(c.get('userId') ?? '')) }));
 
-  router.get('/consent/me/history', (c) => consent(async () =>
-    Response.json({ history: await acceptanceHistory(db, String(c.get('userId') ?? '')) })));
+  router.get('/consent/me/history', async (c) =>
+    Response.json({ history: await acceptanceHistory(db, String(c.get('userId') ?? '')) }));
 
   /** What this person still owes, for the kinds the caller names (`?required=terms,privacy`;
    *  every kind when absent). The required list is the CALLER's, because which documents
    *  gate signup, an enterprise DPA and an embed are three different product decisions. */
-  router.get('/consent/me/outstanding', (c) => consent(async () => {
+  router.get('/consent/me/outstanding', async (c) => {
     const raw = (c.req.query('required') ?? '').split(',').map((k) => k.trim()).filter(Boolean);
     const required = raw.length ? raw.filter(isDocumentKind) : [...DOCUMENT_KINDS];
     return Response.json(await outstandingFor(db, String(c.get('userId') ?? ''), required));
-  }));
+  });
 
-  router.post('/consent/accept', (c) => consent(async () => {
+  router.post('/consent/accept', async (c) => {
     const body = await c.req.json<Record<string, unknown>>();
     // Evidence is taken from the request, never from the body — an IP a client
     // can set is not evidence.
@@ -266,12 +266,12 @@ export function createConsentRoutes(db: Db): Hono<HonoEnv> {
       },
     );
     return Response.json(result);
-  }));
+  });
 
-  router.get('/consent/tenant', (c) => consent(async () =>
-    Response.json(await tenantComplianceSummary(db, c.get('tenantId') as number))));
+  router.get('/consent/tenant', async (c) =>
+    Response.json(await tenantComplianceSummary(db, c.get('tenantId') as number)));
 
-  router.post('/consent/bind', requireRole(TenantRole.MANAGER), (c) => consent(async () => {
+  router.post('/consent/bind', requireRole(TenantRole.MANAGER), async (c) => {
     const body = await c.req.json<Record<string, unknown>>();
     return Response.json(await bindOrganisation(
       db,
@@ -286,14 +286,14 @@ export function createConsentRoutes(db: Db): Hono<HonoEnv> {
         legalEntityName: typeof body.legalEntityName === 'string' ? body.legalEntityName : null,
       },
     ));
-  }));
+  });
 
-  router.post('/consent/supersede', requireRole(TenantRole.MANAGER), (c) => consent(async () => {
+  router.post('/consent/supersede', requireRole(TenantRole.MANAGER), async (c) => {
     const body = await c.req.json<Record<string, unknown>>();
     return Response.json(await supersedeEarlierVersions(
       db, c.env as Env, kindOf(body.kind), String(body.version ?? ''),
     ));
-  }));
+  });
 
   return router;
 }
@@ -301,16 +301,16 @@ export function createConsentRoutes(db: Db): Hono<HonoEnv> {
 export function createPublicLegalDocumentRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
-  router.get('/:token', (c) => handle(async () => {
+  router.get('/:token', async (c) => {
     const env = c.env as Env;
     const resolved = await resolveLegalDocumentShare(db, env, c.req.param('token'));
     if (!resolved) return Response.json({ error: 'That share link is not valid.' }, { status: 404 });
     return Response.json({
       document: { title: resolved.title, permission: resolved.permission, mime: resolved.mime, filename: resolved.filename },
     });
-  }));
+  });
 
-  router.get('/:token/download', (c) => handle(async () => {
+  router.get('/:token/download', async (c) => {
     const env = c.env as Env;
     const resolved = await resolveLegalDocumentShare(db, env, c.req.param('token'));
     if (!resolved) return Response.json({ error: 'That share link is not valid.' }, { status: 404 });
@@ -319,7 +319,7 @@ export function createPublicLegalDocumentRoutes(db: Db): Hono<HonoEnv> {
     // Content-Disposition behavior is what actually enforces the distinction a
     // recipient experiences; a 403 for 'view' would make the link do nothing.
     return fileResponse(resolved.bytes, resolved.filename, resolved.mime, resolved.permission === 'download' ? 'attachment' : 'inline');
-  }));
+  });
 
   return router;
 }

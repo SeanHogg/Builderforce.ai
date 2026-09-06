@@ -69,9 +69,6 @@ function serialize(chatId: number, req: BrainRunRequest): Record<string, unknown
     projectId: req.projectId ?? null,
     chatMode: req.chatMode,
     maxIterations: req.maxIterations,
-    // The invited agent an addressed turn answers AS — data, so it crosses the bridge;
-    // the host stamps every assistant turn it persists with it.
-    authoredBy: req.authoredBy,
     autoApprove: context.autoApprove,
     evermind: req.evermind != null,
     modelSurface: context.modelSurface,

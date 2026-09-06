@@ -52,6 +52,27 @@ import { slugify as slugifyBase } from '@builderforce/creation-canvas-contract';
 import { parseJsonArray } from '../../domain/shared/json';
 import { limitParam, offsetParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { parseBody, z, zNonEmptyString } from './requestBody';
+
+/** POST /psychometric/score — questionnaire answers keyed by question id. */
+const ScoreBody = z.object({ answers: z.record(z.string(), z.number()).optional() });
+/** POST /psychometric/import — a raw trait vector; `sanitizeVector` clamps/drops. */
+const ImportBody = z.object({ vector: z.unknown().optional() });
+
+/** PATCH /:id — every field optional; `null` clears a nullable column. */
+const PersonaPatchBody = z.object({
+  name: zNonEmptyString.optional(),
+  description: z.string().nullable().optional(),
+  category: z.string().nullable().optional(),
+  tags: z.array(z.string()).nullable().optional(),
+  visibility: z.enum(['private', 'tenant', 'public']).optional(),
+  authorName: z.string().nullable().optional(),
+  persona: z.unknown().optional(),
+  /** PsychometricProfile — the behaviour-bearing trait vector (Pro only). */
+  psychometric: z.unknown().optional(),
+});
+/** POST / — same shape, `name` required. */
+const PersonaCreateBody = PersonaPatchBody.extend({ name: zNonEmptyString });
 
 /** Version key for the public personas keyspace — bumped on any publish so the
  *  searchable (q/category/sort) cached browse results all age out at once. */
@@ -198,9 +219,7 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
   // type (highest-agreement typing item).
   // -------------------------------------------------------------------------
   router.post('/psychometric/score', authMiddleware, async (c) => {
-    const body = await c.req
-      .json<{ answers?: Record<string, number> }>()
-      .catch(() => ({ answers: {} as Record<string, number> }));
+    const body = await parseBody(c, ScoreBody);
     const result = scoreQuestionnaire(body.answers ?? {});
     return c.json({ ...result, source: 'questionnaire' });
   });
@@ -213,7 +232,7 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
   // Pure sanitiser — same rationale as `/score`: universal, not plan-gated.
   // -------------------------------------------------------------------------
   router.post('/psychometric/import', authMiddleware, async (c) => {
-    const body = await c.req.json<{ vector?: unknown }>().catch(() => ({ vector: undefined }));
+    const body = await parseBody(c, ImportBody);
     const vector = sanitizeVector(body.vector);
     return c.json({ vector, source: 'imported' });
   });
@@ -237,20 +256,7 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
   router.post('/', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
-    type PersonaCreateBody = {
-      name?: string;
-      description?: string;
-      category?: string;
-      tags?: string[];
-      visibility?: 'private' | 'tenant' | 'public';
-      authorName?: string;
-      persona?: unknown;
-      /** PsychometricProfile — the behaviour-bearing trait vector (Pro only). */
-      psychometric?: unknown;
-    };
-    const body = await c.req.json<PersonaCreateBody>().catch((): PersonaCreateBody => ({}));
-
-    if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
+    const body = await parseBody(c, PersonaCreateBody);
     const visibility = body.visibility ?? 'private';
     let slug = slugify(body.name);
     if (visibility === 'public') slug = await publicSafeSlug(db, slug, null);
@@ -267,7 +273,7 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
       .values({
         tenantId,
         createdBy: userId ?? null,
-        name: body.name.trim(),
+        name: body.name,
         slug,
         description: body.description ?? null,
         category: body.category ?? null,
@@ -278,7 +284,7 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
         authorName: body.authorName ?? null,
       })
       .returning();
-    if (!row) return c.json({ error: 'Failed to create persona' }, 500);
+    if (!row) throw new Error('marketplace_personas insert returned no row');
 
     if (visibility === 'public') await bumpCacheVersion(c.env as Env, PERSONA_PUBLIC_VERSION_KEY);
     // Drop any stale runtime body cached under this slug so the next cloud run
@@ -322,16 +328,13 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(marketplacePersonas.id, id), eq(marketplacePersonas.tenantId, tenantId)));
     if (!existing) return c.json({ error: 'Persona not found' }, 404);
 
-    const body = await c.req.json<{
-      name?: string; description?: string; category?: string; tags?: string[];
-      visibility?: 'private' | 'tenant' | 'public'; authorName?: string; persona?: unknown; psychometric?: unknown;
-    }>().catch(() => ({} as Record<string, never>));
+    const body = await parseBody(c, PersonaPatchBody);
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     const wasPublic = existing.visibility === 'public';
     let slug = existing.slug;
-    if (typeof body.name === 'string' && body.name.trim()) {
-      updates.name = body.name.trim();
+    if (body.name !== undefined) {
+      updates.name = body.name;
       slug = slugify(body.name);
     }
     const nextVisibility = body.visibility ?? existing.visibility;

@@ -1,11 +1,11 @@
+import { getApiBaseUrl, type ApiBaseEnv } from '../lib/apiBaseUrl';
+
 export type GatewayChatMessage = {
   role: 'system' | 'user' | 'assistant';
   content: string;
 };
 
-export interface GatewayEnv {
-  BUILDERFORCE_API_BASE_URL?: string;
-}
+export type GatewayEnv = ApiBaseEnv;
 
 type GatewayChatRequest = {
   env: GatewayEnv;
@@ -27,10 +27,6 @@ type ChatCompletionResponse = {
   }>;
   response?: string;
 };
-
-function getApiBaseUrl(env: GatewayEnv): string {
-  return (env.BUILDERFORCE_API_BASE_URL ?? 'https://api.builderforce.ai').replace(/\/$/, '');
-}
 
 function looksLikeJwt(token: string): boolean {
   return /^[^.]+\.[^.]+\.[^.]+$/.test(token);

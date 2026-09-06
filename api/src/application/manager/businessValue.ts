@@ -18,6 +18,7 @@
 import type { RankableTask, TaskPriorityTier } from './prioritize';
 import { DAY_MS } from '../../domain/shared/time';
 import { clamp } from '../../domain/shared/numbers';
+import { extractJsonObject } from '../../domain/shared/json';
 
 /** RICE components on the bounded, relative scales the manager prompt constrains. */
 export interface RiceComponents {
@@ -175,14 +176,8 @@ export function buildValuePrompt(input: { title: string; description?: string | 
  */
 export function parseValueResponse(raw: string): ScoredValue | null {
   if (!raw) return null;
-  const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) return null;
-  let obj: Record<string, unknown>;
-  try {
-    obj = JSON.parse(match[0]) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
+  const obj = extractJsonObject(raw);
+  if (!obj) return null;
   const num = (v: unknown): number | null => {
     const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN;
     return Number.isFinite(n) ? n : null;

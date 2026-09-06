@@ -16,16 +16,16 @@
  * caller is on record as having bought it.
  *
  * This file is a presentation adapter and holds no data access: every handler calls
- * the application layer, which owns the tables.
+ * the application layer, which owns the tables. A `ListingError` carries its own
+ * status and is rendered by the global handler through `statusOf`; nothing is
+ * caught here.
  */
 
 import { Hono } from 'hono';
-import type { Context } from 'hono';
 import { resolveAppBaseUrl, type HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { authMiddleware } from '../middleware/authMiddleware';
 import {
-  ListingError,
   browseCreationListings,
   getPublicListing,
   installListingIntoCanvas,
@@ -54,12 +54,40 @@ import {
   sellerEarnings,
   startListingCheckout,
 } from '../../application/marketplace/listingCommerce';
+import { parseBody, z, zNonEmptyString, zOptionalString } from './requestBody';
 
-/** One translation of a domain error into a status, so no handler invents its own. */
-function fail(c: Context<HonoEnv>, error: unknown) {
-  if (error instanceof ListingError) return c.json({ error: error.message }, error.status);
-  return c.json({ error: error instanceof Error ? error.message : 'Unexpected error' }, 500);
-}
+/**
+ * What is being sold and from where. Shared by publish and stage because the same
+ * validation decides both — the kind has to accept the source before either can
+ * write a snapshot.
+ */
+const ListingSourceBody = z.object({
+  sessionId: zNonEmptyString,
+  objectId: zOptionalString,
+  kind: zNonEmptyString,
+  name: zNonEmptyString,
+  summary: z.string().nullable().optional(),
+  category: z.string().nullable().optional(),
+  tags: z.array(z.string()).optional(),
+  priceCents: z.number().int().nonnegative().default(0),
+  currency: z.string().default('USD'),
+  trial: z.string().nullable().optional(),
+  listingId: zOptionalString,
+  // Present when the seller pressed Publish from Stage: the staged payload is
+  // promoted rather than the board re-read, so the build that was checked is
+  // the build that goes on sale.
+  fromSnapshotId: zOptionalString,
+});
+
+const RevertBody = z.object({
+  listingId: zNonEmptyString,
+  snapshotId: zNonEmptyString,
+});
+
+const CheckoutBody = z.object({
+  buyerEmail: z.string().nullable().optional(),
+  returnUrl: zOptionalString,
+});
 
 export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -67,41 +95,30 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
 
   /** What on this board could be sold, and as what. */
   router.get('/candidates/:sessionId', async (c) => {
-    try {
-      const candidates = await publishCandidates(db, c.get('tenantId') as number, c.req.param('sessionId'));
-      return c.json({ ...candidates, takeRateBps: platformTakeRateBps(c.env) });
-    } catch (error) {
-      return fail(c, error);
-    }
+    const candidates = await publishCandidates(db, c.get('tenantId') as number, c.req.param('sessionId'));
+    return c.json({ ...candidates, takeRateBps: platformTakeRateBps(c.env) });
   });
 
   /** Publish, or re-publish in place when `listingId` is supplied. */
   router.post('/', async (c) => {
-    try {
-      const body = await c.req.json<Record<string, unknown>>();
-      const listing = await publishCreationListing(db, c.env, {
-        tenantId: c.get('tenantId') as number,
-        userId: c.get('userId') as string,
-        sessionId: String(body.sessionId ?? ''),
-        objectId: typeof body.objectId === 'string' && body.objectId ? body.objectId : null,
-        kind: String(body.kind ?? ''),
-        name: String(body.name ?? ''),
-        summary: typeof body.summary === 'string' ? body.summary : null,
-        category: typeof body.category === 'string' ? body.category : null,
-        tags: Array.isArray(body.tags) ? body.tags.map(String) : [],
-        priceCents: Number(body.priceCents ?? 0),
-        currency: typeof body.currency === 'string' ? body.currency : 'USD',
-        trial: typeof body.trial === 'string' ? body.trial : null,
-        listingId: typeof body.listingId === 'string' && body.listingId ? body.listingId : null,
-        // Present when the seller pressed Publish from Stage: the staged payload is
-        // promoted rather than the board re-read, so the build that was checked is
-        // the build that goes on sale.
-        fromSnapshotId: typeof body.fromSnapshotId === 'string' && body.fromSnapshotId ? body.fromSnapshotId : null,
-      });
-      return c.json({ listing }, 201);
-    } catch (error) {
-      return fail(c, error);
-    }
+    const body = await parseBody(c, ListingSourceBody);
+    const listing = await publishCreationListing(db, c.env, {
+      tenantId: c.get('tenantId') as number,
+      userId: c.get('userId') as string,
+      sessionId: body.sessionId,
+      objectId: body.objectId ?? null,
+      kind: body.kind,
+      name: body.name,
+      summary: body.summary ?? null,
+      category: body.category ?? null,
+      tags: body.tags ?? [],
+      priceCents: body.priceCents,
+      currency: body.currency,
+      trial: body.trial ?? null,
+      listingId: body.listingId ?? null,
+      fromSnapshotId: body.fromSnapshotId ?? null,
+    });
+    return c.json({ listing }, 201);
   });
 
   /**
@@ -112,17 +129,13 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
    * trailing empty segment is not a route anybody should have to reason about.
    */
   router.get('/releases/:sessionId', async (c) => {
-    try {
-      const rail = await listReleases(db, {
-        tenantId: c.get('tenantId') as number,
-        userId: c.get('userId') as string,
-        sessionId: c.req.param('sessionId'),
-        objectId: c.req.query('objectId') || null,
-      });
-      return c.json({ rail });
-    } catch (error) {
-      return fail(c, error);
-    }
+    const rail = await listReleases(db, {
+      tenantId: c.get('tenantId') as number,
+      userId: c.get('userId') as string,
+      sessionId: c.req.param('sessionId'),
+      objectId: c.req.query('objectId') || null,
+    });
+    return c.json({ rail });
   });
 
   /**
@@ -132,25 +145,21 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
    * accept the source before either can write a snapshot.
    */
   router.post('/releases/stage', async (c) => {
-    try {
-      const body = await c.req.json<Record<string, unknown>>();
-      const staged = await stageRelease(db, c.env, {
-        tenantId: c.get('tenantId') as number,
-        userId: c.get('userId') as string,
-        sessionId: String(body.sessionId ?? ''),
-        objectId: typeof body.objectId === 'string' && body.objectId ? body.objectId : null,
-        kind: String(body.kind ?? ''),
-        name: String(body.name ?? ''),
-        summary: typeof body.summary === 'string' ? body.summary : null,
-        priceCents: Number(body.priceCents ?? 0),
-        currency: typeof body.currency === 'string' ? body.currency : 'USD',
-        trial: typeof body.trial === 'string' ? body.trial : null,
-        listingId: typeof body.listingId === 'string' && body.listingId ? body.listingId : null,
-      });
-      return c.json({ staged }, 201);
-    } catch (error) {
-      return fail(c, error);
-    }
+    const body = await parseBody(c, ListingSourceBody);
+    const staged = await stageRelease(db, c.env, {
+      tenantId: c.get('tenantId') as number,
+      userId: c.get('userId') as string,
+      sessionId: body.sessionId,
+      objectId: body.objectId ?? null,
+      kind: body.kind,
+      name: body.name,
+      summary: body.summary ?? null,
+      priceCents: body.priceCents,
+      currency: body.currency,
+      trial: body.trial ?? null,
+      listingId: body.listingId ?? null,
+    });
+    return c.json({ staged }, 201);
   });
 
   /**
@@ -161,34 +170,26 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
    * the version number they thought they were about to publish.
    */
   router.get('/releases/:sessionId/staged/:snapshotId', async (c) => {
-    try {
-      const staged = await checksForStagedRelease(db, c.env, {
-        tenantId: c.get('tenantId') as number,
-        userId: c.get('userId') as string,
-        sessionId: c.req.param('sessionId'),
-        objectId: c.req.query('objectId') || null,
-        snapshotId: c.req.param('snapshotId'),
-      });
-      return c.json({ staged });
-    } catch (error) {
-      return fail(c, error);
-    }
+    const staged = await checksForStagedRelease(db, c.env, {
+      tenantId: c.get('tenantId') as number,
+      userId: c.get('userId') as string,
+      sessionId: c.req.param('sessionId'),
+      objectId: c.req.query('objectId') || null,
+      snapshotId: c.req.param('snapshotId'),
+    });
+    return c.json({ staged });
   });
 
   /** Put an earlier version back on sale. Existing buyers are not moved. */
   router.post('/releases/revert', async (c) => {
-    try {
-      const body = await c.req.json<Record<string, unknown>>();
-      const result = await revertListing(db, c.env, {
-        tenantId: c.get('tenantId') as number,
-        userId: c.get('userId') as string,
-        listingId: String(body.listingId ?? ''),
-        snapshotId: String(body.snapshotId ?? ''),
-      });
-      return c.json({ reverted: result });
-    } catch (error) {
-      return fail(c, error);
-    }
+    const body = await parseBody(c, RevertBody);
+    const result = await revertListing(db, c.env, {
+      tenantId: c.get('tenantId') as number,
+      userId: c.get('userId') as string,
+      listingId: body.listingId,
+      snapshotId: body.snapshotId,
+    });
+    return c.json({ reverted: result });
   });
 
   /** Everything I have published. */
@@ -199,14 +200,10 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
 
   /** Withdraw from the public catalogue. Buyers keep their licences. */
   router.delete('/:listingId', async (c) => {
-    try {
-      await unpublishCreationListing(
-        db, c.env, c.get('tenantId') as number, c.get('userId') as string, c.req.param('listingId'),
-      );
-      return c.json({ ok: true });
-    } catch (error) {
-      return fail(c, error);
-    }
+    await unpublishCreationListing(
+      db, c.env, c.get('tenantId') as number, c.get('userId') as string, c.req.param('listingId'),
+    );
+    return c.json({ ok: true });
   });
 
   /**
@@ -217,33 +214,25 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
    * path is now checkout, below, and this route cannot grant anything priced.
    */
   router.post('/:slug/acquire', async (c) => {
-    try {
-      const result = await acquireListing(db, c.env, {
-        tenantId: c.get('tenantId') as number,
-        buyerRef: c.get('userId') as string,
-        slug: c.req.param('slug'),
-      });
-      return c.json({ acquisition: result }, 201);
-    } catch (error) {
-      return fail(c, error);
-    }
+    const result = await acquireListing(db, c.env, {
+      tenantId: c.get('tenantId') as number,
+      buyerRef: c.get('userId') as string,
+      slug: c.req.param('slug'),
+    });
+    return c.json({ acquisition: result }, 201);
   });
 
   /** Start a paid purchase; answers with the processor's hosted checkout URL. */
   router.post('/:slug/checkout', async (c) => {
-    try {
-      const body: Record<string, unknown> = await c.req.json<Record<string, unknown>>().catch(() => ({}));
-      const result = await startListingCheckout(db, c.env, {
-        tenantId: c.get('tenantId') as number,
-        buyerRef: c.get('userId') as string,
-        buyerEmail: typeof body.buyerEmail === 'string' ? body.buyerEmail : null,
-        slug: c.req.param('slug'),
-        returnUrl: typeof body.returnUrl === 'string' ? body.returnUrl : resolveAppBaseUrl(c.env),
-      });
-      return c.json(result);
-    } catch (error) {
-      return fail(c, error);
-    }
+    const body = await parseBody(c, CheckoutBody);
+    const result = await startListingCheckout(db, c.env, {
+      tenantId: c.get('tenantId') as number,
+      buyerRef: c.get('userId') as string,
+      buyerEmail: body.buyerEmail ?? null,
+      slug: c.req.param('slug'),
+      returnUrl: body.returnUrl ?? resolveAppBaseUrl(c.env),
+    });
+    return c.json(result);
   });
 
   /**
@@ -254,16 +243,12 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
    * is the only reading of "was this paid" that a buyer cannot author.
    */
   router.post('/checkout/:checkoutSessionId/complete', async (c) => {
-    try {
-      const result = await completeListingCheckout(db, c.env, {
-        tenantId: c.get('tenantId') as number,
-        buyerRef: c.get('userId') as string,
-        checkoutSessionId: c.req.param('checkoutSessionId'),
-      });
-      return c.json({ acquisition: result }, 201);
-    } catch (error) {
-      return fail(c, error);
-    }
+    const result = await completeListingCheckout(db, c.env, {
+      tenantId: c.get('tenantId') as number,
+      buyerRef: c.get('userId') as string,
+      checkoutSessionId: c.req.param('checkoutSessionId'),
+    });
+    return c.json({ acquisition: result }, 201);
   });
 
   /**
@@ -275,27 +260,23 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
    * somebody changed its price to zero and back.
    */
   router.post('/:slug/install', async (c) => {
-    try {
-      const tenantId = c.get('tenantId') as number;
-      const userId = c.get('userId') as string;
-      const slug = c.req.param('slug');
-      // Resolved WITHOUT the visibility filter: a buyer whose seller has since
-      // withdrawn the listing still owns it, and installing through the shop
-      // window would 404 the one person entitled to a copy.
-      const listing = await resolveListingBySlug(db, slug);
-      if (!listing) return c.json({ error: 'Listing not found' }, 404);
-      // One read answers both questions: may they install, and WHICH VERSION do they
-      // own. Asking them separately is how "they own it" and "this is what they own"
-      // come to disagree.
-      const licence = await heldLicence(db, tenantId, userId, listing.id);
-      if (!licence) return c.json({ error: 'Take a copy first' }, 403);
-      const installed = await installListingIntoCanvas(db, c.env, {
-        tenantId, userId, slug, heldSnapshotId: licence.snapshotId,
-      });
-      return c.json({ installed }, 201);
-    } catch (error) {
-      return fail(c, error);
-    }
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+    const slug = c.req.param('slug');
+    // Resolved WITHOUT the visibility filter: a buyer whose seller has since
+    // withdrawn the listing still owns it, and installing through the shop
+    // window would 404 the one person entitled to a copy.
+    const listing = await resolveListingBySlug(db, slug);
+    if (!listing) return c.json({ error: 'Listing not found' }, 404);
+    // One read answers both questions: may they install, and WHICH VERSION do they
+    // own. Asking them separately is how "they own it" and "this is what they own"
+    // come to disagree.
+    const licence = await heldLicence(db, tenantId, userId, listing.id);
+    if (!licence) return c.json({ error: 'Take a copy first' }, 403);
+    const installed = await installListingIntoCanvas(db, c.env, {
+      tenantId, userId, slug, heldSnapshotId: licence.snapshotId,
+    });
+    return c.json({ installed }, 201);
   });
 
   /** What I own. */
@@ -306,16 +287,12 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
 
   /** Reverse a sale: licence revoked first, then the ledger. */
   router.post('/orders/:orderId/refund', async (c) => {
-    try {
-      const result = await refundListingOrder(db, c.env, {
-        tenantId: c.get('tenantId') as number,
-        orderId: Number.parseInt(c.req.param('orderId'), 10),
-        actorRef: c.get('userId') as string,
-      });
-      return c.json(result);
-    } catch (error) {
-      return fail(c, error);
-    }
+    const result = await refundListingOrder(db, c.env, {
+      tenantId: c.get('tenantId') as number,
+      orderId: Number.parseInt(c.req.param('orderId'), 10),
+      actorRef: c.get('userId') as string,
+    });
+    return c.json(result);
   });
 
   /**

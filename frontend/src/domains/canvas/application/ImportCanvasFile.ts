@@ -23,6 +23,7 @@ import { fileExtension, fileStem } from '@/lib/canvasDocuments';
 import { htmlToMarkdown } from '@/lib/richText';
 import {
   createResumeFamily, isJsonResume, renderResumeMarkdown, resumeDocumentFromJson, resumeNodePatch,
+  resumeTemplateFromDescriptor,
   type CanvasResumeDocument,
 } from '@/lib/canvasResume';
 import {
@@ -33,7 +34,7 @@ import {
   dxfPreviewSvg, meshFormatFromHint, meshPreviewSvg, parseMeshTriangles, svgDataUrl,
 } from '@/lib/creativeGeometry';
 import {
-  conversionFromGraph, diagramNotation, notationForFileName,
+  convertDiagramSource, convertGraph, diagramNotation, notationForFileName,
   type DiagramConversion, type DiagramNotation,
 } from '@/lib/diagramNotations';
 import type { CreationObjectKind } from '@builderforce/creation-canvas-contract';
@@ -219,6 +220,12 @@ function jsonResumeObject(file: File, source: string, t: ImportTranslator): Impo
   const markdown = document ? renderResumeMarkdown(document) : '';
   if (!document || !markdown.trim()) return null;
   const title = stringField(document.basics?.name) || fileStem(file.name);
+  // A Hired export carries its template descriptor under JSON Resume's `meta`
+  // extension point (or at the top level, in the older shape). It travels with the
+  // revision VERBATIM and only sets the stock id when it validates — an invalid or
+  // unknown descriptor costs the layout, never the import.
+  const templateDescriptor = jsonResumeTemplateDescriptor(parsed);
+  const template = resumeTemplateFromDescriptor(templateDescriptor);
   return {
     kind: 'resume',
     data: {
@@ -232,6 +239,7 @@ function jsonResumeObject(file: File, source: string, t: ImportTranslator): Impo
         title,
         markdown,
         document,
+        ...(template && templateDescriptor ? { templateId: template.id, templateDescriptor } : {}),
         sourceFile: { name: file.name, mimeType: file.type || 'application/json', size: file.size },
       })),
     },
@@ -239,6 +247,15 @@ function jsonResumeObject(file: File, source: string, t: ImportTranslator): Impo
 }
 
 const stringField = (value: unknown): string => typeof value === 'string' ? value.trim() : '';
+
+/** The template descriptor a JSON Resume file carries, if any: `meta.template` first, then `template`. */
+function jsonResumeTemplateDescriptor(parsed: unknown): Record<string, unknown> | undefined {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+  const record = parsed as Record<string, unknown>;
+  const meta = record.meta && typeof record.meta === 'object' && !Array.isArray(record.meta) ? record.meta as Record<string, unknown> : {};
+  const candidate = meta.template ?? record.template;
+  return candidate && typeof candidate === 'object' && !Array.isArray(candidate) ? candidate as Record<string, unknown> : undefined;
+}
 
 /** Sections with at least one entry — what the card can honestly say it holds. */
 function countedResumeSections(document: CanvasResumeDocument): number {
@@ -334,13 +351,11 @@ function diagramObject(
 async function diagramObjects(file: File, t: ImportTranslator): Promise<ImportedCanvasObject[] | null> {
   const notation = notationForFileName(file.name);
   if (!notation) return null;
-  const drawio = diagramNotation('drawio')!;
-
   // A binary container never reaches a text field, so it is read from bytes and
   // kept as draw.io — the notation this can both draw and write back.
   if (notation.readBytes) {
     const graph = await notation.readBytes(await bytes(file));
-    const converted = graph ? conversionFromGraph(graph, drawio) : null;
+    const converted = graph ? convertGraph(graph, 'drawio') : null;
     return converted ? [diagramObject(file, converted, notation, t)] : null;
   }
 
@@ -362,8 +377,9 @@ async function diagramObjects(file: File, t: ImportTranslator): Promise<Imported
     }, notation, t)];
   }
 
-  const graph = await notation.read?.(source).catch(() => null) ?? null;
-  const converted = graph ? conversionFromGraph(graph, drawio) : null;
+  // A read-only notation is kept as draw.io, through the same text-to-text
+  // conversion the canvas offers on a diagram already on the board.
+  const converted = await convertDiagramSource(source, notation.id, 'drawio');
   return converted ? [diagramObject(file, converted, notation, t)] : null;
 }
 
@@ -654,8 +670,7 @@ async function deriveObjects(
      */
     const excalidraw = diagramNotation('excalidraw')!;
     if (excalidraw.detect!(source)) {
-      const graph = await excalidraw.read!(source).catch(() => null);
-      const converted = graph ? conversionFromGraph(graph, excalidraw) : null;
+      const converted = await convertDiagramSource(source, 'excalidraw', 'excalidraw');
       if (converted) return [diagramObject(file, converted, excalidraw, t)];
     }
     const resume = jsonResumeObject(file, source, t);

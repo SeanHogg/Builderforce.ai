@@ -47,7 +47,6 @@ import { computeQualityInsights } from '../../application/insights/qualityInsigh
 import { computeChatModeUsage } from '../../application/insights/chatModeInsights';
 import { computePeopleInsights } from '../../application/insights/peopleInsights';
 import { computeRdFinancials } from '../../application/insights/rdFinancialsInsights';
-import { importBoardRows, isImportDataset, IMPORT_DATASETS } from '../../application/insights/boardImport';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { positiveIntParam, boundedIntParam, daysParam, fiscalYearParam, periodParam } from './queryParams';
@@ -406,22 +405,6 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
     const ver = await getCacheVersion(env, rdFinancialsVersionKey(tenantId));
     const key = `insights:rdfin:t:${tenantId}:fy:${fy}:v:${ver}`;
     return c.json(await getOrSetCached(env, key, () => computeRdFinancials(db, tenantId, fy), SHORT_TTL));
-  });
-
-  // Bulk import — CSV/JSON bulk entry for the manual board-deck datasets
-  // (headcount, positions, R&D financials, support/incidents/uptime, AI program).
-  // Manager-gated; one multi-row insert + a lens cache bump. The dataset list is
-  // the single registry shared with the trackers (IMPORT_DATASETS).
-  router.get('/import/datasets', requireRole(TenantRole.MANAGER), (c) =>
-    c.json({ datasets: Object.fromEntries(Object.entries(IMPORT_DATASETS).map(([k, d]) => [k, d.columns.map((col) => ({ name: col.name, type: col.type, required: !!col.required }))])) }),
-  );
-  router.post('/import/:dataset', requireRole(TenantRole.MANAGER), async (c) => {
-    const { tenantId } = scope(c);
-    const dataset = c.req.param('dataset');
-    if (!isImportDataset(dataset)) return c.json({ error: `unknown dataset "${dataset}"` }, 400);
-    const body = await c.req.json<{ rows?: Array<Record<string, unknown>> }>();
-    const result = await importBoardRows(db, c.env as Env, tenantId, dataset, body.rows ?? []);
-    return c.json(result, result.inserted > 0 ? 201 : 400);
   });
 
   // LENS #6 — compliance summary (manager)

@@ -452,6 +452,22 @@ export function teaserDestinationIds(): string[] {
   return [...new Set(TEASER_NAV_GROUPS.map((group) => group.id))].sort();
 }
 
+let teaserDestinations: ReadonlySet<string> | null = null;
+
+/**
+ * The pitch key for a destination that HAS a teaser, or `null`.
+ *
+ * The same set the catalog ratchet reads (`teaserDestinationIds`) gates the lookup, so
+ * a group id the ratchet never checked — a rail row outside `TEASER_NAV_GROUPS`, a
+ * caller resolving an id by hand — cannot render its dotted key as a pitch. The teaser
+ * and its head both resolve the pitch through this, so they cannot disagree about
+ * which destinations have one.
+ */
+export function teaserDestinationPitchKey(groupId: string): string | null {
+  teaserDestinations ??= new Set(teaserDestinationIds());
+  return teaserDestinations.has(groupId) ? destinationPitchKey(groupId) : null;
+}
+
 /** The routes carrying a DETAILS overlay. Exported for the ratchet that asserts
  *  each one has a base row — an overlay without a base used to render its
  *  highlights under the GENERIC hero, which is how /brainstorm and /training

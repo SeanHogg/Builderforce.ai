@@ -176,3 +176,33 @@ export async function downloadAuditReport(format: 'csv' | 'json', period?: strin
   const blob = await res.blob();
   downloadBlob(blob, `audit-report-${period ?? 'current'}.${format}`);
 }
+
+// ── Audit-report runs (the export log) ───────────────────────────────────────
+
+/** The headline figures a run row keeps — enough to read the log without re-assembling. */
+export interface AuditReportRunSummary {
+  format: 'csv' | 'json';
+  windowDays: number;
+  generatedAt: string;
+  spendUsd: number;
+  forecastUsd: number;
+  capexUsd: number;
+  opexUsd: number;
+  qualifiedBaseUsd: number;
+  socCoveragePct: number;
+  complianceEvents: number;
+}
+
+export interface AuditReportRun {
+  id: number;
+  periodMonth: string;
+  generatedBy: string | null;
+  summary: AuditReportRunSummary | null;
+  createdAt: string;
+}
+
+/** Every export logged for this tenant, newest first (server-bounded). */
+export async function listAuditReportRuns(limit?: number): Promise<AuditReportRun[]> {
+  const res = await apiRequest<{ runs: AuditReportRun[] }>(`/api/finops/audit-report/runs${limit ? `?limit=${limit}` : ''}`);
+  return res.runs;
+}

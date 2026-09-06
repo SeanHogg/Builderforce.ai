@@ -47,6 +47,7 @@ import { salesRevenueForecast } from '../sales/salesPolicy';
 import { resolveManagerAssignee } from '../manager/managerPolicy';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';
 import { isLifecycleManagedTask } from '../kanban/managedExecutionGuard';
+import { executeAsAddressedAgent } from '../brain/addressedAgentRun';
 import { DEP_TYPES } from '../task/taskDependencies';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
@@ -1953,6 +1954,13 @@ const CATALOG: BuiltinTool[] = [
     },
   },
 
+  {
+    tool: 'chats.execute_as_agent', mutates: true,
+    description: "Carry out the user's instruction in YOUR OWN RUNTIME — your clone of the repository, your shell and your git — rather than in this reply, which has none of them. Steers your live run on one of this chat's tickets, resumes a paused one, or starts a follow-up run on the SAME ticket branch your previous run left its changes on (so 'merge and push', 'run the tests', 'fix the failing build' act on your actual work); with no prior run it starts the linked ticket on you with the instruction as its first step. Pass the instruction VERBATIM. Returns what happened (steered / resumed / rerun / started, with the execution id) or awaiting_approval — report that to the user; never answer that you lack a git or file tool.",
+    parameters: obj({ chatId: N, directive: S, taskId: N }, ['chatId', 'directive']),
+    run: (ctx, a) => executeAsAddressedAgent(ctx, { chatId: num(a.chatId), directive: str(a.directive), ...(a.taskId != null ? { taskId: num(a.taskId) } : {}) }),
+  },
+
   // ---- AI Manager: coaching (chat → standing directive) ----
   // Turns a "coaching session" (the human telling the manager how to manage) into a
   // durable directive the background manager pass honors on every run — the chat-side
@@ -3762,8 +3770,8 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'decks.promote_template', mutates: true, description: 'Promote an uploaded .pptx (pass its storage key as sourceKey) into a reusable custom deck template.', parameters: obj({ name: S, description: S, sourceKey: S }, ['name', 'sourceKey']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/decks/templates', { name: str(a.name), description: a.description != null ? str(a.description) : undefined, sourceKey: str(a.sourceKey) }) },
 
   // ---- Board data import (bulk entry for board-deck datasets) ----
-  { tool: 'board_data.import_datasets', mutates: false, description: 'List the board-deck datasets that can be BULK-IMPORTED and their column specs.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/api/insights/import/datasets') },
-  { tool: 'board_data.import', mutates: true, description: 'Bulk-import rows into a board-deck dataset (e.g. headcount-events, rd-financials, support-tickets). `rows` is an array of objects whose keys match the dataset columns (call board_data.import_datasets for the spec).', parameters: obj({ dataset: S, rows: { type: 'array', items: { type: 'object' } } }, ['dataset', 'rows']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/insights/import/${encodeURIComponent(str(a.dataset))}`, { rows: Array.isArray(a.rows) ? a.rows : [] }) },
+  { tool: 'board_data.import_datasets', mutates: false, description: 'List the record kinds that can be BULK-IMPORTED (the board-deck datasets) and their column specs: { kinds: [{ key, columns: [{ name, type, required, example? }] }] }.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/api/import/kinds') },
+  { tool: 'board_data.import', mutates: true, description: 'Bulk-import rows into a record kind (e.g. headcount-events, rd-financials, support-tickets). `rows` is an array of objects whose keys match the kind columns (call board_data.import_datasets for the spec). Pass dryRun:true to validate without writing.', parameters: obj({ dataset: S, rows: { type: 'array', items: { type: 'object' } }, dryRun: { type: 'boolean' } }, ['dataset', 'rows']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/import/${encodeURIComponent(str(a.dataset))}`, { rows: Array.isArray(a.rows) ? a.rows : [], dryRun: a.dryRun === true }) },
 
   // ---- My sessions (the current user's own active sessions) ----
   { tool: 'my_sessions.list', mutates: false, description: 'List the current user’s active sessions.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/api/auth/sessions') },

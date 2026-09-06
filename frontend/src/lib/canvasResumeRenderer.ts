@@ -6,6 +6,7 @@ import {
   normalizedResumeTemplate,
   renderResumeMarkdown,
   resumeFamilyFromNode,
+  resumeTemplateFromDescriptor,
   type CanvasResumeDocument,
   type CanvasResumeRevision,
   type ResumeOrientation,
@@ -188,8 +189,16 @@ export function resumePageCss(revision: Pick<CanvasResumeRevision, 'pageSize' | 
   return `@page{size:${revision.pageSize} ${revision.orientation};margin:0}`;
 }
 
+/**
+ * The template a revision renders with: its own descriptor when it carries a valid
+ * one, else the stock template its id names. The descriptor wins because it is the
+ * fuller statement — a Hired export says which sections, in what layout, and the
+ * stock id alone would render the same résumé in the template's defaults.
+ */
 function templateFor(revision: CanvasResumeRevision): ResumeTemplateDefinition {
-  return RESUME_TEMPLATES.find((template) => template.id === revision.templateId) ?? RESUME_TEMPLATES[0]!;
+  return resumeTemplateFromDescriptor(revision.templateDescriptor)
+    ?? RESUME_TEMPLATES.find((template) => template.id === revision.templateId)
+    ?? RESUME_TEMPLATES[0]!;
 }
 
 /** The exact artifact markup used on Canvas, in standalone HTML, and in print/PDF. */

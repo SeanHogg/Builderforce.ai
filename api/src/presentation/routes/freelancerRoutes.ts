@@ -60,7 +60,6 @@ import {
   listFreelancerDisputes,
   raiseDispute,
   withdrawDispute,
-  type DisputeRefusal,
 } from '../../application/marketplace/disputes';
 import {
   AVATAR_WIDTHS,
@@ -81,6 +80,9 @@ import {
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
+import { refusalResponse } from '../middleware/errorResponse';
+import { ESCROW_REFUSAL_STATUS } from './disputeRoutes';
+import { parseBody, z, zNonEmptyString, zOptionalString } from './requestBody';
 
 /** `freelancer_profiles.*` under the SNAKE_CASE keys every consumer below (and the
  *  cached browse payload) has always seen — the response shape is the contract. */
@@ -291,6 +293,98 @@ async function computeFreelancerStats(db: Db, env: HonoEnv['Bindings'], userId: 
 const DISCIPLINES = ['developer', 'dba', 'designer', 'devops', 'qa', 'pm', 'data', 'security', 'other'] as const;
 const VISIBILITIES = ['public', 'private'] as const;
 const AVAILABILITIES = ['open', 'limited', 'unavailable'] as const;
+
+// ── Request bodies ─────────────────────────────────────────────────────────────
+// Every field the profile editor binds is optional AND nullable: the form sends the
+// whole profile back, and a field the person cleared arrives as `null`, not absent.
+
+/** PATCH /me. `discipline` is a plain string rather than the enum because the editor
+ *  sends `''` for "not chosen" — the handler reads that as null, as it always has.
+ *  `seeking` / `workMode` are normalised by the career domain, which owns their
+ *  vocabulary (see the handler). */
+const ProfilePatchBody = z.object({
+  headline: z.string().nullable().optional(),
+  bio: z.string().nullable().optional(),
+  discipline: z.string().nullable().optional(),
+  skills: z.array(z.string()).nullable().optional(),
+  hourlyRateCents: z.number().nullable().optional(),
+  currency: z.string().nullable().optional(),
+  visibility: z.enum(VISIBILITIES).nullable().optional(),
+  availability: z.enum(AVAILABILITIES).nullable().optional(),
+  published: z.boolean().nullable().optional(),
+  location: z.string().nullable().optional(),
+  timezone: z.string().nullable().optional(),
+  seeking: z.string().nullable().optional(),
+  workMode: z.string().nullable().optional(),
+  targetRoles: z.array(z.string()).nullable().optional(),
+  seniority: z.string().nullable().optional(),
+  desiredSalaryMinCents: z.number().nullable().optional(),
+  desiredSalaryMaxCents: z.number().nullable().optional(),
+  noticePeriodDays: z.number().nullable().optional(),
+  openToRelocation: z.boolean().nullable().optional(),
+  slug: z.string().nullable().optional(),
+  displayName: z.string().nullable().optional(),
+});
+
+/** PATCH /me/resume. Each field is applied only when it names something real (a known
+ *  template, a known privacy, a revision in the family) — the handler keeps those
+ *  checks because they read the stored family, which a schema cannot. */
+const ResumePatchBody = z.object({
+  templateId: z.string().optional(),
+  privacy: z.string().optional(),
+  masterRevisionId: z.string().optional(),
+});
+
+const AvailabilityBody = z.object({ available: z.boolean().optional() });
+
+const ENGAGEMENT_OPEN_STATUSES = ['invited', 'interviewing', 'active'] as const;
+
+/** POST /engagements — a hire. `status` defaults to an invite; `engagementType` is
+ *  normalised by `hireShape`, which owns that vocabulary. */
+const HireBody = z.object({
+  freelancerUserId: zNonEmptyString,
+  projectId: z.number().int().nullable().optional(),
+  rateCents: z.number().nullable().optional(),
+  title: zOptionalString,
+  note: zOptionalString,
+  status: z.enum(ENGAGEMENT_OPEN_STATUSES).optional(),
+  engagementType: z.string().nullable().optional(),
+});
+
+const EngagementPatchBody = z.object({
+  status: z.enum(['invited', 'interviewing', 'active', 'declined']).nullable().optional(),
+  rateCents: z.number().nullable().optional(),
+  title: z.string().nullable().optional(),
+});
+
+/** DELETE /engagements/:id — the reason is optional; the body may be `{}`. */
+const TerminateBody = z.object({ reason: zOptionalString });
+
+const RespondBody = z.object({ accept: z.boolean().optional() });
+
+/** Both review directions: 1..5, clamped by the handler as it always was. */
+const ReviewBody = z.object({
+  rating: z.number(),
+  comment: zOptionalString,
+  wouldWorkAgain: z.boolean().nullable().optional(),
+});
+
+/** An escrow move's optional note — the surface sends `{ note: null }` for none. */
+const MilestoneNoteBody = z.object({ note: zOptionalString });
+
+const RaiseDisputeBody = z.object({ reason: zNonEmptyString, detail: zOptionalString });
+
+const DisputeStatementBody = z.object({ position: zNonEmptyString, evidence: z.unknown().optional() });
+
+/** POST /:id/milestones — a deliverable. Always lands in `draft`. */
+const CreateMilestoneBody = z.object({
+  title: zNonEmptyString,
+  description: zOptionalString,
+  amountCents: z.number().int().nonnegative().optional(),
+  currency: zOptionalString,
+  sequence: z.number().optional(),
+  dueAt: zOptionalString,
+});
 const RESUME_MIME = new Set([
   'application/pdf',
   'application/msword',
@@ -516,7 +610,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     if (!row) {
       await db.insert(freelancerProfiles).values({ userId }).onConflictDoNothing();
       const [fresh] = await loadOwnProfile(db, userId);
-      if (!fresh) return c.json({ error: 'Profile unavailable' }, 500);
+      if (!fresh) throw new Error('freelancer_profiles insert returned no row');
       const stats = await computeFreelancerStats(db, c.env, userId, (fresh.currency as string) ?? 'USD');
       return c.json({ ...mapPublicProfile(fresh), published: false, email: fresh.email, stats });
     }
@@ -548,18 +642,18 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   router.patch('/me', webAuthMiddleware, async (c) => {
     const db = requestDb(c);
     const userId = c.get('userId') as string;
-    const b = await c.req.json<Record<string, unknown>>();
-    const headline = typeof b.headline === 'string' ? b.headline.slice(0, 200) : null;
-    const bio = typeof b.bio === 'string' ? b.bio.slice(0, 5000) : null;
+    const b = await parseBody(c, ProfilePatchBody);
+    const headline = b.headline?.slice(0, 200) ?? null;
+    const bio = b.bio?.slice(0, 5000) ?? null;
     const discipline = DISCIPLINES.includes(b.discipline as never) ? (b.discipline as string) : null;
-    const skills = Array.isArray(b.skills) ? JSON.stringify((b.skills as unknown[]).filter((s) => typeof s === 'string').slice(0, 50)) : null;
+    const skills = b.skills ? JSON.stringify(b.skills.slice(0, 50)) : null;
     const rate = typeof b.hourlyRateCents === 'number' && b.hourlyRateCents >= 0 ? Math.round(b.hourlyRateCents) : null;
-    const currency = typeof b.currency === 'string' ? b.currency.slice(0, 3).toUpperCase() : 'USD';
-    const visibility = VISIBILITIES.includes(b.visibility as never) ? (b.visibility as string) : 'private';
-    const availability = AVAILABILITIES.includes(b.availability as never) ? (b.availability as string) : 'open';
+    const currency = b.currency?.slice(0, 3).toUpperCase() ?? 'USD';
+    const visibility: string = b.visibility ?? 'private';
+    const availability: string = b.availability ?? 'open';
     const published = b.published === true;
-    const location = typeof b.location === 'string' ? b.location.slice(0, 120) : null;
-    const timezone = typeof b.timezone === 'string' ? b.timezone.slice(0, 60) : null;
+    const location = b.location?.slice(0, 120) ?? null;
+    const timezone = b.timezone?.slice(0, 60) ?? null;
 
     // Career intent (0462). The two enumerations are normalised by the CAREER DOMAIN
     // rather than re-listed here: `application/career/listing.ts` owns what "seeking"
@@ -568,11 +662,11 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     // the vocabulary in this route is exactly how the two would drift apart.
     const seeking = normalizeSeeking(b.seeking);
     const workMode = normalizeWorkMode(b.workMode);
-    const targetRoles = Array.isArray(b.targetRoles)
-      ? JSON.stringify((b.targetRoles as unknown[]).filter((r) => typeof r === 'string' && r.trim()).slice(0, 12))
+    const targetRoles = b.targetRoles
+      ? JSON.stringify(b.targetRoles.filter((r) => r.trim()).slice(0, 12))
       : null;
-    const seniority = typeof b.seniority === 'string' ? b.seniority.slice(0, 30) : null;
-    const cents = (v: unknown): number | null =>
+    const seniority = b.seniority?.slice(0, 30) ?? null;
+    const cents = (v: number | null | undefined): number | null =>
       typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.round(v) : null;
     const desiredSalaryMinCents = cents(b.desiredSalaryMinCents);
     const desiredSalaryMaxCents = cents(b.desiredSalaryMaxCents);
@@ -741,7 +835,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   router.patch('/me/resume', webAuthMiddleware, async (c) => {
     const db = requestDb(c);
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{ templateId?: unknown; privacy?: unknown; masterRevisionId?: unknown }>();
+    const body = await parseBody(c, ResumePatchBody);
     const resume = await readProfileResume(db, userId);
     if (!resume) return c.json({ error: 'No resume yet' }, 404);
 
@@ -757,10 +851,10 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
         : revision);
     }
     const PRIVACIES: readonly ResumePrivacy[] = ['public', 'recruiter_only', 'connections', 'private', 'draft'];
-    if (typeof body.privacy === 'string' && PRIVACIES.includes(body.privacy as ResumePrivacy)) {
+    if (body.privacy !== undefined && PRIVACIES.includes(body.privacy as ResumePrivacy)) {
       family.privacy = body.privacy as ResumePrivacy;
     }
-    if (typeof body.masterRevisionId === 'string' && family.revisions.some((r) => r.id === body.masterRevisionId)) {
+    if (body.masterRevisionId !== undefined && family.revisions.some((r) => r.id === body.masterRevisionId)) {
       family.masterRevisionId = body.masterRevisionId;
     }
 
@@ -834,7 +928,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   router.post('/me/availability', webAuthMiddleware, async (c) => {
     const db = requestDb(c);
     const userId = c.get('userId') as string;
-    const b = await c.req.json<{ available?: boolean }>().catch(() => ({} as { available?: boolean }));
+    const b = await parseBody(c, AvailabilityBody);
     const available = b.available === true;
 
     await db.update(users).set({ availableForHire: available, updatedAt: sql`NOW()` }).where(eq(users.id, userId));
@@ -1076,8 +1170,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
-    const b = await c.req.json<{ freelancerUserId?: string; projectId?: number; rateCents?: number; title?: string; note?: string; status?: string; engagementType?: string }>();
-    if (!b.freelancerUserId) return c.json({ error: 'freelancerUserId required' }, 400);
+    const b = await parseBody(c, HireBody);
     // Must be a PUBLISHED for-hire profile — the same gate the marketplace browse
     // uses. This covers both dedicated 'freelancer' accounts AND standard builders
     // who opted in to being hired (available_for_hire), so hiring never checks the
@@ -1090,9 +1183,9 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
       .innerJoin(users, eq(users.id, freelancerProfiles.userId))
       .where(and(eq(freelancerProfiles.userId, b.freelancerUserId), eq(freelancerProfiles.published, true)));
     if (!prof) return c.json({ error: 'Freelancer not found' }, 404);
-    const status = ['invited', 'interviewing', 'active'].includes(b.status ?? '') ? (b.status as string) : 'invited';
+    const status: string = b.status ?? 'invited';
     const rate = typeof b.rateCents === 'number' ? Math.round(b.rateCents) : (prof.hourly_rate_cents as number | null);
-    const projectId = typeof b.projectId === 'number' ? b.projectId : null;
+    const projectId = b.projectId ?? null;
 
     const [existing] = await db.select({ id: freelancerEngagements.id })
       .from(freelancerEngagements)
@@ -1163,8 +1256,8 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const b = await c.req.json<{ status?: string; rateCents?: number; title?: string }>();
-    const status = ['invited', 'interviewing', 'active', 'declined'].includes(b.status ?? '') ? (b.status as string) : null;
+    const b = await parseBody(c, EngagementPatchBody);
+    const status: string | null = b.status ?? null;
     if (!status && b.rateCents == null && b.title == null) return c.json({ error: 'nothing to update' }, 400);
     const rows = await db.update(freelancerEngagements).set({
       status: sql`COALESCE(${status}, ${freelancerEngagements.status})`,
@@ -1194,10 +1287,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    let reason: string | null = null;
-    try { const b = await c.req.json<{ reason?: string }>(); reason = b.reason ?? null; } catch (error) { /* body optional */ 
-      reportCaughtError(error, { source: "presentation/routes/freelancerRoutes.ts", operation: "createEngagementRoutes" });
-    }
+    const reason = (await parseBody(c, TerminateBody)).reason ?? null;
     const rows = await db.update(freelancerEngagements).set({
       terminatedAt: sql`NOW()`,
       terminatedReason: reason,
@@ -1223,7 +1313,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     const db = requestDb(c);
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
-    const b = await c.req.json<{ accept?: boolean }>();
+    const b = await parseBody(c, RespondBody);
     const target = b.accept ? 'active' : 'declined';
     const rows = await db.update(freelancerEngagements).set({
       status: target,
@@ -1260,9 +1350,8 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
     const id = c.req.param('id');
-    const b = await c.req.json<{ rating?: number; comment?: string; wouldWorkAgain?: boolean }>();
-    const rating = Math.max(1, Math.min(5, Math.round(Number(b.rating))));
-    if (!Number.isFinite(rating)) return c.json({ error: 'rating 1..5 required' }, 400);
+    const b = await parseBody(c, ReviewBody);
+    const rating = Math.max(1, Math.min(5, Math.round(b.rating)));
     const [eng] = await db.select({
       id: freelancerEngagements.id,
       freelancer_user_id: freelancerEngagements.freelancerUserId,
@@ -1292,9 +1381,8 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     const db = requestDb(c);
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
-    const b = await c.req.json<{ rating?: number; comment?: string; wouldWorkAgain?: boolean }>();
-    const rating = Math.max(1, Math.min(5, Math.round(Number(b.rating))));
-    if (!Number.isFinite(rating)) return c.json({ error: 'rating 1..5 required' }, 400);
+    const b = await parseBody(c, ReviewBody);
+    const rating = Math.max(1, Math.min(5, Math.round(b.rating)));
     const [eng] = await db.select({
       id: freelancerEngagements.id,
       tenant_id: freelancerEngagements.tenantId,
@@ -1336,19 +1424,9 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // forget. The `/mine/...` prefix mirrors the split `GET /` and `GET /mine` above
   // already draw, and is declared BEFORE `/:id/...` so `mine` is never read as an id.
 
-  /** An escrow refusal as an HTTP answer. 409 for a state conflict, 403 for the wrong
-   *  party — a freelancer told "404" about their own milestone would go looking for a
-   *  bug, and one told "403" knows the action belongs to the client. */
-  const refusalStatus = (reason: string): 400 | 403 | 404 | 409 =>
-    reason === 'not_found' ? 404
-    : reason === 'wrong_party' || reason === 'not_mediator' ? 403
-    // `already_disputed` and `already_closed` are state conflicts in exactly the sense
-    // `wrong_status` is: the row moved on, and the caller should re-read rather than
-    // re-format their request. Mapped here rather than in the dispute module because
-    // `DisputeRefusal` extends `EscrowRefusal` precisely so ONE translation serves both.
-    : reason === 'wrong_status' || reason === 'conflict'
-      || reason === 'already_disputed' || reason === 'already_closed' ? 409
-    : 400;
+  // A refusal's HTTP status is `ESCROW_REFUSAL_STATUS` (owned by `disputeRoutes`): ONE
+  // table for both doors, because `DisputeRefusal` extends `EscrowRefusal` precisely so
+  // one translation serves both.
 
   // GET /mine/milestones — WORKER: every milestone I am engaged on, with the money
   // rolled up. The "what am I owed" view.
@@ -1370,13 +1448,13 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     // caller — see `milestoneTenantForFreelancer`.
     const tenantId = await milestoneTenantForFreelancer(db, milestoneId, userId);
     if (tenantId === null) return c.json({ error: 'Not found' }, 404);
-    const b = await c.req.json<{ note?: string }>().catch(() => ({ note: undefined }));
+    const b = await parseBody(c, MilestoneNoteBody);
     const result = await moveMilestone(c.env as Env, db, {
       tenantId, milestoneId, action: 'submit', party: 'freelancer', actorUserId: userId, note: b.note ?? null,
     });
     return result.ok
       ? c.json({ milestone: result.milestone })
-      : c.json({ error: result.reason }, refusalStatus(result.reason));
+      : refusalResponse(c, result.reason, ESCROW_REFUSAL_STATUS);
   });
 
   // ----------------------------------------------------------- DISPUTES (worker) ----
@@ -1404,15 +1482,13 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     const milestoneId = c.req.param('milestoneId');
     const tenantId = await milestoneTenantForFreelancer(db, milestoneId, userId);
     if (tenantId === null) return c.json({ error: 'not_found' }, 404);
-    const b = await c.req.json<{ reason?: string; detail?: string }>().catch(() => ({} as { reason?: string; detail?: string }));
-    const reason = String(b.reason ?? '').trim();
-    if (!reason) return c.json({ error: 'reason is required' }, 400);
+    const b = await parseBody(c, RaiseDisputeBody);
     const result = await raiseDispute(c.env as Env, db, {
-      tenantId, milestoneId, party: 'freelancer', actorUserId: userId, reason, detail: b.detail ?? null,
+      tenantId, milestoneId, party: 'freelancer', actorUserId: userId, reason: b.reason, detail: b.detail ?? null,
     });
     return result.ok
       ? c.json({ dispute: result.dispute }, 201)
-      : c.json({ error: result.reason }, refusalStatus(result.reason as DisputeRefusal));
+      : refusalResponse(c, result.reason, ESCROW_REFUSAL_STATUS);
   });
 
   // POST /mine/disputes/:disputeId/statement — WORKER: file (or revise) my position and
@@ -1426,16 +1502,13 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     // `milestoneTenantForFreelancer` exists rather than a tenant parameter.
     const tenantId = await disputeTenantForFreelancer(db, disputeId, userId);
     if (tenantId === null) return c.json({ error: 'not_found' }, 404);
-    const b = await c.req.json<{ position?: string; evidence?: unknown }>()
-      .catch(() => ({} as { position?: string; evidence?: unknown }));
-    const position = String(b.position ?? '').trim();
-    if (!position) return c.json({ error: 'position is required' }, 400);
+    const b = await parseBody(c, DisputeStatementBody);
     const result = await fileDisputeStatement(c.env as Env, db, {
-      tenantId, disputeId, party: 'freelancer', authorRef: userId, position, evidence: b.evidence,
+      tenantId, disputeId, party: 'freelancer', authorRef: userId, position: b.position, evidence: b.evidence,
     });
     return result.ok
       ? c.json({ dispute: result.dispute })
-      : c.json({ error: result.reason }, refusalStatus(result.reason as DisputeRefusal));
+      : refusalResponse(c, result.reason, ESCROW_REFUSAL_STATUS);
   });
 
   // POST /mine/disputes/:disputeId/withdraw — WORKER: call off a dispute I raised. The
@@ -1450,7 +1523,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     const result = await withdrawDispute(c.env as Env, db, { tenantId, disputeId, actorUserId: userId });
     return result.ok
       ? c.json({ dispute: result.dispute })
-      : c.json({ error: result.reason }, refusalStatus(result.reason as DisputeRefusal));
+      : refusalResponse(c, result.reason, ESCROW_REFUSAL_STATUS);
   });
 
   // GET /:id/milestones — CLIENT: one engagement's schedule, its escrow summary, and
@@ -1467,11 +1540,8 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const engagementId = c.req.param('id');
-    const b = await c.req.json<{ title?: string; description?: string; amountCents?: number; currency?: string; sequence?: number; dueAt?: string }>();
-    const title = String(b.title ?? '').trim();
-    if (!title) return c.json({ error: 'title is required' }, 400);
-    const amountCents = Math.floor(Number(b.amountCents ?? 0));
-    if (!Number.isFinite(amountCents) || amountCents < 0) return c.json({ error: 'amountCents must be a positive integer' }, 400);
+    const b = await parseBody(c, CreateMilestoneBody);
+    const amountCents = b.amountCents ?? 0;
     // The engagement must be this tenant's — otherwise a milestone could be attached to
     // somebody else's engagement and would be funded out of the wrong pocket.
     const [engagement] = await db.select({
@@ -1485,11 +1555,11 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
       tenantId,
       engagementId,
       freelancerUserId: engagement.freelancerUserId,
-      title,
+      title: b.title,
       description: b.description ?? null,
       amountCents,
       currency: b.currency,
-      sequence: Number.isFinite(Number(b.sequence)) ? Number(b.sequence) : 0,
+      sequence: b.sequence ?? 0,
       dueAt: b.dueAt ? new Date(b.dueAt) : null,
       createdByUserId: c.get('userId') as string,
     });
@@ -1506,7 +1576,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     if (!CLIENT_ESCROW_ACTIONS.includes(action as MilestoneAction)) {
       return c.json({ error: 'unknown_action' }, 400);
     }
-    const b = await c.req.json<{ note?: string }>().catch(() => ({ note: undefined }));
+    const b = await parseBody(c, MilestoneNoteBody);
     const result = await moveMilestone(c.env as Env, db, {
       tenantId: c.get('tenantId') as number,
       milestoneId: c.req.param('milestoneId'),
@@ -1527,7 +1597,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
       // own record and a self-hosted deployment with no payout webhook still releases.
       // The surface reads it to say "recorded, settle manually" rather than "paid".
       ? c.json({ milestone: result.milestone, movedMoney: result.movedMoney, payoutConfigured: result.payoutConfigured })
-      : c.json({ error: result.reason }, refusalStatus(result.reason));
+      : refusalResponse(c, result.reason, ESCROW_REFUSAL_STATUS);
   });
 
   // POST /milestones/:milestoneId/dispute — CLIENT: raise a dispute.
@@ -1539,20 +1609,18 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // gate the list exists to be.
   router.post('/milestones/:milestoneId/dispute', authMiddleware, async (c) => {
     const db = requestDb(c);
-    const b = await c.req.json<{ reason?: string; detail?: string }>().catch(() => ({} as { reason?: string; detail?: string }));
-    const reason = String(b.reason ?? '').trim();
-    if (!reason) return c.json({ error: 'reason is required' }, 400);
+    const b = await parseBody(c, RaiseDisputeBody);
     const result = await raiseDispute(c.env as Env, db, {
       tenantId: c.get('tenantId') as number,
       milestoneId: c.req.param('milestoneId'),
       party: 'client',
       actorUserId: c.get('userId') as string,
-      reason,
+      reason: b.reason,
       detail: b.detail ?? null,
     });
     return result.ok
       ? c.json({ dispute: result.dispute }, 201)
-      : c.json({ error: result.reason }, refusalStatus(result.reason as DisputeRefusal));
+      : refusalResponse(c, result.reason, ESCROW_REFUSAL_STATUS);
   });
 
   // DELETE /milestones/:milestoneId — CLIENT: drop a draft. Refuses anything further

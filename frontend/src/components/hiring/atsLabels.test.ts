@@ -11,6 +11,10 @@ import {
   ATS_LABELLED_KIT_STAGE_KINDS,
   ATS_LABELLED_OFFER_STATUSES,
 } from '@/lib/hiringApi';
+import {
+  EDITABLE_OFFER_STATUSES, LIVE_OFFER_STATUSES,
+  decisionLabelKey, isEditableOfferStatus, isLiveOfferStatus, kitStageLabelKey, offerStatusLabelKey,
+} from './atsLabels';
 
 /**
  * Labels the key guard CANNOT see.
@@ -33,6 +37,28 @@ const KEYS = [
   ...ATS_LABELLED_OFFER_STATUSES.map((status) => `ats.offer.status.${status}`),
   ...ATS_LABELLED_KIT_STAGE_KINDS.map((kind) => `ats.kits.kind.${kind}`),
 ];
+
+describe('ATS label helpers', () => {
+  /** The helpers are the only route from a wire value to a key, so every labelled
+   *  value must produce a key the catalogs carry, and nothing else may. */
+  it('produce a key for every labelled value and null for anything else', () => {
+    for (const decision of ATS_LABELLED_DECISIONS) expect(decisionLabelKey(decision)).toBe(`decision.kind.${decision}`);
+    for (const status of ATS_LABELLED_OFFER_STATUSES) expect(offerStatusLabelKey(status)).toBe(`offer.status.${status}`);
+    for (const kind of ATS_LABELLED_KIT_STAGE_KINDS) expect(kitStageLabelKey(kind)).toBe(`kits.kind.${kind}`);
+    expect(decisionLabelKey('promote')).toBeNull();
+    expect(offerStatusLabelKey('rescinded')).toBeNull();
+    expect(kitStageLabelKey('culture')).toBeNull();
+  });
+
+  it('keep the offer subsets inside the labelled set', () => {
+    for (const status of [...LIVE_OFFER_STATUSES, ...EDITABLE_OFFER_STATUSES]) expect(ATS_LABELLED_OFFER_STATUSES).toContain(status);
+    // Editable is the narrower question: an offer out for signature is live but fixed.
+    for (const status of EDITABLE_OFFER_STATUSES) expect(isLiveOfferStatus(status)).toBe(true);
+    expect(isLiveOfferStatus('sent')).toBe(true);
+    expect(isEditableOfferStatus('sent')).toBe(false);
+    expect(isLiveOfferStatus('accepted')).toBe(false);
+  });
+});
 
 describe('ATS interpolated labels', () => {
   it.each(LOCALES)('%s labels every decision, offer status and kit stage kind', (locale) => {

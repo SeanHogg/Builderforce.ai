@@ -12,6 +12,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
 import { useAuth } from '@/lib/AuthContext';
+import { scopeChangeEffect, type ScopeChangeEffect } from '@/lib/canvasScopePolicy';
 
 /**
  * Global project scope — the second scoping axis, sibling to {@link useAuth}'s
@@ -37,8 +38,16 @@ export interface ProjectScopeValue {
   currentProjectId: number | null;
   /** The resolved current project object, or null in the all-projects view. */
   currentProject: Project | null;
-  /** Select a project (or null for all projects). Persists + reflects to URL. */
-  setProject: (id: number | null) => void;
+  /**
+   * Select a project (or null for all projects). Persists + reflects to URL.
+   *
+   * `effect` is the resolved `scopeChangeEffect('project', …)` when the caller has
+   * one — the switcher resolves it ONCE and applies the board/room halves itself,
+   * so the workbench half applied here reads the same object. Omitted by callers
+   * with no surface to consult (a create path, the stale-selection cleanup), which
+   * resolve the project axis with no live room.
+   */
+  setProject: (id: number | null, effect?: ScopeChangeEffect) => void;
   /** Re-fetch the project list (e.g. after creating/deleting a project). */
   reload: () => void;
   /**
@@ -131,7 +140,7 @@ export function ProjectScopeProvider({ children }: { children: React.ReactNode }
   }, [pathname, tenantId]);
 
   const setProject = useCallback(
-    (id: number | null) => {
+    (id: number | null, effect: ScopeChangeEffect = scopeChangeEffect('project', false)) => {
       setCurrentProjectId(id);
       try {
         if (id == null) localStorage.removeItem(storageKey(tenantId));
@@ -139,15 +148,18 @@ export function ProjectScopeProvider({ children }: { children: React.ReactNode }
       } catch {
         /* storage unavailable — context state still holds the choice */
       }
-      // Reflect into `?project=` on the current path (keep other params), so the
-      // URL stays shareable without forcing a navigation.
-      if (typeof window !== 'undefined') {
-        const params = new URLSearchParams(window.location.search);
-        if (id == null) params.delete('project');
-        else params.set('project', String(id));
-        const qs = params.toString();
-        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-      }
+      // The workbench half of the scope policy. `refetch` keeps the selected tab —
+      // every other param survives and only `?project=` changes, so the docked page
+      // re-reads in the new scope where it stood and the URL stays shareable. `reopen`
+      // drops them: the page is reopened on the same destination with nothing carried
+      // across. `keep` leaves the URL alone because the destination does not read
+      // this axis.
+      if (effect.workbench === 'keep' || typeof window === 'undefined') return;
+      const params = effect.workbench === 'refetch' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+      if (id == null) params.delete('project');
+      else params.set('project', String(id));
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
     [tenantId, router, pathname],
   );

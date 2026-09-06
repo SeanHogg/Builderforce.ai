@@ -16,6 +16,17 @@
  * (`wrangler secret put JWT_SECRET` in the worker/ dir); if it is unset the middleware
  * FAILS CLOSED (503) rather than allowing an auth bypass.
  *
+ * REVOCATION. A signature check cannot see a sign-out, a force-logout or an admin
+ * revoke: the api records those against the token's `jti`, and this worker has no
+ * session store. So after the signature passes, a token that carries a `jti` is
+ * introspected against the api (`lib/sessionIntrospection.ts`), with the verdict
+ * cached in the api's OWN KV namespace so the api's revoke path invalidates it.
+ * A revoked token is refused (401); an api that cannot answer fails CLOSED (503),
+ * because "unknown" is not "live". Tokens WITHOUT a jti keep the signature-only
+ * acceptance — the api makes the same exception for its machine tokens
+ * (`agentHost:<id>` / `embed:<keyId>`), which are minted server-to-server, have no
+ * token row to revoke, and are bounded by a short TTL and an active API key.
+ *
  * Ownership note: the worker's `projects` table has no real per-tenant owner model
  * (rows are created with `owner_id='anonymous'`), so this gate authenticates the
  * caller as a valid session but cannot enforce per-project ownership against that
@@ -26,9 +37,10 @@
  */
 import type { MiddlewareHandler } from 'hono';
 import { verifyHs256 } from '@builderforce/hs256-jwt';
+import { introspectSession, type SessionIntrospectionEnv } from './sessionIntrospection';
 
 /** Bindings every worker route already carries plus the shared JWT signing secret. */
-export interface WorkerAuthBindings {
+export interface WorkerAuthBindings extends SessionIntrospectionEnv {
   JWT_SECRET?: string;
 }
 
@@ -51,8 +63,9 @@ async function verifySessionToken(token: string, secret: string): Promise<Worker
 }
 
 /**
- * Hono middleware: require a valid Bearer session token. 503 if the server has no
- * JWT_SECRET configured (fail closed), 401 on missing/invalid/expired token.
+ * Hono middleware: require a valid, un-revoked Bearer session token. 503 if the
+ * server has no JWT_SECRET configured or the api cannot confirm the session (fail
+ * closed); 401 on a missing/invalid/expired/revoked token.
  */
 export const requireAuth: MiddlewareHandler<{ Bindings: WorkerAuthBindings }> = async (c, next) => {
   const secret = c.env.JWT_SECRET;
@@ -63,7 +76,22 @@ export const requireAuth: MiddlewareHandler<{ Bindings: WorkerAuthBindings }> = 
   const authz = c.req.header('Authorization') ?? '';
   const match = /^Bearer\s+(.+)$/i.exec(authz);
   if (!match) return c.json({ error: 'Unauthorized' }, 401);
-  const payload = await verifySessionToken(match[1].trim(), secret);
+  const token = match[1].trim();
+  const payload = await verifySessionToken(token, secret);
   if (!payload?.sub) return c.json({ error: 'Unauthorized' }, 401);
+
+  // A jti-bearing token is a revocable session token: ask the api whether it is
+  // still live. No jti → signature-only, as the api does for its machine tokens.
+  if (payload.jti) {
+    let verdict;
+    try {
+      verdict = await introspectSession(c.env, token, payload.jti);
+    } catch (error) {
+      console.error('[worker:auth] session introspection failed — refusing request (fail closed).', error instanceof Error ? error.message : error);
+      return c.json({ error: 'Session check unavailable' }, 503);
+    }
+    if (!verdict.active) return c.json({ error: 'Unauthorized' }, 401);
+  }
+
   await next();
 };

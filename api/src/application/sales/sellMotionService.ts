@@ -31,6 +31,7 @@ import { readTrustAnswers, type TrustAnswer } from '@builderforce/creation-canva
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { resolveAppBaseUrl } from '../../env';
+import { extractJsonObject } from '../../domain/shared/json';
 import {
   connections, creationSessionConnections, creationSessionEvents, creationSessionObjects, creationSessions,
   legalDocumentFiles,
@@ -189,12 +190,8 @@ export function talkRatioPercent(transcript: string, counterparty: string): numb
 
 /** Parse the model's JSON reading, refusing anything it did not actually produce. */
 function readCallJson(raw: string): Omit<CallReading, 'talkRatioPercent'> | null {
-  const start = raw.indexOf('{');
-  const end = raw.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
-  let parsed: unknown;
-  try { parsed = JSON.parse(raw.slice(start, end + 1)); } catch { return null; }
-  const row = asRecord(parsed);
+  const row = extractJsonObject(raw);
+  if (!row) return null;
   const objections = (Array.isArray(row.objections) ? row.objections.slice(0, 12) : [])
     .flatMap((entry) => {
       const item = asRecord(entry);

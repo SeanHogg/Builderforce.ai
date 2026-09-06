@@ -28,14 +28,15 @@ import type { CreationNodeData } from './types';
 import { MAX_TABULAR_COLUMNS } from '@/lib/canvasTabularData';
 import { CANVAS_PREVIEW_REPORT_LIMIT } from '@/lib/canvasPreviewReport';
 import { DATA_ARCHITECTURE_FIELD_NAMES } from '@/lib/dataArchitectureObjects';
-import { EMPTY_SPEC_BOARD, specDerivedValues, specFieldNames, type SpecDeriveBoard } from '@/lib/specObjects';
+import { EMPTY_SPEC_BOARD, isSpecObjectKind, specDerivedValues, specFieldNames, specReadableFields, type SpecDeriveBoard } from '@/lib/specObjects';
 // The vocabularies register themselves as an import SIDE EFFECT, and this module asks
 // the registry two questions — which fields are readable, and what the computed ones
 // resolve to. Depending on somebody else having imported the sets first is the accident
 // `specObjectSets.ts` exists to end.
 import '@/lib/specObjectSets';
 
-const CONTEXT_FIELDS = [
+/** The hand-declared half of the snapshot's read list — every non-spec field Brain may see. */
+const DECLARED_CONTEXT_FIELDS = [
   'kind', 'title', 'subtitle', 'status', 'resourceId', 'model', 'role', 'focus',
   'fetchedAt', 'dateRange', 'projectLens', 'columns', 'rowCount', 'sampleRows', 'profile', 'highlightRules', 'sourceDatasetId',
   // ── Data architecture ────────────────────────────────────────────────────
@@ -197,19 +198,51 @@ const CONTEXT_FIELDS = [
   'costPerMillionInput', 'costPerMillionOutput', 'tokensPerRequestIn', 'tokensPerRequestOut',
   'latencyP50Ms', 'latencyP95Ms', 'monthlyRequests', 'projectedMonthlyCost', 'promptObjectId',
   ...DATA_ARCHITECTURE_FIELD_NAMES,
-  /**
-   * Every field name any registered spec vocabulary declares — founder, academic,
-   * hiring, people and the cross-domain kinds today,
-   * and whatever registers next without another edit here.
-   *
-   * `specFieldNames()` deliberately includes `derived` fields: Brain must be able to
-   * READ a mark, an integrity ledger and a coverage gap to answer "who is struggling"
-   * or "which outcome has no evidence". It can never WRITE one, because
-   * `specMutableFields` omits them. The read list and the write list are different
-   * lists on purpose — that is the entire point of the derived flag.
-   */
-  ...specFieldNames(),
 ] as const;
+
+/**
+ * Every field name any registered spec vocabulary declares — founder, academic,
+ * hiring, people and the cross-domain kinds today, and whatever registers next
+ * without another edit here.
+ *
+ * `specFieldNames()` deliberately includes `derived` fields: Brain must be able to
+ * READ a mark, an integrity ledger and a coverage gap to answer "who is struggling"
+ * or "which outcome has no evidence". It can never WRITE one, because
+ * `specMutableFields` omits them. The read list and the write list are different
+ * lists on purpose — that is the entire point of the derived flag.
+ */
+const CONTEXT_FIELDS: readonly string[] = [...new Set([...DECLARED_CONTEXT_FIELDS, ...specFieldNames()])];
+
+/**
+ * The spec-declared names that are NOT also hand-declared above — the part of the
+ * read list a spec kind can be narrowed by. A hand-declared name (`status`, `summary`)
+ * means one thing on every object and is never narrowed; a name only a vocabulary
+ * declares belongs to the kinds that declare it.
+ */
+const SPEC_ONLY_FIELDS: ReadonlySet<string> = new Set(
+  specFieldNames().filter((field) => !(DECLARED_CONTEXT_FIELDS as readonly string[]).includes(field)),
+);
+
+const contextFieldsByKind = new Map<string, readonly string[]>();
+
+/**
+ * The read list for ONE kind.
+ *
+ * A spec object's snapshot carries only ITS readable fields (`specReadableFields`),
+ * not the union across every vocabulary: the union is what let an `invoice` snapshot
+ * enumerate a gradebook's slots and a candidate's — empty, but present, and each one a
+ * name the model could be tempted to fill. A non-spec kind keeps the full list, because
+ * its fields are hand-declared and nothing narrower is known about it.
+ */
+function contextFieldsFor(kind: string): readonly string[] {
+  if (!isSpecObjectKind(kind)) return CONTEXT_FIELDS;
+  const cached = contextFieldsByKind.get(kind);
+  if (cached) return cached;
+  const readable = new Set(specReadableFields(kind));
+  const fields = CONTEXT_FIELDS.filter((field) => !SPEC_ONLY_FIELDS.has(field) || readable.has(field));
+  contextFieldsByKind.set(kind, fields);
+  return fields;
+}
 const SENSITIVE_CONTEXT_KEY = /(?:secret|token|password|credential|authorization|api.?key|cookie)/i;
 
 /**
@@ -383,7 +416,7 @@ export function creationObjectAiContext(
    * not survive a recomputation, and a computed field is not authorable anyway.
    */
   const resolved = { ...data, ...specDerivedValues(data.kind, data, board) };
-  return Object.fromEntries(CONTEXT_FIELDS.flatMap((field) => {
+  return Object.fromEntries(contextFieldsFor(data.kind).flatMap((field) => {
     // The snapshot boundary, enforced once — see NEVER_IN_CONTEXT.
     if (NEVER_IN_CONTEXT.has(field)) return [];
     const value = safeContextValue(

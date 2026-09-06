@@ -259,7 +259,7 @@ import {
   METRIC_DIRECTIONS, METRIC_FORMATS,
   computeMetric, computeMetricSeries, formatMetricValue, normalizeMetricDefinition,
 } from '@/lib/canvasMetrics';
-import { TABULAR_JOIN_TYPES, joinTabular, suggestJoinKeys, type TabularJoinKey } from '@/lib/canvasTabularJoin';
+import { TABULAR_JOIN_TYPES, joinTabular, normalizeJoinSpec, suggestJoinKeys, type TabularJoinKey } from '@/lib/canvasTabularJoin';
 import { buildLineageGraph, columnImpact, impactOf, lineagePatch, staleDerivatives, upstreamOf } from '@/lib/canvasLineage';
 import { dataSourceApi, resolveDataSource, type DataSourceSummary } from '@/lib/dataSourceApi';
 import { detectGeoColumns, mapObjectFields, mapPointsFromRows } from '@/lib/canvasGeo';
@@ -6396,13 +6396,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!keys.length) {
         return { error: `No shared key was found between ${left.data.title} (${leftSource.columns.join(', ')}) and ${right.data.title} (${rightSource.columns.join(', ')}). Name the columns explicitly with \`on\`.` };
       }
-      const spec = { on: keys, ...(args.type ? { type: args.type as typeof TABULAR_JOIN_TYPES[number] } : {}), ...(args.rightAlias ? { rightAlias: args.rightAlias } : {}), ...(args.select ? { select: args.select } : {}), ...(args.limit ? { limit: args.limit } : {}) };
+      const spec = normalizeJoinSpec({ on: keys, type: args.type, rightAlias: args.rightAlias, select: args.select, limit: args.limit });
+      if (!spec) return { error: 'Each join key needs a non-empty `left` and `right` column name.' };
       const result = joinTabular(leftSource, rightSource, spec);
       if (result.unknownColumns.length) {
         return { error: `Unknown join column(s): ${result.unknownColumns.join(', ')}. Left has ${leftSource.columns.join(', ')}; right has ${rightSource.columns.join(', ')}.` };
       }
       if (!result.rows.length) {
-        return { error: `No rows matched on ${keys.map((key) => `${key.left} = ${key.right}`).join(' and ')}. ${leftSource.rows.length} left rows and ${rightSource.rows.length} right rows were compared. Check the key, or use type "left" to keep unmatched rows.` };
+        return { error: `No rows matched on ${spec.on.map((key) => `${key.left} = ${key.right}`).join(' and ')}. ${leftSource.rows.length} left rows and ${rightSource.rows.length} right rows were compared. Check the key, or use type "left" to keep unmatched rows.` };
       }
 
       const title = (args.title || `${left.data.title} × ${right.data.title}`).trim().slice(0, 160);
@@ -6411,7 +6412,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         title, columns: result.columns, rows: result.rows.slice(0, MAX_MATERIALIZED_ROWS), rowCount: result.rowCount,
         sampleRows: result.rows.slice(0, 8),
         status: `${fmt.number(result.rowCount)} joined rows`,
-        summary: `${result.type} join on ${keys.map((key) => `${key.left} = ${key.right}`).join(', ')}. ${fmt.number(result.matchedLeft)} of ${fmt.number(leftSource.rows.length)} left rows matched; ${fmt.number(result.unmatchedLeft)} did not.`,
+        summary: `${result.type} join on ${spec.on.map((key) => `${key.left} = ${key.right}`).join(', ')}. ${fmt.number(result.matchedLeft)} of ${fmt.number(leftSource.rows.length)} left rows matched; ${fmt.number(result.unmatchedLeft)} did not.`,
         ...lineagePatch([left.id, right.id], { engine: 'join', join: spec, rowsIn: leftSource.rows.length + rightSource.rows.length, rowsOut: result.rowCount }, { columns: result.columns }),
       }) };
       node.style = { width: 720, height: 460 };
@@ -6425,7 +6426,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       return {
         ok: true, proposed: true,
         object: { id: node.id, kind: 'table', title },
-        joinedOn: keys, type: result.type, keysDetected: !args.on?.length,
+        joinedOn: spec.on, type: result.type, keysDetected: !args.on?.length,
         rows: result.rowCount, columns: result.columns,
         matchedLeft: result.matchedLeft, unmatchedLeft: result.unmatchedLeft, unmatchedRight: result.unmatchedRight,
         // Surfaced deliberately: a one-to-many join inflates row counts, and any
