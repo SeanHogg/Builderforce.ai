@@ -7,6 +7,7 @@
  */
 
 import { apiRequest } from './apiClient';
+import { getOrSetClientCached } from '@/infrastructure/http/readThrough';
 
 export interface FunnelStage {
   stage: string;
@@ -374,8 +375,14 @@ const patch = <T>(path: string, payload: unknown): Promise<T> =>
   apiRequest<T>(path, { method: 'PATCH', body: JSON.stringify(payload) });
 
 export const atsApi = {
-  /** The vocabulary the server writes with. Read once per surface. */
-  vocabulary: (): Promise<AtsVocabulary> => apiRequest<AtsVocabulary>('/api/ats/vocabulary'),
+  /** The vocabulary the server writes with — a constant of the deployment, read
+   *  ONCE per session through the browser cache rather than once per panel mount
+   *  (served stale-while-revalidate after ten minutes). */
+  vocabulary: (): Promise<AtsVocabulary> => getOrSetClientCached(
+    'ats:vocabulary',
+    () => apiRequest<AtsVocabulary>('/api/ats/vocabulary'),
+    { ttlMs: 10 * 60_000, staleWhileRevalidate: true },
+  ),
 
   /**
    * The requisition, and the applications actually counted against it (FO-B3).

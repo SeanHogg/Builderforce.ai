@@ -2,6 +2,7 @@
 
 import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { usePolledResource } from '@/hooks/usePolledResource';
 import { useTranslations, useFormatter } from 'next-intl';
 import Link from 'next/link';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
@@ -93,10 +94,7 @@ export function ManagerTodayDigest({ projectId }: ManagerTodayDigestProps) {
 
   // The day keeps moving while the tab is open — a digest that froze at page load would
   // stop being today's answer within minutes of a run finishing.
-  useEffect(() => {
-    const id = setInterval(() => { void load(); }, REFRESH_MS);
-    return () => clearInterval(id);
-  }, [load]);
+  usePolledResource(load, { intervalMs: REFRESH_MS, immediate: false });
 
   const relative = useCallback((iso: string | null): string => {
     if (!iso) return '';

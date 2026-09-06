@@ -12009,7 +12009,8 @@
         "open": "Open",
         "closed": "Closed",
         "filled": "Filled"
-      }
+      },
+      "invites": "{count} invited"
     },
     "invoice": {
       "empty": "No invoices yet.",

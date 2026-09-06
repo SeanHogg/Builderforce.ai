@@ -3,11 +3,9 @@
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import AppShell from './AppShell';
-import AppFooter from './AppFooter';
 import PublicShell from './PublicShell';
 import MarketingShell from './MarketingShell';
 import OnboardingGate from './OnboardingGate';
-import RouteMarketing from './RouteMarketing';
 import { BrainActionsProvider, BrainContextProvider, BrainProvider, brainConfig, guestBrainConfig } from '@/lib/brain';
 import { ReportErrorProvider } from './ReportErrorProvider';
 import { PinsProvider } from '@/lib/widgets/PinsProvider';
@@ -22,9 +20,6 @@ import { DestinationBrainBridge } from './workspace/DestinationBrainBridge';
 import { DevexPanelProvider } from './insights/DevexPanelProvider';
 import { DevexPanelBrainBridge } from './insights/DevexPanelBrainBridge';
 import { CanvasPanelBrainBridge } from './canvas/CanvasPanelBrainBridge';
-import { FloatingBrain } from './brain/FloatingBrain';
-import { GuestBrainPanel } from './brain/GuestBrainPanel';
-import { FeedbackTab } from './feedback/FeedbackTab';
 import ActivityTracker from './ActivityTracker';
 import { McpExtensionsBridge } from './brain/McpExtensionsBridge';
 import { PlatformActionsBridge } from './brain/PlatformActionsBridge';
@@ -45,15 +40,28 @@ import { convertVisitor } from '@/lib/marketingApi';
 import { claimGuestRoomIntoAccount } from '@/lib/guestRoomApi';
 import { useOptionalBrainContext } from '@seanhogg/builderforce-brain-embedded';
 import { startGuestCreationSession } from '@/lib/guestPromptCapture';
-import { ResumeWorkBridge } from './workspace/ResumeWorkBridge';
-import { LastBoardBridge } from './workspace/LastBoardBridge';
-import { PlatformAnnouncements } from './announcements/PlatformAnnouncements';
-import { ProductUpdatesHost } from './releaseNotes/ProductUpdatesHost';
 import { LiveSessionProvider } from '@/lib/live/LiveSessionContext';
 import { ActiveCanvasProvider, shellHostsCanvasStage, useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
-import { LiveBar } from './live/LiveBar';
 import { NavigationFeaturesProvider } from '@/lib/NavigationFeaturesContext';
-import { ExitIntentPrompt } from './marketing/ExitIntentPrompt';
+import dynamic from 'next/dynamic';
+
+// Everything below is a shell-level surface that is NOT on the critical path of a
+// first paint: each decides its own visibility, most render nothing for most
+// visitors, and together they dragged the Brain, the marketing content module,
+// the release-notes panel and the live room into the root layout's static
+// closure — parsed before any route could draw. Loaded lazily, so the shell
+// stays what a page needs to render. `check:root-closure` ratchets this.
+const AppFooter = dynamic(() => import('./AppFooter'));
+const RouteMarketing = dynamic(() => import('./RouteMarketing'));
+const FloatingBrain = dynamic(() => import('./brain/FloatingBrain').then((m) => m.FloatingBrain), { ssr: false });
+const GuestBrainPanel = dynamic(() => import('./brain/GuestBrainPanel').then((m) => m.GuestBrainPanel), { ssr: false });
+const FeedbackTab = dynamic(() => import('./feedback/FeedbackTab').then((m) => m.FeedbackTab), { ssr: false });
+const ResumeWorkBridge = dynamic(() => import('./workspace/ResumeWorkBridge').then((m) => m.ResumeWorkBridge), { ssr: false });
+const LastBoardBridge = dynamic(() => import('./workspace/LastBoardBridge').then((m) => m.LastBoardBridge), { ssr: false });
+const PlatformAnnouncements = dynamic(() => import('./announcements/PlatformAnnouncements').then((m) => m.PlatformAnnouncements), { ssr: false });
+const ProductUpdatesHost = dynamic(() => import('./releaseNotes/ProductUpdatesHost').then((m) => m.ProductUpdatesHost), { ssr: false });
+const LiveBar = dynamic(() => import('./live/LiveBar').then((m) => m.LiveBar), { ssr: false });
+const ExitIntentPrompt = dynamic(() => import('./marketing/ExitIntentPrompt').then((m) => m.ExitIntentPrompt), { ssr: false });
 
 /** Preserve old campaign links while moving prompt-led creation onto Canvas. */
 function LegacyPromptCanvasRedirect() {

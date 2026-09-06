@@ -10,7 +10,7 @@ import React, {
   useState,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import { adminApi, type ImpersonationSession } from './adminApi';
+import type { ImpersonationSession } from './adminApi';
 import { setEmulationToken, clearEmulationToken } from './apiClient';
 
 // ---------------------------------------------------------------------------
@@ -135,6 +135,9 @@ export function EmulationProvider({ children }: { children: React.ReactNode }) {
     const mins = Math.floor(duration / 60);
     const secs = duration % 60;
     try {
+      // The admin client is loaded when an emulation actually ends — a superadmin-only
+      // path that must not pull the whole admin API into every visitor's shell.
+      const { adminApi } = await import('./adminApi');
       await adminApi.impersonationEnd(current.sessionId);
     } finally {
       clearEmulationToken();
@@ -149,6 +152,7 @@ export function EmulationProvider({ children }: { children: React.ReactNode }) {
   const switchRole = useCallback(async (newRole: string) => {
     const current = emulationRef.current;
     if (!current) return;
+    const { adminApi } = await import('./adminApi');
     const res = await adminApi.impersonationSwitchRole(current.sessionId, newRole);
     setEmulationToken(res.emulationToken);
     setEmulation((prev) =>

@@ -12009,7 +12009,8 @@
         "open": "Offen",
         "closed": "Geschlossen",
         "filled": "Besetzt"
-      }
+      },
+      "invites": "{count} eingeladen"
     },
     "invoice": {
       "empty": "Noch keine Rechnungen.",

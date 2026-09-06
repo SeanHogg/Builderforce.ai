@@ -2,6 +2,7 @@
 
 import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
+import { usePolledResource } from '@/hooks/usePolledResource';
 import { useTranslations } from 'next-intl';
 import { listConversations, type MessagingSide } from '@/lib/messagingApi';
 import { MessagesPanel, type MessagesLaunchContext } from './MessagesPanel';
@@ -29,11 +30,7 @@ export function MessagesButton({ side, context, variant = 'button', label }: {
     try { const r = await listConversations(side); setUnread(r.unread); } catch { /* best-effort */ }
   }, [side]);
 
-  useEffect(() => {
-    void refresh();
-    const timer = setInterval(() => { void refresh(); }, 30_000);
-    return () => clearInterval(timer);
-  }, [refresh]);
+  usePolledResource(refresh, { intervalMs: 30_000 });
 
   // Re-check unread whenever the drawer closes (the user may have read threads).
   useEffect(() => { if (!open) void refresh(); }, [open, refresh]);

@@ -107,6 +107,8 @@ export interface JobPosting {
   screeningQuestions?: ScreeningQuestion[];
   attachments?: PostingAttachment[];
   proposalCount?: number;
+  /** Live (sent / viewed, unexpired) invites outstanding on the posting — employer list only. */
+  liveInviteCount?: number;
   createdAt: string | null;
   myProposal?: { id: string; status: string; milestones?: MilestoneRow[] } | null;
   /** The invite the VIEWER holds on this posting, when they hold one. Present on the

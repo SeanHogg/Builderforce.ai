@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePolledResource } from '@/hooks/usePolledResource';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -218,20 +219,14 @@ function CeremonyStageInner({
   // would buy nothing and cost a write per client per tick. Only ever records the CALLER
   // (the endpoint takes no identity from the body), so this cannot mark anyone else present.
   const sessionId = session?.status === 'active' ? session.id : null;
-  useEffect(() => {
-    if (!sessionId || !connected) return;
-    let cancelled = false;
-    const beat = () => {
-      if (cancelled) return;
-      // Silent: a dropped heartbeat is recoverable (the next one lands, and an accrued
-      // speaking turn is a server-side backstop), so it must not raise an error banner
-      // over a live ceremony.
-      ceremonySessionsApi.heartbeat(sessionId).catch(() => {});
-    };
-    beat();
-    const id = setInterval(beat, 60_000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, [sessionId, connected]);
+  // Silent: a dropped heartbeat is recoverable (the next one lands, and an accrued
+  // speaking turn is a server-side backstop), so it must not raise an error banner
+  // over a live ceremony — the poll backs off on a failure and carries on. It keeps
+  // beating while the tab is hidden: a person in a live room is still present.
+  usePolledResource(
+    () => (sessionId ? ceremonySessionsApi.heartbeat(sessionId) : undefined),
+    { intervalMs: 60_000, enabled: !!sessionId && connected, pauseWhenHidden: false, restartKey: sessionId },
+  );
 
   // Expire stale peer cursors (a peer that stopped moving / left).
   useEffect(() => {

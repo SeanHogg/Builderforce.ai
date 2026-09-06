@@ -20,7 +20,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * owns its persistence.
  */
 import { Hono } from 'hono';
-import { and, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import {
   isResumeTemplateId,
   masterResumeRevision,
@@ -31,7 +31,7 @@ import {
 import { authMiddleware } from '../middleware/authMiddleware';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { optionalWebUserId } from '../middleware/webAuthMiddleware';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { bumpCacheVersion, getCacheVersion, getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { extractResumeText } from '../../application/career/resumeExtract';
 import { resumeDocumentFromText } from '@builderforce/creation-canvas-contract';
 import {
@@ -161,8 +161,17 @@ const engagementColumns = {
   updated_at: freelancerEngagements.updatedAt,
 } as const;
 
+/**
+ * VERSION key for the talent browse. The browse keyspace is unbounded (every
+ * filter × sort × page combination is its own entry), so the profile writers bump
+ * this token rather than enumerating keys, and every cached page that embedded
+ * the old token is orphaned at once. Exported so the writers below and any future
+ * one bump the SAME token.
+ */
 export const FREELANCER_PUBLIC_LIST_CACHE_KEY = 'fl:public:list';
 const PUBLIC_LIST_TTL = 120;
+/** Hard ceiling on a browse page. */
+const TALENT_PAGE_MAX = 48;
 
 /** Cache key for a freelancer's reputation stat block. Exported so the engagement /
  *  invoice writers invalidate the SAME key (one format, no drift). */
@@ -416,33 +425,60 @@ function mapPublicProfile(row: Record<string, unknown>): Record<string, unknown>
   };
 }
 
-/** In-memory filter/sort/paginate over the (cached) public profile list — keeps the
- *  cache key bounded (one key) while supporting talent search. Shared by the browse
- *  route. `q` matches name/headline/skills; discipline/skill/rate are exact/range. */
-function applyTalentFilters(
-  rows: Record<string, unknown>[],
-  f: { q?: string; discipline?: string; skill?: string; minRate?: number; maxRate?: number; sort?: string; page: number; pageSize: number },
-): { items: Record<string, unknown>[]; total: number } {
-  const q = (f.q ?? '').trim().toLowerCase();
-  let out = rows.filter((r) => {
-    if (f.discipline && String(r.discipline ?? '') !== f.discipline) return false;
-    const skills = parseSkills(r.skills).map((s) => s.toLowerCase());
-    if (f.skill && !skills.includes(f.skill.toLowerCase())) return false;
-    const rate = r.hourly_rate_cents == null ? null : Number(r.hourly_rate_cents);
-    if (f.minRate != null && (rate == null || rate < f.minRate)) return false;
-    if (f.maxRate != null && (rate == null || rate > f.maxRate)) return false;
-    if (q) {
-      const hay = `${r.display_name ?? ''} ${r.headline ?? ''} ${skills.join(' ')}`.toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
-    return true;
-  });
-  if (f.sort === 'rate_asc') out = [...out].sort((a, b) => Number(a.hourly_rate_cents ?? Infinity) - Number(b.hourly_rate_cents ?? Infinity));
-  else if (f.sort === 'rate_desc') out = [...out].sort((a, b) => Number(b.hourly_rate_cents ?? -1) - Number(a.hourly_rate_cents ?? -1));
-  else if (f.sort === 'rating') out = [...out].sort((a, b) => Number(b.avg_rating ?? -1) - Number(a.avg_rating ?? -1));
-  const total = out.length;
-  const start = Math.max(0, (f.page - 1) * f.pageSize);
-  return { items: out.slice(start, start + f.pageSize), total };
+/** The browse criteria, normalised from the query string. */
+interface TalentFilters {
+  q?: string; discipline?: string; skill?: string; minRate?: number; maxRate?: number;
+  sort: 'recent' | 'rate_asc' | 'rate_desc' | 'rating'; page: number; pageSize: number;
+}
+
+function parseTalentFilters(q: Record<string, string | undefined>): TalentFilters {
+  const text = (q.q ?? '').trim();
+  const num = (raw: string | undefined) => (raw && Number.isFinite(Number(raw)) ? Number(raw) : undefined);
+  const sort = q.sort === 'rate_asc' || q.sort === 'rate_desc' || q.sort === 'rating' ? q.sort : 'recent';
+  return {
+    ...(text ? { q: text } : {}),
+    ...(q.discipline ? { discipline: q.discipline } : {}),
+    ...(q.skill ? { skill: q.skill } : {}),
+    ...(num(q.minRate) != null ? { minRate: num(q.minRate) } : {}),
+    ...(num(q.maxRate) != null ? { maxRate: num(q.maxRate) } : {}),
+    sort,
+    page: Math.max(1, Number(q.page) || 1),
+    pageSize: Math.min(TALENT_PAGE_MAX, Math.max(1, Number(q.pageSize) || 24)),
+  };
+}
+
+/**
+ * The browse criteria as SQL, so a matching freelancer is found wherever they sit
+ * in the table. This was an in-memory filter over the first 200 rows by recency,
+ * which meant a profile past row 200 could never be found by any search.
+ *
+ * `skills` is a JSON string[] stored as text; membership is the quoted skill as a
+ * substring of the JSON, which is exact for a plain skill name and never fails on a
+ * row whose text does not parse (a `::jsonb` cast would). `q` matches the same
+ * three fields the in-memory version concatenated.
+ */
+function talentFilterConditions(f: TalentFilters) {
+  const conds = [];
+  if (f.discipline) conds.push(eq(freelancerProfiles.discipline, f.discipline));
+  if (f.skill) conds.push(sql`lower(${freelancerProfiles.skills}) like ${'%"' + f.skill.toLowerCase().replace(/[%_\\]/g, '\\$&') + '"%'}`);
+  if (f.minRate != null) conds.push(gte(freelancerProfiles.hourlyRateCents, f.minRate));
+  if (f.maxRate != null) conds.push(lte(freelancerProfiles.hourlyRateCents, f.maxRate));
+  if (f.q) {
+    const needle = `%${f.q.replace(/[%_\\]/g, '\\$&')}%`;
+    conds.push(or(ilike(users.displayName, needle), ilike(freelancerProfiles.headline, needle), ilike(freelancerProfiles.skills, needle)));
+  }
+  return conds;
+}
+
+function talentOrder(sort: TalentFilters['sort']) {
+  switch (sort) {
+    case 'rate_asc': return [sql`${freelancerProfiles.hourlyRateCents} asc nulls last`, desc(freelancerProfiles.updatedAt)];
+    case 'rate_desc': return [sql`${freelancerProfiles.hourlyRateCents} desc nulls last`, desc(freelancerProfiles.updatedAt)];
+    // The rating is a correlated aggregate in the select list; Postgres orders by
+    // the output column's name.
+    case 'rating': return [sql`"avg_rating" desc nulls last`, desc(freelancerProfiles.updatedAt)];
+    default: return [desc(freelancerProfiles.updatedAt), asc(freelancerProfiles.userId)];
+  }
 }
 
 export function createFreelancerRoutes(): Hono<HonoEnv> {
@@ -594,7 +630,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     if (slug !== undefined) {
       await db.update(freelancerProfiles).set({ slug, updatedAt: sql`NOW()` }).where(eq(freelancerProfiles.userId, userId));
     }
-    await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
+    await bumpCacheVersion(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
     return c.json({ ok: true, slug: slug === undefined ? undefined : slug });
   });
 
@@ -681,7 +717,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
       await db.update(freelancerProfiles)
         .set({ skills: JSON.stringify(suggestions.skills.slice(0, 50)), updatedAt: sql`NOW()` })
         .where(eq(freelancerProfiles.userId, userId));
-      await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
+      await bumpCacheVersion(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
     }
 
     return c.json({ ok: true, resumeTitle: title, canAutofill: suggestions.available });
@@ -733,7 +769,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
 
     await writeProfileResumeFamily(db, c.env as Env, { ...resume, userId }, family);
     // `hasResume` and the public card depend on the résumé being publicly visible.
-    await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
+    await bumpCacheVersion(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
     return c.json({ ok: true, family });
   });
 
@@ -788,7 +824,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     if (previous?.avatarKey && previous.avatarKey !== key) {
       await deleteAvatarWithVariants(c.env.UPLOADS, previous.avatarKey);
     }
-    await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
+    await bumpCacheVersion(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
     return c.json({ ok: true, avatarUrl });
   });
 
@@ -815,7 +851,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
       // Hide them from browse + hire without discarding the profile they built.
       await db.update(freelancerProfiles).set({ published: false, updatedAt: sql`NOW()` })
         .where(eq(freelancerProfiles.userId, userId));
-      await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
+      await bumpCacheVersion(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
     }
     return c.json({ availableForHire: available });
   });
@@ -823,37 +859,35 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
   // --------------------------------------------------------------- PUBLIC -----
 
   // GET / — browse the marketplace with search/filter/pagination. Public profiles
-  // are world-readable; private ones only surface for a signed-in viewer. The
-  // all-public slice is CACHED under one key and filtered in memory, so search
-  // never explodes the cache keyspace. Review aggregate (rating) is joined in.
+  // are world-readable; private ones only surface for a signed-in viewer (any
+  // signed-in viewer — the slice is not per person, so it caches). Every criterion
+  // is SQL, the page carries its exact total through a window count, and the cache
+  // key folds in the version token the profile writers bump. Review aggregate
+  // (rating) is joined in.
   router.get('/', async (c) => {
     const db = requestDb(c);
     const viewer = await optionalWebUserId(c);
-    const q = c.req.query();
-    const filters = {
-      q: q.q, discipline: q.discipline, skill: q.skill,
-      minRate: q.minRate ? Number(q.minRate) : undefined,
-      maxRate: q.maxRate ? Number(q.maxRate) : undefined,
-      sort: q.sort, page: Math.max(1, Number(q.page) || 1), pageSize: Math.min(48, Math.max(1, Number(q.pageSize) || 24)),
-    };
-    // One projection, two visibility slices — the reputation inputs run once per row
-    // (per cache fill for the public slice), exactly as the two hand-written queries did.
-    const browse = (visibility: 'public' | 'private') =>
-      db.select({ ...profileWithUserColumns, ...ratingColumns, ...reputationColumns })
+    const filters = parseTalentFilters(c.req.query());
+    const version = await getCacheVersion(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
+    const key = `fl:browse:v:${version}:${viewer ? 'member' : 'public'}:${JSON.stringify(filters)}`;
+
+    const page = await getOrSetCached(c.env as Env, key, async () => {
+      const rows = await (db
+        .select({ ...profileWithUserColumns, ...ratingColumns, ...reputationColumns, total: sql<number>`count(*) over()::int` })
         .from(freelancerProfiles)
         .innerJoin(users, eq(users.id, freelancerProfiles.userId))
-        .where(and(eq(freelancerProfiles.published, true), eq(freelancerProfiles.visibility, visibility)))
-        .orderBy(desc(freelancerProfiles.updatedAt))
-        .limit(200) as unknown as Promise<Record<string, unknown>[]>;
+        .where(and(
+          eq(freelancerProfiles.published, true),
+          viewer ? inArray(freelancerProfiles.visibility, ['public', 'private']) : eq(freelancerProfiles.visibility, 'public'),
+          ...talentFilterConditions(filters),
+        ))
+        .orderBy(...talentOrder(filters.sort))
+        .limit(filters.pageSize)
+        .offset((filters.page - 1) * filters.pageSize) as unknown as Promise<Array<Record<string, unknown> & { total: number }>>);
+      return { items: rows.map(mapPublicProfile), total: Number(rows[0]?.total ?? 0) };
+    }, { kvTtlSeconds: PUBLIC_LIST_TTL });
 
-    const publicRows = await getOrSetCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY, () => browse('public'));
-    let rows = publicRows;
-    if (viewer) {
-      const privateRows = await browse('private');
-      rows = [...publicRows, ...privateRows];
-    }
-    const { items, total } = applyTalentFilters(rows, filters);
-    return c.json({ items: items.map(mapPublicProfile), total, page: filters.page, pageSize: filters.pageSize });
+    return c.json({ ...page, page: filters.page, pageSize: filters.pageSize });
   });
 
   // GET /:id/avatar[?w=] — serve a freelancer's uploaded profile picture from R2. Public
@@ -1248,7 +1282,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
       set: { rating, comment: b.comment ?? null, wouldWorkAgain, updatedAt: new Date() },
     });
     // Rating + JSS show on the (cached) public list and the freelancer's stat block.
-    await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
+    await bumpCacheVersion(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
     await invalidateCached(c.env as Env, freelancerStatsCacheKey(eng.freelancer_user_id as string));
     await notify(db, c.env, { userId: eng.freelancer_user_id as string, tenantId, kind: 'review', title: `You received a ${rating}★ review`, body: b.comment ?? null, ref: id });
     return c.json({ ok: true, rating });

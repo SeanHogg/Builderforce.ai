@@ -2,6 +2,7 @@
 
 import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { usePolledResource } from '@/hooks/usePolledResource';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { meetingsApi, type MeetingDetail, type MeetingTranscript } from '@/lib/builderforceApi';
@@ -149,12 +150,13 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
     meetingsApi.transcript(meetingId).then(setTranscript).catch(() => { /* ignore */ });
   }, [meetingId]);
   useEffect(() => {
-    if (!transcriptOpen) return;
-    loadTranscript();
-    if (m?.status === 'ended' || m?.status === 'cancelled') return;
-    const timer = setInterval(loadTranscript, 5000);
-    return () => clearInterval(timer);
-  }, [transcriptOpen, loadTranscript, m?.status]);
+    if (transcriptOpen) loadTranscript();
+  }, [transcriptOpen, loadTranscript]);
+  usePolledResource(loadTranscript, {
+    intervalMs: 5000,
+    enabled: transcriptOpen && m?.status !== 'ended' && m?.status !== 'cancelled',
+    immediate: false,
+  });
 
   useEffect(() => {
     if (!notice) return;

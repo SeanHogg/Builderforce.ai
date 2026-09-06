@@ -3,6 +3,7 @@
 import { Icon } from '@/components/ui/Icon';
 import type { Formatter } from '@/i18n/format';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePolledResource } from '@/hooks/usePolledResource';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import {
@@ -101,19 +102,19 @@ export function MessagesPanel({ open, onClose, side, context }: {
   }, [open, context, side]);
 
   // Poll the open thread + list every 5s while the drawer is open.
-  useEffect(() => {
-    if (!open) return;
-    const timer = setInterval(() => {
-      void refreshList();
-      if (selected) {
-        getConversationThread(side, selected).then((r) => {
+  usePolledResource(
+    (signal) => Promise.all([
+      refreshList(),
+      selected
+        ? getConversationThread(side, selected).then((r) => {
+          if (signal.aborted) return;
           setMessages(r.messages);
           setConversation(r.conversation);
-        }).catch(() => {});
-      }
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [open, selected, side, refreshList]);
+        })
+        : undefined,
+    ]),
+    { intervalMs: 5000, enabled: open, immediate: false },
+  );
 
   // Keep the thread pinned to the latest message.
   useEffect(() => {

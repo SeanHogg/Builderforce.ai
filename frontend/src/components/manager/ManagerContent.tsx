@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { usePolledResource } from '@/hooks/usePolledResource';
 import { useTranslations, useFormatter } from 'next-intl';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -230,11 +231,10 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   // Background refresh so a CRON manager pass (every ~5 min) shows up live on this
   // tab — not only when the human clicked "Run manager now". Paused while a manual
   // run is already streaming (streamUntilDone polls then) to avoid double-loading.
-  useEffect(() => {
-    if (projectId == null) return;
-    const id = setInterval(() => { if (!pollingRef.current) void load(); }, 20000);
-    return () => clearInterval(id);
-  }, [projectId, load]);
+  usePolledResource(
+    () => (pollingRef.current ? undefined : load()),
+    { intervalMs: 20000, enabled: projectId != null, immediate: false, restartKey: projectId },
+  );
 
   const streamUntilDone = useCallback(async (baseline: string | null) => {
     pollingRef.current = true;

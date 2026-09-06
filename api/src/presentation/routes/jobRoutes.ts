@@ -66,7 +66,7 @@ import {
   type PostingAttachment,
 } from '../../application/marketplace/jobPostings';
 import {
-  createInvite, hasLiveInvite, markInviteViewed, readInvitesForJob, readInvitesForUser,
+  countLiveInvitesByJob, createInvite, hasLiveInvite, markInviteViewed, readInvitesForJob, readInvitesForUser,
   respondToInvite, withdrawInvite,
 } from '../../application/marketplace/jobInvites';
 import {
@@ -1085,7 +1085,9 @@ export function createJobRoutes(): Hono<HonoEnv> {
       .where(eq(jobPostings.tenantId, tenantId))
       .orderBy(desc(jobPostings.createdAt))
       .limit(200);
-    return c.json(rows.map(mapJob));
+    // The invite badge beside the proposal count — one grouped read for the page.
+    const liveInvites = await countLiveInvitesByJob(db, tenantId, rows.map((row) => row.id));
+    return c.json(rows.map((row) => ({ ...mapJob(row), liveInviteCount: liveInvites.get(row.id) ?? 0 })));
   });
 
   // GET /:id/proposals — EMPLOYER views proposals on their job.

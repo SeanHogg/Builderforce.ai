@@ -328,7 +328,7 @@ export function TalentView() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                     <div>
                       <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{j.title}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{t(`job.status.${j.status}`)} · {t('job.proposals', { count: j.proposalCount ?? 0 })}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{t(`job.status.${j.status}`)} · {t('job.proposals', { count: j.proposalCount ?? 0 })}{(j.liveInviteCount ?? 0) > 0 ? ` · ${t('job.invites', { count: j.liveInviteCount ?? 0 })}` : ''}</div>
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button type="button" style={btn('ghost')} onClick={() => toggleProposals(j.id)}>{openJob === j.id ? t('hide') : t('job.viewProposals')}</button>

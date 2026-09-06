@@ -14,7 +14,12 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { CANVAS_FIT_MIN_ZOOM, CanvasCommands, useCanvasCleanLayout } from '@/components/canvas/CanvasCommands';
-import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
+import dynamic from 'next/dynamic';
+import type { Canvas3DMove } from '@/components/canvas/Canvas3DView';
+
+// The 3D scene (and its renderer) loads when somebody enters it, not with the graph.
+// The cast keeps the component's node-type generic, which `dynamic()` erases.
+const Canvas3DView = dynamic(() => import('@/components/canvas/Canvas3DView').then((m) => m.Canvas3DView), { ssr: false }) as typeof import('@/components/canvas/Canvas3DView').Canvas3DView;
 import { Canvas3DControlsProvider, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
 import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 import { tasksApi, type Task, type DependencyEdge, type DepType } from '@/lib/builderforceApi';

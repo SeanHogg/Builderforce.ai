@@ -23,6 +23,7 @@ export default [
   ['check:canvas-glossary', 'check-canvas-glossary.mjs'],
   ['check:canvas-kind-labels', 'check-canvas-kind-labels.mjs'],
   ['check:layering', 'check-layering.mjs'],
+  ['check:root-closure', 'check-root-closure.mjs'],
   ['check:primitives', 'check-primitive-duplication.mjs'],
   // The repo-wide silent-catch ratchet, narrowed to this package's tree so the
   // cost stays local. The full sweep runs in api's chain.

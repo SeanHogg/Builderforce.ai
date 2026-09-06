@@ -12009,7 +12009,8 @@
         "open": "Ouverte",
         "closed": "Fermée",
         "filled": "Pourvue"
-      }
+      },
+      "invites": "{count} invités"
     },
     "invoice": {
       "empty": "Aucune facture.",

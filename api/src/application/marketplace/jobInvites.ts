@@ -413,14 +413,18 @@ export async function withdrawInvite(db: Db, tenantId: number, inviteId: string)
   return rows.length > 0;
 }
 
-/** How many live invites are outstanding on a posting — the employer's list badge. */
-export async function countLiveInvites(db: Db, tenantId: number, jobId: string): Promise<number> {
+/** How many live invites are outstanding on each posting — the employer's list
+ *  badge, ONE grouped read for the whole page rather than a count per row. A
+ *  posting with none is absent from the map. */
+export async function countLiveInvitesByJob(db: Db, tenantId: number, jobIds: string[]): Promise<Map<string, number>> {
+  if (jobIds.length === 0) return new Map();
   const rows = await db
-    .select({ value: sql<number>`count(*)::int` })
+    .select({ jobId: jobInvites.jobId, value: sql<number>`count(*)::int` })
     .from(jobInvites)
     .where(scopedToTenant(jobInvites, tenantId,
-      eq(jobInvites.jobId, jobId),
+      inArray(jobInvites.jobId, jobIds),
       inArray(jobInvites.status, [...LIVE_INVITE_STATUSES]),
-      or(isNull(jobInvites.expiresAt), gt(jobInvites.expiresAt, new Date()))));
-  return Number(rows[0]?.value ?? 0);
+      or(isNull(jobInvites.expiresAt), gt(jobInvites.expiresAt, new Date()))))
+    .groupBy(jobInvites.jobId);
+  return new Map(rows.map((row) => [row.jobId, Number(row.value)]));
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type PointerEvent } from 'react';
+import { usePolledResource } from '@/hooks/usePolledResource';
 import dynamic from 'next/dynamic';
 import {
   addEdge,
@@ -1461,6 +1462,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<CreationSessionSummary['role']>('editor');
   const [prompt, setPrompt] = useState('');
+  // The composer text as the Brain tools read it. A ref, so `canvasActions` (68
+  // tools, one memo) is not rebuilt on every keystroke.
+  const promptRef = useRef(prompt);
+  useEffect(() => { promptRef.current = prompt; }, [prompt]);
   const [promptHeight, setPromptHeight] = useState(34);
   const promptResizeRef = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
   const clampPromptHeight = useCallback((height: number) => Math.min(240, Math.max(34, height)), []);
@@ -2202,14 +2207,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     return match ? [{ nodeId: node.id, projectId: Number(match[1]) }] : [];
   }).sort((a, b) => a.nodeId.localeCompare(b.nodeId))), [nodes]);
 
+  const evermindLiveEnabled = persistence === 'server' && evermindBindingKey !== '[]';
   useEffect(() => {
-    if (persistence !== 'server' || evermindBindingKey === '[]') {
-      setEvermindLiveByNodeId({});
-      return;
-    }
-    let stopped = false;
-    const bindings = JSON.parse(evermindBindingKey) as Array<{ nodeId: string; projectId: number }>;
-    const sync = async () => {
+    if (!evermindLiveEnabled) setEvermindLiveByNodeId({});
+  }, [evermindLiveEnabled]);
+  usePolledResource(async (signal) => {
+      const bindings = JSON.parse(evermindBindingKey) as Array<{ nodeId: string; projectId: number }>;
       const byProject = new Map<number, Promise<[ProjectEvermindHead, ProjectEvermindContributions]>>();
       for (const binding of bindings) {
         if (!byProject.has(binding.projectId)) byProject.set(binding.projectId, Promise.all([getProjectEvermindHead(binding.projectId), getProjectEvermindContributions(binding.projectId)]));
@@ -2220,7 +2223,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           return [binding.nodeId, projectEvermindNodePatch(head, activity)] as const;
         } catch { return null; }
       }));
-      if (stopped) return;
+      if (signal.aborted) return;
       const activeNodeIds = new Set(bindings.map((binding) => binding.nodeId));
       setEvermindLiveByNodeId((current) => {
         const next = Object.fromEntries(Object.entries(current).filter(([nodeId]) => activeNodeIds.has(nodeId)));
@@ -2229,11 +2232,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         }
         return JSON.stringify(current) === JSON.stringify(next) ? current : next;
       });
-    };
-    void sync();
-    const interval = window.setInterval(() => void sync(), 20_000);
-    return () => { stopped = true; window.clearInterval(interval); };
-  }, [evermindBindingKey, persistence]);
+  }, { intervalMs: 20_000, enabled: evermindLiveEnabled, restartKey: evermindBindingKey });
 
   useEffect(() => { currentGraph.current = JSON.stringify({ nodes, edges }); }, [edges, nodes]);
 
@@ -2332,10 +2331,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     return () => window.clearTimeout(handle);
   }, [edges, nodes, persistence, sessionId, storageKey, timeline]);
 
-  useEffect(() => {
-    if (persistence !== 'server') return;
-    let stopped = false;
-    const reconcile = async () => {
+  // The board-reconcile poll. Its load reads the CURRENT selection, composer state
+  // and follow target at call time (the hook holds the latest closure), so a click
+  // or a keystroke no longer tears the timer down and fires a round-trip.
+  usePolledResource(async (signal) => {
       try {
         // The cursor is STILL written here, on purpose. The relay is what makes a
         // pointer live; this row is what makes it survive a client with no socket at
@@ -2347,7 +2346,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // would have bought staleness rather than saved a write.
         const relayed = liveSocketRef.current?.readyState === WebSocket.OPEN;
         const presence = await creationSessionsApi.presence(sessionId, { revision: revision.current, viewport: viewportRef.current, cursor: cursorRef.current, selection: selectedIds, typing: isComposingPrompt, followingUserId });
-        if (stopped) return;
+        if (signal.aborted) return;
         const nextActiveIds = new Set(presence.members.map((member) => member.userId));
         if (activePresenceInitialized.current) {
           const joined = presence.members.find((member) => member.userId !== (presence.currentUserId || currentUserId) && !activeMemberIds.current.has(member.userId));
@@ -2365,14 +2364,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // cannot render — belongs to `AdoptRemoteBoard`.
         if (presence.revision <= revision.current) return;
         const decision = await adoptRemoteBoard(sessionId, localBoardState(), canvasSessionGateway);
-        if (stopped) return;
+        if (signal.aborted) return;
         applyRemoteBoard(decision, t('noticeUpdatedByCollaborator'));
       } catch { /* Presence and polling are best-effort; local edits continue. */ }
-    };
-    void reconcile();
-    const timer = window.setInterval(() => void reconcile(), 8_000);
-    return () => { stopped = true; window.clearInterval(timer); };
-  }, [currentUserId, followingUserId, isComposingPrompt, persistence, selectedIds, sessionId, setEdges, setNodes]);
+  }, { intervalMs: 8_000, enabled: persistence === 'server', restartKey: sessionId });
 
   useEffect(() => {
     if (!joinedCollaborator) return;
@@ -8353,7 +8348,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!args.kind || !allowed.has(args.kind)) return { error: 'Unsupported canvas object kind' };
       const unmeasured = measurementGate(args.kind);
       if (unmeasured) return unmeasured;
-      const updateTarget = duplicateAddUpdateTarget(prompt, args.kind, nodes, effectiveSelectedIds);
+      const updateTarget = duplicateAddUpdateTarget(promptRef.current, args.kind, nodes, effectiveSelectedIds);
       if (updateTarget) return { error: `This is a correction to selected ${args.kind} ${updateTarget.id}. Call canvas_update_object for that object instead of creating a duplicate.` };
       const node = stage.createObject(args.kind, args);
       if (args.kind === 'guidedTour') node.data = { ...node.data, ...localizedTourDefaults() };
@@ -9049,7 +9044,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       };
     },
   }, ...canvasBuildActionList, ...canvasFounderOpsActionList, ...canvasEquityActionList, ...canvasHiringPostingActionList, ...canvasDataRoomActionList, ...canvasDocumentTemplateActionList, ...canvasLegalDocumentActionList, ...canvasLegalRecordActionList, ...canvasSignatureActionList, ...canvasSellMotionActionList].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
-  [buildSocialFeedNode, canEdit, canvasBuildActionList, canvasDataRoomActionList, canvasDocumentTemplateActionList, canvasEquityActionList, canvasFounderOpsActionList, canvasHiringPostingActionList, canvasLegalDocumentActionList, canvasLegalRecordActionList, canvasSellMotionActionList, canvasSignatureActionList, convertObjectToDiagram, edges, effectiveSelectedIds, fmt, localizedTourDefaults, measurementGate, nodes, openAccountGate, persistence, prompt, recentJournalEvidence, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, stage, stageImageAsset, t, tSocial]);
+  [buildSocialFeedNode, canEdit, canvasBuildActionList, canvasDataRoomActionList, canvasDocumentTemplateActionList, canvasEquityActionList, canvasFounderOpsActionList, canvasHiringPostingActionList, canvasLegalDocumentActionList, canvasLegalRecordActionList, canvasSellMotionActionList, canvasSignatureActionList, convertObjectToDiagram, edges, effectiveSelectedIds, fmt, localizedTourDefaults, measurementGate, nodes, openAccountGate, persistence, recentJournalEvidence, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, stage, stageImageAsset, t, tSocial]);
 
   const addAgentKnowledge = useCallback((agentId: string, content: string) => {
     const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePolledResource } from '@/hooks/usePolledResource';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { listNotifications, markNotificationsRead, type Notification } from '@/lib/freelance/billing';
@@ -30,11 +31,7 @@ export default function NotificationBell() {
     } catch { /* best-effort */ }
   }, []);
 
-  useEffect(() => {
-    void load();
-    const timer = setInterval(() => { void load(); }, 30_000);
-    return () => clearInterval(timer);
-  }, [load]);
+  usePolledResource(load, { intervalMs: 30_000 });
 
   // Close on outside click / Escape.
   useEffect(() => {

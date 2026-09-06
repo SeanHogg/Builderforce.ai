@@ -38,7 +38,7 @@ import {
   unpublishTicketPosting,
   upsertJobPosting,
 } from '../../application/marketplace/jobPostings';
-import { readSavedTalent, readTalentLists, saveTalent, unsaveTalent } from '../../application/marketplace/savedTalent';
+import { readSavedTalent, readSavedTalentIds, readTalentLists, saveTalent, unsaveTalent } from '../../application/marketplace/savedTalent';
 import { requestDb } from '../../application/shared/dbHandle';
 import {
   deliverableProposals,
@@ -187,6 +187,20 @@ export function createGigMarketplaceRoutes(): Hono<HonoEnv> {
     });
     if (!saved) return c.json({ error: 'Not found' }, 404);
     return c.json({ id: saved.id }, 201);
+  });
+
+  // GET /saved-talent/ids?ids=a,b,c — which of these people are shortlisted. The
+  // toggle on a profile and a grid of cards both need ONE boolean per person, and
+  // used to download the whole shortlist to find it.
+  router.get('/saved-talent/ids', authMiddleware, async (c) => {
+    const db = requestDb(c);
+    const ids = [...new Set((c.req.query('ids') ?? '').split(',').map((s) => s.trim()).filter(Boolean))].slice(0, 200);
+    const saved = await readSavedTalentIds(db, {
+      tenantId: c.get('tenantId') as number,
+      ownerUserId: c.get('userId') as string,
+      freelancerUserIds: ids,
+    });
+    return c.json({ saved: [...saved] });
   });
 
   // DELETE /saved-talent/:freelancerUserId?list= — un-shortlist. Without `list`, from

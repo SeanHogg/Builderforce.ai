@@ -12009,7 +12009,8 @@
         "open": "开放",
         "closed": "已关闭",
         "filled": "已填补"
-      }
+      },
+      "invites": "已邀请 {count} 人"
     },
     "invoice": {
       "empty": "暂无发票。",

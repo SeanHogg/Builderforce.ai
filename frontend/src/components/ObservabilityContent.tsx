@@ -5,6 +5,7 @@ import type { Formatter } from '@/i18n/format';
 
 import Link from 'next/link';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { usePolledResource } from '@/hooks/usePolledResource';
 import { useTranslations } from 'next-intl';
 import {
   agentHosts,
@@ -432,12 +433,12 @@ export function ObservabilityContent({
   // the liveness path — it is the reconnect backstop, and it only runs while the run's
   // stream is DOWN (no socket yet, a dropped connection, an older surface that passes
   // no live feed at all). While the stream is up, nothing here polls.
-  useEffect(() => {
-    if (!embedded || !hasSelection || liveConnected) return;
-    const poll = setInterval(() => { void loadDiagnostics(); }, 5000);
-    return () => clearInterval(poll);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [embedded, selectionKey, liveConnected, loadDiagnostics]);
+  usePolledResource(loadDiagnostics, {
+    intervalMs: 5000,
+    enabled: embedded && hasSelection && !liveConnected,
+    immediate: false,
+    restartKey: selectionKey,
+  });
 
   // Reconcile ONCE on (re)connect: the socket only carries what happened after it
   // opened, so a fetch at that moment is what closes the gap it was down for.

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePolledResource } from '@/hooks/usePolledResource';
 import { useTranslations } from 'next-intl';
 import {
   runtimeApi,
@@ -534,17 +535,16 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   // gives instant status; this gives live Changes/Tools without cross-isolate
   // event plumbing. Bounded: only polls while running, stops on terminal.
   useEffect(() => {
-    if (selectedId == null || !isRunning) {
-      // Run settled (or none selected) — pick up changes persisted as it ended.
-      if (selectedId != null && !isRunning) loadTaskChanges();
-      return;
-    }
-    const t = setInterval(() => {
-      runtimeApi.trace(selectedId).then((tr) => setTrace(tr)).catch(() => { /* transient */ });
-      loadTaskChanges();
-    }, 4000);
-    return () => clearInterval(t);
+    // Run settled (or none selected) — pick up changes persisted as it ended.
+    if (selectedId != null && !isRunning) loadTaskChanges();
   }, [selectedId, isRunning, loadTaskChanges]);
+  usePolledResource(
+    (signal) => selectedId == null ? undefined : Promise.all([
+      runtimeApi.trace(selectedId).then((tr) => { if (!signal.aborted) setTrace(tr); }),
+      loadTaskChanges(),
+    ]),
+    { intervalMs: 4000, enabled: selectedId != null && isRunning, immediate: false },
+  );
 
   const send = async () => {
     const text = draft.trim();

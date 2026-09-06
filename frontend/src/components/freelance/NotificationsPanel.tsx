@@ -2,6 +2,7 @@
 
 import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState, useCallback } from 'react';
+import { usePolledResource } from '@/hooks/usePolledResource';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { listNotifications, markNotificationsRead, type Notification } from '@/lib/freelance/billing';
@@ -41,13 +42,8 @@ export default function NotificationsPanel() {
     finally { setLoaded(true); }
   }, [isAuthenticated]);
 
-  useEffect(() => {
-    // No token, no poll — not even the first one, and no timer left running.
-    if (!isAuthenticated) return;
-    void load();
-    const timer = setInterval(() => { void load(); }, 30_000);
-    return () => clearInterval(timer);
-  }, [isAuthenticated, load]);
+  // No token, no poll — not even the first one, and no timer left running.
+  usePolledResource(load, { intervalMs: 30_000, enabled: isAuthenticated });
 
   const markAll = async () => {
     try { await markNotificationsRead(); setItems((p) => p.map((n) => ({ ...n, read: true }))); setUnread(0); } catch { /* noop */ }

@@ -25,6 +25,7 @@
 
 import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePolledResource } from '@/hooks/usePolledResource';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useBrainChats, useBrainConversation, isStepMessage, getBrainCapability, guestMessageAuthor, GUEST_ROOM_CHAT_ID, type BrainCapabilityId } from '@/lib/brain';
@@ -163,29 +164,18 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
   // Keep the guest token alive. Without this a session that runs past the token's
   // one-hour life goes quietly unauthenticated — and in a shared room that looks
   // like being dropped from the conversation mid-meeting.
-  useEffect(() => {
-    if (!ready || !enabled) return;
-    let cancelled = false;
-    const renew = () => {
-      if (cancelled || document.visibilityState === 'hidden') return;
-      void refreshGuestCredentials().then((state) => {
-        if (cancelled) return;
-        // A room that has ended drops us back to solo — reflect that in the UI
-        // instead of showing a room bar for a session that no longer exists.
-        setRoomCode(getActiveGuestRoom());
-        if (state) { setRemaining(state.remaining); setLimit(state.limit); }
-      });
-    };
-    const timer = window.setInterval(renew, CREDENTIAL_REFRESH_MS);
-    // Coming back to a backgrounded tab is the other moment a token is likely
-    // stale — timers are throttled while hidden.
-    document.addEventListener('visibilitychange', renew);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-      document.removeEventListener('visibilitychange', renew);
-    };
-  }, [ready, enabled]);
+  // Coming back to a backgrounded tab is the other moment a token is likely
+  // stale — the poll pauses while hidden and renews once on return.
+  usePolledResource(
+    (signal) => refreshGuestCredentials().then((state) => {
+      if (signal.aborted) return;
+      // A room that has ended drops us back to solo — reflect that in the UI
+      // instead of showing a room bar for a session that no longer exists.
+      setRoomCode(getActiveGuestRoom());
+      if (state) { setRemaining(state.remaining); setLimit(state.limit); }
+    }),
+    { intervalMs: CREDENTIAL_REFRESH_MS, enabled: ready && enabled, immediate: false },
+  );
 
   // In a room the COMBINED counter is the truth — it is what everyone is spending.
   useEffect(() => {

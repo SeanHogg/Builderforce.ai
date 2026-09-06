@@ -4,7 +4,11 @@ import type { ComponentDef, ComponentMount } from '@/lib/components/types';
 import type { Domain } from '@/lib/kernel/kernelApi';
 import { ComponentScopeProvider, useComponentProjectId } from '@/lib/components/scope';
 import { PmScopeProvider } from '@/lib/pm/scope';
-import { TaskMgmtContent } from '@/components/TaskMgmtContent';
+import dynamic from 'next/dynamic';
+
+// The task board is the single heaviest surface; loaded when the board is the
+// destination, not with every shell.
+const TaskMgmtContent = dynamic(() => import('@/components/TaskMgmtContent').then((m) => m.TaskMgmtContent), { ssr: false });
 import { BrainPanel } from '@/components/brain/BrainPanel';
 import { EmbedPrdSurface } from '@/components/embed/EmbedPrdSurface';
 import { Soc2Content } from '@/components/governance/Soc2Content';

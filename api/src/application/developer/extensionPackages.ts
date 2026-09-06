@@ -577,4 +577,4 @@ export async function getPublicPackage(db: Db, env: Env, slug: string): Promise<
  * that reached the stages closed a cycle through three bounded contexts. The
  * shared bottom of this context was never the packages SERVICE's to own.
  */
-export { loadPackage, loadVersion, loadPackagesByIds, invalidatePublicCatalog } from './extensionRepository';
+export { loadPackage, loadVersion, invalidatePublicCatalog } from './extensionRepository';

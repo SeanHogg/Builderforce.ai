@@ -3,7 +3,10 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { agentHosts, type AgentHost } from '@/lib/builderforceApi';
-import { ObservabilityContent } from './ObservabilityContent';
+import dynamic from 'next/dynamic';
+
+// Only the Observability tab needs it — and it is a thousand lines.
+const ObservabilityContent = dynamic(() => import('./ObservabilityContent').then((m) => m.ObservabilityContent), { ssr: false });
 import { AgentHostDebugContent } from './AgentHostDebugContent';
 import { CronJobsContent } from './CronJobsContent';
 import { CapabilitiesContent } from './CapabilitiesContent';

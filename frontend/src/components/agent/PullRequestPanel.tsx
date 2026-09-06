@@ -2,6 +2,7 @@
 
 import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
+import { usePolledResource } from '@/hooks/usePolledResource';
 import { Select } from '@/components/Select';
 import { useTranslations } from 'next-intl';
 import {
@@ -156,15 +157,10 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
   const pr0 = data?.pullRequest;
   const buildPending = pr0?.buildStatus === 'pending'
     || (pr0?.status === 'merged' && (pr0.buildStatus == null || pr0.buildStatus === 'pending'));
-  useEffect(() => {
-    if (!buildPending) return;
-    let n = 0;
-    const t = setInterval(() => {
-      if (++n > 10) { clearInterval(t); return; }  // ~3.5 min ceiling
-      reposApi.getTaskPullRequest(taskId).then((d) => { if (d) setData(d); }).catch(() => {});
-    }, 20_000);
-    return () => clearInterval(t);
-  }, [buildPending, taskId]);
+  usePolledResource(
+    (signal) => reposApi.getTaskPullRequest(taskId).then((d) => { if (d && !signal.aborted) setData(d); }),
+    { intervalMs: 20_000, enabled: buildPending, immediate: false, maxTicks: 10, restartKey: taskId },  // ~3.5 min ceiling
+  );
 
   const liveDetail = data?.detail ?? null;
   const availableMethods = liveDetail?.allowedMergeMethods?.length ? liveDetail.allowedMergeMethods : MERGE_METHODS;

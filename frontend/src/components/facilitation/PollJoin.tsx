@@ -25,6 +25,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePolledResource } from '@/hooks/usePolledResource';
 import { useTranslations } from 'next-intl';
 import type { ParticipantPollView } from '@/lib/pollApi';
 import { castVote, participantId, publicPoll } from '@/lib/pollApi';
@@ -66,17 +67,9 @@ export function PollJoin({ slug }: { slug: string }) {
 
   useEffect(() => { void read(); }, [read]);
 
-  useEffect(() => {
-    // Stopped while the tab is hidden: a phone in a pocket must not be fetching a tally,
-    // and every device in the room is one of these.
-    let timer: ReturnType<typeof setInterval> | null = null;
-    const start = () => { if (!timer) timer = setInterval(() => { void read(); }, REFRESH_MS); };
-    const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
-    const onVisibility = () => (document.hidden ? stop() : (void read(), start()));
-    if (!document.hidden) start();
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => { stop(); document.removeEventListener('visibilitychange', onVisibility); };
-  }, [read]);
+  // Paused while the tab is hidden: a phone in a pocket must not be fetching a tally,
+  // and every device in the room is one of these.
+  usePolledResource(read, { intervalMs: REFRESH_MS, immediate: false });
 
   const view = state.status === 'ready' ? state.view : null;
   const poll = view?.poll ?? null;

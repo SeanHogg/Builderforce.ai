@@ -26,6 +26,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePolledResource } from '@/hooks/usePolledResource';
 import { useTranslations } from 'next-intl';
 import { CopyButton } from '@/components/CopyButton';
 import { PollResults } from '@/components/facilitation/PollResults';
@@ -96,11 +97,7 @@ export function CanvasFacilitateSurface({ data, onEdit, onExit, objectId }: Canv
 
   useEffect(() => { void read(); }, [read]);
 
-  useEffect(() => {
-    if (!questionSetId) return undefined;
-    const timer = setInterval(() => { void read(); }, REFRESH_MS);
-    return () => clearInterval(timer);
-  }, [questionSetId, read]);
+  usePolledResource(read, { intervalMs: REFRESH_MS, enabled: !!questionSetId, immediate: false });
 
   const publish = async () => {
     if (!onEdit) return;

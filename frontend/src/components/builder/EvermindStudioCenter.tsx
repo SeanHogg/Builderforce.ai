@@ -13,6 +13,7 @@
 
 import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePolledResource } from '@/hooks/usePolledResource';
 import { getProjectEvermindContributions, type ProjectEvermindContributions } from '@/lib/projectEvermindApi';
 import type { EvermindRegionKey } from '@/lib/evermindRegions';
 // The live brain map is a 600-line force-directed render nobody sees until the
@@ -55,10 +56,7 @@ export function EvermindStudioCenter({ projectId }: { projectId: number }) {
 
   // Light poll so the map + list stay live while runs/teaching/chat merge. The read
   // endpoint is server-cached, so this is cheap.
-  useEffect(() => {
-    const id = setInterval(() => { void reload(); }, 20_000);
-    return () => clearInterval(id);
-  }, [reload]);
+  usePolledResource(reload, { intervalMs: 20_000, immediate: false });
 
   return (
     <div className="ev-studio">

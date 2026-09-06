@@ -89,6 +89,15 @@ export async function listSavedTalent(list?: string): Promise<{ items: SavedTale
   return jsonOrThrow(res, 'Failed to load your shortlist');
 }
 
+/** Which of these people are on the shortlist — one boolean per id, so a profile
+ *  toggle or a page of cards asks for exactly what it renders. */
+export async function savedTalentIds(freelancerUserIds: string[]): Promise<Set<string>> {
+  if (freelancerUserIds.length === 0) return new Set();
+  const res = await apiRequestStream(`/api/marketplace/saved-talent/ids?ids=${encodeURIComponent(freelancerUserIds.join(','))}`, { auth: 'tenant' });
+  const body = await jsonOrThrow<{ saved: string[] }>(res, 'Failed to load your shortlist');
+  return new Set(body.saved);
+}
+
 export async function saveTalent(input: { freelancerUserId: string; list?: string; note?: string }): Promise<{ id: string }> {
   const res = await apiRequestStream(`/api/marketplace/saved-talent`, { method: 'POST', auth: 'tenant', body: JSON.stringify(input) });
   return jsonOrThrow(res, 'Failed to shortlist');

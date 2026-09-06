@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePolledResource } from '@/hooks/usePolledResource';
 import { runtimeApi, type ActiveRun } from '@/lib/builderforceApi';
 import { RoleGate } from '@/components/RoleGate';
 import { useConfirm } from '@/components/ConfirmProvider';
@@ -40,7 +41,6 @@ export function ActiveRunsPanel() {
   const [cancelling, setCancelling] = useState<Set<number>>(new Set());
   const [stoppingAll, setStoppingAll] = useState(false);
   const [error, setError] = useState('');
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -51,11 +51,7 @@ export function ActiveRunsPanel() {
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-    timer.current = setInterval(() => void load(), POLL_MS);
-    return () => { if (timer.current) clearInterval(timer.current); };
-  }, [load]);
+  usePolledResource(load, { intervalMs: POLL_MS });
 
   const cancel = useCallback(async (id: number) => {
     setCancelling((prev) => new Set(prev).add(id));

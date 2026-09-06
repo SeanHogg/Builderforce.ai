@@ -122,13 +122,3 @@ export async function loadVersion(db: Db, versionId: string): Promise<VersionRow
   if (!row) throw new PublisherError('version not found', 404);
   return row;
 }
-
-/** Load many packages by id in one round-trip. Used by the install list. */
-export async function loadPackagesByIds(db: Db, ids: string[]): Promise<Map<string, PackageRow>> {
-  if (ids.length === 0) return new Map();
-  const rows = await db
-    .select()
-    .from(extensionPackages)
-    .where(acrossTenants(extensionPackages, 'public_catalogue', inArray(extensionPackages.id, ids)));
-  return new Map(rows.map((r) => [r.id, r]));
-}

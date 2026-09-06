@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePolledResource } from '@/hooks/usePolledResource';
 import { useParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
@@ -105,24 +106,21 @@ export default function RfpDetailClient() {
   // reloads itself rather than leaving a stale roster under a live badge.
   const reloadRef = useRef(load);
   reloadRef.current = load;
-  useEffect(() => {
-    if (deepState !== 'refreshing' || !latestId || !canManage) return;
-    let cancelled = false;
-    const tick = async () => {
+  usePolledResource(
+    async (signal) => {
+      if (!latestId) return;
       try {
         const result = await rfpApi.reground(latestId);
-        if (cancelled) return;
+        if (signal.aborted) return;
         setDeepProgress(result.progress);
         setDeepState(result.state);
         if (result.regrounded) reloadRef.current();
       } catch {
-        if (!cancelled) setDeepState('unavailable');
+        if (!signal.aborted) setDeepState('unavailable');
       }
-    };
-    void tick();
-    const timer = setInterval(tick, 20_000);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, [deepState, latestId, canManage]);
+    },
+    { intervalMs: 20_000, enabled: deepState === 'refreshing' && !!latestId && canManage, restartKey: latestId },
+  );
 
   const setEntryStatus = async (id: string, status: RfpRegisterEntry['status']) => {
     await rfpApi.updateRisk(id, { status }).catch(() => undefined);

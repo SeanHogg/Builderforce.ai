@@ -13,14 +13,13 @@ import { useIsMobile } from '@/lib/useIsMobile';
 import { contrastText } from '@/lib/contrastText';
 import { useCart, type ArtifactType } from '@/lib/CartContext';
 import {
-  agentHosts,
   artifactAssignments,
-  marketplaceStats,
-  listMarketplaceSkills,
   marketplacePublisherApi,
+  marketplaceStats,
   setMarketplaceToken,
   type ArtifactStats,
 } from '@/lib/builderforceApi';
+import { invalidateInstalledArtifacts, invalidateMarketplaceAgents, invalidateMarketplaceSkills, invalidateMarketplaceStats, marketplaceReads } from '@/lib/marketplace/marketplaceReads';
 import {
   BUILTIN_PERSONAS,
   BUILTIN_SKILLS,
@@ -28,7 +27,7 @@ import {
   type Persona,
   type BuiltinSkill,
 } from '@/lib/marketplaceData';
-import { listAgents, listPurchasedAgents, hireAgent, unhireAgent, updateAgent, deleteAgent } from '@/lib/api';
+import { hireAgent, unhireAgent, updateAgent, deleteAgent } from '@/lib/api';
 import type { PublishedAgent } from '@/lib/types';
 import { isAgentOwner } from '@/lib/agentPermissions';
 import { formatAgentPrice } from '@/lib/agentPresentation';
@@ -283,6 +282,7 @@ export default function MarketplacePageClient() {
     setPublishError(null);
     setPublishSuccess(false);
     try {
+      invalidateMarketplaceSkills();
       await marketplacePublisherApi.publishSkill({
         name: skillForm.name.trim(),
         slug: skillForm.slug.trim().toLowerCase().replace(/\s+/g, '-'),
@@ -310,7 +310,7 @@ export default function MarketplacePageClient() {
     const builtinSkillListings = BUILTIN_SKILLS.map(builtinSkillToListing);
     let apiSkills: MarketplaceListing[] = [];
     try {
-      const res = await listMarketplaceSkills({ limit: 100 });
+      const res = await marketplaceReads.skills(100);
       apiSkills = (res.skills ?? []).map((s) => ({
         id: `api-skill:${s.slug}`,
         type: 'skill' as const,
@@ -343,11 +343,11 @@ export default function MarketplacePageClient() {
     // account (authenticated but tenantless) would otherwise 401 on both. Anonymous
     // and tenantless browsers see listings + stats but no install state.
     if (hasTenant && tenantNum) {
-      const [agentHostList, assignList] = await Promise.all([
-        agentHosts.list().catch(() => []),
-        artifactAssignments.list('tenant', tenantNum).catch(() => []),
+      const [hasHosts, assignList] = await Promise.all([
+        marketplaceReads.hasAgentHosts().catch(() => false),
+        marketplaceReads.installedArtifacts(tenantNum).catch(() => []),
       ]);
-      setHasAgentHosts(agentHostList.length > 0);
+      setHasAgentHosts(hasHosts);
       setInstalled(new Set(assignList.map((a) => key(a.artifactType, a.artifactSlug))));
     } else {
       setHasAgentHosts(false);
@@ -358,8 +358,8 @@ export default function MarketplacePageClient() {
     for (const item of allListings) byType[item.type].push(item.artifactSlug);
 
     const [skillStats, personaStats] = await Promise.all([
-      byType.skill.length ? marketplaceStats.getStats('skill', byType.skill) : Promise.resolve({} as Record<string, ArtifactStats>),
-      byType.persona.length ? marketplaceStats.getStats('persona', byType.persona) : Promise.resolve({} as Record<string, ArtifactStats>),
+      marketplaceReads.stats('skill', byType.skill),
+      marketplaceReads.stats('persona', byType.persona),
     ]);
     const merged: Record<string, ArtifactStats> = {};
     for (const slug of Object.keys(skillStats)) merged[key('skill', slug)] = skillStats[slug]!;
@@ -374,7 +374,7 @@ export default function MarketplacePageClient() {
   const loadAgents = useCallback(() => {
     setLoadingAgents(true);
     // GET /api/workforce/agents already filters WHERE status = 'active' server-side.
-    return listAgents()
+    return marketplaceReads.publishedAgents()
       .then((list) => { setAgents(list); return list; })
       .catch(() => { setAgents([]); return [] as PublishedAgent[]; })
       .finally(() => setLoadingAgents(false));
@@ -387,7 +387,7 @@ export default function MarketplacePageClient() {
   // 401). Anonymous + tenantless browsers see Hire on everything.
   const loadHired = useCallback(() => {
     if (!hasTenant) { setHiredIds(new Set()); return Promise.resolve(); }
-    return listPurchasedAgents()
+    return marketplaceReads.purchasedAgents()
       .then((list) => setHiredIds(new Set(list.map((a) => a.id))))
       .catch(() => setHiredIds(new Set()));
   }, [hasTenant]);
@@ -482,6 +482,7 @@ export default function MarketplacePageClient() {
     const prev = stats[k] ?? { likes: 0, installs: 0, liked: false };
     try {
       const liked = await marketplaceStats.toggleLike(item.type, item.artifactSlug);
+      invalidateMarketplaceStats(item.type);
       setStats((s) => ({
         ...s,
         [k]: {
@@ -506,6 +507,7 @@ export default function MarketplacePageClient() {
       } else {
         await artifactAssignments.assign(item.type, item.artifactSlug, 'tenant', tenantNum);
       }
+      invalidateInstalledArtifacts(tenantNum);
       setInstalled((prev) => {
         const next = new Set(prev);
         if (wasInstalled) next.delete(k);
@@ -610,6 +612,7 @@ export default function MarketplacePageClient() {
     setHiringId(agentId);
     try {
       const updated = await hireAgent(agentId);
+      invalidateMarketplaceAgents();
       setAgents((prev) => prev.map((a) => (a.id === agentId ? updated : a)));
       setHiredIds((prev) => new Set(prev).add(agentId));
     } catch {
@@ -623,6 +626,7 @@ export default function MarketplacePageClient() {
     setUnhiringId(agentId);
     try {
       await unhireAgent(agentId);
+      invalidateMarketplaceAgents();
       setHiredIds((prev) => { const next = new Set(prev); next.delete(agentId); return next; });
       // hire_count is cumulative (unhire doesn't decrement), so the listing's
       // displayed count is unchanged — no need to refetch the agent row.
@@ -641,12 +645,14 @@ export default function MarketplacePageClient() {
   const unpublishAgent = useCallback(async (a: PublishedAgent) => {
     // Unpublishing removes it from the public registry; refetch so it drops out.
     await updateAgent(a.id, { published: false });
+    invalidateMarketplaceAgents();
     loadAgents();
   }, [loadAgents]);
   const deleteOwnedAgent = useCallback(async (a: PublishedAgent) => {
     if (!(await confirm(tm('action.deleteConfirm', { name: a.name })))) return;
     try {
       await deleteAgent(a.id);
+      invalidateMarketplaceAgents();
       loadAgents();
     } catch {
       // keep UI stable

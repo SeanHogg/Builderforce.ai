@@ -12,7 +12,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
-import { listSavedTalent, saveTalent, unsaveTalent } from '@/lib/freelance/invites';
+import { savedTalentIds, saveTalent, unsaveTalent } from '@/lib/freelance/invites';
 
 export function ShortlistToggle({ freelancerUserId }: { freelancerUserId: string }) {
   const t = useTranslations('talent');
@@ -22,9 +22,9 @@ export function ShortlistToggle({ freelancerUserId }: { freelancerUserId: string
 
   useEffect(() => {
     let cancelled = false;
-    listSavedTalent()
-      .then((result) => {
-        if (!cancelled) setSaved(result.items.some((row) => row.freelancerUserId === freelancerUserId));
+    savedTalentIds([freelancerUserId])
+      .then((saved) => {
+        if (!cancelled) setSaved(saved.has(freelancerUserId));
       })
       // No workspace, no shortlist — and no error to show somebody who was only looking
       // at a profile. `null` keeps the control off the page entirely.
