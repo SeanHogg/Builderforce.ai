@@ -31,6 +31,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { brainChatRoomName } from '../../infrastructure/relay/broadcastRoom';
 import { relayToRoom } from './realtimeRelay';
+import { limitParam } from './queryParams';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -326,7 +327,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const userId = c.get('userId') as string;
     if (!(await brainService.canAccess(id, tenantId, userId))) return c.json({ error: 'Chat not found' }, 404);
 
-    const limit = Math.min(Math.max(1, Number(c.req.query('limit') ?? 500)), 2000);
+    const limit = limitParam(c.req.query('limit'), 500, 2000);
     const token = await getCacheVersion(c.env as Env, traceVersionKey(id));
     const key = `brain-trace:chat:${id}:v:${token}:l:${limit}`;
     const trace = await getOrSetCached(c.env as Env, key, () => brainService.getTrace(id, limit));
@@ -427,7 +428,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const q = (c.req.query('q') ?? '').slice(0, 200);
     const projRaw = c.req.query('project_id');
     const projectId = projRaw != null && projRaw !== '' ? Number(projRaw) : null;
-    const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 40) || 40, 1), 50);
+    const limit = limitParam(c.req.query('limit'), 40, 50);
     if (projectId != null && Number.isNaN(projectId)) return c.json({ error: 'Invalid project_id' }, 400);
 
     const version = await getCacheVersion(env, ticketSearchVersionKey(tenantId));

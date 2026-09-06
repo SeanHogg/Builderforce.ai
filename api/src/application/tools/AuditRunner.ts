@@ -34,6 +34,7 @@ import { getSystemAudit } from './systemAudits';
 import { privacyContentSignals, selectPrivacyProbeFiles, type AuditScanContext, type ScannedRepo } from './auditScanners';
 import { isControlImplemented } from '../governance/controlStatus';
 import { advertisedName } from '../llm/toolNaming';
+import { loadProjectInTenant } from '../project/projectOwnership';
 
 export interface RunAuditArgs {
   tenantId: number;
@@ -172,8 +173,7 @@ export class AuditRunner {
   async buildContext(args: { tenantId: number; projectId: number; secret: string }): Promise<AuditScanContext> {
     const { tenantId, projectId, secret } = args;
 
-    const [proj] = await this.db.select({ name: projects.name }).from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)));
+    const proj = await loadProjectInTenant(this.db, tenantId, projectId, { name: projects.name });
 
     const repoRows = await this.db.select().from(projectRepositories)
       .where(and(eq(projectRepositories.projectId, projectId), eq(projectRepositories.tenantId, tenantId)));

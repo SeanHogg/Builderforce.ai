@@ -38,6 +38,8 @@ import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { isUniqueViolation } from '../../infrastructure/database/uniqueViolation';
+import { daysParam, limitParam } from './queryParams';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 /** Encryption secret for sealing webhook/pull credentials (same resolver integrations use). */
 function integrationSecret(env: Env): string {
@@ -149,7 +151,7 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
       })
       .from(errorCollectors)
       .where(eq(errorCollectors.tenantId, tenantId))
-      .orderBy(desc(errorCollectors.createdAt));
+      .orderBy(desc(errorCollectors.createdAt)).limit(LIST_ROW_CAP);
 
     const ids = cols.map((c2) => c2.id);
     const ints = ids.length
@@ -484,7 +486,7 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
       })
       .from(errorMappingRules)
       .where(scopedToTenant(errorMappingRules, tenantId, eq(errorMappingRules.collectorId, id)))
-      .orderBy(asc(errorMappingRules.priority));
+      .orderBy(asc(errorMappingRules.priority)).limit(LIST_ROW_CAP);
     return c.json({ rules: rows });
   });
 
@@ -527,7 +529,7 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
     const status = c.req.query('status') ?? null;
     const level = c.req.query('level') ?? null;
     const collectorId = c.req.query('collectorId') ?? null;
-    const limit = Math.min(Number(c.req.query('limit') ?? '100'), 200);
+    const limit = limitParam(c.req.query('limit'), 100, 200);
     const cursor = parseGroupsCursor(c.req.query('cursor'));
 
     const versionKey = projectId ? qualityGroupsVersionKey(projectId) : qualityGroupsTenantVersionKey(tenantId);
@@ -568,7 +570,7 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
   router.get('/stats', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const projectId = c.req.query('projectId') ? Number(c.req.query('projectId')) : null;
-    const days = Math.min(Math.max(Number(c.req.query('days') ?? '30'), 1), 90);
+    const days = daysParam(c.req.query('days'), 30, 90);
 
     const versionKey = projectId ? qualityGroupsVersionKey(projectId) : qualityGroupsTenantVersionKey(tenantId);
     const ver = await getCacheVersion(c.env as Env, versionKey);

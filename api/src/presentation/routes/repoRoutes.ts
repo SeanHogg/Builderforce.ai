@@ -50,6 +50,7 @@ import type { CreatePrMessage } from '../../application/repos/prDispatch';
 import { ensureAgentWorkflow, githubActionsAvailable } from '../../application/runtime/githubActionsDispatch';
 import { AGENT_WORKFLOW_PATH } from '../../application/runtime/githubActionsWorkflow';
 import { ingestOpenAlertsForRepo } from '../../application/security/githubAlerts';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 /** Read-through cache key for a project's repo list (the picker + SourceControl read
  *  this; it changes only on the CRUD routes below, which all invalidate it). */
@@ -489,7 +490,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       .select()
       .from(pullRequests)
       .where(and(eq(pullRequests.projectId, projectId), eq(pullRequests.tenantId, tenantId)))
-      .orderBy(desc(pullRequests.createdAt));
+      .orderBy(desc(pullRequests.createdAt)).limit(LIST_ROW_CAP);
     return c.json({ pullRequests: rows });
   });
 

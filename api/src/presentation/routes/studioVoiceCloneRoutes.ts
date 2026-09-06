@@ -37,6 +37,7 @@ import {
   VoiceCloneNotFound,
   VoiceCloneReferenceMissing,
 } from '../../application/studio/voiceCloneService';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 const CONSENT_TEXT_VERSION = 'v1';
 
@@ -217,7 +218,7 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
           .select()
           .from(studioVoiceClones)
           .where(eq(studioVoiceClones.visibility, 'marketplace'))
-          .orderBy(desc(studioVoiceClones.createdAt));
+          .orderBy(desc(studioVoiceClones.createdAt)).limit(LIST_ROW_CAP);
         return rows.filter((r) => r.status === 'published').map(toPublicClone);
       },
       { kvTtlSeconds: 300 },

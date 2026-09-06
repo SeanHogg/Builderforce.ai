@@ -21,13 +21,7 @@ import { scope } from './segmentTrackerRoutes';
 import { getRecommendations, dismissRecommendationCached, getSpaceMetrics } from '../../application/insights/aiInsightsReads';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { positiveIntParam } from './queryParams';
-
-/** Clamp a `?days=` window to a sane range (default 30). */
-function parseDays(raw: string | undefined, def = 30): number {
-  const n = Number(raw);
-  return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : def;
-}
+import { positiveIntParam, daysParam } from './queryParams';
 
 
 // The cache keys these reads use live in `application/insights/versionKeys.ts`
@@ -42,7 +36,7 @@ export function createRecommendationsRoutes(db: Db): Hono<HonoEnv> {
   // into the key so an ack refreshes the list immediately.
   router.get('/recommendations', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    const days = parseDays(c.req.query('days'));
+    const days = daysParam(c.req.query('days'), 30);
     return c.json(await getRecommendations(db, c.env as Env, tenantId, days));
   });
 
@@ -61,7 +55,7 @@ export function createRecommendationsRoutes(db: Db): Hono<HonoEnv> {
   // SPACE metrics (developer+; complements DORA). Short TTL over hot tables.
   router.get('/space', requireRole(TenantRole.DEVELOPER), async (c) => {
     const { tenantId } = scope(c);
-    const days = parseDays(c.req.query('days'));
+    const days = daysParam(c.req.query('days'), 30);
     const projectId = positiveIntParam(c.req.query('projectId'));
     return c.json(await getSpaceMetrics(db, c.env as Env, tenantId, days, projectId));
   });

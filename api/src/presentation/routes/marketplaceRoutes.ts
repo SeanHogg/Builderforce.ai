@@ -23,6 +23,7 @@ import { sendWelcomeEmail } from '../../infrastructure/email/EmailService';
 import { sendTransactionalEmail } from '../../application/email/sendEmail';
 import { headerHints } from '../../application/email/emailLocaleResolver';
 import { localeFromHeaders } from '../../infrastructure/email/emailLocale';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 /** Read-through cache key for a single published skill's SEO/SSR payload. */
 const skillSeoCacheKey = (slug: string): string => `mp:skill:seo:${slug}`;
@@ -268,7 +269,7 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
           eq(schema.marketplaceSkills.published, true),
         ),
       )
-      .orderBy(desc(schema.marketplaceSkills.downloads));
+      .orderBy(desc(schema.marketplaceSkills.downloads)).limit(LIST_ROW_CAP);
 
     return c.json({ user, skills });
   });
@@ -689,7 +690,7 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
       })
       .from(schema.marketplacePurchases)
       .where(eq(schema.marketplacePurchases.userId, userId))
-      .orderBy(desc(schema.marketplacePurchases.createdAt));
+      .orderBy(desc(schema.marketplacePurchases.createdAt)).limit(LIST_ROW_CAP);
     return c.json({ purchases: rows });
   });
 

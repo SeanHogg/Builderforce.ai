@@ -26,6 +26,7 @@ import { invalidateSegment } from '../../infrastructure/auth/segmentResolver';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { slugify as slugifyBase } from '@builderforce/creation-canvas-contract';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 const SEGMENT_STATUSES = ['active', 'suspended', 'archived'] as const;
 type SegmentStatus = (typeof SEGMENT_STATUSES)[number];
@@ -45,7 +46,7 @@ export function createSegmentRoutes(db: Db): Hono<HonoEnv> {
       .select()
       .from(segments)
       .where(eq(segments.tenantId, tenantId))
-      .orderBy(desc(segments.isDefault), desc(segments.provisionedAt));
+      .orderBy(desc(segments.isDefault), desc(segments.provisionedAt)).limit(LIST_ROW_CAP);
     return c.json(rows);
   });
 

@@ -48,6 +48,7 @@ import { instantiateWorkflowRun, runTargetFromDefinition, type RunTarget } from 
 import { parseDefinition } from '../../domain/workflowGraph';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -143,7 +144,7 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const ver = await getCacheVersion(c.env, incidentVersionKey(tenantId));
     const data = await getOrSetCached(c.env, `incidents:contacts:${tenantId}:v:${ver}`, () =>
-      db.select().from(businessContacts).where(eq(businessContacts.tenantId, tenantId)).orderBy(businessContacts.name));
+      db.select().from(businessContacts).where(eq(businessContacts.tenantId, tenantId)).orderBy(businessContacts.name).limit(LIST_ROW_CAP));
     return c.json({ contacts: data });
   });
   router.post('/contacts', requireRole(TenantRole.MANAGER), async (c) => {

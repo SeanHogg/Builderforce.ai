@@ -65,6 +65,7 @@ import { getTicketCoordination } from '../../application/coordination/coordinati
 import { executeGitProxy } from '../../application/repos/gitProxy';
 import { authorizeExecutionPrincipal } from '../../application/agentIdentity/agentRunIdentity';
 import type { ExecutionReadMemo } from '../../application/runtime/executionReadMemo';
+import { limitParam } from './queryParams';
 
 /**
  * Runtime routes – task execution lifecycle.
@@ -1410,7 +1411,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // Tenant-level runtime dashboard aggregates derived from recent execution history.
   router.get('/dashboard', async (c) => {
     const tenantId = c.get('tenantId');
-    const limit = Math.min(Number(c.req.query('limit') ?? '500'), 2_000);
+    const limit = limitParam(c.req.query('limit'), 500, 2000);
     const executionRows = await runtimeService.listByTenant(tenantId, limit);
     const executionsPlain = executionRows.map((execution) => execution.toPlain());
 
@@ -1536,7 +1537,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // fleet's state this instant (same rationale as /cloud-agents).
   router.get('/active', async (c) => {
     const tenantId = c.get('tenantId');
-    const limit = Math.min(Number(c.req.query('limit') ?? '200'), 500);
+    const limit = limitParam(c.req.query('limit'), 200, 500);
     // `liveExecution()` — a rehearsal (0372) drives a real execution row but is a
     // probe rather than fleet activity, so it must not appear on the active-runs board.
     const rows = await db

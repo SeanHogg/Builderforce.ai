@@ -217,6 +217,7 @@ export {
   type ManagerActionInput,
 } from './managerActionJournal';
 import { laneAgentAssignments, laneJoinOn } from '../swimlane/laneAgentAssignments';
+import { loadProjectInTenant } from '../project/projectOwnership';
 
 export interface ManagerActionRow {
   id: string; taskId: number | null; ticketKey: string | null; ticketTitle: string | null;
@@ -327,11 +328,7 @@ export async function createManagerRunTask(
     const now = new Date();
     await reapStaleManagerRunTasks(db, { projectId, olderThanMs: 0 });
 
-    const [project] = await db
-      .select({ key: projects.key })
-      .from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
-      .limit(1);
+    const project = await loadProjectInTenant(db, tenantId, projectId, { key: projects.key });
     if (!project) return null;
 
     const baseSeq = await nextProjectKeySeqBase(db, projectId);
@@ -527,11 +524,7 @@ export async function createManagerCoachingTask(
   const directive = args.directive.trim();
   if (directive.length < 3) return null;
   try {
-    const [project] = await db
-      .select({ key: projects.key })
-      .from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
-      .limit(1);
+    const project = await loadProjectInTenant(db, tenantId, projectId, { key: projects.key });
     if (!project) return null;
 
     const policy = await getEffectiveManagerPolicy(db, tenantId, projectId, env);

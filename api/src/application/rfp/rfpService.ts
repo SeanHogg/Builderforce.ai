@@ -48,6 +48,7 @@ import type {
   RfpResponseBody, RfpCapabilityRoster, RfpPhase, RfpNarrative, RfpPortfolioMatch,
   RfpScanFreshness, RfpDeepFreshness, BrandPalette,
 } from './types';
+import { loadProjectInTenant } from '../project/projectOwnership';
 
 const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
 const MILLICENTS_PER_USD = 100_000;
@@ -560,7 +561,7 @@ export async function generateRfpResponse(
   let projectName: string | undefined;
 
   if (isExisting && projectId != null) {
-    const [proj] = await db.select({ name: projects.name, description: projects.description }).from(projects).where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId))).limit(1);
+    const proj = await loadProjectInTenant(db, tenantId, projectId, { name: projects.name, description: projects.description });
     projectName = proj?.name;
     const gate = await ensureFreshScan(deps, tenantId, projectId, userId);
     scanRefreshed = gate.refreshed;

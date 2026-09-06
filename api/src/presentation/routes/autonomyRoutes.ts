@@ -29,12 +29,7 @@ import { getAutonomyWiringAudit } from '../../application/activity/autonomyWirin
 import { getVerdictCompliance } from '../../application/activity/verdictCompliance';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-
-/** Clamp a `?days=` window to a sane range (default 30). */
-function parseDays(raw: string | undefined, def = 30): number {
-  const n = Number(raw);
-  return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : def;
-}
+import { daysParam } from './queryParams';
 
 export function createAutonomyRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -44,7 +39,7 @@ export function createAutonomyRoutes(db: Db): Hono<HonoEnv> {
   // `?projectId=` narrows to one project; omitted = the whole tenant.
   router.get('/autonomy', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    const windowDays = parseDays(c.req.query('days'));
+    const windowDays = daysParam(c.req.query('days'), 30);
     const rawProject = Number(c.req.query('projectId'));
     const projectId = Number.isFinite(rawProject) && rawProject > 0 ? Math.floor(rawProject) : null;
     return c.json(await getAutonomySummary(c.env as Env, db, { tenantId, projectId, windowDays }));
@@ -73,7 +68,7 @@ export function createAutonomyRoutes(db: Db): Hono<HonoEnv> {
   // WHICH agent is the non-reporter. See `verdictCompliance.ts`.
   router.get('/autonomy/verdict-compliance', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    const windowDays = parseDays(c.req.query('days'));
+    const windowDays = daysParam(c.req.query('days'), 30);
     return c.json(await getVerdictCompliance(c.env as Env, db, { tenantId, windowDays }));
   });
 

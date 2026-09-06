@@ -26,15 +26,9 @@ import {
 } from '../../application/insights/benchmarkingInsights';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { positiveIntParam } from './queryParams';
+import { positiveIntParam, daysParam } from './queryParams';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
-
-/** Clamp a `?days=` window to a sane range (default 30). */
-function parseDays(raw: string | undefined, def = 30): number {
-  const n = Number(raw);
-  return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : def;
-}
 
 
 
@@ -70,7 +64,7 @@ export function createBenchmarkingRoutes(db: Db): Hono<HonoEnv> {
   // the profile cache key is invalidated on PATCH so a profile change refreshes.
   router.get('/benchmarking', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    const days = parseDays(c.req.query('days'));
+    const days = daysParam(c.req.query('days'), 30);
     const projectId = positiveIntParam(c.req.query('projectId'));
     const env = c.env as Env;
     const ver = await getCacheVersion(env, benchVersionKey(tenantId));

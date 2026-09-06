@@ -17,6 +17,7 @@ import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { parseJsonArray } from '../../domain/shared/json';
 import { remember } from '../../application/memory/memoryService';
+import { limitParam } from './queryParams';
 
 export function createTeamMemoryRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -80,7 +81,7 @@ export function createTeamMemoryRoutes(db: Db): Hono<HonoEnv> {
 
   router.get('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const limit = Math.min(Number(c.req.query('limit') ?? '20'), 100);
+    const limit = limitParam(c.req.query('limit'), 20, 100);
 
     const rows = await db
       .select()

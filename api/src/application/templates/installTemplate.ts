@@ -29,6 +29,7 @@ import type { TemplateOutput } from '../../domain/template/templateManifest';
 import { outputKindSpec, type MaterializeOutputContext, type OutputResult } from './outputKinds';
 import { invalidateTemplateCatalog, TEMPLATE_CATALOG_KIND, type ResolvedTemplate } from './templateRegistry';
 import { resolveTemplateSetup } from './templateSetup';
+import { loadProjectInTenant } from '../project/projectOwnership';
 
 export interface InstallTemplateArgs {
   db: Db;
@@ -64,12 +65,7 @@ async function resolveProject(
   const raw = answers.project;
   const id = Number(typeof raw === 'string' || typeof raw === 'number' ? raw : NaN);
   if (!Number.isInteger(id)) return null;
-  const [row] = await db
-    .select({ id: projects.id, key: projects.key })
-    .from(projects)
-    .where(and(eq(projects.id, id), eq(projects.tenantId, tenantId)))
-    .limit(1);
-  return row ?? null;
+  return loadProjectInTenant(db, tenantId, id, { id: projects.id, key: projects.key });
 }
 
 /**

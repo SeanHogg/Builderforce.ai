@@ -32,6 +32,7 @@ import {
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { isUniqueViolation } from '../../infrastructure/database/uniqueViolation';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 /**
  * The public webhook address for one (collector, provider). Built in ONE place so
@@ -81,7 +82,7 @@ export function createFeedbackRoutes(db: Db): Hono<HonoEnv> {
       })
       .from(feedbackCollectors)
       .where(eq(feedbackCollectors.tenantId, tenantId))
-      .orderBy(desc(feedbackCollectors.createdAt));
+      .orderBy(desc(feedbackCollectors.createdAt)).limit(LIST_ROW_CAP);
     return c.json({ collectors: rows });
   });
 

@@ -50,6 +50,7 @@ import { BrainService } from '../../application/brain/BrainService';
 import { resolveTicketViewer } from '../../application/security/resolveTicketViewer';
 import { executionTokenGate } from './executionTokenGate';
 import { broadcastProjectChanged } from '../../infrastructure/relay/broadcastRoom';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 /** Parse a swimlane assignment's `required_capabilities` (JSON array stored as
  *  text) into a clean string[]. Tolerates null / malformed / non-array values by
@@ -1175,7 +1176,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       .from(taskSpecs)
       .innerJoin(specs, eq(specs.id, taskSpecs.specId))
       .where(scopedToTenant(taskSpecs, tenantId, eq(taskSpecs.taskId, taskId)))
-      .orderBy(desc(taskSpecs.isPrimary), desc(specs.updatedAt));
+      .orderBy(desc(taskSpecs.isPrimary), desc(specs.updatedAt)).limit(LIST_ROW_CAP);
     return c.json({ specs: rows });
   });
 

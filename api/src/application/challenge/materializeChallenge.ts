@@ -41,6 +41,7 @@ import { isBuildTask } from './blueprint';
 import type { ChallengePlan } from './planChallenge';
 import type { ChallengeSpec } from './parseBrief';
 import type { SetupStep } from '../backend/hostingStrategy';
+import { loadProjectInTenant } from '../project/projectOwnership';
 
 export interface MaterializeChallengeResult {
   projectId: number;
@@ -74,11 +75,7 @@ async function resolveProject(
   existingProjectId: number | null,
 ): Promise<{ id: number; key: string; name: string }> {
   if (existingProjectId) {
-    const [row] = await db
-      .select({ id: projects.id, key: projects.key, name: projects.name })
-      .from(projects)
-      .where(and(eq(projects.id, existingProjectId), eq(projects.tenantId, tenantId)))
-      .limit(1);
+    const row = await loadProjectInTenant(db, tenantId, existingProjectId, { id: projects.id, key: projects.key, name: projects.name });
     if (row) return row;
   }
 

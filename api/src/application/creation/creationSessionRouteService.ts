@@ -110,6 +110,7 @@ import {
 import {
   resolveSessionAccess, SESSION_ROLE_RANK, type SessionRole as SharedSessionRole,
 } from './sessionAccess';
+import { boundedIntParam, limitParam, offsetParam } from '../../domain/shared/boundedInt';
 // THE graph write. The delete/re-insert/bump/event/snapshot sequence below used to be
 // spelled out twice in this file (`PUT /:id/graph` and `POST /:id/commands`) and had
 // already started to differ between the two copies; the public `/api/v1` item CRUD is
@@ -139,6 +140,7 @@ import {
   readProspectEngagement, revokeProspectShare, SHAREABLE_CANVAS_KINDS,
   type ProspectShareSettings,
 } from '../sales/prospectShare';
+import { loadProjectInTenant } from '../project/projectOwnership';
 
 type SessionRole = SharedSessionRole;
 const ROLE_RANK = SESSION_ROLE_RANK;
@@ -655,8 +657,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId, segmentId } = scope(c);
     const userId = c.get('userId') as string;
     const status = c.req.query('status') === 'archived' ? 'archived' : 'active';
-    const limit = Math.min(100, Math.max(1, Number(c.req.query('limit') ?? 30)));
-    const offset = Math.max(0, Number(c.req.query('offset') ?? 0));
+    const limit = limitParam(c.req.query('limit'), 30, 100);
+    const offset = offsetParam(c.req.query('offset'));
     const projectId = Number(c.req.query('projectId'));
     const hasProjectFilter = Number.isInteger(projectId) && projectId > 0;
     const rows = await db
@@ -733,7 +735,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     const q = (c.req.query('q') ?? '').trim().slice(0, 200);
     if (q.length < 2) return c.json({ sessions: [], hasMore: false });
-    const searchLimit = Math.min(100, Math.max(1, Number(c.req.query('limit') ?? 30)));
+    const searchLimit = limitParam(c.req.query('limit'), 30, 100);
     const pattern = `%${q.replace(/[\\%_]/g, '\\$&')}%`;
     const status = creationSessionSearchStatus(c.req.query('status'));
     const kind = (c.req.query('kind') ?? '').trim().slice(0, 48);
@@ -794,7 +796,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       ))
       .orderBy(desc(creationSessionMembers.pinned), desc(creationSessions.lastActivityAt))
       .limit(searchLimit)
-      .offset(Math.max(0, Number(c.req.query('offset') ?? 0)));
+      .offset(offsetParam(c.req.query('offset')));
     // Search matches are only hints. Revalidate every authoritative resource
     // represented in the preview because access can be revoked after insertion.
     const safeRows = await Promise.all(rows.map(async (row) => {
@@ -1312,8 +1314,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.get('/:id/events', async (c) => {
     const access = await requireSession(c);
     if (!access) return c.json({ error: 'Session not found' }, 404);
-    const after = Math.max(0, Math.floor(Number(c.req.query('after') ?? 0) || 0));
-    const limit = Math.min(500, Math.max(1, Number(c.req.query('limit') ?? 200)));
+    const after = boundedIntParam(c.req.query('after'), { def: 0, min: 0 });
+    const limit = limitParam(c.req.query('limit'), 200, 500);
     const events = await db.select().from(creationSessionEvents).where(and(
       eq(creationSessionEvents.sessionId, access.session.id),
       sql`${creationSessionEvents.revision} > ${after}`,
@@ -1376,7 +1378,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.get('/:id/activity', async (c) => {
     const access = await requireSession(c);
     if (!access) return c.json({ error: 'Session not found' }, 404);
-    const limit = Math.min(200, Math.max(1, Number(c.req.query('limit') ?? 50)));
+    const limit = limitParam(c.req.query('limit'), 50, 200);
     const [events, comments] = await Promise.all([
       db.select({
         id: creationSessionEvents.id,
@@ -1414,8 +1416,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.get('/:id/timeline', async (c) => {
     const access = await requireSession(c, 'viewer');
     if (!access) return c.json({ error: 'Session not found' }, 404);
-    const after = Math.max(0, Math.floor(Number(c.req.query('after') || 0)));
-    const limit = Math.min(500, Math.max(1, Math.floor(Number(c.req.query('limit') || 200))));
+    const after = boundedIntParam(c.req.query('after'), { def: 0, min: 0 });
+    const limit = limitParam(c.req.query('limit'), 200, 500);
     const messages = await db.select().from(creationSessionTimeline).where(and(
       eq(creationSessionTimeline.sessionId, access.session.id),
       after ? gt(creationSessionTimeline.id, after) : undefined,
@@ -2800,10 +2802,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     )).limit(1);
     if (!build) return c.json({ error: 'Build not found' }, 404);
 
-    const [storageProject] = await db.select({ publicId: projects.publicId })
-      .from(projects)
-      .where(and(eq(projects.id, build.storageProjectId), eq(projects.tenantId, tenantId)))
-      .limit(1);
+    const storageProject = await loadProjectInTenant(db, tenantId, build.storageProjectId, { publicId: projects.publicId });
     if (!storageProject) return c.json({ error: 'Build storage project not found' }, 404);
 
     const kind = creationKindForModality(build.modality);

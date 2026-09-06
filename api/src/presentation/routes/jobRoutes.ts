@@ -81,6 +81,7 @@ import { hireShape } from '../../application/marketplace/engagementShape';
 import { summariseEscrow } from '../../application/marketplace/escrow';
 import type { EvalJudge } from '../../application/eval/semanticEval';
 import type { Env, HonoEnv } from '../../env';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 // `JOBS_PUBLIC_CACHE_KEY`, the posting-type vocabulary and the discipline vocabulary all
 // live with the writer now (`application/marketplace/jobPostings.ts` and `jobFilters.ts`).
@@ -1101,7 +1102,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
         .from(jobProposals)
         .innerJoin(users, eq(users.id, jobProposals.freelancerUserId))
         .where(eq(jobProposals.jobId, id))
-        .orderBy(desc(jobProposals.createdAt)),
+        .orderBy(desc(jobProposals.createdAt)).limit(LIST_ROW_CAP),
       readProposalSchedules(db, tenantId, id),
     ]);
     return c.json(rows.map((row) => mapProposal({ ...row, milestones: schedules[String(row.id)] ?? [] })));

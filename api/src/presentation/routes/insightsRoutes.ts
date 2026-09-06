@@ -50,7 +50,7 @@ import { computeRdFinancials } from '../../application/insights/rdFinancialsInsi
 import { importBoardRows, isImportDataset, IMPORT_DATASETS } from '../../application/insights/boardImport';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { positiveIntParam } from './queryParams';
+import { positiveIntParam, boundedIntParam, daysParam } from './queryParams';
 import { capitalizationToCsv, capitalizationToXlsx } from '../../application/metrics/capitalizationReport';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
@@ -63,12 +63,6 @@ const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
  * lifecycle) stay role-only — they're the IC's day-to-day view, not a paid tier.
  */
 const PREMIUM_INSIGHTS = 'advancedInsights';
-
-/** Clamp a `?days=` window to a sane range (default 30). */
-function parseDays(raw: string | undefined, def = 30): number {
-  const n = Number(raw);
-  return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : def;
-}
 
 /** Current calendar month 'YYYY-MM' (UTC) when no `?period=` given. */
 function currentPeriodMonth(now: number): string {
@@ -106,7 +100,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   // LENS #1 — AI effectiveness (manager, premium)
   router.get('/engineering', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
     const { tenantId } = scope(c);
-    const days = parseDays(c.req.query('days'));
+    const days = daysParam(c.req.query('days'), 30);
     // `computeEngineeringInsights` has taken a projectId since it was written; the
     // route dropped it, so selecting a project changed nothing on this lens. The
     // project is part of the cache key too — without it the first read would have
@@ -120,7 +114,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   // LENS #2 — DORA (developer+; reuses the shared DORA rollup)
   router.get('/dora', requireRole(TenantRole.DEVELOPER), async (c) => {
     const { tenantId } = scope(c);
-    const days = parseDays(c.req.query('days'));
+    const days = daysParam(c.req.query('days'), 30);
     const projectId = positiveIntParam(c.req.query('projectId'));
     const env = c.env as Env;
     const key = `insights:dora:t:${tenantId}:d:${days}:p:${projectId ?? 0}`;
@@ -144,7 +138,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   // goal edit refreshes immediately.
   router.get('/allocation', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
     const { tenantId } = scope(c);
-    const days = parseDays(c.req.query('days'));
+    const days = daysParam(c.req.query('days'), 30);
     const now = Date.now();
     const period = parsePeriod(c.req.query('period'), now);
     const projectId = positiveIntParam(c.req.query('projectId'));
@@ -190,7 +184,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   router.get('/allocation/history', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
     const { tenantId } = scope(c);
     const now = Date.now();
-    const months = Math.min(24, Math.max(1, Number(c.req.query('months')) || 12));
+    const months = boundedIntParam(c.req.query('months'), { def: 12, min: 1, max: 24 });
     const projectId = positiveIntParam(c.req.query('projectId'));
     const teamId = positiveIntParam(c.req.query('teamId'));
     const env = c.env as Env;
@@ -228,7 +222,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   router.get('/allocation/history/export', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
     const { tenantId } = scope(c);
     const now = Date.now();
-    const months = Math.min(24, Math.max(1, Number(c.req.query('months')) || 12));
+    const months = boundedIntParam(c.req.query('months'), { def: 12, min: 1, max: 24 });
     const projectId = positiveIntParam(c.req.query('projectId'));
     const requested = c.req.query('format');
     const format: ExportFormat = (EXPORT_FORMATS as readonly string[]).includes(requested ?? '')
@@ -371,7 +365,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   // hot task + transition tables.
   router.get('/bottlenecks', requireRole(TenantRole.DEVELOPER), async (c) => {
     const { tenantId } = scope(c);
-    const days = parseDays(c.req.query('days'));
+    const days = daysParam(c.req.query('days'), 30);
     const projectId = positiveIntParam(c.req.query('projectId'));
     const env = c.env as Env;
     const key = `insights:bottlenecks:t:${tenantId}:d:${days}:p:${projectId ?? 0}`;
@@ -383,7 +377,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   // Reuses the bottleneck stage-dwell derivation, mapped to phases. Developer-gated.
   router.get('/delivery/lifecycle', requireRole(TenantRole.DEVELOPER), async (c) => {
     const { tenantId } = scope(c);
-    const days = parseDays(c.req.query('days'));
+    const days = daysParam(c.req.query('days'), 30);
     const projectId = positiveIntParam(c.req.query('projectId'));
     const env = c.env as Env;
     const key = `insights:lifecycle:t:${tenantId}:d:${days}:p:${projectId ?? 0}`;
@@ -395,7 +389,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   // bumped on every quality CRUD write so a manual entry refreshes immediately.
   router.get('/quality', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
     const { tenantId } = scope(c);
-    const days = parseDays(c.req.query('days'), 90);
+    const days = daysParam(c.req.query('days'), 90);
     const projectId = positiveIntParam(c.req.query('projectId'));
     const env = c.env as Env;
     const ver = await getCacheVersion(env, qualityVersionKey(tenantId));
@@ -407,7 +401,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   // open positions / dev satisfaction (reuses the DevEx lens). Manager-gated.
   router.get('/people', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
     const { tenantId } = scope(c);
-    const months = Math.min(24, Math.max(1, Number(c.req.query('months')) || 6));
+    const months = boundedIntParam(c.req.query('months'), { def: 6, min: 1, max: 24 });
     const env = c.env as Env;
     const ver = await getCacheVersion(env, peopleVersionKey(tenantId));
     const key = `insights:people:t:${tenantId}:m:${months}:v:${ver}`;
@@ -445,7 +439,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   // LENS #6 — compliance summary (manager)
   router.get('/compliance', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
     const { tenantId } = scope(c);
-    const days = parseDays(c.req.query('days'));
+    const days = daysParam(c.req.query('days'), 30);
     const env = c.env as Env;
     const key = `insights:comp:t:${tenantId}:d:${days}`;
     return c.json(await getOrSetCached(env, key, () => computeComplianceSummary(db, tenantId, days), SHORT_TTL));
@@ -458,7 +452,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   // multi-CTE scan that must not run per page view.
   router.get('/chat-modes', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    const days = parseDays(c.req.query('days'));
+    const days = daysParam(c.req.query('days'), 30);
     const env = c.env as Env;
     const key = `insights:chatmode:t:${tenantId}:d:${days}`;
     return c.json(await getOrSetCached(env, key, () => computeChatModeUsage(db, tenantId, days), SHORT_TTL));
@@ -468,7 +462,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   // bounded query is a deliberate point-in-time snapshot for an audit request.
   router.get('/compliance/export', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
     const { tenantId } = scope(c);
-    const days = parseDays(c.req.query('days'), 90);
+    const days = daysParam(c.req.query('days'), 90);
     const format = c.req.query('format') === 'json' ? 'json' : 'csv';
     const rows = await buildEvidencePack(db, tenantId, days);
     const stamp = new Date().toISOString().slice(0, 10);

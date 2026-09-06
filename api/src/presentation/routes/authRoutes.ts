@@ -55,6 +55,7 @@ import { provisionForHireProfile } from '../../application/freelance/provisionFo
 import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
 import { coerceJsonArray } from '../../domain/shared/jsonColumn';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 /** Parse a stored psychometric JSON column into an object (null when unset/invalid). */
 function parsePsychometric(raw: string | null | undefined): unknown {
@@ -460,7 +461,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
 
   router.get('/me/privacy-requests', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as UserId;
-    return c.json({ requests: await db.select().from(privacyRequests).where(eq(privacyRequests.userId, userId)).orderBy(desc(privacyRequests.createdAt)) });
+    return c.json({ requests: await db.select().from(privacyRequests).where(eq(privacyRequests.userId, userId)).orderBy(desc(privacyRequests.createdAt)).limit(LIST_ROW_CAP) });
   });
 
   // POST /api/auth/legal/terms/accept (requires WebJWT)
@@ -1624,7 +1625,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       })
       .from(authTokens)
       .where(eq(authTokens.userId, userId))
-      .orderBy(desc(authTokens.lastSeenAt));
+      .orderBy(desc(authTokens.lastSeenAt)).limit(LIST_ROW_CAP);
 
     return c.json({
       tokens: rows.map((row) => ({

@@ -28,6 +28,7 @@ import {
   timeEntries,
 } from '../../infrastructure/database/schema';
 import { notSystemTask } from '../task/taskScope';
+import { loadProjectInTenant } from '../project/projectOwnership';
 
 const DAY_MS = 86_400_000;
 const MAX_TASKS = 5_000;
@@ -285,8 +286,7 @@ export async function computeDeliveryInsights(
     taskFilter = or(eq(tasks.initiativeId, scopeId), eq(projects.initiativeId, scopeId));
   } else if (scope === 'project') {
     const pid = Number(scopeId);
-    const [row] = await db.select({ name: projects.name, createdAt: projects.createdAt })
-      .from(projects).where(and(eq(projects.id, pid), eq(projects.tenantId, tenantId))).limit(1);
+    const row = await loadProjectInTenant(db, tenantId, pid, { name: projects.name, createdAt: projects.createdAt });
     if (!row) return null;
     name = row.name; baselineDate = row.createdAt;
     taskFilter = eq(tasks.projectId, pid);

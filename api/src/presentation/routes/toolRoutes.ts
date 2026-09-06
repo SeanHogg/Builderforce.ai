@@ -11,6 +11,7 @@ import { isMaturityFrameworkId, listMaturityFrameworks, type MaturityFrameworkId
 import { toolLocaleFromHeaders, type ToolLocale } from '../../application/tools/toolMessages';
 import { headerHints } from '../../application/email/emailLocaleResolver';
 import { maybeAutoRunOnLaneEntry } from './taskRoutes';
+import { daysParam } from './queryParams';
 
 /**
  * Diagnostics & Tools routes.
@@ -163,7 +164,7 @@ export function createToolRoutes(
   // `projectId` scopes it to one project.
   router.get('/:id/data-driven', authMiddleware, requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const days = Math.min(Math.max(Number(c.req.query('days') ?? 90), 7), 365);
+    const days = daysParam(c.req.query('days'), 90, 365, 7);
     const projectId = c.req.query('projectId') ? Number(c.req.query('projectId')) : null;
     const framework = frameworkParam(c.req.query('framework'));
     const result = await toolService.getDataDriven(c.env as Env, tenantId, c.req.param('id'), days, projectId, framework, toolLocale(c.req));

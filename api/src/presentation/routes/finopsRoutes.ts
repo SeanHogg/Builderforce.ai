@@ -38,14 +38,9 @@ import {
   type SocControlStatus,
 } from '../../application/finops/socControls';
 import { assembleAuditReport, auditReportToCsv } from '../../application/finops/auditReport';
+import { daysParam } from './queryParams';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
-
-/** Clamp a `?days=` window (default 30, 1..365). */
-function parseDays(raw: string | undefined, def = 30): number {
-  const n = Number(raw);
-  return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : def;
-}
 
 function currentPeriodMonth(now: number): string {
   const d = new Date(now);
@@ -110,7 +105,7 @@ export function createFinopsRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId } = scope(c);
     const now = Date.now();
     const period = parsePeriod(c.req.query('period'), now);
-    const days = parseDays(c.req.query('days'));
+    const days = daysParam(c.req.query('days'), 30);
     const env = c.env as Env;
     const key = `${rdConfigCacheKey(tenantId)}:report:p:${period}:d:${days}`;
     return c.json(await getOrSetCached(env, key, () => computeRdTaxCredit(db, tenantId, period, days), SHORT_TTL));

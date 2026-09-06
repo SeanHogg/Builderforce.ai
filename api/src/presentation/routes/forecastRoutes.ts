@@ -26,17 +26,13 @@ import { forecastAnomalyAcks } from '../../infrastructure/database/schema';
 import { computeForecast, isForecastMetric } from '../../application/insights/forecastSeries';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { daysParam } from './queryParams';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 
 /** Version token bumped on every ack write so annotated-anomaly reads refresh. */
 function forecastAckVersionKey(tenantId: number): string {
   return `insights-forecast-ack:ver:tenant:${tenantId}`;
-}
-
-function parseDays(raw: string | undefined, def = 90): number {
-  const n = Number(raw);
-  return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : def;
 }
 
 /** 'YYYY-MM-DD' validator for an anomaly point key. */
@@ -57,7 +53,7 @@ export function createForecastRoutes(db: Db): Hono<HonoEnv> {
     if (!isForecastMetric(metric)) {
       return c.json({ error: 'metric must be one of: cost, cycle_time, cfr, throughput' }, 400);
     }
-    const days = parseDays(c.req.query('days'));
+    const days = daysParam(c.req.query('days'), 90);
     const env = c.env as Env;
     const now = Date.now();
 

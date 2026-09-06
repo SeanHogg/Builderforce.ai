@@ -72,6 +72,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { enforceCloudRunCap } from '../../application/runtime/cloudRunLedger';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { forLane, laneAgentAssignments, laneAssignmentValues } from '../../application/swimlane/laneAgentAssignments';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 const WORKFLOW_STATUSES: WorkflowStatus[] = ['pending', 'running', 'completed', 'failed', 'cancelled'];
 
@@ -202,7 +203,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       .select()
       .from(boards)
       .where(eq(boards.tenantId, tenantId))
-      .orderBy(desc(boards.lifecycleManaged), desc(boards.updatedAt), desc(boards.createdAt), desc(boards.id));
+      .orderBy(desc(boards.lifecycleManaged), desc(boards.updatedAt), desc(boards.createdAt), desc(boards.id)).limit(LIST_ROW_CAP);
     // Alongside the list, not on each row: it is one workspace fact, and repeating
     // it per board would invite a per-board reading of a per-workspace condition.
     return c.json({ boards: rows, cloudRunAllowance: await readCloudRunAllowance(db, c.env as Env, tenantId) });
@@ -221,7 +222,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       .select()
       .from(swimlanes)
       .where(and(eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)))
-      .orderBy(asc(swimlanes.position));
+      .orderBy(asc(swimlanes.position)).limit(LIST_ROW_CAP);
 
     return c.json({
       ...board,
@@ -302,7 +303,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       .select()
       .from(swimlanes)
       .where(and(eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)))
-      .orderBy(asc(swimlanes.position));
+      .orderBy(asc(swimlanes.position)).limit(LIST_ROW_CAP);
     return c.json({ swimlanes: lanes });
   });
 
@@ -753,7 +754,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       .select()
       .from(swimlaneRequirements)
       .where(and(eq(swimlaneRequirements.swimlaneId, laneId), eq(swimlaneRequirements.tenantId, tenantId)))
-      .orderBy(asc(swimlaneRequirements.position));
+      .orderBy(asc(swimlaneRequirements.position)).limit(LIST_ROW_CAP);
     return c.json({ requirements: rows });
   });
 
@@ -852,7 +853,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       .select()
       .from(ticketRuns)
       .where(and(eq(ticketRuns.boardId, boardId), eq(ticketRuns.tenantId, tenantId)))
-      .orderBy(asc(ticketRuns.createdAt));
+      .orderBy(asc(ticketRuns.createdAt)).limit(LIST_ROW_CAP);
     return c.json({ tickets: rows });
   });
 
@@ -882,7 +883,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       .innerJoin(ticketRuns, eq(agentDispatches.ticketRunId, ticketRuns.id))
       .leftJoin(laneAgentAssignments, eq(agentDispatches.assignmentId, laneAgentAssignments.id))
       .where(and(eq(ticketRuns.boardId, boardId), eq(agentDispatches.tenantId, tenantId)))
-      .orderBy(asc(agentDispatches.ticketRunId), asc(agentDispatches.stageSeq), asc(agentDispatches.position));
+      .orderBy(asc(agentDispatches.ticketRunId), asc(agentDispatches.stageSeq), asc(agentDispatches.position)).limit(LIST_ROW_CAP);
     return c.json({ dispatches: rows });
   });
 

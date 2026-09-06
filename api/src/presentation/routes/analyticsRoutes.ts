@@ -32,6 +32,7 @@ import { countAuditByAgentDay } from '../../application/audit/toolAuditTrail';
 import { getTenantActivityRollup } from '../../application/analytics/tenantActivity';
 import { computeInteractionActivity } from '../../application/analytics/interactionActivity';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { daysParam } from './queryParams';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -352,7 +353,7 @@ export function createAnalyticsRoutes(db: Db): Hono<HonoEnv> {
   // daily trend, and top contributors — rolled up to the whole tenant. Cached.
   router.get('/tenant-rollup', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const days = Math.min(365, Math.max(1, Number(c.req.query('days') ?? '30') || 30));
+    const days = daysParam(c.req.query('days'), 30, 365);
     const rollup = await getTenantActivityRollup(c.env as Env, db, tenantId, days);
     return c.json(rollup);
   });

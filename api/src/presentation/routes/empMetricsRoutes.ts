@@ -34,14 +34,9 @@ import { memberMetricsToCsv } from '../../application/metrics/metricsCsv';
 import { coachingNotes } from '../../infrastructure/database/schema';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { positiveIntParam } from './queryParams';
+import { positiveIntParam, daysParam } from './queryParams';
 
 const MEMBER_KINDS = new Set(['human', 'cloud_agent', 'host_agent']);
-const clampDays = (raw: number, def: number, max: number) =>
-  Math.min(max, Math.max(1, Number.isFinite(raw) ? raw : def));
-const parseDays = (raw: string | undefined, def = 30, max = 180) =>
-  clampDays(parseInt(raw ?? String(def), 10), def, max);
-
 const MANAGER = requireRole(TenantRole.MANAGER);
 
 export function createEmpMetricsRoutes(db: Db): Hono<HonoEnv> {
@@ -64,21 +59,21 @@ export function createEmpMetricsRoutes(db: Db): Hono<HonoEnv> {
   // ── EMP-14 — collaboration metrics ─────────────────────────────────────────
   router.get('/collaboration', MANAGER, async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const days = parseDays(c.req.query('days'), 30, 180);
+    const days = daysParam(c.req.query('days'), 30, 180);
     return c.json(await cachedByVersion(c, tenantId, `collab:${days}`, () => computeCollaborationMetrics(db, tenantId, days)));
   });
 
   // ── EMP-17 — documentation-activity metrics ────────────────────────────────
   router.get('/doc-activity', MANAGER, async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const days = parseDays(c.req.query('days'), 30, 365);
+    const days = daysParam(c.req.query('days'), 30, 365);
     return c.json(await cachedByVersion(c, tenantId, `doc-act:${days}`, () => computeDocActivity(db, tenantId, days)));
   });
 
   // ── EMP-19 — labour-cost attribution ───────────────────────────────────────
   router.get('/labor-cost', MANAGER, async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const days = parseDays(c.req.query('days'), 30, 365);
+    const days = daysParam(c.req.query('days'), 30, 365);
     const projectIdRaw = c.req.query('projectId');
     const projectId = projectIdRaw != null && Number.isFinite(Number(projectIdRaw)) ? Number(projectIdRaw) : undefined;
     return c.json(await cachedByVersion(c, tenantId, `labor:${days}:p:${projectId ?? 'all'}`, () => computeLaborCost(db, tenantId, days, { projectId })));
@@ -87,7 +82,7 @@ export function createEmpMetricsRoutes(db: Db): Hono<HonoEnv> {
   // ── EMP-16 — high/low-performer tiers ──────────────────────────────────────
   router.get('/performer-tiers', MANAGER, async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const days = parseDays(c.req.query('days'), 30, 180);
+    const days = daysParam(c.req.query('days'), 30, 180);
     return c.json(await cachedByVersion(c, tenantId, `tiers:${days}`, () => computePerformerTiers(db, tenantId, days)));
   });
 
@@ -134,7 +129,7 @@ export function createEmpMetricsRoutes(db: Db): Hono<HonoEnv> {
   // ── EMP-13 — per-member initiative allocation ──────────────────────────────
   router.get('/initiative-allocation', MANAGER, async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const days = parseDays(c.req.query('days'), 30, 365);
+    const days = daysParam(c.req.query('days'), 30, 365);
     return c.json(await cachedByVersion(c, tenantId, `init-alloc:${days}`, () => computeMemberInitiativeAllocation(db, tenantId, days)));
   });
 
@@ -142,7 +137,7 @@ export function createEmpMetricsRoutes(db: Db): Hono<HonoEnv> {
   // A download / point-in-time snapshot: not cached (mirrors the compliance export).
   router.get('/metrics/export', MANAGER, async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const days = parseDays(c.req.query('days'), 30, 180);
+    const days = daysParam(c.req.query('days'), 30, 180);
     const format = c.req.query('format') === 'json' ? 'json' : 'csv';
     // The export has to honour the SAME project scope the page it was clicked from
     // is showing, or a manager downloads a workspace file believing it is the

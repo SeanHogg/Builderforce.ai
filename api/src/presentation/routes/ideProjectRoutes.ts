@@ -23,6 +23,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { ProjectService } from '../../application/project/ProjectService';
 import { ensureProjectTemplate } from '../../application/project/projectTemplate';
 import { applyEvermindRecipe, toEvermindRecipeId } from '../../application/llm/evermindRecipes';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -120,7 +121,7 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
         .select({ id: projects.id, name: projects.name, key: projects.key })
         .from(projects)
         .where(and(eq(projects.tenantId, tenantId), eq(projects.isIdeStorage, false)))
-        .orderBy(desc(projects.updatedAt)),
+        .orderBy(desc(projects.updatedAt)).limit(LIST_ROW_CAP),
       { kvTtlSeconds: 30 },
     );
     return c.json(rows);

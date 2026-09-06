@@ -28,6 +28,7 @@ import {
   getCalendarProvider, availableCalendarProviders, type CalendarProviderName, type CalendarEvent,
 } from '../../application/calendar/calendarProviders';
 import { freshAccessToken, upsertCalendarGrant } from '../../application/calendar/calendarService';
+import { daysParam } from './queryParams';
 
 /** Where the connect flow sends the browser back to when it is not told. */
 const DEFAULT_RETURN_TO = '/meetings';
@@ -144,7 +145,7 @@ export function createCalendarRoutes(db: Db): Hono<HonoEnv> {
     const env = c.env as Env;
     const userId = c.get('userId') as string;
     const tenantId = c.get('tenantId') as number;
-    const days = Math.min(60, Math.max(1, Number(c.req.query('days') ?? 14)));
+    const days = daysParam(c.req.query('days'), 14, 60);
     const now = new Date();
     const timeMinISO = now.toISOString();
     const timeMaxISO = new Date(now.getTime() + days * 86_400_000).toISOString();

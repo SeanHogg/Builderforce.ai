@@ -70,6 +70,8 @@ import {
   validateNavigationFeatures,
   writeNavigationFeatures,
 } from '../../application/tenant/navigationFeatures';
+import { daysParam } from './queryParams';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 /** Best-effort audit emit for a membership mutation (invite / add), attributed to
  *  the acting manager. Off the response path; never throws. */
@@ -759,7 +761,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const callerTenantId = c.get('tenantId') as number;
     if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
 
-    const days = Math.max(1, Math.min(Number(c.req.query('days') ?? '30'), 90));
+    const days = daysParam(c.req.query('days'), 30, 90);
 
     const [totals] = (await db.execute(sql`
       SELECT
@@ -1407,7 +1409,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       })
       .from(authTokens)
       .where(eq(authTokens.userId, userId))
-      .orderBy(desc(authTokens.lastSeenAt));
+      .orderBy(desc(authTokens.lastSeenAt)).limit(LIST_ROW_CAP);
 
     return c.json({
       user: {

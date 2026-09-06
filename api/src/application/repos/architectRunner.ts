@@ -29,6 +29,7 @@ import { effectivePlanOf, loadTenantPlanRow } from '../tenant/tenantPlanSnapshot
 import { onTaskLandedInLane } from '../swimlane/laneEntryTrigger';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { loadProjectInTenant } from '../project/projectOwnership';
 
 /** Why an analysis could not be started — each maps to a different caller answer. */
 export type ArchitectRefusal = 'not_enabled' | 'project_not_found' | 'no_repo' | 'run_not_created';
@@ -74,10 +75,7 @@ export async function startArchitectAnalysis(
   const { tenantId, projectId } = args;
   if (!env.ANALYSIS_RUNNER) return { ok: false, reason: 'not_enabled' };
 
-  const [project] = await db
-    .select({ id: projects.id, name: projects.name })
-    .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)));
+  const project = await loadProjectInTenant(db, tenantId, projectId, { id: projects.id, name: projects.name });
   if (!project) return { ok: false, reason: 'project_not_found' };
 
   // A task cannot execute until a repo is mapped to the project — refuse early,
@@ -293,10 +291,7 @@ export async function retryArchitectAnalysis(
   const { retryable } = partitionRetryableArtifacts(rows, effectivePlan);
   if (retryable.length === 0) return { ok: false, reason: 'nothing_to_retry' };
 
-  const [project] = await db
-    .select({ name: projects.name })
-    .from(projects)
-    .where(and(eq(projects.id, run.projectId), eq(projects.tenantId, tenantId)));
+  const project = await loadProjectInTenant(db, tenantId, run.projectId, { name: projects.name });
   if (!project) return { ok: false, reason: 'run_not_found' };
 
   const stub = env.ANALYSIS_RUNNER.get(env.ANALYSIS_RUNNER.idFromName(run.id));

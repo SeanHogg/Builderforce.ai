@@ -157,7 +157,7 @@ import {
 } from '../../application/llm/tokenUsage';
 import { getTenantTokenAvailability, tokenGateUpgradeHint } from '../../application/llm/tenantTokenAvailability';
 import { getMemberSpendAvailability, maybeEmitSpendNotification, millicentsToUsd } from '../../application/consumption/memberSpend';
-import { positiveIntOrNull } from './queryParams';
+import { positiveIntOrNull, boundedIntParam, daysParam, limitParam } from './queryParams';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -2785,7 +2785,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     } catch (err) {
       return respondToAccessError(c, err);
     }
-    const limit = Math.min(Math.max(Number(c.req.query('limit') ?? '50'), 1), 200);
+    const limit = limitParam(c.req.query('limit'), 50, 200);
     const db = buildDatabase(c.env);
     const seed = await getOrSetCached(
       c.env,
@@ -2860,14 +2860,14 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       return respondToAccessError(c, err);
     }
 
-    const days = Math.min(Number(c.req.query('days') ?? '30'), 90);
+    const days = daysParam(c.req.query('days'), 30, 90);
     const db = buildDatabase(c.env);
 
     // ── Detail mode — row-level pageable per-call ledger for reconciliation
     // against the caller's own usage table. Same auth, same tenant scoping.
     if (c.req.query('detail') === 'true') {
-      const limit  = Math.min(Math.max(Number(c.req.query('limit') ?? '100'), 1), 500);
-      const page   = Math.max(Number(c.req.query('page') ?? '1'), 1);
+      const limit  = limitParam(c.req.query('limit'), 100, 500);
+      const page   = boundedIntParam(c.req.query('page'), { def: 1, min: 1 });
       const offset = (page - 1) * limit;
 
       const rows = await db.execute(sql`

@@ -52,6 +52,7 @@ import { findTaskPrimarySpec } from '../prd/taskPrd';
 import { buildProjectFactsBlock } from '../llm/projectFacts';
 import { buildEvermindLessonsBlock } from '../llm/projectEvermind';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { loadProjectInTenant } from '../project/projectOwnership';
 
 /** Render order (ascending) — the cloud prompt's existing order, with strategy added. */
 export const RUN_CONTEXT_ORDER = {
@@ -140,11 +141,7 @@ export async function loadGovernanceContext(
         reportCaughtError(error, { source: 'application/runtime/runContextSource.ts', operation: 'loadGovernanceContext', context: { logMessage: '[run-context] architecture spec load failed', details: { tenantId, projectId, error } } });
       }
       try {
-        const [proj] = await db
-          .select({ governance: projects.governance })
-          .from(projects)
-          .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
-          .limit(1);
+        const proj = await loadProjectInTenant(db, tenantId, projectId, { governance: projects.governance });
         if (proj?.governance?.trim()) parts.push(`## Project Rules / Governance (must be followed)\n\n${proj.governance.trim()}`);
       } catch (error) {
         reportCaughtError(error, { source: 'application/runtime/runContextSource.ts', operation: 'loadGovernanceContext', context: { logMessage: '[run-context] project governance load failed', details: { tenantId, projectId, error } } });

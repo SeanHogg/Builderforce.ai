@@ -20,10 +20,11 @@
 
 import { and, eq, isNull } from 'drizzle-orm';
 
-import { errorCollectors, projects } from '../../infrastructure/database/schema';
+import { errorCollectors } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { CollectorRef } from './errorMapping';
 import type { NormalizedErrorEvent } from './errorSpec';
+import { projectInTenant } from '../project/projectOwnership';
 
 /**
  * The surfaces allowed to file a client report, as DATA.
@@ -141,12 +142,7 @@ export async function resolveClientReportCollector(
   projectId: number | null,
 ): Promise<CollectorRef | null> {
   if (projectId != null) {
-    const [owned] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
-      .limit(1);
-    if (owned) return { id: null, tenantId, projectId: owned.id, defaultProjectId: null };
+    if (await projectInTenant(db, tenantId, projectId)) return { id: null, tenantId, projectId, defaultProjectId: null };
   }
 
   const [collector] = await db

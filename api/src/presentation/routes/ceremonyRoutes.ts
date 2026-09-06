@@ -46,6 +46,7 @@ import { getActivityLog, recordActivity, resolveActorFromContext } from '../../a
 import { isValidCron, nextCronTime } from '../../domain/workflowSchedule';
 import { relayToRoom } from './realtimeRelay';
 import { broadcastCeremonyChanged, ceremonyRoomName } from '../../infrastructure/relay/broadcastRoom';
+import { daysParam, limitParam } from './queryParams';
 
 /** Cache key for a project's ceremony schedules list. */
 function schedulesCacheKey(tenantId: number, segmentId: string, projectId: number): string {
@@ -60,12 +61,6 @@ const CEREMONY_KINDS = new Set(['standup', 'planning']);
  *  session has not concluded yet", which is a fact about the session, not a correction
  *  anyone can make about a person. */
 const CORRECTABLE_VERDICTS = new Set(['present', 'absent', 'excused']);
-
-/** Clamp a `?days=` window to a sane range (default 30). */
-function parseDays(raw: string | undefined, def = 30): number {
-  const n = Number(raw);
-  return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : def;
-}
 
 export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
@@ -101,7 +96,7 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
   // Manager-gated (an ops/EM view); short TTL over the hot sessions tables.
   r.get('/rollup', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    const days = parseDays(c.req.query('days'));
+    const days = daysParam(c.req.query('days'), 30);
     const env = c.env as Env;
     const key = `agile:ceremonies-rollup:t:${tenantId}:d:${days}`;
     return c.json(await getOrSetCached(env, key, () => computeCeremonyRollup(db, tenantId, days), { kvTtlSeconds: 60, l1TtlMs: 15_000 }));
@@ -492,7 +487,7 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
     const projectId = Number(c.req.query('projectId'));
     if (!projectId) return c.json({ error: 'projectId is required' }, 400);
     const kind = c.req.query('kind');
-    const limit = Math.min(50, Math.max(1, Number(c.req.query('limit')) || 20));
+    const limit = limitParam(c.req.query('limit'), 20, 50);
     const before = c.req.query('before');
     const beforeDate = before ? new Date(before) : null;
 

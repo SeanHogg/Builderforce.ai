@@ -40,6 +40,7 @@ import {
 import { applyMediaPrivacyMode } from '../../domain/meetings/mediaPrivacy';
 
 import { iceServers } from '../../application/meetings/iceServers';
+import { boundedIntParam } from './queryParams';
 
 const KINDS = new Set(['standup', 'planning', 'retrospective', 'adhoc', 'direct', 'interview', 'review']);
 /** Team ceremonies default to being backed by a team chat — "the meeting IS the
@@ -535,10 +536,10 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId } = scope(c);
     const refs = (c.req.query('refs') ?? '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, 50);
     if (refs.length === 0) return c.json({ slots: [] });
-    const durationMinutes = Math.min(480, Math.max(5, Number(c.req.query('durationMinutes') ?? 30)));
+    const durationMinutes = boundedIntParam(c.req.query('durationMinutes'), { def: 30, min: 5, max: 480 });
     const fromMs = Date.parse(c.req.query('from') ?? '') || Date.now();
     const toMs = Date.parse(c.req.query('to') ?? '') || (fromMs + 14 * 86_400_000);
-    const count = Math.min(20, Math.max(1, Number(c.req.query('count') ?? 6)));
+    const count = boundedIntParam(c.req.query('count'), { def: 6, min: 1, max: 20 });
     const [availability, appBusy, extBusy] = await Promise.all([
       loadAvailability(tenantId, refs),
       loadBusy(tenantId, refs, fromMs, toMs),

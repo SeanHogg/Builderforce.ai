@@ -18,6 +18,7 @@ import { resolveCallerTenant } from '../middleware/callerTenant';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
+import { limitParam } from './queryParams';
 
 export function createTelemetryRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -101,7 +102,7 @@ export function createTelemetryRoutes(db: Db): Hono<HonoEnv> {
     const agentHostIdParam = c.req.query('agentHostId') ? Number(c.req.query('agentHostId')) : null;
     const from        = c.req.query('from');
     const to          = c.req.query('to');
-    const limit       = Math.min(Number(c.req.query('limit') ?? '200'), 500);
+    const limit       = limitParam(c.req.query('limit'), 200, 500);
 
     const conditions = [eq(telemetrySpans.tenantId, tenantId)];
     if (traceId)           conditions.push(eq(telemetrySpans.traceId, traceId));
@@ -130,7 +131,7 @@ export function createTelemetryRoutes(db: Db): Hono<HonoEnv> {
   // Returns distinct trace IDs with summary stats (span count, total cost, duration).
   router.get('/traces', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const limit    = Math.min(Number(c.req.query('limit') ?? '50'), 200);
+    const limit    = limitParam(c.req.query('limit'), 50, 200);
     const from     = c.req.query('from');
 
     const conditions = [eq(telemetrySpans.tenantId, tenantId)];

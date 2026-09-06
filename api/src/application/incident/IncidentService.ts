@@ -42,6 +42,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { advertisedName } from '../llm/toolNaming';
 import { taskCreatedHook } from '../task/taskCreationHook';
+import { projectInTenant } from '../project/projectOwnership';
 
 /**
  * The live-room key for an incident's war room.
@@ -199,9 +200,7 @@ export class IncidentService {
   /** Most-recently-updated project for the tenant (a home for the board task). */
   private async pickProject(tenantId: number, projectId?: number | null): Promise<number | null> {
     if (projectId != null) {
-      const [row] = await this.db.select({ id: projects.id }).from(projects)
-        .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId))).limit(1);
-      if (row) return row.id;
+      if (await projectInTenant(this.db, tenantId, projectId)) return projectId;
     }
     const [row] = await this.db.select({ id: projects.id }).from(projects)
       .where(eq(projects.tenantId, tenantId)).orderBy(desc(projects.updatedAt)).limit(1);

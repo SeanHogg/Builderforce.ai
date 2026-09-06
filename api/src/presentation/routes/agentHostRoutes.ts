@@ -73,6 +73,8 @@ import { classifyContextFiles, normalizeMachineProfile, type AgentHostMachinePro
 import { TenantRole } from '../../domain/shared/types';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import { resolveScheduledAgentBinding } from '../../application/agentHost/scheduledAgentBinding';
+import { limitParam } from './queryParams';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 // Extend HonoEnv bindings type to include the Durable Object
 type AgentHostHonoEnv = HonoEnv & {
@@ -916,7 +918,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   router.get('/:id/executions', authMiddleware as never, async (c) => {
     const agentHostId = Number(c.req.param('id'));
     const tenantId = c.get('tenantId') as number;
-    const limit = Math.min(Number(c.req.query('limit') ?? 50), 200);
+    const limit = limitParam(c.req.query('limit'), 50, 200);
 
     // Ensure the agentHost belongs to this tenant
     const agentHost = await agentHostService.getAgentHostForTenant(agentHostId, tenantId);
@@ -986,7 +988,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   router.get('/:id/sessions', authMiddleware as never, async (c) => {
     const agentHostId  = Number(c.req.param('id'));
     const tenantId = c.get('tenantId') as number;
-    const limit = Math.min(Number(c.req.query('limit') ?? 50), 100);
+    const limit = limitParam(c.req.query('limit'), 50, 100);
 
     const rows = await db
       .select({
@@ -1038,7 +1040,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       .select()
       .from(cronJobs)
       .where(and(...conditions))
-      .orderBy(desc(cronJobs.createdAt));
+      .orderBy(desc(cronJobs.createdAt)).limit(LIST_ROW_CAP);
     return c.json({ jobs: rows });
   });
 
@@ -1887,7 +1889,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   router.get('/:id/usage', authMiddleware as never, async (c) => {
     const agentHostId = Number(c.req.param('id'));
     const tenantId = c.get('tenantId') as number;
-    const limit = Math.min(Number(c.req.query('limit') ?? 50), 200);
+    const limit = limitParam(c.req.query('limit'), 50, 200);
 
     // Ensure the agentHost belongs to this tenant
     const agentHost = await agentHostService.getAgentHostForTenant(agentHostId, tenantId);
@@ -1922,7 +1924,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const tenantId = (c as unknown as { get: (k: string) => unknown }).get('tenantId') as number;
     const runId    = c.req.query('runId');
     const sessKey  = c.req.query('sessionKey');
-    const limit    = Math.min(Number(c.req.query('limit') ?? 200), 500);
+    const limit    = limitParam(c.req.query('limit'), 200, 500);
     // Optional per-execution scope: a V2/host run stamps `execution_id` on every
     // tool-audit row, so scoping to it isolates ONE run's Logs/Timeline instead of
     // showing every event the host ever emitted (parity with the cloud read).
@@ -2182,7 +2184,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       .from(taskSpecs)
       .innerJoin(specs, eq(specs.id, taskSpecs.specId))
       .where(and(eq(taskSpecs.taskId, taskId), eq(specs.tenantId, Number(agentHost.tenantId))))
-      .orderBy(desc(taskSpecs.isPrimary), desc(specs.updatedAt));
+      .orderBy(desc(taskSpecs.isPrimary), desc(specs.updatedAt)).limit(LIST_ROW_CAP);
 
     return c.json({ specs: rows });
   });
@@ -2201,7 +2203,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       .select()
       .from(platformPersonas)
       .where(eq(platformPersonas.active, true))
-      .orderBy(platformPersonas.name);
+      .orderBy(platformPersonas.name).limit(LIST_ROW_CAP);
 
     return c.json({ personas: rows });
   });

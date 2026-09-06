@@ -41,6 +41,7 @@ import type {
   StagedProjectAction,
   StagedUserAction,
 } from './MigrationService';
+import { projectInTenant } from '../project/projectOwnership';
 
 function toRun(row: typeof importRuns.$inferSelect): RunRow {
   return {
@@ -221,9 +222,7 @@ export function createMigrationStore(db: Db, env?: Env): MigrationStore {
     },
 
     async projectBelongsToTenant(projectId, tenantId): Promise<boolean> {
-      const [row] = await db.select({ id: projects.id }).from(projects)
-        .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId))).limit(1);
-      return !!row;
+      return projectInTenant(db, tenantId, projectId);
     },
 
     async insertTask(input): Promise<number> {

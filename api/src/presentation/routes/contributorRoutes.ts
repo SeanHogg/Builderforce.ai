@@ -39,6 +39,8 @@ import {
   suggestDuplicates,
 } from '../../application/contributors/mergeService';
 import { aggregateDailyMetrics, ingestActivityEvents } from '../../application/contributors/activityIngest';
+import { limitParam } from './queryParams';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 // ---------------------------------------------------------------------------
 // Routes
@@ -182,7 +184,7 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
       .select()
       .from(contributors)
       .where(and(...conds))
-      .orderBy(asc(contributors.displayName));
+      .orderBy(asc(contributors.displayName)).limit(LIST_ROW_CAP);
     return c.json({ contributors: rows });
   });
 
@@ -376,7 +378,7 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
     const id       = Number(c.req.param('id'));
     const from     = c.req.query('from');
     const to       = c.req.query('to');
-    const limit    = Math.min(Number(c.req.query('limit') ?? '100'), 500);
+    const limit    = limitParam(c.req.query('limit'), 100, 500);
 
     const conditions = [
       eq(activityEvents.tenantId, tenantId),

@@ -52,6 +52,7 @@ import {
   captureWebScreenshotCached,
   isScreenshotViewport,
 } from '../../application/web/webScreenshot';
+import { limitParam } from './queryParams';
 
 /** Every kind this route can generate, and what it produces. */
 const KINDS = {
@@ -200,7 +201,7 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
   router.get('/images/search', async (c) => {
     const query = String(c.req.query('q') ?? '').trim().slice(0, 200);
     if (!query) return c.json({ error: 'q is required' }, 400);
-    const limit = Math.max(1, Math.min(20, Number(c.req.query('limit')) || 12));
+    const limit = limitParam(c.req.query('limit'), 12, 20);
     try {
       return c.json({ results: await findStockImages(c.env, query, limit) });
     } catch (error) {

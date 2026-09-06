@@ -46,6 +46,7 @@ import {
   type WithdrawalRefusal,
 } from '../../application/finance/withdrawalMethods';
 import { describePayoutProviders } from '../../application/payouts/payoutProviders';
+import { boundedIntParam } from './queryParams';
 
 /** A withdrawal refusal as an HTTP answer. */
 function refusalStatus(reason: WithdrawalRefusal): 400 | 404 | 500 {
@@ -110,7 +111,7 @@ export function createEarningsRoutes(db: Db): Hono<HonoEnv> {
   router.get('/fee', async (c) => {
     const userId = c.get('userId') as string;
     const tenantId = await ownTenant(db, c);
-    const grossCents = Math.max(0, Math.floor(Number(c.req.query('grossCents') ?? 0)) || 0);
+    const grossCents = boundedIntParam(c.req.query('grossCents'), { def: 0, min: 0 });
     const quote = await quotePlatformFee(db, c.env as Env, { tenantId, ref: userId }, grossCents);
     return c.json({ schedule: feeSchedule(c.env as Env), quote });
   });

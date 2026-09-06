@@ -50,6 +50,8 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import { slugify as slugifyBase } from '@builderforce/creation-canvas-contract';
 import { parseJsonArray } from '../../domain/shared/json';
+import { limitParam, offsetParam } from './queryParams';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 /** Version key for the public personas keyspace — bumped on any publish so the
  *  searchable (q/category/sort) cached browse results all age out at once. */
@@ -126,8 +128,8 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
     const q = c.req.query('q')?.trim();
     const category = c.req.query('category')?.trim();
     const sort = c.req.query('sort') ?? 'popular';
-    const limit = Math.min(Number(c.req.query('limit') ?? '60'), 100);
-    const offset = Math.max(Number(c.req.query('offset') ?? '0'), 0);
+    const limit = limitParam(c.req.query('limit'), 60, 100);
+    const offset = offsetParam(c.req.query('offset'));
 
     const version = await getCacheVersion(c.env as Env, PERSONA_PUBLIC_VERSION_KEY);
     const cacheKey = `personas:public:v:${version}:q=${q ?? ''}:c=${category ?? ''}:s=${sort}:l=${limit}:o=${offset}`;
@@ -226,7 +228,7 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
       .select()
       .from(marketplacePersonas)
       .where(eq(marketplacePersonas.tenantId, tenantId))
-      .orderBy(desc(marketplacePersonas.updatedAt));
+      .orderBy(desc(marketplacePersonas.updatedAt)).limit(LIST_ROW_CAP);
     return c.json({ personas: rows.map((r) => ({ ...publicView(r), visibility: r.visibility })) });
   });
 

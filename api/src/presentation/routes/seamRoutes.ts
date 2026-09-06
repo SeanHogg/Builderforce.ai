@@ -22,6 +22,7 @@ import { customerFeedback, webhookSubscriptions } from '../../infrastructure/dat
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { isWebhookEvent, WEBHOOK_EVENTS } from '../../application/seams/webhookService';
 import { generateApiKey } from '../../infrastructure/auth/HashService';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 export function createSeamRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -93,7 +94,7 @@ export function createSeamRoutes(db: Db): Hono<HonoEnv> {
       })
       .from(webhookSubscriptions)
       .where(eq(webhookSubscriptions.segmentId, svc.segmentId))
-      .orderBy(desc(webhookSubscriptions.createdAt));
+      .orderBy(desc(webhookSubscriptions.createdAt)).limit(LIST_ROW_CAP);
     // The secret is never returned after creation.
     return c.json({ subscriptions: rows, availableEvents: WEBHOOK_EVENTS });
   });

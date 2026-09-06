@@ -169,6 +169,8 @@ import { createTickDispatchBudget } from '../../application/runtime/tickDispatch
 import { API_VERSION } from '../../version';
 import { getPricingDraft, publishPricing, savePricingDraft } from '../../application/tenant/pricingConfiguration';
 import { coerceStringArray } from '../../domain/shared/jsonColumn';
+import { daysParam } from './queryParams';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 /**
  * Coerce a `platform_modules.permissions` value into `string[]`.
@@ -562,7 +564,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         updatedAt: newsletterTemplates.updatedAt,
       })
       .from(newsletterTemplates)
-      .orderBy(desc(newsletterTemplates.updatedAt));
+      .orderBy(desc(newsletterTemplates.updatedAt)).limit(LIST_ROW_CAP);
 
     return c.json({
       templates: templates.map((template) => ({
@@ -975,7 +977,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       })
       .from(authTokens)
       .where(eq(authTokens.userId, userId))
-      .orderBy(desc(authTokens.lastSeenAt));
+      .orderBy(desc(authTokens.lastSeenAt)).limit(LIST_ROW_CAP);
 
     return c.json({
       user: {
@@ -1461,7 +1463,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // one tenant or project. The previous equal-length period is the baseline.
   // -------------------------------------------------------------------------
   router.get('/outcome-metrics', async (c) => {
-    const days = Math.min(365, Math.max(7, Math.floor(Number(c.req.query('days') ?? 30) || 30)));
+    const days = daysParam(c.req.query('days'), 30, 365, 7);
     const tenantValue = Number(c.req.query('tenantId'));
     const projectValue = Number(c.req.query('projectId'));
     const tenantId = Number.isInteger(tenantValue) && tenantValue > 0 ? tenantValue : undefined;
@@ -2487,7 +2489,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // Per-model aggregates + daily time series
   // -------------------------------------------------------------------------
   router.get('/llm-usage', async (c) => {
-    const days = Math.min(Number(c.req.query('days') ?? '30'), 90);
+    const days = daysParam(c.req.query('days'), 30, 90);
     // The SAME database `recordUsageRow` writes to. This read used to be
     // `buildDatabase` (primary) while the writer routes rows to the operational
     // account whenever NEON_TRANSACTIONAL_DATABASE_URL is bound — so in exactly the
@@ -2774,7 +2776,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // worse choice than the cost table alone can show.
   // -------------------------------------------------------------------------
   router.get('/llm-ratings', async (c) => {
-    const days = Math.min(Math.max(Number(c.req.query('days') ?? '30'), 1), 365);
+    const days = daysParam(c.req.query('days'), 30, 365);
     const db = buildDatabase(c.env);
     // tenantId omitted ⇒ every tenant, which is exactly what a platform view is.
     return c.json(await summarizeActionRatings(c.env, db, { days }));
@@ -2967,7 +2969,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       })
       .from(projects)
       .leftJoin(tenants, eq(projects.tenantId, tenants.id))
-      .orderBy(desc(projects.updatedAt));
+      .orderBy(desc(projects.updatedAt)).limit(LIST_ROW_CAP);
     const list = rows.map((r) => ({
       id:         r.id,
       name:       r.name,
@@ -3346,7 +3348,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       .select()
       .from(adminImpersonationRoleSwitches)
       .where(eq(adminImpersonationRoleSwitches.sessionId, sessionId))
-      .orderBy(adminImpersonationRoleSwitches.switchedAt);
+      .orderBy(adminImpersonationRoleSwitches.switchedAt).limit(LIST_ROW_CAP);
 
     const [targetUser] = await db
       .select({ id: users.id, email: users.email, displayName: users.displayName })
@@ -3497,7 +3499,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // GET /api/admin/modules
   router.get('/modules', async (c) => {
     const db = buildDatabase(c.env);
-    const rows = await db.select().from(platformModules).orderBy(platformModules.name);
+    const rows = await db.select().from(platformModules).orderBy(platformModules.name).limit(LIST_ROW_CAP);
     return c.json({
       modules: rows.map((m) => ({
         ...m,
@@ -3856,7 +3858,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       .from(tenantMembers)
       .innerJoin(tenants, eq(tenants.id, tenantMembers.tenantId))
       .where(and(eq(tenantMembers.userId, targetId), eq(tenantMembers.isActive, true)))
-      .orderBy(tenantMembers.joinedAt);
+      .orderBy(tenantMembers.joinedAt).limit(LIST_ROW_CAP);
     return c.json({
       workspaces: rows.map((r) => ({
         tenantId: r.tenantId,

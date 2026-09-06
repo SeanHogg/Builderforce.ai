@@ -25,6 +25,7 @@ import { createBoardProvider } from '../../application/boardsync/providers';
 import { isItsmProvider, syncItsmConnection } from '../../application/boardsync/itsmIngest';
 import { BOARD_PROVIDERS, BOARD_PROVIDER_IDS } from '../../application/boardsync/providerCatalog';
 import { invalidateProjectConnections } from '../../application/repos/projectConnectionStatus';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 export function createBoardConnectionRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -95,7 +96,7 @@ export function createBoardConnectionRoutes(db: Db): Hono<HonoEnv> {
             .select()
             .from(boardConnections)
             .where(and(eq(boardConnections.tenantId, tenantId), eq(boardConnections.projectId, projectId)))
-            .orderBy(desc(boardConnections.createdAt))
+            .orderBy(desc(boardConnections.createdAt)).limit(LIST_ROW_CAP)
         : await db
             .select()
             .from(boardConnections)
@@ -231,7 +232,7 @@ export function createBoardConnectionRoutes(db: Db): Hono<HonoEnv> {
       .select()
       .from(externalTicketLinks)
       .where(and(eq(externalTicketLinks.connectionId, id), eq(externalTicketLinks.tenantId, tenantId)))
-      .orderBy(desc(externalTicketLinks.updatedAt));
+      .orderBy(desc(externalTicketLinks.updatedAt)).limit(LIST_ROW_CAP);
     return c.json({ links });
   });
 

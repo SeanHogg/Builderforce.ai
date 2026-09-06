@@ -41,6 +41,7 @@ import { markChatRead } from './chatReadState';
 import { normalizeChatMode, resolveChatMode, NEW_CHAT_MODE } from './chatMode';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { loadProjectInTenant } from '../project/projectOwnership';
 
 /**
  * A conversational-only tool: when the agent needs the USER to make a decision to
@@ -462,12 +463,7 @@ export class BrainService {
   }
 
   private async verifyProjectInTenant(projectId: number, tenantId: number) {
-    const [proj] = await this.db
-      .select({ id: projects.id, name: projects.name })
-      .from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
-      .limit(1);
-    return proj ?? null;
+    return loadProjectInTenant(this.db, tenantId, projectId, { id: projects.id, name: projects.name });
   }
 
   // -----------------------------------------------------------------------

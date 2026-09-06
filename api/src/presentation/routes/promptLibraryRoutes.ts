@@ -36,6 +36,8 @@ import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { slugify as slugifyBase } from '@builderforce/creation-canvas-contract';
 import { parseJsonArray } from '../../domain/shared/json';
+import { limitParam, offsetParam } from './queryParams';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 /** Version token for the public prompts-gallery keyspace. The gallery is
  *  searchable + paginated (q/category/tag/sort/limit/offset) → an unbounded
@@ -82,8 +84,8 @@ export function createPromptLibraryRoutes(db: Db): Hono<HonoEnv> {
     const category = c.req.query('category')?.trim();
     const tag = c.req.query('tag')?.trim();
     const sort = c.req.query('sort') ?? 'popular';
-    const limit = Math.min(Number(c.req.query('limit') ?? '60'), 100);
-    const offset = Math.max(Number(c.req.query('offset') ?? '0'), 0);
+    const limit = limitParam(c.req.query('limit'), 60, 100);
+    const offset = offsetParam(c.req.query('offset'));
 
     // World-readable + read-heavy over a searchable/paginated (unbounded)
     // keyspace → read-through cache keyed by a version token bumped on any
@@ -202,7 +204,7 @@ export function createPromptLibraryRoutes(db: Db): Hono<HonoEnv> {
       .select()
       .from(promptLibraryEntries)
       .where(eq(promptLibraryEntries.tenantId, tenantId))
-      .orderBy(desc(promptLibraryEntries.updatedAt));
+      .orderBy(desc(promptLibraryEntries.updatedAt)).limit(LIST_ROW_CAP);
     return c.json({ prompts: rows.map((r) => ({ ...r, tags: safeTags(r.tags) })) });
   });
 
@@ -278,7 +280,7 @@ export function createPromptLibraryRoutes(db: Db): Hono<HonoEnv> {
       .select()
       .from(promptLibraryVersions)
       .where(eq(promptLibraryVersions.entryId, id))
-      .orderBy(asc(promptLibraryVersions.version));
+      .orderBy(asc(promptLibraryVersions.version)).limit(LIST_ROW_CAP);
 
     return c.json({
       ...entry,

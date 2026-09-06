@@ -36,10 +36,11 @@ import { applyDashboardPreset, isPresetKey, listPresetKeys } from '../../applica
 import { computeWorkforceHealth } from '../../application/dashboards/workforceHealth';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { positiveIntOrNull } from './queryParams';
+import { positiveIntOrNull, daysParam } from './queryParams';
 import { gatewayIntentRefiner } from '../../application/dashboards/gatewayIntentRefiner';
 import { resolveTenantPlan } from '../../application/tenant/tenantPlanSnapshot';
 import type { IntentRefiner } from '../../application/dashboards/nlQuery';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 
@@ -57,12 +58,6 @@ const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
  */
 function metricCache(env: Env): MetricCache {
   return (key, loader) => getOrSetCached(env, key, loader, SHORT_TTL);
-}
-
-/** Clamp a `?days=` window to a sane range (default 30). */
-function parseDays(raw: string | undefined, def = 30): number {
-  const n = Number(raw);
-  return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : def;
 }
 
 
@@ -150,7 +145,7 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
   // needing to rebalance and a member checking their own load read the same thing.
   router.get('/workforce-health', async (c) => {
     const { tenantId } = scope(c);
-    const days = parseDays(c.req.query('days'));
+    const days = daysParam(c.req.query('days'), 30);
     const result = await getOrSetCached(
       c.env as Env,
       `dashboards:workforce-health:t:${tenantId}:d:${days}`,
@@ -167,14 +162,14 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
       .select()
       .from(savedDashboards)
       .where(and(eq(savedDashboards.tenantId, tenantId), eq(savedDashboards.segmentId, segmentId)))
-      .orderBy(asc(savedDashboards.id));
+      .orderBy(asc(savedDashboards.id)).limit(LIST_ROW_CAP);
     const ids = dashboards.map((d) => d.id);
     const widgets = ids.length
       ? await db
           .select()
           .from(dashboardWidgets)
           .where(eq(dashboardWidgets.tenantId, tenantId))
-          .orderBy(asc(dashboardWidgets.position), asc(dashboardWidgets.id))
+          .orderBy(asc(dashboardWidgets.position), asc(dashboardWidgets.id)).limit(LIST_ROW_CAP)
       : [];
     const byDash = new Map<number, typeof widgets>();
     for (const w of widgets) {
@@ -347,7 +342,7 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
     const data = await Promise.all(
       widgets.map(async (w) => {
         const cfg = (w.config ?? {}) as { days?: number };
-        const days = parseDays(cfg.days != null ? String(cfg.days) : undefined);
+        const days = daysParam(cfg.days != null ? String(cfg.days) : undefined, 30);
         // Registry widgets render client-side from the widget registry — no server
         // metric to resolve. Hand back the key so the client renders the card.
         if (w.widgetKey) {

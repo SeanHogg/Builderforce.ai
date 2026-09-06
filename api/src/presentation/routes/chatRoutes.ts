@@ -18,6 +18,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { verifyAgentHostApiKey } from '../../infrastructure/auth/agentHostAuth';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { limitParam } from './queryParams';
 
 export function createChatRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -121,7 +122,7 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
   // ---------------------------------------------------------------------------
   router.get('/chats', authMiddleware as never, async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const limit  = Math.min(Number(c.req.query('limit') ?? 50), 100);
+    const limit  = limitParam(c.req.query('limit'), 50, 100);
     const offset = Number(c.req.query('offset') ?? 0);
 
     const rows = await db
@@ -152,7 +153,7 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
   router.get('/chats/:sessionId/messages', authMiddleware as never, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const sessionId = Number(c.req.param('sessionId'));
-    const limit = Math.min(Number(c.req.query('limit') ?? 100), 200);
+    const limit = limitParam(c.req.query('limit'), 100, 200);
 
     if (Number.isNaN(sessionId)) return c.json({ error: 'invalid sessionId' }, 400);
 
@@ -192,7 +193,7 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
     const tenantId  = c.get('tenantId') as number;
     const agentHostId    = Number(c.req.param('agentHostId'));
     const sessionKey = c.req.param('sessionKey');
-    const limit = Math.min(Number(c.req.query('limit') ?? 50), 200);
+    const limit = limitParam(c.req.query('limit'), 50, 200);
 
     if (Number.isNaN(agentHostId) || !sessionKey) {
       return c.json({ error: 'invalid params' }, 400);

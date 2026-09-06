@@ -32,6 +32,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { assembleRunContext, runContextScope, type AssembleRunContextParams } from './runContextSource';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { projectInTenant } from '../project/projectOwnership';
 
 /** The minimal write-through store the cognition layer needs, over `run_context_state`. */
 export interface RunContextFactStore {
@@ -174,12 +175,7 @@ export async function resolveRunContextRequest(
   const { tenantId, projectId, taskId } = params;
   if (!Number.isInteger(projectId) || projectId <= 0) return null;
 
-  const [owned] = await db
-    .select({ id: projects.id })
-    .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
-    .limit(1);
-  if (!owned) return null;
+  if (!(await projectInTenant(db, tenantId, projectId))) return null;
 
   // The ticket is the run's GOAL, so a cross-tenant or cross-project id must yield
   // nothing rather than a row: filter on all three columns, not just the id.

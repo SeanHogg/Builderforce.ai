@@ -34,6 +34,7 @@ export { selectResolvedTicketIds, autoCloseResolved, workerOwnedCheck, type Chec
 import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { projectInTenant, loadProjectInTenant } from '../project/projectOwnership';
 
 /** How the current scan compares to the previous scan of the same URL. */
 export interface ScanBaseline {
@@ -78,12 +79,7 @@ export type WebScanResult =
  */
 export async function resolveScanProject(db: Db, tenantId: number, projectId?: number): Promise<number | null> {
   if (projectId != null) {
-    const [row] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
-      .limit(1);
-    return row?.id ?? null;
+    return (await projectInTenant(db, tenantId, projectId)) ? projectId : null;
   }
   const [row] = await db
     .select({ id: projects.id })
@@ -105,11 +101,7 @@ export async function setProjectScanTarget(db: Db, tenantId: number, projectId: 
 
 /** Read a project's configured scan target (tenant-scoped). */
 export async function getProjectScanTarget(db: Db, tenantId: number, projectId: number): Promise<string | null> {
-  const [row] = await db
-    .select({ url: projects.securityTargetUrl })
-    .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
-    .limit(1);
+  const row = await loadProjectInTenant(db, tenantId, projectId, { url: projects.securityTargetUrl });
   return row?.url ?? null;
 }
 

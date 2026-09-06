@@ -35,6 +35,7 @@ import {
 } from '../../application/prd/versioning';
 import { buildPrdWorkflowSpec } from '../../application/prd/generatePrd';
 import { buildSpecAuditRecord } from '../../application/prd/audit';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 export function createPrdRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -136,7 +137,7 @@ export function createPrdRoutes(db: Db): Hono<HonoEnv> {
       .select()
       .from(specVersions)
       .where(and(eq(specVersions.specId, specId), eq(specVersions.tenantId, tenantId)))
-      .orderBy(desc(specVersions.version));
+      .orderBy(desc(specVersions.version)).limit(LIST_ROW_CAP);
 
     return c.json({ versions: rows });
   });
@@ -228,7 +229,7 @@ export function createPrdRoutes(db: Db): Hono<HonoEnv> {
       .select()
       .from(specAuditRecords)
       .where(and(...conds))
-      .orderBy(desc(specAuditRecords.at));
+      .orderBy(desc(specAuditRecords.at)).limit(LIST_ROW_CAP);
 
     return c.json({ records: rows });
   });

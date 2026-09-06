@@ -29,6 +29,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { advertisedName } from '../llm/toolNaming';
 import { taskCreatedHook } from '../task/taskCreationHook';
+import { projectInTenant } from '../project/projectOwnership';
 
 /** A distinct lane key so the audit run isn't confused with board lane-auto-run. */
 const AUDIT_LANE_KEY = '__security_audit__';
@@ -67,12 +68,7 @@ async function hasRunningAudit(db: Db, tenantId: number): Promise<boolean> {
  */
 async function pickAuditProject(db: Db, tenantId: number, projectId?: number): Promise<number | null> {
   if (projectId != null) {
-    const [row] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
-      .limit(1);
-    return row?.id ?? null;
+    return (await projectInTenant(db, tenantId, projectId)) ? projectId : null;
   }
   const [row] = await db
     .select({ id: projects.id })

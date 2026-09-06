@@ -96,6 +96,8 @@ import type { TaskService } from '../../application/task/TaskService';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { daysParam, limitParam } from './queryParams';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 const MAX_EVENT_BATCH = 200;
 
@@ -212,7 +214,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
   // ── GET /events ───────────────────────────────────────────────────────────
   router.get('/events', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const limit = Math.min(Number(c.req.query('limit') ?? '200'), 1000);
+    const limit = limitParam(c.req.query('limit'), 200, 1000);
     const rows = await db
       .select()
       .from(qaJourneyEvents)
@@ -476,7 +478,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
   router.get('/runs', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const projectId = c.req.query('projectId') ? Number(c.req.query('projectId')) : null;
-    const limit = Math.min(Number(c.req.query('limit') ?? '100'), 500);
+    const limit = limitParam(c.req.query('limit'), 100, 500);
     const conditions = [eq(qaRuns.tenantId, tenantId)];
     if (projectId != null) conditions.push(eq(qaRuns.projectId, projectId));
     const rows = await db
@@ -509,7 +511,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
       .select()
       .from(qaRunSteps)
       .where(eq(qaRunSteps.runId, run.id))
-      .orderBy(qaRunSteps.seq);
+      .orderBy(qaRunSteps.seq).limit(LIST_ROW_CAP);
     return c.json({ run: { ...run, screenshotKeys: run.screenshotKeys ? JSON.parse(run.screenshotKeys) : [] }, steps });
   });
 
@@ -524,7 +526,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
       .select()
       .from(qaTargets)
       .where(and(eq(qaTargets.tenantId, tenantId), eq(qaTargets.projectId, projectId)))
-      .orderBy(desc(qaTargets.isDefault), desc(qaTargets.updatedAt));
+      .orderBy(desc(qaTargets.isDefault), desc(qaTargets.updatedAt)).limit(LIST_ROW_CAP);
     return c.json({ targets: rows });
   });
 
@@ -575,7 +577,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
       .select()
       .from(qaCredentials)
       .where(and(eq(qaCredentials.tenantId, tenantId), eq(qaCredentials.projectId, projectId)))
-      .orderBy(desc(qaCredentials.updatedAt));
+      .orderBy(desc(qaCredentials.updatedAt)).limit(LIST_ROW_CAP);
     return c.json({ credentials: rows.map(toPublicCredential) });
   });
 
@@ -668,7 +670,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
     const projectId = Number(c.req.param('projectId'));
 
     const [targets, tests, creds] = await Promise.all([
-      db.select().from(qaTargets).where(and(eq(qaTargets.tenantId, tenantId), eq(qaTargets.projectId, projectId), eq(qaTargets.status, 'active'))).orderBy(desc(qaTargets.isDefault)),
+      db.select().from(qaTargets).where(and(eq(qaTargets.tenantId, tenantId), eq(qaTargets.projectId, projectId), eq(qaTargets.status, 'active'))).orderBy(desc(qaTargets.isDefault)).limit(LIST_ROW_CAP),
       db.select({ id: qaTests.id, slug: qaTests.slug, name: qaTests.name, spec: qaTests.spec, credentialId: qaTests.credentialId })
         .from(qaTests).where(and(eq(qaTests.tenantId, tenantId), eq(qaTests.projectId, projectId), eq(qaTests.status, 'active'))),
       db.select().from(qaCredentials).where(and(eq(qaCredentials.tenantId, tenantId), eq(qaCredentials.projectId, projectId), eq(qaCredentials.status, 'active'))),
@@ -851,7 +853,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
   router.get('/explorations', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const projectId = c.req.query('projectId') ? Number(c.req.query('projectId')) : null;
-    const limit = Math.min(Number(c.req.query('limit') ?? '50'), 200);
+    const limit = limitParam(c.req.query('limit'), 50, 200);
     const conditions = [eq(qaExplorations.tenantId, tenantId)];
     if (projectId != null) conditions.push(eq(qaExplorations.projectId, projectId));
     const rows = await db.select({
@@ -879,7 +881,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
     if (!exploration) return c.json({ error: 'Exploration not found' }, 404);
     const findings = await db.select().from(qaFindings)
       .where(scopedToTenant(qaFindings, tenantId, eq(qaFindings.explorationId, exploration.id)))
-      .orderBy(desc(qaFindings.heat), desc(qaFindings.createdAt));
+      .orderBy(desc(qaFindings.heat), desc(qaFindings.createdAt)).limit(LIST_ROW_CAP);
     return c.json({
       exploration: { ...exploration, plan: parsePlan(exploration.plan), heatZones: parseZones(exploration.heatZones) },
       findings,
@@ -1147,7 +1149,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
       .select()
       .from(qaSchedules)
       .where(and(eq(qaSchedules.tenantId, tenantId), eq(qaSchedules.projectId, projectId)))
-      .orderBy(desc(qaSchedules.updatedAt));
+      .orderBy(desc(qaSchedules.updatedAt)).limit(LIST_ROW_CAP);
     return c.json({ schedules: rows });
   });
 
@@ -1274,7 +1276,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
   router.get('/quality', async (c) => {
     const tenantId  = c.get('tenantId') as number;
     const projectId = c.req.query('projectId') ? Number(c.req.query('projectId')) : null;
-    const days = Math.min(Math.max(1, Number(c.req.query('days') ?? '30')), 180);
+    const days = daysParam(c.req.query('days'), 30, 180);
     const trend = await getProjectQualityTrend(c.env as Env, db, tenantId, projectId, days);
     return c.json({ trend });
   });

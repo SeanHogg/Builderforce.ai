@@ -33,19 +33,13 @@ import {
 import { deriveSegments } from '../../application/devex/deriveSegments';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { positiveIntOrNull } from './queryParams';
+import { positiveIntOrNull, daysParam } from './queryParams';
 import { positiveIntParam } from './queryParams';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 // The cross-tenant benchmark is the same for everyone and expensive to compute,
 // so it caches globally for far longer than a tenant's own rollup.
 const BENCHMARK_TTL = { kvTtlSeconds: 21_600, l1TtlMs: 300_000 }; // 6h / 5m
-
-/** Clamp a `?days=` window to a sane range (default 90 — surveys are infrequent). */
-function parseDays(raw: string | undefined, def = 90): number {
-  const n = Number(raw);
-  return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : def;
-}
 
 /** Clamp a `?percentile=` to the offered benchmark anchors (default 75th). */
 function parsePercentile(raw: string | undefined): BenchmarkPercentile {
@@ -61,7 +55,7 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
   // ---- Insights lens (manager, cached) ------------------------------------
   router.get('/insights', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    const days = parseDays(c.req.query('days'));
+    const days = daysParam(c.req.query('days'), 90);
     const percentile = parsePercentile(c.req.query('percentile'));
     // Narrow to one project's campaigns (0929). Absent, the workspace rollup.
     const projectId = positiveIntParam(c.req.query('projectId'));

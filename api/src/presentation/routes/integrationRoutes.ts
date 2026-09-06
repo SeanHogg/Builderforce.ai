@@ -32,6 +32,8 @@ import {
   validateProviderCredentials,
 } from '../../application/integrations/providerTests';
 import { getMissingIntegrationRecommendations } from '../../application/integrations/integrationGapRecommendations';
+import { limitParam } from './queryParams';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 /**
  * Credential providers accepted by this endpoint come from ONE registry
@@ -159,7 +161,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
       })
       .from(integrationCredentials)
       .where(and(...filters))
-      .orderBy(desc(integrationCredentials.createdAt));
+      .orderBy(desc(integrationCredentials.createdAt)).limit(LIST_ROW_CAP);
 
     return c.json({ integrations: rows });
   });
@@ -316,7 +318,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
   router.get('/:id/sync-logs', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const limit = Math.min(Number(c.req.query('limit') ?? '20'), 100);
+    const limit = limitParam(c.req.query('limit'), 20, 100);
 
     const [cred] = await db
       .select({ id: integrationCredentials.id })

@@ -37,6 +37,7 @@ import {
   users,
 } from '../../infrastructure/database/schema';
 import type { Env, HonoEnv } from '../../env';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 const SIGNAL_SOURCES = ['portal', 'vscode', 'agent', 'meeting', 'system'] as const;
 const MAX_BATCH = 100;
@@ -428,7 +429,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
       .from(timecardEntries)
       .innerJoin(timecards, eq(timecards.id, timecardEntries.timecardId))
       .where(and(eq(timecardEntries.timecardId, id), eq(timecards.userId, userId)))
-      .orderBy(asc(timecardEntries.workDate));
+      .orderBy(asc(timecardEntries.workDate)).limit(LIST_ROW_CAP);
     return c.json(rows.map(mapEntry));
   });
 
@@ -448,7 +449,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
       .select(entryColumns)
       .from(timecardEntries)
       .where(scopedToTenant(timecardEntries, tenantId, eq(timecardEntries.timecardId, id)))
-      .orderBy(asc(timecardEntries.workDate));
+      .orderBy(asc(timecardEntries.workDate)).limit(LIST_ROW_CAP);
     return c.json({ card: mapCard(cardRow), entries: rows.map(mapEntry) });
   });
 

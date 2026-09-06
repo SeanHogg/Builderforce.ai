@@ -30,6 +30,7 @@ import { alerts, alertEvents, type AlertMetric } from '../../infrastructure/data
 import { ALERT_METRICS, evaluateMetric } from '../../application/alerts/metricEvaluators';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 
@@ -122,7 +123,7 @@ export function createAlertRoutes(db: Db): Hono<HonoEnv> {
     const ver = await getCacheVersion(env, alertsVersionKey(tenantId));
     const key = `alerts:rules:t:${tenantId}:v:${ver}`;
     const rows = await getOrSetCached(env, key, () =>
-      db.select().from(alerts).where(eq(alerts.tenantId, tenantId)).orderBy(desc(alerts.createdAt)),
+      db.select().from(alerts).where(eq(alerts.tenantId, tenantId)).orderBy(desc(alerts.createdAt)).limit(LIST_ROW_CAP),
       SHORT_TTL,
     );
     return c.json({ alerts: rows });

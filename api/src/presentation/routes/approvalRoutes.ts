@@ -66,6 +66,7 @@ import {
   rejectMailboxAutomationApproval,
   sendMailboxAutomationExecution,
 } from '../../application/mailbox/mailboxAutomationService';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 /** The role a `task.execution` approval was created for (set on the metadata when
  *  the gated run is role-attributed), or null. Drives the §5.8 approvals→sign-off bridge. */
@@ -262,7 +263,7 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
       .leftJoin(executions, eq(approvals.executionId, executions.id))
       .leftJoin(tasks, eq(executions.taskId, tasks.id))
       .where(eq(approvals.tenantId, tenantId))
-      .orderBy(desc(approvals.createdAt));
+      .orderBy(desc(approvals.createdAt)).limit(LIST_ROW_CAP);
 
     if (statusFilter) rows = rows.filter((r) => r.status === statusFilter);
     if (agentHostFilter != null) rows = rows.filter((r) => r.agentHostId === agentHostFilter);

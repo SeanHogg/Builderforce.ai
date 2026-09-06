@@ -72,6 +72,7 @@ import { validateLoRASafetensors } from '../../domain/training/loraArtifact';
 import { evaluateTrainingDataset, trainingGateBody } from '../../application/finetune/trainingDatasetGate';
 import { normalizeClassifications, normalizeUsePolicy } from '@builderforce/creation-canvas-contract';
 import { wildcardPath } from './wildcardPath';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 function generateId(): string {
   return crypto.randomUUID();
@@ -687,7 +688,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       .select(datasetRow)
       .from(ideDatasets)
       .where(eq(ideDatasets.projectId, projectId))
-      .orderBy(desc(ideDatasets.createdAt));
+      .orderBy(desc(ideDatasets.createdAt)).limit(LIST_ROW_CAP);
     return c.json(rows);
   });
 
@@ -896,7 +897,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       .select(trainingJobRow)
       .from(ideTrainingJobs)
       .where(eq(ideTrainingJobs.projectId, projectId))
-      .orderBy(desc(ideTrainingJobs.createdAt));
+      .orderBy(desc(ideTrainingJobs.createdAt)).limit(LIST_ROW_CAP);
     return c.json(rows);
   });
 
@@ -985,7 +986,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       .select(trainingLogRow)
       .from(ideTrainingLogs)
       .where(eq(ideTrainingLogs.jobId, c.req.param('id')))
-      .orderBy(asc(ideTrainingLogs.createdAt));
+      .orderBy(asc(ideTrainingLogs.createdAt)).limit(LIST_ROW_CAP);
     return c.json(rows);
   });
 
@@ -1163,7 +1164,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       // The SAME registry `GET /api/workforce/agents` serves — one predicate, so
       // the two listings cannot disagree about what "published" means.
       .where(publicAgentScope(isNotNull(ideAgents.tenantId)))
-      .orderBy(desc(ideAgents.hireCount), desc(ideAgents.createdAt));
+      .orderBy(desc(ideAgents.hireCount), desc(ideAgents.createdAt)).limit(LIST_ROW_CAP);
     return c.json(rows);
   });
 

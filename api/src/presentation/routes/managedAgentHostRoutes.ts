@@ -19,6 +19,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { TenantRole } from '../../domain/shared/types';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 export function createManagedAgentHostRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -63,7 +64,7 @@ export function createManagedAgentHostRoutes(db: Db): Hono<HonoEnv> {
       .select()
       .from(managedAgentHostRequests)
       .where(eq(managedAgentHostRequests.tenantId, tenantId))
-      .orderBy(desc(managedAgentHostRequests.createdAt));
+      .orderBy(desc(managedAgentHostRequests.createdAt)).limit(LIST_ROW_CAP);
 
     return c.json({ requests: rows });
   });

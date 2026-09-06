@@ -21,12 +21,7 @@ import { scope } from './segmentTrackerRoutes';
 import { getAiImpact, getAiOverview } from '../../application/insights/aiInsightsReads';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-
-/** Clamp a `?days=` window to a sane range (default 30). */
-function parseDays(raw: string | undefined, def = 30): number {
-  const n = Number(raw);
-  return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : def;
-}
+import { daysParam } from './queryParams';
 
 export function createAiImpactRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -35,7 +30,7 @@ export function createAiImpactRoutes(db: Db): Hono<HonoEnv> {
   // AI Impact — adoption trends + multi-tool evaluation + productivity score (manager)
   router.get('/ai-impact', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    const days = parseDays(c.req.query('days'));
+    const days = daysParam(c.req.query('days'), 30);
     return c.json(await getAiImpact(db, c.env as Env, tenantId, days));
   });
 
@@ -46,7 +41,7 @@ export function createAiImpactRoutes(db: Db): Hono<HonoEnv> {
   // endpoints, which stay for the drill-downs.
   router.get('/ai-overview', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    const days = parseDays(c.req.query('days'));
+    const days = daysParam(c.req.query('days'), 30);
     return c.json(await getAiOverview(db, c.env as Env, tenantId, days));
   });
 

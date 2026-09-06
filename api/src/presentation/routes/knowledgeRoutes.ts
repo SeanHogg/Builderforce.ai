@@ -58,6 +58,7 @@ import { recordActivity, resolveActorFromContext } from '../../application/activ
 import { knowledgeVersionKey } from '../../application/insights/versionKeys';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 const DOC_TYPES = ['sop', 'process', 'doc', 'postmortem', 'known_error'] as const;
 type DocType = (typeof DOC_TYPES)[number];
@@ -256,7 +257,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
         .select()
         .from(knowledgeDocuments)
         .where(and(...conds))
-        .orderBy(desc(knowledgeDocuments.updatedAt));
+        .orderBy(desc(knowledgeDocuments.updatedAt)).limit(LIST_ROW_CAP);
 
       const tagMap = await tagsFor(docs.map((d) => d.id));
       let enriched = docs.map((d) => ({ ...d, tags: tagMap.get(d.id) ?? [] }));
@@ -547,7 +548,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       .select()
       .from(knowledgeDocumentVersions)
       .where(scopedToTenant(knowledgeDocumentVersions, tenantId, eq(knowledgeDocumentVersions.documentId, id)))
-      .orderBy(desc(knowledgeDocumentVersions.versionNumber));
+      .orderBy(desc(knowledgeDocumentVersions.versionNumber)).limit(LIST_ROW_CAP);
     return c.json({ versions });
   });
 

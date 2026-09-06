@@ -31,6 +31,7 @@ import { loadProjectTeamMembers } from '../../application/metrics/assigneeRecomm
 import { resolveLiveMemberNames } from '../../application/workforce/liveMemberNames';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 const MEMBER_KINDS = ['human', 'cloud_agent', 'host_agent'] as const;
 type MemberKind = (typeof MEMBER_KINDS)[number];
@@ -97,7 +98,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       })
       .from(teams)
       .where(eq(teams.tenantId, tenantId))
-      .orderBy(teams.name);
+      .orderBy(teams.name).limit(LIST_ROW_CAP);
     return c.json({ teams: rows });
   });
 
@@ -132,7 +133,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
           .from(teamProjects)
           .innerJoin(teams, eq(teamProjects.teamId, teams.id))
           .where(and(eq(teamProjects.projectId, projectId), eq(teams.tenantId, tenantId)))
-          .orderBy(teams.name),
+          .orderBy(teams.name).limit(LIST_ROW_CAP),
     );
     return c.json({ teams: rows });
   });
@@ -184,7 +185,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       })
       .from(teamMembers)
       .where(eq(teamMembers.teamId, id))
-      .orderBy(teamMembers.memberName));
+      .orderBy(teamMembers.memberName).limit(LIST_ROW_CAP));
 
     const attachedProjects = await db
       .select({
@@ -197,7 +198,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       .from(teamProjects)
       .innerJoin(projects, eq(teamProjects.projectId, projects.id))
       .where(eq(teamProjects.teamId, id))
-      .orderBy(projects.name);
+      .orderBy(projects.name).limit(LIST_ROW_CAP);
 
     return c.json({ ...team, members, projects: attachedProjects });
   });

@@ -63,3 +63,8 @@ export function nullableDateParam(raw: unknown): Date | null | undefined {
   }
   return undefined;
 }
+
+// The bounded readers live in the domain layer (`domain/shared/boundedInt.ts`)
+// because application code reads query bounds too and must not import a route
+// module. Re-exported here so every route file keeps ONE import for its params.
+export { boundedIntParam, daysParam, limitParam, offsetParam } from '../../domain/shared/boundedInt';

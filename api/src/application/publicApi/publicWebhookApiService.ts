@@ -57,6 +57,7 @@ import {
 import { requirePublicApiKey, type PublicApiContext } from './publicApiAuth';
 import { touchTenantApiKey } from '../llm/tenantApiKeyService';
 import { CREATION_UUID_RE as UUID_RE } from '../creation/creationGraphWriter';
+import { limitParam } from '../../domain/shared/boundedInt';
 
 /** The receiver contract, served as data so an integrator's verification code and
  *  ours are written against the same constants. */
@@ -289,7 +290,7 @@ export function createPublicWebhookRoutes(db: Db): Hono<HonoEnv> {
       .limit(1);
     if (!sub) return c.json({ error: 'Subscription not found' }, 404);
 
-    const limit = Math.min(100, Math.max(1, Number(c.req.query('limit')) || 50));
+    const limit = limitParam(c.req.query('limit'), 50, 100);
     const rows = await db
       .select({
         id: webhookDeliveries.id,

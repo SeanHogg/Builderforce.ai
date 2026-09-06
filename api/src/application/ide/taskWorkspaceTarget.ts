@@ -45,6 +45,7 @@ import {
   validateWorkspacePath,
   writeWorkspaceFile,
 } from './workspaceStore';
+import { loadProjectInTenant, projectInTenant } from '../project/projectOwnership';
 
 /** The workspace a repo-less run should write into. */
 export interface TaskWorkspaceTarget {
@@ -77,11 +78,7 @@ export async function resolveTaskWorkspaceTarget(
     .limit(1);
   if (!task) return null;
 
-  const [project] = await db
-    .select({ id: projects.id, name: projects.name })
-    .from(projects)
-    .where(and(eq(projects.id, task.projectId), eq(projects.tenantId, tenantId)))
-    .limit(1);
+  const project = await loadProjectInTenant(db, tenantId, task.projectId, { id: projects.id, name: projects.name });
   if (!project) return null;
 
   const [child] = await db
@@ -102,12 +99,7 @@ export async function workspaceProjectInTenant(
   tenantId: number,
   projectId: number,
 ): Promise<boolean> {
-  const [row] = await db
-    .select({ id: projects.id })
-    .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
-    .limit(1);
-  return !!row;
+  return projectInTenant(db, tenantId, projectId);
 }
 
 export interface WorkspaceFile {

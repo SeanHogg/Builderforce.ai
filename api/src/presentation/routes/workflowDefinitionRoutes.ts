@@ -48,6 +48,7 @@ import { syncDefinitionTriggers } from '../../application/workflow/triggerSync';
 import { bumpEventTriggerListeners } from '../../application/workflow/eventTriggers';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 /** Normalize an incoming graph payload to a well-formed WorkflowDefinition. */
 function coerceDefinition(input: unknown): WorkflowDefinition {
@@ -263,7 +264,7 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
         .select({ id: agentHosts.id, name: agentHosts.name, status: agentHosts.status })
         .from(agentHosts)
         .where(eq(agentHosts.tenantId, tenantId))
-        .orderBy(desc(agentHosts.lastSeenAt));
+        .orderBy(desc(agentHosts.lastSeenAt)).limit(LIST_ROW_CAP);
       // ide_agents is accessed via raw SQL (no Drizzle model); only agents that
       // can serve the cloud runtime are eligible run targets.
       const cloudRows = (await db.execute(sql`

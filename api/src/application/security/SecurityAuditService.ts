@@ -19,7 +19,7 @@
  * control.
  */
 import { and, desc, eq, sql } from 'drizzle-orm';
-import { securityAudits, tasks as tasksTable, projects } from '../../infrastructure/database/schema';
+import { securityAudits, tasks as tasksTable } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TaskService } from '../task/TaskService';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
@@ -27,6 +27,7 @@ import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepo
 import { TaskType, TaskPriority } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import { taskCreatedHook } from '../task/taskCreationHook';
+import { projectInTenant } from '../project/projectOwnership';
 
 export type FindingSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 /** The five SOC 2 Trust Service Criteria a finding maps to. */
@@ -86,12 +87,7 @@ export class SecurityAuditService {
 
   /** The project id, tenant-scoped. Null on cross-tenant / missing. */
   private async ownedProject(tenantId: number, projectId: number): Promise<boolean> {
-    const [row] = await this.db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
-      .limit(1);
-    return !!row;
+    return projectInTenant(this.db, tenantId, projectId);
   }
 
   /** Open a new audit run for a project. Returns the audit id. */
