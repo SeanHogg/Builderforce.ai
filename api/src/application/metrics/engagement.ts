@@ -33,8 +33,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { clampScore as clamp } from '../../domain/shared/numbers';
 import { notSystemTask } from '../task/taskScope';
-
-const HOUR_MS = 3_600_000;
+import { HOUR_MS } from '../../domain/shared/time';
 
 export interface EngagementSignals {
   /** External dev activity events (commits/PRs/issues) attributed to this person. */

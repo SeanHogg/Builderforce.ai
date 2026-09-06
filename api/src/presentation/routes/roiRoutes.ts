@@ -26,9 +26,7 @@ import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { scope } from './segmentTrackerRoutes';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
-
-const HOUR_MS = 3_600_000;
-const WEEK_MS = 7 * 24 * HOUR_MS;
+import { HOUR_MS, WEEK_MS } from '../../domain/shared/time';
 
 interface RoiRollup {
   scope: { projectId: number | null };

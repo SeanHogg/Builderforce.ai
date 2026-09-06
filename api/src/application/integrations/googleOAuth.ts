@@ -10,6 +10,7 @@
  */
 
 import { googleQueryValue } from '../drive/driveProviders';
+import { base64UrlEncode } from '../../domain/shared/bytes';
 
 export interface GoogleOAuthCreds {
   clientId?: unknown;
@@ -48,11 +49,8 @@ export async function googleAccessToken(creds: GoogleOAuthCreds): Promise<string
   return body.access_token;
 }
 
-/** Base64url-encode a UTF-8 string (RFC 4648 §5, no padding) for the Gmail raw message. */
-function base64Url(input: string): string {
-  const b64 = btoa(unescape(encodeURIComponent(input)));
-  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
+/** Base64url over UTF-8 (RFC 4648 §5, no padding) — the Gmail `raw` message encoding. */
+const base64Url = base64UrlEncode;
 
 export interface GmailMessage {
   to: string;

@@ -41,7 +41,7 @@
  * field is its own consent basis is still a card with no candidate on it.
  */
 
-import { HIRING_OBJECT_KINDS, type HiringObjectKind } from '@builderforce/creation-canvas-contract';
+import { type HiringObjectKind } from '@builderforce/creation-canvas-contract';
 import {
   registerSpecObjectSet, SOURCES_FIELD, SUMMARY_FIELD,
   type SpecField, type SpecObjectSpec,
@@ -368,8 +368,6 @@ export const HIRING_STATUSES: Record<string, string> = {
   pending: 'Pending',
 };
 
-/** Kinds the contract declares, for the test that proves the two lists agree. */
-export const HIRING_CONTRACT_KINDS: readonly HiringObjectKind[] = HIRING_OBJECT_KINDS;
 
 registerSpecObjectSet({
   id: 'hiring',

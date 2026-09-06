@@ -18,8 +18,7 @@ import { and, eq, gte, inArray } from 'drizzle-orm';
 import { ceremonySessions, ceremonyParticipants } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
-
-const DAY_MS = 86_400_000;
+import { DAY_MS } from '../../domain/shared/time';
 
 export interface CeremonyDayPoint {
   /** UTC day 'YYYY-MM-DD'. */

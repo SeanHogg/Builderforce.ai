@@ -4,6 +4,7 @@
  * AI-assisted authoring. Talks to /api/knowledge on the auth API.
  */
 import { apiRequest, apiRequestStream } from './apiClient';
+import { readSseData } from '@/lib/sseFrames';
 
 export type DocType = 'sop' | 'process' | 'doc' | 'postmortem' | 'known_error';
 export type DocStatus = 'draft' | 'published' | 'archived';
@@ -357,32 +358,17 @@ export const knowledgeApi = {
       const msg = (await res.json().catch(() => ({}))) as { error?: string };
       throw new Error(msg.error || `AI generation failed (${res.status})`);
     }
-    const reader = res.body?.getReader();
-    if (!reader) return '';
-    const decoder = new TextDecoder();
-    let buffer = '';
     let acc = '';
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith('data: ')) continue;
-        const data = trimmed.slice(6).trim();
-        if (data === '[DONE]') return acc;
-        try {
-          const parsed = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string } }> };
-          const chunk = parsed.choices?.[0]?.delta?.content;
-          if (chunk) {
-            acc += chunk;
-            onDelta(acc);
-          }
-        } catch {
-          // skip malformed chunks
+    for await (const data of readSseData(res.body)) {
+      try {
+        const parsed = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string } }> };
+        const chunk = parsed.choices?.[0]?.delta?.content;
+        if (chunk) {
+          acc += chunk;
+          onDelta(acc);
         }
+      } catch {
+        // skip malformed chunks
       }
     }
     return acc;

@@ -29,8 +29,8 @@ import {
 } from '../../infrastructure/database/schema';
 import { notSystemTask } from '../task/taskScope';
 import { loadProjectInTenant } from '../project/projectOwnership';
+import { DAY_MS } from '../../domain/shared/time';
 
-const DAY_MS = 86_400_000;
 const MAX_TASKS = 5_000;
 /** Cap on logged time-entry rows pulled for the effort (FTE) line. */
 const MAX_EFFORT_ROWS = 10_000;

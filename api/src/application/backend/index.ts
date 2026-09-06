@@ -41,6 +41,7 @@ import {
   type MaterializeResult,
 } from './hostingStrategy';
 import { HANDLERS_DIR, handlerNameFromPath, parseHandlerSpec, type HandlerSpec } from './handlerSpec';
+import { randomBase64Url } from '../../domain/shared/bytes';
 
 const STRATEGIES: Record<BackendStrategyKey, BackendHostingStrategy> = {
   declarative: declarativeStrategy,
@@ -81,8 +82,7 @@ export interface ProjectBackend {
  * verification is the real authentication — see webhookVerification.ts).
  */
 function newIngressToken(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(24));
-  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '').slice(0, 32);
+  return randomBase64Url(24).slice(0, 32);
 }
 
 /** The public base a project's webhooks are delivered to. */

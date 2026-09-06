@@ -574,7 +574,10 @@
       "finish": "Listo",
       "back": "Atrás",
       "next": "Siguiente",
-      "working": "Procesando…"
+      "working": "Procesando…",
+      "rollback": "Revertir",
+      "rollbackConfirm": "¿Revertir solo los proyectos, tareas y conexiones de sincronización creados por esta importación? El trabajo posterior se conservará.",
+      "rollbackFailed": "La reversión falló"
     },
     "page": {
       "title": "Integraciones / Claves API",
@@ -13567,6 +13570,38 @@
         "withErrorHint": "se toparon con un fallo",
         "converted": "Se registraron"
       }
+    },
+    "system": {
+      "title": "Infraestructura del sistema",
+      "subtitle": "Enlaces del worker, estado del runtime, almacenamiento Neon y mantenimiento seguro.",
+      "cleanExpired": "Limpiar datos caducados",
+      "refresh": "↻ Actualizar",
+      "loading": "Cargando el estado del sistema…",
+      "worker": "Worker",
+      "agentHosts": "Hosts de agentes",
+      "onlineRecently": "en línea en los últimos 5 minutos",
+      "activeExecutions": "Ejecuciones activas",
+      "failed24h": "{count} fallidas en 24 h",
+      "bindings": "Enlaces de Cloudflare",
+      "configuredServices": "servicios configurados",
+      "bound": "enlazado",
+      "missing": "ausente",
+      "neonDatabase": "Base de datos Neon {name}",
+      "unavailable": "no disponible",
+      "latency": "{ms} ms",
+      "vacuumAnalyze": "Vacuum y análisis",
+      "vacuum": "Vacuum",
+      "colTable": "Tabla",
+      "colSize": "Tamaño",
+      "colRows": "Filas",
+      "colWrites": "Escrituras desde el reinicio de estadísticas",
+      "colLastVacuum": "Último vacuum",
+      "allTables": "todas las tablas",
+      "maintenanceCleanup": "ejecutar la limpieza de retención",
+      "maintenanceVacuum": "vacuum de {table} en {target}",
+      "confirmTitle": "¿Ejecutar mantenimiento?",
+      "confirmMaintenance": "Confirmar: ¿{label}? Es una operación de mantenimiento auditada.",
+      "confirmRun": "Ejecutar"
     }
   },
   "providerKeys": {
@@ -14398,7 +14433,9 @@
       "empty": "Nada asignado."
     },
     "nextSpeaker": "Siguiente",
-    "completeSession": "Finalizar"
+    "completeSession": "Finalizar",
+    "createEpic": "Crear épica",
+    "createSprint": "Crear sprint"
   },
   "meetings": {
     "title": "Reuniones",
@@ -23468,7 +23505,10 @@
     "noticeStandupActionItemsPlaced": "{count, plural, one {# acción añadida al lienzo} other {# acciones añadidas al lienzo}}",
     "noticeStandupMinutesNeedsAccount": "Inicia sesión para leer el acta de una daily",
     "noticeStandupMinutesFailed": "No se pudo leer el acta de la daily",
-    "exportUnmaskedColumns": "Exportación rechazada: {columns} contienen datos personales sin enmascarar. Enmascáralas primero en la tarjeta."
+    "exportUnmaskedColumns": "Exportación rechazada: {columns} contienen datos personales sin enmascarar. Enmascáralas primero en la tarjeta.",
+    "approveAgentActionTitle": "Aprobar la acción del agente",
+    "approveAgentActionBody": "Un agente de la sesión quiere ejecutar {action}.",
+    "approveAgentActionConfirm": "Aprobar"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",

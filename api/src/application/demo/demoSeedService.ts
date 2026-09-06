@@ -51,8 +51,8 @@ import {
   type DemoBlueprint,
   type DemoPersonaKey,
 } from './demoPersonas';
+import { DAY_MS } from '../../domain/shared/time';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 /** Daily token allowance for a demo tenant — enough to try the Brain, never enough to hurt. */
 const DEMO_TOKEN_DAILY_LIMIT = 200_000;
 

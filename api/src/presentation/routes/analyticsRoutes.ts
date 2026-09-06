@@ -32,8 +32,7 @@ import { getTenantActivityRollup } from '../../application/analytics/tenantActiv
 import { computeInteractionActivity } from '../../application/analytics/interactionActivity';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { daysParam } from './queryParams';
-
-const DAY_MS = 24 * 60 * 60 * 1000;
+import { DAY_MS } from '../../domain/shared/time';
 
 function dayFloorUTC(d: Date): Date {
   const x = new Date(d);

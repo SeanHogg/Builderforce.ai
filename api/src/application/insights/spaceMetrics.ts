@@ -42,8 +42,7 @@ import {
 import { clampScore as clamp } from '../../domain/shared/numbers';
 import { notSystemTask } from '../task/taskScope';
 import { computeDevexInsights, devexSatisfaction } from './devexInsights';
-
-const HOUR_MS = 3_600_000;
+import { HOUR_MS } from '../../domain/shared/time';
 
 export interface SpaceDimension {
   /** 0..100, or null when there is no signal for the dimension. */

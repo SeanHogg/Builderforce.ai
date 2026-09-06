@@ -9258,7 +9258,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const confirmCanvasAction = ({ name, args }: { name: string; args: unknown }) => {
         let preview = '';
         try { const serialized = JSON.stringify(args ?? {}); preview = serialized === '{}' ? '' : serialized.length > 320 ? `${serialized.slice(0, 320)}…` : serialized; } catch { preview = ''; }
-        return confirm({ title: 'Approve agent action', message: `A session agent wants to run ${name.replaceAll('_', ' ')}.${preview ? `\n\n${preview}` : ''}`, confirmLabel: 'Approve', cancelLabel: 'Cancel', destructive: false });
+        return confirm({ title: t('approveAgentActionTitle'), message: `${t('approveAgentActionBody', { action: name.replaceAll('_', ' ') })}${preview ? `\n\n${preview}` : ''}`, confirmLabel: t('approveAgentActionConfirm'), destructive: false });
       };
       const runGroupTurn = async () => {
         // Stop is honoured between every phase of the turn, not only inside the model

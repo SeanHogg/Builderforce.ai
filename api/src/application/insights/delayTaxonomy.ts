@@ -16,8 +16,8 @@
 import { and, eq, gte, desc } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { delayReasons, tasks, taskStatusTransitions } from '../../infrastructure/database/schema';
+import { HOUR_MS } from '../../domain/shared/time';
 
-const HOUR_MS = 3_600_000;
 /** Only stalls longer than this are treated as an inferred delay. */
 const MIN_STALL_HOURS = 24;
 const MAX_TRANSITION_ROWS = 20_000;

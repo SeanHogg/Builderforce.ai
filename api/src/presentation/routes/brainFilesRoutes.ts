@@ -10,7 +10,7 @@
 import { Hono } from 'hono';
 import type { HonoEnv } from '../../env';
 import { verifyUpload } from '../../infrastructure/auth/uploadSign';
-import { wildcardPath } from './wildcardPath';
+import { wildcardPath } from '@builderforce/hono-wildcard-path';
 
 export function createBrainFilesRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();

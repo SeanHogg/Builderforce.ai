@@ -1,12 +1,19 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { adminApi, type AdminSystemHealth } from '@/lib/adminApi';
 import { errText } from '../adminShared';
 import { formatBytes } from '@/lib/formatBytes';
 import { useAdminFormat } from '../adminShared';
+import { useConfirm } from '@/components/ConfirmProvider';
+
+type MaintenanceAction = 'purge_expired' | 'vacuum_analyze';
+type MaintenanceTarget = 'primary' | 'transactional';
 
 export function SystemHealthSection() {
+  const t = useTranslations('admin.system');
+  const confirm = useConfirm();
   const { fmtDateTime, fmtNum } = useAdminFormat();
   const [health, setHealth] = useState<AdminSystemHealth | null>(null);
   const [error, setError] = useState('');
@@ -17,9 +24,13 @@ export function SystemHealthSection() {
   }, []);
   useEffect(() => { void reload(); }, [reload]);
 
-  const maintain = async (action: 'purge_expired' | 'vacuum_analyze', target?: 'primary' | 'transactional', table?: string) => {
-    const label = action === 'purge_expired' ? 'run retention cleanup' : `vacuum ${table ?? 'all tables'} in ${target}`;
-    if (!window.confirm(`Confirm: ${label}? This is an audited maintenance operation.`)) return;
+  const maintain = async (action: MaintenanceAction, target?: MaintenanceTarget, table?: string) => {
+    const label = action === 'purge_expired'
+      ? t('maintenanceCleanup')
+      : t('maintenanceVacuum', { table: table ?? t('allTables'), target: target ?? '' });
+    // An audited operation on the live database: the in-app modal, never the
+    // browser's, so it is styled, translated and cannot be dismissed by accident.
+    if (!(await confirm({ title: t('confirmTitle'), message: t('confirmMaintenance', { label }), confirmLabel: t('confirmRun'), destructive: false }))) return;
     try {
       setBusy(`${action}:${target ?? 'both'}:${table ?? ''}`); setError('');
       await adminApi.systemMaintenance({ action, target, table });
@@ -32,31 +43,31 @@ export function SystemHealthSection() {
     <section style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 17 }}>System infrastructure</h2>
-          <p className="text-muted" style={{ margin: '4px 0 0', fontSize: 13 }}>Worker bindings, runtime state, Neon storage, and safe maintenance.</p>
+          <h2 style={{ margin: 0, fontSize: 'var(--font-size-card-title)' }}>{t('title')}</h2>
+          <p className="text-muted" style={{ margin: '4px 0 0', fontSize: 'var(--font-size-body)' }}>{t('subtitle')}</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn-ghost" type="button" disabled={Boolean(busy)} onClick={() => void maintain('purge_expired')}>Clean expired data</button>
-          <button className="btn-ghost" type="button" onClick={() => void reload()}>↻ Refresh</button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn-ghost" type="button" disabled={Boolean(busy)} onClick={() => void maintain('purge_expired')}>{t('cleanExpired')}</button>
+          <button className="btn-ghost" type="button" onClick={() => void reload()}>{t('refresh')}</button>
         </div>
       </div>
       {error && <div className="admin-error">{error}</div>}
-      {!health ? <p className="text-muted">Loading system health…</p> : <>
+      {!health ? <p className="text-muted">{t('loading')}</p> : <>
         <div className="health-grid">
-          <div className="health-card"><div className="health-label">Worker</div><div className="health-value">{health.worker.version}</div><div style={{ fontSize: 12 }}>{health.worker.environment}</div></div>
-          <div className="health-card"><div className="health-label">Agent hosts</div><div className="health-value">{fmtNum(health.runtime.onlineAgentHosts)} / {fmtNum(health.runtime.agentHosts)}</div><div style={{ fontSize: 12 }}>online in last 5 min</div></div>
-          <div className="health-card"><div className="health-label">Active executions</div><div className="health-value">{fmtNum(health.runtime.activeExecutions)}</div><div style={{ fontSize: 12 }}>{fmtNum(health.runtime.failedExecutions24h)} failed in 24h</div></div>
-          <div className="health-card"><div className="health-label">Cloudflare bindings</div><div className="health-value">{Object.values(health.worker.bindings).filter(Boolean).length} / {Object.keys(health.worker.bindings).length}</div><div style={{ fontSize: 12 }}>configured services</div></div>
+          <div className="health-card"><div className="health-label">{t('worker')}</div><div className="health-value">{health.worker.version}</div><div style={{ fontSize: 'var(--font-size-small)' }}>{health.worker.environment}</div></div>
+          <div className="health-card"><div className="health-label">{t('agentHosts')}</div><div className="health-value">{fmtNum(health.runtime.onlineAgentHosts)} / {fmtNum(health.runtime.agentHosts)}</div><div style={{ fontSize: 'var(--font-size-small)' }}>{t('onlineRecently')}</div></div>
+          <div className="health-card"><div className="health-label">{t('activeExecutions')}</div><div className="health-value">{fmtNum(health.runtime.activeExecutions)}</div><div style={{ fontSize: 'var(--font-size-small)' }}>{t('failed24h', { count: fmtNum(health.runtime.failedExecutions24h) })}</div></div>
+          <div className="health-card"><div className="health-label">{t('bindings')}</div><div className="health-value">{Object.values(health.worker.bindings).filter(Boolean).length} / {Object.keys(health.worker.bindings).length}</div><div style={{ fontSize: 'var(--font-size-small)' }}>{t('configuredServices')}</div></div>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {Object.entries(health.worker.bindings).map(([name, ok]) => <span key={name} className={`badge ${ok ? 'badge-success' : 'badge-neutral'}`}>{name}: {ok ? 'bound' : 'missing'}</span>)}
+          {Object.entries(health.worker.bindings).map(([name, ok]) => <span key={name} className={`badge ${ok ? 'badge-success' : 'badge-neutral'}`}>{name}: {ok ? t('bound') : t('missing')}</span>)}
         </div>
         {health.databases.map((db) => <div key={db.name} className="health-card" style={{ padding: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <div><strong style={{ textTransform: 'capitalize' }}>{db.name} Neon database</strong><div className="text-muted" style={{ fontSize: 12 }}>{db.databaseName ?? 'unavailable'} · {db.ok ? `${db.latencyMs} ms` : db.error}</div></div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><strong>{formatBytes(db.totalBytes)}</strong><button className="btn-ghost" type="button" disabled={Boolean(busy) || !db.ok} onClick={() => void maintain('vacuum_analyze', db.name)}>Vacuum & analyze</button></div>
+            <div><strong style={{ textTransform: 'capitalize' }}>{t('neonDatabase', { name: db.name })}</strong><div className="text-muted" style={{ fontSize: 'var(--font-size-small)' }}>{db.databaseName ?? t('unavailable')} · {db.ok ? t('latency', { ms: db.latencyMs }) : db.error}</div></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><strong>{formatBytes(db.totalBytes)}</strong><button className="btn-ghost" type="button" disabled={Boolean(busy) || !db.ok} onClick={() => void maintain('vacuum_analyze', db.name)}>{t('vacuumAnalyze')}</button></div>
           </div>
-          <div className="table-wrap" style={{ marginTop: 12 }}><table className="data-table" style={{ fontSize: 12 }}><thead><tr><th>Table</th><th>Size</th><th>Rows</th><th>Writes since stats reset</th><th>Last vacuum</th><th></th></tr></thead><tbody>{db.tables.map((table) => <tr key={table.name}><td>{table.name}</td><td>{formatBytes(Number(table.totalBytes))}</td><td>{fmtNum(Number(table.estimatedRows))}</td><td>{fmtNum(Number(table.insertsSinceStatsReset) + Number(table.updatesSinceStatsReset) + Number(table.deletesSinceStatsReset))}</td><td>{table.lastAutovacuum ? fmtDateTime(table.lastAutovacuum) : '—'}</td><td><button className="btn-ghost" type="button" disabled={Boolean(busy)} onClick={() => void maintain('vacuum_analyze', db.name, table.name)}>Vacuum</button></td></tr>)}</tbody></table></div>
+          <div className="table-wrap" style={{ marginTop: 12 }}><table className="data-table" style={{ fontSize: 'var(--font-size-small)' }}><thead><tr><th>{t('colTable')}</th><th>{t('colSize')}</th><th>{t('colRows')}</th><th>{t('colWrites')}</th><th>{t('colLastVacuum')}</th><th></th></tr></thead><tbody>{db.tables.map((table) => <tr key={table.name}><td>{table.name}</td><td>{formatBytes(Number(table.totalBytes))}</td><td>{fmtNum(Number(table.estimatedRows))}</td><td>{fmtNum(Number(table.insertsSinceStatsReset) + Number(table.updatesSinceStatsReset) + Number(table.deletesSinceStatsReset))}</td><td>{table.lastAutovacuum ? fmtDateTime(table.lastAutovacuum) : '—'}</td><td><button className="btn-ghost" type="button" disabled={Boolean(busy)} onClick={() => void maintain('vacuum_analyze', db.name, table.name)}>{t('vacuum')}</button></td></tr>)}</tbody></table></div>
         </div>)}
       </>}
     </section>

@@ -20,7 +20,10 @@
       "@builderforce/canvas-widget-protocol": ["../packages/canvas-widget-protocol/src/index.ts"],
       "@builderforce/ide-templates": ["../packages/ide-templates/src/index.ts"],
       "@builderforce/ide-file-contract": ["../packages/ide-file-contract/src/index.ts"],
-      "@builderforce/kimi-oauth": ["../packages/kimi-oauth/src/index.ts"]
+      "@builderforce/kimi-oauth": ["../packages/kimi-oauth/src/index.ts"],
+      "@builderforce/hs256-jwt": ["../packages/hs256-jwt/src/index.ts"],
+      "@builderforce/workspace-path": ["../packages/workspace-path/src/index.ts"],
+      "@builderforce/hono-wildcard-path": ["../packages/hono-wildcard-path/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts"],

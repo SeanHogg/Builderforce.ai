@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
-import { validateWorkspacePath } from '../lib/workspacePath';
-import { wildcardPath } from '../lib/wildcardPath';
+import { validateWorkspacePath } from '@builderforce/workspace-path';
+import { wildcardPath } from '@builderforce/hono-wildcard-path';
 import { requireAuth, type WorkerAuthBindings } from '../lib/auth';
 
 interface Env extends WorkerAuthBindings {

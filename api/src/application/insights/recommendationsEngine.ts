@@ -36,6 +36,8 @@ import { computeAllocationInsights, type AllocationInsights } from './allocation
 import { computeDora } from '../metrics/workforceMetrics';
 import type { DoraRollup } from '../metrics/workforceMetrics';
 import { isRuleEnabled } from './recommendationRuleRegistry';
+import { HOUR_MS } from '../../domain/shared/time';
+import { currentPeriodMonth } from '../../domain/shared/period';
 
 /**
  * Structured reference to a source record that contributed to a recommendation.
@@ -68,8 +70,6 @@ export interface RecDataTrace {
   value: string;
   source: string;
 }
-
-const HOUR_MS = 3_600_000;
 
 export type RecSeverity = 'critical' | 'warning' | 'info';
 export type RecCategory = 'cost' | 'quality' | 'allocation' | 'delivery';
@@ -497,10 +497,6 @@ export async function dismissRecommendation(db: Db, tenantId: number, recKey: st
 
 // ── period helpers (UTC, 'YYYY-MM') ────────────────────────────────────────────
 
-function currentPeriodMonth(now: number): string {
-  const d = new Date(now);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-}
 
 function previousPeriodMonth(now: number): string {
   const d = new Date(now);

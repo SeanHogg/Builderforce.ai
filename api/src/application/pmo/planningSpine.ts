@@ -43,12 +43,12 @@ import {
 } from '../llm/allocationCategories';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 import { loadPlanVerdicts } from '../planning/planVerdictStore';
+import { HOUR_MS } from '../../domain/shared/time';
 
 export type CostClass = 'capex' | 'opex';
 export type CostClassSource = 'manual' | 'inherited' | 'agent';
 export type SpineNodeKind = 'portfolio' | 'objective' | 'initiative' | 'epic' | 'task' | 'roadmap';
 
-const HOUR_MS = 3_600_000;
 /** Labour-hours cap per task when estimating human cost from cycle time (no
  *  effort/time-tracking field exists yet — see the roadmap gap). */
 const HUMAN_HOURS_CAP = 8;

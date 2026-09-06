@@ -32,6 +32,7 @@ import { getTool, money } from './toolDefinitions';
 import { pluralSlug, type ToolCopy } from './analyzerCopy';
 import { DEFAULT_TOOL_LOCALE, resultCopy, type ResultCopy } from './resultCopy';
 import type { QuestionnaireTool, Tool, ToolResult, ToolMetric, ToolRecommendation } from './toolTypes';
+import { DAY_MS } from '../../domain/shared/time';
 
 /**
  * Everything a data result needs that is NOT a number.
@@ -503,8 +504,6 @@ const doraQuickCheckProvider = dataProvider<DoraFigures>({
 });
 
 // ── AI Cost Estimator, replaced by real attributed spend ──────────────────────
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Real attributed spend from `llm_usage_log` — the estimator's own promise

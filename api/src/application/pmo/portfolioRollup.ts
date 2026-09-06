@@ -40,9 +40,9 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { notSystemTask } from '../task/taskScope';
 import { rollupDora, type DeployRow, type DoraRollup } from '../metrics/workforceMetrics';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
+import { HOUR_MS, WEEK_MS } from '../../domain/shared/time';
+import { clamp01 } from '../../domain/shared/numbers';
 
-const HOUR_MS = 3_600_000;
-const WEEK_MS = 7 * 24 * HOUR_MS;
 const DEFAULT_DORA_DAYS = 30;
 
 /** Statuses that count as "delivered" — excluded from blocked/critical-path. */
@@ -56,10 +56,6 @@ function num(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function clamp01(n: number): number {
-  if (!Number.isFinite(n)) return 0;
-  return n < 0 ? 0 : n > 1 ? 1 : n;
-}
 
 // ── Pure OKR math (unit-tested) ──────────────────────────────────────────────
 

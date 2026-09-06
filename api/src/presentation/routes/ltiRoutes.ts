@@ -30,6 +30,7 @@ import {
 import { LTI_MESSAGE_DEEP_LINK, canReturnGrades } from '../../domain/lti/ltiClaims';
 import { mintSessionExchangeCode } from '../../application/auth/sessionExchange';
 import type { Db } from '../../infrastructure/database/connection';
+import { decodeJwtPayload } from '@builderforce/hs256-jwt';
 
 /** Read a form or query parameter, whichever binding the platform used. */
 async function param(request: Request, name: string): Promise<string> {
@@ -136,8 +137,7 @@ export function createLtiRoutes(db: Db) {
     // not verify the token.
     let issuer = '';
     try {
-      const payloadSegment = idToken.split('.')[1] ?? '';
-      const payload = JSON.parse(atob(payloadSegment.replace(/-/g, '+').replace(/_/g, '/'))) as { iss?: string };
+      const payload = decodeJwtPayload<{ iss?: string }>(idToken);
       issuer = typeof payload.iss === 'string' ? payload.iss : '';
     } catch {
       return c.json({ error: 'Malformed id_token.' }, 400);

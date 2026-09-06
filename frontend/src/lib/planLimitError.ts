@@ -15,21 +15,36 @@
  * modal, and none of them starts showing it for a purchase.
  */
 
+export type UpgradeTargetPlan = 'pro' | 'teams';
+
+/** The server's one upgrade-required envelope (`domain/tenant/paymentRequired`). */
 export interface PlanLimitPayload {
   error: string;
   upgradeRequired?: boolean;
+  /** Which gate refused — a feature gate, a plan limit, a quota. */
+  code?: string;
   currentPlan?: string;
+  /** The plan that unlocks what was refused, when one specific plan does. */
+  requiredPlan?: string;
+  feature?: string;
 }
 
 export class PlanLimitError extends Error {
   readonly currentPlan: string;
   readonly upgradeRequired: true;
+  readonly code: string | undefined;
+  /** Only a plan a person can upgrade TO; a `free` requirement is not a target. */
+  readonly requiredPlan: UpgradeTargetPlan | undefined;
+  readonly feature: string | undefined;
 
   constructor(payload: PlanLimitPayload) {
     super(payload.error || 'Plan limit reached');
     this.name = 'PlanLimitError';
     this.currentPlan = payload.currentPlan ?? 'free';
     this.upgradeRequired = true;
+    this.code = payload.code;
+    this.requiredPlan = payload.requiredPlan === 'pro' || payload.requiredPlan === 'teams' ? payload.requiredPlan : undefined;
+    this.feature = payload.feature;
   }
 }
 

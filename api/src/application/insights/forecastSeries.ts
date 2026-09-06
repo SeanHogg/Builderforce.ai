@@ -15,6 +15,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { computeFinanceInsights, daysInMonth } from './financeInsights';
 import { computeDora } from '../metrics/workforceMetrics';
 import { regressionForecast, zScoreAnomalies } from './forecasting';
+import { currentPeriodMonth } from '../../domain/shared/period';
 
 /** The metrics the forecast lens understands. */
 export const FORECAST_METRICS = ['cost', 'cycle_time', 'cfr', 'throughput'] as const;
@@ -64,10 +65,6 @@ function shiftDay(day: string, deltaDays: number): string {
 }
 
 /** Current calendar month 'YYYY-MM' (UTC). */
-function currentPeriodMonth(now: number): string {
-  const d = new Date(now);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-}
 
 /**
  * Pull the raw {day,value} history for a metric off its existing collector.

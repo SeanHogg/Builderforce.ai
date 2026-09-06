@@ -574,7 +574,10 @@
       "finish": "Fertig",
       "back": "Zurück",
       "next": "Weiter",
-      "working": "Wird bearbeitet…"
+      "working": "Wird bearbeitet…",
+      "rollback": "Zurückrollen",
+      "rollbackConfirm": "Nur die von diesem Import erstellten Projekte, Aufgaben und Sync-Verbindungen zurückrollen? Spätere Arbeit bleibt erhalten.",
+      "rollbackFailed": "Zurückrollen fehlgeschlagen"
     },
     "page": {
       "title": "Integrationen / API-Schlüssel",
@@ -13567,6 +13570,38 @@
         "withErrorHint": "sind auf einen Defekt gestoßen",
         "converted": "Registriert"
       }
+    },
+    "system": {
+      "title": "Systeminfrastruktur",
+      "subtitle": "Worker-Bindungen, Laufzeitstatus, Neon-Speicher und sichere Wartung.",
+      "cleanExpired": "Abgelaufene Daten bereinigen",
+      "refresh": "↻ Aktualisieren",
+      "loading": "Systemzustand wird geladen…",
+      "worker": "Worker",
+      "agentHosts": "Agent-Hosts",
+      "onlineRecently": "in den letzten 5 Minuten online",
+      "activeExecutions": "Aktive Ausführungen",
+      "failed24h": "{count} in 24 h fehlgeschlagen",
+      "bindings": "Cloudflare-Bindungen",
+      "configuredServices": "konfigurierte Dienste",
+      "bound": "gebunden",
+      "missing": "fehlt",
+      "neonDatabase": "Neon-Datenbank {name}",
+      "unavailable": "nicht verfügbar",
+      "latency": "{ms} ms",
+      "vacuumAnalyze": "Vacuum & Analyse",
+      "vacuum": "Vacuum",
+      "colTable": "Tabelle",
+      "colSize": "Größe",
+      "colRows": "Zeilen",
+      "colWrites": "Schreibvorgänge seit Statistik-Reset",
+      "colLastVacuum": "Letztes Vacuum",
+      "allTables": "alle Tabellen",
+      "maintenanceCleanup": "Aufbewahrungsbereinigung ausführen",
+      "maintenanceVacuum": "Vacuum von {table} in {target}",
+      "confirmTitle": "Wartung ausführen?",
+      "confirmMaintenance": "Bestätigen: {label}? Dies ist ein auditierter Wartungsvorgang.",
+      "confirmRun": "Ausführen"
     }
   },
   "providerKeys": {
@@ -14398,7 +14433,9 @@
       "empty": "Nichts zugewiesen."
     },
     "nextSpeaker": "Weiter",
-    "completeSession": "Abschließen"
+    "completeSession": "Abschließen",
+    "createEpic": "Epic erstellen",
+    "createSprint": "Sprint erstellen"
   },
   "meetings": {
     "title": "Besprechungen",
@@ -23468,7 +23505,10 @@
     "noticeStandupActionItemsPlaced": "{count, plural, one {# Aufgabe auf dem Board platziert} other {# Aufgaben auf dem Board platziert}}",
     "noticeStandupMinutesNeedsAccount": "Melde dich an, um das Protokoll eines Stand-ups zu lesen",
     "noticeStandupMinutesFailed": "Das Stand-up-Protokoll konnte nicht gelesen werden",
-    "exportUnmaskedColumns": "Export abgelehnt: {columns} enthalten unmaskierte personenbezogene Daten. Maskieren Sie sie zuerst auf der Karte."
+    "exportUnmaskedColumns": "Export abgelehnt: {columns} enthalten unmaskierte personenbezogene Daten. Maskieren Sie sie zuerst auf der Karte.",
+    "approveAgentActionTitle": "Agentenaktion genehmigen",
+    "approveAgentActionBody": "Ein Sitzungsagent möchte {action} ausführen.",
+    "approveAgentActionConfirm": "Genehmigen"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",

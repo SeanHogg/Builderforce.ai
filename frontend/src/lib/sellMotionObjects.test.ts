@@ -5,10 +5,7 @@ import {
   sequenceDueSteps, sequenceProgress, summarizeProspectEngagement, trustPacketReadiness,
 } from '@builderforce/creation-canvas-contract';
 import './sellMotionObjects';
-import {
-  SELL_MOTION_CONTRACT_KINDS, SELL_MOTION_LABELS, SELL_MOTION_NAMESPACE,
-  SELL_MOTION_OBJECT_SPECS,
-} from './sellMotionObjects';
+import { SELL_MOTION_LABELS, SELL_MOTION_NAMESPACE, SELL_MOTION_OBJECT_SPECS } from './sellMotionObjects';
 import {
   isSpecObjectKind, specDerivedValues, specMutableFields, specObjectNamespace,
 } from './specObjects';
@@ -24,7 +21,7 @@ import {
 describe('sell-motion vocabulary', () => {
   it('declares every kind the contract does, and no more', () => {
     expect(SELL_MOTION_OBJECT_SPECS.map((spec) => spec.kind).sort())
-      .toEqual([...SELL_MOTION_CONTRACT_KINDS].sort());
+      .toEqual([...SELL_MOTION_OBJECT_KINDS].sort());
     expect(Object.keys(SELL_MOTION_LABELS).sort()).toEqual([...SELL_MOTION_OBJECT_KINDS].sort());
   });
 

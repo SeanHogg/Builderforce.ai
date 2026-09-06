@@ -36,7 +36,6 @@
  */
 
 import {
-  SELL_MOTION_OBJECT_KINDS,
   mutualPlanHealth,
   quoteTotals,
   readMapMilestones,
@@ -511,8 +510,6 @@ export const SELL_MOTION_STATUSES: Record<string, string> = {
   drafting: 'Drafting',
 };
 
-/** Kinds the contract declares, for the test that proves the two lists agree. */
-export const SELL_MOTION_CONTRACT_KINDS: readonly SellMotionObjectKind[] = SELL_MOTION_OBJECT_KINDS;
 
 /**
  * The fields whose ENROLMENT/CURSOR semantics the sequence runner writes.

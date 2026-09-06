@@ -15,12 +15,9 @@ import { scope } from './segmentTrackerRoutes';
 import { getRdReconciliation } from '../../application/finops/rdReconciliation';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { fiscalYearParam } from './queryParams';
 
 /** Parse `?fy=` → 4-digit fiscal year, default current UTC year. */
-function parseFiscalYear(raw: string | undefined, now: number): number {
-  const n = Number(raw);
-  return Number.isInteger(n) && n >= 2000 && n <= 2100 ? n : new Date(now).getUTCFullYear();
-}
 
 export function createEmpFinopsRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -31,7 +28,7 @@ export function createEmpFinopsRoutes(db: Db): Hono<HonoEnv> {
   router.get('/rd-reconciliation', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
     const env = c.env as Env;
-    const fy = parseFiscalYear(c.req.query('fy'), Date.now());
+    const fy = fiscalYearParam(c.req.query('fy'), Date.now());
     return c.json(await getRdReconciliation(db, env, tenantId, fy));
   });
 

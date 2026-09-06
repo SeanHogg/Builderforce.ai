@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Task } from '@/lib/builderforceApi';
 import { useIsMobile } from '@/lib/useIsMobile';
+import { InlineNameForm } from '@/components/ui/InlineNameForm';
 import { placeTargetProps, useCeremonyPick } from './pickToPlace';
 import { DRAG_TASK } from './types';
 
@@ -88,11 +89,12 @@ export function EpicRail({
   epics: Task[];
   childCountByEpic: Map<number, number>;
   onDropToEpic: (taskId: number, epicId: number) => void;
-  onCreateEpic: () => void;
+  onCreateEpic: (title: string) => void | Promise<void>;
   onOpen: (task: Task) => void;
 }) {
   const isMobile = useIsMobile();
   const t = useTranslations('ceremony');
+  const [naming, setNaming] = useState(false);
   return (
     <div
       style={{
@@ -115,7 +117,7 @@ export function EpicRail({
         </span>
         <button
           type="button"
-          onClick={onCreateEpic}
+          onClick={() => setNaming(true)}
           style={{
             fontSize: 12,
             fontWeight: 600,
@@ -128,6 +130,14 @@ export function EpicRail({
           {t('newShort')}
         </button>
       </div>
+      {naming && (
+        <InlineNameForm
+          placeholder={t('newEpicPrompt')}
+          submitLabel={t('createEpic')}
+          onSubmit={async (title) => { await onCreateEpic(title); setNaming(false); }}
+          onCancel={() => setNaming(false)}
+        />
+      )}
       {epics.length === 0 ? (
         <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '12px 0', textAlign: 'center' }}>
           {t('noEpics')}

@@ -23,6 +23,7 @@
  * naive inclusive read would mark someone on leave for a day they were back at work.
  * Both conventions are handled below and pinned by tests.
  */
+import { DAY_MS } from '../../domain/shared/time';
 
 /** One out-of-office window, as written by the Google Calendar sync. */
 export interface PtoBlock {
@@ -41,8 +42,6 @@ interface PtoWindow {
 }
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
-const DAY_MS = 86_400_000;
-
 /**
  * Parse the untyped `pto` column into blocks, dropping anything unusable.
  *

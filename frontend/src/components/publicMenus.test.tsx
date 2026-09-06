@@ -40,7 +40,7 @@ vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')
 
 vi.mock('next/navigation', () => ({ usePathname: () => '/' }));
 vi.mock('./HeaderCartButton', () => ({ HeaderCartButton: () => null }));
-vi.mock('@/app/ThemeProvider', () => ({ ThemeToggleButton: () => null }));
+vi.mock('@/components/ThemeToggleButton', () => ({ ThemeToggleButton: () => null }));
 vi.mock('./legal/useLegalDocs', () => ({
   useLegalDocs: () => ({ appVersion: '0', apiVersion: '0', legal: null, termsVersion: '1', privacyVersion: '1' }),
 }));

@@ -1,5 +1,3 @@
-import type { Context } from 'hono';
-
 /**
  * wildcardPath — THE way to read what a route's trailing `*` matched.
  *
@@ -25,7 +23,14 @@ import type { Context } from 'hono';
  *   • Empty segments are PRESERVED (`a//b` stays `a//b`): validators reject them,
  *     and silently collapsing one would write to a different key than requested.
  */
-export function wildcardPath(c: Context): string {
+/** The two request fields the reader needs — Hono's `Context` satisfies it
+ *  structurally, so the package stays dependency-free. */
+export interface WildcardRequest {
+  routePath?: string;
+  path: string;
+}
+
+export function wildcardPath(c: { req: WildcardRequest }): string {
   const route = c.req.routePath ?? '';
   // Only a whole trailing segment is a path wildcard — `/wildcard-*/abc` is not.
   if (!route.endsWith('/*')) return '';

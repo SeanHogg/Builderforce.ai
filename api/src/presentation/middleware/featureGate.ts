@@ -15,6 +15,7 @@ import {
   type PremiumModelAccess,
 } from '../../domain/tenant/planFeatures';
 import { listTenantProviderKeys } from '../../application/llm/tenantProviderKeyService';
+import { upgradeRequiredBody, type UpgradeRequiredBody } from '../../domain/tenant/paymentRequired';
 
 /**
  * Feature gate — the ONE reusable entry point route handlers use to gate a
@@ -165,13 +166,12 @@ export async function requireFrontierAccess(c: Context<HonoEnv>): Promise<Respon
   const tenantId = c.get('tenantId') as number;
   const userId = c.get('userId') as string | undefined;
   if (await tenantCanUseFrontierModels(c.env, tenantId, userId)) return null;
-  return c.json({
+  return c.json(upgradeRequiredBody({
     error: 'Upgrade to a paid plan, or connect your own frontier account (Settings ▸ API Keys), to use a frontier model.',
-    code: 'upgrade_required' as const,
-    feature: 'frontierModels' as const,
+    code: 'upgrade_required',
+    feature: 'frontierModels',
     requiredPlan: TenantPlan.PRO,
-    upgrade: true as const,
-  }, 402);
+  }), 402);
 }
 
 // ---------------------------------------------------------------------------
@@ -234,15 +234,14 @@ export async function requirePremiumModelAccess(c: Context<HonoEnv>): Promise<Re
  * The standardized upgrade-required payload. Names the feature and the plan that
  * unlocks it so the client can route to the right upsell instead of guessing.
  */
-export function featureGateBody(ent: FeatureEntitlement) {
-  return {
+export function featureGateBody(ent: FeatureEntitlement): UpgradeRequiredBody {
+  return upgradeRequiredBody({
     error: `Upgrade to ${PLAN_LABEL[ent.requiredPlan]} to unlock ${ent.label}.`,
-    code: 'upgrade_required' as const,
+    code: 'upgrade_required',
     feature: ent.feature,
     requiredPlan: ent.requiredPlan,
     currentPlan: ent.currentPlan,
-    upgrade: true as const,
-  };
+  });
 }
 
 /**

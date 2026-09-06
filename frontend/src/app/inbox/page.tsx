@@ -1,5 +1,5 @@
 import { PhoneConsole } from '@/components/phone/PhoneConsole';
-import { InboxClient } from './InboxClient';
+import { InboxClient } from '@/components/inbox/InboxClient';
 
 export const runtime = 'edge';
 

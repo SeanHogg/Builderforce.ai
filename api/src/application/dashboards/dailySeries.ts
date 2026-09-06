@@ -12,14 +12,13 @@
 import { and, eq, gte, sql } from 'drizzle-orm';
 import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
 import type { Db } from '../../infrastructure/database/connection';
+import { DAY_MS } from '../../domain/shared/time';
 
 export interface MetricPoint {
   /** UTC calendar day, 'YYYY-MM-DD'. */
   day: string;
   value: number;
 }
-
-const DAY_MS = 86_400_000;
 
 /** UTC 'YYYY-MM-DD' for a Date or epoch-ms. */
 export function dayKeyUTC(ts: number | Date): string {

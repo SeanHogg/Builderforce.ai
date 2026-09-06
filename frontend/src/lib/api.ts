@@ -13,6 +13,7 @@ import {
   type RequestOptions,
 } from './apiClient';
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
+import { readSseData } from '@/lib/sseFrames';
 import type { ColumnClassification, DatasetUsePolicy } from '@builderforce/creation-canvas-contract';
 import type {
   Project,
@@ -495,39 +496,24 @@ export async function sendAIMessage(
   });
   // 402 already threw a typed plan-limit error inside apiRequestStream.
   if (!res.ok) throw new Error('Failed to send AI message');
-  const reader = res.body?.getReader();
-  if (!reader) return;
-  const decoder = new TextDecoder();
-  let buffer = '';
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() ?? '';
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith('data: ')) continue;
-      const data = trimmed.slice(6).trim();
-      if (data === '[DONE]') return;
-      try {
-        const parsed = JSON.parse(data) as {
-          choices?: Array<{ delta?: { content?: string; reasoning?: string } }>;
-          response?: string;
-          text?: string;
-          delta?: string;
-        };
-        const delta = parsed.choices?.[0]?.delta;
-        const chunk =
-          (delta && typeof delta.content === 'string' ? delta.content : null) ||
-          parsed.response ||
-          parsed.text ||
-          parsed.delta ||
-          '';
-        if (chunk) onChunk(chunk);
-      } catch {
-        // Never append raw JSON to the message; skip malformed chunks
-      }
+  for await (const data of readSseData(res.body)) {
+    try {
+      const parsed = JSON.parse(data) as {
+        choices?: Array<{ delta?: { content?: string; reasoning?: string } }>;
+        response?: string;
+        text?: string;
+        delta?: string;
+      };
+      const delta = parsed.choices?.[0]?.delta;
+      const chunk =
+        (delta && typeof delta.content === 'string' ? delta.content : null) ||
+        parsed.response ||
+        parsed.text ||
+        parsed.delta ||
+        '';
+      if (chunk) onChunk(chunk);
+    } catch {
+      // Never append raw JSON to the message; skip malformed chunks
     }
   }
 }
@@ -550,31 +536,18 @@ export async function generateDataset(
     body: JSON.stringify({ projectId, capabilityPrompt, name, ...(model ? { model } : {}) }),
   });
   if (!res.ok) throw new Error('Failed to generate dataset');
-  if (onChunk && res.headers.get('content-type')?.includes('text/event-stream')) {
-    const reader = res.body?.getReader();
-    if (reader) {
-      const decoder = new TextDecoder();
-      let finalDataset: Dataset | undefined;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const text = decoder.decode(value, { stream: true });
-        for (const line of text.split('\n')) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6).trim();
-            if (data === '[DONE]') break;
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.type === 'chunk' && parsed.content) onChunk(parsed.content);
-              if (parsed.type === 'done') finalDataset = parsed.dataset;
-            } catch {
-              if (data) onChunk(data);
-            }
-          }
-        }
+  if (onChunk && res.headers.get('content-type')?.includes('text/event-stream') && res.body) {
+    let finalDataset: Dataset | undefined;
+    for await (const data of readSseData(res.body)) {
+      try {
+        const parsed = JSON.parse(data);
+        if (parsed.type === 'chunk' && parsed.content) onChunk(parsed.content);
+        if (parsed.type === 'done') finalDataset = parsed.dataset;
+      } catch {
+        if (data) onChunk(data);
       }
-      if (finalDataset) return finalDataset;
     }
+    if (finalDataset) return finalDataset;
   }
   return res.json() as Promise<Dataset>;
 }
@@ -661,23 +634,11 @@ export async function streamTrainingLogs(
 ): Promise<void> {
   const res = await apiRequestStream(`${IDE}/training/${jobId}/logs/stream`);
   if (!res.ok) throw new Error('Failed to stream training logs');
-  const reader = res.body?.getReader();
-  if (!reader) return;
-  const decoder = new TextDecoder();
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const text = decoder.decode(value, { stream: true });
-    for (const line of text.split('\n')) {
-      if (line.startsWith('data: ')) {
-        const data = line.slice(6).trim();
-        if (data === '[DONE]') return;
-        try {
-          onLog(JSON.parse(data) as TrainingLog);
-        } catch {
-          /* ignore */
-        }
-      }
+  for await (const data of readSseData(res.body)) {
+    try {
+      onLog(JSON.parse(data) as TrainingLog);
+    } catch {
+      /* ignore */
     }
   }
 }

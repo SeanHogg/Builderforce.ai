@@ -32,38 +32,16 @@ import {
   type FileContentValidation,
 } from '@builderforce/ide-file-contract';
 import { isScaffoldPath } from '@builderforce/ide-templates';
+import { validateWorkspacePath, type PathValidation } from '@builderforce/workspace-path';
 import { IDE_PREFIX } from '../project/projectTemplate';
 
 // ---------------------------------------------------------------------------
 // Paths
 // ---------------------------------------------------------------------------
 
-export type PathValidation = { ok: true } | { ok: false; reason: string };
-
-/** Longest path we accept — far above anything legitimate, below R2's key cap. */
-const MAX_PATH_LENGTH = 512;
-
-/**
- * Validate a workspace-relative file path. Rejects anything that could escape
- * the project prefix, collide with another key space, or produce a key that can
- * never round-trip: empty, absolute (`/x`), backslashes, `.`/`..` segments,
- * empty segments (`a//b`), trailing slash (that's a "directory", not a file),
- * control characters, and overlong paths.
- */
-export function validateWorkspacePath(path: string): PathValidation {
-  if (typeof path !== 'string' || path.length === 0) return { ok: false, reason: 'Path is required' };
-  if (path.length > MAX_PATH_LENGTH) return { ok: false, reason: `Path exceeds ${MAX_PATH_LENGTH} characters` };
-  if (path.startsWith('/')) return { ok: false, reason: 'Path must be workspace-relative (no leading /)' };
-  if (path.endsWith('/')) return { ok: false, reason: 'Path must name a file, not a directory' };
-  if (path.includes('\\')) return { ok: false, reason: 'Use forward slashes in paths' };
-  // eslint-disable-next-line no-control-regex
-  if (/[\x00-\x1f\x7f]/.test(path)) return { ok: false, reason: 'Path contains control characters' };
-  for (const segment of path.split('/')) {
-    if (segment === '') return { ok: false, reason: 'Path contains an empty segment' };
-    if (segment === '.' || segment === '..') return { ok: false, reason: 'Path traversal segments (./..) are not allowed' };
-  }
-  return { ok: true };
-}
+// The validator is `@builderforce/workspace-path` — the SAME module the legacy
+// worker's file router validates with, so the two edges accept identical paths.
+export { validateWorkspacePath, type PathValidation };
 
 /** The R2 key prefix for a project's workspace. Trailing slash is load-bearing:
  *  it is what keeps project 1's listing from matching project 12's keys. */

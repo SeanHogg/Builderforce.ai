@@ -43,8 +43,8 @@ import { loadTaskCostClassMap } from '../pmo/planningSpine';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 import { taskEffortHours as sharedTaskEffortHours } from '../metrics/effortHours';
 import { loggedMinutesByTask, isoDay } from '../timeTracking/timeTracking';
+import { HOUR_MS } from '../../domain/shared/time';
 
-const HOUR_MS = 3_600_000;
 /** Bound on tasks scanned per window (mirrors workforceMetrics.MAX_METRIC_ROWS). */
 const MAX_METRIC_ROWS = 5_000;
 /** Cap per-task effort hours so a single long-lived/stale task can't dominate the

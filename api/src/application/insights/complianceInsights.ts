@@ -24,8 +24,8 @@ import { toolAuditDaily, toolAuditEvents } from '../../infrastructure/database/s
 import { auditWindowDays, readAuditWindow, type AuditRow } from '../audit/toolAuditTrail';
 import { TOOL_AUDIT_ROLLUP_AFTER_DAYS } from '../maintenance/toolAuditRollup';
 import { csvMatrix } from '../export/tabularExport';
+import { HOUR_MS } from '../../domain/shared/time';
 
-const HOUR_MS = 3_600_000;
 const EVIDENCE_PACK_LIMIT = 5_000;
 
 export type ToolRisk = 'sensitive' | 'normal';

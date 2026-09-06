@@ -159,6 +159,8 @@ import {
 import { getTenantTokenAvailability, tokenGateUpgradeHint } from '../../application/llm/tenantTokenAvailability';
 import { getMemberSpendAvailability, maybeEmitSpendNotification, millicentsToUsd } from '../../application/consumption/memberSpend';
 import { positiveIntOrNull, boundedIntParam, daysParam, limitParam } from './queryParams';
+import { sha256Hex } from '../../domain/shared/hash';
+import { upgradeRequiredBody } from '../../domain/tenant/paymentRequired';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -972,8 +974,7 @@ async function guestTurnFingerprint(messages: ChatCompletionRequest['messages'],
   const stableInput = originalUserInput != null
     ? JSON.stringify(originalUserInput.slice(0, 8_000))
     : JSON.stringify(messages.filter((message) => message.role === 'system' || message.role === 'user'));
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(stableInput));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  return sha256Hex(stableInput);
 }
 
 async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
@@ -2090,11 +2091,12 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       if (!strictAllowed) {
         // 402 Payment Required — uniform with the portal feature-gate standard
         // (the caller is authenticated + authorized; they just need a higher plan).
-        return c.json({
+        return c.json(upgradeRequiredBody({
           error: 'Strict model pinning requires a paid plan (Pro/Teams), a connected provider (BYO), or a superadmin-issued daily-limit override.',
           code: 'strict_pin_not_allowed',
-          upgrade: true,
-        }, 402);
+          currentPlan: access.effectivePlan,
+          requiredPlan: TenantPlan.PRO,
+        }), 402);
       }
       // Canonicalize: downstream (LlmProxyService.complete dispatch branch,
       // traceLogger) keys off `modelStrict`, so set it once here.

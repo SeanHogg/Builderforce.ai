@@ -17,6 +17,7 @@
  * scraped page or an email body actually looks; malformed/nested markup of the
  * same tag can under- or over-match, same as `htmlToText`'s tag-stripper.
  */
+import { bytesToHex } from './shared/bytes';
 
 const MAX_INPUT_LENGTH = 200_000;
 const MAX_PATTERN_LENGTH = 500;
@@ -211,9 +212,6 @@ function bytesToBinaryString(bytes: Uint8Array): string {
   return s;
 }
 
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-}
 
 function hexToBytes(hex: string): Uint8Array {
   const clean = hex.replace(/[^0-9a-fA-F]/g, '');

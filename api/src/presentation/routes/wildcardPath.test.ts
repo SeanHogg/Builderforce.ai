@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
-import { wildcardPath } from './wildcardPath';
+import { wildcardPath } from '@builderforce/hono-wildcard-path';
 
 /** Mount `pattern` under `prefix` and report what the wildcard matched. */
 async function matched(prefix: string, pattern: string, url: string, method = 'GET'): Promise<string> {

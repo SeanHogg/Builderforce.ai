@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { useToast } from '@/components/ToastProvider';
 import { listIdeProjects, deleteIdeProject } from '@/lib/api';
 import { persistLastProjectId } from '@/lib/auth';
 import { creationSessionsApi } from '@/lib/builderforceApi';
@@ -38,6 +39,7 @@ export function BuilderProjectsContent({
 }) {
   const router = useRouter();
   const t = useTranslations('ide');
+  const toast = useToast();
   const confirm = useConfirm();
   const { currentProjectId } = useProjectScope();
   const [items, setItems] = useState<IdeProject[]>([]);
@@ -78,7 +80,7 @@ export function BuilderProjectsContent({
       await deleteIdeProject(p.id);
       setItems((prev) => prev.filter((x) => x.id !== p.id));
     } catch {
-      alert(t('deleteFailed'));
+      toast.error(t('deleteFailed'));
     }
   };
 

@@ -574,7 +574,10 @@
       "finish": "完成",
       "back": "返回",
       "next": "下一步",
-      "working": "处理中…"
+      "working": "处理中…",
+      "rollback": "回滚",
+      "rollbackConfirm": "仅回滚本次导入创建的项目、任务和同步连接？之后的工作将被保留。",
+      "rollbackFailed": "回滚失败"
     },
     "page": {
       "title": "集成 / API 密钥",
@@ -13567,6 +13570,38 @@
         "withErrorHint": "遇到了故障",
         "converted": "已注册"
       }
+    },
+    "system": {
+      "title": "系统基础设施",
+      "subtitle": "Worker 绑定、运行时状态、Neon 存储与安全维护。",
+      "cleanExpired": "清理过期数据",
+      "refresh": "↻ 刷新",
+      "loading": "正在加载系统健康状况…",
+      "worker": "Worker",
+      "agentHosts": "代理主机",
+      "onlineRecently": "最近 5 分钟在线",
+      "activeExecutions": "活动执行",
+      "failed24h": "24 小时内失败 {count} 次",
+      "bindings": "Cloudflare 绑定",
+      "configuredServices": "已配置的服务",
+      "bound": "已绑定",
+      "missing": "缺失",
+      "neonDatabase": "{name} Neon 数据库",
+      "unavailable": "不可用",
+      "latency": "{ms} 毫秒",
+      "vacuumAnalyze": "清理并分析",
+      "vacuum": "清理",
+      "colTable": "表",
+      "colSize": "大小",
+      "colRows": "行数",
+      "colWrites": "统计重置后的写入",
+      "colLastVacuum": "上次清理",
+      "allTables": "所有表",
+      "maintenanceCleanup": "运行保留期清理",
+      "maintenanceVacuum": "在 {target} 中清理 {table}",
+      "confirmTitle": "运行维护？",
+      "confirmMaintenance": "确认：{label}？这是一项受审计的维护操作。",
+      "confirmRun": "运行"
     }
   },
   "providerKeys": {
@@ -14398,7 +14433,9 @@
       "empty": "暂无分配。"
     },
     "nextSpeaker": "下一位",
-    "completeSession": "结束"
+    "completeSession": "结束",
+    "createEpic": "创建史诗",
+    "createSprint": "创建冲刺"
   },
   "meetings": {
     "title": "会议",
@@ -23468,7 +23505,10 @@
     "noticeStandupActionItemsPlaced": "{count, plural, other {已将 # 项行动项放入画布}}",
     "noticeStandupMinutesNeedsAccount": "登录后可查看站会纪要",
     "noticeStandupMinutesFailed": "无法读取站会纪要",
-    "exportUnmaskedColumns": "已拒绝导出：{columns} 包含个人数据且未脱敏。请先在卡片上脱敏。"
+    "exportUnmaskedColumns": "已拒绝导出：{columns} 包含个人数据且未脱敏。请先在卡片上脱敏。",
+    "approveAgentActionTitle": "批准代理操作",
+    "approveAgentActionBody": "会话代理想要运行 {action}。",
+    "approveAgentActionConfirm": "批准"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",

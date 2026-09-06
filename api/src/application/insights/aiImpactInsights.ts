@@ -23,9 +23,8 @@ import { llmUsageLog, runModelOutcomes } from '../../infrastructure/database/sch
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 import { normalizeByoProvider } from '../llm/usageLedger';
 import { vendorForModel } from '../llm/vendors/registry';
-
-const DAY_MS = 86_400_000;
-const WEEK_MS = 7 * DAY_MS;
+import { DAY_MS, WEEK_MS } from '../../domain/shared/time';
+import { clamp01 } from '../../domain/shared/numbers';
 
 /** A usage row, pre-projected to just what the rollup needs. */
 export interface UsageRow {
@@ -388,10 +387,6 @@ export function scoreComponents(outcomes: ImpactOutcomeRow[]): { throughput: num
   return { throughput, quality, efficiency, score };
 }
 
-function clamp01(n: number): number {
-  if (!Number.isFinite(n)) return 0;
-  return n < 0 ? 0 : n > 1 ? 1 : n;
-}
 
 /**
  * Pure: assemble the full AiImpactInsights from already-fetched rows. `prev` is

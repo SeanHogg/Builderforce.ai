@@ -18,8 +18,8 @@ import { and, asc, eq, lt } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { headcountEvents, openPositions, memberProfiles } from '../../infrastructure/database/schema';
 import { computeDevexInsights, devexSatisfaction } from './devexInsights';
+import { DAY_MS } from '../../domain/shared/time';
 
-const DAY_MS = 86_400_000;
 const MAX_EVENT_ROWS = 10_000;
 
 export interface HeadcountEventRow {

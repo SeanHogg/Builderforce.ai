@@ -18,6 +18,7 @@
  */
 
 import type { WorkflowDefinition } from './workflowGraph';
+import { randomHex } from './shared/bytes';
 
 /**
  * Event-driven trigger types — fired by an internal domain event rather than by a
@@ -200,9 +201,7 @@ export function extractTriggers(def: WorkflowDefinition): TriggerSpec[] {
  * runtime and in tests.
  */
 export function generateTriggerToken(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  return randomHex(16);
 }
 
 /** Read a string config value, trimmed; `undefined` when absent/blank. */

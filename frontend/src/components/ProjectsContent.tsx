@@ -19,6 +19,7 @@ import { agentHosts } from '@/lib/builderforceApi';
 import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
 import type { ProjectPanelTab } from '@/components/project-details/projectPanelTabs';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { useToast } from '@/components/ToastProvider';
 import { ProjectCard } from '@/components/ProjectCard';
 import { ProjectTable } from '@/components/ProjectTable';
 import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
@@ -56,6 +57,7 @@ export interface ProjectsContentProps {
 export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContentProps = {}) {
   const t = useTranslations('projectsContent');
   const tSchedule = useTranslations('schedule');
+  const toast = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
   // Global project scope (present in the app shell): when a single project is
@@ -276,9 +278,9 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
       scope?.reload();
     } catch (err) {
       console.error(err);
-      alert(t('errDelete'));
+      toast.error(t('errDelete'));
     }
-  }, [scope, t]);
+  }, [scope, t, toast]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }} data-tour="demo-board">

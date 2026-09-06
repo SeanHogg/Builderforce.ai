@@ -20,8 +20,8 @@ import { SWEPT_TABLES } from './sweptTables';
 import { purgeExpiredMemories } from '../memory/memoryService';
 import { VISITOR_RETENTION_DAYS, purgeVisitorActivity } from '../marketing/visitorActivity';
 import { EXECUTION_PAYLOAD_RETENTION_DAYS, redactStaleExecutionPayloads } from '../runtime/executionPayloadRetention';
+import { DAY_MS } from '../../domain/shared/time';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const cutoff = (now: number, days: number) => new Date(now - days * DAY_MS);
 
 /**

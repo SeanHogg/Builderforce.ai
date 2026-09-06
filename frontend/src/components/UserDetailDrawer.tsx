@@ -13,6 +13,7 @@ import {
   type ImpersonationSession,
 } from '@/lib/adminApi';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { useToast } from '@/components/ToastProvider';
 import { useFormat } from "@/i18n/useFormat";
 
 type DrawerTab = 'profile' | 'permissions' | 'sessions' | 'security' | 'access';
@@ -32,6 +33,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
   const fmt = useFormat();
   const t = useTranslations('admin');
   const confirm = useConfirm();
+  const toast = useToast();
   const [tab, setTab] = useState<DrawerTab>('profile');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -85,7 +87,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
     try {
       await adminApi.forceLogout(user.id);
       setErrorMsg('');
-      alert(t('users.drawer.forceLogoutDone'));
+      toast.success(t('users.drawer.forceLogoutDone'));
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : String(e));
     } finally {
@@ -99,7 +101,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
     setErrorMsg('');
     try {
       await adminApi.resetPassword(user.id);
-      alert(t('users.drawer.resetPasswordDone'));
+      toast.success(t('users.drawer.resetPasswordDone'));
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : String(e));
     } finally {
@@ -113,7 +115,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
     setErrorMsg('');
     try {
       await adminApi.setUserStatus(user.id, suspend);
-      alert(suspend ? t('users.drawer.suspendDone') : t('users.drawer.unsuspendDone'));
+      toast.success(suspend ? t('users.drawer.suspendDone') : t('users.drawer.unsuspendDone'));
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : String(e));
     } finally {

@@ -574,7 +574,10 @@
       "finish": "Done",
       "back": "Back",
       "next": "Next",
-      "working": "Working…"
+      "working": "Working…",
+      "rollback": "Roll back",
+      "rollbackConfirm": "Roll back only the projects, tasks, and sync connections created by this import? Later work will be preserved.",
+      "rollbackFailed": "Rollback failed"
     },
     "page": {
       "title": "Integrations / API Keys",
@@ -13567,6 +13570,38 @@
         "withErrorHint": "hit something broken",
         "converted": "Signed up"
       }
+    },
+    "system": {
+      "title": "System infrastructure",
+      "subtitle": "Worker bindings, runtime state, Neon storage, and safe maintenance.",
+      "cleanExpired": "Clean expired data",
+      "refresh": "↻ Refresh",
+      "loading": "Loading system health…",
+      "worker": "Worker",
+      "agentHosts": "Agent hosts",
+      "onlineRecently": "online in the last 5 minutes",
+      "activeExecutions": "Active executions",
+      "failed24h": "{count} failed in 24h",
+      "bindings": "Cloudflare bindings",
+      "configuredServices": "configured services",
+      "bound": "bound",
+      "missing": "missing",
+      "neonDatabase": "{name} Neon database",
+      "unavailable": "unavailable",
+      "latency": "{ms} ms",
+      "vacuumAnalyze": "Vacuum & analyze",
+      "vacuum": "Vacuum",
+      "colTable": "Table",
+      "colSize": "Size",
+      "colRows": "Rows",
+      "colWrites": "Writes since stats reset",
+      "colLastVacuum": "Last vacuum",
+      "allTables": "all tables",
+      "maintenanceCleanup": "run retention cleanup",
+      "maintenanceVacuum": "vacuum {table} in {target}",
+      "confirmTitle": "Run maintenance?",
+      "confirmMaintenance": "Confirm: {label}? This is an audited maintenance operation.",
+      "confirmRun": "Run"
     }
   },
   "providerKeys": {
@@ -14398,7 +14433,9 @@
       "empty": "Nothing assigned."
     },
     "nextSpeaker": "Next",
-    "completeSession": "Complete"
+    "completeSession": "Complete",
+    "createEpic": "Create epic",
+    "createSprint": "Create sprint"
   },
   "meetings": {
     "title": "Meetings",
@@ -23468,7 +23505,10 @@
     "noticeStandupActionItemsPlaced": "{count, plural, one {Placed # action item on the board} other {Placed # action items on the board}}",
     "noticeStandupMinutesNeedsAccount": "Sign in to read a stand-up’s minutes",
     "noticeStandupMinutesFailed": "Could not read the stand-up minutes",
-    "exportUnmaskedColumns": "Export refused: {columns} hold personal data and are not masked. Mask them on the card first."
+    "exportUnmaskedColumns": "Export refused: {columns} hold personal data and are not masked. Mask them on the card first.",
+    "approveAgentActionTitle": "Approve agent action",
+    "approveAgentActionBody": "A session agent wants to run {action}.",
+    "approveAgentActionConfirm": "Approve"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",

@@ -29,8 +29,8 @@ import {
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { clampScore as clamp } from '../../domain/shared/numbers';
 import { notSystemTask } from '../task/taskScope';
+import { HOUR_MS, DAY_MS, WEEK_MS } from '../../domain/shared/time';
 
-const HOUR_MS = 3_600_000;
 /** Hard cap on tasks scanned per scorecard window — guards the JS-side
  *  aggregation against an unbounded result set on a very large tenant. The newest
  *  rows in the window are kept (ordered by updatedAt desc); a tenant that exceeds
@@ -413,9 +413,6 @@ export interface DoraSeriesPoint {
 export interface DeployRow { deployedAt: Date; isFailure: boolean; restoredAt: Date | null; }
 /** A completed task's create→complete span, used for per-bucket lead time. */
 export interface LeadRow { completedAt: Date; leadTimeHrs: number; }
-
-const DAY_MS = 24 * HOUR_MS;
-const WEEK_MS = 7 * DAY_MS;
 
 /** The four DORA keys over one bucket of `bucketDays` — the shared math both the
  *  window rollup and each weekly series point use (no second definition). */

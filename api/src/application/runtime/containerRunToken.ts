@@ -12,19 +12,8 @@
  * a leaked token can't drive a different run.
  */
 
-const enc = new TextEncoder();
-
-async function hmacHex(secret: string, message: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    'raw',
-    enc.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(message));
-  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
+import { timingSafeEqual } from '../../infrastructure/crypto/constantTime';
+import { hmacHex } from '../../infrastructure/crypto/hmac';
 
 /** Mint the container-run token for `executionId`. */
 export function mintContainerRunToken(secret: string, executionId: number): Promise<string> {
@@ -33,11 +22,8 @@ export function mintContainerRunToken(secret: string, executionId: number): Prom
 
 /** Constant-time verify a presented token for `executionId`. */
 export async function verifyContainerRunToken(secret: string, executionId: number, presented: string): Promise<boolean> {
-  const expected = await hmacHex(secret, `container-run:${executionId}`);
-  if (typeof presented !== 'string' || presented.length !== expected.length) return false;
-  let diff = 0;
-  for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ presented.charCodeAt(i);
-  return diff === 0;
+  if (typeof presented !== 'string') return false;
+  return timingSafeEqual(await hmacHex(secret, `container-run:${executionId}`), presented);
 }
 
 /** Git smart-HTTP URL whose only credential is the execution HMAC. The upstream

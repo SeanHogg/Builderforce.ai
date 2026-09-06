@@ -17,3 +17,12 @@ export function clamp(value: number, min: number, max: number): number {
 export function clampScore(n: number): number {
   return clamp(n, 0, 100);
 }
+
+/**
+ * Clamp into the unit interval, and treat a non-finite input as 0 — the shape
+ * eight scorers had each written (`Number.isFinite(n) ? … : 0`). A ratio that is
+ * NaN because its denominator was zero is "no signal", not a crash.
+ */
+export function clamp01(n: number): number {
+  return Number.isFinite(n) ? clamp(n, 0, 1) : 0;
+}

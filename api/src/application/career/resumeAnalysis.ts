@@ -22,6 +22,7 @@ import {
   STRONG_VERBS, displaySkill, isSkillToken, isTooShortToScore, parseResume, skillGroupOf,
   toneCounts, tokenCounts, type ParsedResume, type ResumeBullet,
 } from '@builderforce/creation-canvas-contract';
+import { clampScore } from '../../domain/shared/numbers';
 
 export interface ScoreCategory {
   key: 'ats' | 'content' | 'keywords' | 'format' | 'impact';
@@ -49,7 +50,7 @@ export interface ResumeScore {
   };
 }
 
-const clamp = (n: number): number => Math.max(0, Math.min(100, Math.round(n)));
+const clamp = (n: number): number => clampScore(Math.round(n));
 
 /** Score a résumé across the five categories a screener actually filters on. */
 export function scoreResume(input: string): ResumeScore {

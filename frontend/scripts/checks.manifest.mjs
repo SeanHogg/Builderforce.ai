@@ -26,6 +26,8 @@ export default [
   ['check:root-closure', 'check-root-closure.mjs'],
   // Raw localStorage/sessionStorage sites may only shrink — see lib/storage.ts.
   ['check:raw-storage', 'check-raw-storage.mjs'],
+  // window.confirm/prompt/alert: zero, not a ratchet — the app has its own doors.
+  ['check:native-dialogs', 'check-native-dialogs.mjs'],
   ['check:primitives', 'check-primitive-duplication.mjs'],
   // The repo-wide silent-catch ratchet, narrowed to this package's tree so the
   // cost stays local. The full sweep runs in api's chain.

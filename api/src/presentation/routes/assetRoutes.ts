@@ -8,7 +8,7 @@ import {
   storeTenantAsset,
   type AssetRejection,
 } from '../../application/assets/tenantAssetStore';
-import { wildcardPath } from './wildcardPath';
+import { wildcardPath } from '@builderforce/hono-wildcard-path';
 
 /**
  * ASSETS — /api/assets. The ONE place a file becomes a URL.

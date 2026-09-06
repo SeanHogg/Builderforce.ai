@@ -21,8 +21,7 @@
 
 import { forecastVsTarget, type DeliveryStatus } from './deliveryInsights';
 import { clampScore } from '../../domain/shared/numbers';
-
-const DAY_MS = 86_400_000;
+import { DAY_MS } from '../../domain/shared/time';
 
 /** Baseline read from the delivery rollup for the chosen deliverable. */
 export interface ScenarioBaseline {

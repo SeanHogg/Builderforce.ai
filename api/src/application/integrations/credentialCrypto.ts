@@ -23,6 +23,7 @@
  */
 
 import type { Env } from '../../env';
+import { base64ToBytes, bytesToBase64, bytesToHex, hexToBytes } from '../../domain/shared/bytes';
 
 /**
  * Canonical resolution order for the at-rest credential-encryption BASE secret.
@@ -102,8 +103,8 @@ export async function encryptCredentials(
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const enc = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(data)));
   return {
-    enc: V2_PREFIX + btoa(String.fromCharCode(...new Uint8Array(enc))),
-    iv: Array.from(iv).map((b) => b.toString(16).padStart(2, '0')).join(''),
+    enc: V2_PREFIX + bytesToBase64(enc),
+    iv: bytesToHex(iv),
   };
 }
 
@@ -139,12 +140,8 @@ export async function decryptCredentials(
       payload = encB64;
     }
     const key = await deriveKey(secret, salt);
-    const iv = new Uint8Array(ivHex.match(/.{2}/g)!.map((h) => parseInt(h, 16)));
-    const dec = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv },
-      key,
-      Uint8Array.from(atob(payload), (c) => c.charCodeAt(0)),
-    );
+    const iv = hexToBytes(ivHex);
+    const dec = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, base64ToBytes(payload));
     return JSON.parse(new TextDecoder().decode(dec));
   } catch {
     return null;

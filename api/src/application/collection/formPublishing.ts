@@ -30,14 +30,7 @@
  */
 
 import { and, asc, count, eq, gt, isNotNull, isNull, or, sql } from 'drizzle-orm';
-import {
-  FORM_AUDIENCES,
-  isFormFieldType,
-  type FormAudience,
-  type FormQuestion,
-  type FormStatus,
-  type PublishedForm,
-} from '@builderforce/creation-canvas-contract';
+import { isFormAudience, isFormFieldType, isFormStatus, type FormAudience, type FormQuestion, type FormStatus, type PublishedForm } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
 import { formRecipients, questionSets, responses } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -115,13 +108,9 @@ export function readQuestions(raw: unknown): FormQuestion[] {
   }).slice(0, MAX_QUESTIONS);
 }
 
-function asFormStatus(value: string): FormStatus {
-  return value === 'open' || value === 'closed' ? value : 'draft';
-}
+const asFormStatus = (value: string): FormStatus => (isFormStatus(value) ? value : 'draft');
 
-function asAudience(value: string): FormAudience {
-  return (FORM_AUDIENCES as readonly string[]).includes(value) ? value as FormAudience : 'anyoneWithLink';
-}
+const asAudience = (value: string): FormAudience => (isFormAudience(value) ? value : 'anyoneWithLink');
 
 // ---------------------------------------------------------------------------
 // Publishing

@@ -24,8 +24,8 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { pullRequests, qaFindings, runModelOutcomes } from '../../infrastructure/database/schema';
+import { DAY_MS } from '../../domain/shared/time';
 
-const DAY_MS = 86_400_000;
 const TOP_N = 12;
 
 /** Version token for a tenant's quality rollups — bumped when a finding lands so

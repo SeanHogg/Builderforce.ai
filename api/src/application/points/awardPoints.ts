@@ -48,6 +48,7 @@ import {
 import { pointsAwardCount, pointsEarnedForActionSince, writePointsEntry } from './pointsLedger';
 import { readPointsProfile, writePointsProfile, type PointsProfile } from './pointsProfile';
 import { localDay, rollStreak } from './streakEngine';
+import { DAY_MS } from '../../domain/shared/time';
 
 export type AwardSkipReason =
   | 'unknown_action' | 'suspended' | 'facet_mismatch'
@@ -66,8 +67,6 @@ export interface AwardInput {
   refId?: string | null;
   metadata?: Record<string, unknown> | null;
 }
-
-const DAY_MS = 86_400_000;
 
 /**
  * Record that `userId` did `action`. See the module note: never throws, and the

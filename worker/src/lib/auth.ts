@@ -11,8 +11,8 @@
  *
  * The token is the SAME HS256 (HMAC-SHA-256) JWT the api issues (JwtService.signJwt,
  * signed with JWT_SECRET). We verify it here with Web Crypto — no dependency, no
- * network hop — mirroring JwtService.verifyJwt exactly (base64url header.body, HMAC
- * verify, exp check). The worker must be given the SAME `JWT_SECRET` as the api
+ * network hop — through `@builderforce/hs256-jwt`, the ONE verifier JwtService itself
+ * uses, so the two can never drift. The worker must be given the SAME `JWT_SECRET` as the api
  * (`wrangler secret put JWT_SECRET` in the worker/ dir); if it is unset the middleware
  * FAILS CLOSED (503) rather than allowing an auth bypass.
  *
@@ -25,6 +25,7 @@
  * is unset.
  */
 import type { MiddlewareHandler } from 'hono';
+import { verifyHs256 } from '@builderforce/hs256-jwt';
 
 /** Bindings every worker route already carries plus the shared JWT signing secret. */
 export interface WorkerAuthBindings {
@@ -34,40 +35,19 @@ export interface WorkerAuthBindings {
 interface WorkerJwtPayload {
   sub?: string;
   tid?: number;
-  exp?: number;
+  exp: number;
   jti?: string;
 }
 
-/** base64url → bytes (JWT segments are base64url, no padding). */
-function b64urlToBytes(segment: string): Uint8Array {
-  const b64 = segment.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(segment.length / 4) * 4, '=');
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
-/** Verify an HS256 JWT against `secret`; return the payload or null (bad sig / shape / expired). */
-async function verifyHs256(token: string, secret: string): Promise<WorkerJwtPayload | null> {
-  const parts = token.split('.');
-  if (parts.length !== 3) return null;
-  const [header, body, sig] = parts;
-  let key: CryptoKey;
+/** The API's session token, verified by the SAME implementation the API uses
+ *  (`@builderforce/hs256-jwt`): signature first, then `exp`, then `nbf`. */
+async function verifySessionToken(token: string, secret: string): Promise<WorkerJwtPayload | null> {
   try {
-    key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+    const verdict = await verifyHs256<WorkerJwtPayload & { exp: number }>(token, secret);
+    return verdict.ok ? verdict.claims : null;
   } catch {
     return null;
   }
-  const valid = await crypto.subtle.verify('HMAC', key, b64urlToBytes(sig), new TextEncoder().encode(`${header}.${body}`));
-  if (!valid) return null;
-  let payload: WorkerJwtPayload;
-  try {
-    payload = JSON.parse(new TextDecoder().decode(b64urlToBytes(body))) as WorkerJwtPayload;
-  } catch {
-    return null;
-  }
-  if (typeof payload.exp === 'number' && payload.exp < Math.floor(Date.now() / 1000)) return null;
-  return payload;
 }
 
 /**
@@ -83,7 +63,7 @@ export const requireAuth: MiddlewareHandler<{ Bindings: WorkerAuthBindings }> = 
   const authz = c.req.header('Authorization') ?? '';
   const match = /^Bearer\s+(.+)$/i.exec(authz);
   if (!match) return c.json({ error: 'Unauthorized' }, 401);
-  const payload = await verifyHs256(match[1].trim(), secret);
+  const payload = await verifySessionToken(match[1].trim(), secret);
   if (!payload?.sub) return c.json({ error: 'Unauthorized' }, 401);
   await next();
 };

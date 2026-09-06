@@ -7,6 +7,7 @@
 import { and, eq } from 'drizzle-orm';
 import { ideAgents } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseJsonArray } from '../../domain/shared/json';
 
 export interface BuiltinAgentRef {
   id: string;
@@ -15,18 +16,8 @@ export interface BuiltinAgentRef {
   skills: string[];
 }
 
-function parseSkills(raw: unknown): string[] {
-  if (Array.isArray(raw)) return raw.map(String);
-  if (typeof raw === 'string') {
-    try {
-      const v = JSON.parse(raw);
-      return Array.isArray(v) ? v.map(String) : [];
-    } catch {
-      return [];
-    }
-  }
-  return [];
-}
+/** Skills arrive as a JSON array or an already-decoded one; every entry is coerced to text. */
+const parseSkills = (raw: unknown): string[] => parseJsonArray<unknown>(raw).map(String);
 
 /** Resolve a tenant's active built-in agent of the given kind, or null. */
 export async function findBuiltinAgentRef(

@@ -4,6 +4,7 @@ export * from './Button';
 export * from './EmptyState';
 export * from './Field';
 export * from './Icon';
+export * from './InlineNameForm';
 export * from './PageHeader';
 export * from './SectionState';
 export * from './Surface';

@@ -57,7 +57,7 @@
  * trademark can be) and a shared field would have to document all three at once.
  */
 
-import { LEGAL_OBJECT_KINDS, type LegalObjectKind } from '@builderforce/creation-canvas-contract';
+import { type LegalObjectKind } from '@builderforce/creation-canvas-contract';
 // The counterparty resolver, from the vocabulary that declares it. `legalMatter` names an
 // ADVERSE party and `party_roles` already holds them, so a matter joins to the same
 // `account` card an invoice and a contract join to — see `founderObjects.ts` for why the
@@ -399,8 +399,6 @@ export const LEGAL_STATUSES: Record<string, string> = {
   unsynced: 'Not synced',
 };
 
-/** Kinds the contract declares, for the test that proves the two lists agree. */
-export const LEGAL_CONTRACT_KINDS: readonly LegalObjectKind[] = LEGAL_OBJECT_KINDS;
 
 registerSpecObjectSet({
   id: 'legal',

@@ -20,8 +20,8 @@ import {
   type StakeholderResponse,
   type StakeholderReviewState,
 } from './stakeholderAlignment.types';
+import { HOUR_MS } from '../../domain/shared/time';
 
-const HOUR_MS = 3_600_000;
 const REVIEW_WINDOW_HOURS = 48;
 
 export interface StakeholderMapEntryInput {

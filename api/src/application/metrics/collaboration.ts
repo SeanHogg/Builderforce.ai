@@ -24,8 +24,9 @@ import {
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { MemberKind } from './workforceMetrics';
+import { HOUR_MS } from '../../domain/shared/time';
+import { clampScore } from '../../domain/shared/numbers';
 
-const HOUR_MS = 3_600_000;
 const MAX_ROWS = 20_000;
 
 const key = (kind: MemberKind, ref: string) => `${kind}:${ref}`;
@@ -48,7 +49,7 @@ export interface CollaborationRow extends CollaborationSignals {
   breakdown: { reviewsPts: number; commentsPts: number; handoffPts: number; latencyPts: number };
 }
 
-const clamp100 = (n: number) => Math.max(0, Math.min(100, n));
+const clamp100 = clampScore;
 
 /**
  * Pure: fold a member's raw collaboration signals into a 0..100 score. Reviews and

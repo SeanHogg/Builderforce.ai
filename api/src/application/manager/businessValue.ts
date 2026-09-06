@@ -16,6 +16,8 @@
  * write; this module owns the prompt, the parse, and the math.
  */
 import type { RankableTask, TaskPriorityTier } from './prioritize';
+import { DAY_MS } from '../../domain/shared/time';
+import { clamp } from '../../domain/shared/numbers';
 
 /** RICE components on the bounded, relative scales the manager prompt constrains. */
 export interface RiceComponents {
@@ -45,7 +47,6 @@ export interface ScoredValue {
   source: 'ai' | 'rice' | 'heuristic' | 'manual';
 }
 
-const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n));
 
 /**
  * Fold RICE components into a bounded 0-100 score. Classic RICE is
@@ -67,8 +68,6 @@ const PRIORITY_BASE: Record<TaskPriorityTier, number> = {
   medium: 45,
   low: 25,
 };
-
-const DAY_MS = 86_400_000;
 
 /**
  * Deterministic fallback value from the signals a ticket already carries. Anchored

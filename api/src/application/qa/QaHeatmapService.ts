@@ -29,14 +29,13 @@ import { qaJourneyEvents } from '../../infrastructure/database/schema';
 import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
 import type { QaHeatZone } from './qaTypes';
+import { DAY_MS } from '../../domain/shared/time';
 
 export const QA_HEAT_VERSION_KEY = (tenantId: number): string => `qa-heat-version:tenant:${tenantId}`;
 
 /** Recency decay applied per day since a zone's last interaction (0.97/day ≈ a
  *  ~23-day half-life): a zone hot last week outranks one equally hot last year. */
 const DECAY_PER_DAY = 0.97;
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 interface RankOpts {
   sinceDays?: number;
   /** How many ranked zones to return. */

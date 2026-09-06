@@ -1,14 +1,7 @@
 import { defineConfig } from 'tsup';
+import { libraryConfig, REACT_EXTERNALS } from '../scripts/tsup.base.mjs';
 
-export default defineConfig({
+export default defineConfig(libraryConfig({
   entry: { index: 'src/index.ts' },
-  format: ['esm', 'cjs'],
-  dts: true,
-  sourcemap: true,
-  clean: true,
-  outDir: 'dist',
-  external: ['react', 'react-dom', 'react/jsx-runtime'],
-  outExtension({ format }) {
-    return { js: format === 'esm' ? '.mjs' : '.cjs' };
-  },
-});
+  external: REACT_EXTERNALS,
+}));

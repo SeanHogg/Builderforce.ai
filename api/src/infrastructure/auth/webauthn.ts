@@ -26,7 +26,7 @@
  * count regression implies — lives in `application/auth/PasskeyService.ts`.
  */
 
-import { base64UrlToBytes, bytesToBase64Url } from './jws';
+import { base64UrlToBytes, bytesToBase64Url, bytesToHex } from '../../domain/shared/bytes';
 
 export { base64UrlToBytes, bytesToBase64Url };
 
@@ -179,10 +179,6 @@ export function decodeCbor(bytes: Uint8Array): { value: CborValue; bytesRead: nu
 // ---------------------------------------------------------------------------
 // Authenticator data
 // ---------------------------------------------------------------------------
-
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-}
 
 /** aaguid is conventionally rendered as a UUID; the raw form is 16 opaque bytes. */
 function formatAaguid(bytes: Uint8Array): string {

@@ -15,13 +15,14 @@
  * `crypto.subtle` is available in Workers, Node 18+ and the test runner alike, so
  * there is no platform branch to hide here.
  */
+import { bytesToHex } from './bytes';
+
 export async function sha256Hex(value: string): Promise<string> {
   return sha256HexBytes(new TextEncoder().encode(value));
 }
 
 /** Same digest, for callers who already have bytes (a file upload) rather than
  *  a string — encoding binary data as text first would corrupt it. */
-export async function sha256HexBytes(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+export async function sha256HexBytes(bytes: ArrayBuffer | ArrayBufferView): Promise<string> {
+  return bytesToHex(await crypto.subtle.digest('SHA-256', bytes as BufferSource));
 }

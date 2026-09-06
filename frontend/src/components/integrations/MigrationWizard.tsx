@@ -13,6 +13,7 @@ import {
   type IntegrationCredential,
 } from '@/lib/builderforceApi';
 import type { Project } from '@/lib/types';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 /**
  * Migration wizard — connect → discover → map/combine projects → map item types
@@ -72,6 +73,7 @@ function stepForStatus(status: MigrationRunDetail['run']['status']): Step {
 
 export function MigrationWizard({ open, onClose, provider, providerLabel, credentials, onImported, side = 'right', initialRunId = null }: MigrationWizardProps) {
   const t = useTranslations('integrations');
+  const confirm = useConfirm();
   const [step, setStep] = useState<Step>('connect');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -170,14 +172,16 @@ export function MigrationWizard({ open, onClose, provider, providerLabel, creden
   };
 
   const rollbackImport = async () => {
-    if (!runId || !window.confirm('Roll back only the projects, tasks, and sync connections created by this import? Later work will be preserved.')) return;
+    if (!runId) return;
+    // A destructive rollback of a live import: the in-app confirm, never the browser's.
+    if (!(await confirm({ message: t('migration.rollbackConfirm'), confirmLabel: t('migration.rollback'), destructive: true }))) return;
     setBusy(true); setError(null);
     try {
       const run = await migrationsApi.rollback(runId);
       setDetail((prev) => prev ? { ...prev, run } : prev);
       onImported?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Rollback failed');
+      setError(e instanceof Error ? e.message : t('migration.rollbackFailed'));
     } finally { setBusy(false); }
   };
 

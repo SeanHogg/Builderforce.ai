@@ -47,6 +47,7 @@ import {
   isWorkingDay,
   type WorkingCalendar,
 } from './workingCalendarModel';
+import { DAY_MS } from '../../domain/shared/time';
 
 export {
   DEFAULT_WORKING_CALENDAR,
@@ -55,8 +56,6 @@ export {
   utcDayKey,
 } from './workingCalendarModel';
 export type { WorkingCalendar } from './workingCalendarModel';
-
-const DAY_MS = 86_400_000;
 
 /**
  * Hard stop on any forward day-walk. A calendar with one working weekday and a year

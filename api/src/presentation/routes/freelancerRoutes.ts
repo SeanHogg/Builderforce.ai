@@ -310,9 +310,6 @@ const RESERVED_SLUGS = new Set([
 ]);
 
 /** Parse the stored skills JSON column into a string[]. */
-function parseSkills(raw: unknown): string[] {
-  return parseJsonArray<string>(raw);
-}
 
 /** Normalize a candidate slug to the canonical form (lowercase, hyphen-joined). */
 function normalizeSlug(raw: string): string {
@@ -388,7 +385,7 @@ function mapPublicProfile(row: Record<string, unknown>): Record<string, unknown>
     headline: row.headline ?? null,
     bio: row.bio ?? null,
     discipline: row.discipline ?? null,
-    skills: parseSkills(row.skills),
+    skills: parseJsonArray<string>(row.skills),
     hourlyRateCents: row.hourly_rate_cents == null ? null : Number(row.hourly_rate_cents),
     currency: row.currency ?? 'USD',
     visibility: row.visibility ?? 'private',
@@ -399,7 +396,7 @@ function mapPublicProfile(row: Record<string, unknown>): Record<string, unknown>
     // browsing talent has to be able to see who is open to employment, which is the
     // whole point of the listing carrying it. See application/career/listing.ts.
     seeking: row.seeking ?? 'services',
-    targetRoles: parseSkills(row.target_roles),
+    targetRoles: parseJsonArray<string>(row.target_roles),
     seniority: row.seniority ?? null,
     desiredSalaryMinCents: row.desired_salary_min_cents == null ? null : Number(row.desired_salary_min_cents),
     desiredSalaryMaxCents: row.desired_salary_max_cents == null ? null : Number(row.desired_salary_max_cents),
@@ -713,7 +710,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     const suggestions = suggestionsFromDocument(document);
     const [row] = await db.select({ skills: freelancerProfiles.skills })
       .from(freelancerProfiles).where(eq(freelancerProfiles.userId, userId));
-    if (parseSkills(row?.skills).length === 0 && suggestions.skills.length > 0) {
+    if (parseJsonArray<string>(row?.skills).length === 0 && suggestions.skills.length > 0) {
       await db.update(freelancerProfiles)
         .set({ skills: JSON.stringify(suggestions.skills.slice(0, 50)), updatedAt: sql`NOW()` })
         .where(eq(freelancerProfiles.userId, userId));

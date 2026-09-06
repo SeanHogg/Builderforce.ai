@@ -50,7 +50,7 @@ import { computeRdFinancials } from '../../application/insights/rdFinancialsInsi
 import { importBoardRows, isImportDataset, IMPORT_DATASETS } from '../../application/insights/boardImport';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { positiveIntParam, boundedIntParam, daysParam } from './queryParams';
+import { positiveIntParam, boundedIntParam, daysParam, fiscalYearParam, periodParam } from './queryParams';
 import { capitalizationToCsv, capitalizationToXlsx } from '../../application/metrics/capitalizationReport';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
@@ -65,14 +65,7 @@ const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 const PREMIUM_INSIGHTS = 'advancedInsights';
 
 /** Current calendar month 'YYYY-MM' (UTC) when no `?period=` given. */
-function currentPeriodMonth(now: number): string {
-  const d = new Date(now);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-}
 
-function parsePeriod(raw: string | undefined, now: number): string {
-  return raw && /^\d{4}-\d{2}$/.test(raw) ? raw : currentPeriodMonth(now);
-}
 
 // Insights cache version-key helpers live in application/insights/versionKeys so
 // ingest code (boardsync) can import them without an application→presentation
@@ -86,11 +79,6 @@ import {
   peopleVersionKey, aiProgramVersionKey, rdFinancialsVersionKey,
 } from '../../application/insights/versionKeys';
 
-/** Parse `?fy=` (fiscal year) → 4-digit int, default current UTC year. */
-function parseFiscalYear(raw: string | undefined, now: number): number {
-  const n = Number(raw);
-  return Number.isInteger(n) && n >= 2000 && n <= 2100 ? n : new Date(now).getUTCFullYear();
-}
 
 
 export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
@@ -125,7 +113,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   router.get('/finance', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
     const { tenantId, segmentId } = scope(c);
     const now = Date.now();
-    const period = parsePeriod(c.req.query('period'), now);
+    const period = periodParam(c.req.query('period'), now);
     const env = c.env as Env;
     const ver = await getCacheVersion(env, financeVersionKey(tenantId));
     const key = `insights:fin:t:${tenantId}:s:${segmentId}:p:${period}:v:${ver}`;
@@ -140,7 +128,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId } = scope(c);
     const days = daysParam(c.req.query('days'), 30);
     const now = Date.now();
-    const period = parsePeriod(c.req.query('period'), now);
+    const period = periodParam(c.req.query('period'), now);
     const projectId = positiveIntParam(c.req.query('projectId'));
     const teamId = positiveIntParam(c.req.query('teamId'));
     const env = c.env as Env;
@@ -413,7 +401,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   router.get('/rd-financials/summary', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
     const { tenantId } = scope(c);
     const now = Date.now();
-    const fy = parseFiscalYear(c.req.query('fy'), now);
+    const fy = fiscalYearParam(c.req.query('fy'), now);
     const env = c.env as Env;
     const ver = await getCacheVersion(env, rdFinancialsVersionKey(tenantId));
     const key = `insights:rdfin:t:${tenantId}:fy:${fy}:v:${ver}`;

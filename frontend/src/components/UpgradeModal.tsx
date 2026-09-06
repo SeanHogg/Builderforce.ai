@@ -3,7 +3,7 @@
 import { Icon } from '@/components/ui/Icon';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { PlanLimitError } from '@/lib/planLimitError';
+import { PlanLimitError, type UpgradeTargetPlan } from '@/lib/planLimitError';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 
 export interface UpgradeModalProps {
@@ -11,8 +11,9 @@ export interface UpgradeModalProps {
   error: PlanLimitError | null;
   /** Called when the user dismisses the panel (X, overlay click, or Continue). */
   onClose: () => void;
-  /** Optional target plan for the pricing page deep link. Defaults to 'pro'. */
-  upgradeTarget?: 'pro' | 'teams';
+  /** Optional target plan for the pricing page deep link. Defaults to the plan
+   *  the error names, then 'pro'. */
+  upgradeTarget?: UpgradeTargetPlan;
   /** Override the default title. */
   title?: string;
   /** Optional dismiss-button label. Defaults to "Not now". */
@@ -32,7 +33,7 @@ function formatPlan(plan: string): string {
 export function UpgradeModal({
   error,
   onClose,
-  upgradeTarget = 'pro',
+  upgradeTarget,
   title: titleOverride,
   dismissLabel: dismissLabelOverride,
 }: UpgradeModalProps) {
@@ -42,9 +43,10 @@ export function UpgradeModal({
   const dismissLabel = dismissLabelOverride ?? t('dismiss');
   const planLabel = error ? formatPlan(error.currentPlan) : '';
 
+  const target = upgradeTarget ?? error?.requiredPlan ?? 'pro';
   const handleUpgrade = () => {
     onClose();
-    router.push(`/pricing?upgrade=${upgradeTarget}`);
+    router.push(`/pricing?upgrade=${target}`);
   };
 
   return (

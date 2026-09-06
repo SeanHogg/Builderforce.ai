@@ -16,6 +16,7 @@
  * expressed in exactly the vocabulary the compiler consumes.
  */
 import { PSYCH_DIM, NEUTRAL, HI, LO, score } from '@builderforce/agent-tools';
+import { clamp } from '../../domain/shared/numbers';
 
 /** A single terminal run's outcome, distilled to the signals reinforcement reads.
  *  Produced LIVE from `run_model_outcomes` (see personalityRoutes). */
@@ -67,7 +68,6 @@ export const MAX_PERIOD_ABS = 6;
 const DEFAULT_TOOL_ERROR_THRESHOLD = 0.3;
 const DEFAULT_EXCESSIVE_RETRIES = 15;
 
-const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n));
 const clamp0100 = (n: number): number => clamp(Math.round(n), 0, 100);
 const mean = (xs: number[]): number => (xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length);
 

@@ -37,7 +37,7 @@ export function UpgradeGate({ error, fallback = null }: { error: unknown; fallba
         {t('upgrade.body', { plan: error.currentPlan })}
       </p>
       <Link
-        href="/pricing?upgrade=pro"
+        href={`/pricing?upgrade=${error.requiredPlan ?? 'pro'}`}
         style={{
           marginTop: 4, padding: '8px 16px', borderRadius: 'var(--radius-md)', textDecoration: 'none',
           background: 'var(--accent)', color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.84rem',

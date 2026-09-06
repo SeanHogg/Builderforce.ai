@@ -33,6 +33,7 @@
  */
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
+import { base64ToBytes, base64UrlEncode, bytesToBase64Url } from '../../domain/shared/bytes';
 
 /** Installation tokens are valid for 1h. Cache short of that so a token is never
  *  handed to a caller that is about to expire mid-run (agent runs are long). */
@@ -126,22 +127,7 @@ export function pkcs1ToPkcs8(pkcs1: Uint8Array): Uint8Array {
   return out;
 }
 
-function base64ToBytes(b64: string): Uint8Array {
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
-function bytesToBase64Url(bytes: Uint8Array): string {
-  let bin = '';
-  for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function base64UrlFromString(s: string): string {
-  return bytesToBase64Url(new TextEncoder().encode(s));
-}
+const base64UrlFromString = base64UrlEncode;
 
 /**
  * Parse a PEM private key into PKCS#8 DER, accepting both the PKCS#1 form

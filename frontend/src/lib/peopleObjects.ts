@@ -28,7 +28,6 @@
  */
 
 import {
-  PEOPLE_OBJECT_KINDS,
   type PeopleObjectKind,
 } from '@builderforce/creation-canvas-contract';
 import {
@@ -512,8 +511,6 @@ export const PEOPLE_STATUSES: Record<string, string> = {
 export const PEOPLE_SPEC_KINDS: readonly PeopleObjectKind[] =
   PEOPLE_OBJECT_SPECS.map((spec) => spec.kind as PeopleObjectKind);
 
-/** Kinds the contract declares, for the test that proves the two lists agree. */
-export const PEOPLE_CONTRACT_KINDS = PEOPLE_OBJECT_KINDS;
 
 registerSpecObjectSet({
   id: 'people',

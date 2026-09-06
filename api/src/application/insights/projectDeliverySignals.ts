@@ -32,9 +32,8 @@ import {
   type TransitionRow, type TaskRow,
 } from './bottleneckInsights';
 import { summarizePhases } from './lifecycleInsights';
+import { HOUR_MS, DAY_MS } from '../../domain/shared/time';
 
-const HOUR_MS = 3_600_000;
-const DAY_MS = 24 * HOUR_MS;
 /** Same cap as the tenant collectors so a very large tenant stays bounded. */
 const MAX_ROWS = 5_000;
 

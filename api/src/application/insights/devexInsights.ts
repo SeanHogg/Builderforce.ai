@@ -28,9 +28,7 @@ import {
   type SurveyQuestion, type DevexDimension, type AnswerMap,
   type DevexSegments, type DevexSegmentKind,
 } from '../../domain/devex/surveys';
-
-const HOUR_MS = 3_600_000;
-const DAY_MS = 24 * HOUR_MS;
+import { HOUR_MS, DAY_MS } from '../../domain/shared/time';
 
 /** Benchmark percentiles the UI offers. */
 export type BenchmarkPercentile = 50 | 75 | 90;

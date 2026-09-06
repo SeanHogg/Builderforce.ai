@@ -1,15 +1,8 @@
 import { defineConfig } from 'tsup';
+import { libraryConfig } from '../scripts/tsup.base.mjs';
 
-export default defineConfig({
+export default defineConfig(libraryConfig({
   entry: { index: 'src/index.ts' },
-  format: ['esm', 'cjs'],
-  dts: true,
-  sourcemap: true,
-  clean: true,
-  outDir: 'dist',
   // Optional client-side path — keep it a peer, never bundle the studio engine.
   external: ['@seanhogg/builderforce-studio'],
-  outExtension({ format }) {
-    return { js: format === 'esm' ? '.mjs' : '.cjs' };
-  },
-});
+}));

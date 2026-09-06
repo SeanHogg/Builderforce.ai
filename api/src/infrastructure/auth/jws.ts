@@ -27,6 +27,7 @@
  */
 
 import { getOrSetCached, invalidateCached } from '../cache/readThroughCache';
+import { base64UrlToBytes, bytesToBase64Url, randomBase64Url } from '../../domain/shared/bytes';
 import type { Env } from '../../env';
 
 export interface Jwks {
@@ -43,20 +44,6 @@ export interface ParsedJws {
   signature: Uint8Array;
 }
 
-export function base64UrlToBytes(value: string): Uint8Array {
-  const padded = value.replace(/-/g, '+').replace(/_/g, '/');
-  const binary = atob(padded + '='.repeat((4 - (padded.length % 4)) % 4));
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  return bytes;
-}
-
-export function bytesToBase64Url(bytes: Uint8Array): string {
-  let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
 /** JSON → one base64url JWS segment. Used when we are the SIGNER. */
 export const encodeJwsSegment = (value: unknown): string =>
   bytesToBase64Url(new TextEncoder().encode(JSON.stringify(value)));
@@ -64,9 +51,7 @@ export const encodeJwsSegment = (value: unknown): string =>
 /** Cryptographically random, URL-safe. The platform's one source of `state`,
  *  `nonce` and `jti` values on this path. */
 export function randomUrlToken(bytes = 32): string {
-  const buffer = new Uint8Array(bytes);
-  crypto.getRandomValues(buffer);
-  return bytesToBase64Url(buffer);
+  return randomBase64Url(bytes);
 }
 
 /** Split and decode a compact JWS, or null when it is not one. */

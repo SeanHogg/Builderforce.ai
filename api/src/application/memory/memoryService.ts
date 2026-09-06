@@ -58,12 +58,12 @@ import type { Env } from '../../env';
 import { dispatchEmbeddingVendor } from '../llm/embeddingVendors/registry';
 import { cosineSimilarity } from '../llm/vectorMath';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { clamp01 } from '../../domain/shared/numbers';
 
 const RECALL_DEFAULT = 5;
 const RECALL_MAX = 20;
 const RECALL_L1_TTL_MS = 30_000;
 
-const clamp01 = (n: number): number => (n < 0 ? 0 : n > 1 ? 1 : n);
 const errMessage = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 const versionKey = (tenantId: number): string => `mem:ver:${tenantId}`;
 

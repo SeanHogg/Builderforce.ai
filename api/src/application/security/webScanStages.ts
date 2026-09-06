@@ -21,6 +21,7 @@
  *
  * PURE by construction: no DB, no clock beyond an injected timestamp, no network.
  */
+import { parseJsonOr } from '../../domain/shared/json';
 
 /** The stages that cannot run inside the Worker and are observed from a container. */
 export const WEB_SCAN_STAGE_IDS = ['tls', 'cve'] as const;
@@ -128,9 +129,7 @@ export function parseStageReports(raw: unknown): WebScanStageReport[] {
   return out;
 }
 
-function safeJson(raw: string): unknown {
-  try { return JSON.parse(raw); } catch { return null; }
-}
+const safeJson = (raw: string): unknown => parseJsonOr<unknown>(raw, null);
 
 /** The outcome of folding one incoming stage report into a scan's existing set. */
 export interface StageMergeResult {

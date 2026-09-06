@@ -85,7 +85,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { normalizeDiscountCode } from '../../application/tenant/discountCodeService';
-import { signJwt, signEmulationJwt } from '../../infrastructure/auth/JwtService';
+import { decodeJwtPayload, signJwt, signEmulationJwt } from '../../infrastructure/auth/JwtService';
 import {
   adminImpersonationSessions,
   adminImpersonationRoleSwitches,
@@ -172,6 +172,7 @@ import { getPricingDraft, publishPricing, savePricingDraft } from '../../applica
 import { coerceStringArray } from '../../domain/shared/jsonColumn';
 import { daysParam, limitParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { randomHex } from '../../domain/shared/bytes';
 
 /**
  * Coerce a `platform_modules.permissions` value into `string[]`.
@@ -3105,9 +3106,8 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     );
 
     // Store the JTI back on the session for revocation
-    const jtiMatch = token.split('.')[1];
-    if (jtiMatch) {
-      const tokenPayload = JSON.parse(atob(jtiMatch.replace(/-/g, '+').replace(/_/g, '/'))) as { jti?: string };
+    {
+      const tokenPayload = decodeJwtPayload<{ jti?: string }>(token);
       if (tokenPayload.jti) {
         await db
           .update(adminImpersonationSessions)
@@ -3640,9 +3640,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (!user) return c.json({ error: 'User not found' }, 404);
 
     // Generate a 24-hour magic link so the user can sign in and set a new password
-    const token = Array.from(crypto.getRandomValues(new Uint8Array(32)))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
+    const token = randomHex(32);
     const frontendBase = resolveAppBaseUrl(c.env);
 
     await db

@@ -12,6 +12,7 @@
  * unit-testable and reproducible. No IO — the caller loads rows and persists the
  * resulting `manager_rank`.
  */
+import { DAY_MS } from '../../domain/shared/time';
 
 /** Priority tiers mirror the tasks.priority enum. */
 export type TaskPriorityTier = 'low' | 'medium' | 'high' | 'urgent';
@@ -62,8 +63,6 @@ const PROGRESS_BONUS: Record<string, number> = {
   in_review: 10,
   blocked: -12, // blocked work waits on something else — deprioritize, don't starve.
 };
-
-const DAY_MS = 86_400_000;
 
 function toTime(v: string | Date | null | undefined): number | null {
   if (v == null) return null;

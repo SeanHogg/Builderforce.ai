@@ -21,8 +21,7 @@ import { computeRdFinancials } from '../insights/rdFinancialsInsights';
 import { computePortfolioRollup } from '../pmo/portfolioRollup';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import type { DeckData } from './types';
-
-const DAY_MS = 86_400_000;
+import { DAY_MS } from '../../domain/shared/time';
 
 /** Current fiscal quarter label, e.g. '2026-Q2' (UTC). */
 export function currentQuarter(now: number): string {

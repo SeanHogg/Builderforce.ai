@@ -15,7 +15,8 @@
  * POLICY: an OAuth token is a personal subscription credential. Each tenant must
  * connect THEIR OWN subscription — it is never resold or shared across tenants.
  */
-import { sha256Base64Url } from '../../infrastructure/crypto/digest';
+import { createPkcePair } from '../../infrastructure/crypto/pkce';
+import { randomBase64Url } from '../../domain/shared/bytes';
 import { throwTokenExchangeFailure } from './subscriptionOAuthCode';
 
 // The public Claude Code OAuth client id (base64 of the uuid, matching
@@ -58,25 +59,18 @@ export const OAUTH_SAFETY_MARGIN_MS = 5 * 60 * 1000;
 // PKCE
 // ---------------------------------------------------------------------------
 
-function base64UrlEncode(bytes: Uint8Array): string {
-  let bin = '';
-  for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
 /** Generate a PKCE verifier + S256 challenge using WebCrypto (available in the
  *  Worker runtime). The verifier is held server-side (KV) keyed by `state`; the
  *  challenge travels in the authorize URL. */
 export async function generatePkce(): Promise<{ verifier: string; challenge: string }> {
-  const verifierBytes = crypto.getRandomValues(new Uint8Array(32));
-  const verifier = base64UrlEncode(verifierBytes);
-  return { verifier, challenge: await sha256Base64Url(verifier) };
+  const pair = await createPkcePair();
+  return { verifier: pair.codeVerifier, challenge: pair.codeChallenge };
 }
 
 /** A random `state` value (also CSRF token); echoed back in the pasted code and
  *  re-checked at exchange time. */
 export function generateState(): string {
-  return base64UrlEncode(crypto.getRandomValues(new Uint8Array(24)));
+  return randomBase64Url(24);
 }
 
 /** Build the Claude.ai authorize URL the user opens to grant access. */

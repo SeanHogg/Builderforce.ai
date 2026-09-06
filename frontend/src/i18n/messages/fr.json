@@ -574,7 +574,10 @@
       "finish": "Terminé",
       "back": "Retour",
       "next": "Suivant",
-      "working": "Traitement…"
+      "working": "Traitement…",
+      "rollback": "Annuler l’import",
+      "rollbackConfirm": "Annuler uniquement les projets, tâches et connexions de synchronisation créés par cet import ? Le travail ultérieur sera conservé.",
+      "rollbackFailed": "L’annulation a échoué"
     },
     "page": {
       "title": "Intégrations / Clés API",
@@ -13567,6 +13570,38 @@
         "withErrorHint": "ont rencontré un dysfonctionnement",
         "converted": "Inscrits"
       }
+    },
+    "system": {
+      "title": "Infrastructure système",
+      "subtitle": "Liaisons du worker, état du runtime, stockage Neon et maintenance sûre.",
+      "cleanExpired": "Nettoyer les données expirées",
+      "refresh": "↻ Actualiser",
+      "loading": "Chargement de l’état du système…",
+      "worker": "Worker",
+      "agentHosts": "Hôtes d’agents",
+      "onlineRecently": "en ligne ces 5 dernières minutes",
+      "activeExecutions": "Exécutions actives",
+      "failed24h": "{count} en échec sur 24 h",
+      "bindings": "Liaisons Cloudflare",
+      "configuredServices": "services configurés",
+      "bound": "liée",
+      "missing": "manquante",
+      "neonDatabase": "Base de données Neon {name}",
+      "unavailable": "indisponible",
+      "latency": "{ms} ms",
+      "vacuumAnalyze": "Vacuum et analyse",
+      "vacuum": "Vacuum",
+      "colTable": "Table",
+      "colSize": "Taille",
+      "colRows": "Lignes",
+      "colWrites": "Écritures depuis la remise à zéro des statistiques",
+      "colLastVacuum": "Dernier vacuum",
+      "allTables": "toutes les tables",
+      "maintenanceCleanup": "lancer le nettoyage de rétention",
+      "maintenanceVacuum": "vacuum de {table} dans {target}",
+      "confirmTitle": "Lancer la maintenance ?",
+      "confirmMaintenance": "Confirmer : {label} ? Il s’agit d’une opération de maintenance auditée.",
+      "confirmRun": "Lancer"
     }
   },
   "providerKeys": {
@@ -14398,7 +14433,9 @@
       "empty": "Rien d’assigné."
     },
     "nextSpeaker": "Suivant",
-    "completeSession": "Terminer"
+    "completeSession": "Terminer",
+    "createEpic": "Créer l’epic",
+    "createSprint": "Créer le sprint"
   },
   "meetings": {
     "title": "Réunions",
@@ -23468,7 +23505,10 @@
     "noticeStandupActionItemsPlaced": "{count, plural, one {# action placée sur le tableau} other {# actions placées sur le tableau}}",
     "noticeStandupMinutesNeedsAccount": "Connectez-vous pour lire le compte rendu d’une mêlée",
     "noticeStandupMinutesFailed": "Impossible de lire le compte rendu de la mêlée",
-    "exportUnmaskedColumns": "Export refusé : {columns} contiennent des données personnelles non masquées. Masquez-les d’abord sur la carte."
+    "exportUnmaskedColumns": "Export refusé : {columns} contiennent des données personnelles non masquées. Masquez-les d’abord sur la carte.",
+    "approveAgentActionTitle": "Approuver l’action de l’agent",
+    "approveAgentActionBody": "Un agent de la session veut exécuter {action}.",
+    "approveAgentActionConfirm": "Approuver"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",

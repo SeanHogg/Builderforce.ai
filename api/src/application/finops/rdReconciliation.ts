@@ -21,8 +21,8 @@ import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/read
 import { rdFinancialsVersionKey } from '../insights/versionKeys';
 import type { Env } from '../../env';
 import { computeRdFinancials, type QuarterFinancials } from '../insights/rdFinancialsInsights';
+import { DAY_MS } from '../../domain/shared/time';
 
-const DAY_MS = 86_400_000;
 /** |variance| within this band → the two surfaces are considered aligned. */
 export const RECON_ALIGN_PCT = 15;
 

@@ -3,9 +3,11 @@
  *
  * Accepts the GitHub-style `sha256=<hex>` header form as well as a bare hex
  * digest, so it is reusable by the GitHub webhook route and the generic
- * workflow webhook trigger. Comparison is length-then-content; this is a
- * shared-secret integrity check, not a constant-time secret comparison.
+ * workflow webhook trigger. The MAC and the constant-time compare are the
+ * platform's one implementation of each (`infrastructure/crypto`).
  */
+import { timingSafeEqual } from '../../infrastructure/crypto/constantTime';
+import { hmacHex } from '../../infrastructure/crypto/hmac';
 
 export async function verifyHmacSignature(
   rawBody: string,
@@ -18,19 +20,7 @@ export async function verifyHmacSignature(
       ? signatureHeader.slice('sha256='.length)
       : signatureHeader.trim();
     if (!expected) return false;
-
-    const key = await crypto.subtle.importKey(
-      'raw',
-      new TextEncoder().encode(secret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign'],
-    );
-    const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawBody));
-    const hex = Array.from(new Uint8Array(mac))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-    return hex.toLowerCase() === expected.toLowerCase();
+    return timingSafeEqual(await hmacHex(secret, rawBody), expected.toLowerCase());
   } catch {
     return false;
   }

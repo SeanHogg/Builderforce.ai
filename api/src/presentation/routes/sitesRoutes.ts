@@ -14,7 +14,7 @@
 import { Hono } from 'hono';
 import type { HonoEnv } from '../../env';
 import { serveHostedSite } from '../../application/ide/siteServer';
-import { wildcardPath } from './wildcardPath';
+import { wildcardPath } from '@builderforce/hono-wildcard-path';
 
 export { tryServeHostedSite } from '../../application/ide/siteServer';
 

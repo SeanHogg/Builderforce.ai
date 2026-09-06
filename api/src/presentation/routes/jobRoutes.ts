@@ -90,9 +90,6 @@ import { pipelineRefForPosting } from '../../domain/hiring/pipelineStages';
 // They used to be re-declared here AND in `gigMarketplaceRoutes`, which is how the two
 // publish paths came to validate `discipline` differently.
 
-function parseSkills(raw: unknown): string[] {
-  return parseJsonArray<string>(raw);
-}
 
 /** `job_postings.*` — snake_case keys so `mapJob` keeps reading the same row shape. */
 const jobColumns = {
@@ -159,7 +156,7 @@ const mapJob = (r: Record<string, unknown>) => ({
   title: r.title,
   description: r.description ?? null,
   discipline: r.discipline ?? null,
-  skills: parseSkills(r.skills),
+  skills: parseJsonArray<string>(r.skills),
   rateMinCents: r.rate_min_cents == null ? null : Number(r.rate_min_cents),
   rateMaxCents: r.rate_max_cents == null ? null : Number(r.rate_max_cents),
   currency: r.currency ?? 'USD',

@@ -1,4 +1,5 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { clamp01 } from '../../domain/shared/numbers';
 /**
  * Semantic evaluation — the "did the answer actually stay grounded and on-topic"
  * layer the platform was missing (observability tracked WHAT ran, not HOW GOOD it
@@ -66,7 +67,6 @@ export function tokenF1(a: Set<string>, b: Set<string>): number {
   return precision + recall === 0 ? 0 : (2 * precision * recall) / (precision + recall);
 }
 
-const clamp01 = (n: number): number => Math.min(1, Math.max(0, Number.isFinite(n) ? n : 0));
 
 // ── Public types ────────────────────────────────────────────────────────────
 

@@ -20,6 +20,8 @@
  * membership cannot be claimed by editing a query string: the combined per-room
  * turn allowance and the room's WebSocket relay both trust `rid` and nothing else.
  */
+import { base64UrlDecode, base64UrlEncode, base64UrlToBytes } from '../../domain/shared/bytes';
+import { hmacBase64Url, hmacVerify } from '../../infrastructure/crypto/hmac';
 
 export const GUEST_TOKEN_PREFIX = 'bfguest_';
 
@@ -39,30 +41,11 @@ export interface GuestIdentity {
   roomCode: string | null;
 }
 
-function b64urlEncodeBytes(data: ArrayBuffer): string {
-  return btoa(String.fromCharCode(...new Uint8Array(data)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
-
-function b64urlEncodeStr(s: string): string {
-  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
-
-function b64urlDecodeStr(s: string): string {
-  return atob(s.replace(/-/g, '+').replace(/_/g, '/'));
-}
-
-async function importKey(secret: string): Promise<CryptoKey> {
+function requireSecret(secret: string): string {
   if (!secret || typeof secret !== 'string' || !secret.trim()) {
     throw new Error('JWT_SECRET is not set — cannot sign/verify guest tokens.');
   }
-  return crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign', 'verify'],
-  );
+  return secret;
 }
 
 /**
@@ -82,10 +65,9 @@ export async function signGuestToken(
     exp: now + expiresInSeconds,
     ...(roomCode ? { rid: roomCode } : {}),
   };
-  const body = b64urlEncodeStr(JSON.stringify(payload));
-  const key = await importKey(secret);
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
-  return `${GUEST_TOKEN_PREFIX}${body}.${b64urlEncodeBytes(sig)}`;
+  const body = base64UrlEncode(JSON.stringify(payload));
+  const sig = await hmacBase64Url(requireSecret(secret), body);
+  return `${GUEST_TOKEN_PREFIX}${body}.${sig}`;
 }
 
 /**
@@ -102,11 +84,9 @@ export async function verifyGuestToken(token: string, secret: string): Promise<G
   const body = rest.slice(0, dot);
   const sigB64 = rest.slice(dot + 1);
   try {
-    const key = await importKey(secret);
-    const sigBytes = Uint8Array.from(b64urlDecodeStr(sigB64), (ch) => ch.charCodeAt(0));
-    const ok = await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(body));
+    const ok = await hmacVerify(requireSecret(secret), body, base64UrlToBytes(sigB64));
     if (!ok) return null;
-    const payload = JSON.parse(b64urlDecodeStr(body)) as GuestTokenPayload;
+    const payload = JSON.parse(base64UrlDecode(body)) as GuestTokenPayload;
     if (typeof payload.vid !== 'string' || typeof payload.exp !== 'number') return null;
     if (payload.exp < Math.floor(Date.now() / 1000)) return null;
     return {

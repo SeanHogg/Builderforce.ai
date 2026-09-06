@@ -49,6 +49,7 @@ import type {
   LedgerQuery,
   LedgerTransaction,
 } from './accountingProviders';
+import { hmacBase64 } from '../../infrastructure/crypto/hmac';
 
 /* ── credential ──────────────────────────────────────────────────────────────── */
 
@@ -704,15 +705,7 @@ export async function netsuiteAuthHeader(
   ].join('&');
   const signingKey = `${oauthEncode(fields.consumerSecret ?? '')}&${oauthEncode(fields.tokenSecret ?? '')}`;
 
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(signingKey),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(baseString));
-  const encoded = btoa(String.fromCharCode(...new Uint8Array(signature)));
+  const encoded = await hmacBase64(signingKey, baseString);
 
   const header: Record<string, string> = {
     realm: fields.accountId ?? '',

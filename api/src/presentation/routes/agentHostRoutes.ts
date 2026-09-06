@@ -77,6 +77,8 @@ import { limitParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
 import { isTerminalExecutionStatus } from '../../domain/shared/terminalStatus';
+import { sha256Hex } from '../../domain/shared/hash';
+import { verifyHmacHex } from '../../infrastructure/crypto/webhookHmac';
 
 // Extend HonoEnv bindings type to include the Durable Object
 type AgentHostHonoEnv = HonoEnv & {
@@ -213,11 +215,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     };
   };
 
-  const hashPath = async (value: string): Promise<string> => {
-    const bytes = new TextEncoder().encode(value.trim().toLowerCase());
-    const digest = await crypto.subtle.digest('SHA-256', bytes);
-    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
-  };
+  const hashPath = (value: string): Promise<string> => sha256Hex(value.trim().toLowerCase());
 
   const verifyAgentHostApiKey = async (id: number, key?: string) => {
     if (!key) return null;
@@ -254,16 +252,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     sigHeader: string | undefined,
   ): Promise<boolean> => {
     if (!sigHeader) return true; // no signature sent — skip verification (backward compat)
-    if (!sigHeader.startsWith('sha256=')) return false;
-    const enc = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      'raw', enc.encode(rawKey),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false, ['sign'],
-    );
-    const sig = await crypto.subtle.sign('HMAC', key, enc.encode(body));
-    const hex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
-    return `sha256=${hex}` === sigHeader;
+    return verifyHmacHex(body, sigHeader, rawKey, 'sha256=');
   };
 
   // GET /api/agent-hosts/fleet?from=<agentHostId>&key=<apiKey>

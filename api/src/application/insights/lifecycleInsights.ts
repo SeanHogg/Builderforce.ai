@@ -24,9 +24,8 @@ import {
   avg, median, buildStageDurations,
   type StageDuration, type TransitionRow, type TaskRow,
 } from './bottleneckInsights';
+import { HOUR_MS, DAY_MS } from '../../domain/shared/time';
 
-const HOUR_MS = 3_600_000;
-const DAY_MS = 86_400_000;
 const MAX_ROWS = 5_000;
 
 export type LifecyclePhase = 'refinement' | 'work' | 'review' | 'deploy';

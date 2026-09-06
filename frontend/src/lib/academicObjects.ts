@@ -33,7 +33,7 @@
  * group with a shared editor, which is the shape normalisation exists to refuse.
  */
 
-import { ACADEMIC_OBJECT_KINDS, type AcademicObjectKind } from '@builderforce/creation-canvas-contract';
+import { type AcademicObjectKind } from '@builderforce/creation-canvas-contract';
 import {
   registerSpecObjectSet, SOURCES_FIELD, SUMMARY_FIELD,
   type SpecField, type SpecObjectSpec,
@@ -740,8 +740,6 @@ export const ACADEMIC_STATUSES: Readonly<Record<string, string>> = {
   noExpression: 'No expression',
 };
 
-/** Kinds the contract declares, for the test that proves the two lists agree. */
-export const ACADEMIC_CONTRACT_KINDS = ACADEMIC_OBJECT_KINDS;
 
 registerSpecObjectSet({
   id: 'academic',

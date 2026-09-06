@@ -16,19 +16,18 @@
  * secrets go through the platform's credential crypto, never through here.
  */
 
+import { bytesToBase64Url } from '../../domain/shared/bytes';
+import { sha256HexBytes } from '../../domain/shared/hash';
+
 type Digestible = string | ArrayBuffer | ArrayBufferView;
 
 function bytes(value: Digestible): ArrayBuffer | ArrayBufferView {
   return typeof value === 'string' ? new TextEncoder().encode(value) : value;
 }
 
-function toHex(buffer: ArrayBuffer): string {
-  return [...new Uint8Array(buffer)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
 /** The full digest as 64 lowercase hex characters. */
 export async function sha256Hex(value: Digestible): Promise<string> {
-  return toHex(await crypto.subtle.digest('SHA-256', bytes(value) as BufferSource));
+  return sha256HexBytes(bytes(value));
 }
 
 /**
@@ -50,8 +49,5 @@ export async function sha256Fingerprint(value: Digestible, length = 16): Promise
 
 /** Base64url, unpadded — the encoding OAuth PKCE and JWS both specify. */
 export async function sha256Base64Url(value: Digestible): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', bytes(value) as BufferSource);
-  let binary = '';
-  for (const byte of new Uint8Array(digest)) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return bytesToBase64Url(await crypto.subtle.digest('SHA-256', bytes(value) as BufferSource));
 }

@@ -17,8 +17,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import {
   knowledgeAcknowledgements, knowledgeDocuments, knowledgeDocumentVersions, users,
 } from '../../infrastructure/database/schema';
-
-const HOUR_MS = 3_600_000;
+import { HOUR_MS } from '../../domain/shared/time';
 
 export interface DocActivityRow {
   memberKind: 'human';

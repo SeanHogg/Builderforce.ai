@@ -1,4 +1,7 @@
 import { hashSecret } from './HashService';
+import { base64ToBytes, bytesToBase64, bytesToHex, hexToBytes } from '../../domain/shared/bytes';
+import { timingSafeEqual } from '../crypto/constantTime';
+import { hmacSign } from '../crypto/hmac';
 import { deriveTenantAesKey } from '../../application/integrations/credentialCrypto';
 
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -8,32 +11,11 @@ const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
  * begins with `v2:` was sealed with PBKDF2 (100k, per-tenant salt) under a dedicated
  * encryption secret (see {@link deriveTenantAesKey}); anything WITHOUT this prefix is a
  * pre-versioning legacy blob sealed with a single unsalted SHA-256 of the caller's key
- * material (the old {@link deriveAesKey}). The legacy container is `b64(iv).b64(cipher)`,
+ * material (the old {@link deriveAesKey}). The legacy container is `bytesToBase64(iv).bytesToBase64(cipher)`,
  * and base64 never contains a `:`, so this prefix is an unambiguous discriminator.
  */
 const V2_PREFIX = 'v2:';
 
-function b64(data: Uint8Array): string {
-  return btoa(String.fromCharCode(...data));
-}
-
-function fromB64(input: string): Uint8Array {
-  return Uint8Array.from(atob(input), (c) => c.charCodeAt(0));
-}
-
-function bytesToHex(data: Uint8Array): string {
-  return Array.from(data).map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-function hexToBytes(hex: string): Uint8Array {
-  const clean = hex.trim().toLowerCase();
-  if (!clean || clean.length % 2 !== 0) return new Uint8Array();
-  const out = new Uint8Array(clean.length / 2);
-  for (let i = 0; i < clean.length; i += 2) {
-    out[i / 2] = Number.parseInt(clean.slice(i, i + 2), 16);
-  }
-  return out;
-}
 
 function base32Encode(data: Uint8Array): string {
   let bits = 0;
@@ -77,14 +59,6 @@ function base32Decode(input: string): Uint8Array {
   return new Uint8Array(out);
 }
 
-function constantTimeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return diff === 0;
-}
 
 async function deriveAesKey(secret: string): Promise<CryptoKey> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret));
@@ -130,8 +104,7 @@ export async function generateTotpCode(
   view.setUint32(0, Math.floor(counter / 2 ** 32));
   view.setUint32(4, counter >>> 0);
 
-  const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
-  const hmac = new Uint8Array(await crypto.subtle.sign('HMAC', key, buffer));
+  const hmac = new Uint8Array(await hmacSign(keyBytes, buffer, 'SHA-1'));
 
   const offset = hmac[hmac.length - 1]! & 0x0f;
   const codeInt =
@@ -154,7 +127,7 @@ export async function verifyTotpCode(
   const now = Date.now();
   for (let skew = -window; skew <= window; skew++) {
     const generated = await generateTotpCode(secret, now + skew * 30_000);
-    if (constantTimeEqual(generated, normalized)) return true;
+    if (timingSafeEqual(generated, normalized)) return true;
   }
   return false;
 }
@@ -211,10 +184,10 @@ export interface SecretStorageOptions {
  *
  * • With `opts.tenantId` (or `opts.upgrade`): the HARDENED v2 scheme — PBKDF2 (100k)
  *   with a per-tenant salt, under the caller-supplied dedicated `keyMaterial`. Output
- *   is `v2:<b64(iv)>.<b64(cipher)>`. Reusing {@link deriveTenantAesKey} means there is
+ *   is `v2:<bytesToBase64(iv)>.<bytesToBase64(cipher)>`. Reusing {@link deriveTenantAesKey} means there is
  *   no third crypto scheme — it is the same KDF as credentialCrypto.
  * • Without `opts` (legacy 2-arg calls): the original single unsalted SHA-256 scheme,
- *   output `<b64(iv)>.<b64(cipher)>` — UNCHANGED, so callers not yet migrated keep
+ *   output `<bytesToBase64(iv)>.<bytesToBase64(cipher)>` — UNCHANGED, so callers not yet migrated keep
  *   producing (and, via the dual-read below, reading) the exact same format.
  */
 export async function encryptSecretForStorage(
@@ -229,7 +202,7 @@ export async function encryptSecretForStorage(
   const cipher = new Uint8Array(
     await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plain),
   );
-  const blob = `${b64(iv)}.${b64(cipher)}`;
+  const blob = `${bytesToBase64(iv)}.${bytesToBase64(cipher)}`;
   return useV2 ? `${V2_PREFIX}${blob}` : blob;
 }
 
@@ -258,8 +231,8 @@ export async function decryptSecretFromStorage(
   const [ivB64, cipherB64] = body.split('.');
   if (!ivB64 || !cipherB64) throw new Error('Malformed encrypted payload');
 
-  const iv = fromB64(ivB64);
-  const cipher = fromB64(cipherB64);
+  const iv = base64ToBytes(ivB64);
+  const cipher = base64ToBytes(cipherB64);
   const key = isV2
     ? await deriveTenantAesKey(keyMaterial, opts?.tenantId)
     : await deriveAesKey(opts?.legacySecret ?? keyMaterial);

@@ -25,6 +25,7 @@
 
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { isProviderOAuthConfigured } from '../shared/providerOAuthConnect';
+import { base64UrlDecode, base64UrlEncode, base64UrlToBytes } from '../../domain/shared/bytes';
 
 // ---------------------------------------------------------------------------
 // The shared shape
@@ -333,12 +334,7 @@ export function htmlToPreviewText(html: string): string {
 }
 
 /** Base64url (RFC 4648 §5, unpadded) over UTF-8 — Gmail's `raw` encoding. */
-function base64Url(input: string): string {
-  const bytes = new TextEncoder().encode(input);
-  let binary = '';
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
+const base64Url = base64UrlEncode;
 
 /** Decode Gmail's base64url message parts back to UTF-8. */
 /**
@@ -349,15 +345,9 @@ function base64Url(input: string): string {
  * invalid sequence replaced by U+FFFD, and the file is silently corrupted rather
  * than failing. Text still decodes; bytes stay bytes.
  */
-function base64UrlToBytes(input: string): ArrayBuffer {
-  const padded = input.replace(/-/g, '+').replace(/_/g, '/');
-  const binary = atob(padded + '='.repeat((4 - (padded.length % 4)) % 4));
-  return Uint8Array.from(binary, (ch) => ch.charCodeAt(0)).buffer;
-}
-
 function decodeBase64Url(input: string): string {
   try {
-    return new TextDecoder().decode(base64UrlToBytes(input));
+    return base64UrlDecode(input);
   } catch {
     return '';
   }
@@ -718,7 +708,7 @@ const googleMailbox: MailboxProvider = {
     if (!res.ok) return providerError('Gmail attachment', res);
     const body = await res.json() as { data?: string; size?: number };
     if (!body.data) return null;
-    const bytes = base64UrlToBytes(body.data);
+    const bytes = base64UrlToBytes(body.data).buffer as ArrayBuffer;
     // Gmail's declared `size` and the decoded length can disagree on a re-encoded
     // part, so the REAL length is checked too — the ceiling protects memory, and
     // memory is spent on actual bytes, not on the number the provider reported.

@@ -32,8 +32,7 @@
  * A logged-time answer ignores both: minutes someone recorded are not an estimate
  * to be clamped, and work in progress with time against it is worked time.
  */
-
-const HOUR_MS = 3_600_000;
+import { HOUR_MS } from '../../domain/shared/time';
 
 export interface EffortInput {
   /** Real minutes recorded against the task in the window (0 when none). */

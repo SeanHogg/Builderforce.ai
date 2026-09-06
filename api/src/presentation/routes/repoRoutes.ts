@@ -52,6 +52,7 @@ import { AGENT_WORKFLOW_PATH } from '../../application/runtime/githubActionsWork
 import { ingestOpenAlertsForRepo } from '../../application/security/githubAlerts';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
+import { upgradeRequiredBody } from '../../domain/tenant/paymentRequired';
 
 /** Read-through cache key for a project's repo list (the picker + SourceControl read
  *  this; it changes only on the CRUD routes below, which all invalidate it). */
@@ -383,12 +384,11 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     const ingestionDb = buildTransactionalDatabase(c.env as Env);
     const gate = await enforceIngestionCap(db, tenantId, ingestionDb, c.env as Env);
     if (!gate.allowed) {
-      return c.json({
+      return c.json(upgradeRequiredBody({
         error: `Monthly data-ingestion allowance reached (${gate.limit.toLocaleString()} bytes). Already-imported repositories stay available; upgrade or wait for the monthly reset to import more.`,
         code: 'ingestion_limit_exceeded',
-        upgradeRequired: true,
         currentPlan: gate.effectivePlan,
-      }, 402);
+      }), 402);
     }
 
     const ref = (c.req.query('ref') || resolved.repo.defaultBranch || 'main').trim();

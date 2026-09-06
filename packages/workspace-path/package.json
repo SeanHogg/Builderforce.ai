@@ -1,0 +1,17 @@
+{
+  "name": "@builderforce/workspace-path",
+  "version": "2026.9.7",
+  "private": true,
+  "type": "module",
+  "description": "The one validator for a workspace-relative file path used as an R2 key: rejects anything that could escape the project prefix or produce a key that can never round-trip (empty, absolute, backslashes, ./.. segments, empty segments, trailing slash, control characters, overlong). Shared by the API's workspace store and the legacy worker's file router so the two edges accept exactly the same paths. Source-only, dependency-free.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

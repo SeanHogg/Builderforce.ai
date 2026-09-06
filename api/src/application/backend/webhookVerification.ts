@@ -22,6 +22,7 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { sha256Hex } from '../../infrastructure/crypto/digest';
 import { timingSafeEqual } from '../../infrastructure/crypto/constantTime';
+import { hmacBase64, hmacHex } from '../../infrastructure/crypto/hmac';
 
 /** How a handler proves who called it. Declared per handler, never inferred. */
 export const VERIFY_KINDS = ['none', 'twilio', 'stripe', 'shopify', 'shared-secret'] as const;
@@ -79,24 +80,6 @@ export type VerifyResult =
   | { ok: true }
   | { ok: false; reason: string };
 
-function toBase64(bytes: ArrayBuffer): string {
-  return btoa(String.fromCharCode(...new Uint8Array(bytes)));
-}
-
-function toHex(bytes: ArrayBuffer): string {
-  return Array.from(new Uint8Array(bytes)).map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-async function hmac(algorithm: 'SHA-1' | 'SHA-256', key: string, message: string): Promise<ArrayBuffer> {
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(key),
-    { name: 'HMAC', hash: algorithm },
-    false,
-    ['sign'],
-  );
-  return crypto.subtle.sign('HMAC', cryptoKey, new TextEncoder().encode(message));
-}
 
 /**
  * The exact string Twilio signs: the full request URL, then every POST parameter
@@ -156,7 +139,7 @@ export async function verifyTwilioSignature(args: {
       }
     }
     const base = isForm ? twilioSignatureBase(url, formParams) : url;
-    const expected = toBase64(await hmac('SHA-1', authToken, base));
+    const expected = await hmacBase64(authToken, base, 'SHA-1');
     return timingSafeEqual(expected, signature)
       ? { ok: true }
       : { ok: false, reason: 'Signature does not match' };
@@ -215,7 +198,7 @@ export async function verifyStripeSignature(args: {
   }
 
   try {
-    const expected = toHex(await hmac('SHA-256', secret, `${timestamp}.${rawBody}`));
+    const expected = await hmacHex(secret, `${timestamp}.${rawBody}`);
     // Every candidate is compared — no early exit — so a rotation with two valid
     // signatures does not leak which one matched through timing.
     let matched = false;
@@ -247,7 +230,7 @@ export async function verifyShopifySignature(args: {
   if (!signature) return { ok: false, reason: 'Missing X-Shopify-Hmac-Sha256 header' };
   if (!secret) return { ok: false, reason: `${VERIFY_SECRET_NAME.shopify} is not set for this project` };
   try {
-    const expected = toBase64(await hmac('SHA-256', secret, rawBody));
+    const expected = await hmacBase64(secret, rawBody);
     return timingSafeEqual(expected, signature.trim())
       ? { ok: true }
       : { ok: false, reason: 'Signature does not match' };
@@ -275,7 +258,7 @@ export async function verifySharedSecret(args: {
   if (!signature) return { ok: false, reason: 'Missing signature header' };
   if (!secret) return { ok: false, reason: 'WEBHOOK_SHARED_SECRET is not set for this project' };
   try {
-    const expected = toHex(await hmac('SHA-256', secret, rawBody));
+    const expected = await hmacHex(secret, rawBody);
     const provided = signature.startsWith('sha256=') ? signature.slice(7) : signature;
     return timingSafeEqual(expected, provided) ? { ok: true } : { ok: false, reason: 'Signature does not match' };
   } catch (error) {

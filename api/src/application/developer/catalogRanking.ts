@@ -52,6 +52,8 @@
  * passed in, which is what makes the decay testable rather than something that
  * quietly changes answer between two runs of the same test.
  */
+import { DAY_MS } from '../../domain/shared/time';
+import { clamp01 } from '../../domain/shared/numbers';
 
 /** Installs beyond this buy no further popularity. Ten workspaces is already the
  *  signal "real people run this"; the thousandth adds nothing a buyer needs. */
@@ -61,8 +63,6 @@ export const POPULARITY_SATURATION = 100;
  *  span over which an unmaintained integration typically starts breaking against
  *  an upstream API, so it is the interval the decay is tuned to. */
 export const FRESHNESS_HALF_LIFE_DAYS = 90;
-
-const DAY_MS = 86_400_000;
 
 /** The one place the browse/search weightings are written. */
 export const RANK_WEIGHTS = {
@@ -123,7 +123,6 @@ export interface ListingSignals {
   featured?: boolean;
 }
 
-const clamp01 = (n: number): number => (Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);
 
 /** Installs → 0..1, log-saturating. `log1p` so zero installs is exactly zero. */
 export function popularityScore(installs: number): number {

@@ -18,6 +18,7 @@
  */
 
 import { displaySkill, isSkillToken, parseResume, skillGroupOf, tokenCounts, tokenSet } from '@builderforce/creation-canvas-contract';
+import { clampScore } from '../../domain/shared/numbers';
 
 export interface KeywordOverlap {
   /** Skill keywords the posting names that the résumé also contains. */
@@ -45,7 +46,7 @@ export interface JobMatch {
   instruction: string;
 }
 
-const clamp = (n: number): number => Math.max(0, Math.min(100, Math.round(n)));
+const clamp = (n: number): number => clampScore(Math.round(n));
 
 /**
  * The single overlap measurement every consumer in this module shares.

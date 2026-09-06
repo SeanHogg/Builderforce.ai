@@ -38,6 +38,7 @@ import { slugify as slugifyBase } from '@builderforce/creation-canvas-contract';
 import { parseJsonArray } from '../../domain/shared/json';
 import { limitParam, offsetParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { parseJsonOr } from '../../domain/shared/json';
 
 /** Version token for the public prompts-gallery keyspace. The gallery is
  *  searchable + paginated (q/category/tag/sort/limit/offset) → an unbounded
@@ -430,10 +431,7 @@ export function createPromptLibraryRoutes(db: Db): Hono<HonoEnv> {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function safeJson(s: string | null): unknown {
-  if (!s) return [];
-  try { return JSON.parse(s); } catch { return []; }
-}
+const safeJson = (s: string | null): unknown => parseJsonOr<unknown>(s, []);
 
 function safeTags(s: string | null): string[] {
   return parseJsonArray<string>(s);

@@ -22,6 +22,7 @@ import { computeRdFinancials } from '../insights/rdFinancialsInsights';
 import { computeWorkforceHealth, UNDER_UTILISED_PCT } from './workforceHealth';
 import { errorEvents, executions, llmUsageLog, deploymentEvents, alertEvents } from '../../infrastructure/database/schema';
 import { dailyCountSeries, dailySumSeries, seriesTotal, type MetricPoint } from './dailySeries';
+import { currentPeriodMonth } from '../../domain/shared/period';
 
 /** Millicents → USD (llm_usage_log.cost_usd_millicents is 1e-5 USD units). */
 const MILLICENTS_PER_USD = 100_000;
@@ -52,10 +53,6 @@ export interface MetricDef {
 }
 
 /** Current calendar month 'YYYY-MM' (UTC) — finance lens is month-keyed. */
-function currentPeriodMonth(now: number): string {
-  const d = new Date(now);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-}
 
 /**
  * THE WHITELIST. Keys are stable, dotted `lens.metric` strings stored on widgets

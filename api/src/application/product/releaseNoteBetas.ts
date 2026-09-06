@@ -25,6 +25,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { releaseNoteBetaEnrollments } from '../../infrastructure/database/schema';
 import { isJoinableBeta, listPublishedReleaseNotes, type ReleaseNote } from './releaseNotes';
+import { sha256Hex } from '../../domain/shared/hash';
 
 export const BETA_ENROLLMENT_STATUSES = ['joined', 'left', 'dismissed'] as const;
 export type BetaEnrollmentStatus = (typeof BETA_ENROLLMENT_STATUSES)[number];
@@ -50,14 +51,8 @@ export interface BetaProgram extends ReleaseNote {
 
 /** SHA-256 hex of the terms text as served — the "which text did they agree to"
  *  half of the consent record. Web Crypto, so it works on the worker runtime. */
-export async function hashBetaTerms(terms: string | null): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(terms && terms.trim() ? terms : DEFAULT_BETA_TERMS_REF),
-  );
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+export function hashBetaTerms(terms: string | null): Promise<string> {
+  return sha256Hex(terms && terms.trim() ? terms : DEFAULT_BETA_TERMS_REF);
 }
 
 /**

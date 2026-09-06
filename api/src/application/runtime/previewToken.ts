@@ -12,26 +12,11 @@
  * and constant-time verified, mirroring the `?exp&sig` brain-file upload signature.
  */
 
-const enc = new TextEncoder();
+import { timingSafeEqual } from '../../infrastructure/crypto/constantTime';
+import { hmacHex } from '../../infrastructure/crypto/hmac';
 
-async function hmacHex(secret: string, message: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    'raw',
-    enc.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(message));
-  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-function constantTimeEqual(a: string, b: string): boolean {
-  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
+const constantTimeEqual = (a: unknown, b: unknown): boolean =>
+  typeof a === 'string' && typeof b === 'string' && timingSafeEqual(a, b);
 
 /** Default preview link lifetime — long enough for an editing session, short enough
  *  that a shared URL doesn't linger. Overridable per mint. */

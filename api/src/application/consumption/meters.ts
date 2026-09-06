@@ -29,6 +29,7 @@ import { resolveSuperadminUnlimited } from '../llm/tenantTokenAvailability';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { utcMonthStart, utcNextMonthStart } from '../llm/tokenUsage';
 import { aiCreditBalance } from '../points/aiCredits';
+import { DAY_MS } from '../../domain/shared/time';
 
 export type MeterKey = 'ai_tokens' | 'ingestion' | 'error_events' | 'outbound_fetches' | 'cloud_runs' | 'stage_sandbox_runs' | 'feedback_submissions';
 export type MeterUnit = 'tokens' | 'bytes' | 'events' | 'fetches' | 'runs' | 'sandbox_runs' | 'submissions';
@@ -51,8 +52,6 @@ export interface MeterSnapshot {
    * integration provider; unattributed rows can remain only in the aggregate). */
   breakdown?: Array<{ key: string; used: number }>;
 }
-
-const DAY_MS = 86_400_000;
 
 /**
  * Densify a sparse per-day series into one value per elapsed UTC day from

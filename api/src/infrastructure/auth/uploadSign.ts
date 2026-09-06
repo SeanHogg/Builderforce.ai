@@ -13,23 +13,11 @@
  * object or past its expiry.
  */
 
-const enc = new TextEncoder();
+import { timingSafeEqual } from '../crypto/constantTime';
+import { hmacBase64Url } from '../crypto/hmac';
 
-async function hmac(secret: string, message: string): Promise<string> {
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    enc.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const sig = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(message));
-  // base64url — URL-safe, no padding.
-  return btoa(String.fromCharCode(...new Uint8Array(sig)))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-}
+/** The signature is base64url — URL-safe, no padding. */
+const hmac = (secret: string, message: string): Promise<string> => hmacBase64Url(secret, message);
 
 /** Default validity window for a signed upload URL. */
 export const SIGNED_URL_TTL_SECONDS = 600;
@@ -53,9 +41,5 @@ export async function verifyUpload(
   secret: string,
 ): Promise<boolean> {
   if (!Number.isFinite(exp) || exp < Math.floor(Date.now() / 1000)) return false;
-  const expected = await hmac(secret, `${key}|${exp}`);
-  if (expected.length !== sig.length) return false;
-  let diff = 0;
-  for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ sig.charCodeAt(i);
-  return diff === 0;
+  return timingSafeEqual(await hmac(secret, `${key}|${exp}`), sig);
 }

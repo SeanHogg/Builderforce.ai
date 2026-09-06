@@ -61,6 +61,7 @@ import {
   type MailboxWatchRegistration,
   type MailboxWatchTarget,
 } from './mailboxProviders';
+import { base64UrlDecode } from '../../domain/shared/bytes';
 
 type WatchRow = typeof mailboxWatches.$inferSelect;
 
@@ -572,9 +573,7 @@ export async function handleGmailPush(
 export function decodeGmailNotification(data: string | undefined): string | null {
   if (!data) return null;
   try {
-    const padded = data.replace(/-/g, '+').replace(/_/g, '/');
-    const json = atob(padded + '='.repeat((4 - (padded.length % 4)) % 4));
-    const parsed = JSON.parse(json) as { emailAddress?: string };
+    const parsed = JSON.parse(base64UrlDecode(data)) as { emailAddress?: string };
     const email = String(parsed.emailAddress ?? '').trim().toLowerCase();
     return email || null;
   } catch {

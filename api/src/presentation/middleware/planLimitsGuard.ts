@@ -23,12 +23,9 @@ import { countPending } from '../../application/kernel/InvitationService';
 import { tenantHasSuperadminMember } from '../../application/llm/tenantTokenAvailability';
 import { TenantPlan } from '../../domain/shared/types';
 import { resolveTenantEffectivePlan } from '../../application/tenant/tenantPlanSnapshot';
+import type { UpgradeRequiredBody } from '../../domain/tenant/paymentRequired';
 
-interface LimitError {
-  error: string;
-  upgradeRequired: true;
-  currentPlan: string;
-}
+type LimitError = UpgradeRequiredBody;
 
 /**
  * Seat accounting for a tenant — the single source of truth for "how many seats
@@ -81,6 +78,7 @@ export function buildPlanLimitsGuard(db: Db, env: Env) {
       return {
         error: `Plan limit reached: your ${plan} plan allows ${maxAgentHosts} AgentHost${maxAgentHosts === 1 ? '' : 's'}. Upgrade to add more.`,
         upgradeRequired: true,
+        code: 'plan_limit_reached',
         currentPlan: plan,
       };
     },
@@ -102,6 +100,7 @@ export function buildPlanLimitsGuard(db: Db, env: Env) {
       return {
         error: `Plan limit reached: your ${plan} plan allows ${maxProjects} project${maxProjects === 1 ? '' : 's'}. Upgrade to add more.`,
         upgradeRequired: true,
+        code: 'plan_limit_reached',
         currentPlan: plan,
       };
     },
@@ -118,6 +117,7 @@ export function buildPlanLimitsGuard(db: Db, env: Env) {
       return {
         error: `Plan limit reached: your ${plan} plan allows ${maxSeats} seat${maxSeats === 1 ? '' : 's'} (${members} member${members === 1 ? '' : 's'} + ${pendingInvites} pending invite${pendingInvites === 1 ? '' : 's'}). Upgrade to Teams to add more members.`,
         upgradeRequired: true,
+        code: 'plan_limit_reached',
         currentPlan: plan,
       };
     },

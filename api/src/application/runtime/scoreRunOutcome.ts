@@ -25,6 +25,7 @@ import {
   type OutcomeSource,
   type TerminalStatus,
 } from '@builderforce/learned-routing';
+import { clamp01 } from '../../domain/shared/numbers';
 
 // The wire contract owns these two vocabularies (the on-prem host sends them, this
 // scorer records them), so they are DEFINED in `@builderforce/learned-routing` and
@@ -69,7 +70,6 @@ export interface OutcomeScore {
   terms: { merge: number; ci: number; completion: number; efficiency: number };
 }
 
-const clamp01 = (n: number): number => Math.min(1, Math.max(0, Number.isFinite(n) ? n : 0));
 
 /**
  * Composite 0..1 outcome score (D3). A failed/cancelled run scores exactly 0 (no

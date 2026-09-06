@@ -28,8 +28,7 @@ import { and, eq, exists, gte, isNotNull, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { executions, projects, tasks } from '../../infrastructure/database/schema';
 import { notSystemTask } from '../task/taskScope';
-
-const DAY_MS = 86_400_000;
+import { DAY_MS } from '../../domain/shared/time';
 
 export interface AiAdoption {
   /** Tickets completed in the window (the denominator). */

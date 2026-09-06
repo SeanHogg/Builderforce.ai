@@ -21,6 +21,7 @@ import { mintSessionExchangeCode, readSessionExchangeCode } from '../../applicat
 import { ensureStarterWorkspace } from '../../application/tenant/starterWorkspace';
 import type { Db } from '../../infrastructure/database/connection';
 import { persistWebSessionToken } from '../../application/auth/webSessionStore';
+import { randomHex } from '../../domain/shared/bytes';
 
 // ---------------------------------------------------------------------------
 // Provider configuration
@@ -221,12 +222,6 @@ async function getGitHubEmail(accessToken: string): Promise<string> {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function randomHex(bytes: number): string {
-  return Array.from(crypto.getRandomValues(new Uint8Array(bytes)))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
 
 /**
  * Same-origin redirect guard (open-redirect fix — M5). A post-login redirect

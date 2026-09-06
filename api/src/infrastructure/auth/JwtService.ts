@@ -1,4 +1,7 @@
+import { decodeJwtPayload, signHs256, verifyHs256 } from '@builderforce/hs256-jwt';
 import { TenantRole } from '../../domain/shared/types';
+
+export { decodeJwtPayload };
 
 // ---------------------------------------------------------------------------
 // Payload
@@ -40,33 +43,21 @@ export interface JwtPayload {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function b64urlEncode(data: ArrayBuffer): string {
-  return btoa(String.fromCharCode(...new Uint8Array(data)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
-
-function strToB64url(s: string): string {
-  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
-
-function b64urlToStr(s: string): string {
-  return atob(s.replace(/-/g, '+').replace(/_/g, '/'));
-}
-
-async function importKey(secret: string): Promise<CryptoKey> {
+function requireSecret(secret: string): string {
   if (!secret || typeof secret !== 'string' || !secret.trim()) {
     throw new Error(
       'JWT_SECRET is not set. Set it with: wrangler secret put JWT_SECRET (in the api/ directory), or add JWT_SECRET to api/.env and run npm run secrets:from-env'
     );
   }
-  return crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign', 'verify'],
-  );
+  return secret;
 }
+
+const FAILURE_MESSAGE = {
+  malformed: 'Malformed token',
+  bad_signature: 'Invalid token signature',
+  expired: 'Token expired',
+  not_yet_valid: 'Token not yet valid',
+} as const;
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -85,15 +76,8 @@ async function importKey(secret: string): Promise<CryptoKey> {
  * The claim TYPES stay separate and stay specific, because what a token asserts is
  * the domain's business. Only the crypto is shared.
  */
-async function signClaims(claims: Record<string, unknown>, secret: string): Promise<string> {
-  const header = strToB64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const body   = strToB64url(JSON.stringify(claims));
-  const input  = `${header}.${body}`;
-
-  const key = await importKey(secret);
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(input));
-
-  return `${input}.${b64urlEncode(sig)}`;
+function signClaims(claims: Record<string, unknown>, secret: string): Promise<string> {
+  return signHs256(claims, requireSecret(secret));
 }
 
 /**
@@ -104,24 +88,9 @@ async function signClaims(claims: Record<string, unknown>, secret: string): Prom
  * controlled JSON by the time it decides the token was forged.
  */
 async function verifyClaims<T extends { exp: number }>(token: string, secret: string): Promise<T> {
-  const parts = token.split('.');
-  if (parts.length !== 3) throw new Error('Malformed token');
-
-  const [header, body, sig] = parts as [string, string, string];
-  const input = `${header}.${body}`;
-
-  const key = await importKey(secret);
-  const sigBytes = Uint8Array.from(
-    atob(sig.replace(/-/g, '+').replace(/_/g, '/')),
-    (c) => c.charCodeAt(0),
-  );
-  const valid = await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(input));
-  if (!valid) throw new Error('Invalid token signature');
-
-  const payload = JSON.parse(b64urlToStr(body)) as T;
-  if (payload.exp < Math.floor(Date.now() / 1000)) throw new Error('Token expired');
-
-  return payload;
+  const verdict = await verifyHs256<T>(token, requireSecret(secret));
+  if (!verdict.ok) throw new Error(FAILURE_MESSAGE[verdict.reason]);
+  return verdict.claims;
 }
 
 /** Sign a claim set that is not one of this file's own token types. */
@@ -201,12 +170,6 @@ export async function signWebJwt(
 
 export async function verifyWebJwt(token: string, secret: string): Promise<WebJwtPayload> {
   return verifyClaims<WebJwtPayload>(token, secret);
-}
-
-export function decodeJwtPayload<T = Record<string, unknown>>(token: string): T {
-  const parts = token.split('.');
-  if (parts.length !== 3) throw new Error('Malformed token');
-  return JSON.parse(b64urlToStr(parts[1]!)) as T;
 }
 
 // ---------------------------------------------------------------------------

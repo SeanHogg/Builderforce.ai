@@ -38,18 +38,11 @@ import {
   type SocControlStatus,
 } from '../../application/finops/socControls';
 import { assembleAuditReport, auditReportToCsv } from '../../application/finops/auditReport';
-import { daysParam } from './queryParams';
+import { daysParam, periodParam } from './queryParams';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 
-function currentPeriodMonth(now: number): string {
-  const d = new Date(now);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-}
 
-function parsePeriod(raw: string | undefined, now: number): string {
-  return raw && /^\d{4}-\d{2}$/.test(raw) ? raw : currentPeriodMonth(now);
-}
 
 function rdConfigCacheKey(tenantId: number): string {
   return `finops:rdtax:t:${tenantId}`;
@@ -104,7 +97,7 @@ export function createFinopsRoutes(db: Db): Hono<HonoEnv> {
   router.get('/rd-tax', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
     const now = Date.now();
-    const period = parsePeriod(c.req.query('period'), now);
+    const period = periodParam(c.req.query('period'), now);
     const days = daysParam(c.req.query('days'), 30);
     const env = c.env as Env;
     const key = `${rdConfigCacheKey(tenantId)}:report:p:${period}:d:${days}`;
@@ -203,7 +196,7 @@ export function createFinopsRoutes(db: Db): Hono<HonoEnv> {
   router.get('/audit-report', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
     const now = Date.now();
-    const period = parsePeriod(c.req.query('period'), now);
+    const period = periodParam(c.req.query('period'), now);
     const env = c.env as Env;
     // Served through the canonical read-through cache. It recomputes finance +
     // allocation + R&D + SOC + compliance rollups per request, so beyond the short
@@ -223,7 +216,7 @@ export function createFinopsRoutes(db: Db): Hono<HonoEnv> {
   router.get('/audit-report/export', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
     const now = Date.now();
-    const period = parsePeriod(c.req.query('period'), now);
+    const period = periodParam(c.req.query('period'), now);
     const format = c.req.query('format') === 'json' ? 'json' : 'csv';
     const report = await assembleAuditReport(db, tenantId, segmentId, period);
     const stamp = new Date().toISOString().slice(0, 10);

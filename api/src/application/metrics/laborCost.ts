@@ -21,8 +21,8 @@ import { notSystemTask } from '../task/taskScope';
 import { loggedMinutesByTask, isoDay } from '../timeTracking/timeTracking';
 import { identityOf, type MemberIdentityFields, type MemberKind } from './workforceMetrics';
 import { taskEffortHours as sharedTaskEffortHours } from './effortHours';
+import { HOUR_MS } from '../../domain/shared/time';
 
-const HOUR_MS = 3_600_000;
 /** Cap a single task's cycle-time estimate at one work-day (matches planningSpine). */
 export const HUMAN_HOURS_CAP = 8;
 

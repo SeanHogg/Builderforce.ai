@@ -4,25 +4,18 @@
  * These work natively in Cloudflare Workers without any npm dependencies.
  */
 
+import { bytesToHex, hexToBytes, randomHex } from '../../domain/shared/bytes';
+import { sha256Hex } from '../../domain/shared/hash';
+import { timingSafeEqual } from '../crypto/constantTime';
+
 /** SHA-256 hex digest of a string – used to store API keys. */
-export async function hashSecret(value: string): Promise<string> {
-  const data = new TextEncoder().encode(value);
-  const hash = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+export function hashSecret(value: string): Promise<string> {
+  return sha256Hex(value);
 }
 
 /** Constant-time comparison of a plaintext secret against a stored SHA-256 hex hash. */
 export async function verifySecret(value: string, storedHash: string): Promise<boolean> {
-  const computed = await hashSecret(value);
-  if (computed.length !== storedHash.length) return false;
-  // constant-time comparison
-  let diff = 0;
-  for (let i = 0; i < computed.length; i++) {
-    diff |= computed.charCodeAt(i) ^ storedHash.charCodeAt(i);
-  }
-  return diff === 0;
+  return timingSafeEqual(await hashSecret(value), storedHash);
 }
 
 /**
@@ -48,9 +41,7 @@ export async function verifySecret(value: string, storedHash: string): Promise<b
  *             for the public key, `credentials` for the sealed secret)
  */
 export function generateApiKey(prefix: 'bfa' | 'clk' | 'clu' | 'bfk' | 'whsec' | 'bfq' | 'bff' | 'bfx'): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  const hex   = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-  return `${prefix}_${hex}`;
+  return `${prefix}_${randomHex(16)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -82,10 +73,7 @@ export async function hashPassword(password: string): Promise<string> {
     KEY_LEN,
   );
 
-  const toHex = (buf: Uint8Array) =>
-    Array.from(buf).map((b) => b.toString(16).padStart(2, '0')).join('');
-
-  return `${toHex(salt)}:${toHex(new Uint8Array(derived))}`;
+  return `${bytesToHex(salt)}:${bytesToHex(derived)}`;
 }
 
 /**
@@ -98,10 +86,7 @@ export async function verifyPassword(
   const [saltHex, hashHex] = stored.split(':');
   if (!saltHex || !hashHex) return false;
 
-  const fromHex = (hex: string) =>
-    new Uint8Array(hex.match(/../g)!.map((h) => parseInt(h, 16)));
-
-  const salt = fromHex(saltHex);
+  const salt = hexToBytes(saltHex);
 
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
@@ -117,9 +102,5 @@ export async function verifyPassword(
     KEY_LEN,
   );
 
-  const derivedHex = Array.from(new Uint8Array(derived))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-
-  return derivedHex === hashHex;
+  return timingSafeEqual(bytesToHex(derived), hashHex);
 }

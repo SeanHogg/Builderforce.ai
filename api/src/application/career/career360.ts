@@ -17,6 +17,7 @@
  */
 
 import { SKILL_GROUPS, displaySkill, isSkillToken, parseResume, tokenSet } from '@builderforce/creation-canvas-contract';
+import { clampScore } from '../../domain/shared/numbers';
 
 export interface RoleProfile {
   id: string;
@@ -76,7 +77,7 @@ export interface Career360Targets {
   instruction: string;
 }
 
-const clamp = (n: number): number => Math.max(0, Math.min(100, Math.round(n)));
+const clamp = (n: number): number => clampScore(Math.round(n));
 
 /** Rank every declared destination by what the person can already evidence. */
 export function suggestTargets(resumeText: string, limit = 6): Career360Targets {

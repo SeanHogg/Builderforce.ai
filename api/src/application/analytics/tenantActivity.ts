@@ -18,8 +18,8 @@ import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/rea
 import { activityEvents, contributors, ideAgents, projects } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { computeInteractionActivity } from './interactionActivity';
+import { HOUR_MS } from '../../domain/shared/time';
 
-const HOUR_MS = 3_600_000;
 const TOP_N = 15;
 
 function versionKey(tenantId: number): string { return `tenant-activity:ver:tenant:${tenantId}`; }

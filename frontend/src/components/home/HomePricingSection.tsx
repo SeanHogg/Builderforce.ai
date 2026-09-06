@@ -11,7 +11,8 @@
  * structured data, the FAQ copy — a client component.
  */
 import { useEffect, useState } from 'react';
-import { useLocale, useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
+import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { fetchPublicPricing, type PublicPricingPlan } from '@/lib/publicPricing';
 import {
   CardTitle,
@@ -24,7 +25,7 @@ import {
 
 export function HomePricingSection() {
   const t = useTranslations();
-  const locale = useLocale();
+  const { formatCents } = useMoneyFormat();
   const [plans, setPlans] = useState<PublicPricingPlan[]>([]);
   const [currency, setCurrency] = useState('USD');
 
@@ -47,7 +48,7 @@ export function HomePricingSection() {
           >
             <CardTitle>{plan.name}</CardTitle>
             <div className={styles.price}>
-              <span>{new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: 0 }).format(plan.monthly)}</span><small>{plan.priceSuffix}</small>
+              <span>{formatCents(Math.round(plan.monthly * 100), { currency, maximumFractionDigits: 0 })}</span><small>{plan.priceSuffix}</small>
             </div>
             <p>{plan.description}</p>
             <ul className={styles.perks}>{plan.features.map((perk) => <li className={styles.perk} key={perk}>{perk}</li>)}</ul>

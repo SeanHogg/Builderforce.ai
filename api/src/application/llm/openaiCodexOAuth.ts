@@ -1,5 +1,6 @@
 /** OpenAI Codex / ChatGPT subscription OAuth for tenant-owned credentials. */
 import { throwTokenExchangeFailure } from './subscriptionOAuthCode';
+import { tryDecodeJwtPayload } from '@builderforce/hs256-jwt';
 
 const CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
 const AUTHORIZE_URL = 'https://auth.openai.com/oauth/authorize';
@@ -14,14 +15,7 @@ export interface OpenAICodexOAuthTokens {
   accountId: string;
 }
 
-function decodeJwt(token: string): Record<string, unknown> | null {
-  try {
-    const payload = token.split('.')[1];
-    if (!payload) return null;
-    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
-    return JSON.parse(atob(normalized)) as Record<string, unknown>;
-  } catch { return null; }
-}
+const decodeJwt = (token: string): Record<string, unknown> | null => tryDecodeJwtPayload(token);
 
 function accountIdFromToken(token: string): string {
   const auth = decodeJwt(token)?.[JWT_AUTH_CLAIM] as { chatgpt_account_id?: unknown } | undefined;

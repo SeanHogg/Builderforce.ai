@@ -29,8 +29,9 @@
 
 import { eq } from 'drizzle-orm';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { bytesToBase64Url } from '../../domain/shared/bytes';
 import {
-  bytesToBase64Url, encodeJwsSegment, parseJws, randomUrlToken, verifyJwsWithJwks,
+  encodeJwsSegment, parseJws, randomUrlToken, verifyJwsWithJwks,
 } from '../../infrastructure/auth/jws';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { ltiRegistrations } from '../../infrastructure/database/schema';

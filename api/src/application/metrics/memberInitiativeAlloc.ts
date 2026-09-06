@@ -18,8 +18,7 @@ import { notSystemTask } from '../task/taskScope';
 import { loggedMinutesByTask, isoDay } from '../timeTracking/timeTracking';
 import { taskEffortHours } from './laborCost';
 import { identityOf, type MemberIdentityFields, type MemberKind } from './workforceMetrics';
-
-const HOUR_MS = 3_600_000;
+import { HOUR_MS } from '../../domain/shared/time';
 
 export interface InitiativeSlice {
   initiativeId: string;   // 'unassigned' for tasks with no initiative

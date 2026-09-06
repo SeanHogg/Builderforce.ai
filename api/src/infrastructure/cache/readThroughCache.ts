@@ -18,6 +18,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
 
 import type { Env } from '../../env';
 import { isKvRateLimit, retryTransient } from '../shared/retryTransient';
+import { sha256HexBytes } from '../../domain/shared/hash';
 
 type L1Entry = { value: unknown; expiresAt: number };
 
@@ -62,11 +63,7 @@ async function kvKey(key: string): Promise<string> {
   const bytes = textEncoder.encode(raw);
   if (bytes.byteLength <= KV_MAX_KEY_BYTES) return raw;
 
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  const hex = [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
-  return `${KV_KEY_PREFIX}sha256:${hex}`;
+  return `${KV_KEY_PREFIX}sha256:${await sha256HexBytes(bytes)}`;
 }
 
 /** KV is JSON storage, so a freshly loaded value must have the same observable shape

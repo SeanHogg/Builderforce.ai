@@ -198,8 +198,12 @@ const BASELINE = {
    * own new panels (`LegalAgreementsPanel`, `CustomerFeedbackInbox`, the read
    * policy switch, the advisory-feed chips) were written on the scale to begin
    * with. Net −9 against a +7 drift.
+   *
+   * 3,586 → 3,578: the no-native-dialogs pass. `SystemHealthSection` was
+   * rewritten onto the app's confirm and localized, and its eight typed sizes
+   * became role tokens on the way; the compliance lens had shed three more.
    */
-  offScaleFontSizes: 3586,
+  offScaleFontSizes: 3578,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

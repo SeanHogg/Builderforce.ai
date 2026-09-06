@@ -35,6 +35,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { freezeIdeAgentDefinition, type FrozenAgentDefinition } from '../agentIdentity/agentRunIdentity';
 import { findTaskPrimarySpec } from '../prd/taskPrd';
+import { parseJsonOr } from '../../domain/shared/json';
 
 export const REHEARSAL_KINDS = ['dry_run', 'replay', 'trial'] as const;
 export type RehearsalKind = (typeof REHEARSAL_KINDS)[number];
@@ -496,14 +497,8 @@ const REHEARSAL_DIRECTIVE =
   + 'the real, complete change — the recording is what gets reviewed, so a placeholder here is a '
   + 'placeholder in the report.';
 
-function safeJson(raw: string | null): unknown {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return raw;
-  }
-}
+/** A stored value that is not JSON is returned as the text it was. */
+const safeJson = (raw: string | null): unknown => (raw ? parseJsonOr<unknown>(raw, raw) : null);
 
 /** Pull the git ref a past run read from out of its payload, when it recorded one. */
 function extractFrozenRef(payload: string | null): string | null {

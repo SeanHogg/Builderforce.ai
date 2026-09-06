@@ -40,6 +40,8 @@ import type {
 } from './PaymentProvider';
 import { PaymentNotConfiguredError } from './PaymentProvider';
 import { TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
+import { timingSafeEqual } from '../crypto/constantTime';
+import { hmacHex } from '../crypto/hmac';
 
 interface StripeConfig {
   secretKey: string;
@@ -1043,29 +1045,10 @@ async function verifyStripeSignature(
     if (!Number.isFinite(sentAt)) return false;
     if (Math.abs(Date.now() / 1000 - sentAt) > SIGNATURE_TOLERANCE_SECONDS) return false;
 
-    const signedPayload = `${timestamp}.${payload}`;
-    const key = await crypto.subtle.importKey(
-      'raw',
-      new TextEncoder().encode(secret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign'],
-    );
-    const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(signedPayload));
-    const hex = Array.from(new Uint8Array(mac))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-
+    const hex = await hmacHex(secret, `${timestamp}.${payload}`);
     return signatures.some((candidate) => timingSafeEqual(hex, candidate));
   } catch {
     return false;
   }
 }
 
-/** Compare without leaking how many leading characters matched via response time. */
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}

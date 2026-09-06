@@ -1,12 +1,8 @@
 import { defineConfig } from 'tsup';
+import { libraryConfig } from '../scripts/tsup.base.mjs';
 
-export default defineConfig({
+export default defineConfig(libraryConfig({
   entry: { index: 'src/index.ts', capabilities: 'src/engine/device-router.ts' },
-  format: ['esm', 'cjs'],
-  dts: true,
-  sourcemap: true,
-  clean: true,
-  outDir: 'dist',
   external: [
     'onnxruntime-web',
     '@huggingface/transformers',
@@ -20,7 +16,4 @@ export default defineConfig({
     '@webdit/runtime',
     '@webdit/shared',
   ],
-  outExtension({ format }) {
-    return { js: format === 'esm' ? '.mjs' : '.cjs' };
-  },
-});
+}));

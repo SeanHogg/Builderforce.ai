@@ -22,6 +22,7 @@
 
 import type { ListingDelivery, ListingHarness } from '@builderforce/creation-canvas-contract';
 import { stableStringify } from '../shared/stableStringify';
+import { bytesToHex } from '../shared/bytes';
 
 /** Only what a sandbox run could ever observe. */
 export interface StageSandboxSubject {
@@ -32,9 +33,7 @@ export interface StageSandboxSubject {
 }
 
 /** Hex-encode a digest without a Buffer, which Workers does not carry. */
-function hex(bytes: ArrayBuffer): string {
-  return [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
+const hex = bytesToHex;
 
 /** SHA-256 over the canonical form of what a sandbox run verified. */
 export async function stageSandboxPayloadHash(subject: StageSandboxSubject): Promise<string> {

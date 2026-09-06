@@ -16,9 +16,12 @@ import {
 } from '@/lib/builderforceApi';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
 
-function formatPrice(item: CartItem, locale: string, freeLabel: string, useLabel: string): string {
+/** Cart prices are whole-dollar decimals; the formatter takes cents. */
+const toCents = (dollars: number): number => Math.round(dollars * 100);
+
+function formatPrice(item: CartItem, money: (dollars: number) => string, freeLabel: string, useLabel: string): string {
   if (item.price === 0) return freeLabel;
-  const dollars = new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(item.price);
+  const dollars = money(item.price);
   if (item.pricingModel === 'consumption') {
     return `${dollars}${item.priceUnit ? ` / ${item.priceUnit}` : ` / ${useLabel}`}`;
   }
@@ -59,6 +62,7 @@ export default function ShoppingCart() {
   const phoneT = useTranslations('pricing.phone');
   const phonePageT = useTranslations('phonePage');
   const locale = useLocale();
+  const money = (dollars: number): string => formatCents(toCents(dollars), { currency: 'USD' });
   const [checkingOut, setCheckingOut] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [checkoutSuccess, setCheckoutSuccess] = useState<string | null>(null);
@@ -280,7 +284,7 @@ export default function ShoppingCart() {
                       <TypeBadge type={item.type} />
                     </div>
                     <div style={{ fontSize: 'var(--font-size-small)', color: item.price === 0 ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
-                      {formatPrice(item, locale, t('free'), t('use'))}
+                      {formatPrice(item, money, t('free'), t('use'))}
                       {item.setupFee != null && <div style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 400 }}>{t('plusActivation', { price: item.setupFee })}</div>}
                     </div>
                   </div>
@@ -320,9 +324,9 @@ export default function ShoppingCart() {
           <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, fontSize: 'var(--font-size-body)', fontWeight: 700 }}>
               <span>{t('dueToday')}</span>
-              <span>{subtotal + setupTotal === 0 ? t('free') : new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(subtotal + setupTotal)}</span>
+              <span>{subtotal + setupTotal === 0 ? t('free') : money(subtotal + setupTotal)}</span>
             </div>
-            {recurringTotal > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}><span>{subscriptionItem?.billingCycle === 'yearly' ? t('renewsYearly') : t('renewsMonthly')}</span><span>{new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(recurringTotal)}</span></div>}
+            {recurringTotal > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}><span>{subscriptionItem?.billingCycle === 'yearly' ? t('renewsYearly') : t('renewsMonthly')}</span><span>{money(recurringTotal)}</span></div>}
 
             {isAuthenticated ? (
               <>

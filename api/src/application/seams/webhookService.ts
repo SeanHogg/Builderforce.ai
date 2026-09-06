@@ -29,6 +29,7 @@ import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { webhookSubscriptions, webhookDeliveries } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { hmacHex } from '../../infrastructure/crypto/hmac';
 
 /**
  * Events an integrator may subscribe to.
@@ -154,18 +155,7 @@ export async function signWebhook(
   timestampSec: number,
   body: string,
 ): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const signed = `${deliveryId}.${timestampSec}.${body}`;
-  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(signed));
-  return Array.from(new Uint8Array(mac))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+  return hmacHex(secret, `${deliveryId}.${timestampSec}.${body}`);
 }
 
 export interface EmitInput {

@@ -36,6 +36,7 @@ import type { Env } from '../../env';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { isSendableEmail, normalizeEmail } from '../shared/dnsVerification';
 import { sha256Hex } from '../../infrastructure/crypto/digest';
+import { randomHex } from '../../domain/shared/bytes';
 
 /** How long a one-time code is good for. Long enough to switch to an inbox. */
 export const CODE_TTL_MS = 10 * 60 * 1000;
@@ -68,9 +69,7 @@ function newCode(): string {
 
 /** An opaque 256-bit session token. Never stored, only its hash. */
 function newSessionToken(): string {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return randomHex(32);
 }
 
 export type RequestSignInResult =

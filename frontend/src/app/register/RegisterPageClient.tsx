@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
-import { ThemeToggleButton } from '@/app/ThemeProvider';
+import { ThemeToggleButton } from '@/components/ThemeToggleButton';
 import JsonLd from '@/components/JsonLd';
 import { Icon } from '@/components/ui/Icon';
 import OAuthButtons from '@/components/OAuthButtons';

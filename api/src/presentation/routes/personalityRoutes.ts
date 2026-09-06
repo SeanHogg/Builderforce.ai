@@ -50,7 +50,7 @@ import {
   summarizeDirectives,
 } from '../../application/persona/recordPersonalityEvent';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { tenantHasFeature } from '../middleware/featureGate';
+import { requireFeature } from '../middleware/featureGate';
 import {
   getOrSetCached,
   getCacheVersion,
@@ -82,10 +82,10 @@ import {
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import { limitParam } from './queryParams';
+import { clamp, clamp01 } from '../../domain/shared/numbers';
+import { parseJsonOr } from '../../domain/shared/json';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
-const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n));
-const clamp01 = (n: number): number => clamp(Number.isFinite(n) ? n : 0, 0, 1);
 
 /** Parse a stored psychometric JSON string into a compiler-ready profile (or null).
  *  DRY: the ONE parser lives in recordPersonalityEvent so read-through derivation and
@@ -369,9 +369,8 @@ export function createPersonalityRoutes(db: Db): Hono<HonoEnv> {
 
     // Reinforcement writes to the psychometric vector — gate on the same Pro feature
     // as the Workforce personality editor.
-    if (!(await tenantHasFeature(c.env as Env, tenantId, userId, 'psychometricPersona'))) {
-      return c.json({ error: 'psychometricPersona feature required', feature: 'psychometricPersona' }, 402);
-    }
+    const gate = await requireFeature(c, 'psychometricPersona');
+    if (gate) return gate;
 
     const body = await c.req.json<{
       deltas?: Record<string, number>;
@@ -546,11 +545,4 @@ async function invalidateAfterWrite(env: Env, tenantId: number, agentRef: string
 }
 
 /** Parse JSON, returning `fallback` on any error. */
-function safeJson<T>(raw: string | null | undefined, fallback: T): T {
-  if (!raw) return fallback;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
+const safeJson = parseJsonOr;

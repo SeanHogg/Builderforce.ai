@@ -72,7 +72,7 @@ import { validateLoRASafetensors } from '../../domain/training/loraArtifact';
 // that dispatches it is the boundary that has to ask. See its own header.
 import { evaluateTrainingDataset, trainingGateBody } from '../../application/finetune/trainingDatasetGate';
 import { normalizeClassifications, normalizeUsePolicy } from '@builderforce/creation-canvas-contract';
-import { wildcardPath } from './wildcardPath';
+import { wildcardPath } from '@builderforce/hono-wildcard-path';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 function generateId(): string {

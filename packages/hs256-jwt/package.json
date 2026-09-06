@@ -1,0 +1,17 @@
+{
+  "name": "@builderforce/hs256-jwt",
+  "version": "2026.9.7",
+  "private": true,
+  "type": "module",
+  "description": "HS256 (HMAC-SHA-256) JWT sign, verify and decode over Web Crypto, dependency-free. Shared by the API (every session, web, emulation, opaque and install token it mints) and the legacy worker (which verifies the API's session token at its data routes) so the two verifiers can never drift: one checks the signature before it parses the body, checks `exp` and `nbf`, and hands the claims back \u2014 or names why it refused. Source-only: every consumer aliases the bare specifier straight at src/index.ts.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

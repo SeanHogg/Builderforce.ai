@@ -12,8 +12,7 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { innovationIdeas } from '../../infrastructure/database/schema';
-
-const DAY_MS = 86_400_000;
+import { DAY_MS } from '../../domain/shared/time';
 
 /** The linear funnel order. `killed` is an off-ramp, not a stage. */
 export const FUNNEL_STAGES = ['idea', 'validated', 'in_build', 'shipped', 'measured'] as const;

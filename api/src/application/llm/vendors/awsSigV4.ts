@@ -9,26 +9,13 @@
  * (service/region/method are parameters) so it is not Bedrock-specific.
  */
 import { sha256Hex } from '../../../infrastructure/crypto/digest';
+import { hmacHex, hmacSign } from '../../../infrastructure/crypto/hmac';
 
 const encoder = new TextEncoder();
 
 
 
-async function hmac(key: ArrayBuffer | Uint8Array, data: string): Promise<ArrayBuffer> {
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    key instanceof Uint8Array ? key : new Uint8Array(key),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  return crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(data));
-}
-
-async function hmacHex(key: ArrayBuffer | Uint8Array, data: string): Promise<string> {
-  const sig = await hmac(key, data);
-  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
+const hmac = (key: ArrayBuffer | Uint8Array, data: string): Promise<ArrayBuffer> => hmacSign(key, data);
 
 /** `YYYYMMDDTHHMMSSZ` / `YYYYMMDD` — AWS's own basic ISO 8601 date formats. */
 export function amzDate(now: Date): { amzDate: string; dateStamp: string } {

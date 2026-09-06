@@ -9,45 +9,22 @@
  * payloads the other rejects).
  */
 
-/** Compute HMAC-SHA256(secret, body) as a lowercase hex string. */
-export async function hmacSha256Hex(secret: string, body: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
-  return Array.from(new Uint8Array(mac))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+import { timingSafeEqual } from './constantTime';
+import { hmacBase64Url, hmacHex } from './hmac';
+
+/** HMAC-SHA256(secret, body) as lowercase hex. The webhook-header form of {@link hmacHex}. */
+export function hmacSha256Hex(secret: string, body: string): Promise<string> {
+  return hmacHex(secret, body);
 }
 
-/** Compute HMAC-SHA256(secret, body) as a base64url string (no padding) — JWT HS256 form. */
-export async function hmacSha256Base64Url(secret: string, body: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
-  let bin = '';
-  for (const b of new Uint8Array(mac)) bin += String.fromCharCode(b);
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+/** HMAC-SHA256(secret, body) as unpadded base64url — the JWT HS256 form of {@link hmacBase64Url}. */
+export function hmacSha256Base64Url(secret: string, body: string): Promise<string> {
+  return hmacBase64Url(secret, body);
 }
 
-/** Constant-time-ish equal-length string compare (avoids early-exit). */
-export function timingSafeEqualHex(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return diff === 0;
-}
+/** Constant-time equal-length compare — {@link timingSafeEqual} under the name the
+ *  webhook verifiers were written against. */
+export const timingSafeEqualHex = timingSafeEqual;
 
 /**
  * Verify that `candidateHex` is a valid HMAC-SHA256 hex digest of `rawBody` under

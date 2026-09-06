@@ -1,12 +1,12 @@
 import { defineConfig } from 'tsup';
+import { libraryConfig, REACT_EXTERNALS } from '../scripts/tsup.base.mjs';
 
-export default defineConfig({
+export default defineConfig(libraryConfig({
   // `chatError` is a SECOND entry, not just a re-export off the root: it is pure
   // TypeScript with no React, so a non-React host (the VS Code extension process,
   // which renders chat errors in its own native surfaces) can share the ONE
   // error classifier without bundling React and the whole hook layer with it.
   entry: { index: 'src/index.ts', chatError: 'src/chatError.ts' },
-  format: ['esm', 'cjs'],
   // `resolve`, not a bare `true`. The JS bundles already inline
   // `@builderforce/agent-stall` (it is a devDependency, so tsup does not treat it
   // as external) — but `dts: true` left the DECLARATIONS re-exporting the bare
@@ -23,11 +23,5 @@ export default defineConfig({
   // so the wider root costs nothing and the app's own `tsc --noEmit` keeps the
   // narrow one.
   dts: { resolve: [/^@builderforce\//], compilerOptions: { rootDir: '.' } },
-  sourcemap: true,
-  clean: true,
-  outDir: 'dist',
-  external: ['react', 'react-dom', 'react/jsx-runtime'],
-  outExtension({ format }) {
-    return { js: format === 'esm' ? '.mjs' : '.cjs' };
-  },
-});
+  external: REACT_EXTERNALS,
+}));

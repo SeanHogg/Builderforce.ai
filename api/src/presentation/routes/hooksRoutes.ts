@@ -30,7 +30,7 @@ import {
   type ProjectBackend,
 } from '../../application/backend';
 import { dispatchIngressRequest } from '../../application/backend/ingress';
-import { wildcardPath } from './wildcardPath';
+import { wildcardPath } from '@builderforce/hono-wildcard-path';
 
 export function createHooksRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();

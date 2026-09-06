@@ -31,6 +31,7 @@
  */
 
 import { displaySkill, isSkillToken, parseResume, tokenSet } from '@builderforce/creation-canvas-contract';
+import { clampScore } from '../../domain/shared/numbers';
 
 /**
  * What a person is open to.
@@ -128,7 +129,7 @@ export interface ListingReadiness {
   instruction: string;
 }
 
-const clamp = (n: number): number => Math.max(0, Math.min(100, Math.round(n)));
+const clamp = (n: number): number => clampScore(Math.round(n));
 
 /**
  * Grade a listing SEPARATELY per channel, because the two demand sides read different

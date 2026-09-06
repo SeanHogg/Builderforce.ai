@@ -14,8 +14,7 @@ import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
 import { users, tenants, llmUsageLog, errorEvents } from '../../infrastructure/database/schema';
 import { densifyDaily, type MetricPoint } from '../dashboards/dailySeries';
 import type { Db } from '../../infrastructure/database/connection';
-
-const DAY_MS = 86_400_000;
+import { DAY_MS } from '../../domain/shared/time';
 
 function windowStart(days: number, now: number): Date {
   const mid = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate());

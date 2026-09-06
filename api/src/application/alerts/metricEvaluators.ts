@@ -22,8 +22,7 @@ import { computeEngineeringInsights } from '../insights/engineeringInsights';
 import { buildConsumptionSnapshot } from '../consumption/meters';
 import { buildTenantDriftReport } from '../eval/driftReport';
 import { millicentsToUsd } from '../../domain/shared/money';
-
-const HOUR_MS = 3_600_000;
+import { HOUR_MS } from '../../domain/shared/time';
 
 /** The full set of metric keys a rule may target (kept in lockstep with the
  *  migration's CHECK-list and the schema AlertMetric type). */

@@ -10,7 +10,7 @@ import { getStoredWebToken, resolveAndSelectTenant, requestMagicLink } from '@/l
 import { safeRedirectPath } from '@/lib/safeRedirect';
 import { isPasskeyCancellation, isPasskeySupported } from '@/lib/passkeys';
 import { Icon } from '@/components/ui/Icon';
-import { ThemeToggleButton } from '@/app/ThemeProvider';
+import { ThemeToggleButton } from '@/components/ThemeToggleButton';
 import JsonLd from '@/components/JsonLd';
 import OAuthButtons from '@/components/OAuthButtons';
 import MarketingFaq from '@/components/marketing/MarketingFaq';

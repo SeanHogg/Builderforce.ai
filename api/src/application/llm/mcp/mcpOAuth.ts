@@ -35,6 +35,7 @@ import {
   type TokenResponse,
 } from '../../../infrastructure/auth/oauthState';
 import { assertSafeUrl, resolveAndAssertPublic } from '../../../infrastructure/net/ssrfGuard';
+import { createPkcePair } from '../../../infrastructure/crypto/pkce';
 
 /** How this deployment identifies itself when registering with an unknown AS. */
 const CLIENT_NAME = 'Builderforce';
@@ -182,18 +183,8 @@ export async function registerClient(
 
 // ── PKCE (RFC 7636, S256) ──────────────────────────────────────────────────
 
-function base64Url(bytes: Uint8Array): string {
-  let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
 /** A fresh verifier + its S256 challenge. The verifier never leaves our storage. */
-export async function createPkcePair(): Promise<{ codeVerifier: string; codeChallenge: string }> {
-  const codeVerifier = base64Url(crypto.getRandomValues(new Uint8Array(32)));
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(codeVerifier));
-  return { codeVerifier, codeChallenge: base64Url(new Uint8Array(digest)) };
-}
+export { createPkcePair };
 
 /** The consent URL the human is sent to. */
 export function buildAuthorizeUrl(

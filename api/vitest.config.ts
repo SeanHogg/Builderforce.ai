@@ -28,6 +28,11 @@ export default defineConfig({
      * first making that state per-file.
      */
     pool: 'threads',
+    // The source-only packages under `packages/` have no install of their own, so
+    // their tests ran NOWHERE: `packages/kimi-oauth/src/index.test.ts` was green by
+    // never executing. This suite already aliases every one of them, so it runs
+    // them too — a package's contract is checked wherever its consumer is.
+    include: ['src/**/*.{test,spec}.ts', '../packages/*/src/**/*.test.ts'],
   },
   resolve: {
     // Derived from the package manifests, never listed: every tsconfig path

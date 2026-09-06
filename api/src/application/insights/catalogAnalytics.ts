@@ -33,6 +33,7 @@ import {
 import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { DAY_MS } from '../../domain/shared/time';
 
 export type CatalogKind = 'skill' | 'persona' | 'prompt';
 
@@ -44,7 +45,6 @@ export interface CatalogAnalytics {
   topItems: Array<{ id: string; name: string; installs: number; usage: number }>;
 }
 
-const MS_PER_DAY = 86_400_000;
 const TOP_N = 8;
 
 /** Normalize a plural route segment (skills|personas|prompts) → a catalog kind. */
@@ -132,7 +132,7 @@ export async function computeCatalogAnalytics(
   windowDays: number,
   now: number = Date.now(),
 ): Promise<CatalogAnalytics> {
-  const since = new Date(now - windowDays * MS_PER_DAY);
+  const since = new Date(now - windowDays * DAY_MS);
   const events: Ev[] = [];
 
   // ── Kind-specific reuse of existing timestamped rows ──────────────────────
@@ -204,7 +204,7 @@ function aggregate(kind: CatalogKind, windowDays: number, since: number, now: nu
   // Zero-filled day buckets [since .. now] so the trend has a continuous axis.
   const byDay = new Map<string, { installs: number; usage: number }>();
   const startDay = new Date(dayKey(since) + 'T00:00:00Z').getTime();
-  for (let t = startDay; t <= now; t += MS_PER_DAY) byDay.set(dayKey(t), { installs: 0, usage: 0 });
+  for (let t = startDay; t <= now; t += DAY_MS) byDay.set(dayKey(t), { installs: 0, usage: 0 });
 
   const byItem = new Map<string, { name: string; installs: number; usage: number }>();
   let installs = 0;

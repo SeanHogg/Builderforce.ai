@@ -55,6 +55,7 @@ import {
 } from '../../application/repoanalysis/types';
 import { analysisPlanConfig } from '../../application/repoanalysis/analysisPlan';
 import type { Env } from '../../env';
+import { parseJsonOr } from '../../domain/shared/json';
 
 interface StartBody {
   runId: string;
@@ -845,11 +846,4 @@ function uniqueTopDirs(entries: { path: string; type: 'file' | 'dir' }[]): strin
   return [...dirs].sort().slice(0, 20);
 }
 
-function safeJson<T>(raw: string | null): T | null {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-}
+const safeJson = <T>(raw: string | null): T | null => parseJsonOr<T | null>(raw, null);

@@ -80,12 +80,16 @@ export function InboxClient() {
   }, [connectionId, folder, query, t]);
 
   useEffect(() => { void loadMessages(); }, [loadMessages]);
-  useEffect(() => {
+  const loadAutomation = useCallback(async () => {
     if (connectionId == null) { setRules([]); setExecutions([]); return; }
-    void Promise.all([mailboxApi.listRules(connectionId), mailboxApi.listAutomation(connectionId)])
-      .then(([ruleResult, executionResult]) => { setRules(ruleResult.rules); setExecutions(executionResult.executions); })
-      .catch(() => { setRules([]); setExecutions([]); });
+    try {
+      const [ruleResult, executionResult] = await Promise.all([mailboxApi.listRules(connectionId), mailboxApi.listAutomation(connectionId)]);
+      setRules(ruleResult.rules); setExecutions(executionResult.executions);
+    } catch {
+      setRules([]); setExecutions([]);
+    }
   }, [connectionId]);
+  useEffect(() => { void loadAutomation(); }, [loadAutomation]);
 
   const openMessage = async (message: MailboxMessage) => {
     setSelected(message); setReply(''); setError('');

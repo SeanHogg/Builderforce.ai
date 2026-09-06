@@ -1,23 +1,14 @@
 import { defineConfig } from 'tsup';
+import { libraryConfig, REACT_EXTERNALS } from '../../scripts/tsup.base.mjs';
 
-export default defineConfig({
+export default defineConfig(libraryConfig({
   entry: { index: 'src/index.ts' },
-  format: ['esm', 'cjs'],
-  dts: true,
-  sourcemap: true,
-  clean: true,
-  outDir: 'dist',
   // React + the markdown libs + the brain core are provided by the consumer
   // (deduped with the host app / webview) — never bundled into this UI package.
   external: [
-    'react',
-    'react-dom',
-    'react/jsx-runtime',
+    ...REACT_EXTERNALS,
     'react-markdown',
     'remark-gfm',
     '@seanhogg/builderforce-brain-embedded',
   ],
-  outExtension({ format }) {
-    return { js: format === 'esm' ? '.mjs' : '.cjs' };
-  },
-});
+}));

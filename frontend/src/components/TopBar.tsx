@@ -10,7 +10,7 @@ import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { signInHref } from '@/lib/auth';
 import { ButtonLink } from '@/components/ui';
-import { ThemeToggleButton } from '@/app/ThemeProvider';
+import { ThemeToggleButton } from '@/components/ThemeToggleButton';
 import { useRolePreview, type PreviewRole } from '@/lib/RolePreviewContext';
 import { useEmulation } from '@/lib/EmulationContext';
 import { HeaderCartButton } from './HeaderCartButton';

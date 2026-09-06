@@ -9,7 +9,7 @@ const routing = vi.hoisted(() => ({ pathname: '/' }));
 vi.mock('next/navigation', () => ({ usePathname: () => routing.pathname }));
 
 vi.mock('./HeaderCartButton', () => ({ HeaderCartButton: () => <span>Cart</span> }));
-vi.mock('@/app/ThemeProvider', () => ({ ThemeToggleButton: () => <span>Theme</span> }));
+vi.mock('@/components/ThemeToggleButton', () => ({ ThemeToggleButton: () => <span>Theme</span> }));
 
 const localWork = vi.hoisted(() => ({ sessions: [] as Array<{ sessionId: string }> }));
 vi.mock('@/domains/canvas/infrastructure/localCanvasStore', () => ({ listLocalCreationSessions: () => localWork.sessions }));

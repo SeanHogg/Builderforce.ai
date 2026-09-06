@@ -15,19 +15,8 @@
  * `npm run check:layering`.
  */
 
-function toHex(bytes: Uint8Array): string {
-  return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-async function hmacKey(secret: string, usage: ('sign' | 'verify')[]): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    usage,
-  );
-}
+import { hexToBytes, randomHex } from '../../domain/shared/bytes';
+import { hmacHex, hmacVerify } from '../crypto/hmac';
 
 /**
  * Sign an arbitrary state payload. A random `nonce` and issue timestamp `ts` are
@@ -35,11 +24,9 @@ async function hmacKey(secret: string, usage: ('sign' | 'verify')[]): Promise<Cr
  * verifier can enforce a freshness window.
  */
 export async function signState(secret: string, payload: Record<string, unknown>): Promise<string> {
-  const nonce = toHex(crypto.getRandomValues(new Uint8Array(16)));
+  const nonce = randomHex(16);
   const body = JSON.stringify({ ...payload, nonce, ts: Date.now() });
-  const key = await hmacKey(secret, ['sign']);
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
-  return btoa(body + '|' + toHex(new Uint8Array(sig)));
+  return btoa(body + '|' + (await hmacHex(secret, body)));
 }
 
 /**
@@ -58,9 +45,7 @@ export async function verifyState<T extends Record<string, unknown>>(
     if (sep < 0) return null;
     const body = decoded.slice(0, sep);
     const sigHex = decoded.slice(sep + 1);
-    const key = await hmacKey(secret, ['verify']);
-    const sigBytes = new Uint8Array(sigHex.match(/.{2}/g)!.map((b) => parseInt(b, 16)));
-    const ok = await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(body));
+    const ok = await hmacVerify(secret, body, hexToBytes(sigHex));
     if (!ok) return null;
     const parsed = JSON.parse(body) as T & { ts: number };
     if (typeof parsed.ts !== 'number' || Date.now() - parsed.ts > maxAgeMs) return null;

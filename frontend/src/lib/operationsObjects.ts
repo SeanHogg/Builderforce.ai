@@ -30,7 +30,7 @@
  * is what an invoice is raised against.
  */
 
-import { OPERATIONS_OBJECT_KINDS, type OperationsObjectKind } from '@builderforce/creation-canvas-contract';
+import { type OperationsObjectKind } from '@builderforce/creation-canvas-contract';
 import { formatMoney, sumRowColumn, type MoneyTotal } from './canvasMoney';
 import {
   deriveDaysBetween, deriveNumber, derivePercent, registerSpecObjectSet, sumColumn,
@@ -604,8 +604,6 @@ export const OPERATIONS_STATUSES: Record<string, string> = {
   reported: 'Reported',
 };
 
-/** Kinds the contract declares, for the test that proves the two lists agree. */
-export const OPERATIONS_CONTRACT_KINDS: readonly OperationsObjectKind[] = OPERATIONS_OBJECT_KINDS;
 
 registerSpecObjectSet({
   id: 'operations',

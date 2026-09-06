@@ -38,8 +38,6 @@ import { projects, tasks, taskStatusTransitions } from '../../infrastructure/dat
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { notSystemTask } from '../task/taskScope';
 
-const HOUR_MS = 3_600_000;
-
 /** Hard cap on rows scanned per window — mirrors workforceMetrics.MAX_METRIC_ROWS
  *  so the JS-side aggregation stays bounded on a very large tenant. */
 const MAX_ROWS = 5_000;
@@ -68,6 +66,7 @@ export const AGING_TOP_N = 10;
  */
 import { avg, median } from '../shared/stats';
 import { TASK_TERMINAL_SET } from '../../domain/shared/terminalStatus';
+import { HOUR_MS } from '../../domain/shared/time';
 
 export { avg, median };
 

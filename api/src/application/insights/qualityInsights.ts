@@ -20,9 +20,7 @@
 import { and, eq, gte } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { prodIncidents, supportTickets, uptimeSamples, qaFindings } from '../../infrastructure/database/schema';
-
-const HOUR_MS = 3_600_000;
-const DAY_MS = 86_400_000;
+import { HOUR_MS, DAY_MS } from '../../domain/shared/time';
 
 export interface IncidentRow {
   isAlertOnly: boolean;

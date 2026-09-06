@@ -31,6 +31,7 @@
 import { and, desc, eq, gte, isNotNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { salesAssociateSettings, salesContacts, salesReferrals, users } from '../../infrastructure/database/schema';
+import { DAY_MS } from '../../domain/shared/time';
 
 export const SALES_REPORT_WINDOWS = ['week', 'month', 'quarter', 'ytd', 'all'] as const;
 export type SalesReportWindow = (typeof SALES_REPORT_WINDOWS)[number];
@@ -331,15 +332,13 @@ export function summarizePipeline(
   };
 }
 
-const MS_PER_DAY = 86_400_000;
-
 /** Totals for one window over already-fetched rows. Pure, hence testable. */
 export function totalsForWindow(facts: readonly ReferralFact[], window: SalesReportWindow, now: Date): SalesWindowTotals {
   const from = windowStart(window, now).getTime();
   const signups = facts.filter((fact) => fact.signedUpAt.getTime() >= from);
   const conversions = facts.filter((fact) => fact.convertedAt != null && fact.convertedAt.getTime() >= from);
   const dayGaps = conversions
-    .map((fact) => (fact.convertedAt!.getTime() - fact.signedUpAt.getTime()) / MS_PER_DAY)
+    .map((fact) => (fact.convertedAt!.getTime() - fact.signedUpAt.getTime()) / DAY_MS)
     .filter((days) => Number.isFinite(days) && days >= 0);
 
   return {
@@ -414,7 +413,7 @@ export async function buildSalesReport(
     ? and(eq(salesReferrals.associateUserId, associateUserId), isNotNull(salesReferrals.signupNotifiedAt))
     : isNotNull(salesReferrals.signupNotifiedAt);
 
-  const stalledBefore = new Date(now.getTime() - STALLED_CONTACT_DAYS * MS_PER_DAY);
+  const stalledBefore = new Date(now.getTime() - STALLED_CONTACT_DAYS * DAY_MS);
 
   const [referralRows, contactRows, peopleRows, goalRows] = await Promise.all([
     db.select({

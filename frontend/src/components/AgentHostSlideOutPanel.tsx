@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { agentHosts, type AgentHost } from '@/lib/builderforceApi';
 import dynamic from 'next/dynamic';
+import { useToast } from '@/components/ToastProvider';
 
 // Only the Observability tab needs it — and it is a thousand lines.
 const ObservabilityContent = dynamic(() => import('./ObservabilityContent').then((m) => m.ObservabilityContent), { ssr: false });
@@ -113,6 +114,7 @@ export function AgentHostSlideOutPanel({
   const confirm = useConfirm();
   const tc = useTranslations('common');
   const t = useTranslations('agentHostPanel');
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<AgentHostPanelTab>(initialTab);
   const [savingDefault, setSavingDefault] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -162,7 +164,7 @@ export function AgentHostSlideOutPanel({
       onDeleted?.(agentHost.id);
       onClose();
     } catch (err) {
-      alert(err instanceof Error ? err.message : t('deregisterFailed'));
+      toast.error(err instanceof Error ? err.message : t('deregisterFailed'));
     } finally {
       setDeleting(false);
     }

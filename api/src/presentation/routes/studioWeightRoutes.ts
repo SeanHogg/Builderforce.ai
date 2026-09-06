@@ -28,7 +28,7 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { HonoEnv } from '../../env';
-import { wildcardPath } from './wildcardPath';
+import { wildcardPath } from '@builderforce/hono-wildcard-path';
 
 export function createStudioRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();

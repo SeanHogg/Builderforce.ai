@@ -60,7 +60,7 @@ import { projectInTenant, loadProjectInTenant } from '../../application/project/
 import { deriveTargetZones } from '../../application/qa/deriveTargetRoutes';
 import { fireEventTriggers } from '../../application/workflow/eventTriggers';
 import { getFindingScreenshot, putFindingScreenshot } from '../../application/qa/findingScreenshots';
-import { wildcardPath } from './wildcardPath';
+import { wildcardPath } from '@builderforce/hono-wildcard-path';
 import { QaFlowService } from '../../application/qa/QaFlowService';
 import { QaGeneratorService } from '../../application/qa/QaGeneratorService';
 import { QaHeatmapService, QA_HEAT_VERSION_KEY } from '../../application/qa/QaHeatmapService';

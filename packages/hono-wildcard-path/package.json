@@ -1,0 +1,17 @@
+{
+  "name": "@builderforce/hono-wildcard-path",
+  "version": "2026.9.7",
+  "private": true,
+  "type": "module",
+  "description": "THE way to read what a Hono route's trailing `*` matched: Hono never exposes the wildcard as a named param, and every hand-rolled `c.req.path.replace(...)` mangles a key that repeats a segment. Derives the remainder from the matched route pattern itself and decodes each segment. Shared by the API's file, asset, hook and weight routes and the legacy worker's file router. Source-only and dependency-free: it types the two request fields it reads structurally, so Hono's Context satisfies it without being imported.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

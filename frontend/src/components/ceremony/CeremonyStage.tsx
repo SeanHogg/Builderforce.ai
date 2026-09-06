@@ -25,6 +25,7 @@ import { ScorecardPanel } from './ScorecardPanel';
 import { AssignedWorkPanel } from './AssignedWorkPanel';
 import { DRAG_TASK, memberAssigneePatch, memberKey, taskBelongsToMember, type CeremonyMember } from './types';
 import { CeremonyPickProvider, placeTargetProps, useCeremonyPick } from './pickToPlace';
+import { InlineNameForm } from '@/components/ui/InlineNameForm';
 
 export type CeremonyMode = 'standup' | 'planning';
 
@@ -318,24 +319,22 @@ function CeremonyStageInner({
   );
   const setStatus = useCallback((id: number, status: string) => mutate(id, { status }), [mutate]);
 
-  const createEpic = useCallback(async () => {
-    const title = window.prompt(t('newEpicPrompt'));
-    if (!title?.trim()) return;
+  const createEpic = useCallback(async (title: string) => {
     try {
-      const epic = await tasksApi.create({ projectId, title: title.trim(), taskType: 'epic' });
+      const epic = await tasksApi.create({ projectId, title, taskType: 'epic' });
       setTasks((prev) => [epic, ...prev]);
     } catch (e) {
       setError(e instanceof Error ? e.message : t('errorCreateEpic'));
     }
   }, [projectId, t]);
 
-  const createSprint = useCallback(async () => {
-    const name = window.prompt(t('newSprintPrompt'));
-    if (!name?.trim()) return;
+  const [namingSprint, setNamingSprint] = useState(false);
+  const createSprint = useCallback(async (name: string) => {
     try {
-      const sprint = await sprintsApi.create({ name: name.trim(), status: 'active', projectId });
+      const sprint = await sprintsApi.create({ name, status: 'active', projectId });
       setSprints((prev) => [sprint, ...prev]);
       setActiveSprintId(sprint.id);
+      setNamingSprint(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : t('errorCreateSprint'));
     }
@@ -592,13 +591,24 @@ function CeremonyStageInner({
                     {t('sprintScheduled', { count: sprintTaskCount })}
                   </span>
                 )}
-                <button
-                  type="button"
-                  onClick={createSprint}
-                  style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--coral-bright)', background: 'none', border: 'none', cursor: 'pointer' }}
-                >
-                  {t('newSprint')}
-                </button>
+                {namingSprint ? (
+                  <div style={{ marginLeft: 'auto', minWidth: 0 }}>
+                    <InlineNameForm
+                      placeholder={t('newSprintPrompt')}
+                      submitLabel={t('createSprint')}
+                      onSubmit={createSprint}
+                      onCancel={() => setNamingSprint(false)}
+                    />
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setNamingSprint(true)}
+                    style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--coral-bright)', background: 'none', border: 'none', cursor: 'pointer' }}
+                  >
+                    {t('newSprint')}
+                  </button>
+                )}
               </div>
             )}
 

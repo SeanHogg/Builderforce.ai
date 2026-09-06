@@ -42,3 +42,18 @@ export function parseJsonObject<T = Record<string, unknown>>(raw: unknown): T {
   }
   return {} as T;
 }
+
+/**
+ * `JSON.parse`, or `fallback` — for an absent OR an unparseable string. The
+ * `safeJson` that five modules had written, differing only in what they fell
+ * back to (`null`, `[]`, the raw text, a caller value): the fallback is now the
+ * caller's to state, once, at the call.
+ */
+export function parseJsonOr<T>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
