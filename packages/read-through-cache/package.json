@@ -1,0 +1,17 @@
+{
+  "name": "@builderforce/read-through-cache",
+  "version": "2026.9.6",
+  "private": true,
+  "type": "module",
+  "description": "The canonical read-through cache — L1 in-isolate Map + L2 Workers KV — written ONCE. Shared by the API (every read-heavy path, every writer's invalidation) and the legacy worker (which caches the API's session-introspection verdict in the API's OWN KV namespace, so an API-side revoke deletes the key the worker reads). Dependency-free: the KV binding is passed per call, error reporting and delete-retry are injected, and the 512-byte key hashing carries its own WebCrypto SHA-256. Source-only: every consumer aliases the bare specifier straight at src/index.ts.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}
