@@ -13,7 +13,7 @@ import { useInsightFormat } from './format';
 
 const btnStyle: React.CSSProperties = {
   padding: '7px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
-  background: 'transparent', color: 'var(--text-primary)', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer',
+  background: 'transparent', color: 'var(--text-primary)', fontWeight: 600, fontSize: 'var(--font-size-small)', cursor: 'pointer',
 };
 
 /** LENS #6 — compliance/audit over tool_audit_events + evidence-pack export. */
@@ -56,14 +56,14 @@ export function ComplianceLens() {
           both grains, so this is not a caveat on them — it is the one thing an auditor
           cannot do with the older half, stated where they choose the window. */}
       {data.windowDays > data.rawWithinDays && (
-        <p style={{ margin: 0, fontSize: '0.78rem', lineHeight: 1.5, color: 'var(--text-muted)' }}>
+        <p className="ui-text-small" style={{ margin: 0, color: 'var(--text-muted)' }}>
           {t('comp.grainNote', { days: data.rawWithinDays })}
         </p>
       )}
 
       <PmCard title={t('comp.byTool')}>
         {data.byTool.length === 0 ? (
-          <span style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>{t('comp.noEvents')}</span>
+          <span className="ui-text-small" style={{ color: 'var(--text-muted)' }}>{t('comp.noEvents')}</span>
         ) : (
           <div style={tableWrapStyle}>
             <table style={tableStyle}>
@@ -84,7 +84,7 @@ export function ComplianceLens() {
 
       <PmCard title={t('comp.byAgent')}>
         {data.byAgent.length === 0 ? (
-          <span style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>{t('comp.noEvents')}</span>
+          <span className="ui-text-small" style={{ color: 'var(--text-muted)' }}>{t('comp.noEvents')}</span>
         ) : (
           <div style={tableWrapStyle}>
             <table style={tableStyle}>

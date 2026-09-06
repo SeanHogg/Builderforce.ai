@@ -30,6 +30,26 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   936 → 938 (`useClientFiles`, 2026-09-05) — the two files the "801 → 802"
+ *   entry below said carried NO directive: `components/templates/GuidedSetupPanel.tsx`
+ *   and `lib/templates/useTemplateCatalog.ts`. That entry's argument was "every
+ *   module that imports them already declares the boundary", and the "808 → 868"
+ *   entry has since ruled that argument out as a REASON TO STRIP: a boundary
+ *   inferred from today's import graph breaks the first time a component is reused
+ *   from a canvas surface, and both of these now are — the hook is read by the
+ *   prompt picker, the canvas's template browser AND the gallery (its own header
+ *   names all three), and the panel opens from any of them. The directive is what
+ *   the guest pass made true on their own terms: the hook now reads `useAuth` and
+ *   the client read-through cache to serve a signed-out visitor the public
+ *   catalogue, and the panel holds the wizard's answers in `useState`, mounts in a
+ *   `SlideOutPanel` and drops a `SessionGate` wall in front of the install. Neither
+ *   could be a Server Component, and neither is a directive marking nothing.
+ *
+ *   The 937 → 936 step between here and the entry below was never written up: it
+ *   is `lib/canvas/CanvasChromeSlot.tsx` being deleted in the canvas chrome
+ *   consolidation (the `CanvasCommandBar` / `CanvasInsightsSurface` pass), a
+ *   tightening this guard reports as slack rather than failing on.
+ *
  *   930 → 937 (`useClientFiles`, 2026-08-29) — a RECONCILIATION, not new work,
  *   same shape as "913 → 918" and "912 → 913" below. The live grep read 937
  *   against the 930 recorded here, and `printDelta` made it look like 195 files

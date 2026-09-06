@@ -180,8 +180,18 @@ const BASELINE = {
    * archive-toggle label, straight to `--font-size-small` instead of adding a
    * tenth) — against fourteen the surface's own `GrowthClient.tsx` shell never
    * had, a net SHRINK. The floor follows it down rather than sitting slack.
+   *
+   * 3,598 → 3,595 (2026-09-05): `insights/ComplianceLens.tsx`. The audit
+   * rollup pass added a grain note under the KPI row typed at 0.78rem — the
+   * +1 to 3,599 that turned this guard red — and the fix took the file's
+   * three older literals (already inside the 3,598) with it: the export
+   * button's 0.82rem was `--font-size-small` by value already, and the two
+   * "no events" captions at 0.84rem are the same role, so all four now name
+   * it (the class where the element had no other type styling, the token
+   * where the button's own weight stays). The lens reads zero literals now,
+   * and the floor follows it down.
    */
-  offScaleFontSizes: 3598,
+  offScaleFontSizes: 3595,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.
