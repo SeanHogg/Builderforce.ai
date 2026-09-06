@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * The three answers a data section gives before it has rows: loading, failed,
  * empty.
