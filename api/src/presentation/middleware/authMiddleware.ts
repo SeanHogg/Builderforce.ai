@@ -141,7 +141,7 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
   // sole entry point that establishes (tenantId, segmentId) request scope.
   // `resolveSegment` serves this from a bounded, TTL'd in-isolate map, so it is
   // usually free.
-  c.set('segmentId', await resolveSegment(db, payload.tid, { accountId: payload.acct, companyId: payload.co }));
+  c.set('segmentId', await resolveSegment(db, payload.tid, { accountId: payload.acct, companyId: payload.co }, c.env));
 
   await next();
 };

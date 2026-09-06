@@ -268,12 +268,6 @@ const BY_ID = new Map<CanvasSessionActionId, CanvasSessionActionDef>(
   CANVAS_SESSION_ACTIONS.map((def) => [def.id, def]),
 );
 
-export function canvasSessionAction(id: CanvasSessionActionId): CanvasSessionActionDef {
-  const def = BY_ID.get(id);
-  if (!def) throw new Error(`Unknown canvas session action: ${id}`);
-  return def;
-}
-
 /**
  * The actions that mean something on this surface.
  *

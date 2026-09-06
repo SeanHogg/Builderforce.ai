@@ -57,8 +57,3 @@ export const COMPOSABLE_WIDGET_IDS = [
 
 /** A widget id the server may return — narrowed from {@link COMPOSABLE_WIDGET_IDS}. */
 export type ComposableWidgetId = (typeof COMPOSABLE_WIDGET_IDS)[number];
-
-/** Guard for a candidate string (used where ids arrive as data, e.g. a route param). */
-export function isComposableWidgetId(id: string): id is ComposableWidgetId {
-  return (COMPOSABLE_WIDGET_IDS as readonly string[]).includes(id);
-}

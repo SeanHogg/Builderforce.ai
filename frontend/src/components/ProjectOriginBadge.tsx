@@ -36,8 +36,3 @@ export function ProjectOriginBadge({ origin, style }: { origin?: string | null; 
     </span>
   );
 }
-
-/** Convenience for the common case of passing a whole project. */
-export function ProjectOriginBadgeFor({ project, style }: { project: Pick<Project, 'origin'>; style?: React.CSSProperties }) {
-  return <ProjectOriginBadge origin={project.origin} style={style} />;
-}

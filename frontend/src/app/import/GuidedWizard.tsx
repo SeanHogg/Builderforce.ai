@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useToast } from '@/components/ToastProvider';
 import type { GuidedStep } from '@/lib/import-input-schema';
-import { BASE_FIELDS, fieldLabelKey } from '@/lib/import-input-schema';
+import { BASE_FIELDS, DEFAULT_BEGINNER_STEP, defineGuidedSteps, fieldLabelKey } from '@/lib/import-input-schema';
 
 /**
  * Guided (Interactive) Wizard Component
@@ -22,7 +22,7 @@ interface GuidedWizardProps {
   onCancel: () => void;
 }
 
-const STEPS: GuidedStep[] = ['step-info', 'step-fields', 'step-review', 'step-success'];
+const STEPS: GuidedStep[] = defineGuidedSteps('record');
 
 const STEP_LABEL_KEYS: Record<GuidedStep, string> = {
   'step-info': 'stepInfo',
@@ -37,7 +37,7 @@ export default function GuidedWizard({ initialValues, onDataChange, onCancel }: 
   const confirmDialog = useConfirm();
   const toast = useToast();
 
-  const [step, setStep] = useState<GuidedStep>('step-info');
+  const [step, setStep] = useState<GuidedStep>(DEFAULT_BEGINNER_STEP);
   const [record, setRecord] = useState<Record<string, string | null>>({
     name: initialValues?.name ?? '',
     description: initialValues?.description ?? null,

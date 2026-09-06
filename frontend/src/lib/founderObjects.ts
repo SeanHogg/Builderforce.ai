@@ -83,7 +83,6 @@ import {
  * drift.
  */
 export type FounderField = SpecField;
-export type FounderFieldRender = SpecField['render'];
 
 /** A founder spec, with the kind narrowed to the declared founder set — the one thing
  *  this vocabulary knows that the generic type cannot. */

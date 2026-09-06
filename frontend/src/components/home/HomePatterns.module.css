@@ -128,7 +128,6 @@
 
 .cardText { margin: 0; color: var(--text-secondary); font-size: var(--font-size-small); line-height: 1.65; }
 
-.badgeRow { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 24px; }
 
 .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
 .actionsCenter { justify-content: center; }

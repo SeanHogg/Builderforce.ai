@@ -32,10 +32,6 @@
  *  with an EMPTY list pays every signed-in earner. */
 export type EarnerFacet = 'talent' | 'recruiter' | 'employer' | 'creator';
 
-/** Every facet that is not staff — the list ~30 of the rules below share. Named
- *  so the triple is written once (it was repeated per-rule in the source). */
-export const ALL_EARNER_FACETS: readonly EarnerFacet[] = ['talent', 'recruiter', 'employer', 'creator'];
-
 /** A badge this rule can unlock, and the lifetime count that unlocks it.
  *  `countOf: 'action'` counts qualifying awards of THIS action; `'user_tasks'`
  *  counts the user-authored task completions the gate below also reads. */
@@ -122,8 +118,6 @@ export const POINT_ACTIONS = {
   /** Written by the badge award, never by a caller. */
   BADGE_UNLOCKED: 'badge.unlocked',
 } as const;
-
-export type PointActionKey = (typeof POINT_ACTIONS)[keyof typeof POINT_ACTIONS];
 
 const T = 'talent' as const;
 const R = 'recruiter' as const;

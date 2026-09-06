@@ -70,9 +70,3 @@ export function seatTint(seat: SeatOrPlatform, percent = 12): string {
 export function isSeat(value: SeatOrPlatform): value is Seat {
   return value !== 'platform';
 }
-
-/** Initials for a seat chip. Acronym seats are their own initials. */
-export function seatInitials(seat: SeatOrPlatform): string {
-  if (seat === 'platform') return 'BF';
-  return seat.length <= 3 ? seat.toUpperCase() : seat.slice(0, 2).toUpperCase();
-}

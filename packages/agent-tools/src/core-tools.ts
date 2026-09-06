@@ -828,7 +828,7 @@ function shellQuote(v: string): string {
  * Refuses to commit onto the base branch: `branch` names the ticket branch, created
  * from the current HEAD if it does not exist yet.
  */
-function buildCommitCommand(opts: { message: string; paths: string[]; branch?: string; repo?: string }): string {
+function buildCommitCommand(opts: { message: string; paths: string[]; branch?: string; allowBaseBranch?: boolean; repo?: string }): string {
   const branch = safeGitArg(opts.branch);
   const paths = opts.paths.map((p) => shellQuote(p)).join(" ");
   return [
@@ -837,10 +837,16 @@ function buildCommitCommand(opts: { message: string; paths: string[]; branch?: s
     'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"',
     'git config user.name  >/dev/null 2>&1 || git config user.name  "Builderforce Agent"',
     'CUR="$(git rev-parse --abbrev-ref HEAD)"',
-    // A ticket branch was named: switch to it, creating it if new.
+    // A ticket branch was named: switch to it, creating it if new. Otherwise the base
+    // branch is refused — unless the caller DECLARED it, the same declared act `git_push`
+    // takes. Without that declaration "commit and push to main" had no reachable path at
+    // all: push accepted `allowBaseBranch`, but the commit before it could never land on
+    // main, so an explicit human instruction ended in a refusal every time.
     ...(branch
       ? [`git rev-parse --verify --quiet "${branch}" >/dev/null && git checkout "${branch}" || git checkout -b "${branch}"`]
-      : ['[ "$CUR" != "$BASE" ] || { echo ON_BASE_BRANCH; exit 5; }']),
+      : opts.allowBaseBranch
+        ? []
+        : ['[ "$CUR" != "$BASE" ] || { echo ON_BASE_BRANCH; exit 5; }']),
     `git add -- ${paths}`,
     // Nothing staged is a fact, not a failure — say which rather than exiting 1 with
     // git's own "nothing to commit" that reads like a broken tool.
@@ -892,7 +898,7 @@ function publishToolResult(action: string, r: { ok: boolean; stdout?: string; ex
     return fail(
       action === "push"
         ? "you are on the BASE branch (main/master) and `allowBaseBranch` was not set — pushing here bypasses review. Open a pull request instead (git_commit with a `branch`, then open_pull_request). If the human has explicitly asked you to push the base branch, re-call with allowBaseBranch:true; they will be prompted to approve it."
-        : "you are on the BASE branch (main/master) — committing here bypasses review. Pass `branch` to git_commit to work on a ticket branch (it is created for you), then open_pull_request.",
+        : "you are on the BASE branch (main/master) and `allowBaseBranch` was not set — committing here bypasses review. Pass `branch` to git_commit to work on a ticket branch (it is created for you), then open_pull_request. If the human has explicitly asked you to commit to the base branch directly, re-call with allowBaseBranch:true; they will be prompted to approve it.",
     );
   }
   if (r.exitCode === 6 || /\bNOTHING_STAGED\b/.test(out)) {
@@ -923,13 +929,14 @@ async function runPublishTool(
 export const gitCommitTool: ToolDefinition = defineTool({
   name: "git_commit",
   description:
-    "Commit the files you changed, on a TICKET BRANCH. You must list the exact `paths` to commit — the working tree is shared with the human using it, so committing everything would sweep up their unrelated in-flight work; run git_status/git_diff first if you are unsure what you touched. Pass `branch` to name the ticket branch (created for you if it does not exist); without it, a commit is refused while you are on the base branch, because that bypasses review. After committing, use open_pull_request — that is how work gets reviewed and shipped.",
+    "Commit the files you changed. You must list the exact `paths` to commit — the working tree is shared with the human using it, so committing everything would sweep up their unrelated in-flight work; run git_status/git_diff first if you are unsure what you touched. The DEFAULT route is a TICKET BRANCH: pass `branch` to name it (created for you if it does not exist), then use open_pull_request so the work is reviewed. Without `branch`, a commit is refused while you are on the base branch (main/master) — unless the human has EXPLICITLY asked you to commit to main directly, in which case pass allowBaseBranch:true (they will be prompted to approve it) and follow with git_push allowBaseBranch:true.",
   parameters: {
     type: "object",
     properties: {
       message: { type: "string", description: "Commit message. One line saying what changed and why." },
       paths: { type: "array", items: { type: "string" }, description: "Repo-relative paths to commit. Exactly the files YOU changed — never a catch-all." },
-      branch: { type: "string", description: 'Ticket branch to commit on, created if new (e.g. "ticket/2394-mobile-board-height"). Required in effect when you are on the base branch.' },
+      branch: { type: "string", description: 'Ticket branch to commit on, created if new (e.g. "ticket/2394-mobile-board-height"). The default route; required when on the base branch unless allowBaseBranch is set.' },
+      allowBaseBranch: { type: "boolean", description: "Set ONLY when the human explicitly asked to commit to the base branch (main/master) directly. Default false, which refuses on the base branch and tells you to use a ticket branch." },
       repo: REPO_PARAM,
     },
     required: ["message", "paths"],
@@ -943,7 +950,12 @@ export const gitCommitTool: ToolDefinition = defineTool({
       return Promise.resolve({ data: { ok: false, action: "commit", error: "paths is required — list the exact files you changed. Run git_status to see them. Do not pass '.' or '-A': the working tree may hold changes that are not yours." } });
     }
     const repo = typeof args.repo === "string" ? args.repo : undefined;
-    return runPublishTool("commit", buildCommitCommand({ message, paths, branch: typeof args.branch === "string" ? args.branch : undefined, repo }), repo, ctx);
+    return runPublishTool(
+      "commit",
+      buildCommitCommand({ message, paths, branch: typeof args.branch === "string" ? args.branch : undefined, allowBaseBranch: args.allowBaseBranch === true, repo }),
+      repo,
+      ctx,
+    );
   },
 });
 

@@ -1039,6 +1039,10 @@ function Chat({ init }: { init: InitData }) {
     // `chatModeDirective`, identical to the web Brain. Without this the loop's absent-
     // mode fallback made every IDE turn a Work turn regardless of the chat's row.
     chatMode,
+    // An @-addressed agent runs HERE, with the workspace's file/git tools, whenever a
+    // folder is open. The server's reply on the agent's behalf has platform tools only,
+    // and "commit and push" addressed to it could only ever end in "I have no git tool".
+    runAddressedAgentLocally: init.hasWorkspace,
   });
 
   // Trace rehydrate (parity with the web app): on chat open, load the persisted

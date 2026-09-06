@@ -84,11 +84,6 @@ export type DataScienceObjectKind = typeof DATA_SCIENCE_OBJECT_KINDS[number];
 
 const DATA_SCIENCE_KIND_SET: ReadonlySet<string> = new Set<string>(DATA_SCIENCE_OBJECT_KINDS);
 
-/** True for the data-science kinds — the set `dataScienceObjects.ts` specs. */
-export function isDataScienceObjectKind(value: unknown): value is DataScienceObjectKind {
-  return typeof value === 'string' && DATA_SCIENCE_KIND_SET.has(value);
-}
-
 // ---------------------------------------------------------------------------
 // The notebook kernel contract
 // ---------------------------------------------------------------------------
@@ -134,11 +129,9 @@ export const NOTEBOOK_CELL_TIMEOUT_MS = 5_000;
  * draft/live flag cannot express.
  */
 export const MODEL_LIFECYCLE_STATES = ['draft', 'training', 'evaluated', 'shadow', 'production', 'retired'] as const;
-export type ModelLifecycleState = typeof MODEL_LIFECYCLE_STATES[number];
 
 /** What the model is FOR. Decides which metrics are meaningful on its scorecard. */
 export const MODEL_TASKS = ['classification', 'regression', 'generation', 'embedding', 'ranking', 'clustering', 'forecasting'] as const;
-export type ModelTask = typeof MODEL_TASKS[number];
 
 // ---------------------------------------------------------------------------
 // The data-use gate — MOVED

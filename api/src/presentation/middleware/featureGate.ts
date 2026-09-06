@@ -206,15 +206,6 @@ export async function resolvePremiumModelAccess(
   });
 }
 
-/** Boolean convenience — "may this tenant select any paid OpenRouter model?" */
-export async function tenantCanUsePremiumModels(
-  env: Env,
-  tenantId: number,
-  userId: string | undefined | null,
-): Promise<boolean> {
-  return (await resolvePremiumModelAccess(env, tenantId, userId)).entitled;
-}
-
 /**
  * Route-handler gate for selecting a premium model. Returns `null` to proceed, or a
  * **402** naming the exact unlock step:

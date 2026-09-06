@@ -16,7 +16,6 @@ export const asAgentId     = (n: number): AgentId     => n as AgentId;
 export const asAgentHostId      = (n: number): AgentHostId      => n as AgentHostId;
 export const asSkillId     = (n: number): SkillId     => n as SkillId;
 export const asExecutionId = (n: number): ExecutionId => n as ExecutionId;
-export const asUserId      = (s: string): UserId      => s as UserId;
 
 // ---------------------------------------------------------------------------
 // Enumerations

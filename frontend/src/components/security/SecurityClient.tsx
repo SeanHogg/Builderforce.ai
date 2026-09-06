@@ -18,6 +18,7 @@ import { getStoredTenant, getStoredUser } from '@/lib/auth';
 import { AgentAssignmentPanel } from '@/components/AgentAssignmentPanel';
 import { SessionList } from '@/components/security/SessionList';
 import AccountSecurityPanel from '@/components/security/AccountSecurityPanel';
+import SetPasswordPanel from '@/components/security/SetPasswordPanel';
 import { SecurityTicketAccessCard } from '@/components/security/SecurityTicketAccessCard';
 import { SecurityAuditPanel } from '@/components/security/SecurityAuditPanel';
 import { WorkspaceAuditLogPanel } from '@/components/security/WorkspaceAuditLogPanel';
@@ -259,7 +260,7 @@ export default function SecurityClient() {
       ) : (
         <>
           <DestinationIndex items={subTabs} activeId={sub} ariaLabel={t('subnavLabel')} />
-          {sub === 'account' ? <AccountSecurityPanel />
+          {sub === 'account' ? <><SetPasswordPanel /><AccountSecurityPanel /></>
             : sub === 'agreements' ? <LegalAgreementsPanel />
             : sub === 'agents' ? renderAgents()
             : sub === 'webscan' ? <WebSecurityScanPanel />

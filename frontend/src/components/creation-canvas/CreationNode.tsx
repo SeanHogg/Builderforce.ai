@@ -79,7 +79,7 @@ import { authoredMarkdown, canvasDiagram, canvasDocument, canvasSlides } from '@
 import type { CanvasExportAction } from '@/lib/canvasExports';
 import { DocumentEditor } from './DocumentEditor';
 import { CanvasExportActions } from './CanvasExportActions';
-import { diagramLabelLines, diagramShapePolygon, type DiagramGraph } from '@/lib/diagramGraph';
+import { diagramGraphStats, diagramLabelLines, diagramShapePolygon, type DiagramGraph } from '@/lib/diagramGraph';
 import { diagramNotation, readDiagramSource } from '@/lib/diagramNotations';
 import { MermaidDiagram } from '@/components/MermaidDiagram';
 import { COURSE_EXPORT_STANDARDS, courseAssessmentQuestions, courseFromNode, courseProgress, courseScore } from '@/lib/courseLms';
@@ -1693,7 +1693,7 @@ function DiagramBody({ data }: { data: CreationNodeData }) {
   return <div className={styles.diagramBody}>
     <div className={styles.documentMeta}>
       <span>{notation.name}</span>
-      {graph && <span>{t('diagramShapes', { count: graph.vertices.length, connections: graph.edges.length })}</span>}
+      {graph && <span>{t('diagramShapes', { count: diagramGraphStats(graph).shapes, connections: diagramGraphStats(graph).connections })}</span>}
     </div>
     <div className={`${styles.diagramSurface} nowheel nodrag`} role="region" aria-label={data.title} tabIndex={0}>
       {notation.renderer === 'mermaid'

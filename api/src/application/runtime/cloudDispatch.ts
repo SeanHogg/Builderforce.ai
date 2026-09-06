@@ -25,10 +25,6 @@ export type CloudSurface = 'durable' | 'container' | 'github_actions';
  */
 export const CLOUD_SURFACES = ['durable', 'container', 'github_actions'] as const;
 
-export function isCloudSurface(v: unknown): v is CloudSurface {
-  return typeof v === 'string' && (CLOUD_SURFACES as readonly string[]).includes(v);
-}
-
 /**
  * Resolve the surface a run targets. An explicitly-pinned host is a long-lived
  * runtime (reached via the relay), so it maps to 'container'; otherwise honor the

@@ -171,11 +171,6 @@ export function canTrainInBrowser(maxParams: number): boolean {
   return maxParams <= BROWSER_LORA_MAX_PARAMS;
 }
 
-/** Conservative browser limit based on the exact-gradient implementation. */
-export function shouldUseWebGPU(maxParams: number): boolean {
-  return hasWebGPUSupport() && canTrainInBrowser(maxParams);
-}
-
 function parseJsonl(jsonl: string): string[] {
   return jsonl.split('\n').filter(Boolean).map((line) => {
     try {
@@ -410,4 +405,3 @@ export class WebGPUTrainer {
   }
 }
 
-export { WebGPUTrainer as BrowserLoRATrainer };

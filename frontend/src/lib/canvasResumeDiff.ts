@@ -109,5 +109,3 @@ export function mergeResumeAsNewVersion(
   };
   return next;
 }
-
-export const resumeSectionIdForDiff = (section: ResumeDiffSection): ResumeSectionId | null => section === 'basics' ? null : section;

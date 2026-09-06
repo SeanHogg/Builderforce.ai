@@ -42,8 +42,6 @@ export const COSE_ALG_ES256 = -7;
 export const COSE_ALG_RS256 = -257;
 export const SUPPORTED_COSE_ALGORITHMS = [COSE_ALG_ES256, COSE_ALG_RS256] as const;
 
-export type CoseAlgorithm = (typeof SUPPORTED_COSE_ALGORITHMS)[number];
-
 export interface ParsedAuthenticatorData {
   rpIdHash: Uint8Array;
   flags: number;

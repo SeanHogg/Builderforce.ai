@@ -59,10 +59,6 @@ export type PartyRole = typeof PARTY_ROLES[number];
 
 const PARTY_ROLE_SET: ReadonlySet<string> = new Set<string>(PARTY_ROLES);
 
-export function isPartyRole(value: unknown): value is PartyRole {
-  return typeof value === 'string' && PARTY_ROLE_SET.has(value);
-}
-
 /**
  * The roles a canvas `account` object may declare.
  *
@@ -75,17 +71,9 @@ export function isPartyRole(value: unknown): value is PartyRole {
 export const ACCOUNT_RELATIONSHIPS = ['customer', 'vendor', 'investor', 'equity_holder', 'partner', 'contact'] as const;
 export type AccountRelationship = typeof ACCOUNT_RELATIONSHIPS[number];
 
-export function isAccountRelationship(value: unknown): value is AccountRelationship {
-  return typeof value === 'string' && (ACCOUNT_RELATIONSHIPS as readonly string[]).includes(value);
-}
-
 /** 'person' | 'company' — what kind of party holds the role. */
 export const PARTY_KINDS = ['person', 'company'] as const;
 export type PartyKind = typeof PARTY_KINDS[number];
-
-export function isPartyKind(value: unknown): value is PartyKind {
-  return typeof value === 'string' && (PARTY_KINDS as readonly string[]).includes(value);
-}
 
 /**
  * The stable reference a counterparty is addressed by across the platform.

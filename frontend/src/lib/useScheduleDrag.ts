@@ -132,11 +132,3 @@ export function useScheduleDrag<T>({ deltaFor, commit, enabled = true }: UseSche
 
   return { drag, begin, consumedClick };
 }
-
-/** The day cell under a viewport point, as the `YYYY-MM-DD` its element declares. */
-export function dayKeyAtPoint(pos: PointerPos): string | null {
-  if (typeof document === 'undefined') return null;
-  const el = document.elementFromPoint(pos.x, pos.y);
-  const cell = el?.closest?.('[data-schedule-day]') as HTMLElement | null | undefined;
-  return cell?.dataset.scheduleDay ?? null;
-}

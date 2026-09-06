@@ -197,16 +197,6 @@ export function deleteProp(scene: CanvasWorldScene, propId: string): CanvasWorld
   return { ...scene, props: scene.props.filter((prop) => prop.id !== propId) };
 }
 
-/** Move a prop's position. Convenience over `updateProp` for the drag-drop
- *  placement handler, which only ever has a position to write. */
-export function moveProp(
-  scene: CanvasWorldScene,
-  propId: string,
-  position: [number, number, number],
-): CanvasWorldScene {
-  return updateProp(scene, propId, { position });
-}
-
 export function updateSpawn(scene: CanvasWorldScene, patch: Partial<CanvasWorldTransform>): CanvasWorldScene {
   return { ...scene, spawn: { ...scene.spawn, ...patch } };
 }

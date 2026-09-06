@@ -87,7 +87,7 @@ function normalize(model: OpenRouterModel): CatalogModel {
   const completion = num(model.pricing?.completion);
   const isFree = model.id.endsWith(':free') || (prompt === 0 && completion === 0);
   // Cross-reference against our curated vendor catalog: an entry exists iff the
-  // Free/Pro cascade can route this id (the pools are modelsByTier over exactly
+  // Free/Pro cascade can route this id (the pools are autoRoutableModelsByTier over exactly
   // these entries). entry.tier === 'FREE' → free pool, else the paid pool [1305].
   const entry = catalogEntry(model.id);
   const pool: 'free' | 'pro' | undefined = entry ? (entry.tier === 'FREE' ? 'free' : 'pro') : undefined;

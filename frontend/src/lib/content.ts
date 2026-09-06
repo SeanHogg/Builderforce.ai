@@ -505,28 +505,11 @@ export const MEDIA_KIT: { cover: string; coverWidth: number; coverHeight: number
   ],
 };
 
-/* ════════════════════ COMPARISON ════════════════════ */
-
-export interface ComparisonRow {
-  feature: string;
-  builderforce: string;
-  genericNotebooks: string;
-  cloudTraining: string;
-}
-
-export const COMPARISON: ComparisonRow[] = [
-  { feature: 'In-browser LoRA training', builderforce: '✅', genericNotebooks: '❌', cloudTraining: '⚠️' },
-  { feature: 'Dataset generation wizard', builderforce: '✅', genericNotebooks: '⚠️', cloudTraining: '❌' },
-  { feature: 'AI evaluation engine', builderforce: '✅', genericNotebooks: '❌', cloudTraining: '❌' },
-  { feature: 'Agent registry & skills', builderforce: '✅', genericNotebooks: '❌', cloudTraining: '❌' },
-  { feature: 'Global Workforce marketplace', builderforce: '✅', genericNotebooks: '❌', cloudTraining: '❌' },
-  { feature: 'Zero GPU bills', builderforce: '✅', genericNotebooks: '❌', cloudTraining: '⚠️' },
-];
 
 /* ════════════════════ COMPETITIVE COMPARISON (vs other AI coding tools) ════════════════════ */
 
 export interface CompetitorCol {
-  /** Stable column key — must match the keys used in CompetitiveRow.values. */
+  /** Stable column key — the key a comparison row's `values` map is written under. */
   key: string;
   label: string;
 }
@@ -634,125 +617,11 @@ export function arenaForCompetitor(key: string): CompareArena | undefined {
 /** The AI-coding-agent columns — the first arena, and the only one with `/compare/{slug}` leaf pages. */
 export const COMPETITORS: CompetitorCol[] = COMPARE_ARENAS[0].competitors;
 
-export interface CompetitiveRow {
-  feature: string;
-  /** Optional Builderforce-only qualifier shown under the feature name. */
-  note?: string;
-  /** Cell value per column key — `builderforce` plus every COMPETITORS key (✅ / ⚠️ / ❌ or short text). */
-  values: Record<string, string>;
-}
-
-export interface CompetitiveCategory {
-  id: string;
-  title: string;
-  blurb: string;
-  rows: CompetitiveRow[];
-}
-
 /**
  * Legacy internal snapshot retained only for migration compatibility. Public
  * comparison pages and structured data use criteria-first copy from COMPARE;
  * these undated cells must never be rendered or cited as current evidence.
  */
-const LEGACY_COMPETITIVE_COMPARISON: CompetitiveCategory[] = [
-  {
-    id: 'ownership',
-    title: 'Ownership & Deployment',
-    blurb: 'Where the platform runs and who controls it determines cost, data residency, and lock-in.',
-    rows: [
-      { feature: 'Price', note: 'Self-hosted runtime is MIT (free); the hosted Cloud platform is a Free/Pro/Teams SaaS.', values: { builderforce: 'Free (MIT) self-hosted · Cloud from $0', copilot: '$19/user/mo', cursor: '$20/user/mo', claudeCode: 'Usage-based', devin: '$500/mo', openhands: 'Free (MIT)', aider: 'Free (MIT)', continueDev: 'Free (MIT)' } },
-      { feature: 'Self-hosted / open source', note: 'MIT, fully self-hosted', values: { builderforce: '✅', copilot: '❌ MS cloud', cursor: '❌ Vendor cloud', claudeCode: '❌ Anthropic cloud', devin: '❌ Cloud only', openhands: '✅', aider: '✅', continueDev: '✅' } },
-      { feature: 'Air-gapped / private deployment', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '✅', aider: '✅', continueDev: '✅' } },
-      { feature: 'RBAC + audit trails', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '⚠️ Basic', openhands: '❌', aider: '❌', continueDev: '❌' } },
-    ],
-  },
-  {
-    id: 'model-flexibility',
-    title: 'Model & Tooling Flexibility',
-    blurb: 'Freedom to choose any model, run offline, and integrate with the open MCP ecosystem.',
-    rows: [
-      { feature: 'Any model provider', note: '30+ providers', values: { builderforce: '✅', copilot: '❌ GPT/Claude', cursor: '⚠️ Limited', claudeCode: '❌ Anthropic only', devin: '❌ Proprietary', openhands: '✅', aider: '✅', continueDev: '✅' } },
-      { feature: 'Local / offline models (Ollama)', values: { builderforce: '✅', copilot: '❌', cursor: '⚠️', claudeCode: '❌', devin: '❌', openhands: '✅', aider: '✅', continueDev: '✅' } },
-      { feature: 'IDE-independent', note: 'Any channel / CLI', values: { builderforce: '✅', copilot: '❌ VS Code', cursor: '❌ VS Code fork', claudeCode: '⚠️ Terminal', devin: '✅ Web UI', openhands: '✅ Web/CLI', aider: '✅ CLI', continueDev: '❌ Extension' } },
-      { feature: 'MCP — consume', values: { builderforce: '✅', copilot: '❌', cursor: '✅ Native', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '✅ Native' } },
-      { feature: 'MCP — expose as server', note: '/mcp endpoint', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
-    ],
-  },
-  {
-    id: 'self-improving',
-    title: 'Self-Improving Models & Proof of Done',
-    blurb: 'Models that learn from your work, route themselves by outcome, and prove that "Done" is really done — capabilities frozen single-agent tools structurally lack.',
-    rows: [
-      { feature: 'Trains your own model on your work', note: 'Frontier-model teacher distillation', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
-      { feature: 'Self-updating model per project', note: 'Evermind, runs on-device', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
-      { feature: 'Learned, outcome-based model routing', note: 'scores runs, reorders models', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
-      { feature: 'Validator agent — proof of Done', note: 'opens GAP tasks on shortfall', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
-      { feature: 'Role-gated board with sign-off audit', note: 'per-ticket role + diagnostic', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
-    ],
-  },
-  {
-    id: 'orchestration',
-    title: 'Multi-Agent Orchestration',
-    blurb: 'Coordinating specialized agents across structured workflows, not single-pass prompts.',
-    rows: [
-      { feature: 'Multi-agent orchestration', note: '7 roles + dependency DAG', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
-      { feature: 'Planning workflow', note: 'PRD → Arch → Tasks via /spec', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '⚠️ Basic plan', openhands: '❌', aider: '❌', continueDev: '❌' } },
-      { feature: 'Bug-fix workflow', note: 'Analyzer → Creator → Reviewer', values: { builderforce: '✅', copilot: '⚠️ Inline', cursor: '⚠️ Inline', claudeCode: '⚠️ Inline', devin: '✅', openhands: '⚠️ Single-pass', aider: '⚠️ Single-pass', continueDev: '⚠️ Inline' } },
-      { feature: 'Refactor workflow', note: 'Reviewer → Refactor → Tests', values: { builderforce: '✅', copilot: '❌', cursor: '⚠️ Single-pass', claudeCode: '⚠️ Single-pass', devin: '⚠️ Single-pass', openhands: '⚠️ Single-pass', aider: '⚠️ Single-pass', continueDev: '❌' } },
-      { feature: 'Adversarial review pass', note: 'Built-in workflow', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
-      { feature: 'Custom agent personas / roles', note: 'YAML in .builderforce/personas/', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
-    ],
-  },
-  {
-    id: 'governance',
-    title: 'Governance & Reliability',
-    blurb: 'Approval gates, recovery, and automation that make agents safe to run in production.',
-    rows: [
-      { feature: 'Human-in-the-loop approval gates', note: 'Suspend + approve via portal', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '⚠️ Basic', openhands: '❌', aider: '❌', continueDev: '❌' } },
-      { feature: 'Self-healing / error recovery', note: 'Auto-detect + rerun', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '⚠️ Retry only', openhands: '⚠️ Retry only', aider: '❌', continueDev: '❌' } },
-      { feature: 'Scheduled automation (cron)', note: 'Builderforce-synced', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
-      { feature: 'CI/CD pipeline integration', note: 'CLI + webhook triggers', values: { builderforce: '✅', copilot: '⚠️ PR suggest', cursor: '❌', claudeCode: '⚠️ CLI only', devin: '⚠️ API', openhands: '⚠️ API', aider: '⚠️ CLI', continueDev: '❌' } },
-      { feature: 'Semantic answer evaluation', note: 'faithfulness / relevance / hallucination', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
-      { feature: 'Quality-drift monitoring', note: 'per-model regression alerts', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
-    ],
-  },
-  {
-    id: 'codebase-context',
-    title: 'Codebase Understanding & Editing',
-    blurb: 'How deeply the tool reads your repo and how cleanly it stages changes for review.',
-    rows: [
-      { feature: 'Codebase semantic search', values: { builderforce: '✅', copilot: '⚠️', cursor: '✅', claudeCode: '⚠️ Basic RAG', devin: '✅', openhands: '⚠️ Basic', aider: '⚠️ Git-aware', continueDev: '✅' } },
-      { feature: 'Hybrid retrieval (dense + BM25 + rerank)', note: 'RRF fusion + MMR diversity', values: { builderforce: '✅', copilot: '❌', cursor: '⚠️ Vector only', claudeCode: '⚠️ Vector only', devin: '⚠️ Vector only', openhands: '⚠️ Vector only', aider: '⚠️ Git-aware', continueDev: '⚠️ Vector only' } },
-      { feature: 'Deep AST + git-history analysis', values: { builderforce: '✅', copilot: '❌', cursor: '⚠️ Basic RAG', claudeCode: '⚠️ Basic RAG', devin: '⚠️ Basic RAG', openhands: '⚠️ Basic RAG', aider: '⚠️ Git-aware', continueDev: '⚠️ Basic RAG' } },
-      { feature: 'Staged diff / accept-reject', note: '/diff, /accept, /reject', values: { builderforce: '✅', copilot: '❌', cursor: '✅ Composer', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '✅ Git diff', continueDev: '✅ ⌘K diff' } },
-      { feature: 'Bundled skills', note: '53 built-in + marketplace', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
-    ],
-  },
-  {
-    id: 'memory-fleet',
-    title: 'Memory & Fleet',
-    blurb: 'Persistent knowledge across sessions and coordination across machines.',
-    rows: [
-      { feature: 'Persistent project knowledge', note: '.builderforce/', values: { builderforce: '✅', copilot: '❌', cursor: '⚠️ In-session', claudeCode: '⚠️ In-session', devin: '⚠️ In-session', openhands: '❌', aider: '❌', continueDev: '❌' } },
-      { feature: 'Session handoffs', note: '/handoff + auto-load', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
-      { feature: 'Workflow persistence across restarts', note: 'YAML checkpoint + resume', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '⚠️ Session-based', openhands: '❌', aider: '❌', continueDev: '❌' } },
-      { feature: 'Post-task knowledge loop', note: '.builderforce/memory/ auto-updated', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
-      { feature: 'Agent-to-agent distributed delegation', note: 'remote:<id> dispatch', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
-      { feature: 'Fleet / multi-machine coordination', note: 'Builderforce fleet registry', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
-    ],
-  },
-  {
-    id: 'reach',
-    title: 'Channels & Reach',
-    blurb: 'Meeting your team where they already work, on any device.',
-    rows: [
-      { feature: 'Works in WhatsApp / Telegram / Slack', note: '15+ channels', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
-      { feature: 'Voice + Talk mode', note: 'macOS / iOS / Android', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
-      { feature: 'Mobile companion apps', note: 'iOS + Android', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
-    ],
-  },
-];
-
 /* ════════════════════ COMPARE PAGE COPY ════════════════════ */
 
 export interface ComparePillar {
@@ -827,12 +696,6 @@ export const COMPARE = {
 } as const;
 
 /* ════════════════════ GETTING STARTED ════════════════════ */
-
-export const GETTING_STARTED_STEPS = [
-  { num: '01', title: 'Bring the idea', desc: 'Start with what you want to make, without translating it into a tool-specific format first.' },
-  { num: '02', title: 'Shape it in one place', desc: 'Keep people, agents, decisions, and context together as the work moves forward.' },
-  { num: '03', title: 'Make it real', desc: 'Review, approve, and put the result into production—live, working, and ready to use.' },
-];
 
 /* ════════════════════ FAQ ════════════════════ */
 
@@ -1333,26 +1196,6 @@ export const BLOG_FAQ: FaqItem[] = [
   },
 ];
 
-/** BuilderForce Agents (/agents) FAQ — rich-snippet + GEO coverage for the agent-runtime surface. */
-export const AGENTS_FAQ: FaqItem[] = [
-  {
-    question: 'What is BuilderForce Agents?',
-    answer: 'BuilderForce Agents is the self-hosted agent runtime behind Builderforce.ai. It runs and coordinates independent coding agents and sub-agents on your own infrastructure under the MIT license, with deep codebase understanding, a skills system, multi-agent workflows, and human-in-the-loop approval gates — orchestrated from the Builderforce.ai portal.',
-  },
-  {
-    question: 'Is BuilderForce Agents open source and self-hosted?',
-    answer: 'BuilderForce Agents is MIT-licensed and can run on private infrastructure with supported local models. Hosted collaboration, publishing, remote evaluation, and connected services remain separate; validate a complete air-gapped workflow before making a compliance commitment.',
-  },
-  {
-    question: 'How do agents coordinate across machines?',
-    answer: 'Agents can form an AgentHost-to-AgentHost mesh and route supported work by capability. Configured dispatch uses the documented authentication path, and the portal shows telemetry for instrumented execution paths.',
-  },
-  {
-    question: 'Can agents ship code on their own?',
-    answer: 'Yes. A Cloud agent clones the bound repo through a secure server-side git proxy (your Git token never leaves the server), writes the change, pushes a branch, and opens a pull request — headless, no browser open. On-Premise agents do the same on your own machine, and approval gates can require human sign-off before any high-impact step.',
-  },
-];
-
 /** Projects / Tasks domain FAQ — rich-snippet + GEO coverage for the work-management surface. */
 export const PROJECTS_TASKS_FAQ: FaqItem[] = [
   {
@@ -1618,8 +1461,6 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
     ],
   },
 ];
-
-void LEGACY_COMPETITIVE_COMPARISON;
 
 /**
  * Public capability-claim contract. A product surface cannot appear in the

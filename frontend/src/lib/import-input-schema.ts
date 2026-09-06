@@ -5,7 +5,7 @@
  */
 
 export const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
-export const DEFAULT_BEGINNER_STEP = 'step-info';
+export const DEFAULT_BEGINNER_STEP: GuidedStep = 'step-info';
 
 /**
  * Canonical field directives for record import: identifier + checker API.
@@ -29,7 +29,6 @@ export interface FieldDirective {
  * render them through their own translator.
  */
 export const fieldLabelKey = (key: string): string => `field${key.charAt(0).toUpperCase()}${key.slice(1)}`;
-export const fieldTooltipKey = (key: string): string => `fieldTooltip${key.charAt(0).toUpperCase()}${key.slice(1)}`;
 
 /**
  * Base fields shared across all record types.
@@ -90,36 +89,6 @@ export type ValidatedRecord = BaseRecord & {
 export type GuidedStep = 'step-info' | 'step-fields' | 'step-review' | 'step-success';
 
 /**
- * Guided mode form state: current step, filled values, and a runtime-error per-field ID.
- */
-export interface GuidedFormState {
-  step: GuidedStep;
-  record: Partial<ValidatedRecord>;
-  error: Record<string, string | null>; // ID → error message
-  touched: Set<string>; // IDs that were focused
-  summary?: string | null; // validation summary from the API (on dry-run in bulk)
-}
-
-/**
- * Bulk mode state: uploaded file, detected columns, mapped names, run condition.
- */
-export interface BulkState {
-  fileType: 'csv' | 'xlsx' | 'json' | null;
-  file: File | null;
-  rowsCount: number;
-  columns: string[]; // detected headers
-  mappings: Record<string, string | null>; // header → canonical key
-  dryRunResult: DryRunResult | null;
-  uploading: boolean;
-  importStatus: 'idle' | 'uploading' | 'mapping' | 'dryrun' | 'importing' | 'done';
-  totalRows: number;
-  validRowsCount: number;
-  erroredRowsCount: number;
-  importSummary?: string | null; // API summary (success/fail counts)
-  errorMessage?: string | null;
-}
-
-/**
  * Row-level validation result in bulk dry-run.
  */
 export interface RowError {
@@ -138,30 +107,6 @@ export type DryRunResult = {
   errors: RowError[];
   summaryLines: string[];
 };
-
-/**
- * Determine if a record is fully valid (all required fields present and non-empty if required).
- */
-export function isRecordValid(record: Partial<BaseRecord>, overrideRequireds?: Record<string, boolean>): boolean {
-  // Record kinds may add fields at runtime, so validation necessarily reads by
-  // schema key. Keep BaseRecord strict for callers and widen only this lookup
-  // boundary instead of adding an `any` index signature to the public type.
-  const values = record as Readonly<Record<string, unknown>>;
-  for (const kind in RECORD_KINDS) {
-    const fields = RECORD_KINDS[kind].availableFields;
-    for (const key in fields) {
-      const field = fields[key];
-      const required = overrideRequireds?.[key] ?? field.required;
-      if (required || values[key]) {
-        const value = values[key];
-        if (!value || String(value).trim() === '') {
-          return false;
-        }
-      }
-    }
-  }
-  return true;
-}
 
 /**
  * Convert field directive to React `id` attribute per accessibility guidelines.

@@ -207,14 +207,3 @@ export async function closeRetiredPullRequests(
   }
   return out;
 }
-
-/** Repos referenced by a project's PR rows — used by the route to fail fast with a
- *  useful message when a project has no connected repository at all. */
-export async function projectHasRepository(db: Db, tenantId: number, projectId: number): Promise<boolean> {
-  const [row] = await db
-    .select({ id: projectRepositories.id })
-    .from(projectRepositories)
-    .where(and(eq(projectRepositories.tenantId, tenantId), eq(projectRepositories.projectId, projectId)))
-    .limit(1);
-  return !!row;
-}

@@ -24,7 +24,7 @@ import { recordRunFailureEvent } from './application/runtime/recordRunFailureEve
 import { loadCloudRunForSelfHeal, selfHealCloudRun } from './application/runtime/cloudSelfHeal';
 import { wireExecutionEventSinks } from './application/runtime/wireExecutionEventSinks';
 import { syncExecutionTaskLifecycle } from './application/task/taskLifecycle';
-import { maybeAutoRunOnLaneEntry } from './presentation/routes/taskRoutes';
+import { maybeAutoRunOnLaneEntry } from './application/swimlane/laneEntryTrigger';
 import { resolveNextTaskStatus, resolveRunningTaskStatus } from './application/swimlane/nextLane';
 import { ChatTicketService } from './application/brain/ChatTicketService';
 import { attributeRunToManifest } from './application/kanban/attributeRunToManifest';

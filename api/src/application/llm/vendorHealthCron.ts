@@ -21,7 +21,7 @@ import { sendTransactionalEmail } from '../email/sendEmail';
 import type { Env } from '../../env';
 import { persistProbe } from '../../presentation/routes/adminRoutes';
 import {
-  probeVendor,
+  probeAllVendors,
   type VendorProbeResult,
 } from './vendorHealthProbe';
 import { getAllVendorIds, type VendorEnv, type VendorId } from './vendors';
@@ -78,7 +78,7 @@ export async function runVendorHealthCron(env: CronEnv & { LLM_HEALTH_ALERT_RECI
 
   const [previousByVendor, chatResults, imageResults] = await Promise.all([
     loadPreviousStatusByVendor(healthDb),
-    Promise.all(getAllVendorIds().map((v) => probeVendor(env, v))),
+    probeAllVendors(env, getAllVendorIds()),
     probeAllImageVendors(env),
   ]);
 

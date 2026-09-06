@@ -134,11 +134,6 @@ export type PeopleObjectKind = typeof PEOPLE_OBJECT_KINDS[number];
 
 const PEOPLE_KIND_SET: ReadonlySet<string> = new Set<string>(PEOPLE_OBJECT_KINDS);
 
-/** True for the HR/collection objects — the set `peopleObjects.ts` specs. */
-export function isPeopleObjectKind(value: unknown): value is PeopleObjectKind {
-  return typeof value === 'string' && PEOPLE_KIND_SET.has(value);
-}
-
 // ---------------------------------------------------------------------------
 // Confidentiality — the precondition, not a feature
 // ---------------------------------------------------------------------------
@@ -485,10 +480,6 @@ export interface PublishedForm {
  */
 export const SIGNATURE_PARTY_STATUSES = ['pending', 'viewed', 'signed', 'acknowledged', 'declined'] as const;
 export type SignaturePartyStatus = typeof SIGNATURE_PARTY_STATUSES[number];
-
-export function isSignaturePartyStatus(value: unknown): value is SignaturePartyStatus {
-  return typeof value === 'string' && (SIGNATURE_PARTY_STATUSES as readonly string[]).includes(value);
-}
 
 export const SIGNATURE_REQUEST_STATUSES = ['draft', 'sent', 'completed', 'declined', 'cancelled', 'expired'] as const;
 export type SignatureRequestStatus = typeof SIGNATURE_REQUEST_STATUSES[number];

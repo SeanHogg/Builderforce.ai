@@ -71,7 +71,7 @@ async function ingestSignals(
     const byProject = forTenant.find((e) => e.projectId != null && Number(e.projectId) === Number(projectId));
     return (byProject ?? forTenant[0])?.id ?? null;
   };
-  let ingested = 0;
+  const rows: (typeof activitySignals.$inferInsert)[] = [];
   for (const raw of list) {
     const s = raw as Record<string, unknown>;
     const source = SIGNAL_SOURCES.includes(s.source as never) ? (s.source as string) : defaultSource;
@@ -88,7 +88,7 @@ async function ingestSignals(
     const metadata = s.metadata != null ? JSON.stringify(s.metadata).slice(0, 4000) : null;
     // `activity_signals.id` is a DB bigserial the schema models as a plain bigint PK
     // (no Drizzle default), so it is omitted here and the sequence supplies it.
-    await db.insert(activitySignals).values({
+    rows.push({
       userId,
       tenantId,
       engagementId,
@@ -102,9 +102,10 @@ async function ingestSignals(
       sessionId,
       occurredAt: new Date(occurredAt),
     } as typeof activitySignals.$inferInsert);
-    ingested++;
   }
-  return ingested;
+  // ONE multi-row insert: a batch of two hundred signals was two hundred round trips.
+  if (rows.length) await db.insert(activitySignals).values(rows);
+  return rows.length;
 }
 
 /** Recompute a timecard's totals from its entries and persist them. Shared by the
@@ -369,22 +370,24 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
 
     // Replace auto entries for this card (idempotent re-resolve).
     await db.delete(timecardEntries).where(and(eq(timecardEntries.timecardId, realCardId), eq(timecardEntries.source, 'auto')));
-    for (const [day, daySignals] of byDay) {
+    const entries = [...byDay].flatMap(([day, daySignals]) => {
       const resolved = resolveActiveMinutes(daySignals.map((s): ResolvableSignal => ({ id: s.id, occurredAt: s.occurredAt, durationSeconds: s.durationSeconds, weight: s.weight, kind: s.kind })));
-      if (resolved.minutes <= 0) continue;
-      await db.insert(timecardEntries).values({
+      if (resolved.minutes <= 0) return [];
+      return [{
         id: crypto.randomUUID(),
         engagementId,
         userId,
         tenantId: eng.tenantId,
         workDate: day,
         minutes: resolved.minutes,
-        source: 'auto',
+        source: 'auto' as const,
         billable: true,
         resolvedFrom: JSON.stringify(resolved),
         timecardId: realCardId,
-      });
-    }
+      }];
+    });
+    // ONE insert for the period rather than one per day.
+    if (entries.length) await db.insert(timecardEntries).values(entries);
     // Recompute totals over auto + any manual entries already in the period.
     const totals = await recomputeTimecard(db, realCardId);
     return c.json({ id: realCardId, ...totals });

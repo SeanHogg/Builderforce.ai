@@ -25,9 +25,8 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { resolveApiOrigin, resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import {
-  mintSessionExchangeCode, readSsoLoginState, safeRedirectPath, signSsoLoginState,
-} from '../../application/auth/ssoLoginState';
+import { readSsoLoginState, signSsoLoginState } from '../../application/auth/ssoLoginState';
+import { mintSessionExchangeCode, safeRedirectPath } from '../../application/auth/sessionExchange';
 import { signInWithSso } from '../../application/auth/ssoSignIn';
 import {
   SsoError,

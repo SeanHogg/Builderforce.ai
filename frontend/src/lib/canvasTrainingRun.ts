@@ -56,8 +56,6 @@ export const TRAINING_SCORE_AXES = [
   { key: 'hallucinationRate', field: 'eval_hallucination_rate', higherIsBetter: false },
 ] as const satisfies ReadonlyArray<{ key: string; field: keyof TrainingJob; higherIsBetter: boolean }>;
 
-export type TrainingScoreAxis = typeof TRAINING_SCORE_AXES[number]['key'];
-
 /** True when a higher number is a better result on this axis. */
 export function axisHigherIsBetter(axis: string): boolean {
   return TRAINING_SCORE_AXES.find((entry) => entry.key === axis)?.higherIsBetter ?? true;

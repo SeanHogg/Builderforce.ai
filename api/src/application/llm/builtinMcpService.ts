@@ -70,7 +70,7 @@ import { MigrationService, type ImportMode } from '../migration/MigrationService
 import { createMigrationStore } from '../migration/migrationStore';
 import { buildMigrationProviderFactory } from '../migration/buildProviderFactory';
 import { BOARD_PROVIDERS, DISCOVERY_PROVIDER_IDS } from '../boardsync/providerCatalog';
-import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
+import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
 import { evaluateTaskAutoRun, AUTO_RUN_REASON_TEXT, type AutoRunReason } from '../swimlane/evaluateAutoRun';
 import { invalidateProjectsList } from '../project/projectsListCache';
 import { recordActivity, resolveHumanActor, SYSTEM_ACTOR } from '../activity/activityLog';
@@ -131,7 +131,7 @@ type Json = Record<string, unknown>;
 // The caller context, route replay and catalog-row shape now live in their own
 // module so a domain can declare its own CATALOG rows without a cycle back to
 // this file. Re-exported here so every existing importer is unaffected.
-export type { BuiltinCtx, BuiltinTool, ReplayAuthPlan } from './builtinToolContext';
+export type { BuiltinCtx, BuiltinTool } from './builtinToolContext';
 export { replayRoute, resolveReplayAuth } from './builtinToolContext';
 import { replayRoute, type BuiltinCtx, type BuiltinTool } from './builtinToolContext';
 import { taskCreatedHook } from '../task/taskCreationHook';

@@ -22,6 +22,7 @@ import { computeFingerprint, eventTitle, type NormalizedErrorEvent } from './err
 import { enforceErrorEventsCap } from './errorEventsLedger';
 import { resolveEventProjectId, type CollectorRef, type MappingRule } from './errorMapping';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { excluded } from '../../infrastructure/database/upsert';
 
 /** Groups per upsert statement. Neon HTTP carries one statement per request, and
  *  a few hundred rows of sample payloads is the size that stays comfortably
@@ -157,14 +158,14 @@ export async function ingestErrorEvents(
         .onConflictDoUpdate({
           target: [errorGroups.tenantId, errorGroups.projectId, errorGroups.fingerprint],
           set: {
-            eventCount: sql`${errorGroups.eventCount} + excluded.event_count`,
-            lastSeen: sql`GREATEST(${errorGroups.lastSeen}, excluded.last_seen)`,
+            eventCount: sql`${errorGroups.eventCount} + ${excluded(errorGroups.eventCount)}`,
+            lastSeen: sql`GREATEST(${errorGroups.lastSeen}, ${excluded(errorGroups.lastSeen)})`,
             // A resolved bug that recurs is a regression — reopen it; ignored stays ignored.
             status: sql`CASE WHEN ${errorGroups.status} = 'resolved' THEN 'unresolved' ELSE ${errorGroups.status} END`,
-            level: sql`excluded.level`,
-            release: sql`excluded.release`,
-            environment: sql`excluded.environment`,
-            samplePayload: sql`excluded.sample_payload`,
+            level: excluded(errorGroups.level),
+            release: excluded(errorGroups.release),
+            environment: excluded(errorGroups.environment),
+            samplePayload: excluded(errorGroups.samplePayload),
             updatedAt: now,
           },
         })

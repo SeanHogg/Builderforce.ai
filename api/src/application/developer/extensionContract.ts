@@ -310,10 +310,6 @@ export function meteredChargeCents(plan: ExtensionPlan, units: number): number {
 export const INSTALL_SUBSCRIPTION_STATES = ['none', 'active', 'past_due', 'cancelled'] as const;
 export type InstallSubscriptionState = (typeof INSTALL_SUBSCRIPTION_STATES)[number];
 
-export function isInstallSubscriptionState(v: unknown): v is InstallSubscriptionState {
-  return typeof v === 'string' && (INSTALL_SUBSCRIPTION_STATES as readonly string[]).includes(v);
-}
-
 /** May this install still call, and still be metered? `past_due` deliberately may. */
 export function subscriptionEntitles(state: string): boolean {
   return state === 'active' || state === 'past_due';

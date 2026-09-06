@@ -169,16 +169,6 @@ export async function dispatchTaskFinalize(
   }
 }
 
-/**
- * The board autonomous trigger now lives in the APPLICATION layer
- * ({@link ../../application/swimlane/laneEntryTrigger}) so the non-HTTP writers
- * that land tickets in lanes (board-sync inbound, the QA finding router, the cron
- * sweeps, the MCP tools) can reach it without importing a route module. Re-exported
- * here verbatim so every existing import path (`presentation/routes/taskRoutes`)
- * keeps resolving; the routes below call the moved function.
- */
-export { maybeAutoRunOnLaneEntry, onTaskLandedInLane } from '../../application/swimlane/laneEntryTrigger';
-
 export function createTaskRoutes(taskService: TaskService, db: Db, runtimeService: RuntimeService): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);

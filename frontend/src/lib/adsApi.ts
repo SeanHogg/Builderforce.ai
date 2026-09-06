@@ -33,13 +33,6 @@ export type AdNetwork =
   | 'google' | 'meta' | 'linkedin' | 'tiktok' | 'x' | 'reddit' | 'pinterest' | 'snapchat'
   | 'microsoft';
 
-/** The canonical order the UI lists networks in — the API's `AD_NETWORKS` order. A
- *  network missing here is not a smaller list: it is an account whose rows render
- *  unlabelled, which is how `microsoft` shipped invisible on this surface. */
-export const AD_NETWORKS: readonly AdNetwork[] = [
-  'google', 'meta', 'linkedin', 'tiktok', 'x', 'reddit', 'pinterest', 'snapchat', 'microsoft',
-];
-
 /** What a campaign is trying to buy, in one vocabulary across every network. */
 export type AdObjective =
   | 'awareness' | 'traffic' | 'engagement' | 'leads' | 'conversions' | 'app_installs' | 'video_views';

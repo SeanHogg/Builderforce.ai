@@ -84,8 +84,3 @@ export async function withSemanticResponseCache(
 ): Promise<{ response: string; cached: boolean }> {
   return runThroughCache(await getSemanticResponseCache(), query, generate);
 }
-
-/** Reset the memoised cache (tests / disposal). */
-export function resetSemanticResponseCache(): void {
-  invalidateClientCache(CACHE_KEY);
-}

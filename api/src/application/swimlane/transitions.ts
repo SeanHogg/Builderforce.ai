@@ -123,9 +123,6 @@ export function countLaneFailures(stageHistory: string | null | undefined, swiml
   }
 }
 
-/** The lane action that fires once a stage succeeds (migration 0084). */
-export type StageActionType = 'advance' | 'move_ticket' | 'run_workflow' | 'do_nothing';
-
 /** What a successful stage should do: the lifecycle + any action side-effect. */
 export interface StageActionPlan {
   /** Where the ticket lands: advancing | awaiting_gate | done. */

@@ -1237,6 +1237,10 @@ export class BrainService {
       ...(isManagerChat && projectHint != null ? [accountabilityFraming(projectHint, nameFor)] : []),
       `Reply AS ${agentName} — first person, concise, helpful, no preamble and no "${agentName}:" label. `,
       `You may use the provided tools to read or update the team's work (projects, tasks, specs, OKRs, knowledge) when it helps answer or act on the request. After using tools, summarise what you found or did. `,
+      // This reply runs on the server with platform tools only. Say so when it matters:
+      // an agent asked to edit/commit/push from here used to answer "I have no git
+      // tool" as if that were the end of it, while the editor that asked has the tool.
+      `You have NO file, shell or git tools in this reply — you cannot read, edit, commit or push code from here. If asked to, say that plainly in one line and name the route that can: in the editor, send the request to the Brain without addressing an agent (it runs with the workspace's file and git tools), or dispatch it as a task assigned to a cloud agent, which ships as a pull request. `,
       // The agent IS a participant in this chat (chatId is known here, not to the model) —
       // tell it the id so it can tie work items to THIS conversation. Named by ADVERTISED
       // name for the same reason as above; dropped entirely when the tools are not offered.

@@ -201,10 +201,6 @@ export function diagramNotation(id: string | null | undefined): DiagramNotation 
  * declared, so the picker is stable and draw.io leads. */
 export const DIAGRAM_TARGETS: readonly DiagramNotation[] = DIAGRAM_NOTATIONS.filter((notation) => Boolean(notation.write));
 
-export function isDiagramTarget(id: string | null | undefined): boolean {
-  return Boolean(diagramNotation(id)?.write);
-}
-
 /** The notation a file name declares, if any. */
 export function notationForFileName(fileName: string): DiagramNotation | null {
   const name = fileName.trim().toLowerCase();

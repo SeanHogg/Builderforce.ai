@@ -38,6 +38,7 @@ import { TaskStatus } from '../../domain/shared/types';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { decideParticipantRemoval } from './participantRemovalPolicy';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { excluded } from '../../infrastructure/database/upsert';
 
 // Role display names come from the ONE resolver in `roleCatalog` (this module used to
 // keep its own private copy, and it disagreed with the lane gate's).
@@ -475,30 +476,46 @@ export class TicketParticipantsService {
     const hasPr = hasNonDraftPr(await loadTaskPrSignal(this.db, tenantId, taskId));
     const slots = await this.templateSlots(projectId, { taskType: ctx.taskType, actionType: ctx.actionType, hasPr });
     const now = new Date();
-    for (const s of slots) {
-      const assignee = await this.resolveAssignee(env, tenantId, projectId, s.roleKey);
+    // Resolve each ROLE once, not once per slot: a template with the same role on
+    // three stages was three identical roster reads.
+    const byRole = new Map<string, Awaited<ReturnType<typeof this.resolveAssignee>>>();
+    for (const roleKey of new Set(slots.map((s) => s.roleKey))) {
+      byRole.set(roleKey, await this.resolveAssignee(env, tenantId, projectId, roleKey));
+    }
+    const rows = slots.map((s) => {
+      const assignee = byRole.get(s.roleKey) ?? null;
+      return {
+        tenantId,
+        taskId,
+        stageKey: s.stageKey,
+        roleKey: s.roleKey,
+        responsibility: s.responsibility,
+        required: s.required,
+        source: 'template',
+        assigneeKind: assignee?.kind ?? null,
+        assigneeRef: assignee?.ref ?? null,
+        assigneeName: assignee?.name ?? null,
+        state: assignee ? 'assigned' : (s.required ? 'unstaffed' : 'pending'),
+        quorumGroup: `${s.stageKey ?? ''}:${s.roleKey}:${s.responsibility}`,
+        createdAt: now,
+        updatedAt: now,
+      };
+    });
+    if (rows.length) {
+      // ONE multi-row upsert for the manifest.
       await this.db
         .insert(ticketParticipants)
-        .values({
-          tenantId,
-          taskId,
-          stageKey: s.stageKey,
-          roleKey: s.roleKey,
-          responsibility: s.responsibility,
-          required: s.required,
-          source: 'template',
-          assigneeKind: assignee?.kind ?? null,
-          assigneeRef: assignee?.ref ?? null,
-          assigneeName: assignee?.name ?? null,
-          state: assignee ? 'assigned' : (s.required ? 'unstaffed' : 'pending'),
-          quorumGroup: `${s.stageKey ?? ''}:${s.roleKey}:${s.responsibility}`,
-          createdAt: now,
-          updatedAt: now,
-        })
+        .values(rows)
         .onConflictDoUpdate({
           target: [ticketParticipants.taskId, ticketParticipants.stageKey, ticketParticipants.roleKey, ticketParticipants.responsibility, ticketParticipants.source],
           // Re-resolve assignee (roster may have changed) but never clobber a live state.
-          set: { assigneeKind: assignee?.kind ?? null, assigneeRef: assignee?.ref ?? null, assigneeName: assignee?.name ?? null, required: s.required, updatedAt: now },
+          set: {
+            assigneeKind: excluded(ticketParticipants.assigneeKind),
+            assigneeRef: excluded(ticketParticipants.assigneeRef),
+            assigneeName: excluded(ticketParticipants.assigneeName),
+            required: excluded(ticketParticipants.required),
+            updatedAt: now,
+          },
         });
     }
     await this.syncStates(env, tenantId, taskId);
@@ -754,23 +771,21 @@ export class TicketParticipantsService {
         eq(ticketParticipants.roleKey, 'owner'),
         eq(ticketParticipants.responsibility, 'owner'),
       )));
-    let changed = false;
-    for (const owner of owners) {
-      if (owner.assigneeKind === assignee?.kind
-        && owner.assigneeRef === assignee?.ref
-        && owner.assigneeName === assignee?.name) continue;
-      await this.db.update(ticketParticipants).set({
-        assigneeKind: assignee?.kind ?? null,
-        assigneeRef: assignee?.ref ?? null,
-        assigneeName: assignee?.name ?? null,
-        state: assignee ? 'assigned' : 'unstaffed',
-        signoffId: null,
-        evidence: null,
-        updatedAt: new Date(),
-      }).where(scopedToTenant(ticketParticipants, tenantId, eq(ticketParticipants.id, owner.id)));
-      changed = true;
-    }
-    if (changed) await this.bump(env, taskId);
+    const stale = owners.filter((owner) => owner.assigneeKind !== assignee?.kind
+      || owner.assigneeRef !== assignee?.ref
+      || owner.assigneeName !== assignee?.name);
+    if (!stale.length) return;
+    // Every stale owner slot takes the SAME assignee: one update, not one per slot.
+    await this.db.update(ticketParticipants).set({
+      assigneeKind: assignee?.kind ?? null,
+      assigneeRef: assignee?.ref ?? null,
+      assigneeName: assignee?.name ?? null,
+      state: assignee ? 'assigned' : 'unstaffed',
+      signoffId: null,
+      evidence: null,
+      updatedAt: new Date(),
+    }).where(scopedToTenant(ticketParticipants, tenantId, inArray(ticketParticipants.id, stale.map((owner) => owner.id))));
+    await this.bump(env, taskId);
   }
 
   /** Cached manifest read; derives on first access when empty. */

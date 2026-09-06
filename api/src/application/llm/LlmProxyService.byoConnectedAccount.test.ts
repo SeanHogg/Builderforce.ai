@@ -107,7 +107,7 @@ describe('connected account — a non-BYO caller model does NOT shadow the conne
 
     const result = await connectedProxy().complete({
       ...request,
-      // A non-BYO coder pin — the kind resolveEffectiveModel/defaultModel can send.
+      // A non-BYO coder pin — the kind resolveEffectiveModelChoice/defaultModel can send.
       model: 'deepseek/deepseek-v4-flash-20260423',
     });
 

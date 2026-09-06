@@ -66,18 +66,6 @@ export function parseEmbeddingVendorPrefix(modelId: string): { vendor: Embedding
   return null;
 }
 
-export function embeddingVendorKeyBound(env: EmbeddingVendorEnv, vendor: EmbeddingVendorId): boolean {
-  return !!MODULES_BY_ID[vendor].apiKeyFrom(env);
-}
-
-export function getEmbeddingModule(id: EmbeddingVendorId): EmbeddingVendorModule {
-  return MODULES_BY_ID[id];
-}
-
-export function getEmbeddingCatalog(): ReadonlyArray<EmbeddingVendorModelEntry & { vendor: EmbeddingVendorId }> {
-  return MODULES.flatMap((mod) => mod.catalog.map((entry) => ({ ...entry, vendor: mod.id })));
-}
-
 // ---------------------------------------------------------------------------
 // Dispatch — walk the embeddings vendor cascade with failover
 // ---------------------------------------------------------------------------

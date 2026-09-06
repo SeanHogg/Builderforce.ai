@@ -9,8 +9,6 @@
  * the streaming fetch.
  */
 
-export type GitProvider = 'github' | 'bitbucket' | 'gitlab';
-
 export interface ProxyRepo {
   provider: string;       // github | bitbucket | gitlab
   host: string | null;    // e.g. github.com, gitlab.example.com

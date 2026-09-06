@@ -7,6 +7,9 @@ import {
   resolveRecipient,
   activeMentionToken,
   filterMentionCandidates,
+  withAuthoredBy,
+  addressedAgentSystemPrompt,
+  parseMessageAuthor,
   type DirectedRecipient,
 } from './directedMessage';
 
@@ -96,5 +99,26 @@ describe('resolveRecipient', () => {
   it('falls back to the mention, then the BRAIN', () => {
     expect(resolveRecipient(null, bob)).toEqual(bob);
     expect(resolveRecipient(null, null)).toBeNull();
+  });
+});
+
+describe('a host-run addressed turn', () => {
+  it('attributes a persisted assistant turn to the agent without losing its provenance', () => {
+    const meta = withAuthoredBy(JSON.stringify({ provenance: { model: 'm1' } }), bob);
+    expect(JSON.parse(meta!)).toMatchObject({ provenance: { model: 'm1' }, authoredBy: bob });
+    // The read side is the same one the server's attributed replies use.
+    expect(parseMessageAuthor({ metadata: meta })).toEqual(bob);
+  });
+
+  it('stamps an author onto a turn that had no metadata, and leaves one alone without an author', () => {
+    expect(parseMessageAuthor({ metadata: withAuthoredBy(undefined, bob) })).toEqual(bob);
+    expect(withAuthoredBy(undefined, null)).toBeUndefined();
+    expect(withAuthoredBy('{"a":1}', undefined)).toBe('{"a":1}');
+  });
+
+  it('puts the persona first and the host prompt — the one that names the tools — last', () => {
+    const prompt = addressedAgentSystemPrompt({ directives: 'You are Bob, a terse developer.' }, bob, 'Use git_commit to ship.');
+    expect(prompt.indexOf('You are Bob')).toBeLessThan(prompt.indexOf('Reply AS Bob Developer'));
+    expect(prompt.indexOf('Reply AS Bob Developer')).toBeLessThan(prompt.indexOf('Use git_commit to ship.'));
   });
 });

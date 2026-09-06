@@ -51,7 +51,7 @@ import type { Env } from '../../env';
  *     refused at 15, so a preview surge can never starve dispatch. That reservation is
  *     the whole point of a preview-specific budget rather than one shared free-for-all.
  */
-export const AGENT_CONTAINER_MAX_INSTANCES = 25;
+/** The container `max_instances` in wrangler.toml is 25; previews may take at most this many. */
 export const PREVIEW_GLOBAL_INSTANCE_BUDGET = 15;
 
 /**

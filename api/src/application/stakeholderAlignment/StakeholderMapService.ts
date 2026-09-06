@@ -260,10 +260,10 @@ export class StakeholderMapService {
       rationale: row.rationale ?? undefined,
       submittedAt: row.submittedAt,
     })), now);
-    for (const conflict of conflicts) {
-      await this.db.insert(stakeholderConflicts).values({
+    if (conflicts.length) {
+      await this.db.insert(stakeholderConflicts).values(conflicts.map((conflict) => ({
         tenantId, segmentId, projectId, ...conflict,
-      }).onConflictDoNothing({
+      }))).onConflictDoNothing({
         target: [stakeholderConflicts.tenantId, stakeholderConflicts.projectId, stakeholderConflicts.signature],
       });
     }

@@ -5765,6 +5765,18 @@
         "nda": "Acuerdo de confidencialidad",
         "cookie": "Política de cookies"
       }
+    },
+    "setPassword": {
+      "title": "Establecer una contraseña",
+      "subtitle": "Te registraste con un proveedor. Añade una contraseña para poder iniciar sesión también con tu correo.",
+      "password": "Nueva contraseña",
+      "confirm": "Confirmar contraseña",
+      "save": "Establecer contraseña",
+      "saving": "Guardando…",
+      "done": "Contraseña establecida. Ya puedes iniciar sesión con tu correo.",
+      "failed": "No se pudo establecer la contraseña.",
+      "tooShort": "Usa al menos {min} caracteres.",
+      "mismatch": "Las dos contraseñas no coinciden."
     }
   },
   "catalogInsights": {
@@ -24256,10 +24268,6 @@
     "hintOpen": "<kbd>⏎</kbd> abrir",
     "hintClose": "<kbd>esc</kbd> cerrar",
     "locked": "Plan {plan}"
-  },
-  "homeScroller": {
-    "previous": "Mostrar anterior",
-    "next": "Mostrar más"
   },
   "liveBar": {
     "region": "Llamada",

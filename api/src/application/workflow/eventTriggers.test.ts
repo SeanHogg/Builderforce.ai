@@ -12,7 +12,7 @@ vi.mock('./instantiateRun', () => ({
  * chained call resolves to whatever is queued next. The point of these tests is the
  * MATCHING and the listener gate, not drizzle.
  */
-function fakeDb(rows: Array<Record<string, unknown>>, defs: Array<Record<string, unknown>> = [{ name: 'W', projectId: null, definition: '{"nodes":[],"edges":[]}' }]) {
+function fakeDb(rows: Array<Record<string, unknown>>, defs: Array<Record<string, unknown>> = [{ id: 'def_1', name: 'W', projectId: null, definition: '{"nodes":[],"edges":[]}' }]) {
   const selects = [rows, defs];
   let call = 0;
   const db = {

@@ -32,6 +32,7 @@ import { enterPipeline, moveCandidate, type PipelineEntryRef } from './pipeline'
 import { AtsError } from './atsError';
 import { ENTRY_STAGE, REJECTED_STAGE, pipelineRefForPosting } from '../../domain/hiring/pipelineStages';
 import type { Env } from '../../env';
+import { excluded } from '../../infrastructure/database/upsert';
 
 /** How many applications one list read returns. A posting with more than this has a
  *  filter problem rather than a paging problem, and the board is the surface for
@@ -173,8 +174,8 @@ export async function recordApplication(
     .onConflictDoUpdate({
       target: [jobApplications.tenantId, jobApplications.jobPostingId, jobApplications.candidateRef],
       set: {
-        coverLetter: sql`coalesce(excluded.cover_letter, ${jobApplications.coverLetter})`,
-        resumeRef: sql`coalesce(excluded.resume_ref, ${jobApplications.resumeRef})`,
+        coverLetter: sql`coalesce(${excluded(jobApplications.coverLetter)}, ${jobApplications.coverLetter})`,
+        resumeRef: sql`coalesce(${excluded(jobApplications.resumeRef)}, ${jobApplications.resumeRef})`,
         updatedAt: sql`now()`,
       },
     })

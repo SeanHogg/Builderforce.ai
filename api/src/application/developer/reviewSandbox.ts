@@ -156,20 +156,3 @@ export async function withSandboxInstall<T>(
     });
   }
 }
-
-/**
- * Is this workspace the review sandbox?
- *
- * Exported so the analytics and directory reads can EXCLUDE it. A review install
- * that lasted four seconds is not a customer, and counting it would make every
- * package's install analytics report one workspace that does not exist and never
- * came back — churn invented by our own pipeline.
- */
-export async function isSandboxTenant(db: Db, tenantId: number): Promise<boolean> {
-  const [row] = await db
-    .select({ slug: tenants.slug })
-    .from(tenants)
-    .where(and(eq(tenants.id, tenantId), eq(tenants.slug, REVIEW_SANDBOX_SLUG)))
-    .limit(1);
-  return Boolean(row);
-}

@@ -29,7 +29,7 @@
  * through a path that forgot one.
  */
 
-import { and, asc, count, eq, gt, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, count, eq, gt, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { isFormAudience, isFormFieldType, isFormStatus, type FormAudience, type FormQuestion, type FormStatus, type PublishedForm } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
 import { formRecipients, questionSets, responses } from '../../infrastructure/database/schema';
@@ -37,6 +37,7 @@ import { acrossTenants, scopedToTenant } from '../../infrastructure/database/ten
 import { hashShareToken, mintShareToken } from '../security/shareToken';
 import { fireEventTriggers } from '../workflow/eventTriggers';
 import type { Env } from '../../env';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** The `question_sets.kind` a canvas `form` object projects to. A kind is a
  *  column value — see the table's own note. */
@@ -299,22 +300,33 @@ export async function formRemindersDue(db: Db, now = new Date()): Promise<FormRe
     .orderBy(asc(questionSets.updatedAt))
     .limit(FORM_REMINDER_BATCH);
 
-  const due: FormReminderDue[] = [];
-  for (const row of rows) {
+  const overdue = rows.filter((row) => {
     const since = (row.lastRemindedAt ?? row.createdAt)?.getTime();
-    if (since == null) continue;
-    if (now.getTime() - since < row.remindAfterDays * 86_400_000) continue;
+    return since != null && now.getTime() - since >= row.remindAfterDays * DAY_MS;
+  });
+  if (!overdue.length) return [];
 
-    const pending = await db
-      .select({ id: formRecipients.id, name: formRecipients.name, email: formRecipients.email })
-      .from(formRecipients)
-      .where(scopedToTenant(
-        formRecipients,
-        row.tenantId,
-        eq(formRecipients.questionSetId, row.id),
-        isNull(formRecipients.respondedAt),
-      ))
-      .orderBy(asc(formRecipients.id));
+  // ONE read for every overdue form's unanswered recipients, grouped in memory.
+  const pendingRows = await db
+    .select({ questionSetId: formRecipients.questionSetId, id: formRecipients.id, name: formRecipients.name, email: formRecipients.email })
+    .from(formRecipients)
+    .where(acrossTenants(
+      formRecipients,
+      'scheduled_sweep',
+      inArray(formRecipients.questionSetId, overdue.map((row) => row.id)),
+      isNull(formRecipients.respondedAt),
+    ))
+    .orderBy(asc(formRecipients.id));
+  const pendingByForm = new Map<string, typeof pendingRows>();
+  for (const recipient of pendingRows) {
+    const list = pendingByForm.get(recipient.questionSetId) ?? [];
+    list.push(recipient);
+    pendingByForm.set(recipient.questionSetId, list);
+  }
+
+  const due: FormReminderDue[] = [];
+  for (const row of overdue) {
+    const pending = pendingByForm.get(row.id) ?? [];
     if (!pending.length) continue;
 
     due.push({

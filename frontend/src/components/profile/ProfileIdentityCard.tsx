@@ -26,14 +26,10 @@ import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui';
 import { getStoredUser, getStoredWebToken, updateMyDisplayName } from '@/lib/auth';
 import { uploadMyAvatar } from '@/lib/freelance/talentProfile';
+import { initialsOf } from '@/lib/initials';
 
 /** Initials are the fallback identity — legible at any size, unlike a title. */
-function initials(name: string | null | undefined): string {
-  const words = (name ?? '').trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return '?';
-  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-  return (words[0][0] + words[words.length - 1][0]).toUpperCase();
-}
+const initials = initialsOf;
 
 /**
  * The avatar, wherever a person is shown at rest. Exported because the talent

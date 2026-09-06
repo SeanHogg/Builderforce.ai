@@ -48,6 +48,7 @@ import { DONE_CLASS_STATUSES } from '../../domain/shared/doneClass';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { excluded } from '../../infrastructure/database/upsert';
 
 // ---------------------------------------------------------------------------
 // Report generation helpers
@@ -842,17 +843,18 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
 
     if (!Array.isArray(body)) return c.json({ error: 'body must be an array of { reportType, isSubscribed }' }, 400);
 
-    for (const item of body) {
+    // ONE multi-row upsert; each row's own flag comes back through `excluded`.
+    if (body.length) {
       await db.insert(reportSubscriptions)
-        .values({
+        .values(body.map((item) => ({
           tenantId,
           userId,
           reportType:   item.reportType as 'standup',
           isSubscribed: item.isSubscribed,
-        })
+        })))
         .onConflictDoUpdate({
           target: [reportSubscriptions.tenantId, reportSubscriptions.userId, reportSubscriptions.reportType],
-          set:    { isSubscribed: item.isSubscribed, updatedAt: new Date() },
+          set:    { isSubscribed: excluded(reportSubscriptions.isSubscribed), updatedAt: new Date() },
         });
     }
 

@@ -25,6 +25,9 @@ export interface AuthUser {
    *  turn this on to publish a for-hire profile + bid on gigs while keeping the full
    *  builder shell. Always true for 'freelancer' accounts. From /api/auth/me. */
   availableForHire?: boolean;
+  /** False for an OAuth-only account that has no password yet — the Account tab
+   *  offers to set one so the person can also sign in without the provider. */
+  hasPassword?: boolean;
   /** This user's OWN personality (same shape agents/personas use); null when unset. */
   psychometric?: import('./psychometric').PsychometricProfile | null;
 }
@@ -35,13 +38,6 @@ export interface Tenant {
   slug?: string;
   /** The authenticated user's role in this workspace (from the tenant JWT claim). */
   role?: string;
-}
-
-export interface AuthState {
-  webToken: string | null;
-  tenantToken: string | null;
-  user: AuthUser | null;
-  tenant: Tenant | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -141,31 +137,6 @@ export interface IdeContainerOption {
   id: number;
   name: string;
   key: string;
-}
-
-export interface AIMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  created_at?: string;
-}
-
-export interface CollaborationSession {
-  id: string;
-  project_id: string;
-  user_id: string;
-  started_at: string;
-  ended_at?: string;
-}
-
-export interface UserPresence {
-  userId: string;
-  name: string;
-  color: string;
-  cursor?: {
-    line: number;
-    column: number;
-  };
 }
 
 export interface WebContainerState {
@@ -365,24 +336,6 @@ export interface AgentPackage {
 
 /** Which model backend a BuilderForce Agents agent uses for inference */
 export type ModelBackend = 'mamba' | 'external-llm' | string;
-
-/** Top-level configuration for a BuilderForce Agents agent */
-export interface BuilderForceAgentConfig {
-  /** Unique agent identifier */
-  agentId: string;
-  /** Display name shown in the IDE and workforce registry */
-  name: string;
-  /** Short description of what this agent does */
-  description?: string;
-  /** The model backend to use for inference */
-  modelBackend: ModelBackend;
-  /** Mamba provider config (required when modelBackend === 'mamba') */
-  mambaProvider?: import('./model-provider').MambaProviderConfig;
-  /** Mamba SSM state engine config */
-  mambaConfig?: MambaConfig;
-  /** Confidence threshold below which the agent escalates to cloud (0–1) */
-  confidenceThreshold?: number;
-}
 
 // ---------------------------------------------------------------------------
 // Mamba State Engine (Hybrid Local Brain)

@@ -702,10 +702,6 @@ const _EXHAUSTIVE: Record<AcademicObjectKind, true> = Object.fromEntries(
 ) as Record<AcademicObjectKind, true>;
 void _EXHAUSTIVE;
 
-/** Every academic kind, in spec order. */
-export const ACADEMIC_SPEC_KINDS: readonly AcademicObjectKind[] =
-  ACADEMIC_OBJECT_SPECS.map((spec) => spec.kind as AcademicObjectKind);
-
 /**
  * English fallbacks for the palette and for a blank card.
  *

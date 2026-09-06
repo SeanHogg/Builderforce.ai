@@ -459,37 +459,6 @@ async function renumber(
 }
 
 /**
- * Close a candidate's open entry without opening another — the end of the road.
- *
- * Used when a pipeline itself ends (the requisition is filled or withdrawn), which is not
- * a stage the candidate reached and must not be recorded as one. A hire and a rejection
- * both go through `moveCandidate` into their terminal stage instead, because both ARE
- * outcomes the funnel is measuring.
- */
-export async function closePipelineEntry(
-  db: Db,
-  env: Env | undefined,
-  input: { tenantId: number; pipelineRef: string; candidateRef: string },
-  now = new Date(),
-): Promise<{ closed: boolean }> {
-  const entries = await readOpenEntries(db, input.tenantId, input.pipelineRef);
-  const current = entries.find((entry) => entry.candidateRef === input.candidateRef);
-  if (!current) return { closed: false };
-  const enteredAt = current.enteredAt instanceof Date ? current.enteredAt : new Date(current.enteredAt);
-  await db
-    .update(jobPipelineEntries)
-    .set({ exitedAt: now, daysInStage: daysInStage(enteredAt, now), updatedAt: now })
-    .where(scopedToTenant(
-      jobPipelineEntries,
-      input.tenantId,
-      eq(jobPipelineEntries.id, current.entryId),
-      isNull(jobPipelineEntries.exitedAt),
-    ));
-  await invalidatePipeline(env, input.tenantId, input.pipelineRef);
-  return { closed: true };
-}
-
-/**
  * Close EVERY open entry of a pipeline — the requisition itself ended (filled or
  * withdrawn), so nobody still in it reached a stage. One UPDATE: days-in-stage is
  * computed in SQL with the same rounding {@link daysInStage} applies row by row.
@@ -565,10 +534,4 @@ export async function listPipelines(env: Env, db: Db, tenantId: number): Promise
       lastActivityAt: row.lastActivityAt ? new Date(row.lastActivityAt).toISOString() : null,
     }));
   }, { kvTtlSeconds: 60, l1TtlMs: 5_000 });
-}
-
-/** Whether a stage ends a candidate's run — the route uses it to decide whether a move
- *  needs a recorded decision behind it. */
-export function isTerminalStage(stage: string): boolean {
-  return TERMINAL_STAGES.includes(stage);
 }

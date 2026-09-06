@@ -35,7 +35,6 @@ function round(value: number): number {
 const Z_CRITICAL: Record<number, number> = { 0.8: 1.281552, 0.9: 1.644854, 0.95: 1.959964, 0.99: 2.575829 };
 
 export const CONFIDENCE_LEVELS = [0.8, 0.9, 0.95, 0.99] as const;
-export type ConfidenceLevel = typeof CONFIDENCE_LEVELS[number];
 
 function criticalValue(level: number): number {
   return Z_CRITICAL[level] ?? Z_CRITICAL[0.95];

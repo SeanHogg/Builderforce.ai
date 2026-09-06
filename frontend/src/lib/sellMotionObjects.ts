@@ -510,25 +510,6 @@ export const SELL_MOTION_STATUSES: Record<string, string> = {
   drafting: 'Drafting',
 };
 
-
-/**
- * The fields whose ENROLMENT/CURSOR semantics the sequence runner writes.
- *
- * Exported so the runner's patch builder and this declaration cannot drift: the runner
- * writes exactly these and nothing else, which is what keeps "the model may not move the
- * cadence cursor" true in practice rather than only in a comment.
- */
-export const SEQUENCE_RUNNER_FIELDS = ['enrolments', 'lastRunAt', 'sequenceState'] as const;
-
-/** Same contract for the sequence reader half, used by the runner to load a cadence. */
-export function readSequence(data: Record<string, unknown>) {
-  return {
-    state: data.sequenceState,
-    steps: readSequenceSteps(data.steps),
-    enrolments: readSequenceEnrolments(data.enrolments),
-  };
-}
-
 registerSpecObjectSet({
   id: 'sellMotion',
   namespace: SELL_MOTION_NAMESPACE,

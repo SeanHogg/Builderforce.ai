@@ -66,7 +66,7 @@ export async function authenticateServiceToken(
   const segmentId = await resolveSegment(db, access.tenantId, {
     accountId: coords.accountId,
     companyId: coords.companyId,
-  });
+  }, c.env);
 
   return { tenantId: access.tenantId, segmentId, tenantApiKeyId: access.tenantApiKeyId };
 }

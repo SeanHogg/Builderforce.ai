@@ -27,32 +27,6 @@ import {
 } from '@builderforce/creation-canvas-contract';
 import { specDeadlineFields } from './specObjects';
 
-export {
-  DATE_COMPARATORS,
-  DEADLINE_FIELD_NAMES,
-  TRIGGER_COMPARATORS,
-  dateValue,
-  daysUntil,
-  deadlineDetailOf,
-  deadlineValueOf,
-  evaluateBoardTriggers,
-  evaluateTrigger,
-  isDateComparator,
-  isVirtualDeadlineField,
-  nextOpenObligation,
-  numericValue,
-  resolveDeadlineField,
-} from '@builderforce/creation-canvas-contract';
-export type {
-  OpenObligation,
-  ResolvedTrigger,
-  TriggerBoardObject,
-  TriggerComparator,
-  TriggerEvaluation,
-  TriggerInput,
-  TriggerState,
-} from '@builderforce/creation-canvas-contract';
-
 /** The shape a canvas node exposes. Structural rather than an import of the canvas's own
  *  node type, so this module does not depend on the component tree. */
 export interface CanvasTriggerNode {

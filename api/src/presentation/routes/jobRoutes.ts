@@ -84,6 +84,7 @@ import type { Env, HonoEnv } from '../../env';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { closePipeline } from '../../application/hiring/pipeline';
 import { pipelineRefForPosting } from '../../domain/hiring/pipelineStages';
+import { excluded } from '../../infrastructure/database/upsert';
 
 // `JOBS_PUBLIC_CACHE_KEY`, the posting-type vocabulary and the discipline vocabulary all
 // live with the writer now (`application/marketplace/jobPostings.ts` and `jobFilters.ts`).
@@ -503,7 +504,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
       })
       .onConflictDoUpdate({
         target: [savedSearches.tenantId, savedSearches.ownerRef, savedSearches.scope, savedSearches.name],
-        set: { filters: sql`excluded.filters`, updatedAt: sql`NOW()` },
+        set: { filters: excluded(savedSearches.filters), updatedAt: sql`NOW()` },
       })
       .returning({ id: savedSearches.id, name: savedSearches.name, filters: savedSearches.filters,
         last_run_at: savedSearches.lastRunAt, result_count: savedSearches.resultCount });
@@ -1380,13 +1381,13 @@ export function createJobRoutes(): Hono<HonoEnv> {
       .onConflictDoUpdate({
         target: [jobProposals.jobId, jobProposals.freelancerUserId],
         set: {
-          coverNote: sql`excluded.cover_note`,
-          rateCents: sql`excluded.rate_cents`,
+          coverNote: excluded(jobProposals.coverNote),
+          rateCents: excluded(jobProposals.rateCents),
           // A revision replaces the answers wholesale — one bid is one set of answers,
           // not an accumulation. Attachments are NOT touched: they are uploaded by their
           // own route after the row exists, and re-submitting a revised cover note must
           // not delete the work samples already attached to it.
-          screeningAnswers: sql`excluded.screening_answers`,
+          screeningAnswers: excluded(jobProposals.screeningAnswers),
           status: 'submitted',
           updatedAt: sql`NOW()`,
         },

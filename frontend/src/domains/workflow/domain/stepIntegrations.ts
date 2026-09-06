@@ -97,11 +97,6 @@ export const INTEGRATION_CATEGORY_KEYS: Record<string, string> = {
   'analytics-collection': 'analyticsAndDataCollection',
 };
 
-/** Accent color for an integration, derived from its category. */
-export function integrationAccent(category: string): string {
-  return CATEGORY_MAP[category]?.accent ?? 'var(--text-muted)';
-}
-
 /** Display icon for an integration (own icon, else category icon). */
 export function integrationIcon(integ: Integration): string {
   return integ.icon ?? CATEGORY_MAP[integ.category]?.icon ?? '🔌';

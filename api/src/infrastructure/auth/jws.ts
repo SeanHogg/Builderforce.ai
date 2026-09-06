@@ -72,18 +72,6 @@ export function parseJws(token: string): ParsedJws | null {
   }
 }
 
-/**
- * The payload of a token whose signature has NOT been checked.
- *
- * Exists because two callers legitimately need one claim before they can pick the
- * key to verify with — an LTI launch reads `iss` to select a registration, and an
- * SSO callback reads it to select a connection. Named so that every use of it
- * reads as the hazard it is at the call site.
- */
-export function unverifiedPayload(token: string): Record<string, unknown> | null {
-  return parseJws(token)?.payload ?? null;
-}
-
 async function verifyRs256(key: JsonWebKey, signingInput: string, signature: Uint8Array): Promise<boolean> {
   const imported = await crypto.subtle.importKey(
     'jwk',

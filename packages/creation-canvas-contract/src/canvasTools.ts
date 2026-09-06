@@ -588,10 +588,6 @@ export const GUEST_CAREER_TOOL_NAMES = [
   'builtin_listing_profile_blocks',
 ] as const;
 
-export type GuestSafeCanvasTool = typeof GUEST_SAFE_CANVAS_TOOLS[number];
-export type GuestGatedCanvasTool = typeof GUEST_GATED_CANVAS_TOOLS[number];
-export type AccountRequiredCanvasTool = typeof ACCOUNT_REQUIRED_CANVAS_TOOLS[number];
-
 /** Every `canvas_*` tool the Creation Canvas advertises, across all three sets. */
 export const CREATION_CANVAS_TOOLS = [
   ...GUEST_SAFE_CANVAS_TOOLS,
@@ -613,11 +609,6 @@ const GUEST_GATED_SET: ReadonlySet<string> = new Set<string>(GUEST_GATED_CANVAS_
 /** True when this tool needs a signed-in tenant session to do anything at all. */
 export function canvasToolRequiresAccount(name: string): boolean {
   return ACCOUNT_REQUIRED_SET.has(name);
-}
-
-/** True when this tool is advertised to a guest but answers with the account gate. */
-export function canvasToolGatesForGuest(name: string): boolean {
-  return GUEST_GATED_SET.has(name);
 }
 
 /** True when an anonymous canvas turn may be given this tool. */

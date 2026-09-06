@@ -14,16 +14,6 @@ export type EvermindRegionKey =
 
 export type EvermindRegionGroup = 'memory' | 'limbic' | 'trait';
 
-export const REGION_GROUP: Record<EvermindRegionKey, EvermindRegionGroup> = {
-  neocortex: 'memory',
-  hippocampus: 'memory',
-  amygdala: 'limbic',
-  hypothalamus: 'limbic',
-  thalamus: 'limbic',
-  basalGanglia: 'limbic',
-  personality: 'trait',
-};
-
 /** CSS variable carrying each region's themed hue (defined in the Knowledge Map's
  *  scoped `<style>`; the same `.ev-brainmap` custom properties cascade to consumers). */
 export const REGION_HUE_VAR: Record<EvermindRegionKey, string> = {

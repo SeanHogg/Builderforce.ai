@@ -58,7 +58,7 @@ import { createPassBudget, MIN_DISPATCH_WINDOW_MS, type PassBudget } from '../ma
 import { resolveRequiredSignoffGate } from '../kanban/signoffGate';
 import { mergeRecordedPullRequest, updateRecordedPullRequestBranch } from './mergeRecordedPr';
 import { pollPrCiStatus } from './pollPrCiStatus';
-import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
+import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
 import { runBoundedPool } from '../runtime/boundedPool';
 import {
   createTickDispatchBudget, tenantDispatchReserver,

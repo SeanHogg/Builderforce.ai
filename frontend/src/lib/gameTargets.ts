@@ -178,12 +178,6 @@ export function gameWorldFrom(data: CreationNodeData): RobloxWorldReading | null
   return place ? robloxWorldReading(place) : null;
 }
 
-/** The Luau a place carries, for the surfaces that read source. */
-export function gameScriptsFrom(data: CreationNodeData): RobloxScriptSource[] {
-  const place = robloxPlaceFrom(data);
-  return place ? robloxScriptsFrom(place) : [];
-}
-
 /**
  * WHICH runtime plays this game — the single answer every play surface, node
  * body and empty state reads.

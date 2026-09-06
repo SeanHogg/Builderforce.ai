@@ -57,7 +57,6 @@ import { acrossTenants, scopedToTenant } from '../../infrastructure/database/ten
  * registry kind and the canvas kind stays where it already lives — on the object row.
  */
 export const PROSPECT_SHARE_KINDS = ['creation_session', 'canvas_object'] as const;
-export type ProspectShareKind = typeof PROSPECT_SHARE_KINDS[number];
 
 /**
  * The canvas kinds a seller may hand to a buyer.
@@ -635,10 +634,6 @@ export function engagementPatch(engagement: ProspectEngagement, shareUrl: string
     })),
   };
 }
-
-/** Exported for the route's validation, so the wire vocabulary and the contract's are one
- *  list rather than two that drift. */
-export const PROSPECT_EVENT_NAMES: readonly string[] = PROSPECT_EVENTS;
 
 /** Every live share on one canvas object, for the tool that refreshes a card's figures. */
 export async function findCardShare(db: Db, env: Env, tenantId: number, canvasObjectId: string) {

@@ -1004,7 +1004,6 @@ export const artifacts = pgTable('artifacts', {
 export const RENDITION_KINDS = [
   'recording', 'caption', 'transcript', 'thumbnail', 'export', 'preview',
 ] as const;
-export type RenditionKind = (typeof RENDITION_KINDS)[number];
 
 /**
  * Version history per versionable thing. Absorbs 18 tables.

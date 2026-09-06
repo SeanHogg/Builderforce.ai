@@ -34,17 +34,6 @@ const PR_REF_COLUMNS = {
   number: pullRequests.number,
 } as const;
 
-/** Shape returned by the PR-lookup helpers. */
-export type PullRequestRef = {
-  id: string;
-  tenantId: number;
-  taskId: number | null;
-  projectId: number;
-  repoId: string | null;
-  buildStatus: string | null;
-  number: number | null;
-};
-
 export interface RecordPullRequestInput {
   tenantId: number;
   segmentId?: string | null;

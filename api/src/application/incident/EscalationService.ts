@@ -11,7 +11,7 @@
  * evaluateIncident() on the frequent cron tick to fire later levels as their timers
  * elapse. Both funnel through pageLevel() → incidentNotifier, so paging is DRY.
  */
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { escalationPolicies, escalationLevels, prodIncidents, incidentEvents } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { OnCallService } from './OnCallService';
@@ -39,13 +39,18 @@ export class EscalationService {
   async listPolicies(tenantId: number) {
     const policies = await this.db.select().from(escalationPolicies)
       .where(eq(escalationPolicies.tenantId, tenantId)).orderBy(asc(escalationPolicies.name));
-    const out = [];
-    for (const p of policies) {
-      const levels = await this.db.select().from(escalationLevels)
-        .where(scopedToTenant(escalationLevels, tenantId, eq(escalationLevels.policyId, p.id))).orderBy(asc(escalationLevels.level));
-      out.push({ ...p, levels });
+    if (!policies.length) return [];
+    // ONE read for every policy's levels, grouped in memory — not a read per policy.
+    const levels = await this.db.select().from(escalationLevels)
+      .where(scopedToTenant(escalationLevels, tenantId, inArray(escalationLevels.policyId, policies.map((p) => p.id))))
+      .orderBy(asc(escalationLevels.level));
+    const byPolicy = new Map<string, typeof levels>();
+    for (const level of levels) {
+      const list = byPolicy.get(level.policyId) ?? [];
+      list.push(level);
+      byPolicy.set(level.policyId, list);
     }
-    return out;
+    return policies.map((p) => ({ ...p, levels: byPolicy.get(p.id) ?? [] }));
   }
 
   private async ownedPolicy(tenantId: number, policyId: string): Promise<boolean> {

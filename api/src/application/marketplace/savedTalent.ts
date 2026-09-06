@@ -24,6 +24,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { freelancerProfiles, savedTalent, users } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { parseJsonArray } from '../../domain/shared/json';
+import { excluded } from '../../infrastructure/database/upsert';
 
 /** The default list, so "save this person" needs no name. */
 export const DEFAULT_TALENT_LIST = 'shortlist';
@@ -158,7 +159,7 @@ export async function saveTalent(
       target: [savedTalent.tenantId, savedTalent.ownerUserId, savedTalent.freelancerUserId, savedTalent.listName],
       // A save with no note must not WIPE the note that is already there — the second
       // save is usually a click, not an edit.
-      set: { note: sql`COALESCE(excluded.note, ${savedTalent.note})`, updatedAt: sql`NOW()` },
+      set: { note: sql`COALESCE(${excluded(savedTalent.note)}, ${savedTalent.note})`, updatedAt: sql`NOW()` },
     })
     .returning({ id: savedTalent.id });
   return row ?? null;

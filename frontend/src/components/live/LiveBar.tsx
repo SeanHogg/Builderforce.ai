@@ -8,6 +8,7 @@ import { observeResizeOnAnimationFrame } from '@/lib/observeResize';
 import { useOptionalLiveSession, type LiveMember } from '@/lib/live/LiveSessionContext';
 import { CallConnectionNotice } from './CallConnectionNotice';
 import styles from './LiveBar.module.css';
+import { initialsOf } from '@/lib/initials';
 
 /**
  * The room, at shell level — a DOCK, not an overlay.
@@ -56,11 +57,7 @@ import styles from './LiveBar.module.css';
  * shell-themed. Both read the toggle; neither owns the other's colours.
  */
 
-function initials(member: LiveMember): string {
-  const source = member.displayName?.trim() || '';
-  if (!source) return '??';
-  return source.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
-}
+const initials = (member: LiveMember): string => initialsOf(member.displayName, '??');
 
 /** One camera tile. A `<video>` needs its stream attached imperatively. */
 function Tile({ stream, label, self, sharing, speaking }: {

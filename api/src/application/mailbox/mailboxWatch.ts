@@ -786,14 +786,3 @@ export async function runMailboxPushSweep(env: Env, db: Db = buildDatabase(env))
   const swept = await runMailboxWatchSweep(env, db);
   return { ...swept, armed };
 }
-
-/** Re-exported so the routes can answer "is this mailbox live?" without importing
- *  the schema directly. */
-export async function listWatchedConnections(db: Db, tenantId: number): Promise<MailboxWatchView[]> {
-  const rows = await db
-    .select()
-    .from(mailboxWatches)
-    .where(scopedToTenant(mailboxWatches, tenantId, isNotNull(mailboxWatches.id)))
-    .orderBy(asc(mailboxWatches.connectionId));
-  return rows.map(toWatchView);
-}

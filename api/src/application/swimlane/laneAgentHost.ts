@@ -17,9 +17,6 @@ import type { Db } from '../../infrastructure/database/connection';
 import { tenants } from '../../infrastructure/database/schema';
 import type { LaneAgentRuntime } from './laneAutoRun';
 
-/** Backplanes that are NOT pushable to an agent host by the simple lane trigger. */
-export const CLOUD_LANE_RUNTIMES: ReadonlySet<LaneAgentRuntime> = new Set<LaneAgentRuntime>(['cloud']);
-
 /**
  * The agent-host id a lane assignment targets, or null when the run belongs in the
  * cloud. Never throws: an unresolvable pin degrades to the tenant default host, and a

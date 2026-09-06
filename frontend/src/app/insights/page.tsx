@@ -41,7 +41,7 @@ import { usePins } from '@/lib/widgets/PinsProvider';
 import { getComponent } from '@/lib/components/registry';
 import { useComponentCatalog, useComponentLabel } from '@/lib/components/useComponentCatalog';
 import type { ComponentSize } from '@/lib/components/types';
-import { DashboardWidget } from '@/components/dashboard';
+import { DashboardWidget } from '@/components/dashboard/DashboardWidget';
 import {
   dashboardsApi,
   type DashboardData,

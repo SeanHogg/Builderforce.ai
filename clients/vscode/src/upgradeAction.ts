@@ -32,15 +32,6 @@ export interface UpgradeAction {
 }
 
 /**
- * The action for an error, if any. `auth` is deliberately excluded: reconnecting
- * is an in-editor command, not a web page, and the surfaces that show it already
- * offer their own sign-in affordance.
- */
-export function upgradeActionFor(error: unknown): UpgradeAction | null {
-  return upgradeActionForVerdict(chatErrorAction(error));
-}
-
-/**
  * The same call-to-action, from an ALREADY-CLASSIFIED verdict.
  *
  * The shared run loop classifies a failure once (on the run cell's `errorAction`) and

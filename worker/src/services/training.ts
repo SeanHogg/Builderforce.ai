@@ -1,34 +1,6 @@
 import { requestGatewayCompletion, type GatewayChatMessage } from './gateway';
 import type { DatasetExample } from './dataset';
 
-export interface TrainingJobRecord {
-  id: string;
-  project_id: string;
-  dataset_id: string | null;
-  base_model: string;
-  lora_rank: number;
-  epochs: number;
-  batch_size: number;
-  learning_rate: number;
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  current_epoch: number;
-  current_loss: number | null;
-  r2_artifact_key: string | null;
-  error_message: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface TrainingLogRecord {
-  id: string;
-  job_id: string;
-  epoch: number | null;
-  step: number | null;
-  loss: number | null;
-  message: string;
-  created_at: string;
-}
-
 export interface EvaluationResult {
   job_id: string;
   score: number;

@@ -38,8 +38,6 @@ import type { Env } from '../../env';
  *  carries the object it grants access to. */
 export type InvitationKind = 'tenant' | 'session' | 'project' | 'team' | 'board' | 'ceremony' | 'engagement';
 
-export type InvitationState = 'pending' | 'accepted' | 'declined' | 'revoked' | 'expired';
-
 export type InvitationRow = {
   id: string;
   tenantId: number;

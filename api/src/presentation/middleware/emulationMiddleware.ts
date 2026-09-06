@@ -1,7 +1,7 @@
 import { MiddlewareHandler } from 'hono';
 import { eq, sql } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
-import { verifyJwt } from '../../infrastructure/auth/JwtService';
+import { verifyEmulationJwt } from '../../infrastructure/auth/JwtService';
 import type { EmulationJwtPayload } from '../../infrastructure/auth/JwtService';
 import { ForbiddenError, UnauthorizedError } from '../../domain/shared/errors';
 import { buildDatabase } from '../../infrastructure/database/connection';
@@ -38,9 +38,7 @@ export const emulationMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) =
   // Verify emulation JWT
   let payload: EmulationJwtPayload;
   try {
-    const raw = await verifyJwt(emulationHeader, c.env.JWT_SECRET) as EmulationJwtPayload;
-    if (!raw.emu) throw new Error('Not an emulation token');
-    payload = raw;
+    payload = await verifyEmulationJwt(emulationHeader, c.env.JWT_SECRET);
   } catch {
     throw new UnauthorizedError('Invalid or expired emulation token');
   }

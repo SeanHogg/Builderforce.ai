@@ -100,20 +100,6 @@ export function webPageHost(url: string): string {
   }
 }
 
-/**
- * Fields the panel writes back after probing an address. Kept together because
- * they are only ever meaningful as a set — a `frameable` verdict without the
- * URL it was measured against would be re-applied to the next address typed.
- */
-export interface WebPageProbe {
-  frameCheckedUrl: string;
-  frameable: boolean;
-  frameBlockedBy: string | null;
-  pageTitle: string | null;
-  content: string;
-  fetchedAt: string;
-}
-
 /** True when `data` already holds a probe for exactly this address. */
 export function hasWebPageProbe(data: CreationNodeData, url: string): boolean {
   return data.frameCheckedUrl === url;

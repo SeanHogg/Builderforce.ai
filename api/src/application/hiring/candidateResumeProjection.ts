@@ -23,6 +23,7 @@ import { candidateResumes } from '../../infrastructure/database/schema';
 import { readProfileResume } from '../resume/profileResume';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { Db } from '../../infrastructure/database/connection';
+import { excluded } from '../../infrastructure/database/upsert';
 
 /**
  * Years of experience implied by the earliest dated role — the ATS's coarsest filter.
@@ -99,11 +100,11 @@ export async function projectResumeToCandidate(
       .onConflictDoUpdate({
         target: [candidateResumes.tenantId, candidateResumes.candidateRef],
         set: {
-          headline: sql`excluded.headline`,
-          parsed: sql`excluded.parsed`,
-          skills: sql`excluded.skills`,
-          yearsExp: sql`excluded.years_exp`,
-          parsedAt: sql`excluded.parsed_at`,
+          headline: excluded(candidateResumes.headline),
+          parsed: excluded(candidateResumes.parsed),
+          skills: excluded(candidateResumes.skills),
+          yearsExp: excluded(candidateResumes.yearsExp),
+          parsedAt: excluded(candidateResumes.parsedAt),
           updatedAt: sql`now()`,
         },
       });

@@ -47,10 +47,3 @@ export function resourceIdOfType(value: unknown, type: string): string | null {
   const ref = parseResourceRef(value);
   return ref && ref.type === type ? ref.id : null;
 }
-
-/** Build a ref. Both halves are required; a blank one yields null rather than a
- *  half-formed string that `parseResourceRef` would then reject. */
-export function formatResourceRef(type: string, id: string | number | null | undefined): string | null {
-  const text = id === null || id === undefined ? '' : String(id);
-  return type && text ? `${type}:${text}` : null;
-}

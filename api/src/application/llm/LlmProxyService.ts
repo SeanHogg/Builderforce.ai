@@ -771,7 +771,7 @@ export class LlmProxyService {
     }
 
     // 1) Pool composition is already TTFT-ordered (Cerebras → Ollama → NVIDIA
-    //    → OpenRouter) because `modelsByTier` walks the registry's MODULES
+    //    → OpenRouter) because `autoRoutableModelsByTier` walks the registry's MODULES
     //    array in priority order. Shape-based reorder then floats capable
     //    models (tools / structured / vision) to the head within that order.
     const reorderedPool = reorderPoolByShape(body, this.modelPool);

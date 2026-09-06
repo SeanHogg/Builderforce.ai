@@ -28,6 +28,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { projectSites, siteTrafficDaily } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { sha256Fingerprint } from '../../infrastructure/crypto/digest';
+import { excluded } from '../../infrastructure/database/upsert';
 
 /** One site's pending counts for one UTC day. */
 export interface TrafficDelta {
@@ -227,10 +228,10 @@ export async function flushTrafficDeltas(db: Db, deltas: TrafficDelta[]): Promis
     .onConflictDoUpdate({
       target: [siteTrafficDaily.siteId, siteTrafficDaily.day],
       set: {
-        pageViews: sql`${siteTrafficDaily.pageViews} + excluded.page_views`,
-        assetHits: sql`${siteTrafficDaily.assetHits} + excluded.asset_hits`,
-        visitors: sql`${siteTrafficDaily.visitors} + excluded.visitors`,
-        bytesServed: sql`${siteTrafficDaily.bytesServed} + excluded.bytes_served`,
+        pageViews: sql`${siteTrafficDaily.pageViews} + ${excluded(siteTrafficDaily.pageViews)}`,
+        assetHits: sql`${siteTrafficDaily.assetHits} + ${excluded(siteTrafficDaily.assetHits)}`,
+        visitors: sql`${siteTrafficDaily.visitors} + ${excluded(siteTrafficDaily.visitors)}`,
+        bytesServed: sql`${siteTrafficDaily.bytesServed} + ${excluded(siteTrafficDaily.bytesServed)}`,
         updatedAt: sql`NOW()`,
       },
     });

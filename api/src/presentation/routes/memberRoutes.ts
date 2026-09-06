@@ -42,6 +42,7 @@ import { recordActivity, resolveActorFromContext } from '../../application/activ
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { positiveIntParam } from './queryParams';
+import { excluded } from '../../infrastructure/database/upsert';
 
 const MEMBER_KINDS = new Set(['human', 'cloud_agent', 'host_agent']);
 const clampDays = (raw: number, def: number, max: number) =>
@@ -376,50 +377,44 @@ async function snapshotMetrics(db: Db, tenantId: number, days: number, cards: Me
   if (!cards.length) return;
   const periodEnd = new Date();
   const periodStart = new Date(periodEnd.getTime() - days * 24 * 3_600_000);
-  for (const m of cards) {
-    await db
-      .insert(memberMetricsPeriod)
-      .values({
-        tenantId,
-        memberKind: m.memberKind,
-        memberRef: m.memberRef,
-        memberName: m.memberName,
-        periodStart,
-        periodEnd,
-        assignedCount: m.assignedCount,
-        completedCount: m.completedCount,
-        redoCount: m.redoCount,
-        reopenCount: m.reopenCount,
-        avgCycleTimeHours: m.avgCycleTimeHours,
-        avgPickupLatencyHours: m.avgPickupLatencyHours,
-        avgIdleAfterDoneHours: m.avgIdleAfterDoneHours,
-        boardHygieneScore: m.boardHygieneScore,
-        engagementScore: m.engagementScore,
-        effectivenessScore: m.effectivenessScore,
-        computedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: [
-          memberMetricsPeriod.tenantId,
-          memberMetricsPeriod.memberKind,
-          memberMetricsPeriod.memberRef,
-          memberMetricsPeriod.periodStart,
-          memberMetricsPeriod.periodEnd,
-        ],
-        set: {
-          memberName: m.memberName,
-          assignedCount: m.assignedCount,
-          completedCount: m.completedCount,
-          redoCount: m.redoCount,
-          reopenCount: m.reopenCount,
-          avgCycleTimeHours: m.avgCycleTimeHours,
-          avgPickupLatencyHours: m.avgPickupLatencyHours,
-          avgIdleAfterDoneHours: m.avgIdleAfterDoneHours,
-          boardHygieneScore: m.boardHygieneScore,
-          engagementScore: m.engagementScore,
-          effectivenessScore: m.effectivenessScore,
-          computedAt: new Date(),
-        },
-      });
-  }
+  const computedAt = new Date();
+  const metricColumns = [
+    'memberName', 'assignedCount', 'completedCount', 'redoCount', 'reopenCount', 'avgCycleTimeHours',
+    'avgPickupLatencyHours', 'avgIdleAfterDoneHours', 'boardHygieneScore', 'engagementScore', 'effectivenessScore',
+  ] as const;
+  // ONE multi-row upsert for the whole roster; each row's own figures come back through `excluded`.
+  await db
+    .insert(memberMetricsPeriod)
+    .values(cards.map((m) => ({
+      tenantId,
+      memberKind: m.memberKind,
+      memberRef: m.memberRef,
+      memberName: m.memberName,
+      periodStart,
+      periodEnd,
+      assignedCount: m.assignedCount,
+      completedCount: m.completedCount,
+      redoCount: m.redoCount,
+      reopenCount: m.reopenCount,
+      avgCycleTimeHours: m.avgCycleTimeHours,
+      avgPickupLatencyHours: m.avgPickupLatencyHours,
+      avgIdleAfterDoneHours: m.avgIdleAfterDoneHours,
+      boardHygieneScore: m.boardHygieneScore,
+      engagementScore: m.engagementScore,
+      effectivenessScore: m.effectivenessScore,
+      computedAt,
+    })))
+    .onConflictDoUpdate({
+      target: [
+        memberMetricsPeriod.tenantId,
+        memberMetricsPeriod.memberKind,
+        memberMetricsPeriod.memberRef,
+        memberMetricsPeriod.periodStart,
+        memberMetricsPeriod.periodEnd,
+      ],
+      set: {
+        ...Object.fromEntries(metricColumns.map((column) => [column, excluded(memberMetricsPeriod[column])])),
+        computedAt,
+      },
+    });
 }

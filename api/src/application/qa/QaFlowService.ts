@@ -16,6 +16,7 @@ import { and, asc, eq, gte, gt, or, sql, type SQL } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { qaFlows, qaJourneyEvents } from '../../infrastructure/database/schema';
 import { inferPersonaRole, type QaStep, shortHash, toSlug } from './qaTypes';
+import { excluded } from '../../infrastructure/database/upsert';
 
 interface JourneyRow {
   sessionId: string;
@@ -204,43 +205,46 @@ export class QaFlowService {
       .sort((a, b) => b.frequency - a.frequency)
       .slice(0, maxFlows);
 
-    let upserted = 0;
     const now = new Date();
-    for (const agg of ranked) {
+    const rows = ranked.map((agg) => {
       const startRoute = agg.signature[0] ?? null;
       const name = agg.signature.join(' → ');
       const slug = `usage-${toSlug(agg.signature.join('-'))}-${shortHash(agg.signature.join('>'))}`;
       const personaRole = inferPersonaRole(agg.signature);
+      return {
+        tenantId,
+        segmentId,
+        projectId: opts.projectId,
+        name,
+        slug,
+        source: 'usage',
+        description: `Auto-derived from ${agg.frequency} captured session(s).`,
+        startRoute,
+        steps: JSON.stringify(agg.steps),
+        personaRole,
+        frequency: agg.frequency,
+        status: 'active',
+        updatedAt: now,
+      };
+    });
+    // ONE multi-row upsert for every derived flow.
+    if (rows.length) {
       await this.db
         .insert(qaFlows)
-        .values({
-          tenantId,
-          segmentId,
-          projectId: opts.projectId,
-          name,
-          slug,
-          source: 'usage',
-          description: `Auto-derived from ${agg.frequency} captured session(s).`,
-          startRoute,
-          steps: JSON.stringify(agg.steps),
-          personaRole,
-          frequency: agg.frequency,
-          status: 'active',
-          updatedAt: now,
-        })
+        .values(rows)
         .onConflictDoUpdate({
           target: [qaFlows.tenantId, qaFlows.slug],
           set: {
-            steps: JSON.stringify(agg.steps),
-            frequency: agg.frequency,
-            name,
-            startRoute,
-            personaRole,
+            steps: excluded(qaFlows.steps),
+            frequency: excluded(qaFlows.frequency),
+            name: excluded(qaFlows.name),
+            startRoute: excluded(qaFlows.startRoute),
+            personaRole: excluded(qaFlows.personaRole),
             updatedAt: now,
           },
         });
-      upserted++;
     }
+    const upserted = rows.length;
     return { upserted, eventsScanned, truncated };
   }
 }

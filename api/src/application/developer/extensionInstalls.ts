@@ -432,25 +432,3 @@ export async function installedConnectorManifests(
   }
   return out;
 }
-
-/** Does this tenant's install of `packageId` carry `scope`? Strict — see `installGrants`. */
-export async function installHasScope(
-  db: Db,
-  tenantId: number,
-  packageId: string,
-  scope: string,
-): Promise<boolean> {
-  const [row] = await db
-    .select({ grantedScopes: tenantExtensionInstalls.grantedScopes })
-    .from(tenantExtensionInstalls)
-    .where(
-      scopedToTenant(
-        tenantExtensionInstalls,
-        tenantId,
-        eq(tenantExtensionInstalls.packageId, packageId),
-        sql`${tenantExtensionInstalls.disabledAt} is null`,
-      ),
-    )
-    .limit(1);
-  return Array.isArray(row?.grantedScopes) && row.grantedScopes.includes(scope);
-}

@@ -118,11 +118,6 @@ export type PrivacyContentSignal =
   | 'unsubscribeSuppresses'
   | 'retentionPurges';
 
-export const PRIVACY_CONTENT_SIGNALS: readonly PrivacyContentSignal[] = [
-  'cookieConsentGatesTrackers', 'deletionRemovesData', 'exportProducesData',
-  'unsubscribeSuppresses', 'retentionPurges',
-];
-
 /**
  * What to read, and what counts as proof.
  *

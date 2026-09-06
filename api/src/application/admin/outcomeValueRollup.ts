@@ -33,9 +33,6 @@ export interface OutcomeValueFilters {
   projectId?: number;
 }
 
-/** Kept as the panel's own type name; the shape is the contract's. */
-export type OutcomeValueMetric = OutcomeMetricValue;
-
 type RollupRow = Record<string, unknown>;
 
 const n = (value: unknown): number => Number(value ?? 0);

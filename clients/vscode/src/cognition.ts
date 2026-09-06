@@ -14,29 +14,6 @@ import { recallProjectFacts, rememberProjectFact } from "./bfApi";
 import type { ChatMessage } from "./gateway";
 import type { ToolDef } from "./fileTools";
 
-/** A `system` message of shared project facts relevant to `query`, or null when
- *  none / no project selected / unavailable.
- *
- *  NOT on the turn path, by design: both chat surfaces recall project memory through
- *  the api's ONE run-context section (`fetchRunContextSection` → `ContextSource`,
- *  whose `memory` block is this same facts store, recall-scoped to the turn), so
- *  adding this message would put the facts in the prompt twice. Kept as the
- *  client-side read for a surface that has no run-context fetch (offline / signed-out
- *  recall against a cached project), which none of the current ones is. */
-export async function recallSystemMessage(
-  secrets: vscode.SecretStorage,
-  projectId: number | undefined,
-  query: string,
-): Promise<ChatMessage | null> {
-  if (!projectId || !query.trim()) return null;
-  const facts = await recallProjectFacts(secrets, projectId, query, 5);
-  if (facts.length === 0) return null;
-  return {
-    role: "system",
-    content: `[Project memory — facts recalled for this request]\n${facts.map((f) => `- ${f.content}`).join("\n")}`,
-  };
-}
-
 /**
  * The agent's write side: a `remember_fact` tool routed through the SHARED project
  * facts store, so a fact about the same key supersedes its incumbent (write-through,

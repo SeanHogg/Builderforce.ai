@@ -24,6 +24,7 @@ import {
   verifyEmailCode as apiVerifyEmailCode,
   selectAccountType as apiSelectAccountType,
   setAvailableForHire as apiSetAvailableForHire,
+  addPassword as apiAddPassword,
   type AuthStepResult,
 } from './auth';
 import { signInWithPasskey } from './passkeys';
@@ -68,6 +69,8 @@ interface AuthContextValue {
   /** Opt IN/OUT of being hired talent (independent of account type — the builder
    *  shell is unaffected). Updates the stored user in place. */
   setAvailableForHire: (available: boolean) => Promise<void>;
+  /** Set a password on an OAuth-only account; the stored user then reads `hasPassword: true`. */
+  setPassword: (password: string) => Promise<void>;
   selectTenant: (tenant: Tenant) => Promise<void>;
   fetchTenants: () => Promise<Tenant[]>;
   logout: () => void;
@@ -172,6 +175,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [webToken],
   );
 
+  const setPassword = useCallback(
+    async (password: string) => {
+      if (!webToken) throw new Error('Not authenticated');
+      await apiAddPassword(webToken, password);
+      setUser((prev) => {
+        if (!prev) return prev;
+        const updated = { ...prev, hasPassword: true };
+        persistSession(webToken, updated);
+        return updated;
+      });
+    },
+    [webToken],
+  );
+
   const fetchTenants = useCallback(async (): Promise<Tenant[]> => {
     if (!webToken) throw new Error('Not authenticated');
     return getMyTenants(webToken);
@@ -211,6 +228,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       verifyEmail,
       selectAccountType,
       setAvailableForHire,
+      setPassword,
       selectTenant,
       fetchTenants,
       logout,
@@ -227,6 +245,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       verifyEmail,
       selectAccountType,
       setAvailableForHire,
+      setPassword,
       selectTenant,
       fetchTenants,
       logout,

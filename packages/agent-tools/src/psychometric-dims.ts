@@ -56,7 +56,6 @@ export const PSYCH_DIM = {
 } as const;
 
 export type PsychDimKey = keyof typeof PSYCH_DIM;
-export type PsychDimId = (typeof PSYCH_DIM)[PsychDimKey];
 
 // ── Trait-scoring primitives (shared by the psychometric compiler + limbic) ──────
 // The 0..100 trait scale thresholds and the scorer live here — the one neutral

@@ -216,10 +216,6 @@ export const CAPABILITIES = {
 
 export type Capability = keyof typeof CAPABILITIES;
 
-export function requiredRoleFor(cap: Capability): TenantRole {
-  return CAPABILITIES[cap];
-}
-
 export interface PermissionResult {
   allowed: boolean;
   role: TenantRole | undefined;

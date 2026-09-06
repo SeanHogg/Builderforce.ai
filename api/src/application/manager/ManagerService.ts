@@ -93,7 +93,7 @@ import { loadPassRotation, savePassRotation } from './passRotation';
 import { invalidateDailyDigest } from './dailyDigest';
 import { raiseSystemicFindings } from './systemicDiagnosis';
 import { dispatchTaskFinalize } from '../../presentation/routes/taskRoutes';
-import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
+import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
 import { TicketAuditService } from '../audit/ticketAuditService';
 import { coordinateTicket } from './coordinateTicket';
 import {
@@ -2090,21 +2090,4 @@ async function coordinatePullRequests(
   // The pass still REPORTS what landed (`summary.prsMerged`) — it reads
   // `countPrMergesSince` off the journal the sweep writes. Reading the result is not the
   // same as doing the work, and that distinction is the whole point of the split.
-}
-
-/**
- * A project is "auto-staffed" when its board has ANY swimlane agent assignment —
- * used by the sweep as a cheap superset filter for projects the manager should even
- * look at when there is no explicit config row. (A project with an explicit enabled
- * config always qualifies regardless.)
- */
-export async function projectHasBoardStaffing(db: Db, projectId: number): Promise<boolean> {
-  const [row] = await db
-    .select({ one: sql`1` })
-    .from(laneAgentAssignments)
-    .innerJoin(swimlanes, laneJoinOn(swimlanes.id))
-    .innerJoin(boards, eq(boards.id, swimlanes.boardId))
-    .where(eq(boards.projectId, projectId))
-    .limit(1);
-  return !!row;
 }

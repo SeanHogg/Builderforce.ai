@@ -27,10 +27,6 @@ const CanvasSurfaceContext = createContext<CanvasSurfaceId>(DEFAULT_CANVAS_SURFA
 
 export const CanvasSurfaceProvider = CanvasSurfaceContext.Provider;
 
-export function useCanvasSurface(): CanvasSurfaceId {
-  return useContext(CanvasSurfaceContext);
-}
-
 /** The active surface's rules — what chrome reads instead of comparing ids. */
 export function useCanvasSurfaceDefinition(): CanvasSurfaceDef {
   return canvasSurfaceDefinition(useContext(CanvasSurfaceContext));

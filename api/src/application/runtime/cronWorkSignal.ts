@@ -352,10 +352,6 @@ const SCHEDULE_SOURCES = [
   { name: 'qa_schedules',      table: qaSchedules,      nextRunAt: qaSchedules.nextRunAt,      enabled: qaSchedules.enabled },
 ] as const;
 
-/** Names of the schedule tables the next-due gate reads — exported for the test that
- *  keeps {@link SCHEDULE_SOURCES} honest against the schema. */
-export const NEXT_DUE_SCHEDULE_TABLES = SCHEDULE_SOURCES.map((source) => source.name);
-
 /**
  * Publish the earliest armed `next_run_at` across every schedule table to KV, so the
  * NEXT idle tick can tell "nothing is due" from "a report fires in three minutes"

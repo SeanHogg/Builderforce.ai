@@ -125,10 +125,6 @@ export async function listIdeProjects(): Promise<IdeProject[]> {
   return apiRequest<IdeProject[]>('/api/ide-projects');
 }
 
-export async function fetchIdeProject(id: number | string): Promise<IdeProject> {
-  return apiRequest<IdeProject>(`/api/ide-projects/${id}`);
-}
-
 /** Resolve the IDE project backing a given storage project (e.g. to scope the
  *  Voice studio when the IDE is opened by storage project id). */
 export async function fetchIdeProjectByStorage(storageProjectId: number): Promise<IdeProject> {
@@ -584,10 +580,6 @@ export async function listDatasets(projectId: number | string): Promise<Dataset[
   );
 }
 
-export async function fetchDataset(datasetId: string): Promise<Dataset> {
-  return apiRequest<Dataset>(`${IDE}/datasets/${datasetId}`);
-}
-
 export async function downloadDataset(datasetId: string): Promise<string> {
   return apiRequestText(`${IDE}/datasets/${datasetId}/download`);
 }
@@ -782,10 +774,6 @@ export async function listAgents(): Promise<PublishedAgent[]> {
   // Public workforce registry — works for anonymous visitors on /marketplace.
   // Management endpoints (hire, update, etc.) still live under /api/ide/agents.
   return apiRequest<PublishedAgent[]>(`/api/workforce/agents`);
-}
-
-export async function fetchAgent(agentId: string): Promise<PublishedAgent> {
-  return apiRequest<PublishedAgent>(`${IDE}/agents/${agentId}`);
 }
 
 export async function hireAgent(agentId: string): Promise<PublishedAgent> {

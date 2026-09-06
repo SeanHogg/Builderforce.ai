@@ -46,7 +46,6 @@ export class FundingRoundError extends Error {
 
 /** The card's own vocabulary, and the column's. Declared once. */
 export const ROUND_TYPES = ['pre-seed', 'seed', 'series-a', 'series-b', 'bridge', 'safe'] as const;
-export type RoundType = typeof ROUND_TYPES[number];
 
 /** What the money is: equity, or an instrument that becomes equity later. */
 export const ROUND_INSTRUMENTS = ['equity', 'safe', 'convertible-note', 'grant', 'debt'] as const;

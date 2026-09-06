@@ -16,7 +16,7 @@ import styles from './CreationCanvas.module.css';
  * copies of the same segmented trough in the stylesheet, and two sets of catalogue keys
  * (`surface.app.viewportName.*` and `surface.site.desktop`) that could drift into calling
  * the same width two different things in the same product. A third surface with a preview
- * would have made three. The WIDTHS behind the words are `lib/canvasViewport`, shared with
+ * would have made three. The WIDTHS behind the words are the contract's `viewport.ts`, shared with
  * the live web page panel, for the same reason.
  *
  * The VALUE stays with the caller. What the reader is checking is not what the artifact

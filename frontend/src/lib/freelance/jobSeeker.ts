@@ -83,13 +83,3 @@ export interface JobExtractResult {
   match: { score: number; matched: string[]; missing: string[]; summary?: string } | null;
   tailor: { changes: Array<{ section?: string; action?: string; detail?: string }>; summary?: string } | null;
 }
-
-/** Read a JD from pasted text, or from an uploaded file when `source` is a File. */
-export async function extractJobDescription(source: string | File): Promise<JobExtractResult> {
-  const init = source instanceof File
-    ? { method: 'POST' as const, auth: 'web' as const, body: (() => { const fd = new FormData(); fd.append('file', source); return fd; })() }
-    : { method: 'POST' as const, auth: 'web' as const, body: JSON.stringify({ text: source }) };
-  const res = await apiRequestStream(`/api/jobs/extract`, init);
-  return jsonOrThrow<JobExtractResult>(res, 'Failed to read job description');
-}
-

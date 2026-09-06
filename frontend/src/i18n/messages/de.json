@@ -5765,6 +5765,18 @@
         "nda": "Geheimhaltungsvereinbarung",
         "cookie": "Cookie-Richtlinie"
       }
+    },
+    "setPassword": {
+      "title": "Passwort festlegen",
+      "subtitle": "Sie haben sich über einen Anbieter registriert. Legen Sie ein Passwort fest, um sich auch mit Ihrer E-Mail anmelden zu können.",
+      "password": "Neues Passwort",
+      "confirm": "Passwort bestätigen",
+      "save": "Passwort festlegen",
+      "saving": "Wird gespeichert…",
+      "done": "Passwort festgelegt. Sie können sich jetzt mit Ihrer E-Mail anmelden.",
+      "failed": "Das Passwort konnte nicht festgelegt werden.",
+      "tooShort": "Verwenden Sie mindestens {min} Zeichen.",
+      "mismatch": "Die beiden Passwörter stimmen nicht überein."
     }
   },
   "catalogInsights": {
@@ -24256,10 +24268,6 @@
     "hintOpen": "<kbd>⏎</kbd> öffnen",
     "hintClose": "<kbd>esc</kbd> schließen",
     "locked": "{plan}-Tarif"
-  },
-  "homeScroller": {
-    "previous": "Vorheriges anzeigen",
-    "next": "Mehr anzeigen"
   },
   "liveBar": {
     "region": "Anruf",

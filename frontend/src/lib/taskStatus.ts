@@ -23,9 +23,6 @@ export const TASK_STATUSES: TaskStatus[] = [
   'done',
 ];
 
-export const isTaskStatus = (k: string): k is TaskStatus =>
-  (TASK_STATUSES as string[]).includes(k);
-
 /**
  * "in_progress" / "code-review" → "In Progress" / "Code Review".
  *

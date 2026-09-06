@@ -44,15 +44,6 @@ import {
 export const WORKER_DIR = 'worker/';
 export const WORKER_DEPLOY_WORKFLOW_PATH = '.github/workflows/builderforce-worker-deploy.yml';
 
-/**
- * Path the generated Worker answers its own readiness on.
- *
- * Re-exported from the shared engine rather than redeclared: the platform probes
- * this path, and a second copy of the string would silently stop matching the
- * one the generated code actually serves.
- */
-export const WORKER_HEALTH_PATH = BACKEND_HEALTH_PATH;
-
 const json = (v: unknown): string => JSON.stringify(v, null, 2);
 
 // ---------------------------------------------------------------------------

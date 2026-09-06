@@ -52,10 +52,6 @@ export const REALIZATION_KEYS = [
 ] as const;
 export type RealizationKey = (typeof REALIZATION_KEYS)[number];
 
-export function isRealizationKey(v: unknown): v is RealizationKey {
-  return typeof v === 'string' && (REALIZATION_KEYS as readonly string[]).includes(v);
-}
-
 /** Everything a target is given about the idea it is making real. */
 export interface RealizeContext {
   spec: ChallengeSpec;

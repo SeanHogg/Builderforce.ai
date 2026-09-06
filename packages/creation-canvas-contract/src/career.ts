@@ -139,8 +139,6 @@ export const CAREER_APPLICATION_STAGES = [
   'drafting', 'submitted', 'shortlisted', 'interviewing', 'offered', 'accepted', 'declined', 'withdrawn', 'noReply',
 ] as const;
 
-export type CareerApplicationStage = typeof CAREER_APPLICATION_STAGES[number];
-
 /**
  * The timecard lifecycle, exactly as `timecards.status` stores it.
  *
@@ -152,8 +150,6 @@ export type CareerApplicationStage = typeof CAREER_APPLICATION_STAGES[number];
  * answerable.
  */
 export const TIMECARD_STATUSES = ['draft', 'submitted', 'approved', 'rejected', 'paid'] as const;
-
-export type TimecardStatus = typeof TIMECARD_STATUSES[number];
 
 /** Statuses where the money has NOT yet arrived. Exported so the card's own derivation
  *  and any consumer counting "outstanding" cannot disagree about the word. */

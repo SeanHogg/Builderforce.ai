@@ -61,6 +61,7 @@ import {
 } from './campaignTransports';
 import { defaultLogoUrl, getTemplate, resolveAssetOrigin } from './templateLibrary';
 import { fireEventTriggers } from '../workflow/eventTriggers';
+import { excluded } from '../../infrastructure/database/upsert';
 
 /** How many recipients one batch attempts. Bounded by the Worker's subrequest
  *  budget, not by taste — each send is one outbound HTTP call. */
@@ -197,11 +198,11 @@ export async function addAudienceMembers(
     .onConflictDoUpdate({
       target: [marketingAudienceMembers.audienceId, marketingAudienceMembers.email],
       set: {
-        name: sql`excluded.name`,
+        name: excluded(marketingAudienceMembers.name),
         // COALESCE, not overwrite: re-importing a list without phone numbers must
         // not delete the ones already there. `phone_status` is untouched for the
         // same reason `status` is — an import must never undo an opt-out.
-        phone: sql`COALESCE(excluded.phone, ${marketingAudienceMembers.phone})`,
+        phone: sql`COALESCE(${excluded(marketingAudienceMembers.phone)}, ${marketingAudienceMembers.phone})`,
         updatedAt: sql`NOW()`,
       },
     })
@@ -299,7 +300,7 @@ export async function createSender(
     })
     .onConflictDoUpdate({
       target: [marketingSenderIdentities.tenantId, marketingSenderIdentities.fromEmail],
-      set: { fromName: sql`excluded.from_name`, replyTo: sql`excluded.reply_to`, updatedAt: sql`NOW()` },
+      set: { fromName: excluded(marketingSenderIdentities.fromName), replyTo: excluded(marketingSenderIdentities.replyTo), updatedAt: sql`NOW()` },
     })
     .returning(SENDER_COLUMNS);
   return { ok: true, sender: senderView(row!) };

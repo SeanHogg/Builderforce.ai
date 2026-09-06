@@ -13,6 +13,7 @@
 
 import { createContext, useContext, useMemo } from 'react';
 import type { BrainChat, BrainMessage } from './types';
+import type { AddressedAgentPersona } from './directedMessage';
 import {
   streamChatCompletion,
   type BrainTransport,
@@ -66,6 +67,15 @@ export interface BrainPersistenceAdapter {
    * Optional: when absent, directing to an agent just posts the turn (legacy).
    */
   requestAgentReply?(chatId: number, input: { agentRef: string; agentName?: string }): Promise<BrainMessage>;
+  /**
+   * The compiled persona of an invited agent participant — the SAME directives the
+   * server's addressed-agent reply runs under — so a host that HAS local tools (the
+   * editor) can run an addressed turn in its own loop, AS that agent, with those tools.
+   * The server reply has only platform tools: asked to "commit and push" it could only
+   * say it had no git tool, while the editor beside it had one. Optional: when absent
+   * (or when the host has no local tools) the turn goes to `requestAgentReply`.
+   */
+  resolveAgentPersona?(chatId: number, input: { agentRef: string; query?: string }): Promise<AddressedAgentPersona>;
   upload(file: File): Promise<{ key: string; name: string; type: string }>;
   uploadUrl(key: string): string;
   /**

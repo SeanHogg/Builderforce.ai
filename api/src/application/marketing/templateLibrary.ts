@@ -31,6 +31,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { newChallengeToken } from '../shared/dnsVerification';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { assertSafeUrl, BlockedUrlError, resolveAndAssertPublic } from '../../infrastructure/net/ssrfGuard';
+import { excluded } from '../../infrastructure/database/upsert';
 
 // ---------------------------------------------------------------------------
 // Sanitization
@@ -290,12 +291,12 @@ export async function createTemplate(
     .onConflictDoUpdate({
       target: [marketingTemplates.tenantId, marketingTemplates.name],
       set: {
-        subject: sql`excluded.subject`,
-        bodyHtml: sql`excluded.body_html`,
-        description: sql`excluded.description`,
-        source: sql`excluded.source`,
-        assetId: sql`excluded.asset_id`,
-        mergeFields: sql`excluded.merge_fields`,
+        subject: excluded(marketingTemplates.subject),
+        bodyHtml: excluded(marketingTemplates.bodyHtml),
+        description: excluded(marketingTemplates.description),
+        source: excluded(marketingTemplates.source),
+        assetId: excluded(marketingTemplates.assetId),
+        mergeFields: excluded(marketingTemplates.mergeFields),
         updatedAt: sql`NOW()`,
       },
     })

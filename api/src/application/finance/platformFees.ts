@@ -98,11 +98,6 @@ export function feeSchedule(env: Env): PlatformFeeSchedule {
   };
 }
 
-/** True when this kind of money is charged the take rate today. */
-export function feeAppliesTo(surface: FeeSurface): boolean {
-  return CHARGED_SURFACES.includes(surface);
-}
-
 /**
  * The fee on an amount, at a rate.
  *

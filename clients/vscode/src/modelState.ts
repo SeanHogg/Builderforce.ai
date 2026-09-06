@@ -40,23 +40,6 @@ function defaultModel(): string | undefined {
   return vscode.workspace.getConfiguration("builderforce").get<string>("defaultModel") || undefined;
 }
 
-/**
- * Resolve the model for a chat turn across BOTH editor chat surfaces (the native
- * `@builderforce` participant and the Brain webview), mirroring the cloud/on-prem
- * dispatch precedence (payload pin > agent base > project Evermind > default):
- *   1. an explicit manual pick always wins;
- *   2. otherwise, when the active project opted into running on its Evermind
- *      (`inferenceEnabled` + seeded — the SAME gate the cloud/on-prem dispatcher
- *      honors), send the `project_evermind:<id>` pin so the gateway serves the
- *      project's CURRENT learned model, auto-following each learning bump;
- *   3. otherwise the configured default (or gateway auto).
- * Best-effort: any failure resolving the head falls back to the default, so chat
- * always works.
- */
-export async function resolveEffectiveModel(secrets: vscode.SecretStorage): Promise<string | undefined> {
-  return (await resolveEffectiveModelChoice(secrets)).model;
-}
-
 export async function resolveEffectiveModelChoice(secrets: vscode.SecretStorage): Promise<EffectiveModelChoice> {
   if (selected?.mode === "auto") return { routingMode: "auto" };
   if (selected?.mode === "byo_pool") return { routingMode: "byo_pool" };

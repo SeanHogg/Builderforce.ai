@@ -127,7 +127,6 @@ export function scoreDestination(destination: Destination, label: string, groupL
 }
 
 export type Ranked<T extends Destination> = T & { label: string; groupLabel: string };
-export type RankedDestination = Ranked<Destination>;
 
 /**
  * Rank destinations for a query. `translate` resolves a `nav`-namespace key; it

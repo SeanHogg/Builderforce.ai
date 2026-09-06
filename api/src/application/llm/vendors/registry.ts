@@ -53,7 +53,7 @@ import {
  * (highest variance, broadest coverage). `googleai` is intentionally last:
  * its catalog is all PREMIUM-tier and serves only as the proxy's last-resort
  * paid fallback, not as part of the free rotation. This order propagates into:
- *   - `modelsByTier(...)` → the FREE/PRO pool composition in LlmProxyService
+ *   - `autoRoutableModelsByTier(...)` → the FREE/PRO pool composition in LlmProxyService
  *   - `getCrossVendorFallbacks(...)` → the cross-vendor tail of each chain
  * Drives both Pool composition and Pool ordering with one source of truth.
  */
@@ -307,29 +307,11 @@ export function getAllVendorIds(): VendorId[] {
 }
 
 /**
- * All catalog model ids of a given tier, in registry order. Used to compose
- * Free vs Pro pools without hard-coding model lists.
- */
-export function modelsByTier(...tiers: AiModelTier[]): string[] {
-  const set = new Set(tiers);
-  return MODULES.flatMap((mod) =>
-    mod.catalog.filter((m) => set.has(m.tier)).map((m) => m.id),
-  );
-}
-
-/** Whether a vendor's models may be auto-selected into a failover pool. A vendor
- *  is auto-routable unless it opts out (`autoRoute: false`) — e.g. Ollama, which
- *  must only run when a caller explicitly pins `ollama/<id>`. */
-export function vendorAutoRoutes(vendor: VendorId): boolean {
-  return MODULES_BY_ID[vendor].autoRoute !== false;
-}
-
-/**
- * Like {@link modelsByTier}, but EXCLUDES vendors that opt out of auto-routing
+ * Every model of the given tiers, EXCLUDING vendors that opt out of auto-routing
  * (`autoRoute: false`). This is the composer for the gateway's auto-selected
  * FREE/PRO pools: a non-auto-route vendor (Ollama) stays in the catalog — and so
  * remains reachable via an explicit `ollama/<id>` pin — but can never be the model
- * a cascade silently falls onto. Keeping this separate from `modelsByTier` leaves
+ * a cascade silently falls onto. Reading the module's `autoRoute` flag here leaves
  * the "all models of a tier" query (catalog/admin) honest.
  */
 export function autoRoutableModelsByTier(...tiers: AiModelTier[]): string[] {

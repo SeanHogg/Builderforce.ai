@@ -1062,7 +1062,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     const user = await authService.getMe(userId);
     if (!user) return c.json({ error: 'User not found' }, 404);
     const [full] = await db
-      .select({ mfaEnabled: users.mfaEnabled, onboardingCompletedAt: users.onboardingCompletedAt, onboardingProgress: users.onboardingProgress, psychometric: users.psychometric, accountType: users.accountType, accountTypeSelectedAt: users.accountTypeSelectedAt, availableForHire: users.availableForHire })
+      .select({ mfaEnabled: users.mfaEnabled, onboardingCompletedAt: users.onboardingCompletedAt, onboardingProgress: users.onboardingProgress, psychometric: users.psychometric, accountType: users.accountType, accountTypeSelectedAt: users.accountTypeSelectedAt, availableForHire: users.availableForHire, passwordHash: users.passwordHash })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
@@ -1098,6 +1098,8 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         accountTypeSelected: !!full?.accountTypeSelectedAt,
         // Opt-in to being hired talent (independent of accountType).
         availableForHire: full?.availableForHire ?? false,
+        // False for an OAuth-only account: the Account tab then offers to set one.
+        hasPassword: !!full?.passwordHash,
       },
     });
   });

@@ -37,6 +37,7 @@ import {
   type DiagramConversion, type DiagramNotation,
 } from '@/lib/diagramNotations';
 import type { CreationObjectKind } from '@builderforce/creation-canvas-contract';
+import { diagramGraphStats } from '@/lib/diagramGraph';
 
 /** Text attachments Brain can read directly once they are on the canvas. */
 const READABLE_TEXT_FILE = /\.(txt|md|markdown|log|xml|yaml|yml|html?|sql|ini|conf|env\.example)$/i;
@@ -355,7 +356,7 @@ async function diagramObjects(file: File, t: ImportTranslator): Promise<Imported
     return [diagramObject(file, {
       source,
       format: notation.id,
-      shapes: graph?.vertices.length ?? 0,
+      shapes: graph ? diagramGraphStats(graph).shapes : 0,
       connections: graph?.edges.length ?? 0,
       droppedConnections: 0,
     }, notation, t)];

@@ -206,8 +206,3 @@ export function kindSettingsHasMoreThanCompact(kind: string): boolean {
   if (!manifest) return true;
   return !!manifest.custom || manifest.actions.length > 0 || manifest.fields.some((field) => field.surface !== 'compact');
 }
-
-/** Every registered manifest, for the completeness guard. */
-export function allKindSettingsManifests(): readonly KindSettingsManifest[] {
-  return MANIFESTS;
-}

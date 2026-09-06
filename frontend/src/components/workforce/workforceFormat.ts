@@ -40,6 +40,3 @@ export const ENGAGEMENT_LEVEL_COLOR: Record<EngagementLevel, string> = {
   high: 'var(--accent)',
   very_high: 'var(--success)',
 };
-
-/** Order of engagement levels (low → high) for any scale/legend rendering. */
-export const ENGAGEMENT_LEVELS: EngagementLevel[] = ['inactive', 'low', 'moderate', 'high', 'very_high'];

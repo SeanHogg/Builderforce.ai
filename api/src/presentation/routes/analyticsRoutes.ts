@@ -33,6 +33,7 @@ import { computeInteractionActivity } from '../../application/analytics/interact
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { daysParam } from './queryParams';
 import { DAY_MS } from '../../domain/shared/time';
+import { excluded } from '../../infrastructure/database/upsert';
 
 function dayFloorUTC(d: Date): Date {
   const x = new Date(d);
@@ -386,7 +387,7 @@ export function createAnalyticsRoutes(db: Db): Hono<HonoEnv> {
       }))).onConflictDoUpdate({
         target: [contributors.tenantId, contributors.agentHostId],
         targetWhere: sql`${contributors.kind} = 'agent'`,
-        set: { displayName: sql`excluded.display_name`, isActive: sql`excluded.is_active`, updatedAt: new Date() },
+        set: { displayName: excluded(contributors.displayName), isActive: excluded(contributors.isActive), updatedAt: new Date() },
       }).returning({ inserted: sql<boolean>`(xmax = 0)` });
       for (const r of rows) { if (r.inserted) created++; else updated++; }
     }

@@ -45,7 +45,6 @@
  * on common stock makes that subtraction impossible to express.
  */
 export const SHARE_CLASS_KINDS = ['common', 'preferred', 'option-pool'] as const;
-export type ShareClassKind = typeof SHARE_CLASS_KINDS[number];
 
 /**
  * What a holder actually holds.
@@ -56,7 +55,6 @@ export type ShareClassKind = typeof SHARE_CLASS_KINDS[number];
  * company's issued count.
  */
 export const EQUITY_INSTRUMENTS = ['common', 'preferred', 'option', 'rsu', 'warrant'] as const;
-export type EquityInstrument = typeof EQUITY_INSTRUMENTS[number];
 
 /**
  * The append-only ledger's verbs — FO-D2.

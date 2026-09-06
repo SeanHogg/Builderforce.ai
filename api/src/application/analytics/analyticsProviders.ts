@@ -153,15 +153,6 @@ function refuseDimension(provider: AnalyticsProvider, dimension: AnalyticsDimens
   );
 }
 
-/** Add two measure maps without inventing a key neither side reported. */
-export function addMeasures(a: AnalyticsMeasures, b: AnalyticsMeasures): AnalyticsMeasures {
-  const out: AnalyticsMeasures = { ...a };
-  for (const [key, value] of Object.entries(b) as Array<[AnalyticsMeasure, number]>) {
-    out[key] = (out[key] ?? 0) + value;
-  }
-  return out;
-}
-
 // ---------------------------------------------------------------------------
 // Google Analytics 4
 // ---------------------------------------------------------------------------
@@ -460,10 +451,6 @@ const posthog: AnalyticsProvider = {
 const PROVIDERS: Readonly<Record<AnalyticsSource, AnalyticsProvider>> = {
   ga4, search_console: searchConsole, plausible, posthog,
 };
-
-export function getAnalyticsProvider(source: string): AnalyticsProvider | null {
-  return isAnalyticsSource(source) ? PROVIDERS[source] : null;
-}
 
 export function allAnalyticsProviders(): readonly AnalyticsProvider[] {
   return ANALYTICS_SOURCES.map((s) => PROVIDERS[s]);

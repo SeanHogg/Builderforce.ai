@@ -171,14 +171,6 @@ export const addObjectAnnotation = (
 export const getObjectMembers = (id: string, limit?: number) =>
   apiRequest<Membership[]>(`/api/objects/${id}/members${qs({ limit })}`);
 
-export const addObjectMember = (id: string, body: { memberKind?: string; memberRef: string; role?: string }) =>
-  apiRequest<Membership>(`/api/objects/${id}/members`, { method: 'POST', body: JSON.stringify(body) });
-
-export const removeObjectMember = (id: string, kind: string, ref: string) =>
-  apiRequest<void>(`/api/objects/${id}/members/${encodeURIComponent(kind)}/${encodeURIComponent(ref)}`, {
-    method: 'DELETE',
-  });
-
 export const getObjectShares = (id: string) => apiRequest<ShareLink[]>(`/api/objects/${id}/shares`);
 
 /** Returns the raw token EXACTLY once — it is never stored, only its hash. */
@@ -205,8 +197,6 @@ export const getObjectRevisions = (id: string, limit?: number) =>
  *  so fifteen calls per navigation render would be the fan-out the platform
  *  rejects outright. */
 export const getRoster = () => apiRequest<DomainSummary[]>('/api/roster');
-
-export const getRosterManifest = () => apiRequest<DomainManifestEntry[]>('/api/roster/manifest');
 
 // ── the roster, as people ──────────────────────────────────────────────────
 
@@ -308,9 +298,6 @@ export const getEntityRows = (
   entity: string,
   opts: { limit?: number; offset?: number; q?: string; archived?: boolean } = {},
 ) => apiRequest<EntityPage>(`/api/${scope}/entities/${entity}${qs(opts)}`);
-
-export const getEntityRow = (scope: EntityScope, entity: string, id: string) =>
-  apiRequest<EntityRow>(`/api/${scope}/entities/${entity}/${encodeURIComponent(id)}`);
 
 export const createEntityRow = (scope: EntityScope, entity: string, body: EntityRow) =>
   apiRequest<EntityRow>(`/api/${scope}/entities/${entity}`, { method: 'POST', body: JSON.stringify(body) });

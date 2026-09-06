@@ -10,7 +10,7 @@ import { listSystemAudits } from '../../application/tools/systemAudits';
 import { isMaturityFrameworkId, listMaturityFrameworks, type MaturityFrameworkId } from '../../application/tools/maturityFrameworks';
 import { toolLocaleFromHeaders, type ToolLocale } from '../../application/tools/toolMessages';
 import { headerHints } from '../../application/email/emailLocaleResolver';
-import { maybeAutoRunOnLaneEntry } from './taskRoutes';
+import { maybeAutoRunOnLaneEntry } from '../../application/swimlane/laneEntryTrigger';
 import { daysParam } from './queryParams';
 
 /**

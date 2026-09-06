@@ -111,7 +111,6 @@ type RuntimeHonoEnv = HonoEnv & {
 // context — see application/runtime/executionApprovalGate.ts. Re-exported here
 // because existing importers reference them through this module.
 export { parseApprovalReplay, evaluateExecutionApprovalGate } from '../../application/runtime/executionApprovalGate';
-export type { ApprovalReplay, ApprovalGateTask, ExecutionApprovalGateResult } from '../../application/runtime/executionApprovalGate';
 
 /** ide_agents.base_model sentinel meaning "no explicit model — use the default"
  *  (mirrors cloudAgentEngine.AGENT_DEFAULT_MODEL_SENTINEL). */

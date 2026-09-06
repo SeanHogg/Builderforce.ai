@@ -82,10 +82,6 @@ export const STENCIL_SHAPES: readonly StencilShapeDef[] = [
 
 export const STENCIL_SHAPE_VALUES: readonly string[] = STENCIL_SHAPES.map((shape) => shape.value);
 
-export function isStencilShape(value: unknown): boolean {
-  return typeof value === 'string' && STENCIL_SHAPE_VALUES.includes(value);
-}
-
 /**
  * One stencil: a named preset of the sticky card.
  *

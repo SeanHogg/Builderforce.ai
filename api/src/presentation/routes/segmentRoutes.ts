@@ -117,7 +117,7 @@ export function createSegmentRoutes(db: Db): Hono<HonoEnv> {
 
     if (!updated) return c.json({ error: 'segment not found, not yours, or is the default segment' }, 404);
     // Drop the warm-isolate mapping so a status/plan change takes effect now.
-    invalidateSegment(updated.id);
+    await invalidateSegment(updated.id, c.env);
     return c.json(updated);
   });
 
@@ -138,7 +138,7 @@ export function createSegmentRoutes(db: Db): Hono<HonoEnv> {
 
     if (!deleted) return c.json({ error: 'segment not found, not yours, or is the default segment' }, 404);
     // Stop the warm isolate from resolving the now-deleted segment.
-    invalidateSegment(deleted.id);
+    await invalidateSegment(deleted.id, c.env);
     return c.json({ ok: true, id: deleted.id });
   });
 

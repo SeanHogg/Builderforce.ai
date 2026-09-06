@@ -164,11 +164,6 @@ export const ENFORCED_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>
  * `permissionEnforcement.test.ts` keeps this honest in both directions.
  */
 
-/** Is this permission backed by a real request-time gate? */
-export function isPermissionEnforced(permission: string): boolean {
-  return ENFORCED_PERMISSIONS.has(permission as Permission);
-}
-
 // ---------------------------------------------------------------------------
 // Default role → permission matrix
 // viewer < developer < manager < owner

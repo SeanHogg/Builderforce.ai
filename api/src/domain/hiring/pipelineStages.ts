@@ -130,14 +130,6 @@ export function nextStage(current: string, observed: readonly string[] = []): st
   return stages[index + 1] ?? null;
 }
 
-/** The stage before `current`, or `null` at the head of the ladder. */
-export function previousStage(current: string, observed: readonly string[] = []): string | null {
-  const stages = orderedStages(observed);
-  const index = stages.indexOf(current);
-  if (index <= 0) return null;
-  return stages[index - 1] ?? null;
-}
-
 /**
  * Where a decision PUTS the candidate — the reason recording one is not a second click.
  *

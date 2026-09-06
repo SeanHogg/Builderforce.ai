@@ -1022,16 +1022,6 @@ export interface ListingAccessFacts {
   trial: ListingTrialPolicy | null;
 }
 
-/** Project a listing row onto {@link ListingAccessFacts}. Exported so a caller
- *  that caches the inputs projects them the same way `launchListing` does. */
-export function listingAccessFacts(row: CatalogRow): ListingAccessFacts {
-  return {
-    visibility: row.visibility,
-    priceCents: row.priceCents,
-    trial: (row.body as ListingBody | null)?.trial ?? null,
-  };
-}
-
 /**
  * IS THIS CALLER ENTITLED TO THE PRODUCT, RATHER THAN THE PREVIEW?
  *

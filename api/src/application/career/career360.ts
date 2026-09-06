@@ -212,17 +212,3 @@ export function planForTarget(resumeText: string, targetId: string): Career360Pl
 export function declaredRoleSkillTokens(): string[] {
   return [...new Set(ROLE_PROFILES.flatMap((role) => [...role.core, ...role.adjacent]))];
 }
-
-/** The skill areas a target belongs to, for grouping a plan's study material. */
-export function areasForTarget(target: RoleProfile): string[] {
-  const areas = new Set<string>();
-  for (const [group, tokens] of Object.entries(SKILL_GROUPS)) {
-    if (target.core.some((token) => tokens.includes(token))) areas.add(group);
-  }
-  return [...areas];
-}
-
-/** True when a free-text term names a skill the lexicon knows — used to validate input. */
-export function isKnownSkillPhrase(phrase: string): boolean {
-  return tokenSet(phrase).some(isSkillToken);
-}

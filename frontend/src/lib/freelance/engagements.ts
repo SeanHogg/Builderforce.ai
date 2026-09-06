@@ -67,11 +67,6 @@ export async function listMyEngagements(): Promise<Engagement[]> {
   return jsonOrThrow<Engagement[]>(res, 'Failed to load engagements');
 }
 
-export async function updateEngagement(id: string, patch: { status?: string; rateCents?: number; title?: string }): Promise<void> {
-  const res = await apiRequestStream(`/api/engagements/${id}`, { method: 'PATCH', auth: 'tenant', body: JSON.stringify(patch) });
-  await jsonOrThrow(res, 'Failed to update engagement');
-}
-
 export async function terminateEngagement(id: string, reason?: string): Promise<void> {
   const res = await apiRequestStream(`/api/engagements/${id}`, { method: 'DELETE', auth: 'tenant', body: JSON.stringify({ reason }) });
   await jsonOrThrow(res, 'Failed to terminate engagement');

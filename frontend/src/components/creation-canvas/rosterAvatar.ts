@@ -3,10 +3,11 @@
  * chat surface's header) — the initials and the colour-cycling rule live here
  * once so the same person reads as the same avatar in both.
  */
+import { initialsOf } from '@/lib/initials';
 
 /** Up to two initials from a display name, or a placeholder for one with none. */
 export function memberInitials(displayName: string | null | undefined): string {
-  return (displayName || 'U').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
+  return initialsOf(displayName, 'U');
 }
 
 /** Which of the three avatar colour classes a roster slot cycles to. */

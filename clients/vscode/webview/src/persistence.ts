@@ -5,7 +5,7 @@
  * exact same server-side conversation as on the web: one unified brain.
  */
 
-import type { BrainPersistenceAdapter, BrainChat, BrainMessage, EvermindLearnOutcome } from '@seanhogg/builderforce-brain-embedded';
+import type { AddressedAgentPersona, BrainPersistenceAdapter, BrainChat, BrainMessage, EvermindLearnOutcome } from '@seanhogg/builderforce-brain-embedded';
 import { attachEvermindLearn, subscribeToChatMessages } from '@seanhogg/builderforce-brain-embedded';
 import { authedFetch } from './authedFetch';
 
@@ -57,6 +57,13 @@ export function createPersistence(
         method: 'POST',
         body: JSON.stringify(input),
       }).then((r) => r.message),
+    // The addressed agent's compiled persona, so the host runs the turn itself with the
+    // workspace's tools (the conversation hook decides when; see `runAddressedAgentLocally`).
+    resolveAgentPersona: (id, input) => {
+      const q = new URLSearchParams({ agentRef: input.agentRef });
+      if (input.query) q.set('q', input.query.slice(0, 2000));
+      return req<AddressedAgentPersona>(`/api/brain/chats/${id}/agent-persona?${q.toString()}`);
+    },
     upload: async (file) => {
       const token = getToken();
       const form = new FormData();

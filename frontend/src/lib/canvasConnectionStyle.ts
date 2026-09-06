@@ -110,8 +110,3 @@ export function edgeVisuals(style: ConnectionStyle): Pick<Edge, 'type' | 'style'
     ...(style.ends === 'both' ? { markerStart: closed } : {}),
   };
 }
-
-/** The style an existing edge is carrying, for the control that shows what is selected. */
-export function connectionStyleOf(edge: Pick<Edge, 'data'>): ConnectionStyle {
-  return readConnectionStyle((edge.data as { connectionStyle?: unknown } | undefined)?.connectionStyle);
-}

@@ -41,7 +41,7 @@ import { AnchoredPopover, ButtonLink } from '@/components/ui';
 import { isStageRoute } from '@/lib/workbenchPolicy';
 import styles from './TeamBar.module.css';
 
-/** Identity survives compression; a title does not — the same rule `RosterNav`
+/** Identity survives compression; a title does not — the same rule the seat rail
  *  applies to seats, applied to people. */
 function initials(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);

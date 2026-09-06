@@ -398,7 +398,6 @@ export async function moveDeal(
 /** The channels a touch can be logged on. `intro` is what makes a warm path a
  *  recorded event rather than a note somebody typed — see {@link openDeal}. */
 export const TOUCH_CHANNELS = ['call', 'email', 'meeting', 'demo', 'intro', 'note'] as const;
-export type TouchChannel = typeof TOUCH_CHANNELS[number];
 
 export const TOUCH_DIRECTIONS = ['outbound', 'inbound', 'internal'] as const;
 

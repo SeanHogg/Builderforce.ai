@@ -561,11 +561,3 @@ export const CANVAS_BUILD_TOOL_NAMES = [
   'canvas_list_build_file_history',
   'canvas_restore_build_file',
 ] as const;
-
-/** Modality ids a Builder object can be created with, for the UI that offers them. */
-export const CANVAS_BUILDABLE_MODALITIES = BUILDABLE_MODALITIES;
-
-/** Label for a buildable modality, from the modality registry (never re-typed here). */
-export function buildableModalityLabel(id: ProjectModality): string {
-  return MODALITIES.find((modality) => modality.id === id)?.label ?? id;
-}

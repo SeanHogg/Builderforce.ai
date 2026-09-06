@@ -158,7 +158,3 @@ export function forkedDocumentHeaders(): Record<string, string> {
 /** Re-exported so a consumer of the entitlement rule never has to reach past it into
  *  the subscription module to name the states it returns. */
 export type { SiteSubscriptionState };
-
-/** The env type the fork needs — declared so the serving path can stay honest about
- *  requiring R2 without importing the bucket's type from three places. */
-export type SiteServingEnv = Env & { UPLOADS?: R2Bucket };

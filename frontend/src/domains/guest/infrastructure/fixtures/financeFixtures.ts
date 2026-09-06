@@ -20,15 +20,7 @@
  * the wire is impossible rather than merely unlikely.
  */
 
-import {
-  SAMPLE_MEMBERS,
-  SAMPLE_PROJECTS,
-  isSampleTaskCompleted,
-  sampleDailySeries,
-  sampleTasks,
-  type SampleDailyPoint,
-  type SampleTaskStatus,
-} from '../../domain/sampleWorkspace';
+import { isSampleTaskCompleted, SAMPLE_MEMBERS, SAMPLE_PROJECTS, SAMPLE_WORKSPACE_NAME, sampleDailySeries, sampleTasks, type SampleDailyPoint, type SampleTaskStatus } from '../../domain/sampleWorkspace';
 import { dayOffsetToIso, exact, type GuestFixture, type GuestFixtureContext } from '../../domain/guestFixture';
 
 /** The requested window, clamped to what the series can honestly answer. */
@@ -429,7 +421,7 @@ export const financeFixtures: GuestFixture[] = [
         : Math.round(cycleHours.reduce((total, hours) => total + hours, 0) / cycleHours.length);
 
       return {
-        scope: { kind: 'workspace', id: 'sample', name: 'Nova Commerce (Sample)' },
+        scope: { kind: 'workspace', id: 'sample', name: SAMPLE_WORKSPACE_NAME },
         projectCount: SAMPLE_PROJECTS.length,
         initiativeCount: SAMPLE_PROJECTS.length,
         delivery: {

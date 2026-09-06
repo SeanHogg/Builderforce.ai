@@ -367,31 +367,3 @@ export function summarizeRegister(rows: readonly StallWatchRow[]): Omit<StallReg
 
 /** Re-exported so callers wire the triage stage from one import. */
 export { isManagerActionable, MAX_REMEDY_ATTEMPTS };
-
-/**
- * Oldest open stalls across a workspace, for the tenant-wide escalation view.
- * Used by the MCP tool so an agent can ask "what is stuck everywhere" in one call.
- */
-export async function listEscalatedStalls(
-  db: Db,
-  tenantId: number,
-  limit = 50,
-): Promise<Array<{ taskId: number; projectId: number; cause: string; detail: string; escalatedAt: Date }>> {
-  const rows = await db
-    .select({
-      taskId: managerStallWatch.taskId,
-      projectId: managerStallWatch.projectId,
-      cause: managerStallWatch.cause,
-      detail: managerStallWatch.detail,
-      escalatedAt: managerStallWatch.escalatedAt,
-    })
-    .from(managerStallWatch)
-    .where(and(
-      eq(managerStallWatch.tenantId, tenantId),
-      isNull(managerStallWatch.resolvedAt),
-      sql`${managerStallWatch.escalatedAt} is not null`,
-    ))
-    .orderBy(asc(managerStallWatch.escalatedAt))
-    .limit(limit);
-  return rows as Array<{ taskId: number; projectId: number; cause: string; detail: string; escalatedAt: Date }>;
-}

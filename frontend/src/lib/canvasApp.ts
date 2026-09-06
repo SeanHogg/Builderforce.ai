@@ -304,8 +304,3 @@ export function canvasApp(
     server: files.filter((file) => file.role === 'server'),
   };
 }
-
-/** Whether the `app` surface has anything to show — read by the switcher and the host. */
-export function canvasAppIsRunnable(app: CanvasApp): boolean {
-  return app.document !== null;
-}

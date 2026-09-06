@@ -162,7 +162,10 @@ export interface CompiledStep {
   edgeLabels?: Record<string, string>;
 }
 
-export const EMPTY_DEFINITION: WorkflowDefinition = { nodes: [], edges: [] };
+/** A fresh empty definition — never a shared object a caller could mutate. */
+function emptyDefinition(): WorkflowDefinition {
+  return { nodes: [], edges: [] };
+}
 
 // ---------------------------------------------------------------------------
 // YAML interchange — round-trip a definition to/from a human-authorable YAML
@@ -223,7 +226,7 @@ export function yamlToDefinition(text: string): WorkflowDefinition {
 /** Parse a stored definition string defensively; returns an empty graph on any
  *  malformed/legacy value so callers never have to null-check. */
 export function parseDefinition(raw: string | null | undefined): WorkflowDefinition {
-  if (!raw) return { nodes: [], edges: [] };
+  if (!raw) return emptyDefinition();
   try {
     const v = JSON.parse(raw) as Partial<WorkflowDefinition>;
     return {
@@ -231,7 +234,7 @@ export function parseDefinition(raw: string | null | undefined): WorkflowDefinit
       edges: Array.isArray(v.edges) ? (v.edges as WorkflowDefEdge[]) : [],
     };
   } catch {
-    return { nodes: [], edges: [] };
+    return emptyDefinition();
   }
 }
 

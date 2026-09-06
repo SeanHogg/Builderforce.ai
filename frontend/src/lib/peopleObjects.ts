@@ -507,11 +507,6 @@ export const PEOPLE_STATUSES: Record<string, string> = {
   tracking: 'Tracking',
 };
 
-/** The kinds this module actually specs, for the test that proves it matches the contract. */
-export const PEOPLE_SPEC_KINDS: readonly PeopleObjectKind[] =
-  PEOPLE_OBJECT_SPECS.map((spec) => spec.kind as PeopleObjectKind);
-
-
 registerSpecObjectSet({
   id: 'people',
   namespace: PEOPLE_NAMESPACE,

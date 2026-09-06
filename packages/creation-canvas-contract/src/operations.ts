@@ -161,7 +161,3 @@ export const OPERATIONS_DISCIPLINES = [
   'fleet', 'logistics', 'manufacturing', 'hospitality', 'professional', 'other',
 ] as const;
 export type OperationsDiscipline = typeof OPERATIONS_DISCIPLINES[number];
-
-export function isOperationsDiscipline(value: unknown): value is OperationsDiscipline {
-  return typeof value === 'string' && (OPERATIONS_DISCIPLINES as readonly string[]).includes(value);
-}

@@ -11,7 +11,6 @@
  */
 
 export const LEGAL_POLICY_VERSION = '2.1.0';
-export const LEGAL_POLICY_EFFECTIVE_DATE = 'August 4, 2026';
 
 export const BUILDERFORCE_TERMS_OF_USE = String.raw`# Terms of Use for BuilderForce.ai
 

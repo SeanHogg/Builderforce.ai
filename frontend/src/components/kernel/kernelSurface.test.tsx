@@ -15,7 +15,6 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DOMAINS, OBJECT_RELATIONS, isDomain } from '@/lib/kernel/kernelApi';
-import { earned } from './RosterNav';
 import en from '@/i18n/messages/en.json';
 import zh from '@/i18n/messages/zh.json';
 import es from '@/i18n/messages/es.json';
@@ -112,18 +111,6 @@ describe('isDomain', () => {
   it('accepts the roster and rejects everything else', () => {
     for (const d of DOMAINS) expect(isDomain(d)).toBe(true);
     for (const junk of ['', 'Growth', 'billing', 'work', 'pmo', '..']) expect(isDomain(junk)).toBe(false);
-  });
-});
-
-describe('progressive disclosure', () => {
-  it('gates state, never capability', () => {
-    // A dimmed CFO is an invitation; a missing CFO is a secret (§7). `earned()`
-    // decides the dimming — it never decides presence, and this is the one
-    // helper every consumer asks rather than computing a `canX` of its own.
-    expect(earned(0, 0)).toBe(true);
-    expect(earned(2, 3)).toBe(true);
-    expect(earned(3, 3)).toBe(true);
-    expect(earned(3, 1)).toBe(false);
   });
 });
 

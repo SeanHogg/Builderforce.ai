@@ -34,7 +34,7 @@ import type { EffectivePlan } from '../../domain/tenant/effectivePlan';
 // ---------------------------------------------------------------------------
 // Pool composition (derived from vendor catalogs — single source of truth)
 //
-// Multi-vendor by construction. `modelsByTier` walks every registered vendor
+// Multi-vendor by construction. `autoRoutableModelsByTier` walks every registered vendor
 // in registry MODULES order (cerebras → ollama → nvidia → openrouter), so the
 // free pool naturally starts with sub-200ms TTFT Cerebras entries and ends
 // with the highest-variance OpenRouter free tier. When a vendor's key isn't
@@ -545,7 +545,7 @@ export function resolveCacheTtl(body: Record<string, unknown>): '1h' | undefined
  * lands on a high-quality model. Three candidates so the cascade has fallback
  * room within the extended outer budget (180s SDK / 60s per-vendor).
  *
- * Derived from `modelsByTier('PREMIUM')` so adding a new PREMIUM model to any
+ * Derived from `autoRoutableModelsByTier('PREMIUM')` so adding a new PREMIUM model to any
  * vendor catalog automatically extends the candidate list — and the first three
  * in registry order become the active premium cascade.
  */

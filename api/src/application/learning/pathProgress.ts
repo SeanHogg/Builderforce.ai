@@ -33,6 +33,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { listRelatedFrom } from '../kernel/ObjectRelations';
 import { loadCourse } from './learningPaths';
+import { excluded } from '../../infrastructure/database/upsert';
 
 /** 'enrolled' — has not started. 'in_progress' — at least one member started.
  *  'completed' — every member finished. */
@@ -99,7 +100,7 @@ export async function enrollInPath(
     target: [courseEnrollments.tenantId, courseEnrollments.courseId, courseEnrollments.learnerRef],
     // Only the path link and the due date. Never `status` or `progress`: those
     // are the learner's record, and re-enrolment must not erase what they did.
-    set: { pathRef: sql`excluded.path_ref`, dueAt: sql`excluded.due_at`, updatedAt: new Date() },
+    set: { pathRef: excluded(courseEnrollments.pathRef), dueAt: excluded(courseEnrollments.dueAt), updatedAt: new Date() },
   });
 
   return { ok: true, progress: await recomputePathProgress(db, env, input.tenantId, input.pathId, input.learnerRef) };

@@ -761,27 +761,3 @@ export async function takeAbandonedBuild(
   if (!payload) throw new ListingError('That version is no longer available', 404);
   return { title: payload.title || listing?.name || 'App', objects: payload.objects };
 }
-
-/**
- * What an app's creator is earning from it, and from how many people.
- *
- * ONE grouped query, never a row per subscriber: an app with four thousand
- * subscribers must not pull four thousand rows to show one number on a panel.
- */
-export async function siteSubscriptionSummary(
-  db: Db,
-  tenantId: number,
-  siteId: number,
-): Promise<{ activeCount: number; monthlyCents: number }> {
-  const [row] = await db
-    .select({
-      activeCount: sql<string>`count(*) filter (where ${siteSubscriptions.status} = 'active')`,
-      monthlyCents: sql<string>`coalesce(sum(${siteSubscriptions.priceCents}) filter (where ${siteSubscriptions.status} = 'active'), 0)`,
-    })
-    .from(siteSubscriptions)
-    .where(scopedToTenant(siteSubscriptions, tenantId, eq(siteSubscriptions.siteId, siteId)));
-  return {
-    activeCount: Number(row?.activeCount ?? 0),
-    monthlyCents: Number(row?.monthlyCents ?? 0),
-  };
-}

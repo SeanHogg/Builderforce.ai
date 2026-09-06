@@ -323,7 +323,7 @@ export async function resolveActorByRef(env: Env, db: Db, tenantId: number, ref:
       const [ha] = await db
         .select({ name: agentHosts.name })
         .from(agentHosts).where(and(eq(agentHosts.tenantId, tenantId), eq(agentHosts.id, Number(ref)))).limit(1);
-      if (ha) return { type: 'host_agent', ref, name: ha.name ?? ref };
+      if (ha) return hostAgentActor(ref, ha.name ?? ref);
     }
     // Unknown ref shape → treat as an agent self-ref (its own label).
     return { type: 'cloud_agent', ref, name: ref };

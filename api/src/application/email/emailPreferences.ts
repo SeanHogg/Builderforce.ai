@@ -41,10 +41,6 @@ export const LIFECYCLE_CATEGORIES = ['product_updates', 'onboarding_tips', 'dige
 
 export type LifecycleCategory = (typeof LIFECYCLE_CATEGORIES)[number];
 
-export function isLifecycleCategory(value: unknown): value is LifecycleCategory {
-  return typeof value === 'string' && (LIFECYCLE_CATEGORIES as readonly string[]).includes(value);
-}
-
 /** The consent state for one address, in the shape both the API and the gate use. */
 export interface EmailPreferenceState {
   productUpdates: boolean;

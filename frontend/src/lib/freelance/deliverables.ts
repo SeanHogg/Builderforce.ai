@@ -43,11 +43,6 @@ export async function listEngagementDeliverables(engagementId: string): Promise<
   return jsonOrThrow<Deliverable[]>(res, 'Failed to load deliverables');
 }
 
-export async function listJobDeliverables(jobId: string): Promise<Deliverable[]> {
-  const res = await apiRequestStream(`/api/deliverables/for-job/${jobId}`, { auth: 'tenant' });
-  return jsonOrThrow<Deliverable[]>(res, 'Failed to load deliverables');
-}
-
 export async function evaluateDeliverable(id: string): Promise<EvalScores> {
   const res = await apiRequestStream(`/api/deliverables/${id}/evaluate`, { method: 'POST', auth: 'tenant' });
   return jsonOrThrow<EvalScores>(res, 'Failed to evaluate deliverable');

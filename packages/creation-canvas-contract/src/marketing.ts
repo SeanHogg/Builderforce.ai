@@ -65,11 +65,6 @@ export type MarketingObjectKind = typeof MARKETING_OBJECT_KINDS[number];
 
 const MARKETING_KIND_SET: ReadonlySet<string> = new Set<string>(MARKETING_OBJECT_KINDS);
 
-/** True for the marketing objects declared above — the set `marketingObjects.ts` specs. */
-export function isMarketingObjectKind(value: unknown): value is MarketingObjectKind {
-  return typeof value === 'string' && MARKETING_KIND_SET.has(value);
-}
-
 // ---------------------------------------------------------------------------
 // The brand binding
 // ---------------------------------------------------------------------------
@@ -289,8 +284,6 @@ export function forbiddenClaimsIn(body: unknown, binding: BrandBinding | undefin
 export const AUDIENCE_CONSENT_BASES = [
   'unknown', 'optIn', 'doubleOptIn', 'legitimateInterest', 'contractual', 'imported',
 ] as const;
-
-export type AudienceConsentBasis = typeof AUDIENCE_CONSENT_BASES[number];
 
 /** The bases that are evidence of an affirmative act by the person. Everything else is
  *  a basis that may be defensible and is not consent, which is a distinction the card

@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.18] — "Commit and push to main" now lands, and an @-addressed agent works in your workspace
+
+- **Asking an invited agent to commit ended in "I have no git tool".** A message addressed to an @agent was answered on the server, where the agent has the platform tools (tasks, projects, OKRs) and nothing else — no files, no shell, no git — while the editor that asked has all three. When a folder is open, an addressed agent now runs in the editor's own loop, under its own persona, with the workspace's file and git tools; its replies are still attributed to it in the transcript. Without a folder open, the server still answers for it, and now says plainly what it cannot do from there and where to ask instead.
+- **"Commit and push to main" could not be done even by the Brain.** Pushing the base branch could be declared (`allowBaseBranch`), but the commit before it refused main outright, and the persona told the agent to argue for a pull request instead. A commit now takes the same declaration a push does, both are shown to you for approval, and the persona is explicit: the default route is a ticket branch and a pull request, but when you ask for main, that is your call — do it, do not substitute a PR.
+- **The approval prompt for a base-branch commit says so.** "commit 1 file on the BASE BRANCH (main) — skips pull-request review", the same wording the push prompt already used.
+
 ## [2026.8.141] — Local models kept their platform tools, and a wrong explanation was withdrawn
 
 - **Pinning a model on your machine silently disconnected every platform tool.** Projects, tasks, OKRs and the rest are fetched from the gateway, but the panel was fetching them from wherever the MODEL lived — so choosing an on-device model pointed that lookup at your local runtime, which serves no such thing. The catalogue failed, the Brain lost its tools, and turns answered "I don’t have that data" with nothing in the trace. Where the model runs and where your work lives are now two separate questions.

@@ -230,39 +230,6 @@ export const socialApi = {
     apiRequest(`${SOCIAL}/campaigns/${id}/publish`, { method: 'POST' }),
 };
 
-/**
- * Which social account a caller meant — the client mirror of the server's
- * `resolveSocialAccount`.
- *
- * Deliberately the SAME rule on both sides: a named connection wins, a single ready
- * account on the named network is assumed, and anything ambiguous is reported rather
- * than guessed at. Two different rules would mean the canvas tile and the agent tool
- * silently published to different Pages for the same request.
- */
-export function resolveSocialAccount(
-  accounts: SocialAccount[],
-  ref: { connectionId?: string | null; network?: SocialNetwork | null } = {},
-): { ok: true; account: SocialAccount } | { ok: false; error: string } {
-  const usable = accounts.filter((a) => a.enabled && a.ready);
-  if (ref.connectionId) {
-    const match = accounts.find((a) => a.id === ref.connectionId);
-    if (!match) return { ok: false, error: 'That social account is not connected to this workspace.' };
-    if (!match.ready) {
-      return { ok: false, error: `${match.networkLabel} · ${match.name} is missing ${match.missingFields.map((f) => f.label).join(', ') || 'setup'}.` };
-    }
-    return { ok: true, account: match };
-  }
-  const scoped = ref.network ? usable.filter((a) => a.network === ref.network) : usable;
-  if (scoped.length === 1) return { ok: true, account: scoped[0]! };
-  if (scoped.length === 0) {
-    return { ok: false, error: ref.network ? `No ${ref.network} account is connected.` : 'No social account is connected.' };
-  }
-  return {
-    ok: false,
-    error: `Several accounts are connected (${scoped.map((a) => `${a.networkLabel} · ${a.name}`).join(', ')}). Name which one to use.`,
-  };
-}
-
 /** Total engagement across a set of posts — the number a feed tile leads with. */
 export function totalEngagement(items: readonly SocialFeedItem[]): SocialMetrics {
   return items.reduce<SocialMetrics>((sum, item) => ({

@@ -24,7 +24,7 @@
  * written somewhere real.
  */
 
-import { SAMPLE_MEMBERS } from '../../domain/sampleWorkspace';
+import { SAMPLE_MEMBERS, SAMPLE_WORKSPACE_NAME } from '../../domain/sampleWorkspace';
 import { dayOffsetToIso, exact, type GuestFixture, type GuestFixtureContext } from '../../domain/guestFixture';
 
 /** Hours, expressed as the day offsets the rest of the fixtures speak in. */
@@ -168,7 +168,7 @@ function contacts() {
       id: 'sample-contact-1',
       name: 'Priya Raman',
       roleTitle: 'VP Engineering',
-      company: 'Nova Commerce (Sample)',
+      company: SAMPLE_WORKSPACE_NAME,
       email: 'priya@example.invalid',
       phone: '+1 555 0100',
       teamsId: null,

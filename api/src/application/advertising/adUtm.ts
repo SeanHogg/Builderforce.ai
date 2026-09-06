@@ -125,13 +125,3 @@ export function appendUtmParams(url: string, params: Record<string, string>): st
   }
   return parsed.toString();
 }
-
-/** The tag already on a URL, if any — so a caller can tell "untagged" from "tagged by
- *  someone else" instead of treating both as missing. */
-export function utmCampaignOf(url: string): string | null {
-  try {
-    return new URL(url).searchParams.get('utm_campaign');
-  } catch {
-    return null;
-  }
-}

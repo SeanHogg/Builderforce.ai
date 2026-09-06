@@ -321,7 +321,7 @@ export async function bumpPublicCanvasVersion(env: Env, tenantId: number): Promi
 
 /** Invalidate both cache layers for `key`. Call from every mutation that
  *  changes the cached data so the next read re-loads. */
-export async function invalidateCached(env: Env, key: string): Promise<void> {
+export async function invalidateCached(env: Env | undefined, key: string): Promise<void> {
   l1.delete(key);
   const kv = env?.AUTH_CACHE_KV;
   if (kv) {

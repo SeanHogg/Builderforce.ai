@@ -37,11 +37,6 @@ export interface JobRole {
  *  supplies via {@link RequirementTaskScope.hasPr}. */
 export type RequirementCondition = 'is_security' | 'has_ui_change' | 'is_data_change' | 'has_pr';
 
-/** Every condition predicate, in the order they are offered to an operator. */
-export const REQUIREMENT_CONDITIONS: readonly RequirementCondition[] = [
-  'is_security', 'has_ui_change', 'is_data_change', 'has_pr',
-];
-
 /**
  * The ticket facts a requirement's applicability is scoped by.
  *

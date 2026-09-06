@@ -73,13 +73,3 @@ export async function tenantRoleOf(db: Db, tenantId: number, userId: string): Pr
     .limit(1);
   return isTenantRole(row?.role) ? row.role : null;
 }
-
-/** True when the caller holds at least `minimum` in the workspace. */
-export async function hasTenantRole(
-  db: Db,
-  tenantId: number,
-  userId: string,
-  minimum: TenantRole,
-): Promise<boolean> {
-  return tenantRoleAtLeast(await tenantRoleOf(db, tenantId, userId), minimum);
-}

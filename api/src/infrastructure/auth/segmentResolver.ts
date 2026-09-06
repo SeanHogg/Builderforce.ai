@@ -1,5 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../database/connection';
+import type { Env } from '../../env';
+import { getOrSetCached, invalidateCached } from '../cache/readThroughCache';
 import { segments } from '../database/schema';
 
 /**
@@ -11,53 +13,37 @@ import { segments } from '../database/schema';
  *  - With (accountId, companyId) claims (a 'segmented' tenant whose IdP is an
  *    external host): the matching Segment, lazy-created on first sight.
  *
- * Resolved ids are stable, so they are cached per (tenant, account, company) in
- * the isolate to avoid a DB round-trip on every request. The cache is:
- *  - BOUNDED (FIFO eviction past MAX_CACHE_ENTRIES) so a long-lived isolate seeing
- *    many federated (account, company) pairs can't grow it without limit;
- *  - INVALIDATED on segment mutate/delete (see invalidateSegment) so a
- *    suspended/archived/erased segment stops resolving inside the ORIGINATING
- *    isolate at once;
- *  - TTL-BACKSTOPPED (CACHE_TTL_MS): invalidateSegment only reaches the isolate
- *    it runs on, so a warm SIBLING isolate would otherwise serve a deleted
- *    segment's id forever. The per-entry TTL bounds that cross-isolate staleness
- *    to a few minutes while keeping the hot auth path fully in-isolate (no KV
+ * Resolved ids are stable, so they are cached per (tenant, account, company)
+ * through the canonical read-through cache (`getOrSetCached`: L1 in-isolate, L2 KV
+ * when the caller passes `env`) rather than a private Map. The cache is:
+ *  - INVALIDATED on segment mutate/delete (see invalidateSegment) in both layers,
+ *    so a suspended/archived/erased segment stops resolving at once;
+ *  - TTL-BACKSTOPPED (CACHE_TTL_SECONDS) for any isolate the invalidation could not
+ *    reach. The per-entry TTL bounds that staleness to a few minutes while keeping
+ *    the hot auth path in-isolate for callers without `env` (no KV
  *    round-trip). A stale entry simply re-resolves against the DB after it lapses.
  */
 
-/** Cap on cached (tenant, account, company) → segmentId entries per isolate. */
-const MAX_CACHE_ENTRIES = 10_000;
+/** How long a resolved mapping may be served before it is re-read — the cross-isolate backstop. */
+const CACHE_TTL_SECONDS = 300;
 
-/** Max age of a cached mapping — the cross-isolate invalidation backstop. */
-const CACHE_TTL_MS = 300_000; // 5 minutes
-
-type CacheEntry = { segmentId: string; expiresAt: number };
-
-const cache = new Map<string, CacheEntry>();
+/** Which cache keys resolved to each segment, so a segment mutation can drop exactly them. */
+const keysBySegment = new Map<string, Set<string>>();
 
 function keyFor(tenantId: number, accountId?: string, companyId?: string): string {
-  return `${tenantId}|${accountId ?? ''}|${companyId ?? ''}`;
-}
-
-function cacheSet(key: string, segmentId: string): void {
-  // Map preserves insertion order — evict the oldest entry when over the bound.
-  if (cache.size >= MAX_CACHE_ENTRIES) {
-    const oldest = cache.keys().next().value;
-    if (oldest !== undefined) cache.delete(oldest);
-  }
-  cache.set(key, { segmentId, expiresAt: Date.now() + CACHE_TTL_MS });
+  return `segment:${tenantId}|${accountId ?? ''}|${companyId ?? ''}`;
 }
 
 /**
- * Drop every cached mapping that resolves to `segmentId`. Call after any change
- * that alters or removes a segment (status flip, plan change, deletion) so the
- * originating isolate stops serving a stale id without waiting for a recycle.
- * Sibling isolates are covered by {@link CACHE_TTL_MS}.
+ * Drop every cached mapping that resolves to `segmentId` — both layers when `env` is
+ * given. Call after any change that alters or removes a segment (status flip, plan
+ * change, deletion) so the next request re-resolves instead of serving a stale id.
  */
-export function invalidateSegment(segmentId: string): void {
-  for (const [key, value] of cache) {
-    if (value.segmentId === segmentId) cache.delete(key);
-  }
+export async function invalidateSegment(segmentId: string, env?: Env): Promise<void> {
+  const keys = keysBySegment.get(segmentId);
+  if (!keys) return;
+  keysBySegment.delete(segmentId);
+  await Promise.all([...keys].map((key) => invalidateCached(env, key)));
 }
 
 export interface SegmentClaims {
@@ -69,18 +55,16 @@ export async function resolveSegment(
   db: Db,
   tenantId: number,
   claims: SegmentClaims = {},
+  env?: Env,
 ): Promise<string> {
   const { accountId, companyId } = claims;
   const cacheKey = keyFor(tenantId, accountId, companyId);
-  const cached = cache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return cached.segmentId;
-  if (cached) cache.delete(cacheKey);
-
-  const id = accountId && companyId
-    ? await resolveFederated(db, tenantId, accountId, companyId)
-    : await resolveDefault(db, tenantId);
-
-  cacheSet(cacheKey, id);
+  const id = await getOrSetCached(env, cacheKey, () => (accountId && companyId
+    ? resolveFederated(db, tenantId, accountId, companyId)
+    : resolveDefault(db, tenantId)), { kvTtlSeconds: CACHE_TTL_SECONDS, l1TtlMs: CACHE_TTL_SECONDS * 1000 });
+  const keys = keysBySegment.get(id) ?? new Set<string>();
+  keys.add(cacheKey);
+  keysBySegment.set(id, keys);
   return id;
 }
 

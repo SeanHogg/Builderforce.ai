@@ -55,7 +55,7 @@ export function HomeCard({ children, className = '' }: { children: ReactNode; cl
 
 export function CardTitle({ children }: { children: ReactNode }) { return <h3 className={styles.cardTitle}>{children}</h3>; }
 export function CardText({ children }: { children: ReactNode }) { return <p className={styles.cardText}>{children}</p>; }
-export function BadgeRow({ children }: { children: ReactNode }) { return <div className={styles.badgeRow}>{children}</div>; }
+
 export function Badge({ children, accent = false }: { children: ReactNode; accent?: boolean }) { return <UiBadge tone={accent ? 'accent' : 'neutral'}>{children}</UiBadge>; }
 
 export function HomeButton({ href, children, primary = false, arrow = false }: { href: string; children: ReactNode; primary?: boolean; arrow?: boolean }) {

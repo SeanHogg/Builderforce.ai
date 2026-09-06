@@ -27,7 +27,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * bad definition or target can't fail the incident-open / task-move that raised it.
  */
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { workflowDefinitions, workflowTriggers } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { parseDefinition } from '../../domain/workflowGraph';
@@ -147,6 +147,15 @@ export async function fireEventTriggers(db: Db, params: FireEventTriggersParams)
   }
 
   const now = new Date();
+  // ONE read for every listening trigger's definition, not one per trigger.
+  const definitionIds = [...new Set(rows.map((row) => row.definitionId))];
+  const definitions = definitionIds.length
+    ? await db
+      .select({ id: workflowDefinitions.id, name: workflowDefinitions.name, projectId: workflowDefinitions.projectId, definition: workflowDefinitions.definition })
+      .from(workflowDefinitions)
+      .where(and(inArray(workflowDefinitions.id, definitionIds), eq(workflowDefinitions.tenantId, params.tenantId)))
+    : [];
+  const definitionById = new Map(definitions.map((def) => [def.id, def]));
   for (const row of rows) {
     let config: Record<string, unknown> = {};
     try { config = JSON.parse(row.config || '{}') as Record<string, unknown>; } catch { config = {}; }
@@ -158,10 +167,7 @@ export async function fireEventTriggers(db: Db, params: FireEventTriggersParams)
 
     let status = 'ok';
     try {
-      const [def] = await db
-        .select({ name: workflowDefinitions.name, projectId: workflowDefinitions.projectId, definition: workflowDefinitions.definition })
-        .from(workflowDefinitions)
-        .where(and(eq(workflowDefinitions.id, row.definitionId), eq(workflowDefinitions.tenantId, params.tenantId)));
+      const def = definitionById.get(row.definitionId);
       if (!def) {
         status = 'error: definition missing';
         result.errors++;

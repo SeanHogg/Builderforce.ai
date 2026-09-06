@@ -79,6 +79,7 @@ import { loadProjectInTenant } from '../../application/project/projectOwnership'
 import { isTerminalExecutionStatus } from '../../domain/shared/terminalStatus';
 import { sha256Hex } from '../../domain/shared/hash';
 import { verifyHmacHex } from '../../infrastructure/crypto/webhookHmac';
+import { excluded } from '../../infrastructure/database/upsert';
 
 // Extend HonoEnv bindings type to include the Durable Object
 type AgentHostHonoEnv = HonoEnv & {
@@ -839,17 +840,18 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
           updatedAt: new Date(),
         }));
 
-      for (const row of fileRows) {
+      // ONE multi-row upsert for the manifest, not one round trip per file.
+      if (fileRows.length) {
         await db
           .insert(agentHostDirectoryFiles)
-          .values(row)
+          .values(fileRows)
           .onConflictDoUpdate({
             target: [agentHostDirectoryFiles.directoryId, agentHostDirectoryFiles.relPath],
             set: {
-              contentHash: row.contentHash,
-              sizeBytes: row.sizeBytes,
-              content: row.content,
-              updatedAt: row.updatedAt,
+              contentHash: excluded(agentHostDirectoryFiles.contentHash),
+              sizeBytes: excluded(agentHostDirectoryFiles.sizeBytes),
+              content: excluded(agentHostDirectoryFiles.content),
+              updatedAt: excluded(agentHostDirectoryFiles.updatedAt),
             },
           });
       }

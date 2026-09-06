@@ -44,8 +44,6 @@ export type ApprovalMode =
   /** Explicitly delegated to an agent — recorded, not reviewed. */
   | 'autonomous';
 
-export const APPROVAL_MODES: readonly ApprovalMode[] = ['open', 'required', 'autonomous'];
-
 /**
  * Acts that are IRREVERSIBLE or ATTESTED, keyed by object kind.
  *

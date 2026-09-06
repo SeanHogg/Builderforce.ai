@@ -5765,6 +5765,18 @@
         "nda": "保密协议",
         "cookie": "Cookie 政策"
       }
+    },
+    "setPassword": {
+      "title": "设置密码",
+      "subtitle": "您是通过第三方账户注册的。添加密码后，也可以使用邮箱登录。",
+      "password": "新密码",
+      "confirm": "确认密码",
+      "save": "设置密码",
+      "saving": "保存中…",
+      "done": "密码已设置。现在可以使用邮箱登录。",
+      "failed": "无法设置密码。",
+      "tooShort": "至少使用 {min} 个字符。",
+      "mismatch": "两次输入的密码不一致。"
     }
   },
   "catalogInsights": {
@@ -24256,10 +24268,6 @@
     "hintOpen": "<kbd>⏎</kbd> 打开",
     "hintClose": "<kbd>esc</kbd> 关闭",
     "locked": "{plan} 方案"
-  },
-  "homeScroller": {
-    "previous": "显示上一项",
-    "next": "显示更多"
   },
   "liveBar": {
     "region": "通话",

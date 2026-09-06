@@ -477,13 +477,3 @@ export async function dealFlowBySource(db: Db, tenantId: number) {
     .groupBy(dealFlowOpportunities.source)
     .orderBy(desc(sql`count(*)`));
 }
-
-/** Prospects a set of canonical refs already has — used before scoring an import
- *  so the same company is not queued twice. */
-export async function existingProspectRefs(db: Db, tenantId: number, companyRefs: string[]) {
-  if (companyRefs.length === 0) return [];
-  return db
-    .select({ companyRef: riProspects.companyRef })
-    .from(riProspects)
-    .where(scopedToTenant(riProspects, tenantId, inArray(riProspects.companyRef, companyRefs)));
-}

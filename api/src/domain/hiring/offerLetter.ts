@@ -23,10 +23,6 @@ export const OFFER_STATUSES = ['draft', 'approved', 'sent', 'accepted', 'decline
 
 export type OfferStatus = typeof OFFER_STATUSES[number];
 
-export function isOfferStatus(value: unknown): value is OfferStatus {
-  return typeof value === 'string' && (OFFER_STATUSES as readonly string[]).includes(value);
-}
-
 /** The two answers a candidate can give. */
 export const OFFER_RESPONSES = ['accepted', 'declined'] as const;
 

@@ -173,6 +173,7 @@ import { coerceStringArray } from '../../domain/shared/jsonColumn';
 import { daysParam, limitParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { randomHex } from '../../domain/shared/bytes';
+import { excluded } from '../../infrastructure/database/upsert';
 
 /**
  * Coerce a `platform_modules.permissions` value into `string[]`.
@@ -3446,14 +3447,14 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const body = await c.req.json<{ overrides: Array<{ permission: string; granted: boolean; reason?: string }> }>();
     if (!Array.isArray(body.overrides)) return c.json({ error: 'overrides array required' }, 400);
 
-    // Upsert each override
-    for (const override of body.overrides) {
+    // ONE multi-row upsert for the whole matrix edit.
+    if (body.overrides.length) {
       await db
         .insert(rolePermissionOverrides)
-        .values({ role, permission: override.permission, granted: override.granted, reason: override.reason ?? null, createdBy: actorId })
+        .values(body.overrides.map((override) => ({ role, permission: override.permission, granted: override.granted, reason: override.reason ?? null, createdBy: actorId })))
         .onConflictDoUpdate({
           target: [rolePermissionOverrides.role, rolePermissionOverrides.permission],
-          set: { granted: override.granted, reason: override.reason ?? null },
+          set: { granted: excluded(rolePermissionOverrides.granted), reason: excluded(rolePermissionOverrides.reason) },
         });
     }
 
@@ -3708,20 +3709,20 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (!body.tenantId || !Array.isArray(body.overrides)) {
       return c.json({ error: 'tenantId and overrides array required' }, 400);
     }
-    for (const o of body.overrides) {
+    if (body.overrides.length) {
       await db
         .insert(userPermissionOverrides)
-        .values({
+        .values(body.overrides.map((o) => ({
           tenantId: body.tenantId,
           userId: targetId,
           permission: o.permission,
           granted: o.granted,
           expiresAt: o.expiresAt ? new Date(o.expiresAt) : null,
           createdBy: actorId,
-        })
+        })))
         .onConflictDoUpdate({
           target: [userPermissionOverrides.tenantId, userPermissionOverrides.userId, userPermissionOverrides.permission],
-          set: { granted: o.granted, expiresAt: o.expiresAt ? new Date(o.expiresAt) : null },
+          set: { granted: excluded(userPermissionOverrides.granted), expiresAt: excluded(userPermissionOverrides.expiresAt) },
         });
     }
     await invalidateMemberPermissions(c.env, body.tenantId, targetId);

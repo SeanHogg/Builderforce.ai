@@ -46,7 +46,6 @@ import { recordActivity, type ActorIdentity } from '../activity/activityLog';
 
 /** `approval_actions.state`. */
 export const APPROVAL_STATES = ['waiting', 'active', 'done', 'skipped'] as const;
-export type ApprovalState = (typeof APPROVAL_STATES)[number];
 
 export class ApprovalChainError extends Error {
   constructor(message: string, readonly status: 400 | 404 | 409 = 400) {

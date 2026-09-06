@@ -35,6 +35,7 @@ import type { Env } from '../../env';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { jobInvites, jobPostings, jobProposals, tenants, users } from '../../infrastructure/database/schema';
 import { notify } from '../notifications/notify';
+import { excluded } from '../../infrastructure/database/upsert';
 
 /** The lifecycle. `expired` is never WRITTEN by a request — it is what the clock says. */
 export const INVITE_STATUSES = ['sent', 'viewed', 'accepted', 'declined', 'expired'] as const;
@@ -173,13 +174,13 @@ export async function createInvite(
     .onConflictDoUpdate({
       target: [jobInvites.jobId, jobInvites.freelancerUserId],
       set: {
-        message: sql`COALESCE(excluded.message, ${jobInvites.message})`,
-        expiresAt: sql`excluded.expires_at`,
+        message: sql`COALESCE(${excluded(jobInvites.message)}, ${jobInvites.message})`,
+        expiresAt: excluded(jobInvites.expiresAt),
         // Only a lapsed or unanswered invite goes back to `sent`. An `accepted` or
         // `declined` one keeps its answer: re-asking somebody who said no must not
         // silently rewrite the record to say they never did.
         status: sql`CASE WHEN ${jobInvites.status} IN ('accepted','declined') THEN ${jobInvites.status} ELSE 'sent' END`,
-        invitedByUserId: sql`excluded.invited_by_user_id`,
+        invitedByUserId: excluded(jobInvites.invitedByUserId),
         updatedAt: sql`NOW()`,
       },
     })

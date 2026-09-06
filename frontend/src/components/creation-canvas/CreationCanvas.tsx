@@ -56,7 +56,7 @@ import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasS
 import { CanvasSessionPill } from './CanvasSessionPill';
 import { RemoteCursors } from './RemoteCursors';
 import { applyPresenceFrame, dropPresence, expirePresence, isPresenceFrame, mergeLivePresence, LIVE_PRESENCE_TTL_MS, PRESENCE_SEND_INTERVAL_MS, type LivePresenceMap } from '@/lib/canvas/livePresence';
-import { BRAND_BINDING_FIELD, CANVAS_PRESENCE_FRAME, canvasScreenshotToolRedirect, isBrandBoundKind, looksLikeWebPageUrl, type CanvasPresenceState } from '@builderforce/creation-canvas-contract';
+import { BRAND_BINDING_FIELD, CANVAS_PRESENCE_FRAME, canvasScreenshotToolRedirect, isBrandBoundKind, isDateComparator, looksLikeWebPageUrl, type CanvasPresenceState } from '@builderforce/creation-canvas-contract';
 import { CanvasCommandBar } from './CanvasCommandBar';
 import { TeamBar } from '@/components/team/TeamBar';
 import type { CanvasSessionActionId } from '@/lib/canvasSessionActions';
@@ -264,7 +264,7 @@ import { buildLineageGraph, columnImpact, impactOf, lineagePatch, staleDerivativ
 import { dataSourceApi, resolveDataSource, type DataSourceSummary } from '@/lib/dataSourceApi';
 import { detectGeoColumns, mapObjectFields, mapPointsFromRows } from '@/lib/canvasGeo';
 import { analyzeCompetitorGeography, competitorSitesFrom } from '@/lib/competitorGeo';
-import { evaluateCanvasTriggers, isDateComparator, triggerUnboundHint } from '@/lib/canvasTriggers';
+import { evaluateCanvasTriggers, triggerUnboundHint } from '@/lib/canvasTriggers';
 // The brand a generative object composes against, and the consent state a send is
 // gated on. Adapter only — the rules live in the contract; see `canvasMarketing.ts`.
 import { brandForNode, brandViolationsIn, campaignSendReadiness } from '@/lib/canvasMarketing';

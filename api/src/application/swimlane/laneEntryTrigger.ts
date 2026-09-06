@@ -580,15 +580,3 @@ export async function onTaskLandedInLane(env: Env, db: Db, signal: LaneEntrySign
     return false;
   }
 }
-
-/** Tenant that owns a task's project — the one lookup a writer without a tenantId
- *  needs before it can call {@link onTaskLandedInLane}. Null when unresolvable. */
-export async function resolveTaskTenantId(db: Db, taskId: number): Promise<number | null> {
-  const [row] = await db
-    .select({ tenantId: projects.tenantId })
-    .from(tasks)
-    .innerJoin(projects, eq(projects.id, tasks.projectId))
-    .where(eq(tasks.id, taskId))
-    .limit(1);
-  return row?.tenantId ?? null;
-}

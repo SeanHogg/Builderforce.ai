@@ -4,7 +4,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { activityLog, executionLifecycleOutbox } from '../../infrastructure/database/schema';
 import type { Env } from '../../env';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
-import { activityDatabase, activityLogVersionKey, type ActorIdentity } from '../activity/activityLog';
+import { activityDatabase, activityLogVersionKey, hostAgentActor, type ActorIdentity } from '../activity/activityLog';
 import { submittingUserId } from './dispatcherLabel';
 
 const MAX_ATTEMPTS = 8;
@@ -49,7 +49,7 @@ function actorFor(row: {
     return { type: 'cloud_agent', ref: row.cloudAgentRef, name: row.cloudAgentRef };
   }
   if (row.agentHostId != null) {
-    return { type: 'host_agent', ref: String(row.agentHostId), name: `AgentHost ${row.agentHostId}` };
+    return hostAgentActor(row.agentHostId, `AgentHost ${row.agentHostId}`);
   }
   return { type: 'system', ref: null, name: 'System' };
 }

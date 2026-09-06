@@ -37,8 +37,6 @@ export const VISITOR_JOURNEY_KINDS = {
   visitEnd: 'visit_end',
 } as const;
 
-export type VisitorJourneyKind = (typeof VISITOR_JOURNEY_KINDS)[keyof typeof VISITOR_JOURNEY_KINDS];
-
 /** A journey event that has been validated and is safe to persist. */
 export interface VisitorEvent {
   visitorId: string;

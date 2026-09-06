@@ -39,7 +39,7 @@ import { RuntimeService } from './RuntimeService';
 import { TaskStatus } from '../../domain/shared/types';
 import { tenantMayRunAutonomously } from '../llm/tenantTokenAvailability';
 import { sendPendingAgentsUpgradeEmail } from './pendingAgentsUpgradeEmail';
-import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
+import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
 import type { Env } from '../../env';
 import { enforceCloudRunCap } from './cloudRunLedger';
 import { recordTenantAutoRunSkip, clearTenantAutoRunSkip } from './autoRunSkipLedger';
@@ -75,11 +75,6 @@ const RUNNABLE_STATUSES: string[] = [
  * is running, and the next-priority ticket takes the slot.
  */
 export const MAX_CANDIDATES_PER_TICK = 400;
-
-/** Re-exported for back-compat. The per-tenant ceiling now lives in
- *  {@link MAX_TENANT_DISPATCHES_PER_TICK} because it is shared with every OTHER
- *  dispatching sweep in the same cron tick rather than owned by this one. */
-export const MAX_DISPATCHES_PER_TENANT_PER_TICK = MAX_TENANT_DISPATCHES_PER_TICK;
 
 export interface AutonomousSweepResult {
   candidates: number;

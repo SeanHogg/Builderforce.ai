@@ -59,14 +59,6 @@ export interface FlowStepOutput {
   from: string;
 }
 
-/** What a `flowStep` object holds, beyond the identity every object has. */
-export interface FlowStepFields {
-  stepKind: WorkflowNodeKind;
-  stepConfig: Record<string, unknown>;
-  stepInputs: FlowStepBinding[];
-  stepOutputs: FlowStepOutput[];
-}
-
 /** The step kind an object carries, defaulting to the one kind that needs no
  *  configuration to be meaningful. */
 export function stepKindOf(data: Record<string, unknown>): WorkflowNodeKind {
@@ -96,11 +88,6 @@ export function stepInputsOf(data: Record<string, unknown>): FlowStepBinding[] {
 
 export function stepOutputsOf(data: Record<string, unknown>): FlowStepOutput[] {
   return readBindings(data.stepOutputs);
-}
-
-/** The metadata for the step an object carries. */
-export function stepMetaOf(data: Record<string, unknown>): NodeKindMeta | undefined {
-  return NODE_KIND_MAP[stepKindOf(data)];
 }
 
 /**

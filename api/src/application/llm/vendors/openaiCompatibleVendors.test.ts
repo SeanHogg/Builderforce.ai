@@ -4,7 +4,6 @@ import {
   getModule,
   vendorForModel,
   parseVendorPrefix,
-  vendorAutoRoutes,
   autoRoutableModelsByTier,
   dispatchVendor,
   dispatchVendorStream,
@@ -103,8 +102,8 @@ describe('explicit direct/<vendor>/<id> prefix routing reaches the new vendors',
   });
 
   it('the new vendors stay OUT of the auto-selected FREE/PRO pools', () => {
-    expect(vendorAutoRoutes('groq')).toBe(false);
-    expect(vendorAutoRoutes('deepseek')).toBe(false);
+    expect(getModule('groq').autoRoute).toBe(false);
+    expect(getModule('deepseek').autoRoute).toBe(false);
     // No factory-vendor model id leaks into the auto-routable pools.
     const autoIds = new Set(autoRoutableModelsByTier('FREE', 'STANDARD', 'PREMIUM', 'ULTRA'));
     for (const mod of openAICompatibleModules) {

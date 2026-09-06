@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, type MouseEvent } from 'react';
+import { initialsOf } from '@/lib/initials';
 
 /**
  * Generate a deterministic color from a name string.
@@ -27,15 +28,7 @@ export function avatarColor(name: string): string {
  * Extract initials from a name (up to 2 characters).
  * "John Doe" → "JD", "Alice" → "AL", "" → "?"
  */
-export function avatarInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) {
-    const s = parts[0];
-    return s.length >= 2 ? s.slice(0, 2).toUpperCase() : s.toUpperCase();
-  }
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
+export const avatarInitials = (name: string): string => initialsOf(name);
 
 export interface AvatarProps {
   /** Display name (derives initials + color). */

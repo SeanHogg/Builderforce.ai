@@ -52,21 +52,6 @@ export const publishForm = (body: PublishFormBody) =>
 export const closeForm = (questionSetId: string) =>
   apiRequest<{ ok: true }>(`/api/forms/${questionSetId}/close`, { method: 'POST' });
 
-export interface FormSummary {
-  questionSetId: string;
-  slug: string | null;
-  title: string;
-  status: FormStatus;
-  anonymous: boolean;
-  audience: FormAudience;
-  submissionCount: number;
-  invitedCount: number;
-  respondedCount: number;
-}
-
-export const formSummary = (questionSetId: string) =>
-  apiRequest<{ summary: FormSummary }>(`/api/forms/${questionSetId}/summary`).then((r) => r.summary);
-
 export interface PublicFormView {
   form: PublishedForm;
   recipient: { name: string | null; email: string; answered: boolean } | null;

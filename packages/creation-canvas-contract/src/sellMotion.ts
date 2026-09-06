@@ -100,11 +100,6 @@ export type SellMotionObjectKind = typeof SELL_MOTION_OBJECT_KINDS[number];
 
 const SELL_MOTION_KIND_SET: ReadonlySet<string> = new Set<string>(SELL_MOTION_OBJECT_KINDS);
 
-/** True for the sell-motion objects declared above — the set `sellMotionObjects.ts` specs. */
-export function isSellMotionObjectKind(value: unknown): value is SellMotionObjectKind {
-  return typeof value === 'string' && SELL_MOTION_KIND_SET.has(value);
-}
-
 // ---------------------------------------------------------------------------
 // The quote — ONE definition of what a deal costs
 // ---------------------------------------------------------------------------
@@ -117,11 +112,9 @@ export function isSellMotionObjectKind(value: unknown): value is SellMotionObjec
  * a discount somebody can still take. See {@link quoteAcceptability}.
  */
 export const QUOTE_STATES = ['draft', 'sent', 'viewed', 'accepted', 'declined', 'expired'] as const;
-export type QuoteState = typeof QUOTE_STATES[number];
 
 /** How the same priced deal is PRESENTED. A value, not a kind — see the header. */
 export const QUOTE_PRESENTATIONS = ['quote', 'proposal', 'orderForm'] as const;
-export type QuotePresentation = typeof QUOTE_PRESENTATIONS[number];
 
 export const QUOTE_BILLING_CYCLES = ['monthly', 'yearly'] as const;
 export type QuoteBillingCycle = typeof QUOTE_BILLING_CYCLES[number];
@@ -319,7 +312,6 @@ export const SEQUENCE_CHANNELS = ['email', 'social', 'call', 'sms', 'task'] as c
 export type SequenceChannel = typeof SEQUENCE_CHANNELS[number];
 
 export const SEQUENCE_STATES = ['draft', 'running', 'paused', 'stopped', 'completed'] as const;
-export type SequenceState = typeof SEQUENCE_STATES[number];
 
 export interface SequenceStep {
   /** Days after enrolment this step fires. Day 0 is "send immediately on enrolment". */

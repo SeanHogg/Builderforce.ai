@@ -57,20 +57,6 @@ import { taskCreatedHook } from '../task/taskCreationHook';
 export const DELTA_KINDS = ['improvement', 'fix', 'bug'] as const;
 export type DeltaKind = (typeof DELTA_KINDS)[number];
 
-/**
- * The generic "record your delta" instruction, in the advertised tool name.
- *
- * NOT the directive the coding surfaces run on. The shared Brain (`brain-embedded`,
- * used by the web app and the VS Code client) prepends its own, chat-scoped variant —
- * `chatWorkLinking.ts` — which also names the chat id and the dedupe rule, and backs it
- * with a from_delta backstop when the model forgets. A cloud run always works a ticket,
- * so it has no ad-hoc delta to record. Kept as the tool-side statement of the contract
- * the tool description and that directive both honour; wire it only to a NEW surface
- * that has no chat to scope to.
- */
-export const DELTA_DIRECTIVE =
-  'Work visibility: when your turn ADDS or CHANGES code that is not already tracked by an existing ticket, record it before you finish — call the `tickets.from_delta` tool (advertised as `builtin_tickets_from_delta`) with a one-line summary, the kind (improvement | fix | bug), and the files you touched. This opens a ticket in the review lane so the change is visible on the board. If you then MERGE that change to the base branch yourself (commit and push to main), the ticket is completed for you — you do not need to update its status by hand. If you leave the change on a branch and open a pull request, the ticket stays in review until that PR is MERGED, at which point it is completed for you too — so name the ticket branch `ticket/<id>-slug` (or let the platform name it) and the merge finds its way back to the ticket. Record one delta per meaningful change; skip trivial no-op edits.';
-
 export interface RecordDeltaInput {
   projectId: number;
   /** Short one-line title of what changed (becomes the ticket title). */

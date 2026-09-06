@@ -96,7 +96,11 @@ export function describeTool(name: string, args: Record<string, unknown>): strin
     // ticket branch or the base branch — so the base-branch case says so outright.
     case "git_commit": {
       const files = Array.isArray(args.paths) ? args.paths.filter((p): p is string => typeof p === "string") : [];
-      const where = typeof args.branch === "string" && args.branch ? ` on ${args.branch}` : "";
+      const where = typeof args.branch === "string" && args.branch
+        ? ` on ${args.branch}`
+        : args.allowBaseBranch === true
+          ? " on the BASE BRANCH (main) — skips pull-request review"
+          : "";
       return `commit ${files.length} file${files.length === 1 ? "" : "s"}${where}: ${files.slice(0, 3).join(", ")}${files.length > 3 ? ", …" : ""}`;
     }
     case "git_push":

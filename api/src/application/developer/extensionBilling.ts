@@ -390,6 +390,3 @@ export async function setSubscriptionState(
 /** Re-exported so a caller reading a period does not need a second import for
  *  the predicate that decides whether the install may still be metered. */
 export { subscriptionEntitles };
-
-/** Exported for the sweep's own tests. Never for a caller to tune. */
-export const EXTENSION_PERIOD_DAYS = PERIOD_DAYS;

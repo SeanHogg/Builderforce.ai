@@ -34,6 +34,7 @@ import {
 import { clampScore as clamp } from '../../domain/shared/numbers';
 import { notSystemTask } from '../task/taskScope';
 import { HOUR_MS } from '../../domain/shared/time';
+import { excluded } from '../../infrastructure/database/upsert';
 
 export interface EngagementSignals {
   /** External dev activity events (commits/PRs/issues) attributed to this person. */
@@ -212,9 +213,9 @@ export async function persistTenantEngagement(
           memberMetricsPeriod.periodEnd,
         ],
         set: {
-          memberName: sql`excluded.member_name`,
-          engagementScore: sql`excluded.engagement_score`,
-          computedAt: sql`excluded.computed_at`,
+          memberName: excluded(memberMetricsPeriod.memberName),
+          engagementScore: excluded(memberMetricsPeriod.engagementScore),
+          computedAt: excluded(memberMetricsPeriod.computedAt),
         },
       });
   }

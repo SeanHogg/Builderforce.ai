@@ -17,7 +17,7 @@ import { planHeadcount, type HeadcountPlan } from './headcountPlan';
 import { reviewCycleState, type ReviewCycleState } from './performanceReview';
 import { reviewOrg, type OrgReview } from './orgReview';
 import { assessTeamHealth, type TeamHealthReport } from './teamHealth';
-import { hrmsRefusal, type HrmsRefusal, type RosterPerson } from './roster';
+import { hrmsRefusal, isRefusal, type HrmsRefusal, type RosterPerson } from './roster';
 
 /** The roster read, or the refusal that replaces every one of these tools' output. */
 async function requireRoster(
@@ -35,8 +35,7 @@ async function requireRoster(
   return read;
 }
 
-const refused = (value: PortRead<RosterPerson> | HrmsRefusal): value is HrmsRefusal =>
-  (value as HrmsRefusal).ok === false;
+const refused = isRefusal;
 
 /** `hr.org_review` — spans and layers. */
 export async function orgReview(

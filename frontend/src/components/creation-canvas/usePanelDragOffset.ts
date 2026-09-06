@@ -2,6 +2,7 @@
 // and `CanvasCommandBar.tsx`, both already inside that client boundary — see the same
 // reasoning in `useChromeSpace.ts` and `CanvasCommandBar.tsx`'s own header.
 import { useCallback, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
+import { removeLocal } from '@/lib/storage';
 
 export interface PanelDragOffset { x: number; y: number; }
 
@@ -24,7 +25,7 @@ function readOffset(panelId: string): PanelDragOffset {
 function writeOffset(panelId: string, offset: PanelDragOffset): void {
   if (typeof window === 'undefined') return;
   try {
-    if (offset.x === 0 && offset.y === 0) window.localStorage.removeItem(STORAGE_PREFIX + panelId);
+    if (offset.x === 0 && offset.y === 0) removeLocal(STORAGE_PREFIX + panelId);
     else window.localStorage.setItem(STORAGE_PREFIX + panelId, JSON.stringify(offset));
   } catch {
     // Storage can be unavailable in hardened contexts. Best-effort persistence;

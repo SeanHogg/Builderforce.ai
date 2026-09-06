@@ -61,6 +61,28 @@ describe("git_commit", () => {
     expect(sh.scripts[0]).toContain("ON_BASE_BRANCH");
   });
 
+  it("commits ON the base branch only when the caller declared allowBaseBranch", async () => {
+    // "commit and push to main" had no reachable path: push took `allowBaseBranch`, but
+    // the commit before it could never land on main, so an explicit human instruction
+    // ended in a refusal every time. The declaration is the same act push already has —
+    // and it is what the surface's approval prompt names.
+    const sh = recordingShell();
+    await gitCommitTool.execute({ message: "m", paths: ["a.ts"], allowBaseBranch: true }, sh as never);
+    expect(sh.scripts[0]).not.toContain("ON_BASE_BRANCH");
+    expect(sh.scripts[0]).toContain("git add -- 'a.ts'");
+    // A named ticket branch still wins over the declaration: it says where to commit.
+    const withBranch = recordingShell();
+    await gitCommitTool.execute({ message: "m", paths: ["a.ts"], allowBaseBranch: true, branch: "ticket/1-x" }, withBranch as never);
+    expect(withBranch.scripts[0]).toContain('git checkout -b "ticket/1-x"');
+  });
+
+  it("names the declared route when refused on the base branch", async () => {
+    const r = await gitCommitTool.execute({ message: "m", paths: ["a.ts"] }, failingShell(5, "ON_BASE_BRANCH") as never);
+    expect(data(r).ok).toBe(false);
+    expect(data(r).error).toMatch(/open_pull_request/);
+    expect(data(r).error).toMatch(/allowBaseBranch:true/);
+  });
+
   it("switches to (or creates) the named ticket branch instead", async () => {
     const sh = recordingShell();
     await gitCommitTool.execute({ message: "m", paths: ["a.ts"], branch: "ticket/2394-mobile" }, sh as never);

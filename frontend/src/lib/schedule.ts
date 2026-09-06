@@ -45,14 +45,6 @@ export function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-export function sameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
 export function deadlineStatus(end: Date | null, now: Date = new Date()): DeadlineStatus {
   if (!end) return 'none';
   const today = startOfDay(now);
@@ -178,8 +170,4 @@ const FMT_LONG = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'nume
 
 export function formatShort(d: Date): string {
   return FMT_SHORT.format(d);
-}
-
-export function formatLong(d: Date): string {
-  return FMT_LONG.format(d);
 }

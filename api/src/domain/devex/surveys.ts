@@ -62,19 +62,6 @@ export interface SurveyQuestion {
   dimension: DevexDimension;
 }
 
-export interface SurveyTemplate {
-  id: number;
-  tenantId: number;
-  segmentId: string | null;
-  name: string;
-  description: string;
-  questions: SurveyQuestion[];
-  isActive: boolean;
-  createdBy: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
 export interface Campaign {
   id: number;
   tenantId: number;

@@ -50,10 +50,6 @@ import type { Domain } from '@/lib/kernel/kernelApi';
 export const COMPONENT_MOUNTS = ['dashboard', 'canvas', 'app'] as const;
 export type ComponentMount = (typeof COMPONENT_MOUNTS)[number];
 
-export function isComponentMount(value: string): value is ComponentMount {
-  return (COMPONENT_MOUNTS as readonly string[]).includes(value);
-}
-
 export type ComponentSize = 'sm' | 'md' | 'lg';
 
 /** Where a component drills to for the full report (a slide-out side panel). */

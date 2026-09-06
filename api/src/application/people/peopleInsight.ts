@@ -206,18 +206,6 @@ export async function deleteEmergencyContact(db: Db, tenantId: number, id: numbe
   return { deleted: id };
 }
 
-/** Employees with no contact on file — the gap an HR lead needs to close, and
- *  the only aggregate this data is used for. */
-export async function employeesMissingContacts(db: Db, tenantId: number, employeeIds: number[]) {
-  if (employeeIds.length === 0) return [];
-  const have = await db
-    .select({ employeeId: hrEmergencyContacts.employeeId })
-    .from(hrEmergencyContacts)
-    .where(scopedToTenant(hrEmergencyContacts, tenantId));
-  const covered = new Set(have.map((h) => h.employeeId));
-  return employeeIds.filter((id) => !covered.has(id));
-}
-
 // ── Cohort retention ────────────────────────────────────────────────────────
 
 /**

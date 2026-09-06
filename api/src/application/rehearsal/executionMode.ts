@@ -19,10 +19,6 @@ import { executions } from '../../infrastructure/database/schema';
 export const EXECUTION_MODES = ['live', 'rehearsal'] as const;
 export type ExecutionMode = (typeof EXECUTION_MODES)[number];
 
-export function isExecutionMode(v: unknown): v is ExecutionMode {
-  return typeof v === 'string' && (EXECUTION_MODES as readonly string[]).includes(v);
-}
-
 /**
  * The predicate for "real work only". Compose it into any list/aggregate over
  * `executions`:
@@ -31,9 +27,4 @@ export function isExecutionMode(v: unknown): v is ExecutionMode {
  */
 export function liveExecution() {
   return eq(executions.mode, 'live');
-}
-
-/** Its complement — the rehearsal-only reads (the Rehearsal tab). */
-export function rehearsalExecution() {
-  return eq(executions.mode, 'rehearsal');
 }

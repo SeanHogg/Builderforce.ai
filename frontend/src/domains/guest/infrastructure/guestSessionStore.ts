@@ -45,28 +45,6 @@ function editKey(slice: string): string {
 const storage = localStore;
 
 /**
- * This browser's guest session id, minted on first read.
- *
- * Returns `null` on the server and wherever storage is unavailable, because a
- * server-rendered guest id would be a different id in every response and the
- * first hydrated frame would replace it — a session that changes identity on
- * hydration is worse than no session.
- */
-export function guestSessionId(): string | null {
-  const store = storage();
-  if (!store) return null;
-  const existing = store.getItem(SESSION_KEY);
-  if (existing) return existing;
-  const minted = `guest-${crypto.randomUUID()}`;
-  try {
-    store.setItem(SESSION_KEY, minted);
-  } catch {
-    return null;
-  }
-  return minted;
-}
-
-/**
  * Drop every edit written by a DIFFERENT build.
  *
  * Called once per page load from {@link readGuestEdits}. Cheap — it scans the
@@ -122,17 +100,6 @@ export function readGuestEdits<T>(slice: string): T | null {
   }
 }
 
-/** Record the visitor's edits to one slice. Silently a no-op without storage. */
-export function writeGuestEdits(slice: string, value: unknown): void {
-  const store = storage();
-  if (!store) return;
-  try {
-    store.setItem(editKey(slice), JSON.stringify(value));
-  } catch {
-    /* out of quota: the edit is lost, the page is not */
-  }
-}
-
 /**
  * Forget everything this browser holds as a guest.
  *
@@ -154,17 +121,4 @@ export function clearGuestSession(): void {
       /* ignore */
     }
   }
-}
-
-/** Which slices this browser has edits for — the claim's input. */
-export function editedGuestSlices(): string[] {
-  const store = storage();
-  if (!store) return [];
-  const live = `${EDIT_PREFIX}${APP_VERSION}:`;
-  const slices: string[] = [];
-  for (let i = 0; i < store.length; i += 1) {
-    const key = store.key(i);
-    if (key && key.startsWith(live)) slices.push(key.slice(live.length));
-  }
-  return slices;
 }

@@ -14,6 +14,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { brainChats, brainChatMessages, chatReadState } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import { excluded } from '../../infrastructure/database/upsert';
 
 /**
  * Advance a user's read high-water mark for one chat. Idempotent and monotonic:
@@ -40,7 +41,7 @@ export async function markChatRead(
       target: [chatReadState.chatId, chatReadState.userId],
       // GREATEST so a stale/racing lower mark never rewinds the pointer.
       set: {
-        lastReadSeq: sql`greatest(${chatReadState.lastReadSeq}, excluded.last_read_seq)`,
+        lastReadSeq: sql`greatest(${chatReadState.lastReadSeq}, ${excluded(chatReadState.lastReadSeq)})`,
         updatedAt: new Date(),
       },
     });

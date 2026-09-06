@@ -4,7 +4,7 @@ import {
   CREATION_OBJECT_KINDS, HIRING_OBJECT_KINDS, isCareerObjectKind, isOpenApplicationStage,
   isTimecardOutstanding,
 } from '@builderforce/creation-canvas-contract';
-import { CAREER_LABELS, CAREER_OBJECT_SPECS, CAREER_STATUSES } from './careerObjects';
+import { CAREER_AUTHORED_MONEY_FIELDS, CAREER_LABELS, CAREER_OBJECT_SPECS, CAREER_STATUSES } from './careerObjects';
 import './specObjectSets';
 import {
   makeSpecDeriveBoard, specFieldValue, specMutableFields, specObjectNamespace, specReadableFields,
@@ -112,7 +112,7 @@ describe('career vocabulary', () => {
     expect(specMutableFields('runway')).not.toContain('weeksRemaining');
     expect(specMutableFields('runway')).not.toContain('pressure');
     // …while the money the person actually knows stays theirs to type.
-    for (const name of ['savings', 'monthlyExpenses', 'monthlyIncome']) {
+    for (const name of CAREER_AUTHORED_MONEY_FIELDS) {
       expect(specMutableFields('runway')).toContain(name);
     }
   });

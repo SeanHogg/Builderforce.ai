@@ -234,12 +234,6 @@ export function jobFilterConditions(spec: JobFilterSpec): SQL[] {
   return conditions;
 }
 
-/** The criteria as ONE condition, or undefined when nothing is filtered. */
-export function jobFilterWhere(spec: JobFilterSpec): SQL | undefined {
-  const conditions = jobFilterConditions(spec);
-  return conditions.length ? and(...conditions) : undefined;
-}
-
 /** The posting's skills as a lowercased list, whether stored as JSON text or array. */
 function skillList(value: unknown): string[] {
   const raw = Array.isArray(value) ? value : parseJsonArray<unknown>(value);

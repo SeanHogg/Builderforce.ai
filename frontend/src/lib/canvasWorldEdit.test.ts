@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addProp, canvasWorldSceneFrom, deleteProp, emptyCanvasWorldScene, moveProp, updateGround, updateLighting, updateProp, updateSkyColor, updateSpawn } from '@builderforce/creation-canvas-contract';
+import { addProp, canvasWorldSceneFrom, deleteProp, emptyCanvasWorldScene, updateGround, updateLighting, updateProp, updateSkyColor, updateSpawn } from '@builderforce/creation-canvas-contract';
 
 describe('canvas world edit', () => {
   it('adds a prop with kind-default scale/color/physics and an incrementing id', () => {
@@ -29,12 +29,12 @@ describe('canvas world edit', () => {
 
   it('moving an unknown prop id is a no-op', () => {
     const scene = emptyCanvasWorldScene();
-    expect(moveProp(scene, 'missing', [1, 1, 1])).toEqual(scene);
+    expect(updateProp(scene, 'missing', { position: [1, 1, 1] })).toEqual(scene);
   });
 
   it('moves a prop by position only', () => {
     const { scene, prop } = addProp(emptyCanvasWorldScene(), { kind: 'block' });
-    const moved = moveProp(scene, prop.id, [5, 1, -2]);
+    const moved = updateProp(scene, prop.id, { position: [5, 1, -2] });
     expect(moved.props[0]!.position).toEqual([5, 1, -2]);
   });
 

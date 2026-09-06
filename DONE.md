@@ -1,3 +1,48 @@
+## ✅ RESOLVED 2026-09-06 — "Commit and push to main": an @-addressed agent had no git tool, and the Brain was told to refuse
+
+**What was measured (chat #99, VSIX).** Directed to commit and push a one-line CSS change, the agent
+reported it had no commit/push tool and could not. Three separate causes, one symptom:
+
+1. **The turn ran on VSIX 2026.9.5** (built 17:17 on 2026-09-05), which predates BOTH the `git.write`
+   publish tools and the POSIX-script routing (commit 852c4cb93, 19:05 the same day). The `set -e`
+   scripts reached `cmd.exe` ("Environment variable -e not defined") and `git_commit` / `git_push` did
+   not exist. The running host at report time (2026.9.17, build d6546f869d7b, `out/extension.js` 12:19)
+   ships both — verified by grepping the packaged bundle and the installed extension. Not re-fixed.
+2. **An @-addressed agent is answered ON THE SERVER** (`BrainService.agentReply`, via
+   `POST /chats/:id/agent-reply`) with the curated platform tools only — no file, shell or git tool,
+   because a Worker has no working tree. The editor that asked has all three. So "direct the
+   Developer to commit" could only ever end in "I have no git tool", truthfully, on every build.
+3. **Even the Brain could not do it.** `git_push` took `allowBaseBranch`, but `git_commit` refused the
+   base branch with no override, and the IDE persona said: prefer a PR "even when asked to push to
+   main — say you are opening a PR instead". An explicit human instruction ended in a refusal by design.
+
+**Fix (VSIX 2026.9.18 · brain-embedded 2026.9.2 · API 2026.9.11).**
+- **Addressed agents run in the editor when it has a workspace.** `useBrainConversation` gained
+  `runAddressedAgentLocally` (the IDE passes `init.hasWorkspace`); a directed turn fetches the agent's
+  compiled persona — the SAME lowering the server reply uses, `resolveWorkforceModel` → new
+  `api/src/application/brain/addressedAgentPersona.ts`, exposed as `GET /chats/:id/agent-persona`
+  (chat-access gated, resolver cached 5 min KV / 1 min L1) — and runs the host loop under
+  `addressedAgentSystemPrompt(persona, agent, hostPrompt)` (persona first, the tool-naming host prompt
+  last), with the host's tools. `BrainRunRequest.authoredBy` stamps every assistant turn the run
+  persists via ONE `persistMeta` helper (`withAuthoredBy` over the provenance), so the transcript
+  attributes the reply exactly as a server reply is. `WebviewRunStart.authoredBy` carries it over the
+  host bridge. The web Brain (no local tools) keeps the server reply unchanged.
+- **The server reply says what it cannot do.** One sentence in the `agentReply` system prompt: no
+  file/shell/git tools here; name the route that has them (the editor Brain, or a dispatched task).
+- **`git_commit` takes `allowBaseBranch`**, the same declared act `git_push` already had; the base-branch
+  guard is dropped only under it, a named `branch` still wins, and the refusal names the remedy. The
+  IDE approval label reads "commit N files on the BASE BRANCH (main) — skips pull-request review".
+- **The persona no longer argues.** Default route: ticket branch + `open_pull_request`. When the human
+  EXPLICITLY asks for main: `git_commit allowBaseBranch:true` then `git_push allowBaseBranch:true`, each
+  shown for approval — "do not refuse, argue, or substitute a pull request".
+- **DRY:** the send path and the trailing-message auto-reply built the model seed twice; ONE `seedFrom`.
+
+**Tests.** `git-publish.test.ts` (declared base-branch commit; branch wins; refusal names the remedy),
+`directedMessage.test.ts` (`withAuthoredBy` keeps provenance; prompt order), `brainRunStore.test.ts`
+(every persisted assistant turn carries `authoredBy` + provenance), `useBrainConversation.test.tsx`
+(local run with host tools + persona, server not asked; legacy path without the flag),
+`addressedAgentPersona.test.ts` (same lowering, null for unknown).
+
 ## ✅ RESOLVED 2026-09-06 — VSIX chat: runs survive a closed tab, denser replies, and four defects from chat #99's transcript
 
 **Runs execute in the extension host, not the webview (VSIX 2026.9.17 · brain-embedded 2026.9.1).**
@@ -36,11 +81,39 @@ line (chip left, hover-revealed actions right); copy / replay hand back the answ
 - *`git_sync_latest` failed with cmd.exe's "Environment variable -e not defined"* — POSIX scripts
   now go to bash EXPLICITLY (`execFile(bash, ["-c", script])`) instead of through the platform
   shell with an override; verified on this Windows machine with a `set -e` script.
-- *`read_file` results reached the model double-JSON-encoded* (`"{\"ok\":true,…`, every `
+- *`read_file` results reached the model double-JSON-encoded* (`"{\"ok\":true,…`, every `
+
 `
   escaped twice) because the webview path handed the tool's JSON STRING to the trimmer as a
   string — the host path parses it (`parseToolOutput`) so the read-file pager and the failure
   detector see an object.
+
+## ✅ RESOLVED 2026-09-06 — Codebase review, sixth pass: dead code validated and gone, the request-path writes batched, the per-item reads collapsed
+
+**How the dead code was found.** A whole-repo export-reference scan — every `export` in `api/src`, `frontend/src`, `worker/src`, `packages/*`, `clients/vscode` (extension AND webview), `brain-embedded`, the SDKs and the scripts; references counted as identifiers in code, tests, docs and config — reported 30,138 exports, 5,862 with no reference outside their own file. Triage removed entry-point conventions (pages, routes, `activate`), names the file itself uses (exported-but-internal), and types; 143 functions/constants and 45 types had no reference anywhere. Each was then validated against a live path before anything was deleted, per the review's own rule: a dead export is deleted only when a live path supersedes it, wired when it was the ONE home a re-inlined copy should have used, and kept when something outside the scan reads it.
+
+**Deleted — superseded by a live twin or never given a consumer.**
+- api: 68 exports across 60 modules — guards nothing called (`isComposableWidgetId`, `isLifecycleCategory`, `isRealizationKey`, `isExecutionMode`, `isCloudSurface`, `isOfferStatus`, `isInstallSubscriptionState`, `isPermissionEnforced`), lookups the live path had replaced (`getAnalyticsProvider` → `analyticsProviderForConnector`, `isSandboxTenant` → the slug filter `installAnalytics` already applies, `listEscalatedStalls` → `getStallRegister`, `existingProspectRefs` → `suspectedDuplicates`, `PROSPECT_EVENT_NAMES` → `isProspectEvent`, `closePipelineEntry` → the whole-pipeline close beside it, `unverifiedPayload` → the package's `decodeJwtPayload`, `tenantCanUsePremiumModels` → `requireFrontierAccess`), back-compat aliases (`WORKER_HEALTH_PATH`, `MAX_DISPATCHES_PER_TENANT_PER_TICK`, `OutcomeValueMetric`, `EXTENSION_PERIOD_DAYS`), constants nothing read (`REQUIREMENT_CONDITIONS`, `LEGAL_POLICY_EFFECTIVE_DATE`, `PRIVACY_CONTENT_SIGNALS`, `ALL_EARNER_FACETS`, `NEXT_DUE_SCHEDULE_TABLES`, `CLOUD_LANE_RUNTIMES`, `DELTA_DIRECTIVE`), 15 dead types, the `modelsByTier`/`vendorAutoRoutes` pool helpers production had stopped calling (their two tests read `catalogEntry().tier` and the module's `autoRoute` flag instead), the `burnrateTenantCompanyMapping` planner (+ test) under the no-ETL decision, and four barrel lines that re-exported names nobody imported.
+- The `taskRoutes` re-export shim was a layering fault, not just dead code: six modules — three of them APPLICATION modules — imported a swimlane function from a ROUTE module. They import `application/swimlane/laneEntryTrigger` now and the shim is gone; the `ssoLoginState` shim over `sessionExchange` likewise.
+- frontend: 97 exports across 45 modules — typed API clients no surface calls (`fetchDataset`/`fetchIdeProject`/`fetchAgent`, `formSummary`, `listJobDeliverables`, `updateEngagement` (no route exists), `extractJobDescription`, four kernel object/entity clients), canvas helpers whose promised consumer never came (`canvasAppIsRunnable`, `connectionStyleOf`, `allKindSettingsManifests`, `canvasSessionAction`, `isStencilShape`, `isDiagramTarget`, `gameScriptsFrom`, `resumeSectionIdForDiff`, `CANVAS_BUILDABLE_MODALITIES`/`buildableModalityLabel`, `APPROVAL_MODES`), the `SEQUENCE_RUNNER_FIELDS`/`readSequence` pair whose "cannot drift" contract the api runner never read, `requiredRoleFor`, `seatInitials`, `formatLong`/`sameDay`, `isTaskStatus`, `dayKeyAtPoint`, `shouldUseWebGPU`/`BrowserLoRATrainer`, `removeObjectMember` and friends, the `ACADEMIC_SPEC_KINDS`/`PEOPLE_SPEC_KINDS` "for the test" lists no test read, `AGENTS_FAQ` (the page reads its FAQ from the catalog) and `GETTING_STARTED_STEPS` (the home page was redesigned), `COMPARISON` and the `void`-kept `LEGACY_COMPETITIVE_COMPARISON` (98 lines of marketing data kept alive by a `void` statement) with its two types, 14 dead types, and the `canvasTriggers` 23 re-export aliases of the contract (its one importer and its test read the contract).
+- Whole files: `HomeScroller.tsx` (+ its stylesheet and `homeScroller` catalog keys in five locales — never mounted), `RolePreviewBar.tsx` (the TopBar renders the role preview), `workspace/CanvasSwitcher.tsx` (`SessionList` carries recent canvases), `kernel/RosterNav.tsx` (the seat page records its removal; the `earned()` test went with it), `ProjectList.tsx` (`ProjectTable`/`ProjectCard`), `lib/canvasViewport.ts` (the contract's `viewport.ts` is the one module; the switcher's docblock now says so), `lib/evermindRecipes.ts` (the api owns recipes; the mirror had no reader), `lib/agent-runtime.ts` (a runtime factory no surface called), `components/dashboard/index.ts` (17 re-exports with one consumer, which now imports the component), `data/agents/threats.yaml`.
+- contract package: 10 unused `is*` guards and 14 dead types; `world.moveProp` (its test reads `updateProp`). worker: 2 dead interfaces. VS Code: `recallSystemMessage`, `onGroundingChange`/`getGroundingSummary` (and the emitter nothing subscribed to), `upgradeActionFor`, `resolveEffectiveModel`.
+- Four names the memory recorded as deleted in earlier passes (`DELTA_DIRECTIVE`, `installHasScope`, `recallSystemMessage`, `onGroundingChange`) had never actually been deleted. They are now, and the memory is corrected.
+
+**Wired — the dead export was the ONE home a re-inlined copy should have used.** `hostAgentActor` (two inline `host_agent` actors in `activityLog` and the lifecycle outbox), `probeAllVendors` (the health cron had re-written the same fan-out), `isRefusal` (`hrAnalytics` had its own), `verifyEmulationJwt` (the emulation middleware re-implemented the typed check inline), a fresh `emptyDefinition()` for the two inline empty workflow definitions, `SAMPLE_WORKSPACE_NAME` (two fixtures spelled it by hand), `diagramGraphStats` (the card subtitle and the import notice each counted), `defineGuidedSteps`/`DEFAULT_BEGINNER_STEP` (the import wizard carried its own step ladder), `removeLocal` (one raw `localStorage.removeItem`), `CAREER_AUTHORED_MONEY_FIELDS` (its own test spelled the list again), and `initialsOf` — four components each derived avatar initials their own way (`Avatar`, `rosterAvatar`, `LiveBar`, `ProfileIdentityCard`); `lib/initials.ts` is the one rule.
+
+**An unwired feature given its consumer.** `POST /api/auth/add-password` and `addPassword()` existed, and nothing rendered a way to use them: an account that signed up through a provider had no path to a password. `SetPasswordPanel` sits at the top of the Account tab of `/security`, renders only when `/me` reports `hasPassword: false` (the new field), calls `AuthContext.setPassword`, and is localized in five catalogs.
+
+**Kept on evidence, not on the scanner's word.** `registerCanvasHost` and `withWorkspaceMap` (the VS Code webview imports them — the first scan did not cover the webview; it does now), `mamba-worker-client.createLocalFirstProvider` and its worker (the local-first blog post documents it), `widgetAcceptsOrigin`, `requiresWorkspace`, `cacheStore`, `integrityFromNode`/`moderationRowsFromNode` (register blockers), `BUILDERFORCE_MODELS` (a live fallback), `CheckOwnership`/`workerOwnedCheck` (their own module uses them as defaults). Six `metrics/*` scorers "exported for unit testing" with no tests now have them (`scoreAllocation`, `scoreCollaboration`, `scoreDocActivity`, `rollupAllocation`, `assignTiers`, `taskEffortHours`/`taskLaborUsd`).
+
+**Performance.**
+- Request-path per-row writes are ONE multi-row statement: activity signal ingest (N inserts → 1 for a batch of N), timecard auto entries (one per day → one per period), report subscriptions, the role and user permission-override matrices, the agent-host directory manifest, the member metrics period snapshot, derived QA flows, stakeholder conflicts, and the ticket-participant manifest (which also resolves each ROLE once rather than once per slot); the owner-sync loop is one `UPDATE … WHERE id IN`.
+- `excluded()` (`infrastructure/database/upsert.ts`) spells `excluded.<column>` from the schema column object. The multi-row upserts use it, and the 43 hand-typed `excluded.snake_name` strings inside sql templates across 13 modules were migrated to it — a renamed column now fails the typecheck instead of the query.
+- Per-item reads inside loops became one read plus an in-memory group: escalation policies' levels (`EscalationService.listPolicies`), overdue forms' unanswered recipients (`formRemindersDue`), and listening triggers' workflow definitions (`fireEventTriggers`). Every other loop the scan flagged writes per item by design (claims, sweeps, seeds) or reads a bounded per-parent set.
+- `segmentResolver` — the auth hot path — moved off its private `Map` + TTL onto the canonical `getOrSetCached` (L1, plus KV when the caller holds `env`; `authMiddleware` and `serviceTokenAuth` now pass it), and `invalidateSegment` clears BOTH layers from the segment routes instead of the originating isolate alone.
+- The unbounded-select sweep (210 statements without `.limit`) found every one by-id, parent-scoped, or date-windowed; none unbounded.
+
+**Verification.** api `tsgo` clean; api guards 29/29 (silent-catches re-baselined downward: 893 sites); api suite 774 files / 9,381 tests green (the `eventTriggers` fixture now carries the definition id the batched read keys on); frontend `tsgo` clean; frontend guards 22/22 (design-scale 3,578 → 3,572 with its history line; root-closure re-baselined to 482 files / 120,665 lines); 242 frontend suites / 3,052 tests green across the touched trees; worker `tsc` clean and 44 tests green; VS Code client `tsc` clean.
 
 ## ✅ RESOLVED 2026-09-06 — Codebase review, fifth pass: the duplicated primitives are one each, the browser dialogs are gone, and the worker verifies with the api's own verifier
 

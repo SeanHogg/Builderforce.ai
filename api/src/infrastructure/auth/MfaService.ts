@@ -243,7 +243,3 @@ export async function decryptSecretFromStorage(
 export function parseTokenTimeToDate(unixSeconds: number): Date {
   return new Date(unixSeconds * 1000);
 }
-
-export function secretFromHex(hex: string): string {
-  return base32Encode(hexToBytes(hex));
-}

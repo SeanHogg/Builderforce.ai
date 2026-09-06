@@ -4,14 +4,13 @@ import {
   dateValue,
   daysUntil,
   deadlineValueOf,
-  evaluateCanvasTriggers,
   evaluateTrigger,
   isVirtualDeadlineField,
   nextOpenObligation,
   numericValue,
   resolveDeadlineField,
-  triggerUnboundHint,
-} from './canvasTriggers';
+} from '@builderforce/creation-canvas-contract';
+import { evaluateCanvasTriggers, triggerUnboundHint } from './canvasTriggers';
 import { allSpecObjectSpecs, deadlineBearingKinds, specDeadlineFields } from './specObjects';
 // Registers the vocabularies whose deadline flags the drift guard reads. Importing for
 // side effect is how every other spec test reaches the registry.

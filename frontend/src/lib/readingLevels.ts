@@ -18,8 +18,6 @@ export const READING_LEVELS = [
   { id: 'advanced', audience: 'a well-read adult — precise, technical, no simplification' },
 ] as const;
 
-export type ReadingLevelId = (typeof READING_LEVELS)[number]['id'];
-
 export function readingLevel(id: string): (typeof READING_LEVELS)[number] {
   return READING_LEVELS.find((level) => level.id === id) ?? READING_LEVELS[1];
 }

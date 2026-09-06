@@ -24,7 +24,7 @@ import {
 
 /**
  * Vendor priority — free Together first (cost-optimised), FluxAPI premium last.
- * This is the order `modelsByTier` walks, and the order the proxy uses for
+ * This is the order the pool composer walks, and the order the proxy uses for
  * the candidate chain when no caller-pinned model is supplied.
  */
 const MODULES: ReadonlyArray<ImageVendorModule> = [togetherImageModule, fluxApiModule];
@@ -75,12 +75,6 @@ export function imageVendorKeyBound(env: ImageVendorEnv, vendor: ImageVendorId):
 
 export function tierForImageModel(modelId: string): ImageModelTier {
   return MODULES_BY_ID[vendorForImageModel(modelId)].tierFor(modelId);
-}
-
-export function getImageCatalog(): ReadonlyArray<ImageVendorModelEntry & { vendor: ImageVendorId }> {
-  return MODULES.flatMap((mod) =>
-    mod.catalog.map((entry) => ({ ...entry, vendor: mod.id })),
-  );
 }
 
 export function getImageModule(id: ImageVendorId): ImageVendorModule {

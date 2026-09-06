@@ -5765,6 +5765,18 @@
         "nda": "Accord de confidentialité",
         "cookie": "Politique de cookies"
       }
+    },
+    "setPassword": {
+      "title": "Définir un mot de passe",
+      "subtitle": "Vous vous êtes inscrit via un fournisseur. Ajoutez un mot de passe pour pouvoir aussi vous connecter avec votre e-mail.",
+      "password": "Nouveau mot de passe",
+      "confirm": "Confirmer le mot de passe",
+      "save": "Définir le mot de passe",
+      "saving": "Enregistrement…",
+      "done": "Mot de passe défini. Vous pouvez maintenant vous connecter avec votre e-mail.",
+      "failed": "Le mot de passe n’a pas pu être défini.",
+      "tooShort": "Utilisez au moins {min} caractères.",
+      "mismatch": "Les deux mots de passe ne correspondent pas."
     }
   },
   "catalogInsights": {
@@ -24256,10 +24268,6 @@
     "hintOpen": "<kbd>⏎</kbd> ouvrir",
     "hintClose": "<kbd>échap</kbd> fermer",
     "locked": "Formule {plan}"
-  },
-  "homeScroller": {
-    "previous": "Afficher le précédent",
-    "next": "Afficher plus"
   },
   "liveBar": {
     "region": "Appel",

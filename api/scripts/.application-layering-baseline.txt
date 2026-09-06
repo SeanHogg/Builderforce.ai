@@ -5,12 +5,9 @@ application/creation/creationSessionFolderRouteService.ts
 application/creation/creationSessionRouteService.ts
 application/incident/incidentDispatch.ts
 application/kanban/requestRoleRun.ts
-application/llm/builtinMcpService.ts
 application/llm/vendorHealthCron.ts
 application/manager/ManagerService.ts
 application/manager/triageStage.ts
-application/repos/prMergeSweep.ts
-application/runtime/autonomousExecutionSweep.ts
 application/security/securityDispatch.ts
 application/swimlane/laneEntryTrigger.ts
 application/validation/validationDispatch.ts

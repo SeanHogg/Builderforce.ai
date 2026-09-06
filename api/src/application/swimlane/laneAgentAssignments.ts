@@ -54,12 +54,6 @@ export function forLanes(swimlaneIds: readonly string[], ...extra: Array<SQL | u
   )!;
 }
 
-/** `WHERE scope = 'swimlane'` alone — for a query that joins to `swimlanes` for its
- *  own narrowing (a board-wide staffing scan) rather than naming lane ids. */
-export function laneScoped(...extra: Array<SQL | undefined>): SQL {
-  return and(eq(agentAssignments.scope, LANE_AGENT_SCOPE), ...extra)!;
-}
-
 /**
  * The JOIN condition between a lane assignment and `swimlanes.id`.
  *

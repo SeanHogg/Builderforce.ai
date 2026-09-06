@@ -20,7 +20,7 @@ import {
 import { rankModelsForAction, type ActionModelRankStat } from '@builderforce/learned-routing';
 import { CODING_BACKSTOP_MODELS } from './modelPool';
 import { parseModel, withDefaultModel } from '../runtime/cloudDispatch';
-import { catalogEntry, vendorForModel, autoRoutableModelsByTier, modelsByTier, tierForModel } from './vendors';
+import { catalogEntry, vendorForModel, autoRoutableModelsByTier, tierForModel } from './vendors';
 
 // ---------------------------------------------------------------------------
 // Drift guard for the curated coding pool. The capability-reorder + the cloud-
@@ -79,7 +79,7 @@ describe('auto-route pool composition', () => {
     // The exclusion is at pool-composition time only — the catalog still owns them
     // so `ollama/gpt-oss:120b` resolves for genuine on-prem/self-hosted use.
     expect(catalogEntry('gpt-oss:120b')).not.toBeNull();
-    expect(modelsByTier('FREE')).toContain('gpt-oss:120b');
+    expect(catalogEntry('gpt-oss:120b')?.tier).toBe('FREE');
     expect(autoRoutableModelsByTier('FREE')).not.toContain('gpt-oss:120b');
   });
 

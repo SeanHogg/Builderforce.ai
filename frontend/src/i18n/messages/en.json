@@ -5765,6 +5765,18 @@
         "nda": "Non-disclosure agreement",
         "cookie": "Cookie policy"
       }
+    },
+    "setPassword": {
+      "title": "Set a password",
+      "subtitle": "You signed up with a provider. Add a password so you can also sign in with your email.",
+      "password": "New password",
+      "confirm": "Confirm password",
+      "save": "Set password",
+      "saving": "Saving…",
+      "done": "Password set. You can now sign in with your email.",
+      "failed": "The password could not be set.",
+      "tooShort": "Use at least {min} characters.",
+      "mismatch": "The two passwords do not match."
     }
   },
   "catalogInsights": {
@@ -24256,10 +24268,6 @@
     "hintOpen": "<kbd>⏎</kbd> open",
     "hintClose": "<kbd>esc</kbd> close",
     "locked": "{plan} plan"
-  },
-  "homeScroller": {
-    "previous": "Show previous",
-    "next": "Show more"
   },
   "liveBar": {
     "region": "Live session",

@@ -29,8 +29,6 @@
 
 import { signState, verifyState } from '../../infrastructure/auth/oauthState';
 
-export { mintSessionExchangeCode, readSessionExchangeCode, safeRedirectPath } from './sessionExchange';
-
 import { safeRedirectPath } from './sessionExchange';
 
 /** Ten minutes. See the header. */
