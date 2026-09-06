@@ -83,13 +83,51 @@ describe('compliance', () => {
     expect(s.byTool[0]!.count).toBe(1);
   });
 
+  // The rollup fold: a tally weighs the calls it stands for, so every figure has to
+  // come out the same as it would have from the raw rows it replaced.
+  it('summarizeAudit weighs a rolled-up day exactly as its raw rows', () => {
+    const raw: AuditRow[] = [
+      { toolName: 'Bash', category: 'tool', agentHostId: 1, cloudAgentRef: null, executionId: 10 },
+      { toolName: 'Bash', category: 'tool', agentHostId: 1, cloudAgentRef: null, executionId: 11 },
+      { toolName: 'Read', category: 'tool', agentHostId: 1, cloudAgentRef: null, executionId: 10 },
+    ];
+    const folded: AuditRow[] = [
+      { toolName: 'Bash', category: 'tool', agentHostId: 1, cloudAgentRef: null, events: 2, distinctExecutions: 2 },
+      { toolName: 'Read', category: 'tool', agentHostId: 1, cloudAgentRef: null, events: 1, distinctExecutions: 1 },
+    ];
+    const a = summarizeAudit(raw, 90);
+    const b = summarizeAudit(folded, 90);
+    expect(b.totalEvents).toBe(a.totalEvents);
+    expect(b.sensitiveEvents).toBe(a.sensitiveEvents);
+    expect(b.distinctAgents).toBe(a.distinctAgents);
+    expect(b.byTool).toEqual(a.byTool);
+    expect(b.byCategory).toEqual(a.byCategory);
+    expect(b.byAgent).toEqual(a.byAgent);
+    // The one figure that is a per-day sum rather than a set: Read's execution 10 is
+    // already counted by Bash's day, so summing the days is an upper bound, not a set.
+    expect(a.distinctExecutions).toBe(2);
+    expect(b.distinctExecutions).toBe(3);
+  });
+
+  it('summarizeAudit reports the grain boundary so a window can say what it itemises', () => {
+    expect(summarizeAudit([], 90, 45).rawWithinDays).toBe(45);
+  });
+
   it('evidencePackToCsv escapes quotes and emits a header', () => {
     const rows: EvidenceRow[] = [
-      { ts: '2026-06-23T00:00:00.000Z', toolName: 'say "hi"', risk: 'normal', category: 'tool', agent: 'host:1', executionId: 10, durationMs: 5 },
+      { ts: '2026-06-23T00:00:00.000Z', grain: 'event', events: 1, toolName: 'say "hi"', risk: 'normal', category: 'tool', agent: 'host:1', executionId: 10, durationMs: 5 },
     ];
     const csv = evidencePackToCsv(rows);
-    expect(csv.split('\n')[0]).toBe('"ts","tool","risk","category","agent","execution_id","duration_ms"');
+    expect(csv.split('\n')[0]).toBe('"ts","grain","events","tool","risk","category","agent","execution_id","duration_ms"');
     expect(csv).toContain('"say ""hi"""');
+  });
+
+  // An auditor reading the pack must be able to tell one call from a folded day.
+  it('evidencePackToCsv states the grain and the calls a folded line accounts for', () => {
+    const csv = evidencePackToCsv([
+      { ts: '2026-07-27T23:59:00.000Z', grain: 'day', events: 312, toolName: 'auto_run_skipped', risk: 'normal', category: 'tool', agent: 'cloud:a1', executionId: null, durationMs: 900 },
+    ]);
+    expect(csv).toContain('"day",312,');
   });
 });
 

@@ -2628,7 +2628,8 @@
       "count": "Nombre",
       "byAgent": "Par agent",
       "agent": "Agent",
-      "kind": "Type"
+      "kind": "Type",
+      "grainNote": "Au-delà de {days} jours, cette piste d'audit est un cumul quotidien : les totaux, les répartitions et le nombre d'actions sensibles restent exacts, mais les appels d'outil individuels ne sont plus détaillés."
     },
     "funnel": {
       "title": "Entonnoir d’innovation",

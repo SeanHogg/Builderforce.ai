@@ -127,6 +127,21 @@ describe('SWEPT_TABLES redact windows', () => {
       expect(table.redact.afterDays, `${table.relation} redact window`).toBeGreaterThan(0);
     }
   });
+
+  it('folds a row to a tally only AFTER its payload is blanked and BEFORE it is purged', () => {
+    // The three stages have to stay in this order — redact < rollup < retention — and each
+    // inversion fails silently in its own way. Rollup at or before the redact window folds
+    // rows that still carry a payload, so the fold discards data the shorter window said
+    // was still live. Rollup at or after the retention window never runs, because the purge
+    // has already deleted the rows: the relation keeps growing and the summary table it was
+    // supposed to fill stays empty, with nothing anywhere reporting a problem.
+    for (const table of SWEPT_TABLES) {
+      if (!table.rollup) continue;
+      expect(table.rollup.afterDays, `${table.relation} rollup window`).toBeLessThan(table.retentionDays);
+      expect(table.rollup.afterDays, `${table.relation} rollup window`)
+        .toBeGreaterThan(table.redact?.afterDays ?? 0);
+    }
+  });
 });
 
 describe('runTableVacuum', () => {

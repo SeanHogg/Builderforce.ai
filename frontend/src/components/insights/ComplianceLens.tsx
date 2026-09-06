@@ -52,6 +52,15 @@ export function ComplianceLens() {
         <StatCard label={t('comp.agents')} value={int(data.distinctAgents)} sub={t('comp.agentsSub')} />
       </KpiGrid>
 
+      {/* Say which half of the window is still itemised. The numbers above are exact at
+          both grains, so this is not a caveat on them — it is the one thing an auditor
+          cannot do with the older half, stated where they choose the window. */}
+      {data.windowDays > data.rawWithinDays && (
+        <p style={{ margin: 0, fontSize: '0.78rem', lineHeight: 1.5, color: 'var(--text-muted)' }}>
+          {t('comp.grainNote', { days: data.rawWithinDays })}
+        </p>
+      )}
+
       <PmCard title={t('comp.byTool')}>
         {data.byTool.length === 0 ? (
           <span style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>{t('comp.noEvents')}</span>

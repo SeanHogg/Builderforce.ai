@@ -8697,7 +8697,10 @@ export interface FinanceInsights {
 
 export type ToolRisk = 'sensitive' | 'normal';
 export interface ComplianceSummary {
-  windowDays: number; totalEvents: number; sensitiveEvents: number; distinctExecutions: number; distinctAgents: number;
+  windowDays: number;
+  /** Days still held at single-call grain; older evidence is a daily tally. */
+  rawWithinDays: number;
+  totalEvents: number; sensitiveEvents: number; distinctExecutions: number; distinctAgents: number;
   byTool: Array<{ toolName: string; risk: ToolRisk; count: number }>;
   byCategory: Array<{ category: string; count: number }>;
   byAgent: Array<{ agent: string; kind: 'host' | 'cloud'; count: number }>;

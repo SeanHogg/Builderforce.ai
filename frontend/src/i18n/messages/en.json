@@ -2628,7 +2628,8 @@
       "count": "Count",
       "byAgent": "By agent",
       "agent": "Agent",
-      "kind": "Kind"
+      "kind": "Kind",
+      "grainNote": "Beyond {days} days this trail is a daily rollup: the totals, breakdowns and sensitive-action counts are exact, but individual tool calls are no longer itemised."
     },
     "funnel": {
       "title": "Innovation Funnel",

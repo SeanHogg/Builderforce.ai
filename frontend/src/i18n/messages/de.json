@@ -2628,7 +2628,8 @@
       "count": "Anzahl",
       "byAgent": "Nach Agent",
       "agent": "Agent",
-      "kind": "Art"
+      "kind": "Art",
+      "grainNote": "Jenseits von {days} Tagen ist dieser Verlauf eine Tagesaggregation: Summen, Aufschlüsselungen und die Anzahl sensibler Aktionen bleiben exakt, einzelne Tool-Aufrufe werden jedoch nicht mehr einzeln aufgeführt."
     },
     "funnel": {
       "title": "Innovationstrichter",

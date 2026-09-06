@@ -2628,7 +2628,8 @@
       "count": "Recuento",
       "byAgent": "Por agente",
       "agent": "Agente",
-      "kind": "Tipo"
+      "kind": "Tipo",
+      "grainNote": "Más allá de {days} días, este registro es un resumen diario: los totales, los desgloses y el recuento de acciones sensibles son exactos, pero las llamadas de herramienta individuales ya no se detallan."
     },
     "funnel": {
       "title": "Embudo de innovación",
