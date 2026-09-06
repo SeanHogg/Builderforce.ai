@@ -4,19 +4,23 @@
  * Cross-agentHost memory sharing mesh: BuilderForce Agents instances push activity summaries
  * here so all agentHosts in a tenant can recall what peer agentHosts have been working on.
  *
+ * Backed by the converged memory store (`agent_memory`, migration 0442 — the old
+ * `team_memory` table was dropped by 1131). The write is `memoryService.remember`,
+ * which bumps the tenant's memory version; the read is `teamMemoryFeed`, cached on
+ * that same version. Both responses are the published `TeamMemoryEntry` contract.
+ *
  * POST /api/teams/memory  – store a memory entry (agentHost API key or tenant JWT)
  * GET  /api/teams/memory  – retrieve recent entries (tenant JWT)
  */
 
 import { Hono } from 'hono';
-import { and, desc, eq, like } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { agentMemory } from '../../infrastructure/database/schema';
 import { verifyAgentHostApiKey } from '../../infrastructure/auth/agentHostAuth';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { parseJsonArray } from '../../domain/shared/json';
+import type { TeamMemoryEntry } from '../../openapi/schema';
 import { remember } from '../../application/memory/memoryService';
+import { listTeamMemoryEntries, teamMemoryKey } from '../../application/memory/teamMemoryFeed';
 import { limitParam } from './queryParams';
 
 export function createTeamMemoryRoutes(db: Db): Hono<HonoEnv> {
@@ -67,12 +71,14 @@ export function createTeamMemoryRoutes(db: Db): Hono<HonoEnv> {
     if (!agentHostId) return c.json({ error: 'agentHostId is required when not using agentHost API key auth' }, 400);
 
     const runId = body.runId.trim();
+    const summary = body.summary.trim();
+    const tags = Array.isArray(body.tags) ? body.tags : [];
     const stored = await remember(c.env, db, { tenantId, origin: 'on-prem' }, {
-      key: `team:${agentHostId}:${runId}`, content: body.summary.trim(),
-      tags: Array.isArray(body.tags) ? body.tags : [], scope: 'tenant',
+      key: teamMemoryKey(agentHostId, runId), content: summary, tags, scope: 'tenant',
     });
     if (!stored.ok) return c.json({ error: stored.error }, 500);
-    return c.json({ agentHostId, runId, summary: body.summary.trim(), tags: body.tags ?? [], timestamp: new Date().toISOString() }, 201);
+    const entry: TeamMemoryEntry = { tenantId, agentHostId, runId, summary, tags, timestamp: new Date().toISOString() };
+    return c.json(entry, 201);
   });
 
   // ── GET /api/teams/memory ─────────────────────────────────────────────────
@@ -82,19 +88,7 @@ export function createTeamMemoryRoutes(db: Db): Hono<HonoEnv> {
   router.get('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const limit = limitParam(c.req.query('limit'), 20, 100);
-
-    const rows = await db
-      .select()
-      .from(agentMemory)
-      .where(and(eq(agentMemory.tenantId, tenantId), like(agentMemory.key, 'team:%')))
-      .orderBy(desc(agentMemory.createdAt))
-      .limit(limit);
-
-    const entries = rows.map((r) => {
-      const [, agentHostId = '', ...run] = r.key.split(':');
-      return { id: r.id, agentHostId, runId: run.join(':'), summary: r.content, tags: parseJsonArray<string>(r.tags), timestamp: r.createdAt.toISOString(), createdAt: r.createdAt };
-    });
-
+    const entries: TeamMemoryEntry[] = await listTeamMemoryEntries(c.env as Env, db, tenantId, limit);
     return c.json({ entries, total: entries.length });
   });
 

@@ -41,7 +41,7 @@
 
 import {
   analyzeSalary, auditProfile, buildCoachingPlan, buildInterviewKit, compareOffers,
-  compareOptions, compareResumeToJob, computeRunway, consolidateResumes, draftListingFromResume,
+  compareOptions, compareResumeToJob, computeRunway, consolidateResumes, declaredRoleSkillTokens, draftListingFromResume,
   employerResearchBrief, extractSkills, listingReadiness, optimizeResume,
   planForTarget, profileBlocks, PROFILE_VENDORS, roastResume, ROLE_PROFILES, resumeSentiment,
   screenCandidate, scoreResume, suggestTargets, summarizeResume, tailorResume, valueProposition,
@@ -49,7 +49,7 @@ import {
   type CareerListing, type InterviewType, type OfferInput, type ProfileVendor, type SeekingMode,
   type WorkOption,
 } from '../career';
-import { parseResume } from '@builderforce/creation-canvas-contract';
+import { displaySkill, parseResume } from '@builderforce/creation-canvas-contract';
 // The five HRMS-backed rows. They are the one group here that reaches neither a
 // route nor a text argument: their data lives in the customer's HRIS, payroll and
 // ATS, and it arrives through the connector port. See `application/people/`.
@@ -537,6 +537,9 @@ const TENANT_TOOLS: BuiltinTool[] = [
         seniority: listing.seniority,
         offeredPostingTypes: postingTypesFor(listing.seeking),
         availableTargets: ROLE_PROFILES.map((r) => ({ id: r.id, title: r.title, family: r.family, level: r.level })),
+        // The skills every destination above is scored on. Without it the model rates a
+        // résumé against skills it made up, and the gap it names is one no plan closes.
+        skillVocabulary: declaredRoleSkillTokens().map(displaySkill),
         instruction: 'If `declaredTargets` is empty, run hr.career360_suggest_targets over their résumé and offer the top results. If it is not, plan against what they already chose rather than re-litigating the choice.',
       };
     },

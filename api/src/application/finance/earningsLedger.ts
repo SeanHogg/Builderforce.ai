@@ -68,6 +68,7 @@ import {
   tenants,
 } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { MILESTONE_STATUSES, isHoldingFunds } from '../marketplace/escrow';
 import { settlementMode, type SettlementMode } from '../integrations/payments';
 import { quotePlatformFee, type PlatformFeeQuote } from './platformFees';
@@ -109,7 +110,9 @@ export function classifyLedgerEntry(entryKind: string, reference: string | null)
 }
 
 /** True when this row is money the person EARNED (positive or, for a refund, negative)
- *  rather than money moving out of the platform. */
+ *  rather than money moving out of the platform. The TypeScript twin of
+ *  `EARNING_SQL`: the summary is summed by the SQL, every listed row is checked
+ *  against this, and `toEarningsTransaction` reports the two disagreeing. */
 export function isEarningKind(kind: EarningKind): boolean {
   return kind === 'sale' || kind === 'escrow_release' || kind === 'refund';
 }
@@ -370,6 +373,9 @@ async function buildEarningsReport(db: Db, env: Env, query: EarningsQuery & { li
       memo: ledgerEntries.memo,
       tenantId: ledgerEntries.tenantId,
       workspaceName: tenants.name,
+      // The SQL twin's verdict on THIS row, so the mapper can hold it against the
+      // TypeScript twin's — see `toEarningsTransaction`.
+      earning: sql<boolean>`${EARNING_SQL}`,
     }).from(ledgerEntries)
       .leftJoin(tenants, eq(tenants.id, ledgerEntries.tenantId))
       .where(scope)
@@ -394,23 +400,7 @@ async function buildEarningsReport(db: Db, env: Env, query: EarningsQuery & { li
   const truncated = rows.length > query.limit;
   const page = truncated ? rows.slice(0, query.limit) : rows;
 
-  const transactions: EarningsTransaction[] = page.map((row) => {
-    const kind = classifyLedgerEntry(row.entryKind, row.reference);
-    const amountCents = num(row.amount);
-    const feeCents = kind === 'sale' ? (feeByOrder.get(row.reference ?? '') ?? 0) : 0;
-    return {
-      id: Number(row.id),
-      occurredAtISO: row.occurredAt.toISOString(),
-      kind,
-      amountCents,
-      feeCents,
-      grossCents: amountCents + feeCents,
-      reference: row.reference,
-      memo: row.memo,
-      tenantId: Number(row.tenantId),
-      workspaceName: row.workspaceName ?? null,
-    };
-  });
+  const transactions: EarningsTransaction[] = page.map((row) => toEarningsTransaction(row, feeByOrder));
 
   const feeByPeriod = new Map(feeBuckets.map((row) => [row.period, num(row.fee)]));
   const buckets: EarningsBucket[] = ledgerBuckets.map((row) => {
@@ -447,6 +437,63 @@ async function buildEarningsReport(db: Db, env: Env, query: EarningsQuery & { li
     transactionsTruncated: truncated,
     fee,
     settlement: settlementMode(env),
+  };
+}
+
+/** One ledger row as the statement query selects it. */
+export interface EarningsLedgerRow {
+  id: number | string;
+  occurredAt: Date;
+  entryKind: string;
+  amount: number | string;
+  reference: string | null;
+  memo: string | null;
+  tenantId: number | string;
+  workspaceName: string | null;
+  /** `EARNING_SQL` evaluated on this row — the SQL twin's answer. */
+  earning: boolean | null;
+}
+
+/**
+ * One row → one statement line, with the classifier's two twins held against
+ * each other.
+ *
+ * The summary above is summed by `EARNING_SQL`; the line is labelled by
+ * `classifyLedgerEntry` and sided by `isEarningKind`. A row where those disagree
+ * is money the total counts and the list files elsewhere (or the reverse) — the
+ * one drift the header says a reader must be able to see. Reported, never
+ * corrected here: the mapper does not know which twin is right, and a statement
+ * that silently re-sides a row is the second set of books this module exists
+ * not to be.
+ */
+export function toEarningsTransaction(
+  row: EarningsLedgerRow,
+  feeByOrder: ReadonlyMap<string, number>,
+): EarningsTransaction {
+  const kind = classifyLedgerEntry(row.entryKind, row.reference);
+  const amountCents = num(row.amount);
+  const feeCents = kind === 'sale' ? (feeByOrder.get(row.reference ?? '') ?? 0) : 0;
+  if (row.earning != null && isEarningKind(kind) !== row.earning) {
+    reportCaughtError(
+      new Error(`ledger row ${row.id}: entry_kind "${row.entryKind}" is ${row.earning ? 'an earning' : 'not an earning'} in SQL but classifies as "${kind}"`),
+      {
+        source: 'application/finance/earningsLedger.ts',
+        operation: 'toEarningsTransaction:classifierDrift',
+        context: { ledgerEntryId: row.id, entryKind: row.entryKind, reference: row.reference, kind, sqlEarning: row.earning },
+      },
+    );
+  }
+  return {
+    id: Number(row.id),
+    occurredAtISO: row.occurredAt.toISOString(),
+    kind,
+    amountCents,
+    feeCents,
+    grossCents: amountCents + feeCents,
+    reference: row.reference,
+    memo: row.memo,
+    tenantId: Number(row.tenantId),
+    workspaceName: row.workspaceName ?? null,
   };
 }
 

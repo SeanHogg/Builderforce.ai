@@ -29,6 +29,8 @@ import {
   aggregateStageOutcome,
   computeDeadBlocked,
   computeReadyDispatches,
+  isStageSettled,
+  isTerminalDispatch,
   type DispatchStatus,
   type SchedulableDispatch,
   type SuccessPolicy,
@@ -106,6 +108,14 @@ export class InvalidTicketTransitionError extends Error {
   constructor(from: TicketLifecycle, to: TicketLifecycle) {
     super(`Illegal ticket transition: ${from} -> ${to}.`);
     this.name = 'InvalidTicketTransitionError';
+  }
+}
+
+/** A dispatch result that is not terminal cannot settle a stage — refused, not stored. */
+export class NonTerminalDispatchResultError extends Error {
+  constructor(status: string) {
+    super(`A dispatch result must be terminal (completed | failed | cancelled), got "${status}".`);
+    this.name = 'NonTerminalDispatchResultError';
   }
 }
 
@@ -502,6 +512,10 @@ export class SwimlaneCoordinator {
     tenantId: number,
     result: { status: 'completed' | 'failed' | 'cancelled'; output?: string | null; error?: string | null },
   ): Promise<void> {
+    // The type says terminal; the routes that feed this parse a JSON body. A
+    // non-terminal status written here would leave the stage never settling and
+    // the ticket parked in stage_running with nothing left to report.
+    if (!isTerminalDispatch(result.status)) throw new NonTerminalDispatchResultError(result.status);
     const dispatch = await this.store.getDispatch(dispatchId, tenantId);
     if (!dispatch) throw new TicketRunNotFoundError();
 
@@ -640,12 +654,18 @@ export class SwimlaneCoordinator {
       siblings = await this.store.listStageDispatches(ticketRunId, stageSeq, tenantId);
     }
 
+    // Still running: a pull worker / agentHost callback re-enters via
+    // reportDispatchResult. Decided BEFORE the lane read — an unsettled stage has
+    // no outcome to policy-check, so the round trip would buy nothing.
+    const statuses = siblings.map((s) => s.status as DispatchStatus);
+    if (!isStageSettled(statuses)) return;
+
     // The stage's success quorum comes from the lane (all | any | n_of_m).
     const lane = siblings[0]?.swimlaneId
       ? await this.loadLane(siblings[0].swimlaneId, tenantId)
       : undefined;
     const outcome = aggregateStageOutcome(
-      siblings.map((s) => s.status as DispatchStatus),
+      statuses,
       (lane?.successPolicy as SuccessPolicy) ?? 'all',
       lane?.successThreshold ?? null,
     );
@@ -654,7 +674,6 @@ export class SwimlaneCoordinator {
     } else if (outcome === 'failed') {
       await this.onStageComplete(ticketRunId, 'failed');
     }
-    // 'running': a pull worker / agentHost callback re-enters via reportDispatchResult.
   }
 
   /** Route one ready dispatch: browser → claimable `pending`; agentHost → push. */

@@ -176,7 +176,9 @@ export function PendingChangesList({
         )}
       </div>
 
-      <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+      {/* The rail sits ABOVE the scrolling transcript, so a large working tree (hundreds
+          of files) must scroll inside the drawer rather than push the chat off-screen. */}
+      <ul style={{ listStyle: 'none', margin: 0, padding: 0, maxHeight: 'min(40vh, 280px)', overflowY: 'auto' }}>
         {changes.map((change) => {
           const { dir, file } = splitPath(change.path);
           const state = change.staged

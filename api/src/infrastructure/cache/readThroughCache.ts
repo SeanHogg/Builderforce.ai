@@ -1,76 +1,60 @@
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
- * Canonical read-through cache: L1 in-isolate Map + L2 Workers KV.
+ * The API's read-through cache — a thin adapter over the ONE cache core in
+ * `@builderforce/read-through-cache` (L1 in-isolate Map + L2 Workers KV).
  *
  * Use this for read-heavy / expensive paths (DB round-trips, fan-out, stable
  * recomputation) instead of an ad-hoc `Map + TTL` (which never propagates
- * cross-isolate). The L1 Map lives here — the one place a per-isolate cache is
- * acceptable — and is backed by the shared KV namespace so a value populated on
- * one isolate is visible to others.
- *
- * Pattern: cache on read, invalidate on write. For an unbounded keyspace (e.g.
- * search) fold a version token into the key so old entries age out naturally.
+ * cross-isolate). Pattern: cache on read, invalidate on write. For an unbounded
+ * keyspace (e.g. search) fold a version token into the key so old entries age
+ * out naturally.
  *
  * The KV binding (`AUTH_CACHE_KV`) is optional — when unbound, every call falls
  * straight through to the loader, so caching is opt-in via wrangler.toml without
  * touching call sites.
+ *
+ * What is API-specific, and therefore here rather than in the package:
+ *   - the binding: every export takes the API `Env` and reads `AUTH_CACHE_KV`;
+ *   - error reporting goes through `reportCaughtError`;
+ *   - the KV delete retries past KV's one-write-per-second per-key 429
+ *     (`retryTransient` + `isKvRateLimit`);
+ *   - the shared cache-KEY helpers every writer and reader must agree on.
+ *
+ * The legacy worker holds its own instance of the same core over the SAME KV
+ * namespace, which is what lets `invalidateCached` here drop a verdict the
+ * worker cached (see `application/auth/sessionRevocation.ts`).
  */
 
 import type { Env } from '../../env';
+import { createReadThroughCache } from '@builderforce/read-through-cache';
 import { isKvRateLimit, retryTransient } from '../shared/retryTransient';
-import { sha256HexBytes } from '../../domain/shared/hash';
 
-type L1Entry = { value: unknown; expiresAt: number };
+const SOURCE = 'infrastructure/cache/readThroughCache.ts';
 
-/** Per-isolate L1 layer. Short TTL — KV is the cross-isolate source of truth. */
-const l1 = new Map<string, L1Entry>();
-const L1_TTL_MS = 30_000;
-const DEFAULT_KV_TTL_SECONDS = 300;
+/** ONE instance = ONE L1 Map for the isolate. */
+const cache = createReadThroughCache({
+  onError: (error, { operation, ...context }) => {
+    reportCaughtError(error, { source: SOURCE, operation: legacyOperationName(operation), context });
+  },
+  // KV allows one write per second per key, so a burst of writes bumping the
+  // SAME version token 429s. "Wait for the TTL" is not an acceptable
+  // degradation here: version tokens are stored for 24h (getCacheVersion),
+  // so a dropped bump leaves every data key that embedded the old token
+  // serving stale reads for a day. Retrying past the per-key window is what
+  // makes invalidation actually hold.
+  retryDelete: (op) => retryTransient(op, isKvRateLimit),
+});
 
-/**
- * Workers KV refuses any `expirationTtl` below 60 seconds with
- * `400 Invalid expiration_ttl of N. Expiration TTL must be at least 60.`
- *
- * Eleven call sites asked for 10–45s, so every one of their KV writes threw and
- * was swallowed by the best-effort catch — 3,514 failures in a day, and those
- * paths silently degraded to an L1-only, per-isolate cache: exactly the
- * behaviour the shared helper exists to prevent, with none of the noise a
- * broken cache normally makes.
- *
- * Sub-minute expiry is simply not expressible in KV, so the honest resolution is
- * to raise the L2 entry to the platform minimum. The caller's `l1TtlMs` is NOT
- * clamped, so in-isolate freshness stays exactly as requested; only the
- * cross-isolate copy lives longer. Callers needing tighter cross-isolate
- * freshness than 60s should fold a version token into the key (as the ticket
- * search and Project 360 readers already do) rather than lean on expiry.
- */
-const KV_MIN_TTL_SECONDS = 60;
-const KV_MAX_KEY_BYTES = 512;
-const KV_KEY_PREFIX = 'cache:';
-const textEncoder = new TextEncoder();
-
-function kvTtl(requested: number | undefined): number {
-  return Math.max(requested ?? DEFAULT_KV_TTL_SECONDS, KV_MIN_TTL_SECONDS);
-}
-
-/**
- * Preserve existing storage keys while they fit Cloudflare's 512-byte limit.
- * Oversized keys are content-addressed so every read/write/invalidation derives
- * the same bounded key without truncation collisions.
- */
-async function kvKey(key: string): Promise<string> {
-  const raw = `${KV_KEY_PREFIX}${key}`;
-  const bytes = textEncoder.encode(raw);
-  if (bytes.byteLength <= KV_MAX_KEY_BYTES) return raw;
-
-  return `${KV_KEY_PREFIX}sha256:${await sha256HexBytes(bytes)}`;
-}
-
-/** KV is JSON storage, so a freshly loaded value must have the same observable shape
- * as a later KV hit. In particular, Dates become ISO strings on both paths. */
-function toJsonShape<T>(value: T): T {
-  const encoded = JSON.stringify(value);
-  return encoded === undefined ? value : JSON.parse(encoded) as T;
+/** The reporter's `operation` keeps this module's public names, so dashboards
+ *  and alerts keyed on `getOrSetCached` / `invalidateCached` do not go blind. */
+function legacyOperationName(operation: string): string {
+  switch (operation) {
+    case 'getOrSet': return 'getOrSetCached';
+    case 'peek': return 'peekCached';
+    case 'set': return 'setCached';
+    case 'invalidate': return 'invalidateCached';
+    default: return operation;
+  }
 }
 
 /**
@@ -78,64 +62,16 @@ function toJsonShape<T>(value: T): T {
  * both layers, and return it. KV/L1 errors degrade to a direct loader call.
  */
 export async function getOrSetCached<T>(
-  // Optional by CONTRACT, not by accident: the body already falls through to the
-  // loader when there is no env (unit tests, non-Worker callers) and says so at
-  // the guard below. The signature said `Env`, which forced every caller holding
-  // an optional env to either assert or drop the cached read entirely.
+  // Optional by CONTRACT, not by accident: the core already falls through to the
+  // loader when there is no KV (unit tests, non-Worker callers). The signature
+  // said `Env`, which forced every caller holding an optional env to either
+  // assert or drop the cached read entirely.
   env: Env | undefined,
   key: string,
   loader: () => Promise<T>,
   opts?: { kvTtlSeconds?: number; l1TtlMs?: number },
 ): Promise<T> {
-  const now = Date.now();
-
-  const hit = l1.get(key);
-  if (hit && hit.expiresAt > now) return hit.value as T;
-  if (hit) l1.delete(key);
-
-  // env may be absent (unit tests, non-Worker callers); the helper's contract is
-  // "no KV → fall through to the loader", so guard env itself, not just the binding.
-  const kv = env?.AUTH_CACHE_KV;
-  const l1Ttl = opts?.l1TtlMs ?? L1_TTL_MS;
-
-  if (kv) {
-    const storageKey = await kvKey(key);
-    try {
-      const cached = (await kv.get(storageKey, 'json')) as T | null;
-      if (cached != null) {
-        l1.set(key, { value: cached, expiresAt: now + l1Ttl });
-        return cached;
-      }
-    } catch (error) {
-      // KV read failures never fail the request — fall through to the loader.
-
-      reportCaughtError(error, {
-        source: 'infrastructure/cache/readThroughCache.ts',
-        operation: 'getOrSetCached',
-        context: { cacheOperation: 'get', storageKey, sourceKeyBytes: textEncoder.encode(key).byteLength },
-      });
-    }
-  }
-
-  const fresh = toJsonShape(await loader());
-  l1.set(key, { value: fresh, expiresAt: now + l1Ttl });
-  if (kv) {
-    const storageKey = await kvKey(key);
-    try {
-      await kv.put(storageKey, JSON.stringify(fresh), {
-        expirationTtl: kvTtl(opts?.kvTtlSeconds),
-      });
-    } catch (error) {
-      // Best-effort write — a miss next time is acceptable.
-
-      reportCaughtError(error, {
-        source: 'infrastructure/cache/readThroughCache.ts',
-        operation: 'getOrSetCached',
-        context: { cacheOperation: 'put', storageKey, sourceKeyBytes: textEncoder.encode(key).byteLength },
-      });
-    }
-  }
-  return fresh;
+  return cache.getOrSet(env?.AUTH_CACHE_KV, key, loader, opts);
 }
 
 /**
@@ -146,31 +82,7 @@ export async function getOrSetCached<T>(
  * of double-counting against a loader that already includes the new write).
  */
 export async function peekCached<T>(env: Env, key: string): Promise<T | null> {
-  const now = Date.now();
-  const hit = l1.get(key);
-  if (hit && hit.expiresAt > now) return hit.value as T;
-  if (hit) l1.delete(key);
-
-  const kv = env?.AUTH_CACHE_KV;
-  if (kv) {
-    const storageKey = await kvKey(key);
-    try {
-      const cached = (await kv.get(storageKey, 'json')) as T | null;
-      if (cached != null) {
-        l1.set(key, { value: cached, expiresAt: now + L1_TTL_MS });
-        return cached;
-      }
-    } catch (error) {
-      // KV read failure → treat as a miss.
-
-      reportCaughtError(error, {
-        source: 'infrastructure/cache/readThroughCache.ts',
-        operation: 'peekCached',
-        context: { cacheOperation: 'get', storageKey, sourceKeyBytes: textEncoder.encode(key).byteLength },
-      });
-    }
-  }
-  return null;
+  return cache.peek<T>(env?.AUTH_CACHE_KV, key);
 }
 
 /**
@@ -185,24 +97,7 @@ export async function setCached<T>(
   value: T,
   opts?: { kvTtlSeconds?: number; l1TtlMs?: number },
 ): Promise<void> {
-  l1.set(key, { value, expiresAt: Date.now() + (opts?.l1TtlMs ?? L1_TTL_MS) });
-  const kv = env?.AUTH_CACHE_KV;
-  if (kv) {
-    const storageKey = await kvKey(key);
-    try {
-      await kv.put(storageKey, JSON.stringify(value), {
-        expirationTtl: kvTtl(opts?.kvTtlSeconds),
-      });
-    } catch (error) {
-      // Best-effort — a miss next read just triggers a reconcile.
-
-      reportCaughtError(error, {
-        source: 'infrastructure/cache/readThroughCache.ts',
-        operation: 'setCached',
-        context: { cacheOperation: 'put', storageKey, sourceKeyBytes: textEncoder.encode(key).byteLength },
-      });
-    }
-  }
+  return cache.set(env?.AUTH_CACHE_KV, key, value, opts);
 }
 
 /**
@@ -233,7 +128,7 @@ export async function bumpCacheVersion(env: Env, versionKey: string): Promise<vo
  * the L2 KV layer — that is per-test bound (usually absent) and never shared.
  */
 export function __clearL1CacheForTests(): void {
-  l1.clear();
+  cache.clearL1();
 }
 
 /** Cache key for a segment-tracker list at a given scope; projectId omitted =
@@ -268,7 +163,7 @@ export function ticketSearchVersionKey(tenantId: number): string {
  *  Best-effort (never throws) so it can be fire-and-forget on a write path. */
 export async function bumpTicketSearchVersion(env: Env, tenantId: number): Promise<void> {
   await bumpCacheVersion(env, ticketSearchVersionKey(tenantId)).catch((error) => {
-    reportCaughtError(error, { source: "infrastructure/cache/readThroughCache.ts", operation: "bumpTicketSearchVersion" });
+    reportCaughtError(error, { source: SOURCE, operation: 'bumpTicketSearchVersion' });
   });
 }
 
@@ -287,7 +182,7 @@ export function outcomesVersionKey(tenantId: number): string {
  *  scorer alongside the learned-routing fold. Best-effort (never throws). */
 export async function bumpOutcomesVersion(env: Env, tenantId: number): Promise<void> {
   await bumpCacheVersion(env, outcomesVersionKey(tenantId)).catch((error) => {
-    reportCaughtError(error, { source: "infrastructure/cache/readThroughCache.ts", operation: "bumpOutcomesVersion" });
+    reportCaughtError(error, { source: SOURCE, operation: 'bumpOutcomesVersion' });
   });
 }
 
@@ -315,31 +210,12 @@ export function publicCanvasVersionKey(tenantId: number): string {
  *  write. Best-effort (never throws) so it can be fire-and-forget. */
 export async function bumpPublicCanvasVersion(env: Env, tenantId: number): Promise<void> {
   await bumpCacheVersion(env, publicCanvasVersionKey(tenantId)).catch((error) => {
-    reportCaughtError(error, { source: 'infrastructure/cache/readThroughCache.ts', operation: 'bumpPublicCanvasVersion' });
+    reportCaughtError(error, { source: SOURCE, operation: 'bumpPublicCanvasVersion' });
   });
 }
 
 /** Invalidate both cache layers for `key`. Call from every mutation that
  *  changes the cached data so the next read re-loads. */
 export async function invalidateCached(env: Env | undefined, key: string): Promise<void> {
-  l1.delete(key);
-  const kv = env?.AUTH_CACHE_KV;
-  if (kv) {
-    const storageKey = await kvKey(key);
-    try {
-      // KV allows one write per second per key, so a burst of writes bumping the
-      // SAME version token 429s. "Wait for the TTL" is not an acceptable
-      // degradation here: version tokens are stored for 24h (getCacheVersion),
-      // so a dropped bump leaves every data key that embedded the old token
-      // serving stale reads for a day. Retrying past the per-key window is what
-      // makes invalidation actually hold.
-      await retryTransient(() => kv.delete(storageKey), isKvRateLimit);
-    } catch (error) {
-      reportCaughtError(error, {
-        source: 'infrastructure/cache/readThroughCache.ts',
-        operation: 'invalidateCached',
-        context: { cacheOperation: 'delete', storageKey, sourceKeyBytes: textEncoder.encode(key).byteLength },
-      });
-    }
-  }
+  return cache.invalidate(env?.AUTH_CACHE_KV, key);
 }

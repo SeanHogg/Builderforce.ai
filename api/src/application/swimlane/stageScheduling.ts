@@ -32,12 +32,13 @@ export interface SchedulableDispatch {
 }
 
 const TERMINAL: ReadonlySet<string> = EXECUTION_TERMINAL_SET;
-const ACTIVE_NONTERMINAL: ReadonlySet<DispatchStatus> = new Set([
-  'pending',
-  'claimed',
-  'running',
-]);
 
+/**
+ * True when a dispatch will never change status again. The ONE membership test
+ * for a dispatch: `isStageSettled` is "every dispatch passes it", the coordinator
+ * refuses a reported result that does not, and the non-terminal statuses are the
+ * complement rather than a second list that could disagree.
+ */
 export function isTerminalDispatch(status: DispatchStatus): boolean {
   return TERMINAL.has(status);
 }
@@ -96,8 +97,7 @@ export function aggregateStageOutcome(
   threshold?: number | null,
 ): StageOutcome {
   if (statuses.length === 0) return 'completed'; // empty stage = pass-through
-  const active = statuses.some((s) => ACTIVE_NONTERMINAL.has(s) || s === 'blocked');
-  if (active) return 'running';
+  if (!isStageSettled(statuses)) return 'running';
   const done = statuses.filter((s) => s === 'completed').length;
   return done >= stageSuccessNeed(policy, threshold, statuses.length) ? 'completed' : 'failed';
 }
@@ -121,7 +121,13 @@ export function computeDeadBlocked(
   });
 }
 
-/** True when every dispatch is in a terminal state (nothing left to run). */
+/**
+ * True when every dispatch is in a terminal state (nothing left to run) — the
+ * complement of "still active or blocked". The coordinator asks this BEFORE it
+ * loads the lane: a stage that has not settled has no outcome to policy-check,
+ * so the lane round trip would be paid on every intermediate dispatch result
+ * for nothing.
+ */
 export function isStageSettled(statuses: readonly DispatchStatus[]): boolean {
-  return statuses.every((s) => TERMINAL.has(s));
+  return statuses.every(isTerminalDispatch);
 }

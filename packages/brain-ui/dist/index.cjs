@@ -1806,7 +1806,7 @@ function PendingChangesList({
             }
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0 }, children: changes.map((change) => {
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, maxHeight: "min(40vh, 280px)", overflowY: "auto" }, children: changes.map((change) => {
           const { dir, file } = splitPath(change.path);
           const state = change.staged ? `${labels.status[change.status]} \xB7 ${labels.staged}` : labels.status[change.status];
           return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(

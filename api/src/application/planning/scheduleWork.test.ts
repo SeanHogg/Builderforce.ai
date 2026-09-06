@@ -4,6 +4,7 @@ import {
   nextWorkingDay, scheduleItems, workingDaysBetween,
   DEFAULT_WORKING_CALENDAR, normalizeWorkingCalendar, type WorkingCalendar,
 } from './scheduleWork';
+import { emptyPlanVerdict, summarizePlanVerdict } from './planVerdict';
 
 /** A Monday, so weekend arithmetic in the assertions is easy to read. */
 const MONDAY = new Date('2026-08-03T00:00:00.000Z');
@@ -46,6 +47,13 @@ describe('working-day arithmetic', () => {
 });
 
 describe('scheduleItems', () => {
+  it('an empty plan carries THE clean verdict, not a second spelling of it', () => {
+    const r = scheduleItems([], { anchor: MONDAY });
+    expect(r.windows.size).toBe(0);
+    expect(r.span).toBeNull();
+    expect(summarizePlanVerdict(r)).toEqual(emptyPlanVerdict());
+  });
+
   it('runs independent items in PARALLEL from the anchor', () => {
     const r = scheduleItems(
       [{ key: 'a', estimateDays: 2 }, { key: 'b', estimateDays: 3 }],

@@ -12,6 +12,8 @@
     "paths": {
       "@builderforce/ide-templates": ["../packages/ide-templates/src/index.ts"],
       "@builderforce/hs256-jwt": ["../packages/hs256-jwt/src/index.ts"],
+      "@builderforce/read-through-cache": ["../packages/read-through-cache/src/index.ts"],
+      "@builderforce/session-introspection": ["../packages/session-introspection/src/index.ts"],
       "@builderforce/workspace-path": ["../packages/workspace-path/src/index.ts"],
       "@builderforce/hono-wildcard-path": ["../packages/hono-wildcard-path/src/index.ts"]
     }

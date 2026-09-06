@@ -65,7 +65,8 @@
     "unpdf": "^1.8.1",
     "y-protocols": "^1.0.6",
     "yaml": "^2.6.1",
-    "yjs": "^13.6.30"
+    "yjs": "^13.6.30",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260305.0",

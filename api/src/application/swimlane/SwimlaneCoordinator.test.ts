@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { SwimlaneCoordinator, TicketCapacityError, type StageDispatcher } from './SwimlaneCoordinator';
+import { NonTerminalDispatchResultError, SwimlaneCoordinator, TicketCapacityError, type StageDispatcher } from './SwimlaneCoordinator';
 import { MAX_AUTO_RETRIES } from './transitions';
 import type {
   AssignmentLite,
@@ -342,6 +342,44 @@ describe('SwimlaneCoordinator — execution loop', () => {
     expect((await store.getTicketRun(run.id))!.lifecycle).toBe('stage_running'); // still one running
     await coord.reportDispatchResult(pend[1]!.id, TENANT, { status: 'completed' });
     expect((await store.getTicketRun(run.id))!.lifecycle).toBe('done');
+  });
+
+  it('an unsettled stage is decided without loading the lane; the lane is read once the stage settles', async () => {
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
+    store.seedLane({ id: 'l0', boardId: 'b1', position: 0, isTerminal: true, executionMode: 'parallel', successPolicy: 'any' });
+    store.seedAssignment('l0', { id: 'a0', role: 'x', runtime: 'browser', position: 0 });
+    store.seedAssignment('l0', { id: 'a1', role: 'y', runtime: 'browser', position: 1 });
+
+    const coord = new SwimlaneCoordinator(store);
+    const run = await coord.startTicket('b1', 10, TENANT);
+    const pend = store.pending(run.id);
+    const getLane = vi.spyOn(store, 'getLane');
+
+    // One of two still pending → isStageSettled is false → no lane round trip,
+    // even though the lane's 'any' policy would already be satisfied.
+    await coord.reportDispatchResult(pend[0]!.id, TENANT, { status: 'failed', error: 'x' });
+    expect(getLane).not.toHaveBeenCalled();
+    expect((await store.getTicketRun(run.id))!.lifecycle).toBe('stage_running');
+
+    // The last dispatch settles the stage → the lane (and its quorum) is consulted.
+    await coord.reportDispatchResult(pend[1]!.id, TENANT, { status: 'completed' });
+    expect(getLane).toHaveBeenCalledWith('l0', TENANT);
+    expect((await store.getTicketRun(run.id))!.lifecycle).toBe('done');
+  });
+
+  it('refuses a non-terminal dispatch result instead of storing a status the stage can never settle on', async () => {
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
+    store.seedLane({ id: 'l0', boardId: 'b1', position: 0, isTerminal: true });
+    store.seedAssignment('l0', { id: 'a0', role: 'x', runtime: 'browser' });
+
+    const coord = new SwimlaneCoordinator(store);
+    const run = await coord.startTicket('b1', 11, TENANT);
+    const d = store.pending(run.id)[0]!;
+
+    await expect(coord.reportDispatchResult(d.id, TENANT, { status: 'running' as never }))
+      .rejects.toBeInstanceOf(NonTerminalDispatchResultError);
+    expect((await store.getDispatch(d.id, TENANT))!.status).toBe('pending');
+    expect((await store.getTicketRun(run.id))!.lifecycle).toBe('stage_running');
   });
 
   it('human gate: a successful stage waits at the gate; approveGate advances it', async () => {

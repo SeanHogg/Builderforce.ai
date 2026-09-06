@@ -286,26 +286,6 @@ export const brainChatMessages = pgTable('brain_chat_messages', {
 ]);
 
 
-// ---------------------------------------------------------------------------
-// Team memory — cross-agentHost memory sharing mesh (P4-5)
-// ---------------------------------------------------------------------------
-
-export const teamMemory = pgTable('team_memory', {
-  id:        uuid('id').primaryKey().defaultRandom(),
-  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  /** Numeric agentHost ID stored as string for flexibility. */
-  agentHostId:    varchar('agent_host_id', { length: 64 }).notNull(),
-  runId:     varchar('run_id', { length: 64 }).notNull(),
-  summary:   text('summary').notNull(),
-  /** JSON array of tag strings, stored as text. */
-  tags:      text('tags').notNull().default('[]'),
-  /** ISO-8601 timestamp provided by the agentHost. */
-  timestamp: varchar('timestamp', { length: 32 }).notNull(),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-});
-
-
 /**
  * Marketplace listings for KNOWLEDGE documents (migration 0252). Lets a tenant
  * publish a SOP/process/doc/canvas for sale; the listing carries a content

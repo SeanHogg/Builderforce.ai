@@ -1,0 +1,17 @@
+{
+  "name": "@builderforce/session-introspection",
+  "version": "2026.9.6",
+  "private": true,
+  "type": "module",
+  "description": "The contract between the API's session-introspection endpoint (GET /api/auth/introspect) and the legacy worker that calls it: the path, the cache key the verdict is stored under, its TTLs, and the verdict's shape. Both sides import these so the API's revoke path and the worker's cached read can never disagree about the key. Source-only: every consumer aliases the bare specifier straight at src/index.ts.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

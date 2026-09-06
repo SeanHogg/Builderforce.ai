@@ -11,7 +11,7 @@
  * declares rather than only the ones this report expects. A new kind added upstream must
  * fall into `adjustment`, not into a silent hole.
  */
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   EARNINGS_PERIODS,
   classifyLedgerEntry,
@@ -19,8 +19,13 @@ import {
   isEarningsPeriod,
   isEarningKind,
   parseRangeDate,
+  toEarningsTransaction,
+  type EarningsLedgerRow,
 } from './earningsLedger';
 import { escrowLedgerReference } from '../marketplace/escrow';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
+
+vi.mock('../observability/caughtErrorReporter', () => ({ reportCaughtError: vi.fn() }));
 
 /** Every `entry_kind` `ledger_entries` documents (kernel.ts). */
 const ALL_ENTRY_KINDS = [
@@ -76,6 +81,44 @@ describe('classifyLedgerEntry', () => {
     // `startsWith`, not `includes`: a memo-shaped reference mentioning escrow must not
     // reclassify a bank withdrawal as money earned.
     expect(classifyLedgerEntry('payout', 'mp-payout:for-escrow:12')).toBe('withdrawal');
+  });
+});
+
+describe('toEarningsTransaction — the two twins, held against each other', () => {
+  const row = (over: Partial<EarningsLedgerRow>): EarningsLedgerRow => ({
+    id: 7, occurredAt: new Date('2026-03-01T00:00:00Z'), entryKind: 'commission', amount: '1200',
+    reference: 'mp-sale:41', memo: null, tenantId: '3', workspaceName: 'Acme', earning: true, ...over,
+  });
+
+  beforeEach(() => vi.mocked(reportCaughtError).mockClear());
+
+  it('sides a listed row by isEarningKind and files the fee only on a sale', () => {
+    const tx = toEarningsTransaction(row({}), new Map([['mp-sale:41', 300]]));
+    expect(tx).toMatchObject({ id: 7, kind: 'sale', amountCents: 1200, feeCents: 300, grossCents: 1500, tenantId: 3 });
+    expect(isEarningKind(tx.kind)).toBe(true);
+    expect(reportCaughtError).not.toHaveBeenCalled();
+
+    const out = toEarningsTransaction(row({ entryKind: 'payout', reference: 'mp-payout:1', earning: false }), new Map());
+    expect(out.kind).toBe('withdrawal');
+    expect(out.feeCents).toBe(0);
+    expect(reportCaughtError).not.toHaveBeenCalled();
+  });
+
+  it('reports — and does not re-side — a row the SQL twin sums as an earning but the TS twin rejects', () => {
+    // The summary already counted this row; the list would file it as a withdrawal.
+    // That is the drift the module header says must be visible, not corrected.
+    const tx = toEarningsTransaction(row({ entryKind: 'payout', reference: 'mp-payout:9', earning: true }), new Map());
+    expect(tx.kind).toBe('withdrawal');
+    expect(reportCaughtError).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(reportCaughtError).mock.calls[0]![1]).toMatchObject({
+      operation: 'toEarningsTransaction:classifierDrift',
+      context: { ledgerEntryId: 7, entryKind: 'payout', kind: 'withdrawal', sqlEarning: true },
+    });
+  });
+
+  it('stays quiet when the SQL verdict was not selected (a caller outside the statement query)', () => {
+    toEarningsTransaction(row({ earning: null }), new Map());
+    expect(reportCaughtError).not.toHaveBeenCalled();
   });
 });
 

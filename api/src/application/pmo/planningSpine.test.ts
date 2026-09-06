@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildSpine, classifyCostClass, type RawTask } from './planningSpine';
+import { emptyPlanVerdict } from '../planning/planVerdict';
 
 describe('classifyCostClass (rides the shared allocation taxonomy)', () => {
   it('treats net-new development as CAPEX', () => {
@@ -34,6 +35,29 @@ const baseTask = (over: Partial<RawTask>): RawTask => ({
 });
 
 describe('buildSpine', () => {
+  it('hands every node the one clean verdict unless the store recorded a misfit', () => {
+    // The store keeps no row for a clean plan (planVerdictStore), so "no stored
+    // verdict" IS the clean verdict — spelled through emptyPlanVerdict(), never as a
+    // null each reader has to translate.
+    const r = buildSpine({
+      portfolios: [],
+      objectives: [],
+      initiatives: [{ id: 'i1', name: 'Init', status: 'active', startDate: null, targetDate: null, portfolioId: null, costClass: null, costClassSource: 'manual' }],
+      projects: [{ id: 1, initiativeId: 'i1' }],
+      tasks: [
+        baseTask({ id: 5, projectId: 1, taskType: 'epic' }),
+        baseTask({ id: 6, projectId: 1, taskType: 'epic' }),
+      ],
+      links: [],
+      taskLlm: [],
+      memberRates: [],
+      planVerdicts: new Map([[6, { compressed: true, overruns: ['7'], cyclic: [], capacityDeferred: [] }]]),
+    });
+    expect(r.nodes.find((n) => n.key === 'epic:5')!.planVerdict).toEqual(emptyPlanVerdict());
+    expect(r.nodes.find((n) => n.key === 'initiative:i1')!.planVerdict).toEqual(emptyPlanVerdict());
+    expect(r.nodes.find((n) => n.key === 'epic:6')!.planVerdict).toEqual({ compressed: true, overruns: ['7'], cyclic: [], capacityDeferred: [] });
+  });
+
   it('rolls LLM cost from tasks up to the initiative and bucket by CAPEX/OPEX', () => {
     const r = buildSpine({
       portfolios: [],

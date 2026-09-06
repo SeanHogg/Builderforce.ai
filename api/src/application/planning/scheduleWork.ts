@@ -48,6 +48,7 @@ import {
   type WorkingCalendar,
 } from './workingCalendarModel';
 import { DAY_MS } from '../../domain/shared/time';
+import { emptyPlanVerdict } from './planVerdict';
 
 export {
   DEFAULT_WORKING_CALENDAR,
@@ -263,9 +264,9 @@ export function scheduleItems(items: readonly SchedulableItem[], opts: ScheduleO
   const deadline = opts.deadline ? startOfUtcDay(opts.deadline) : null;
   const sprints = normalizeSprints(opts.sprints);
 
-  const empty: ScheduleResult = {
-    windows: new Map(), span: null, compressed: false, overruns: [], cyclic: [], capacityDeferred: [],
-  };
+  // The verdict half of an empty result is the ONE clean verdict, not a second
+  // spelling of it: `summarizePlanVerdict(empty)` must equal `emptyPlanVerdict()`.
+  const empty: ScheduleResult = { windows: new Map(), span: null, ...emptyPlanVerdict() };
   if (items.length === 0) return empty;
 
   const known = new Set(items.map((i) => i.key));

@@ -14,7 +14,7 @@ BF	brain_chats	Canvas & ideas	primitive	thread
 BF	chat_read_state	Platform & observability	merged	(folded into a sibling)
 BF	chat_ticket_links	Platform & observability	primitive	share_link
 BF	brain_chat_messages	Canvas & ideas	primitive	message
-BF	team_memory	Identity & tenancy	keep	team_memory
+BF	team_memory	Identity & tenancy	merged	agent_memory
 BF	marketplace_knowledge	Commerce	keep	marketplace_knowledge
 BF	knowledge_listing_purchases	Support & knowledge	primitive	ledger_entry
 BF	knowledge_documents	Support & knowledge	session	creation_session + live session

@@ -43,6 +43,7 @@ import {
 } from '../llm/allocationCategories';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 import { loadPlanVerdicts } from '../planning/planVerdictStore';
+import { emptyPlanVerdict, type PlanVerdict } from '../planning/planVerdict';
 import { HOUR_MS } from '../../domain/shared/time';
 
 export type CostClass = 'capex' | 'opex';
@@ -145,17 +146,9 @@ export interface RawTaskDependency { predecessorTaskId: number; successorTaskId:
 
 export interface SpineCost { llmUsd: number; humanUsd: number; totalUsd: number; capexUsd: number; opexUsd: number }
 
-/** The stored plan verdict as the spine hands it to the UI. */
-export interface SpinePlanVerdict {
-  /** Estimates were scaled DOWN to fit the parent's window. */
-  compressed: boolean;
-  /** Child ids that still end after the parent's due date. */
-  overruns: string[];
-  /** Child ids caught in a precedence cycle — their order is a guess, not a plan. */
-  cyclic: string[];
-  /** Child ids whose start was pushed out by their owner's capacity. */
-  capacityDeferred: string[];
-}
+/** The plan verdict as the spine hands it to the UI — the planner's own shape,
+ *  not a second declaration of the same four fields. */
+export type SpinePlanVerdict = PlanVerdict;
 
 export interface SpineNode {
   key: string;                 // 'portfolio:uuid' | 'objective:uuid' | 'initiative:uuid' | 'epic:12' | 'task:12'
@@ -191,11 +184,13 @@ export interface SpineNode {
    */
   decompositionSource: string | null;
   /**
-   * The planner's verdict on this node's own plan — set only where one was
-   * recorded (an Epic whose fan-out did NOT fit its window, or whose children sit
-   * in a dependency cycle). Null means the plan was clean; see planVerdictStore.
+   * The planner's verdict on this node's own plan. The store keeps a row only
+   * where a plan did NOT come out clean (an Epic whose fan-out was squeezed into
+   * its window, or whose children sit in a dependency cycle — see
+   * planVerdictStore), so every other node carries the one clean verdict,
+   * `emptyPlanVerdict()`, rather than a null every reader had to translate into it.
    */
-  planVerdict: SpinePlanVerdict | null;
+  planVerdict: SpinePlanVerdict;
   /**
    * Keys of the nodes that must FINISH before this one starts — the precedence the
    * Gantt draws as arrows. Sourced from `task_dependencies` (task/epic nodes only);
@@ -309,7 +304,8 @@ export function buildSpine(input: {
     const kind: SpineNodeKind = tk.taskType === 'epic' ? 'epic' : 'task';
     const node = baseNode(kind, String(tk.id), tk.title, tk.status, iso(tk.startDate), iso(tk.dueDate), declared(tk.costClass), source(tk.costClassSource), tk.costClassVerified, classifyCostClass(tk));
     node.decompositionSource = tk.decompositionSource ?? null;
-    node.planVerdict = input.planVerdicts?.get(tk.id) ?? null;
+    const stored = input.planVerdicts?.get(tk.id);
+    if (stored) node.planVerdict = stored;
     nodes.set(`${kind}:${tk.id}`, node);
     categoryDefaultByKey.set(`${kind}:${tk.id}`, defaultCostClassFor(categoryOf(tk)));
   }
@@ -526,7 +522,7 @@ function baseNode(
 ): SpineNode {
   return {
     key: `${kind}:${id}`, id, kind, parentKey: null, title, status, startDate, endDate,
-    datesDerived: false, notYetScoped: false, decompositionSource: null, planVerdict: null,
+    datesDerived: false, notYetScoped: false, decompositionSource: null, planVerdict: emptyPlanVerdict(),
     dependsOn: [], depth: 0,
     declaredCostClass, costClassSource, inheritedCostClass: null, effectiveCostClass: declaredCostClass,
     costClassVerified, anomaly: false, hasDescendantAnomaly: false, suggestion,

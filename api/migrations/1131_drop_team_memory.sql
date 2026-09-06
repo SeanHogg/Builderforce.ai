@@ -1,0 +1,14 @@
+-- 1131 · Drop `team_memory` — SUPERSEDED by the converged memory store, not unbuilt.
+--
+-- WHY. Migration 0442 (`memory_store_convergence`) copied every `team_memory` row
+-- into `agent_memory` under the key `team:<agent_host_id>:<run_id>` at tenant
+-- scope, and `/api/teams/memory` has written through
+-- `application/memory/memoryService.remember` and read `agent_memory` with a
+-- `team:%` key prefix ever since. Nothing has read or written this table since
+-- 0442 applied; it existed only as a Drizzle declaration with no code path, which
+-- the table-adoption guard reports as "cold" while every other guard reports as
+-- healthy. The declaration is removed in the same change so the schema and the
+-- database retire it together.
+--
+-- Idempotent: safe on a database where the table was already dropped.
+DROP TABLE IF EXISTS team_memory;

@@ -373,7 +373,13 @@ describe('career 360', () => {
   it('lists the real targets rather than failing silently on an unknown one', () => {
     const plan = planForTarget(RESUME, 'astronaut');
     expect('error' in plan).toBe(true);
-    if ('error' in plan) expect(plan.availableTargets).toEqual(ROLE_PROFILES.map((r) => r.id));
+    if ('error' in plan) {
+      expect(plan.availableTargets).toEqual(ROLE_PROFILES.map((r) => r.id));
+      // The miss carries the vocabulary the targets are scored on, so the caller can
+      // correct a guessed id — or a guessed skill — without a second round trip.
+      expect(plan.skillVocabulary).toHaveLength(declaredRoleSkillTokens().length);
+      expect(plan.skillVocabulary).toContain('Kubernetes');
+    }
   });
 });
 

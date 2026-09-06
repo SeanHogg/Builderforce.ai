@@ -6,6 +6,7 @@ import {
   stageSuccessNeed,
   isStageSettled,
   isTerminalDispatch,
+  type DispatchStatus,
   type SchedulableDispatch,
 } from './stageScheduling';
 
@@ -115,6 +116,16 @@ describe('isStageSettled / isTerminalDispatch', () => {
   it('settled only when every dispatch is terminal', () => {
     expect(isStageSettled(['completed', 'failed', 'cancelled'])).toBe(true);
     expect(isStageSettled(['completed', 'running'])).toBe(false);
+  });
+
+  it('aggregateStageOutcome says running exactly when the stage is not settled', () => {
+    // The outcome's "still active" branch IS the complement of isStageSettled, so the
+    // coordinator's early return and the outcome can never disagree about a stage.
+    const every: DispatchStatus[] = ['blocked', 'pending', 'claimed', 'running', 'completed', 'failed', 'cancelled'];
+    for (const s of every) {
+      expect(aggregateStageOutcome(['completed', s]) === 'running', s).toBe(!isStageSettled(['completed', s]));
+      expect(isStageSettled([s]), s).toBe(isTerminalDispatch(s));
+    }
   });
 
   it('isTerminalDispatch', () => {

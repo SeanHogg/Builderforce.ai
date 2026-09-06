@@ -15,14 +15,16 @@
  * `crypto.subtle` is available in Workers, Node 18+ and the test runner alike, so
  * there is no platform branch to hide here.
  */
-import { bytesToHex } from './bytes';
+import { sha256HexBytes } from '@builderforce/read-through-cache';
 
 export async function sha256Hex(value: string): Promise<string> {
   return sha256HexBytes(new TextEncoder().encode(value));
 }
 
 /** Same digest, for callers who already have bytes (a file upload) rather than
- *  a string — encoding binary data as text first would corrupt it. */
-export async function sha256HexBytes(bytes: ArrayBuffer | ArrayBufferView): Promise<string> {
-  return bytesToHex(await crypto.subtle.digest('SHA-256', bytes as BufferSource));
-}
+ *  a string — encoding binary data as text first would corrupt it.
+ *
+ *  The digest itself lives in `@builderforce/read-through-cache`, which needs it
+ *  for its 512-byte KV key hashing and cannot import api code; re-exported here
+ *  so the api keeps ONE implementation rather than a fifth copy. */
+export { sha256HexBytes };

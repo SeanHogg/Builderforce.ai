@@ -97,8 +97,12 @@ async function semanticRank(env: Env, query: string, entries: MemoryEntry[]): Pr
  *
  * Composing both tokens makes EITHER write invalidate the union, with no cross-module
  * bump and therefore no import cycle.
+ *
+ * Exported for the one other reader of this store — the team feed
+ * (`teamMemoryFeed.ts`) — so it keys on THIS token rather than minting a second
+ * one that `remember` would not know to bump.
  */
-async function scopeCacheToken(env: Env, ctx: MemoryScopeContext, chain: ResolvedScope[]): Promise<string> {
+export async function scopeCacheToken(env: Env, ctx: MemoryScopeContext, chain: ResolvedScope[]): Promise<string> {
   const projectScope = chain.find((s) => s.kind === 'project');
   const [ownVersion, factsVersion] = await Promise.all([
     getCacheVersion(env, versionKey(ctx.tenantId)),

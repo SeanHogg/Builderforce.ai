@@ -129,14 +129,27 @@ export interface Career360Plan {
   instruction: string;
 }
 
+/**
+ * What an unknown destination gets back: the catalogue it could have named, and the
+ * whole skill vocabulary that catalogue is scored against — so a caller that guessed a
+ * role id can correct itself without a second round trip.
+ */
+export interface Career360TargetMiss {
+  error: string;
+  availableTargets: string[];
+  /** Every skill (display form) the declared destinations are ranked on. */
+  skillVocabulary: string[];
+}
+
 /** Build the gap-closing plan for one chosen destination. */
-export function planForTarget(resumeText: string, targetId: string): Career360Plan | { error: string; availableTargets: string[] } {
+export function planForTarget(resumeText: string, targetId: string): Career360Plan | Career360TargetMiss {
   const target = ROLE_PROFILES.find((role) => role.id === targetId)
     ?? ROLE_PROFILES.find((role) => role.title.toLowerCase() === String(targetId).toLowerCase().trim());
   if (!target) {
     return {
       error: `No declared target role matches "${targetId}".`,
       availableTargets: ROLE_PROFILES.map((role) => role.id),
+      skillVocabulary: declaredRoleSkillTokens().map(displaySkill),
     };
   }
   const resume = parseResume(resumeText);
@@ -208,7 +221,13 @@ export function planForTarget(resumeText: string, targetId: string): Career360Pl
   };
 }
 
-/** Every skill token the role catalogue references — used by the module's own test. */
+/**
+ * Every skill token the role catalogue references — the vocabulary Career 360 scores
+ * against. Handed to the model beside `availableTargets` (a plan miss, and
+ * `hr.career360_state`) so it ranks a résumé on the skills the catalogue actually
+ * declares rather than on ones it invents; the module's test asserts every token here
+ * exists in the shared lexicon.
+ */
 export function declaredRoleSkillTokens(): string[] {
   return [...new Set(ROLE_PROFILES.flatMap((role) => [...role.core, ...role.adjacent]))];
 }
