@@ -38,6 +38,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import { isCeremonySessionDone } from '../../domain/agile/ceremonySession';
 import { notSystemTask } from '../task/taskScope';
+import { buildTaskProgressBreakdown } from '../task/taskProgressBreakdown';
 import { keyResultProgress, objectiveProgress } from '../pmo/portfolioRollup';
 import { AgentAssignmentService } from '../agent/AgentAssignmentService';
 import { resolveChatAccess } from './chatAccess';
