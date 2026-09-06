@@ -6,8 +6,8 @@ import type { TaskStatus } from './builderforceApi';
  * so swimlanes can be bound to a real status.
  *
  * The human LABELS deliberately do not live here — they are in the `taskStatus.*`
- * catalog namespace and are read through `useTaskStatusLabel()` /
- * `getTaskStatusLabel()` (`taskStatusLabel.ts`). They used to be a plain
+ * catalog namespace and are read through `useTaskStatusLabel()`
+ * (`taskStatusLabel.ts`). They used to be a plain
  * `Record<TaskStatus, string>` of English constants, which meant the board — the
  * single largest surface in the product — rendered "Backlog"/"In Review" in every
  * locale no matter what the user picked. A label a person reads is a translated

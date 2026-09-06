@@ -24,6 +24,8 @@ export default [
   ['check:canvas-kind-labels', 'check-canvas-kind-labels.mjs'],
   ['check:layering', 'check-layering.mjs'],
   ['check:root-closure', 'check-root-closure.mjs'],
+  // Raw localStorage/sessionStorage sites may only shrink — see lib/storage.ts.
+  ['check:raw-storage', 'check-raw-storage.mjs'],
   ['check:primitives', 'check-primitive-duplication.mjs'],
   // The repo-wide silent-catch ratchet, narrowed to this package's tree so the
   // cost stays local. The full sweep runs in api's chain.

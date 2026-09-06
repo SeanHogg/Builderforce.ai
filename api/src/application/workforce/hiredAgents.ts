@@ -23,7 +23,7 @@
  * invisible.
  *
  * ── THE FIX: ONE PREDICATE, NOT FOUR ─────────────────────────────────────────
- * {@link dispatchableAgentIds} answers "which agents may this workspace use" —
+ * `usableByTenant` answers "which agents may this workspace use" —
  * the ones it OWNS plus the ones it currently HOLDS a hire on — and every
  * surface above now asks it instead of re-deriving the rule from
  * `ide_agents.tenant_id`. Four copies of an entitlement rule is four places for
@@ -73,38 +73,6 @@ export async function activeHiredAgentIds(db: Db, tenantId: number): Promise<str
     .from(agentPurchases)
     .where(scopedToTenant(agentPurchases, tenantId, isNull(agentPurchases.unhiredAt)));
   return rows.map((r) => r.agentId);
-}
-
-/** Does this workspace currently hold a hire on this agent? */
-export async function holdsActiveHire(db: Db, tenantId: number, agentId: string): Promise<boolean> {
-  const [row] = await db
-    .select({ id: agentPurchases.id })
-    .from(agentPurchases)
-    .where(scopedToTenant(agentPurchases, tenantId,
-      eq(agentPurchases.agentId, agentId),
-      isNull(agentPurchases.unhiredAt)))
-    .limit(1);
-  return Boolean(row);
-}
-
-/**
- * EVERY agent this workspace may dispatch: the ones it owns and the ones it
- * hired. The single predicate the picker, the roster and the dispatch resolver
- * share.
- *
- * Returns ids rather than rows because each caller projects different columns —
- * the roster wants a title and `last_used_at`, the resolver wants runtime and
- * model. Returning rows would have forced one widest-common projection on all of
- * them, which is how a "shared" read acquires columns only one caller uses.
- */
-export async function dispatchableAgentIds(db: Db, tenantId: number): Promise<string[]> {
-  const [owned, hired] = await Promise.all([
-    db.select({ id: ideAgents.id })
-      .from(ideAgents)
-      .where(scopedToTenant(ideAgents, tenantId, eq(ideAgents.status, 'active'))),
-    activeHiredAgentIds(db, tenantId),
-  ]);
-  return [...new Set([...owned.map((a) => a.id), ...hired])];
 }
 
 /**

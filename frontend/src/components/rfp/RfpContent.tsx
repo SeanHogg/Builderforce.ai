@@ -1,5 +1,6 @@
 'use client';
 
+import { useProjects } from '@/lib/ProjectScopeContext';
 import { useCallback, useEffect, useState } from 'react';
 import type { Formatter } from '@/i18n/format';
 import { useRouter } from 'next/navigation';
@@ -9,7 +10,6 @@ import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { useRole, hasMinRole } from '@/lib/rbac';
 import { rfpApi, type RfpRequestListRow, type RfpRequestInput, type BrandPalette } from '@/lib/builderforceApi';
 import { BrandPaletteEditor } from './BrandPaletteEditor';
-import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
@@ -70,7 +70,7 @@ export default function RfpContent() {
   const canManage = hasMinRole(role, 'developer');
 
   const [rows, setRows] = useState<RfpRequestListRow[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const projects = useProjects();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -94,7 +94,6 @@ export default function RfpContent() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { fetchProjects().then(setProjects).catch(() => setProjects([])); }, []);
   useEffect(() => {
     rfpApi.getBrand()
       .then((r) => { setBrand(r.palette); setBrandIsDefault(r.isDefault); })

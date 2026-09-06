@@ -2607,7 +2607,10 @@
       "scope": "Scope",
       "scopeWorkspace": "Whole workspace",
       "scopeProjects": "Projects",
-      "scopeInitiatives": "Initiatives"
+      "scopeInitiatives": "Initiatives",
+      "runway": "{months} months of runway",
+      "burnUnavailable": "No burn data yet",
+      "burnSub": "monthly burn"
     },
     "comp": {
       "title": "Compliance & Audit",
@@ -3432,7 +3435,8 @@
     "errNameRequired": "Name is required",
     "errSaveFailed": "Save failed",
     "errDeleteFailed": "Delete failed",
-    "surfaceUnavailableOption": "{surface} — not available for this project"
+    "surfaceUnavailableOption": "{surface} — not available for this project",
+    "errSurfaceBlocked": "{surface} is not available for this project — pick another runtime surface."
   },
   "personalitySummary": {
     "title": "Personality",
@@ -5096,7 +5100,8 @@
         "vuln-scans": "Vulnerability Scans",
         "dsr": "Data Subject Requests",
         "suppression": "Suppression List"
-      }
+      },
+      "finBurnRate": "Burn & runway"
     },
     "loading": "Loading…",
     "overview": {
@@ -5736,6 +5741,27 @@
       "page": "Showing {from}–{to}",
       "newer": "Newer",
       "older": "Older"
+    },
+    "webAdvisoryFeeds": "Advisory feeds",
+    "webAdvisoryConfigured": "ready",
+    "webAdvisoryUnconfigured": "not configured here",
+    "agreementsTab": "Agreements",
+    "agreements": {
+      "title": "Your agreements",
+      "description": "What you have accepted, by version, and what is still outstanding.",
+      "loading": "Loading your agreements…",
+      "error": "Your agreements could not be loaded.",
+      "outstanding": "Outstanding",
+      "accepted": "Accepted v{version} on {date}",
+      "notRequired": "Not required",
+      "kind": {
+        "terms": "Terms of service",
+        "privacy": "Privacy policy",
+        "dpa": "Data processing agreement",
+        "aup": "Acceptable use policy",
+        "nda": "Non-disclosure agreement",
+        "cookie": "Cookie policy"
+      }
     }
   },
   "catalogInsights": {
@@ -16321,7 +16347,9 @@
       "readFailed": "Those colours could not be read — enter them by hand.",
       "candidates": "Other colours found — click one to make it the primary:"
     },
-    "needManager": "Requires Manager role"
+    "needManager": "Requires Manager role",
+    "discard": "Discard request",
+    "discardConfirm": "Discard “{title}”? Its responses and risk register go with it."
   },
   "planBadge": {
     "tier": {
@@ -16673,6 +16701,23 @@
     "admin": {
       "title": "Product feedback",
       "subtitle": "Feature requests, bugs and ideas gathered from every workspace’s feedback collectors."
+    },
+    "voc": {
+      "title": "Customer feedback inbox",
+      "description": "What your site’s feedback collectors gathered — your customers’ own words, triaged here.",
+      "filterLabel": "Filter by status",
+      "status": {
+        "new": "New",
+        "triaged": "Triaged",
+        "dismissed": "Dismissed"
+      },
+      "loading": "Loading feedback…",
+      "error": "Feedback could not be loaded.",
+      "empty": "Nothing here.",
+      "sentiment": "sentiment {value}",
+      "markTriaged": "Mark triaged",
+      "dismiss": "Dismiss",
+      "reopen": "Reopen"
     }
   },
   "onboardingPill": {
@@ -20794,7 +20839,8 @@
         "templateKey": "Template",
         "abTestKey": "A/B test key",
         "trafficAllocation": "Traffic split",
-        "evidence": "Evidence"
+        "evidence": "Evidence",
+        "daysToCliff": "Days to cliff"
       },
       "column": {
         "actual": "Actual",
@@ -21934,7 +21980,9 @@
       "trialHint": {
         "full": "Anyone can use it in full; paying is how they support you and keep a copy.",
         "preview": "Visitors see a preview; the working version needs a purchase."
-      }
+      },
+      "priceFreeOnly": "This kind is always free to take.",
+      "deliveryHostedHint": "Can be delivered hosted — buyers get a running copy, not files."
     },
     "email": {
       "mailbox": "Mailbox",
@@ -23417,7 +23465,8 @@
     "noticeStandupActionItemsAlreadyOnBoard": "{count, plural, one {The action item is already on the board} other {All # action items are already on the board}}",
     "noticeStandupActionItemsPlaced": "{count, plural, one {Placed # action item on the board} other {Placed # action items on the board}}",
     "noticeStandupMinutesNeedsAccount": "Sign in to read a stand-up’s minutes",
-    "noticeStandupMinutesFailed": "Could not read the stand-up minutes"
+    "noticeStandupMinutesFailed": "Could not read the stand-up minutes",
+    "exportUnmaskedColumns": "Export refused: {columns} hold personal data and are not masked. Mask them on the card first."
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
@@ -23739,7 +23788,9 @@
       "add": "Add form",
       "raisesTickets": "Open a ticket for each submission",
       "raisesTicketsHint": "When on, every new submission opens a ticket on this project's board so the workforce can act on it — and the submitter is notified when it's resolved.",
-      "genericError": "Something went wrong. Try again."
+      "genericError": "Something went wrong. Try again.",
+      "readPolicy": "Signed-in visitors can read back their own submissions",
+      "readPolicyHint": "Off by default. Turn on for an app with accounts — “show me my orders” — and only rows a signed-in person submitted are ever returned to them."
     },
     "traffic": {
       "title": "Traffic",
@@ -27287,7 +27338,8 @@
       "category": "Category",
       "categoryPlaceholder": "email, deployment, holiday…"
     },
-    "undatedLabel": "No date yet"
+    "undatedLabel": "No date yet",
+    "nextUp": "Next: {subject} · {when}"
   },
   "points": {
     "view": {

@@ -1,9 +1,9 @@
 'use client';
 
+import { useProjects } from '@/lib/ProjectScopeContext';
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { insightsApi, pmoApi, type FinanceInsights, type FinanceBudgetLine, type BudgetState, type Initiative } from '@/lib/builderforceApi';
-import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmCard, PmEmpty, PmError, StatCard, ProgressBar } from '@/components/pm/pmShared';
@@ -51,14 +51,13 @@ export function FinanceLens() {
   const [busy, setBusy] = useState(false);
   const [newLimit, setNewLimit] = useState('');
   const [budgetScope, setBudgetScope] = useState('tenant');
-  const [projects, setProjects] = useState<Project[]>([]);
+  const projects = useProjects();
   const [initiatives, setInitiatives] = useState<Initiative[]>([]);
   const { data, error, reload } = usePmData<FinanceInsights>(() => insightsApi.finance(period), [period]);
 
   // Scope options for a budget: workspace (tenant), a project, or an initiative.
   useEffect(() => {
     let alive = true;
-    fetchProjects().then((p) => { if (alive) setProjects(p); }).catch(() => {});
     pmoApi.initiatives.list().then((i) => { if (alive) setInitiatives(i); }).catch(() => {});
     return () => { alive = false; };
   }, []);

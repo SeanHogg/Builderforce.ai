@@ -24,7 +24,9 @@
  * on the page a buyer is reading.
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
+import { API_ORIGIN } from './apiOrigin';
+
+const API_BASE = API_ORIGIN;
 
 /** One hour. Public catalogs change on deploy, not on the minute. */
 const DEFAULT_REVALIDATE_SECONDS = 3600;

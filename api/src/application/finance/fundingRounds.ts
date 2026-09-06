@@ -211,9 +211,3 @@ export async function upsertFundingRound(
   if (!saved) throw new FundingRoundError('The round could not be saved.', 500);
   return saved;
 }
-
-/** Retire a round. The allocations stay — a round that was abandoned is a fact,
- *  and the conversations that happened on it are the record of why. */
-export async function closeFundingRound(db: Db, tenantId: number, name: string, status: 'closed' | 'abandoned'): Promise<FundingRoundRecord> {
-  return upsertFundingRound(db, tenantId, { name, status });
-}

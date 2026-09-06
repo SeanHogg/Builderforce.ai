@@ -198,6 +198,12 @@ export type { GitShortStatus } from './shipVerification';
 // that wants to report the same coverage picture.
 export { ReadCoverage, revisitAdvisory, withAdvisory, REVISIT_NUDGE_AT, REVISIT_HARD_AT } from './readCoverage';
 export type { ReadVisit } from './readCoverage';
+// What one tool result may cost the MODEL transcript, and how it is cut down: a generic
+// head slice for list results, LINE-paged windows with an intact continuation offset for
+// `read_file`. Exported so a host can size its own reads to the same budget.
+export { trimToolResult, MAX_TOOL_RESULT_CHARS, READ_FILE_RESULT_CHARS } from './toolResultBudget';
+export type { TrimmedToolResult, TrimOptions } from './toolResultBudget';
+export { stableStringify } from './stableStringify';
 export type { PayloadBudget, PayloadBudgetOptions, PayloadBudgetStats } from './transcriptBudget';
 
 // Durable tool/memory STEP rows — the reader for what the run loop persisted, so a

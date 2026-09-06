@@ -10,6 +10,8 @@
  * route. Nothing here knows about Hono, drizzle, or the shape of a lens payload.
  */
 
+import { linearFit, movingAverage as sharedMovingAverage } from '@builderforce/creation-canvas-contract';
+
 /** A finite number or 0 — guards every reducer against NaN/Infinity leaking in. */
 function fin(n: number): number {
   return Number.isFinite(n) ? n : 0;
@@ -35,14 +37,7 @@ export function stdDev(series: number[]): number {
  * fewer points until the window fills). `window` is clamped to ≥1.
  */
 export function movingAverage(series: number[], window: number): number[] {
-  const w = Math.max(1, Math.floor(window));
-  const out: number[] = [];
-  for (let i = 0; i < series.length; i++) {
-    const start = Math.max(0, i - w + 1);
-    const slice = series.slice(start, i + 1);
-    out.push(mean(slice));
-  }
-  return out;
+  return sharedMovingAverage(series.map(fin), window);
 }
 
 export interface RegressionFit {
@@ -70,41 +65,20 @@ export function regressionForecast(series: number[], horizon: number): Regressio
   const h = Math.max(0, Math.floor(horizon));
   const ys = series.map(fin);
 
-  if (n < 2) {
+  const fit = linearFit(ys);
+  if (!fit) {
     const flat = ys[0] ?? 0;
     return { slope: 0, intercept: flat, r2: 0, projection: flat, forecast: Array.from({ length: h }, () => flat) };
   }
 
-  const xs = ys.map((_, i) => i);
-  const mx = mean(xs);
-  const my = mean(ys);
-  let sxx = 0, sxy = 0, syy = 0;
-  for (let i = 0; i < n; i++) {
-    const dx = xs[i]! - mx;
-    const dy = ys[i]! - my;
-    sxx += dx * dx;
-    sxy += dx * dy;
-    syy += dy * dy;
-  }
-
-  // sxx is 0 only for a single distinct x (n<2, already handled) — defensive guard.
-  const slope = sxx === 0 ? 0 : sxy / sxx;
-  const intercept = my - slope * mx;
-  const r2 = syy === 0 ? 0 : Math.max(0, Math.min(1, (sxy * sxy) / (sxx * syy)));
+  // A series with no spread fits its own mean exactly; the shared fit reports that
+  // as R²=1, but for a FORECAST "no variance" is "no evidence of a trend", so 0.
+  const { slope, intercept } = fit;
+  const r2 = ys.every((y) => y === ys[0]) ? 0 : fit.r2;
 
   const at = (x: number) => slope * x + intercept;
   const forecast = Array.from({ length: h }, (_, k) => at(n + k));
   return { slope, intercept, r2, projection: at(n), forecast };
-}
-
-/**
- * Convenience wrapper: the least-squares forward projection of `series` over
- * `horizon` steps (just {@link regressionForecast}'s `forecast`). Named
- * `linearForecast` because the projection is the fitted straight line extended
- * past the data.
- */
-export function linearForecast(series: number[], horizon: number): number[] {
-  return regressionForecast(series, horizon).forecast;
 }
 
 export interface AnomalyPoint {

@@ -10,6 +10,7 @@ import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { feedbackApi, type FeedbackStatus, type FeedbackSubmission } from '@/lib/feedbackApi';
 import { FeedbackTriage } from '@/components/feedback/FeedbackTriage';
 import { FeedbackCollectorManager } from '@/components/feedback/FeedbackCollectorManager';
+import { CustomerFeedbackInbox } from '@/components/feedback/CustomerFeedbackInbox';
 import { QualityDashboard } from './QualityDashboard';
 import { QualityCollectorsManager } from './QualityCollectorsManager';
 
@@ -75,6 +76,8 @@ function FeedbackPanelBody() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
       <FeedbackCollectorManager />
+      {/* What those collectors gathered — the customers' own words, triaged here. */}
+      <CustomerFeedbackInbox />
       <FeedbackTriage load={load} review={review} refreshKey={currentProjectId} />
     </div>
   );

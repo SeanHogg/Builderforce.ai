@@ -28,7 +28,7 @@
  * to a uuid one. That is a separate migration with its own blast radius; what it would
  * BUY is exactly the coherence this module now enforces directly.
  */
-import { and, eq, isNull, or } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHostProjects, projectAgents } from '../../infrastructure/database/schema';
 
@@ -143,21 +143,3 @@ export async function resolveScheduledAgentBinding(
  * a picker should offer, so an operator cannot choose an option the reconciliation above
  * would then refuse.
  */
-export async function eligibleScheduledAgents(
-  db: Db,
-  args: { tenantId: number; projectId: number },
-): Promise<Array<{ id: number; agentKind: string | null; agentRef: string | null; projectId: number | null }>> {
-  return db
-    .select({
-      id: projectAgents.id,
-      agentKind: projectAgents.agentKind,
-      agentRef: projectAgents.agentRef,
-      projectId: projectAgents.projectId,
-    })
-    .from(projectAgents)
-    .where(and(
-      eq(projectAgents.tenantId, args.tenantId),
-      // Attached to THIS project, or a tenant-level identity row usable anywhere.
-      or(eq(projectAgents.projectId, args.projectId), isNull(projectAgents.projectId)),
-    ));
-}

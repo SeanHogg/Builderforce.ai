@@ -33,3 +33,45 @@ export function formatHours(hours: number | null | undefined): string {
   if (hours == null) return '—';
   return `${hours.toFixed(1)}h`;
 }
+
+/**
+ * The transcript's reading: "52s" / "1m 14s" / "2m" — a whole minute drops its
+ * zero seconds, because "2m 00s" in a run summary reads as a timer, not a fact.
+ */
+export function formatDurationCompact(ms: number): string {
+  const seconds = Math.max(0, Math.round(ms / 1_000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
+}
+
+/**
+ * A clock reading — "m:ss", or "mm:ss" with `padMinutes` — for the places a
+ * person reads elapsed time the way a stopwatch shows it: a video cut, an
+ * emulation session. Takes SECONDS, because both of those hold seconds.
+ */
+export function formatClock(totalSeconds: number, options: { padMinutes?: boolean } = {}): string {
+  const whole = Math.max(0, Math.round(totalSeconds));
+  const minutes = Math.floor(whole / 60);
+  const seconds = String(whole % 60).padStart(2, '0');
+  return `${options.padMinutes ? String(minutes).padStart(2, '0') : minutes}:${seconds}`;
+}
+
+/** Sub-second precision for traces: "850ms" / "1.2s" / "3.5m". */
+export function formatDurationPrecise(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${(ms / 60_000).toFixed(1)}m`;
+}
+
+/**
+ * A span read at the scale it sits at: "mm:ss" under an hour, "3h 05m" under a
+ * day, "2d 03h" past it. Takes SECONDS — the survey and DevEx metrics arrive so.
+ */
+export function formatSpan(totalSeconds: number): string {
+  const sec = Math.max(0, totalSeconds);
+  if (sec < 3600) return formatClock(sec, { padMinutes: true });
+  if (sec < 86_400) return `${Math.floor(sec / 3600)}h ${String(Math.round((sec % 3600) / 60)).padStart(2, '0')}m`;
+  return `${Math.floor(sec / 86_400)}d ${String(Math.round((sec % 86_400) / 3600)).padStart(2, '0')}h`;
+}

@@ -42,8 +42,11 @@ import {
   CONVERTIBLE_KINDS,
   EQUITY_INSTRUMENTS,
   VESTING_FREQUENCIES,
+  daysToCliff,
   nextOpenObligation,
+  type AccelerationKind,
   type FounderObjectKind,
+  type VestingFrequency,
 } from '@builderforce/creation-canvas-contract';
 import {
   SOURCES_FIELD,
@@ -922,6 +925,19 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
         hint: 'READ-ONLY. The date the cliff lands, computed from `vestingStartAt` + `cliffMonths` and written by the sync. Bind a `trigger` with comparator "due-within" to it so the conversation happens before the date rather than after — this is the first ownership date on the canvas that a trigger can watch.',
         derived: true,
         deadline: true,
+      },
+      {
+        name: 'daysToCliff',
+        render: 'stat',
+        label: 'daysToCliff',
+        hint: 'COMPUTED. Days from today until the cliff lands — negative once it has passed, empty when the grant has no cliff. The one number a founder is asked for and could not previously answer without a calendar.',
+        derive: (data) => daysToCliff({
+          startAt: typeof data.vestingStartAt === 'string' ? data.vestingStartAt : null,
+          durationMonths: deriveNumber(data.vestingMonths) ?? null,
+          cliffMonths: deriveNumber(data.cliffMonths) ?? null,
+          frequency: (VESTING_FREQUENCIES as readonly string[]).includes(String(data.vestingFrequency)) ? data.vestingFrequency as VestingFrequency : 'monthly',
+          acceleration: (ACCELERATION_KINDS as readonly string[]).includes(String(data.acceleration)) ? data.acceleration as AccelerationKind : 'none',
+        }, Date.now()) ?? undefined,
       },
       {
         name: 'unvested',

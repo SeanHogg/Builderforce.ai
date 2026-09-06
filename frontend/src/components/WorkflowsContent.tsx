@@ -1,5 +1,6 @@
 'use client';
 
+import { useProjects } from '@/lib/ProjectScopeContext';
 import { Icon } from '@/components/ui/Icon';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
@@ -12,7 +13,6 @@ import {
   type WorkflowDefinitionSummary,
   type WorkflowRunTarget,
 } from '@/lib/builderforceApi';
-import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
 import { WorkflowRunHistoryPanel } from './WorkflowRunHistoryPanel';
 import { ViewToggle, type ViewMode } from './ViewToggle';
@@ -165,7 +165,7 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
   const tc = useTranslations('common');
   const t = useTranslations('workflowsContent');
   const [defs, setDefs] = useState<WorkflowDefinitionSummary[]>([]);
-  const [projectList, setProjectList] = useState<Project[]>([]);
+  const projectList = useProjects();
   const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -189,7 +189,6 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { fetchProjects().then(setProjectList).catch(() => {}); }, []);
   // Refetch when the Brain creates/updates/removes a workflow definition so this
   // list reflects the change live instead of going stale until a manual reload.
   useBrainDataRefresh(['workflows'], load);

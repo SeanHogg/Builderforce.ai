@@ -5,6 +5,7 @@ import { getStoredTenant } from '@/lib/auth';
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 import { persistedGraphFromBoard } from '@/domains/canvas/domain/canvasBoard';
 import { clearGuestSession } from '@/domains/guest/infrastructure/guestSessionStore';
+import { readLocalJson, writeLocalJson } from './storage';
 import {
   listLocalCreationSessions,
   readLocalCreationSession,
@@ -152,21 +153,14 @@ export interface LastCanvas {
 }
 
 export function rememberLastCanvas(sessionId: string, title: string): void {
-  try {
-    localStorage.setItem(`${LAST_CANVAS_PREFIX}${scopeKey()}`, JSON.stringify({ sessionId, title } satisfies LastCanvas));
-  } catch {
-    // Private mode / quota — the switcher still lists server sessions.
-  }
+  // Private mode / quota / the server — the switcher still lists server sessions.
+  writeLocalJson(`${LAST_CANVAS_PREFIX}${scopeKey()}`, { sessionId, title } satisfies LastCanvas);
 }
 
 export function readLastCanvas(): LastCanvas | null {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(`${LAST_CANVAS_PREFIX}${scopeKey()}`) ?? 'null') as Partial<LastCanvas> | null;
-    if (!parsed || typeof parsed.sessionId !== 'string' || typeof parsed.title !== 'string') return null;
-    return { sessionId: parsed.sessionId, title: parsed.title };
-  } catch {
-    return null;
-  }
+  const parsed = readLocalJson<Partial<LastCanvas>>(`${LAST_CANVAS_PREFIX}${scopeKey()}`);
+  if (!parsed || typeof parsed.sessionId !== 'string' || typeof parsed.title !== 'string') return null;
+  return { sessionId: parsed.sessionId, title: parsed.title };
 }
 
 // ---------------------------------------------------------------------------

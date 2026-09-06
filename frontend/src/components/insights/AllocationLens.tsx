@@ -1,5 +1,6 @@
 'use client';
 
+import { useProjects } from '@/lib/ProjectScopeContext';
 import { useEffect, useState, type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import {
@@ -8,7 +9,6 @@ import {
   type AllocationInsights, type AllocationGoal, type AllocationCategory, type CategoryAllocation,
   type AllocationHistory, type CapitalizationExportFormat, type CapitalizationStatus, type EpicCapitalization,
 } from '@/lib/builderforceApi';
-import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmCard, PmEmpty, PmError, StatCard, ProgressBar } from '@/components/pm/pmShared';
@@ -105,7 +105,7 @@ export function AllocationLens() {
   const [goalCat, setGoalCat] = useState<AllocationCategory>('innovation');
   const [goalPct, setGoalPct] = useState('');
   const [projectId, setProjectId] = useState<number | undefined>(undefined);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const projects = useProjects();
   const [metric, setMetric] = useState<'fte' | 'cost'>('fte');
   const [epicFilter, setEpicFilter] = useState<'all' | CapitalizationStatus>('all');
   const [exporting, setExporting] = useState(false);
@@ -118,7 +118,6 @@ export function AllocationLens() {
     finally { setExporting(false); }
   };
 
-  useEffect(() => { let alive = true; fetchProjects().then((p) => { if (alive) setProjects(p); }).catch(() => {}); return () => { alive = false; }; }, []);
 
   const { data, error, reload } = usePmData<AllocationInsights>(() => insightsApi.allocation({ days, period, projectId }), [days, period, projectId]);
   const { data: goals, reload: reloadGoals } = usePmData<AllocationGoal[]>(() => insightsApi.allocationGoals.list(), []);

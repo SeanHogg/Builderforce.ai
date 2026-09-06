@@ -24,6 +24,7 @@ import { WorkspaceAuditLogPanel } from '@/components/security/WorkspaceAuditLogP
 import { WebSecurityScanPanel } from '@/components/security/WebSecurityScanPanel';
 import PolicyPacksPanel from '@/components/security/PolicyPacksPanel';
 import IdentityProvidersPanel from '@/components/security/IdentityProvidersPanel';
+import LegalAgreementsPanel from '@/components/security/LegalAgreementsPanel';
 import { DestinationIndex, type IndexItem } from '@/components/shell/DestinationIndex';
 import PageContainer from '@/components/PageContainer';
 
@@ -107,6 +108,9 @@ export default function SecurityClient() {
     // from nowhere; it is personal security, so it earns a tab rather than being
     // folded into workspace governance beside it.
     { id: 'account', label: t('accountTab'), icon: '🔑', href: '/security?sub=account' },
+    // What this person has agreed to — their own consent record, beside their
+    // own account security rather than under workspace governance.
+    { id: 'agreements', label: t('agreementsTab'), icon: '📜', href: '/security?sub=agreements' },
     { id: 'agents', label: t('agentsTab'), icon: '🛡', href: '/security?sub=agents' },
     { id: 'webscan', label: t('webTab'), icon: '🌐', href: '/security?sub=webscan' },
     { id: 'soc2', label: t('auditTab'), icon: '📋', href: '/security?sub=soc2' },
@@ -256,6 +260,7 @@ export default function SecurityClient() {
         <>
           <DestinationIndex items={subTabs} activeId={sub} ariaLabel={t('subnavLabel')} />
           {sub === 'account' ? <AccountSecurityPanel />
+            : sub === 'agreements' ? <LegalAgreementsPanel />
             : sub === 'agents' ? renderAgents()
             : sub === 'webscan' ? <WebSecurityScanPanel />
               : sub === 'soc2' ? renderSoc2()

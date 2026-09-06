@@ -28,6 +28,8 @@
 
 /** Ascending copy. Every quantile below needs one, and sorting in place would
  *  reorder a caller's array — the classic silent corruption in a stats helper. */
+import { linearFit as sharedLinearFit } from '@builderforce/creation-canvas-contract';
+
 function sorted(values: readonly number[]): number[] {
   return [...values].sort((a, b) => a - b);
 }
@@ -236,33 +238,10 @@ export function mode(values: readonly number[]): number | null {
 export interface LinearFit { slope: number; intercept: number; r2: number }
 
 export function linearFit(values: readonly number[]): LinearFit | null {
-  if (values.length < 2) return null;
-  const length = values.length;
-  let sumX = 0;
-  let sumY = 0;
-  for (let index = 0; index < length; index += 1) { sumX += index; sumY += values[index]; }
-  const meanX = sumX / length;
-  const meanY = sumY / length;
-  let covariance = 0;
-  let varianceX = 0;
-  for (let index = 0; index < length; index += 1) {
-    covariance += (index - meanX) * (values[index] - meanY);
-    varianceX += (index - meanX) ** 2;
-  }
-  if (varianceX <= 0) return null;
-  const slope = covariance / varianceX;
-  const intercept = meanY - slope * meanX;
-  let residual = 0;
-  let total = 0;
-  for (let index = 0; index < length; index += 1) {
-    residual += (values[index] - (intercept + slope * index)) ** 2;
-    total += (values[index] - meanY) ** 2;
-  }
-  return {
-    slope: round(slope),
-    intercept: round(intercept),
-    r2: total <= 0 ? 1 : round(Math.max(0, 1 - residual / total)),
-  };
+  // The contract's least squares — the same line the API's forecasts draw —
+  // rounded to this module's six places like every other statistic here.
+  const fit = sharedLinearFit(values);
+  return fit ? { slope: round(fit.slope), intercept: round(fit.intercept), r2: round(fit.r2) } : null;
 }
 
 /**

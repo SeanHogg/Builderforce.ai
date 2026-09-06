@@ -19,7 +19,9 @@
 
 import { useTranslations } from 'next-intl';
 import {
+  biApi,
   insightsApi,
+  type BurnRateResult,
   type FinanceInsights,
   type EffectivenessBucket,
 } from '@/lib/builderforceApi';
@@ -62,6 +64,11 @@ function useFin() {
   return { data: source.data, state: useSourceState(source), t };
 }
 
+/** One shared read of the segment's burn/runway metrics. */
+function useBurnRate() {
+  return useSharedSource<BurnRateResult>('bi:burn-rate', () => biApi.getBurnRate());
+}
+
 /** Wrap an engineering card body: handles loading / error. */
 function useEng(days: number) {
   const t = useTranslations('insights');
@@ -76,6 +83,22 @@ function SpendCard(_: ComponentSurfaceProps) {
   const { data, state, t } = useFin();
   if (!data) return state;
   return <Stat value={usd(data.totals.spendUsd)} sub={data.periodMonth} />;
+}
+
+function BurnRateCard(_: ComponentSurfaceProps) {
+  const { usd } = useInsightFormat();
+  const t = useTranslations('insights');
+  const source = useBurnRate();
+  const state = useSourceState(source);
+  const data = source.data;
+  if (!data) return state;
+  if (!data.available || data.monthlyBurn == null) return <Muted>{t('fin.burnUnavailable')}</Muted>;
+  return (
+    <Stat
+      value={usd(data.monthlyBurn)}
+      sub={data.runwayMonths != null ? t('fin.runway', { months: Math.round(data.runwayMonths) }) : t('fin.burnSub')}
+    />
+  );
 }
 
 function ForecastCard(_: ComponentSurfaceProps) {
@@ -254,6 +277,7 @@ export const FINANCE_COMPONENTS: ComponentDef[] = [
   // Finance / FinOps
   { id: 'finance.spend', group: 'finance', titleKey: 'finSpend', capability: FIN_CAP, size: 'sm', Surface: SpendCard, drill: FIN_DRILL },
   { id: 'finance.forecast', group: 'finance', titleKey: 'finForecast', capability: FIN_CAP, size: 'sm', Surface: ForecastCard, drill: FIN_DRILL },
+  { id: 'finance.burn-rate', group: 'finance', titleKey: 'finBurnRate', capability: FIN_CAP, size: 'sm', Surface: BurnRateCard, drill: FIN_DRILL },
   { id: 'finance.cost-per-pr', group: 'finance', titleKey: 'finCostPerPr', capability: FIN_CAP, size: 'sm', Surface: CostPerPrCard, drill: FIN_DRILL },
   { id: 'finance.paid-overflow', group: 'finance', titleKey: 'finPaidOverflow', capability: FIN_CAP, size: 'sm', Surface: PaidOverflowCard, drill: FIN_DRILL },
   { id: 'finance.cache-read', group: 'finance', titleKey: 'finCacheRead', capability: FIN_CAP, size: 'sm', Surface: CacheReadCard, drill: FIN_DRILL },

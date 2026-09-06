@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import { readLocal, writeLocal } from './storage';
 
 const SIDEBAR_COLLAPSED_KEY = 'builderforce-sidebar-collapsed';
 
@@ -11,24 +12,21 @@ const SIDEBAR_COLLAPSED_KEY = 'builderforce-sidebar-collapsed';
  * except when a route forces collapse.
  */
 export function useSidebarCollapse(routeCollapsed = false): { collapsed: boolean; toggle: () => void } {
-  const [userCollapsed, setUserCollapsed] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
-  });
+  // `readLocal` is null on the server and in Safari private mode alike — this
+  // used to throw on the second, which took the whole shell down with it.
+  const [userCollapsed, setUserCollapsed] = useState<boolean>(() => readLocal(SIDEBAR_COLLAPSED_KEY) === '1');
 
   const collapsed = routeCollapsed || userCollapsed;
 
   // Persist when a route forces collapse (external system → useEffect; no setState).
   useEffect(() => {
-    if (routeCollapsed && typeof window !== 'undefined') {
-      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, '1');
-    }
+    if (routeCollapsed) writeLocal(SIDEBAR_COLLAPSED_KEY, '1');
   }, [routeCollapsed]);
 
   const toggle = useCallback(() => {
     setUserCollapsed((prev) => {
       const next = !prev;
-      if (typeof window !== 'undefined') localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0');
+      writeLocal(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0');
       return next;
     });
   }, []);

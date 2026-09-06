@@ -183,3 +183,41 @@ export function erasureDecision(
     daysRemaining: Math.max(0, rule.minimumRetentionDays - daysElapsed),
   };
 }
+
+/**
+ * The date a kind's retention clock runs from, read off the object itself.
+ *
+ * `relationshipEnded` is the employee's `endedAt`; `created` is the earliest dated
+ * fact a hiring record carries, because a card has no creation stamp of its own.
+ * `null` when nothing is dated — and the caller treats that as day zero, which is
+ * the conservative reading a retention rule has to take: an undated record is a
+ * record nobody can prove is old enough to erase.
+ */
+export function retentionSince(kind: string, data: Record<string, unknown>): string | null {
+  const rule = retentionForKind(kind);
+  const candidates = rule.clock === 'relationshipEnded'
+    ? ['endedAt']
+    : ['appliedAt', 'decidedAt', 'acceptedAt', 'startedAt', 'startDate'];
+  for (const field of candidates) {
+    const value = data[field];
+    if (typeof value === 'string' && value.trim() && !Number.isNaN(Date.parse(value))) return value;
+  }
+  return null;
+}
+
+/**
+ * Why an `erase` act on this object must not run today, or `null` when it may.
+ *
+ * Model-facing, like every other tool refusal: it names the rule and the date so
+ * the model relays a reason rather than inventing a limitation. Kinds without a
+ * retention rule erase freely — `retentionForKind` says so with a zero floor.
+ */
+export function erasureRefusal(kind: string, data: Record<string, unknown>, now: Date = new Date()): string | null {
+  const decision = erasureDecision(kind, retentionSince(kind, data), now);
+  if (decision.mayErase) return null;
+  if (!decision.rule.erasable) {
+    return `A ${kind} record cannot be erased on request: it must be kept ${decision.rule.minimumRetentionDays} days after the ${decision.rule.clock === 'relationshipEnded' ? 'relationship ends' : 'record is made'} for payroll, tax and dispute obligations. Say so, and offer to mark it inactive instead.`;
+  }
+  const until = new Date(now.getTime() + decision.daysRemaining * 86_400_000).toISOString().slice(0, 10);
+  return `This ${kind} record must be kept until ${until} (${decision.daysRemaining} more days of its ${decision.rule.minimumRetentionDays}-day minimum retention) before it can be erased on request. Do not claim it was erased.`;
+}

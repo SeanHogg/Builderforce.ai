@@ -1,6 +1,7 @@
 'use client';
 
 import { Icon } from '@/components/ui/Icon';
+import { formatClock } from '@/lib/duration';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -10,11 +11,9 @@ import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 
 const ROLES = ['owner', 'manager', 'developer', 'viewer'] as const;
 
+/** "mm:ss" since the session started — the shared clock reading. */
 function formatElapsed(startedAt: Date): string {
-  const secs = Math.floor((Date.now() - startedAt.getTime()) / 1000);
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return formatClock(Math.floor((Date.now() - startedAt.getTime()) / 1000), { padMinutes: true });
 }
 
 /**

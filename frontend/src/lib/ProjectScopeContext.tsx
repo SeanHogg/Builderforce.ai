@@ -198,3 +198,26 @@ export function useProjectScope(): ProjectScopeValue {
 export function useOptionalProjectScope(): ProjectScopeValue | null {
   return useContext(ProjectScopeContext);
 }
+
+/**
+ * The tenant's project list for a picker or a filter.
+ *
+ * From the provider when one is above — the shell loads the list ONCE, and a
+ * lens that fetched its own copy was a second request for the same twenty rows
+ * on every mount — and loaded here otherwise, so the same component works on the
+ * surfaces (embed, guest) that have no shell. Either way the consumer holds no
+ * state and no effect of its own.
+ */
+export function useProjects(): Project[] {
+  const scope = useOptionalProjectScope();
+  const [own, setOwn] = useState<Project[]>([]);
+  useEffect(() => {
+    if (scope) return;
+    let live = true;
+    fetchProjects()
+      .then((list) => { if (live) setOwn(list); })
+      .catch(() => { if (live) setOwn([]); });
+    return () => { live = false; };
+  }, [scope]);
+  return scope ? scope.projects : own;
+}

@@ -190,8 +190,16 @@ const BASELINE = {
    * it (the class where the element had no other type styling, the token
    * where the button's own weight stays). The lens reads zero literals now,
    * and the floor follows it down.
+   *
+   * 3,595 → 3,586: the unwired-features pass. The tally had drifted +7 above the
+   * baseline through the two embed settings surfaces (`EmbedSurfaceCatalog`,
+   * `EmbedIntegrationSettings`) landing with typed sizes; both now name their
+   * roles (`14` card-title, `13` body, `12` small, `11` eyebrow), and the pass's
+   * own new panels (`LegalAgreementsPanel`, `CustomerFeedbackInbox`, the read
+   * policy switch, the advisory-feed chips) were written on the scale to begin
+   * with. Net −9 against a +7 drift.
    */
-  offScaleFontSizes: 3595,
+  offScaleFontSizes: 3586,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

@@ -7,7 +7,7 @@ import { useCart, type CartItem } from '@/lib/CartContext';
 import { useAuth } from '@/lib/AuthContext';
 import { Icon } from '@/components/ui/Icon';
 import { useLocale, useTranslations } from 'next-intl';
-import { AUTH_API_URL, getStoredTenantToken } from '@/lib/auth';
+import { ApiRequestError, apiRequest } from '@/lib/apiClient';
 import { subscriptionCheckoutPayload } from '@/lib/subscriptionCart';
 import {
   marketplacePurchaseApi,
@@ -121,26 +121,33 @@ export default function ShoppingCart() {
       if (subscriptionItem) {
         if (!tenant?.id || !user?.email) throw new Error(t('workspaceRequired'));
         if (!subscriptionItem.targetPlan || !subscriptionItem.billingCycle) throw new Error(t('unsupportedCheckout'));
-        const token = getStoredTenantToken();
-        const response = await fetch(`${AUTH_API_URL}/api/tenants/${tenant.id}/subscription/checkout`, {
+        // The transport carries the tenant credential and the server's own error
+        // text; a refusal surfaces as an ApiRequestError with that message.
+        const body = await apiRequest<{ checkoutUrl?: string }>(`/api/tenants/${tenant.id}/subscription/checkout`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
           body: JSON.stringify(subscriptionCheckoutPayload(subscriptionItem, user.email)),
         });
-        const body = await response.json() as { checkoutUrl?: string; error?: string };
-        if (!response.ok || !body.checkoutUrl) throw new Error(body.error ?? t('checkoutFailed'));
+        if (!body.checkoutUrl) throw new Error(t('checkoutFailed'));
         window.location.href = body.checkoutUrl;
         return;
       }
 
       if (phoneItem) {
         if (!tenant?.id || !user?.email) throw new Error(t('workspaceRequired'));
-        const token = getStoredTenantToken();
-        const response = await fetch(`${AUTH_API_URL}/api/tenants/${tenant.id}/add-ons/business-phone/checkout`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ billingEmail: user.email }) });
-        const body = await response.json() as { checkoutUrl?: string; error?: string };
-        if (response.status === 403) throw new Error(phoneT('eligibility'));
-        if (response.status === 409) throw new Error(phonePageT('active'));
-        if (!response.ok || !body.checkoutUrl) throw new Error(t('checkoutFailed'));
+        let body: { checkoutUrl?: string };
+        try {
+          body = await apiRequest<{ checkoutUrl?: string }>(`/api/tenants/${tenant.id}/add-ons/business-phone/checkout`, {
+            method: 'POST',
+            body: JSON.stringify({ billingEmail: user.email }),
+            // Rendered inline below, so neither raises the global error toast.
+            expectedErrors: [403, 409],
+          });
+        } catch (cause) {
+          if (cause instanceof ApiRequestError && cause.status === 403) throw new Error(phoneT('eligibility'));
+          if (cause instanceof ApiRequestError && cause.status === 409) throw new Error(phonePageT('active'));
+          throw cause;
+        }
+        if (!body.checkoutUrl) throw new Error(t('checkoutFailed'));
         window.location.href = body.checkoutUrl;
         return;
       }

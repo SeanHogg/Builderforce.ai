@@ -1,4 +1,5 @@
 import type { Skill } from './SkillsBrowser';
+import { publicApiGet } from '@/lib/publicApi';
 
 /**
  * Shared skills data source for the public `/agents/skills` directory.
@@ -34,8 +35,6 @@ export const BUILTIN_SKILLS: Skill[] = [
   { id: 'openhue', name: 'OpenHue', author: 'OpenHue', description: 'Control Philips Hue smart lights, scenes, and automation.', category: 'IoT & Hardware', likes: 25, downloads: 120, tags: ['hue', 'lights', 'smart-home'] },
   { id: 'gh-issues', name: 'GitHub Issues', author: 'BuilderForce Agents', description: 'Manage GitHub issues with advanced filtering, labeling, and workflows.', category: 'Development', likes: 68, downloads: 330, tags: ['github', 'issues', 'tracking'] },
 ];
-
-const REGISTRY_URL = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
 
 /**
  * Shape of a row from `GET /marketplace/skills` (snake_case, author split
@@ -80,18 +79,9 @@ export function mapRegistrySkill(r: RegistrySkillRow): Skill {
  * and icon render correctly).
  */
 export async function fetchSkills(): Promise<Skill[]> {
-  try {
-    const res = await fetch(`${REGISTRY_URL}/marketplace/skills?limit=100`, {
-      headers: { Accept: 'application/json' },
-      next: { revalidate: 300 },
-    });
-    if (!res.ok) return BUILTIN_SKILLS;
-    const body = await res.json();
-    const remote = body.skills as RegistrySkillRow[] | undefined;
-    return remote && remote.length > 0 ? remote.map(mapRegistrySkill) : BUILTIN_SKILLS;
-  } catch {
-    return BUILTIN_SKILLS;
-  }
+  const body = await publicApiGet<{ skills?: RegistrySkillRow[] }>('/marketplace/skills?limit=100', { revalidateSeconds: 300 });
+  const remote = body?.skills;
+  return remote && remote.length > 0 ? remote.map(mapRegistrySkill) : BUILTIN_SKILLS;
 }
 
 /** Resolve a single skill by its slug/id from the shared catalog. */

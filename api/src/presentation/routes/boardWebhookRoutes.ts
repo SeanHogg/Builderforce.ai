@@ -24,7 +24,7 @@ import { createDrizzleStore, loadConnectionCredentials } from '../../application
 import { createBoardProvider, type NormalizedTicket } from '../../application/boardsync/providers';
 import { hashFields } from '../../application/boardsync/reconciler';
 import { verifyProviderWebhookSignature, normalizeWebhookPayload } from '../../application/boardsync/webhookIngest';
-import { getBoardProviderMeta } from '../../application/boardsync/providerCatalog';
+import { WEBHOOK_BOARD_PROVIDER_IDS, getBoardProviderMeta } from '../../application/boardsync/providerCatalog';
 import { ingestIncidentWebhook } from '../../application/boardsync/opsIngest';
 import { fireEventTriggers } from '../../application/workflow/eventTriggers';
 
@@ -44,6 +44,12 @@ export function createBoardWebhookRoutes(db: Db): Hono<HonoEnv> {
     if (!conn) return c.json({ error: 'Connection not found' }, 404);
     if (conn.provider !== provider) {
       return c.json({ error: 'provider mismatch' }, 400);
+    }
+    // A poll-only provider has no webhook normaliser. Said here, once, rather
+    // than verifying a signature and then reporting "no actionable ticket" for
+    // every event a misconfigured subscription sends.
+    if (!WEBHOOK_BOARD_PROVIDER_IDS.includes(provider)) {
+      return c.json({ error: `${provider} has no inbound webhook; its board is synced by polling` }, 404);
     }
     if (!conn.webhookEnabled || !conn.webhookSecret) {
       return c.json({ received: true, processed: false, reason: 'webhook not enabled for this connection' });

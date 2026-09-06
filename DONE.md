@@ -1,3 +1,154 @@
+## ✅ RESOLVED 2026-09-06 — Codebase review, fourth pass: the unwired features are wired, or re-validated, or named as surfaces
+
+**What this pass was.** The register's seven "validated as intended; wire, do not delete" bullets
+(delivery, canvas, commerce, growth, finance, governance, frontend primitives) held ~60 exports
+that were built and never reached. Each was traced to the consumer it was written for and
+either WIRED there, RE-VALIDATED as superseded (and then deleted, with the superseding path
+named), or classified as a SURFACE still to build (not a wiring) with the blocker stated.
+Nothing was deleted on sight.
+
+**Wired — canvas.** `CanvasAppPanel` sits in the session bar's handoff corner (server boards only)
+and `ProjectAppPanel` under the site panels, so `POST /convert-to-app` and `GET /address-available`
+have callers. A dataset's CSV/XLSX export goes through the same mask the card renders through, and
+`unmaskedSensitiveColumns` REFUSES an export while a classified column is unmasked (the classify
+tool promised "masked on render and export"; export was reading raw rows). `fixtureFromDataset` is
+`canvas_generate_test_data`'s `mode: 'sample'` — real rows, every personal column masked, refused
+otherwise. `canvasScreenshotToolRedirect` fires from `canvas_add_object` (an `image` whose
+`outputUrl` is a page) and `canvas_add_image` (a query that is a URL), through the contract's new
+`looksLikeWebPageUrl`. `eventsOnDay` replaced the grid's two hand-written day filters and
+`nextCalendarEvent` is the card's next-up line. `patchWebsiteSection` is now the hero edit (one
+section-patch, not a second map) and is re-exported. `daysToCliff` is a derived `equityGrant` field.
+`erasureDecision` gates the `erase` act at `canvas_invoke_object_action` through the new
+`erasureRefusal`/`retentionSince` (a hiring record must be kept 365 days; an employment record is
+not erasable on request). `useCanRunCardActs` hides an act button that would run a no-op.
+`BRAND_BINDING_HINT` reaches the model as `fieldHints` on inspect.
+
+**Wired — growth and transport.** `publicWebsitePage` is `GET /api/public/web/:owner/p/*` (cached
+under a per-owner version token the three page writers bump — `websitePagesVersionKey`) and
+`recordSeoImpression` is `POST …/seo/impression`, the denominator the conversion counter never had.
+`trackDemoEvent` fires at the demo door. `app/marketplace`, `app/sitemap`, `app/talent/[id]` and
+`app/agents/skills` read through `publicApiGet`; the origin is spelled ONCE in `lib/apiOrigin.ts`
+(`auth.ts`, `publicApi.ts` and the three screens that print it all read it — three of those had
+dropped the environment override); `ShoppingCart`, `/activate` and the newsletter form are on
+`apiRequest` (the newsletter POSTed to the marketing origin, which has no such route);
+`check-api-transport` walks `app/` and `components/` and fails a second copy of the origin.
+
+**Wired — governance.** `availableAdvisoryFeeds` rides `GET /web-scan/config` and the scan panel
+shows each feed and whether this environment can reach it. A request can be DISCARDED
+(`DELETE /api/rfp/requests/:id` → `discardRfpRequest`, cascade takes responses and register; a
+Discard button with confirm on the detail page) — `clearRegisterFor` was written for a soft delete
+that never existed. A collection's `read_policy` is a fact the owner sees and sets: exposed on the
+list, accepted by the PATCH through `updateCollection` (the ONE writer; `setCollectionReadPolicy`
+folded in), a switch on the forms panel. The 5-Why ladder's cap and convention travel with the
+chain (`{ whys, maxSteps, conventionalSteps }`) so `WhyLadderSection` no longer mirrors numbers it
+cannot enforce. `outstandingFor` is `GET /consent/me/outstanding?required=` and the new Agreements
+tab under /security lists every document kind as accepted (version, date) or outstanding.
+
+**Wired — finance and delivery.** Board packs can be scheduled: `POST /schedules` takes and validates a
+`canvas_frame` subject, `GET /schedules/board-pack/frames?sessionId=` serves the picker. The burn-rate
+card is in the finance widget registry over `biApi.getBurnRate`. Least squares and the trailing mean
+live ONCE in the contract's `series.ts`; the API's `regressionForecast`/`movingAverage` and the
+canvas's `linearFit`/`movingAverage` window all read it (each keeps its own rounding).
+`WEBHOOK_BOARD_PROVIDER_IDS` refuses a webhook for a poll-only provider up front (404 with the
+reason) instead of verifying a signature and reporting "no actionable ticket".
+`useRuntimeSurfaceBlocked` refuses a save (edit and create) onto a surface the project provably
+cannot run, with the same cached readiness the picker disables on. `country()` validates the region
+waitlist's code and normalises it. The employer's attachment side is on the postings list (upload,
+open, remove) and on every proposal (open); `allowsPricing`/`allowsHostedDelivery` gate the publish
+panel's price box and trial; `feedbackApi` → `customerFeedbackApi` and the Voice-of-Customer inbox
+sits under the collectors on the quality page.
+
+**Wired — frontend primitives.** `lib/storage.ts` is the one door to localStorage (never throws;
+`useSidebarCollapse` threw in Safari private mode and `pendingWork` under SSR — both on it now,
+`guestSessionStore` shares its `localStore`), with `check:raw-storage` as a shrink-only ratchet
+(146 → 143). `lib/duration.ts` gained the four readings the tree had re-implemented
+(`formatDurationCompact`, `formatClock`, `formatDurationPrecise`, `formatSpan`) and seven local
+copies are gone. `useProjects()` reads the shell's list when there is a shell and loads once
+otherwise; seven pickers hold no state of their own now. `SectionLoading/Error/Empty` are on the
+`ui` barrel.
+
+**Re-validated as NOT gaps, and deleted with the superseding path named.**
+`requireCloudByoAnthropic` — `llmRoutes` composes the same resolve+classify inline because it
+needs the resolution for other purposes; `holdsActiveHire`/`dispatchableAgentIds` — dispatch gates
+on the hire inline in `resolveAssignedAgent` and every picker reads `usableByTenant`;
+`eligibleScheduledAgents` — the schedule picker derives from `projectAgents.list`;
+`useRecommendations` — the hub tile reads recommendations off the bundled overview and the lens
+needs reload-on-dismiss; `useReportError` — the reporter opens through the `REPORT_ERROR_EVENT`
+window event every root surface already fires; `getTaskStatusLabel` — no server component renders a
+task status; `stageLabel` — the stage list is read, no server side labels a key; `closeFundingRound` —
+`POST /rounds` already takes `status` through the same upsert; `clearRegisterFor` — the FK cascade;
+`setCollectionReadPolicy` — folded into the one collection writer; `linearForecast` — a wrapper
+with no caller; `queueDemoEvent`/`flushDemoEvents` — the only door unloads the page, so it fires;
+`jobAlerts`/`siteSubscriptions` — consumed by the cron sweep and the site server/visitor/billing.
+
+**Surfaces, not wirings (still on the register with the blocker named).** The canvas approval inbox
+and provenance stamping; the `canvasMetrics` card; the third-party widget BROWSER HOST (registry and
+protocol exist, nothing mounts a `canvas_widget` frame — `widgetAcceptsOrigin` is its first line);
+the academic set; the tenant web surface's page renderer; a report-schedules screen; a validation-
+engagements card; `requiresWorkspace` on the buyer's control. Moved to the obsolete-by-decision
+bullet, not deleted: `GETTING_STARTED_STEPS`/`AGENTS_FAQ`, the `/import` scaffold, the guest edit store.
+
+**Ratchets.** `check:raw-storage` (new), root closure re-baselined deliberately to 478 files /
+120,792 lines (+`apiOrigin.ts`, `storage.ts`, `duration.ts` — three shell-level primitives), the
+design-scale font tally lowered 3,595 → 3,586 (the two embed settings surfaces had drifted +7 and
+now name their roles), react-hooks baseline re-locked lower (`Calendar.tsx` reads `now` from state
+set once per mount rather than a ref during render), silent-catch baseline re-locked (92 → 87).
+`api/src/application/brain/ChatTicketService.ts` fails `tsgo` on `buildTaskProgressBreakdown` — that
+file is the concurrent session's uncommitted work, not this pass.
+
+**Verification.** api `tsgo` clean apart from that one file; api 29/29 guards; targeted api suites
+(forecasting, hiredAgents, reports, rfp, siteData, webSurface, board webhooks, cloud BYO policy,
+vocabulary, incidents, legal documents, security review, growth ops, scheduled binding, advisory
+feed) green; frontend `tsgo` clean; 21/21 frontend guards; 271 frontend tests across the touched
+areas green; five catalogs +44 keys each.
+
+## ✅ RESOLVED 2026-09-06 — VSIX agent run loop: `read_file` results were sliced mid-line with their paging fields deleted, so a coding run re-read one file until its tool budget was gone and never edited
+
+**What was wrong.** Review of Brain chat #99 (VS Code surface, 72 turns, 87 tool calls, 45% of targeted calls
+revisiting ground already covered, `ChatTicketService.ts` read ×6, nine results "truncated before the model
+saw them", the requested change never made). Root cause in `brain-embedded/src/brainRunStore.ts`:
+`trimToolResult` applied ONE rule to every tool result — `JSON.stringify(...).slice(0, 6_000)` plus a "re-call
+with a narrower query" marker. `read_file` returns up to 2,000 lines and then `{truncated, totalLines, offset,
+note}` AFTER `content`, so the slice cut a 54 KB file mid-line and deleted every continuation field. The model
+was handed ~10% of the file with no line number for where it stopped, no total and no offset to continue from —
+while the re-read guard (`readCoverage.ts`) told it to "request the file WHOLE in a single call", which that
+very cap made impossible. Two more defects compounded it: the exact-repeat dedupe (`readDedupe`) was cleared
+wholesale by EVERY non-read call (a ticket write, a `git_status`), so in a run that interleaves reads with
+platform writes no re-read was ever suppressed; and `git_sync_latest` / `git_undo` / `git_redo`, which rewrite
+the working tree, were not in `UNSCOPED_MUTATION_TOOLS`, so a merge did not invalidate stale reads.
+Already fixed earlier the same day and confirmed live here (not re-fixed): the `set -e` scripts reaching
+`cmd.exe` ("Environment variable -e not defined") — `posixShell.ts`, commit a0869f5a0, reproduced under Node
+`exec` with and without the bash shell option; and the missing `git_commit` / `git_push` /
+`open_pull_request` verbs — `git.write` capability, commit 852c4cb93.
+
+**Fix.**
+- **`toolResultBudget.ts`** (new; extracted from the 2,155-line run store, which now states a budget rather
+  than implementing one) — `trimToolResult(tool, out, {advisory})`. A `read_file` success is cut at a LINE
+  boundary to `READ_FILE_RESULT_CHARS` (16,000 — reading source is what a coding surface does) and its
+  `offset` / `totalLines` / `truncated` / `note` are REWRITTEN to describe exactly what was returned and the
+  precise `offset` that continues it (binary search over whole-line prefixes; a single over-budget line is
+  handed over partially with a note that paging cannot reach the rest). Every other tool keeps the 6,000-char
+  head slice. The loop-guard advisory is attached AFTER the cut so the budget can never delete it. `bytes`
+  stays the original size for the diagnostics.
+- **`readCoverage.ts`** — `ReadCoverage` now owns BOTH guards: `isRepeat()` (exact same tool + canonical args,
+  key order insensitive via the shared `stableStringify`) and the circling tally. ONE `invalidate()` speaks for
+  both, scoped to what the call could have changed: unscoped mutation ⇒ everything; file write/edit/delete ⇒ its
+  own target across every reader; other local git verbs ⇒ nothing; any platform/MCP call ⇒ target-less platform
+  reads only. `revisitAdvisory` no longer says "read it whole" — it says page forward from the last `offset`.
+- **`localWorkspaceTools.ts`** — `UNSCOPED_MUTATION_TOOLS` gains `git_sync_latest`, `git_undo`, `git_redo`.
+- **`stableStringify.ts`** (new) — the one canonical-JSON fingerprint; `mcpCatalog.ts` migrated off its private copy.
+- **`brainRunStore.ts`** — `readDedupe` set and the local `trimToolResult` / `MAX_TOOL_RESULT_CHARS` deleted;
+  dispatch uses `readCoverage.isRepeat` / `record` / `invalidate` and `trimToolResult(tc.name, out, {advisory})`.
+- **Tests** — `toolResultBudget.test.ts` (new, 13), `readCoverage.test.ts` (+7 exact-repeat/invalidation cases),
+  `brainRunStore.test.ts` (+2: a paged read keeps its continuation offset in front of the model; an exact re-read
+  after an unrelated ticket write is still stubbed), `localWorkspaceTools.test.ts` updated. 478/478 pass; tsc clean.
+- **VSIX** bumped to 2026.9.16.
+
+**Out of this pass, flagged to the operator.** Ticket #2395 (task deep link `/projects?tab=tasks&project=<id>&task=<id>`
+shows an empty board): the agent's uncommitted edit in `api/src/application/brain/ChatTicketService.ts` aligns a
+progress percentage and does not touch the deep link; the frontend consumer is `TaskMgmtContent.tsx`
+(`searchParams.get('task')`). The ticket stays with its owner.
+
 ## ✅ RESOLVED 2026-09-05 — `/embedded` › "BuilderForce surfaces" tab was empty for every visitor and every member below manager
 
 **What was wrong.** The fourth tab on the public `/embedded` page mounted `EmbedIntegrationSettings`, which
@@ -295,7 +446,12 @@ look): `DELTA_DIRECTIVE` is superseded by brain-embedded's chat-scoped directive
 `raiseProviderAuthAlertsFromFailovers`; `reapStaleManagerRunTasks` runs inside every
 manager pass; `campaignEngine`'s policy constants and `campaignTransports` are consumed;
 `requirePremiumModelAccess` is the documented middleware form of a gate `llmRoutes`
-enforces in place; `invalidateVocabulary` has no writer because no vocabulary editor exists; the exact-match
+enforces in place; `invalidateVocabulary` has no writer because no vocabulary editor exists;
+(2026-09-06) `requireCloudByoAnthropic`, `holdsActiveHire`, `dispatchableAgentIds`,
+`eligibleScheduledAgents`, `useRecommendations`, `useReportError`, `getTaskStatusLabel`,
+`stageLabel`, `closeFundingRound`, `clearRegisterFor`, `setCollectionReadPolicy`, `linearForecast`,
+`queueDemoEvent`/`flushDemoEvents`, `jobAlerts`/`siteSubscriptions` — each superseded by a live
+path named in the fourth-pass entry above, and deleted; the exact-match
 response cache IS wired in the gateway through its read/store pair (`getCachedOrGenerate`
 is the documented `CachingBridge`-shaped convenience for a caller that holds a loader);
 the natural-language dashboard query ships as `POST /api/dashboards/query` through

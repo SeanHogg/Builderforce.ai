@@ -112,7 +112,7 @@ import {
   type Audience,
   type ProgressStatus,
 } from '../../application/tenant/onboardingFlows';
-import { countries, stages, supportedCountries } from '../../application/kernel/platformVocabulary';
+import { countries, country, stages, supportedCountries } from '../../application/kernel/platformVocabulary';
 
 const handle = async (run: () => Promise<Response>): Promise<Response> => {
   try {
@@ -488,11 +488,20 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
     }), { status: 201 });
   }));
 
+  /** A country the vocabulary knows, normalised to its ISO code — or a 400 that
+   *  names the code, so a region list never fills with "usa", "US " and "United States". */
+  const knownCountry = async (c: { env: unknown }, raw: string | null): Promise<string | null> => {
+    if (!raw) return null;
+    const match = await country(db, c.env as Env, raw);
+    if (!match) throw new WaitlistError(`Unknown country code: ${raw}`, 400);
+    return match.code;
+  };
+
   router.post('/waitlist/regions/join', (c) => handle(async () => {
     const body = await c.req.json<Record<string, unknown>>();
     return Response.json(await joinRegion(db, tenant(c), {
       email: String(body.email ?? ''),
-      country: str(body.country) ?? null,
+      country: await knownCountry(c, str(body.country) ?? null),
       region: str(body.region) ?? null,
       source: str(body.source) ?? null,
     }), { status: 201 });
@@ -508,7 +517,7 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
 
   router.post('/waitlist/regions/:country/open', manager, (c) => handle(async () =>
     Response.json(await inviteRegion(
-      db, c.env as Env, tenant(c), await who(c), c.req.param('country'),
+      db, c.env as Env, tenant(c), await who(c), (await knownCountry(c, c.req.param('country'))) ?? '',
     ))));
 
   router.post('/waitlist/outcome', (c) => handle(async () => {

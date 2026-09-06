@@ -1,10 +1,13 @@
 /**
  * The loop-breaker for re-reading.
  *
- * The run loop already suppresses an EXACT repeat of a read — same tool, same
- * arguments — and returns a stub telling the model to reuse the earlier result.
- * That catches a model that asks the identical question twice. It does not catch
- * the failure that actually burns runs:
+ * Two guards, one tally:
+ *
+ * 1. The EXACT repeat — same tool, same arguments. The run loop answers it with a stub
+ *    telling the model to reuse the earlier result. That catches a model that asks the
+ *    identical question twice.
+ *
+ * 2. The CIRCLING read — the failure that actually burns runs:
  *
  *     read_file(LandingCanvasHero.module.css, offset 1)
  *     read_file(LandingCanvasHero.module.css, offset 140)
@@ -14,10 +17,10 @@
  *     read_file(LandingCanvasHero.module.css, offset 340)
  *     read_file(LandingCanvasHero.module.css, offset 440)
  *
- * Seven DIFFERENT calls, so the exact-repeat guard stays silent for all of them,
- * while the model shuffles a window up and down one 566-line file until the tool
- * budget is gone and the user's actual request — a one-line CSS change — is never
- * made. Every existing signal scores that run clean.
+ *    Seven DIFFERENT calls, so the exact-repeat guard stays silent for all of them,
+ *    while the model shuffles a window up and down one 566-line file until the tool
+ *    budget is gone and the user's actual request — a one-line CSS change — is never
+ *    made. Every existing signal scores that run clean.
  *
  * The fix is not to block the read: a legitimate second pass over a large file is
  * normal, and refusing it would break real work. The fix is to make the model AWARE
@@ -25,12 +28,21 @@
  * result it is about to read — and to tell it exactly what it has already been
  * shown, so "I'll just look again" stops being the cheapest next move.
  *
+ * Both guards live in ONE object because they share the one question that decides
+ * whether they are still valid: "did something just change what a re-read would see?"
+ * They used to be two structures with two answers. The exact-repeat set was cleared
+ * wholesale by EVERY non-read call — a ticket write, a git status, a failed dispatch —
+ * so a run that interleaves reads with platform writes never suppressed anything, while
+ * the circling tally had already learned to forget only the target an edit touched.
+ * Now one `invalidate` speaks for both.
+ *
  * Pure and self-contained: a small tally with one method to record a visit and one
  * to describe it. No clock, no I/O.
  */
 
 import { activityTarget } from './runActivity';
-import { isUnscopedMutationTool } from './localWorkspaceTools';
+import { isUnscopedMutationTool, isCodeChangeTool, isLocalWorkspaceTool } from './localWorkspaceTools';
+import { stableStringify } from './stableStringify';
 
 /**
  * Visits to one target before the model is told it is circling. Two reads of a
@@ -55,19 +67,43 @@ export interface ReadVisit {
 /** Distinct argument sets remembered per target — enough to quote back, not a log. */
 const MAX_REMEMBERED_ARGS = 8;
 
+/** One successful read this run has already made, by its canonical fingerprint. */
+interface ExactRead {
+  tool: string;
+  /** The file/search target the read was about, or null for a target-less platform read. */
+  target: string | null;
+}
+
 /**
- * Per-run tally of which targets have been read and how. One instance per run;
- * the run loop owns it and drops it when the run ends.
+ * Per-run tally of which reads have been made, which targets they were about, and how
+ * often. One instance per run; the run loop owns it and drops it when the run ends.
  */
 export class ReadCoverage {
   private readonly visits = new Map<string, ReadVisit>();
+  /** Successful reads by `${tool}:${canonical args}` — the exact-repeat guard. */
+  private readonly exact = new Map<string, ExactRead>();
+
+  private static exactKey(tool: string, args: unknown): string {
+    return `${tool}:${stableStringify(args ?? {})}`;
+  }
 
   /**
-   * Record a read and return the resulting visit, or null when the call names no
-   * target (nothing to be circling around). `args` is the parsed argument object.
+   * Has this exact read — same tool, same arguments in any key order — already
+   * SUCCEEDED this run, with nothing since that could have changed its answer? The run
+   * loop answers such a call with a stub instead of re-running it.
+   */
+  isRepeat(tool: string, args: unknown): boolean {
+    return this.exact.has(ReadCoverage.exactKey(tool, args));
+  }
+
+  /**
+   * Record a SUCCESSFUL read. Arms the exact-repeat guard for it, and returns the
+   * resulting target visit — or null when the call names no target (nothing to be
+   * circling around; the exact guard still applies).
    */
   record(tool: string, args: unknown): ReadVisit | null {
-    const target = activityTarget(args);
+    const target = activityTarget(args) ?? null;
+    this.exact.set(ReadCoverage.exactKey(tool, args), { tool, target });
     if (!target) return null;
     const key = `${tool}:${target}`;
     const existing = this.visits.get(key);
@@ -90,36 +126,44 @@ export class ReadCoverage {
   }
 
   /**
-   * A mutation makes a re-read of WHAT IT CHANGED legitimate — that read returns
-   * genuinely new information, and nagging about it would punish exactly the right
-   * behaviour. So the tally for that target is dropped.
+   * A non-read call has run. Forget exactly the reads it could have changed — no more,
+   * no less — for BOTH guards:
    *
-   * It says nothing about any OTHER target, and treating it as if it did is what made
-   * this guard almost inert. Clearing the whole map on every non-read call meant a
-   * single `edit_file`, ticket write, git status or failed dispatch wiped the history
-   * of every file in the run — and in a run that interleaves reads with platform
-   * writes, the counter never reached three. Measured on the run this was built for:
-   * one CSS file read 14 times and its component 13, across 78 calls, with the
-   * advisory firing on neither.
-   *
-   * A tool that can touch arbitrary files (`run_command` — a codemod, a formatter, a
-   * checkout) is the one honest exception: the answer to "what did that change?" is
-   * unknown, so everything is invalidated.
+   * - A tool whose blast radius is unknown (`run_command`, a base-branch merge, an
+   *   undo) forgets everything: the honest answer to "what did that touch?" is "anything".
+   * - A file write/edit/delete forgets its own target, across every tool that reads it —
+   *   `read_file` and `search_code` on one path are the same stale picture. A re-read of
+   *   what was just changed is genuinely new information; nagging about it would punish
+   *   exactly the right behaviour. It forgets NOTHING about other files: clearing the
+   *   whole tally on every non-read call is what once let one CSS file be read 14 times
+   *   with the advisory firing on neither it nor its component.
+   * - The remaining local tools (`git_status`, `git_diff`, `git_commit`, …) change nothing
+   *   a read observes, so they forget nothing.
+   * - Anything else is a platform or MCP call. It may have changed what a PLATFORM read
+   *   returns (a ticket update changes the ticket list), so target-less platform reads
+   *   are forgotten; file reads are not, because a ticket write does not edit source.
    */
   invalidate(tool: string, args: unknown): void {
     if (isUnscopedMutationTool(tool)) {
       this.visits.clear();
+      this.exact.clear();
       return;
     }
-    const target = activityTarget(args);
-    // A mutation with no resolvable target changed nothing ON DISK that this tally
-    // describes (a ticket write, a dispatch, a sign-off), so it invalidates nothing.
-    if (!target) return;
-    // Keyed `${tool}:${target}`, and the edit invalidates the target across every
-    // tool that reads it — `read_file` and `search_code` on one path are the same
-    // stale picture.
-    for (const key of [...this.visits.keys()]) {
-      if (key.slice(key.indexOf(':') + 1) === target) this.visits.delete(key);
+    if (isCodeChangeTool(tool)) {
+      const target = activityTarget(args);
+      // A file mutation with no resolvable path changed nothing this tally describes.
+      if (!target) return;
+      for (const key of [...this.visits.keys()]) {
+        if (key.slice(key.indexOf(':') + 1) === target) this.visits.delete(key);
+      }
+      for (const [key, read] of [...this.exact.entries()]) {
+        if (read.target === target) this.exact.delete(key);
+      }
+      return;
+    }
+    if (isLocalWorkspaceTool(tool)) return;
+    for (const [key, read] of [...this.exact.entries()]) {
+      if (!isLocalWorkspaceTool(read.tool)) this.exact.delete(key);
     }
   }
 
@@ -140,7 +184,10 @@ export class ReadCoverage {
  * Written as a diagnosis plus a next move, not a scolding: a model told only "you
  * are repeating yourself" tends to repeat itself apologetically. It is told what it
  * has already been given, why looking again will not help, and which of the two
- * things it should do instead — read the file WHOLE, or act on what it has.
+ * things it should do instead — page FORWARD through the rest of the file from the
+ * offset its last result named, or act on what it has. (Not "read it whole in one
+ * call": a large file is delivered in budgeted windows, so that advice asked for
+ * something the transcript could never carry.)
  */
 export function revisitAdvisory(tool: string, target: string, visit: ReadVisit): string | null {
   if (visit.count < REVISIT_NUDGE_AT) return null;
@@ -150,17 +197,17 @@ export function revisitAdvisory(tool: string, target: string, visit: ReadVisit):
     : '';
 
   if (visit.count >= REVISIT_HARD_AT) {
-    return `STOP RE-READING. This is call ${visit.count} of \`${tool}\` against ${target} in this run, and the previous ${visit.count - 1} results are all still above you in this conversation.${shape} Re-reading it again will return content you already have and will not move the task forward — this pattern is how a run exhausts its tool budget without producing a single change. Do ONE of these now: (a) if you still need more of the file, request it WHOLE in a single call instead of another window; (b) otherwise stop reading and make the edit, or state plainly what is blocking you. Do not issue another partial read of this target.`;
+    return `STOP RE-READING. This is call ${visit.count} of \`${tool}\` against ${target} in this run, and the previous ${visit.count - 1} results are all still above you in this conversation.${shape} Re-reading it again will return content you already have and will not move the task forward — this pattern is how a run exhausts its tool budget without producing a single change. Do ONE of these now: (a) if you still need more of the file, continue from the \`offset\` the last result's note gave you and page forward in order — never re-open a window you already have; (b) otherwise stop reading and make the edit, or state plainly what is blocking you. Do not issue another partial read of this target.`;
   }
 
-  return `You have now read ${target} ${visit.count} times in this run with \`${tool}\`, and every earlier result is still above you in this conversation.${shape} If you are looking for something you have not found, another window over the same file is unlikely to surface it — read the file whole in one call, or search for the specific symbol. If you already have what you need, act on it rather than re-reading.`;
+  return `You have now read ${target} ${visit.count} times in this run with \`${tool}\`, and every earlier result is still above you in this conversation.${shape} If you are looking for something you have not found, another window over the same lines is unlikely to surface it — page forward from the \`offset\` the last result's note gave you, or search for the specific symbol with search_code. If you already have what you need, act on it rather than re-reading.`;
 }
 
 /**
  * Attach an advisory to a tool result without disturbing its shape. Object results
- * gain a `note` field (the same channel the run loop's dedupe stub already uses, so
- * the model meets one convention rather than two); anything else is wrapped so the
- * original value survives intact under `result`.
+ * gain a `note` field (the same channel the tools' own guidance uses, so the model
+ * meets one convention rather than two); anything else is wrapped so the original
+ * value survives intact under `result`.
  */
 export function withAdvisory(result: unknown, advisory: string): unknown {
   if (result && typeof result === 'object' && !Array.isArray(result)) {

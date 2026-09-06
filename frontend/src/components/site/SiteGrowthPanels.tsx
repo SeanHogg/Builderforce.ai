@@ -287,11 +287,13 @@ export function SiteFormsPanel({ projectId }: { projectId: number }) {
   }, [load, newName, projectId, t]);
 
   const [togglingId, setTogglingId] = useState<number | null>(null);
-  const toggleRaisesTickets = useCallback(async (collection: SiteCollection) => {
+  // ONE patch path for every per-collection switch, so a new flag is a new
+  // checkbox and not a new copy of the busy/error/reload dance.
+  const patchCollection = useCallback(async (collection: SiteCollection, patch: Parameters<typeof siteDataApi.updateCollection>[2]) => {
     setTogglingId(collection.id);
     setError('');
     try {
-      await siteDataApi.updateCollection(projectId, collection.id, { raisesTickets: !collection.raisesTickets });
+      await siteDataApi.updateCollection(projectId, collection.id, patch);
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : t('genericError'));
@@ -332,11 +334,21 @@ export function SiteFormsPanel({ projectId }: { projectId: number }) {
                 type="checkbox"
                 checked={collection.raisesTickets}
                 disabled={togglingId === collection.id}
-                onChange={() => toggleRaisesTickets(collection)}
+                onChange={() => patchCollection(collection, { raisesTickets: !collection.raisesTickets })}
               />
               {t('raisesTickets')}
             </label>
             <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>{t('raisesTicketsHint')}</p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 'var(--font-size-body)', color: 'var(--text-primary, var(--bg-elevated))' }}>
+              <input
+                type="checkbox"
+                checked={collection.readPolicy === 'owner'}
+                disabled={togglingId === collection.id}
+                onChange={() => patchCollection(collection, { readPolicy: collection.readPolicy === 'owner' ? 'none' : 'owner' })}
+              />
+              {t('readPolicy')}
+            </label>
+            <p style={{ margin: '2px 0 0', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('readPolicyHint')}</p>
             <button type="button" style={{ ...button, marginTop: 10 }} onClick={() => openCollection(collection.id)}>
               {openId === collection.id ? t('hideSubmissions') : t('viewSubmissions')}
             </button>

@@ -13,6 +13,7 @@ import {
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 /**
  * RfpDetailClient — the response workspace for one RFP request. Generates a proposal
@@ -50,6 +51,20 @@ export default function RfpDetailClient() {
   const id = String(params?.id ?? '');
   const role = useRole();
   const canManage = hasMinRole(role, 'developer');
+  const confirm = useConfirm();
+  const [discarding, setDiscarding] = useState(false);
+  const discard = async () => {
+    if (!request || discarding) return;
+    if (!(await confirm(t('discardConfirm', { title: request.title })))) return;
+    setDiscarding(true);
+    try {
+      await rfpApi.deleteRequest(id);
+      router.push('/projects?tab=rfp');
+    } catch (e: unknown) {
+      setError(faultMessage(e));
+      setDiscarding(false);
+    }
+  };
 
   const [request, setRequest] = useState<RfpRequestRow | null>(null);
   const [responses, setResponses] = useState<RfpResponseRow[]>([]);
@@ -158,9 +173,14 @@ export default function RfpDetailClient() {
                 {request.requesterOrgName || t('noOrg')} · {request.sourceMode === 'existing_project' ? t('sourceExisting') : t('sourceNew')}
               </p>
             </div>
-            <button type="button" className="btn btn-primary" onClick={generate} disabled={generating || !canManage} title={canManage ? undefined : t('needDeveloper')}>
-              {generating ? t('generating') : latest ? t('regenerate') : t('generate')}
-            </button>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button type="button" className="btn btn-secondary" onClick={discard} disabled={discarding || generating || !canManage} title={canManage ? undefined : t('needDeveloper')}>
+                {t('discard')}
+              </button>
+              <button type="button" className="btn btn-primary" onClick={generate} disabled={generating || !canManage} title={canManage ? undefined : t('needDeveloper')}>
+                {generating ? t('generating') : latest ? t('regenerate') : t('generate')}
+              </button>
+            </div>
           </div>
 
           {generating && <div style={{ ...card, ...muted }}>{t('generatingHint')}</div>}

@@ -37,7 +37,7 @@ import { businessContacts, workflows, workflowDefinitions } from '../../infrastr
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { incidentVersionKey, monitoringVersionKey } from '../../application/insights/versionKeys';
 import { IncidentService, incidentRoomKey, type IncidentSeverity, type IncidentStatus } from '../../application/incident/IncidentService';
-import { PostmortemWhyService, type WhyStepInput } from '../../application/incident/PostmortemWhyService';
+import { CONVENTIONAL_WHY_STEPS, MAX_WHY_STEPS, PostmortemWhyService, type WhyStepInput } from '../../application/incident/PostmortemWhyService';
 import { loadIncidentDependencyGraph } from '../../application/incident/incidentDependencyGraph';
 import { relayToRoom } from './realtimeRelay';
 import { prodIncidents } from '../../infrastructure/database/schema';
@@ -311,7 +311,9 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
     const ver = await getCacheVersion(c.env, incidentVersionKey(tenantId));
     const whys = await getOrSetCached(c.env, `incidents:whys:${tenantId}:${incidentId}:v:${ver}`,
       () => new PostmortemWhyService(db).listChain(tenantId, incidentId));
-    return c.json({ whys });
+    // The cap and the convention travel with the chain, so the capture UI reads
+    // the numbers this service truncates at rather than mirroring them.
+    return c.json({ whys, maxSteps: MAX_WHY_STEPS, conventionalSteps: CONVENTIONAL_WHY_STEPS });
   });
   // PUT, not POST: the ladder is replaced as a UNIT. A per-step endpoint would let a
   // client leave why₄ answering a why₃ that no longer exists, and would need a

@@ -2607,7 +2607,10 @@
       "scope": "范围",
       "scopeWorkspace": "整个工作区",
       "scopeProjects": "项目",
-      "scopeInitiatives": "举措"
+      "scopeInitiatives": "举措",
+      "runway": "剩余 {months} 个月跑道",
+      "burnUnavailable": "暂无烧钱率数据",
+      "burnSub": "每月烧钱"
     },
     "comp": {
       "title": "合规与审计",
@@ -3432,7 +3435,8 @@
     "errNameRequired": "名称为必填项",
     "errSaveFailed": "保存失败",
     "errDeleteFailed": "删除失败",
-    "surfaceUnavailableOption": "{surface} — 此项目不可用"
+    "surfaceUnavailableOption": "{surface} — 此项目不可用",
+    "errSurfaceBlocked": "{surface} 在此项目不可用——请选择其他运行环境。"
   },
   "personalitySummary": {
     "title": "性格",
@@ -5096,7 +5100,8 @@
         "vuln-scans": "漏洞扫描",
         "dsr": "数据主体请求",
         "suppression": "屏蔽名单"
-      }
+      },
+      "finBurnRate": "烧钱率与跑道"
     },
     "loading": "加载中…",
     "overview": {
@@ -5736,6 +5741,27 @@
       "page": "显示第 {from}–{to} 条",
       "newer": "较新",
       "older": "较早"
+    },
+    "webAdvisoryFeeds": "安全通告源",
+    "webAdvisoryConfigured": "就绪",
+    "webAdvisoryUnconfigured": "此环境未配置",
+    "agreementsTab": "协议",
+    "agreements": {
+      "title": "你的协议",
+      "description": "你已接受的版本，以及仍待接受的内容。",
+      "loading": "正在加载你的协议…",
+      "error": "无法加载你的协议。",
+      "outstanding": "待接受",
+      "accepted": "已于 {date} 接受 v{version}",
+      "notRequired": "无需接受",
+      "kind": {
+        "terms": "服务条款",
+        "privacy": "隐私政策",
+        "dpa": "数据处理协议",
+        "aup": "可接受使用政策",
+        "nda": "保密协议",
+        "cookie": "Cookie 政策"
+      }
     }
   },
   "catalogInsights": {
@@ -16321,7 +16347,9 @@
       "readFailed": "无法读取这些配色 — 请手动输入。",
       "candidates": "找到的其他颜色 — 点击其一设为主色："
     },
-    "needManager": "需要经理角色"
+    "needManager": "需要经理角色",
+    "discard": "放弃请求",
+    "discardConfirm": "放弃“{title}”？其回复和风险登记将一并删除。"
   },
   "planBadge": {
     "tier": {
@@ -16673,6 +16701,23 @@
     "admin": {
       "title": "产品反馈",
       "subtitle": "从每个工作区的反馈收集器汇集的功能请求、缺陷和想法。"
+    },
+    "voc": {
+      "title": "客户反馈收件箱",
+      "description": "你网站的反馈收集器收集到的内容——客户的原话，在此分类处理。",
+      "filterLabel": "按状态筛选",
+      "status": {
+        "new": "新",
+        "triaged": "已分类",
+        "dismissed": "已忽略"
+      },
+      "loading": "正在加载反馈…",
+      "error": "无法加载反馈。",
+      "empty": "暂无内容。",
+      "sentiment": "情感 {value}",
+      "markTriaged": "标记为已分类",
+      "dismiss": "忽略",
+      "reopen": "重新打开"
     }
   },
   "onboardingPill": {
@@ -20794,7 +20839,8 @@
         "templateKey": "模板",
         "abTestKey": "A/B 测试标识",
         "trafficAllocation": "流量分配",
-        "evidence": "证据"
+        "evidence": "证据",
+        "daysToCliff": "距悬崖期天数"
       },
       "column": {
         "actual": "实际",
@@ -21934,7 +21980,9 @@
       "trialHint": {
         "full": "任何人都可完整使用；付费是为了支持你并保留副本。",
         "preview": "访客只能看到预览，购买后才能使用完整版本。"
-      }
+      },
+      "priceFreeOnly": "此类型始终免费获取。",
+      "deliveryHostedHint": "可托管交付——买家获得运行中的副本，而非文件。"
     },
     "email": {
       "mailbox": "邮箱",
@@ -23417,7 +23465,8 @@
     "noticeStandupActionItemsAlreadyOnBoard": "{count, plural, other {全部 # 项行动项已在画布上}}",
     "noticeStandupActionItemsPlaced": "{count, plural, other {已将 # 项行动项放入画布}}",
     "noticeStandupMinutesNeedsAccount": "登录后可查看站会纪要",
-    "noticeStandupMinutesFailed": "无法读取站会纪要"
+    "noticeStandupMinutesFailed": "无法读取站会纪要",
+    "exportUnmaskedColumns": "已拒绝导出：{columns} 包含个人数据且未脱敏。请先在卡片上脱敏。"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
@@ -23739,7 +23788,9 @@
       "add": "添加表单",
       "raisesTickets": "每次提交都创建一个工单",
       "raisesTicketsHint": "开启后，每次新提交都会在该项目看板上创建一个工单，供团队处理——处理完成后会通知提交者。",
-      "genericError": "出错了，请重试。"
+      "genericError": "出错了，请重试。",
+      "readPolicy": "已登录访客可读取自己提交的记录",
+      "readPolicyHint": "默认关闭。适用于带账户的应用——“查看我的订单”——只会返回该登录用户自己提交的记录。"
     },
     "traffic": {
       "title": "访问量",
@@ -27287,7 +27338,8 @@
       "category": "类别",
       "categoryPlaceholder": "邮件、部署、假期…"
     },
-    "undatedLabel": "尚无日期"
+    "undatedLabel": "尚无日期",
+    "nextUp": "下一项：{subject} · {when}"
   },
   "points": {
     "view": {

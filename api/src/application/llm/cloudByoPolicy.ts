@@ -31,7 +31,6 @@
  */
 import type { HonoEnv } from '../../env';
 import {
-  resolveAnthropicResolution,
   unresolvedProviders,
   type AnthropicAuth,
   type AnthropicResolution,
@@ -167,11 +166,3 @@ export function cloudByoFailureBody(failure: CloudByoFailure): {
  * "we tried and nothing was reachable").
  */
 export const CLOUD_BYO_FAILURE_STATUS = 402;
-
-/**
- * Resolve the tenant's Anthropic credential for a cloud-agent execution, fail-closed.
- * The one entry point the gateway route calls.
- */
-export async function requireCloudByoAnthropic(env: Env, tenantId: number): Promise<CloudByoAllowed | CloudByoFailure> {
-  return classifyCloudByoAnthropic(await resolveAnthropicResolution(env, tenantId));
-}

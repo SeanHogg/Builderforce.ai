@@ -1,5 +1,6 @@
 'use client';
 
+import { useProjects } from '@/lib/ProjectScopeContext';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
@@ -11,7 +12,6 @@ import {
   type MigrationRunDetail,
   type IntegrationCredential,
 } from '@/lib/builderforceApi';
-import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
 
 /**
@@ -81,10 +81,9 @@ export function MigrationWizard({ open, onClose, provider, providerLabel, creden
   const [mode, setMode] = useState<MigrationMode>('both');
 
   const [detail, setDetail] = useState<MigrationRunDetail | null>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const projects = useProjects();
 
   useEffect(() => { setCredentialId(credentials[0]?.id ?? ''); }, [credentials]);
-  useEffect(() => { if (open) fetchProjects().then(setProjects).catch(() => undefined); }, [open]);
 
   // Resume a run the Brain already started: load its staging snapshot and jump
   // straight to the right step instead of the connect form.

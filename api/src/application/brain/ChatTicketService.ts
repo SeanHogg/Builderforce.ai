@@ -381,9 +381,14 @@ export class ChatTicketService {
           const r = selfById.get(id);
           if (!r) { out.set(key(kind, String(id)), missing(kind, String(id))); continue; }
           const done = r.completedAt != null || DONE_STATUS.has(r.status) ? 1 : 0;
+          // Delegate to the canonical status ladder so a chat ticket chip and the
+          // task list API never disagree about the same task (in_review is 75, not 50).
+          const progressPct = done
+            ? 100
+            : buildTaskProgressBreakdown({ status: r.status }).progressPct;
           out.set(key(kind, String(id)), {
             kind, ref: String(id), label: r.title, status: r.status,
-            progressPct: done ? 100 : (r.status === 'in_progress' || r.status === 'in_review' ? 50 : 0),
+            progressPct,
             done, total: 1, exists: true,
           });
         }

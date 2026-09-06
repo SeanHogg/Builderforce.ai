@@ -15,6 +15,7 @@ import {
   duplicateWebsiteSection,
   insertWebsiteSection,
   moveWebsiteSection,
+  patchWebsiteSection,
   websitePagesFrom,
   type SectionAddress,
   type WebsitePage,
@@ -23,6 +24,7 @@ import {
 import type { CreationNodeData } from './types';
 
 export {
+  patchWebsiteSection,
   WEBSITE_ADDABLE_SECTION_KINDS,
   WEBSITE_CONTENT_FRAME_SANDBOX,
   WEBSITE_MAX_PAGES,
@@ -58,15 +60,13 @@ export function patchWebsiteHero(data: CreationNodeData, patch: Partial<Creation
   const heroIndex = page.sections.findIndex((section) => section.kind === 'hero');
   if (heroIndex < 0) return patch;
   const hero = page.sections[heroIndex]!;
-  const nextHero = {
-    ...hero,
+  // The contract's own section edit, so the inspector and the WYSIWYG write a
+  // section field through one operation rather than two copies of the same map.
+  const nextPages = patchWebsiteSection(pages, { pageId: page.id, sectionId: hero.id }, {
     ...(typeof patch.websiteHeadline === 'string' ? { heading: patch.websiteHeadline } : {}),
     ...(typeof patch.websiteBody === 'string' ? { body: patch.websiteBody } : {}),
     ...(typeof patch.websiteCta === 'string' ? { cta: patch.websiteCta } : {}),
-  };
-  const nextPages = pages.map((candidate, index) => index === pageIndex
-    ? { ...candidate, sections: candidate.sections.map((section, sectionIndex) => sectionIndex === heroIndex ? nextHero : section) }
-    : candidate);
+  }, data.activeWebsitePageId);
   return { ...patch, pages: nextPages };
 }
 

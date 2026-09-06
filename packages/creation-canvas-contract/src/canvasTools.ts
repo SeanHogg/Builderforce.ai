@@ -770,6 +770,33 @@ export function canvasScreenshotToolRedirect(): string {
   return `This product CAN photograph a live web page: call ${CANVAS_SCREENSHOT_TOOL} with the page's URL and a real browser renders it server-side. Never tell the user you cannot browse the web visually, cannot see a website, or cannot take screenshots — that is a statement about a language model, not about this canvas, and it is false here. For a redesign, capture the current page FIRST and attach it to the new design with compareWithObjectId, so the board holds a real before and after rather than an after on its own.`;
 }
 
+const IMAGE_FILE_EXTENSION = /\.(png|jpe?g|gif|webp|avif|svg|bmp|tiff?)$/i;
+/** Hosts that serve pictures by opaque path — a photo CDN URL has no extension and
+ *  is still a picture, not a page to photograph. */
+const IMAGE_HOST = /(^|\.)(images?|img|cdn|media|static|assets|photos?)\./i;
+
+/**
+ * Whether a URL names a web PAGE rather than a picture — the one question every
+ * refusal path above has to answer before it can point at the screenshot tool.
+ *
+ * A model handed "put https://example.com on the board as an image" reaches for
+ * the image object with the page's URL as its source, and the object then holds a
+ * document a `<img>` cannot draw. The redirect fires here, at the URL, so the
+ * board never carries that object and the model is told the tool that would work.
+ */
+export function looksLikeWebPageUrl(raw: string): boolean {
+  const value = raw.trim();
+  if (!/^https?:\/\/\S+$/i.test(value)) return false;
+  try {
+    const url = new URL(value);
+    if (IMAGE_FILE_EXTENSION.test(url.pathname)) return false;
+    if (IMAGE_HOST.test(url.hostname)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Returned to the MODEL when a capture is requested on a canvas with no account.
  *

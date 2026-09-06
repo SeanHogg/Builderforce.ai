@@ -17,6 +17,9 @@
 import type { BrainAction } from './BrainActionsContext';
 import type { BrainTransport } from './streamChatCompletion';
 import { getLastResolvedModel } from './lastResolvedModel';
+// Deterministic JSON for the dedupe key (object key order can vary per call) — shared
+// with the run loop's read-repeat guard, so both fingerprint arguments the same way.
+import { stableStringify } from './stableStringify';
 
 /** One tool as the gateway advertises it. */
 export interface McpToolEntry {
@@ -77,14 +80,6 @@ function withObservedModel(tool: string, args: unknown): unknown {
   const supplied = (args ?? {}) as Record<string, unknown>;
   if (typeof supplied.model === 'string' && supplied.model.trim()) return args;
   return { ...supplied, model: observed };
-}
-
-/** Deterministic JSON for the dedupe key (object key order can vary per call). */
-function stableStringify(value: unknown): string {
-  if (value == null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  const o = value as Record<string, unknown>;
-  return `{${Object.keys(o).sort().map((k) => `${JSON.stringify(k)}:${stableStringify(o[k])}`).join(',')}}`;
 }
 
 /** A create-like tool whose double-fire should be collapsed (by flat name or `domain.create`). */

@@ -56,7 +56,7 @@ import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasS
 import { CanvasSessionPill } from './CanvasSessionPill';
 import { RemoteCursors } from './RemoteCursors';
 import { applyPresenceFrame, dropPresence, expirePresence, isPresenceFrame, mergeLivePresence, LIVE_PRESENCE_TTL_MS, PRESENCE_SEND_INTERVAL_MS, type LivePresenceMap } from '@/lib/canvas/livePresence';
-import { CANVAS_PRESENCE_FRAME, type CanvasPresenceState } from '@builderforce/creation-canvas-contract';
+import { BRAND_BINDING_FIELD, CANVAS_PRESENCE_FRAME, canvasScreenshotToolRedirect, isBrandBoundKind, looksLikeWebPageUrl, type CanvasPresenceState } from '@builderforce/creation-canvas-contract';
 import { CanvasCommandBar } from './CanvasCommandBar';
 import { TeamBar } from '@/components/team/TeamBar';
 import type { CanvasSessionActionId } from '@/lib/canvasSessionActions';
@@ -249,6 +249,7 @@ import {
   DATA_CLASSIFICATIONS, PII_CATEGORIES,
   classificationSummary, classifyTabular, contractVerdict, evaluateDataContract, inferDataContract,
   evaluateDatasetUse, normalizeClassifications, normalizeDataContract, normalizeUsePolicy,
+  maskTabular,
 } from '@/lib/canvasDataGovernance';
 import {
   DATA_QUALITY_CHECK_KINDS, checksFromContract, dataQualityVerdict, normalizeDataQualityChecks,
@@ -282,7 +283,9 @@ import {
 import { readAttachmentSource, uploadAttachmentSource } from '@/lib/canvasAttachmentUploadApi';
 import { importResumeFromAttachment } from '@/lib/resumeImportApi';
 import { aiContextGate, boardInventory, findInInventory, scopeNote } from '@/lib/canvasContextSnapshot';
-import { objectMayCross, partitionForBoundary, withheldNotice } from '@/lib/canvasConfidentiality';
+import { erasureRefusal, objectMayCross, partitionForBoundary, withheldNotice } from '@/lib/canvasConfidentiality';
+import { BRAND_BINDING_HINT } from '@/lib/marketingObjects';
+import { CanvasAppPanel } from '@/components/apps/CanvasAppPanel';
 import {
   RESUME_TEMPLATES, RESUME_TEMPLATE_IDS, activeResumeRevision, createResumeFamily,
   initializeResumeFromPatch, preserveResumeSourceForPatch, renderResumeMarkdown,
@@ -366,7 +369,7 @@ import {
   testTargetUrl, type BuildPlanInput, type GateEvidence,
 } from '@/lib/canvasQa';
 import { auditPageHtml } from '@/lib/canvasPageAudit';
-import { generateFixture } from '@/lib/canvasTestData';
+import { fixtureFromDataset, generateFixture, unmaskedSensitiveColumns } from '@/lib/canvasTestData';
 import * as qaApi from '@/lib/qa/api';
 import { canvasBuildBinding, canvasBuildModality, canvasBuildPatch, createCanvasBuild } from '@/lib/canvasBuild';
 import { canvasBuildActions, type BoundCanvasBuild } from '@/lib/canvasBuildTools';
@@ -804,15 +807,36 @@ function safeDownloadName(value: string): string {
  * re-read `data.rows`/`data.columns` by hand, which is why a dataset carrying
  * `sampleRows` rendered on the card and then exported as "no rows".
  */
-function artifactSheet(data: CreationNodeData): { columns: string[]; rows: Array<Array<string | number | null>> } | null {
-  const source = tabularFromObject(data as Record<string, unknown>);
-  if (!source.columns.length) return null;
+function artifactSheet(data: CreationNodeData): { columns: string[]; rows: Array<Array<string | number | null>>; unmasked: string[] } | null {
+  const raw = tabularFromObject(data as Record<string, unknown>);
+  if (!raw.columns.length) return null;
+  // Masked through the SAME rule the card renders through, so a file can never show
+  // a value the board starred. The columns the classifier found and nobody masked
+  // come back too — an export is refused rather than silently leaking them.
+  const classifications = normalizeClassifications(data.classifications);
+  const source = maskTabular(raw, classifications);
   const rows = source.rows.map((row) => source.columns.map((column) => {
     const value = row[column];
     if (value == null) return null;
     return typeof value === 'string' || typeof value === 'number' ? value : String(value);
   }));
-  return { columns: source.columns, rows };
+  return { columns: source.columns, rows, unmasked: unmaskedSensitiveColumns(classifications) };
+}
+
+/**
+ * The sheet an export may write, or the error that says why it may not: no rows at
+ * all, or a personal column the classifier found that nobody masked. The second is
+ * the privacy guard the classify tool promises ("masked on render and export") and
+ * the reason `unmaskedSensitiveColumns` exists.
+ */
+function exportableSheet(
+  data: CreationNodeData,
+  refuse: { noRows: () => Error; unmasked: (columns: string[]) => Error },
+): NonNullable<ReturnType<typeof artifactSheet>> {
+  const sheet = artifactSheet(data);
+  if (!sheet) throw refuse.noRows();
+  if (sheet.unmasked.length) throw refuse.unmasked(sheet.unmasked);
+  return sheet;
 }
 
 /** Horizontal gap between objects created by one multi-file drop, so a folder
@@ -8168,6 +8192,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const query = typeof args.query === 'string' ? args.query.trim().slice(0, 2_000) : '';
       const mode = args.mode === 'find' || args.mode === 'generate' || args.mode === 'auto' ? args.mode : null;
       if (!query || !mode) return { error: 'Pass an image query and mode (find, generate, or auto)' };
+      // "Find me a picture of https://example.com" is a request to photograph a page.
+      if (looksLikeWebPageUrl(query)) return { error: canvasScreenshotToolRedirect() };
       try {
         const asset = await resolveCanvasImage(query, mode);
         const imageTitle = typeof args.title === 'string' && args.title.trim() ? args.title.trim().slice(0, 160) : query.slice(0, 80);
@@ -8366,6 +8392,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const wantsPixels = args.kind === 'image' && !authored.outputUrl;
       const emptyDrawing = args.kind === 'drawing' && (!Array.isArray(authored.points) || authored.points.length < 2);
       if (wantsPixels || emptyDrawing) return { error: canvasImageToolRedirect(args.kind) };
+      // A URL that is a PAGE, not a picture: the model was asked to show a live site
+      // and reached for the image object. The screenshot tool is what photographs it.
+      if (args.kind === 'image' && typeof authored.outputUrl === 'string' && looksLikeWebPageUrl(authored.outputUrl)) return { error: canvasScreenshotToolRedirect() };
       // THE SAME MISROUTE, ONE KIND OVER, AND THE MOST EXPENSIVE ONE. A `game`
       // authored here is a brief with no artifact: generating the playable thing
       // is a separate step the model does not know to take. It reached the board
@@ -8515,7 +8544,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!args.objectId || !target) return { error: 'Object not found' };
       const definition = creationObjectDefinition(target.data.kind);
       if (!args.action || !definition.actions.includes(args.action)) return { error: `Unsupported action. Available actions: ${definition.actions.join(', ')}` };
-      if (args.action === 'inspect') return { object: { id: target.id, ...definition.contextAdapter(target.data, specBoardOf(nodes)) }, actions: definition.actions, mutableFields: definition.mutableFields };
+      if (args.action === 'inspect') {
+        return {
+          object: { id: target.id, ...definition.contextAdapter(target.data, specBoardOf(nodes)) },
+          actions: definition.actions,
+          mutableFields: definition.mutableFields,
+          // The binding field is a bare name on the registry; the hint that says how
+          // it resolves has to reach the model somewhere, and inspect is where it
+          // reads a kind's fields.
+          ...(isBrandBoundKind(target.data.kind) ? { fieldHints: { [BRAND_BINDING_FIELD]: BRAND_BINDING_HINT } } : {}),
+        };
+      }
       if (args.action === 'edit') return { objectId: target.id, kind: target.data.kind, mutableFields: definition.mutableFields, instruction: 'Call canvas_update_object with the desired fields.' };
       // The redirect FIRST: an act with a dedicated tool is not an unimplemented act,
       // and answering "no delivery adapter" for one is how a model comes to tell a
@@ -8538,6 +8577,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         };
       }
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      // ── The retention gate ───────────────────────────────────────────────────
+      //
+      // An `erase` is a data-subject request, and a hiring or employment record has a
+      // legal floor under it. Decided here, at the one seam every model-invoked act
+      // passes through, from the same rule table the boundary paths read.
+      if (args.action === 'erase') {
+        const refusal = erasureRefusal(target.data.kind, target.data as Record<string, unknown>);
+        if (refusal) return { error: refusal, objectId: target.id, action: args.action };
+      }
       // ── The approval gate ────────────────────────────────────────────────────
       //
       // Two reviews found the same hole from opposite sides: outbound acts (send,
@@ -8879,15 +8927,41 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         includeHostileStrings: { type: 'boolean', description: 'Add quotes, markup, unicode, over-length and traversal strings to every free-text column. Default true.' },
         includeBoundary: { type: 'boolean' },
         includeInvalid: { type: 'boolean' },
+        mode: { type: 'string', enum: ['contract', 'sample'], description: 'contract (default) generates rows from the declared contract. sample copies up to validRows REAL rows with every classified personal column masked — refused while a personal column is left unmasked, because a fixture that leaks is not a fixture. Use sample when the user wants realistic rows rather than edge cases.' },
       },
     },
     mutates: true,
     run: (raw: unknown) => {
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
-      const args = raw as { objectId?: string; validRows?: number; includeHostileStrings?: boolean; includeBoundary?: boolean; includeInvalid?: boolean };
+      const args = raw as { objectId?: string; validRows?: number; includeHostileStrings?: boolean; includeBoundary?: boolean; includeInvalid?: boolean; mode?: string };
       const target = resolveTabularTarget(args.objectId);
       if ('error' in target) return target;
-      const { node: dataset } = target;
+      const { node: dataset, source } = target;
+      if (args.mode === 'sample') {
+        const classifications = normalizeClassifications(dataset.data.classifications);
+        const unmasked = unmaskedSensitiveColumns(classifications);
+        if (unmasked.length) {
+          return { error: `${dataset.data.title} still shows personal data in ${unmasked.join(', ')}. Mask those columns first (canvas_classify_dataset with masked: true) — a sample that leaks is not a fixture, so none was made.` };
+        }
+        const sample = fixtureFromDataset(source, classifications, Number(args.validRows) || 25);
+        const node = stage.createObject('dataset', { x: dataset.position.x + 460, y: dataset.position.y + 320 });
+        node.data = {
+          ...node.data,
+          ...sanitizeCreationObjectPatch('dataset', {
+            title: `${dataset.data.title} sample`,
+            columns: sample.columns, rows: sample.rows, rowCount: sample.rows.length,
+            classifications,
+            status: `${sample.rows.length} rows`,
+            summary: `${sample.rows.length} real rows sampled from ${dataset.data.title}, every personal column masked.`,
+          }),
+        };
+        stage.addObject(`Sample ${dataset.data.title}`, node);
+        stage.addConnection(
+          `Sample of ${dataset.data.title}`,
+          { id: crypto.randomUUID(), source: dataset.id, target: node.id, type: 'smoothstep', label: 'sample', data: { connectionKind: 'data' } },
+        );
+        return { ok: true, proposed: true, object: { id: node.id, kind: 'dataset', title: String(node.data.title), created: true }, rows: sample.rows.length, maskedColumns: classifications.filter((item) => item.masked).map((item) => item.column) };
+      }
       const contract = normalizeDataContract(dataset.data.dataContract);
       if (!contract?.columns.length) {
         return { error: `${dataset.data.title} has no declared contract to generate against. Declare one with canvas_set_data_contract first — the contract is what says which values are valid, so it is also what says which are not.` };
@@ -10453,6 +10527,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!useGate.allowed) { setNotice(useGate.reason ?? t('exportRestricted')); return useGate.reason ?? t('exportRestricted'); }
     const markdown = canvasObjectMarkdown(target.data);
     const base = safeDownloadName(target.data.title);
+    const exportRefusals = {
+      noRows: () => new Error(t('noTabularRows')),
+      unmasked: (columns: string[]) => new Error(t('exportUnmaskedColumns', { columns: columns.join(', ') })),
+    };
     try {
       if (action === 'copy') return await copyTextToClipboard(markdown) ? t('copiedToClipboard') : t('clipboardUnavailable');
       const diagram = canvasDiagram(target.data);
@@ -10471,8 +10549,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         downloadText(renderedResume ? resumeHtmlFile(target.data.title, renderedResume) : markdownHtmlDocument(target.data.title, markdown), fileName, 'text/html');
       }
       if (action === 'csv') {
-        const sheet = artifactSheet(target.data);
-        if (!sheet) throw new Error(t('noTabularRows'));
+        const sheet = exportableSheet(target.data, exportRefusals);
         exportCsv(toCsv(sheet.columns, sheet.rows), fileName);
       }
       if (action === 'diagram') {
@@ -10491,8 +10568,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         downloadText(svg, fileName, 'image/svg+xml');
       }
       if (SERVER_RENDERED_ACTIONS.has(action)) {
-        const sheet = action === 'xlsx' ? artifactSheet(target.data) : null;
-        if (action === 'xlsx' && !sheet) throw new Error(t('noTabularRows'));
+        const sheet = action === 'xlsx' ? exportableSheet(target.data, exportRefusals) : null;
         try {
           if (action === 'docx') {
             const renderedResume = target.data.kind === 'resume' ? renderedCanvasResume(target.data) : null;
@@ -11744,6 +11820,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               action left in this corner, and it is worded for the reason it always
               was: a glyph acts on the board, a word opens somewhere else. */}
           <CanvasSessionActions variant="handoff" surface={surface} collapsed={barCollapsed} handlers={sessionActionHandlers} />
+          {/* Turn the board into an app. Self-gating: a local board, a viewer, and a
+              board that is not yet an app and cannot become one all render nothing. */}
+          {canvasChromeShows('actions', barCollapsed) && <CanvasAppPanel sessionId={persistence === 'server' ? sessionId : null} />}
           {canvasChromeShows('actions', barCollapsed) && <button className={`${styles.secondaryButton} ${styles.iconAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} title={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}><MoreActionsIcon /></button>}
           {/* NO SAVE BUTTON HERE. A guest board is kept by taking an account, and the
               header already offers exactly that — its CTA becomes "Keep your work" as

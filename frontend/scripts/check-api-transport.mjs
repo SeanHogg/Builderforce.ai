@@ -99,8 +99,63 @@ function collect(dir, out = []) {
   return out;
 }
 
+/**
+ * Raw `fetch` sites OUTSIDE `lib/` that are allowed, keyed by path from `src/`.
+ * The same rule as ALLOWED: a reason about the code, never about the effort.
+ */
+const ALLOWED_OUTSIDE_LIB = new Map([
+  [
+    'app/auth/callback/page.tsx',
+    'The OAuth code exchange runs BEFORE a session exists — the auth.ts story: ' +
+      'apiRequest would bounce a failed exchange off the page that reports it.',
+  ],
+  [
+    'app/auth/magic-link/page.tsx',
+    'Magic-link verification is the other pre-session call; same reason.',
+  ],
+  [
+    'app/docs/[[...path]]/route.ts',
+    'A Next route handler proxying the docs site. It is the SERVER forwarding a ' +
+      'request to another origin, not the browser calling the API.',
+  ],
+  [
+    'components/ModelApiSamples.tsx',
+    'The `fetch(` is inside a code SAMPLE string the screen prints for a person ' +
+      'to paste into their own project. Nothing here calls it.',
+  ],
+]);
+
+/** The one file that may spell the API origin. Every other copy of the literal
+ *  had silently dropped the environment override. */
+const ORIGIN_LITERAL = 'https://api.builderforce.ai';
+const ORIGIN_ALLOWED = new Set(['lib/apiOrigin.ts']);
+
 const violations = [];
+const originViolations = [];
 const cacheViolations = [];
+
+for (const file of [...collect(resolve(srcDir, 'app')), ...collect(resolve(srcDir, 'components'))]) {
+  const rel = relative(srcDir, file).split('\\').join('/');
+  if (ALLOWED_OUTSIDE_LIB.has(rel)) continue;
+  if (rel.endsWith('.test.ts') || rel.endsWith('.test.tsx')) continue;
+  const lines = readFileSync(file, 'utf8').split(/\r?\n/);
+  lines.forEach((line, i) => {
+    if (/^\s*[*]/.test(line)) return;
+    const code = line.replace(/\/\/.*$/, '').replace(/\/\*.*?\*\//g, '');
+    if (FETCH_CALL.test(code)) violations.push(`${rel}:${i + 1}  ${line.trim()}`);
+  });
+}
+
+for (const file of collect(srcDir)) {
+  const rel = relative(srcDir, file).split('\\').join('/');
+  if (ORIGIN_ALLOWED.has(rel) || rel.endsWith('.test.ts') || rel.endsWith('.test.tsx')) continue;
+  const lines = readFileSync(file, 'utf8').split(/\r?\n/);
+  lines.forEach((line, i) => {
+    if (/^\s*[*]/.test(line)) return;
+    const code = line.replace(/\/\/.*$/, '').replace(/\/\*.*?\*\//g, '');
+    if (code.includes(ORIGIN_LITERAL)) originViolations.push(`${rel}:${i + 1}  ${line.trim()}`);
+  });
+}
 
 for (const file of collect(libDir)) {
   const rel = relative(libDir, file).split('\\').join('/');
@@ -161,6 +216,17 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
+if (originViolations.length > 0) {
+  console.error(`❌  The API origin is spelled outside lib/apiOrigin.ts (${originViolations.length} site(s)):\n`);
+  for (const violation of originViolations) console.error('  - ' + violation);
+  console.error(
+    "\n   Import AUTH_API_URL from '@/lib/auth' (client) or API_ORIGIN from " +
+      "'@/lib/apiOrigin' (server). A second copy of the literal is a second place " +
+      'the environment override gets dropped.\n',
+  );
+  process.exit(1);
+}
+
 if (cacheViolations.length > 0) {
   console.error(`❌  Hand-rolled client request cache (${cacheViolations.length} site(s)):\n`);
   for (const violation of cacheViolations) console.error('  - ' + violation);
@@ -173,5 +239,5 @@ if (cacheViolations.length > 0) {
 }
 
 console.log(
-  `✅  API transport/cache check passed — fetch() appears only in ${[...ALLOWED.keys()].join(', ')}, and request caches use the shared primitive.`,
+  `✅  API transport/cache check passed — fetch() appears only in ${[...ALLOWED.keys()].join(', ')} (+${ALLOWED_OUTSIDE_LIB.size} reasoned sites outside lib/), the origin is spelled once, and request caches use the shared primitive.`,
 );

@@ -29,6 +29,7 @@ import { rfpRequests, rfpResponses, tenants } from '../../infrastructure/databas
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { generateRfpResponse, matchPortfolio, regroundRfpResponse, type RfpGenerateDeps } from '../../application/rfp/rfpService';
 import { readRiskRegister, updateRegisterEntry } from '../../application/rfp/rfpRegister';
+import { discardRfpRequest } from '../../application/rfp/discardRequest';
 import { renderRfpDocPdf, normalizePalette, DEFAULT_TENANT_PALETTE } from '../../application/rfp/rfpBranding';
 import { extractSitePalette } from '../../application/rfp/brandExtraction';
 import type { RfpResponseBody } from '../../application/rfp/types';
@@ -157,6 +158,15 @@ export function createRfpRoutes(db: Db, toolService: ToolService, auditRunner: A
     if (!row) return c.json({ error: 'Request not found' }, 404);
     await bumpCacheVersion(c.env as Env, rfpVersionKey(tenantId));
     return c.json(row);
+  });
+
+  // Discard a request. Its responses and register entries cascade with it.
+  router.delete('/requests/:id', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const deleted = await discardRfpRequest(db, tenantId, c.req.param('id'));
+    if (!deleted) return c.json({ error: 'Request not found' }, 404);
+    await bumpCacheVersion(c.env as Env, rfpVersionKey(tenantId));
+    return c.json({ deleted: true });
   });
 
   /** One dependency bundle for both the generator and the re-grounder, so a

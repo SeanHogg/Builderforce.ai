@@ -4,7 +4,7 @@
  * directive here would declare a second entry point that does not exist, and
  * `check-frontend-architecture` counts directives rather than components.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   CALENDAR_VIEWS,
@@ -16,6 +16,8 @@ import {
   calendarGridDays,
   calendarGridRange,
   eventsInRange,
+  eventsOnDay,
+  nextCalendarEvent,
   sanitizeCalendarView,
   shiftCalendarCursor,
   startOfDay,
@@ -239,8 +241,11 @@ export function Calendar({
   // "Now" is read ONCE per mount rather than per render. A calendar that recomputed
   // Date.now() every render would move its own "today" mid-interaction and, worse,
   // change the identity of every memo below on every keystroke in the detail panel.
-  const mountedNow = useRef(Date.now());
-  const now = nowMs ?? mountedNow.current;
+  // State with a lazy initialiser rather than a ref: the value is READ during
+  // render (the next-up line, the grid's today), and a ref read in render is the
+  // one thing the hooks rule refuses; state set once per mount is the same fact.
+  const [mountedNow] = useState(() => Date.now());
+  const now = nowMs ?? mountedNow;
 
   const [ownView, setOwnView] = useState<CalendarView>(() => sanitizeCalendarView(defaultView));
   const activeView = sanitizeCalendarView(view ?? ownView, 'month');
@@ -478,10 +483,8 @@ export function Calendar({
             onClick={onCreate ? () => startDraftOn(dayMs) : undefined}
             {...dayCellProps(dayMs)}
           >
-            {visible
-              .filter((event) => event.allDay
-                && calendarEventStart(event) < dayMs + DAY_MS
-                && calendarEventEnd(event) > dayMs)
+            {eventsOnDay(visible, dayMs)
+              .filter((event) => event.allDay)
               .map((event) => eventButton(event, styles.pill))}
           </div>
         ))}
@@ -509,10 +512,8 @@ export function Calendar({
           <span className={styles.gutter} aria-hidden />
           {days.map((dayMs) => (
             <div key={dayMs} className={styles.timedColumn}>
-              {visible
-                .filter((event) => !event.allDay
-                  && calendarEventStart(event) < dayMs + DAY_MS
-                  && calendarEventEnd(event) > dayMs)
+              {eventsOnDay(visible, dayMs)
+                .filter((event) => !event.allDay)
                 .map((event) => {
                   const startMs = Math.max(calendarEventStart(event), dayMs);
                   const endMs = Math.min(calendarEventEnd(event), dayMs + DAY_MS);
@@ -542,6 +543,20 @@ export function Calendar({
           ? t('loading')
           : t('summary', { shown: visible.length, total: all.length, undated: undated?.length ?? 0 })}
       </p>;
+
+  // What a ~340px card can always state without being opened: the next thing. The
+  // full surface has the grid for that and does not repeat it.
+  const nextEvent = variant === 'card' ? nextCalendarEvent(all, now) : undefined;
+  const nextUp = nextEvent
+    ? <p className={styles.nextUp}>
+        {t('nextUp', {
+          subject: nextEvent.subject || t('untitled'),
+          when: nextEvent.allDay
+            ? fmt.date(calendarEventStart(nextEvent))
+            : fmt.dateWith(calendarEventStart(nextEvent), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
+        })}
+      </p>
+    : null;
 
   return (
     <section
@@ -589,6 +604,7 @@ export function Calendar({
       </header>
 
       {summary}
+      {nextUp}
 
       <div className={styles.body}>
         {activeView === 'month' ? monthGrid : timeGrid}

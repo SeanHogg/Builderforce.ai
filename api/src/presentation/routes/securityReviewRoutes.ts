@@ -32,6 +32,7 @@ import {
   setProjectScanTarget,
 } from '../../application/security/webSecurityScan';
 import { ScanTargetError } from '../../application/security/WebSecurityScanner';
+import { availableAdvisoryFeeds } from '../../application/security/advisoryFeed';
 import { ingestWebScanStage, type WebScanStageIngestPayload } from '../../application/security/webScanContainerStages';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -148,9 +149,13 @@ export function createSecurityReviewRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const qp = c.req.query('projectId');
     const projectId = await resolveScanProject(db, tenantId, qp ? Number(qp) : undefined);
-    if (projectId == null) return c.json({ projectId: null, targetUrl: null });
+    // Which advisory feed the scan's dependency lookup will actually use, and
+    // whether it is usable here — so "every scan says the lookup did not run" has
+    // a visible cause instead of a silent one.
+    const advisoryFeeds = availableAdvisoryFeeds(c.env as Env);
+    if (projectId == null) return c.json({ projectId: null, targetUrl: null, advisoryFeeds });
     const targetUrl = await getProjectScanTarget(db, tenantId, projectId);
-    return c.json({ projectId, targetUrl });
+    return c.json({ projectId, targetUrl, advisoryFeeds });
   });
 
   // PUT /web-scan/config — set the website this project scans (manager+).

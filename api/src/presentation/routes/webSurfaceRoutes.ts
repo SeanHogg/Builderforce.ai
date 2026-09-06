@@ -55,9 +55,11 @@ import {
   landingPageDetail,
   listLandingPages,
   publicLandingPage,
+  publicWebsitePageCached,
   publishLandingPage,
   recordLandingPageConversion,
   recordLandingPageView,
+  recordSeoImpression,
   reorderBlocks,
   retireSeoPattern,
   seoPatternSummary,
@@ -341,6 +343,31 @@ export function createPublicWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = tenantParam(c.req.param('tenantId'));
     const page = await publicLandingPage(db, tenantId, c.req.param('slug'));
     if (page) await recordLandingPageConversion(db, tenantId, page.id);
+    return new Response(null, { status: 204 });
+  }));
+
+  /** `platform` names the platform's own pages (owner null); a number names a
+   *  workspace — the same split `scopedToNullableTenant` draws underneath. */
+  const ownerParam = (raw: string): number | null => (raw === 'platform' ? null : tenantParam(raw));
+
+  /** One published website page by path. The path is everything after `/p`, so a
+   *  nested page (`/docs/pricing`) round-trips without encoding. Cached under the
+   *  owner's version token — the page writers bump it. */
+  router.get('/:tenantId/p/*', (c) => handle(async () => {
+    const at = c.req.path.indexOf('/p/');
+    const path = at >= 0 ? c.req.path.slice(at + 2) : '/';
+    const page = await publicWebsitePageCached(db, c.env as Env, ownerParam(c.req.param('tenantId')), path);
+    if (!page) return Response.json({ error: 'No published page at that address.' }, { status: 404 });
+    return Response.json(page);
+  }));
+
+  /** An SEO impression — the denominator the conversion counter never had. 204
+   *  with no body, for the same reason the landing-page counters return none. */
+  router.post('/:tenantId/seo/impression', (c) => handle(async () => {
+    const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+    if (typeof body.path === 'string' && body.path) {
+      await recordSeoImpression(db, ownerParam(c.req.param('tenantId')), body.path);
+    }
     return new Response(null, { status: 204 });
   }));
 

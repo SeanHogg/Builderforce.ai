@@ -42,7 +42,7 @@ import { notSystemTask } from '../../application/task/taskScope';
 import { computePortfolioRollup } from '../../application/pmo/portfolioRollup';
 import { buildExecutiveSummary } from '../../application/reports/executiveSummary';
 import { generateProjectStatusReport } from '../../application/reports/projectStatusReport';
-import { buildBoardPackReport } from '../../application/finance/boardPackReport';
+import { boardPackSubjectRef, buildBoardPackReport, listSchedulableFrames, parseBoardPackSubject } from '../../application/finance/boardPackReport';
 import { TenantRole } from '../../domain/shared/types';
 import { DONE_CLASS_STATUSES } from '../../domain/shared/doneClass';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
@@ -729,6 +729,17 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ schedules: rows });
   });
 
+  // ── GET /api/reports/schedules/board-pack/frames?sessionId= ───────────────
+  // The frames on a board that could back a `board_pack` schedule — what the
+  // "schedule this" picker reads before it posts a subject below.
+  router.get('/schedules/board-pack/frames', requirePermission(PERMISSIONS.REPORT_READ), requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const sessionId = (c.req.query('sessionId') ?? '').trim();
+    if (!sessionId) return c.json({ error: 'sessionId is required' }, 400);
+    const frames = await listSchedulableFrames(db, tenantId, sessionId);
+    return c.json({ frames: frames.map((frame) => ({ ...frame, subjectKind: 'canvas_frame', subjectRef: boardPackSubjectRef(sessionId, frame.id) })) });
+  });
+
   // ── POST /api/reports/schedules ───────────────────────────────────────────
   router.post('/schedules', requirePermission(PERMISSIONS.REPORT_EXPORT), requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
@@ -737,10 +748,26 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
       schedule: string;
       deliveryHour?: number;
       recipients: string[];
+      subjectKind?: string | null;
+      subjectRef?: string | null;
     }>();
 
     if (!body.reportType || !body.schedule || !Array.isArray(body.recipients)) {
       return c.json({ error: 'reportType, schedule, and recipients[] are required' }, 400);
+    }
+
+    // The first report type that is ABOUT something: a board pack without a frame
+    // would be dispatched as "nothing to send" every month, so it is refused here,
+    // and the frame it names has to be one this workspace can actually read.
+    let subject: { subjectKind: string; subjectRef: string } | null = null;
+    if (body.reportType === 'board_pack') {
+      const parsed = parseBoardPackSubject(body.subjectKind ?? null, body.subjectRef ?? null);
+      if (!parsed) return c.json({ error: 'A board_pack schedule needs subjectKind "canvas_frame" and subjectRef "<sessionId>:<frameId>"' }, 400);
+      const frames = await listSchedulableFrames(db, tenantId, parsed.sessionId);
+      if (!frames.some((frame) => frame.id === parsed.frameId)) {
+        return c.json({ error: 'That frame is not on a board this workspace can read' }, 400);
+      }
+      subject = { subjectKind: 'canvas_frame', subjectRef: body.subjectRef as string };
     }
 
     const [row] = await db.insert(reportSchedules)
@@ -750,6 +777,7 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
         schedule:     body.schedule as 'daily',
         deliveryHour: body.deliveryHour ?? 8,
         recipients:   JSON.stringify(body.recipients),
+        ...(subject ?? {}),
       })
       .returning();
 

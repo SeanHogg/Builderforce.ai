@@ -47,7 +47,8 @@ import { isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTi
 import { isCodeChangeTool, canChangeCodeHere, localToolsIn } from './localWorkspaceTools';
 import { shippedToBaseBranch } from './shipVerification';
 import { toolActivity, activityTarget, type BrainRunActivity } from './runActivity';
-import { ReadCoverage, revisitAdvisory, withAdvisory } from './readCoverage';
+import { ReadCoverage, revisitAdvisory } from './readCoverage';
+import { trimToolResult } from './toolResultBudget';
 import { chatModeDirective, normalizeChatMode, type ChatMode } from './chatMode';
 import { routingQueryForTurn, turnOptimizationDirective } from './turnOptimization';
 import {
@@ -166,14 +167,9 @@ function accrueProviderCap(c: RunCell, raw: string | undefined): void {
  * 413. See {@link windowed}.
  */
 const HISTORY_TOKEN_BUDGET = 24_000;
-/**
- * Per-tool-result cap (chars) for what we put into the MODEL transcript. The
- * full result is still recorded in the trace (for the timeline + triage copy);
- * only the copy the model re-reads every turn is trimmed. A `tasks.list`
- * returning 352 full rows is what filled the window and killed the run — the
- * model gets a truncated head plus a marker telling it to narrow the query.
- */
-const MAX_TOOL_RESULT_CHARS = 6_000;
+// The per-result cap on what the MODEL transcript carries for one tool result (the trace
+// keeps the full result) lives in `toolResultBudget.ts`: a generic head slice for list
+// results, and LINE-paged windows with an intact continuation offset for `read_file`.
 
 /** Cheap token estimate from a char count — chars/4, the gateway's heuristic. */
 function estimateTokens(chars: number): number {
@@ -187,27 +183,6 @@ function messageTokens(m: ChatCompletionMessage): number {
   return estimateTokens(chars) + 4; // +4 for role/framing overhead
 }
 
-/**
- * Trim a tool result to what the model transcript can afford. Returns the
- * (possibly truncated) string to store as the tool message plus diagnostics
- * (original byte size + whether it was truncated) for the trace. Large results
- * get a head slice and an explicit marker so the model knows data was elided and
- * can re-call the tool with a narrower filter/limit instead of assuming it saw
- * everything.
- */
-function trimToolResult(out: unknown): { content: string; bytes: number; truncated: boolean } {
-  const full = JSON.stringify(out ?? null);
-  const bytes = full.length;
-  if (bytes <= MAX_TOOL_RESULT_CHARS) return { content: full, bytes, truncated: false };
-  // If the result is an array, tell the model how many items were dropped — that
-  // is the signal it needs to add a `limit`/`status`/`projectId` filter.
-  const itemNote = Array.isArray(out)
-    ? ` The full result had ${out.length} items; re-call this tool with a narrower filter (e.g. status, projectId, or limit) to see specific ones.`
-    : ' The full result was large; re-call with a narrower query if you need the elided fields.';
-  const head = full.slice(0, MAX_TOOL_RESULT_CHARS);
-  const content = `${head}\n…[truncated ${bytes - MAX_TOOL_RESULT_CHARS} of ${bytes} chars to protect the context window.${itemNote}]`;
-  return { content, bytes, truncated: true };
-}
 /**
  * Memory bounds. Run cells are session-lived (the transcript IS the cross-turn
  * grounding), so without a cap a long session touching many chats grows the
@@ -1512,17 +1487,12 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     });
   }
 
-  // Read-only tool calls whose (name+args) exactly repeat within a run return a
-  // "already returned above" stub instead of re-fetching + re-injecting the full
-  // payload — the context bloat that let a weak model thrash into exhaustion (one
-  // file was read 3+ times in the reported run). Any NON-read tool clears the set:
-  // a write/edit/delete (or any side-effecting call) can change what a re-read would
-  // see, so a read after a mutation is never suppressed. Only successful reads cache.
-  const readDedupe = new Set<string>();
-  // Which TARGETS this run has read, and how often. The dedupe set above catches an
-  // exact repeat; this catches the far more common (and far more expensive) pattern
-  // of the same file re-read at shifting offsets until the budget is gone. See
-  // `readCoverage.ts`.
+  // What this run has already read. Two guards, one tally (see `readCoverage.ts`):
+  // an EXACT repeat of a successful read-only call — same tool, same arguments —
+  // returns an "already returned above" stub instead of re-fetching + re-injecting
+  // the payload; and a target re-read at SHIFTING offsets gets an advisory once it
+  // starts circling. Both are invalidated together, and only for what a later
+  // mutation actually touched — never wiped wholesale by an unrelated call.
   const readCoverage = new ReadCoverage();
   // Bounded counter for the announced-but-never-made tool call recovery below, so a
   // model that keeps narrating instead of acting cannot spin the loop. Not one-shot:
@@ -1863,12 +1833,14 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           }
         }
         // Read-dedupe: suppress an EXACT repeat of a read-only file/search OR read-only
-        // platform call (its result is already above), and invalidate the cache on any
-        // other (possibly mutating) tool so a read AFTER a change is never suppressed.
+        // platform call (its result is already above). Any other call invalidates what
+        // it could have changed — and ONLY that (see `ReadCoverage.invalidate`): an edit
+        // forgets its own file, a platform write forgets the platform reads, a git status
+        // forgets nothing. The old set was cleared wholesale by every non-read call, so
+        // one ticket write re-armed a full re-read of every file in the run.
         const isReadTool = isDedupableRead(tc.name);
-        const dedupeKey = `${tc.name}:${tc.args ?? ''}`;
         if (isReadTool) {
-          if (readDedupe.has(dedupeKey)) {
+          if (readCoverage.isRepeat(tc.name, args)) {
             const stub = {
               note: `Duplicate ${tc.name} call — identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping).`,
             };
@@ -1877,13 +1849,6 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
             continue;
           }
         } else {
-          readDedupe.clear();
-          // A possibly-mutating call invalidates the coverage picture for WHAT IT
-          // TOUCHED — a read after a change is new information, and nagging the model
-          // for taking it would punish exactly the right behaviour. Only for what it
-          // touched, though: clearing the whole tally on every non-read call let a
-          // ticket write or a failed dispatch erase the history of unrelated files,
-          // which is why the guard never fired through 14 reads of one CSS file.
           readCoverage.invalidate(tc.name, args);
         }
         const toolStart = nowMs();
@@ -1929,13 +1894,14 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         // timeline must show what the tool actually returned), and the intervention
         // is recorded as its own step so triage can see the loop was fought rather
         // than inferring it from the repetition alone.
-        let modelOut = out;
+        let advisory: string | null = null;
         if (isReadTool && !isFailedToolResult(out)) {
+          // Recording a SUCCESSFUL read is also what arms the exact-repeat stub for it;
+          // a failed read is not recorded, so it can be retried.
           const visit = readCoverage.record(tc.name, args);
           const target = visit ? activityTarget(args) : undefined;
-          const advisory = visit && target ? revisitAdvisory(tc.name, target, visit) : null;
+          advisory = visit && target ? revisitAdvisory(tc.name, target, visit) : null;
           if (advisory) {
-            modelOut = withAdvisory(out, advisory);
             pushTrace(c, {
               ts: nowIso(),
               category: 'message',
@@ -1945,7 +1911,11 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
             });
           }
         }
-        const trimmedOut = trimToolResult(modelOut ?? null);
+        // Trimmed to the transcript budget with the advisory attached AFTER the cut, so
+        // the budget can never delete the guard — and a `read_file` is paged by LINE with
+        // its continuation offset intact, instead of sliced mid-line with the paging
+        // fields (which sit after the content) thrown away. See `toolResultBudget.ts`.
+        const trimmedOut = trimToolResult(tc.name, out ?? null, { advisory });
         convo.push({ role: 'tool', tool_call_id: tc.id, content: trimmedOut.content });
         pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
@@ -1958,8 +1928,6 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           resultBytes: trimmedOut.bytes,
           truncated: trimmedOut.truncated,
         });
-        // Cache only a SUCCESSFUL read so a failed read can be retried.
-        if (isReadTool && !isFailedToolResult(out)) readDedupe.add(dedupeKey);
         // Pin this tool into every later turn's selection — a multi-step task must
         // never lose a tool it is mid-way through using.
         usedTools.add(tc.name);

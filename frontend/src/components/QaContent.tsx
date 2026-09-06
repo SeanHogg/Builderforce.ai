@@ -1,5 +1,6 @@
 'use client';
 
+import { useProjects } from '@/lib/ProjectScopeContext';
 import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 
@@ -15,7 +16,6 @@ import { Select } from '@/components/Select';
 
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
 import { Empty, STATUS_COLOR, SEVERITY_COLOR, Section, Table, Td, btnStyle, inputStyle } from './qa/QaPrimitives';
 import { QualityTrendSection, RoutingSection } from './qa/QaQualitySections';
@@ -71,7 +71,7 @@ const SELF_TEST_ROUTES = [
 export function QaContent() {
   const t = useTranslations('qa');
   const fmt = useFormat();
-  const [projects, setProjects] = useState<Project[]>([]);
+  const projects = useProjects();
   const [projectId, setProjectId] = useState<number | null>(null);
   const [flows, setFlows] = useState<QaFlow[]>([]);
   const [tests, setTests] = useState<QaTest[]>([]);
@@ -86,9 +86,6 @@ export function QaContent() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchProjects().then(setProjects).catch(() => { /* projects optional for self-test */ });
-  }, []);
 
   const reload = useCallback(async () => {
     try {

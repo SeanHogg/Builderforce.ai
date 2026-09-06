@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { getStoredWebToken } from '@/lib/auth';
+import { AUTH_API_URL, getStoredWebToken } from '@/lib/auth';
 import { downloadText } from '@/lib/download';
 import { AdminError, errText } from '../adminShared';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
@@ -30,7 +30,7 @@ export default function TokenPanel() {
   };
 
   const buildEnvTemplate = () => {
-    const base = typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai') : 'https://api.builderforce.ai';
+    const base = AUTH_API_URL;
     const apiUrl = base.replace(/\/+$/, '');
     return [
       `BUILDERFORCE_API_URL=${apiUrl}`,

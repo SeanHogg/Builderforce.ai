@@ -18,7 +18,7 @@
  * this" on every regeneration would make the lifecycle worthless.
  */
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { and, eq, inArray, desc } from 'drizzle-orm';
+import { and, eq, desc } from 'drizzle-orm';
 import { rfpRisks } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type {
@@ -219,11 +219,4 @@ export async function updateRegisterEntry(
     .where(and(eq(rfpRisks.id, id), eq(rfpRisks.tenantId, tenantId)))
     .returning();
   return row ? toEntry(row) : null;
-}
-
-/** Drop a response's entries — used when a response itself is discarded and the
- *  cascade cannot be relied on (a soft delete rather than a row delete). */
-export async function clearRegisterFor(db: Db, tenantId: number, responseIds: readonly string[]): Promise<void> {
-  if (!responseIds.length) return;
-  await db.delete(rfpRisks).where(and(eq(rfpRisks.tenantId, tenantId), inArray(rfpRisks.responseId, [...responseIds])));
 }

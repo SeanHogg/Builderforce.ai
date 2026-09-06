@@ -80,11 +80,19 @@ export const CODE_CHANGE_TOOLS: ReadonlySet<string> = new Set([
 /**
  * Local tools that can change ARBITRARY files — a shell command may run a codemod, a
  * formatter, `git checkout`, or nothing at all, and the call site cannot tell which.
- * Consumers that invalidate per-target state (see `readCoverage`) must treat these as
- * invalidating everything, because the honest answer to "what did that touch?" is
- * "unknown".
+ * The three git tools that REWRITE the working tree belong here for the same reason: a
+ * merge of the base branch, an undo or a redo can change any file in the checkout, and
+ * name none of them. Consumers that invalidate per-target state (see `readCoverage`)
+ * must treat these as invalidating everything, because the honest answer to "what did
+ * that touch?" is "unknown". `git_commit` / `git_push` / `open_pull_request` are NOT
+ * here: they move work out of the tree without changing a byte a read would see.
  */
-export const UNSCOPED_MUTATION_TOOLS: ReadonlySet<string> = new Set(['run_command']);
+export const UNSCOPED_MUTATION_TOOLS: ReadonlySet<string> = new Set([
+  'run_command',
+  'git_sync_latest',
+  'git_undo',
+  'git_redo',
+]);
 
 export function isLocalWorkspaceTool(name: string): boolean {
   return LOCAL_WORKSPACE_TOOLS.has(name);

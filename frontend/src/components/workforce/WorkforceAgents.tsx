@@ -73,6 +73,7 @@ import {
   btnSubtle,
   type CloudAgentFormState,
 } from './CloudAgentFormFields';
+import { useRuntimeSurfaceBlocked } from './RuntimeSurfaceSelect';
 import { useFormat } from "@/i18n/useFormat";
 
 /**
@@ -162,6 +163,10 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
   const [createKind, setCreateKind] = useState<AgentKind>('cloud');
   // cloud sub-state
   const [form, setForm] = useState<CloudAgentFormState>(EMPTY_CLOUD_AGENT_FORM);
+  // The same cached readiness the surface picker disables on, so the create
+  // cannot save a combination the option already said the project cannot run.
+  const surfaceBlocked = useRuntimeSurfaceBlocked(form.runtimeSurface);
+  const tCaf = useTranslations('cloudAgentForm');
   const [saving, setSaving] = useState(false);
   // remote sub-state
   const [registerName, setRegisterName] = useState('');
@@ -275,6 +280,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
   // --- Cloud create --------------------------------------------------------
   const createCloud = async () => {
     if (!form.name.trim()) { setError(tWf('errNameRequired')); return; }
+    if (surfaceBlocked) { setError(tCaf('errSurfaceBlocked', { surface: tCaf(`surfaceLabel.${form.runtimeSurface}` as 'surfaceLabel.durable') })); return; }
     setSaving(true); setError('');
     try {
       await createCloudAgent(cloudAgentFormToInput(form));
@@ -876,7 +882,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                   {error && <div style={{ fontSize: 13, color: 'var(--error-text)', marginTop: 12 }}>{error}</div>}
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
                     <button type="button" onClick={closeDialog} style={{ ...btnSubtle, background: 'none', border: 'none' }}>{tc('cancel')}</button>
-                    <button type="button" onClick={createCloud} disabled={saving || !form.name.trim()} style={btnPrimary}>
+                    <button type="button" onClick={createCloud} disabled={saving || !form.name.trim() || surfaceBlocked} style={btnPrimary}>
                       {saving ? tc('saving') : tAdd('create')}
                     </button>
                   </div>

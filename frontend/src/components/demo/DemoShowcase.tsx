@@ -10,7 +10,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { demoEntryPath, DEMO_PERSONAS, type DemoPersona } from '@/lib/demoApi';
+import { demoEntryPath, DEMO_PERSONAS, trackDemoEvent, type DemoPersona } from '@/lib/demoApi';
 import { observeResizeOnAnimationFrame } from '@/lib/observeResize';
 
 /** Compact product-area marks — presentation only; copy comes from i18n. */
@@ -83,6 +83,9 @@ export function DemoShowcase() {
   const enter = (persona: DemoPersona) => {
     if (loading) return;
     setLoading(persona);
+    // Fired, not queued: the assign below unloads this page, and the funnel's
+    // "which door did they take" is the one event the demo exists to measure.
+    trackDemoEvent({ kind: 'demo.enter', persona, path: demoEntryPath(persona) });
     window.location.assign(demoEntryPath(persona));
   };
 

@@ -29,6 +29,7 @@
  */
 
 import { APP_VERSION } from '@/lib/buildVersion';
+import { localStore } from '@/lib/storage';
 
 const SESSION_KEY = 'builderforce:guest:session';
 const EDIT_PREFIX = 'builderforce:guest:edit:';
@@ -38,15 +39,10 @@ function editKey(slice: string): string {
   return `${EDIT_PREFIX}${APP_VERSION}:${slice}`;
 }
 
-function storage(): Storage | null {
-  try {
-    return typeof window === 'undefined' ? null : window.localStorage;
-  } catch {
-    // Private mode, blocked site data, or a sandboxed frame. A guest with no
-    // storage still gets the sample workspace — they just cannot keep an edit.
-    return null;
-  }
-}
+/** Private mode, blocked site data, or a sandboxed frame all answer `null`. A
+ *  guest with no storage still gets the sample workspace — they just cannot keep
+ *  an edit. The door itself is `lib/storage`, shared with every other store. */
+const storage = localStore;
 
 /**
  * This browser's guest session id, minted on first read.

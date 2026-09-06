@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { CARD_ACT_HANDLER, kindSettingsActions } from '@/lib/canvasKindSettings';
-import { useCardActRunner } from './cardActRunner';
+import { useCanRunCardActs, useCardActRunner } from './cardActRunner';
 import type { CreationNodeData } from './types';
 import styles from './CreationCanvas.module.css';
 
@@ -33,12 +33,15 @@ export function KindDetailsActions({ objectId, kind, data, editable, handlers }:
 }) {
   const t = useTranslations('creationCanvas');
   const runCardAct = useCardActRunner();
+  // Outside a board (a preview, an embed) the runner is a no-op, and a button wired
+  // to a no-op is the inert control this component exists to never draw.
+  const canAct = useCanRunCardActs();
   const actions = kindSettingsActions(kind, data);
   if (!actions.length) return null;
 
   return <>{actions.map((action) => {
     const handler = action.handler === CARD_ACT_HANDLER
-      ? () => runCardAct(objectId, action.name)
+      ? (canAct ? () => runCardAct(objectId, action.name) : undefined)
       : handlers[action.handler];
     if (!handler) return null;
     return <button

@@ -12,6 +12,7 @@
  */
 
 import { useTranslations } from 'next-intl';
+import { formatDuration } from '@/lib/duration';
 import { adminApi, type AdminVisitorJourney, type AdminVisitorJourneyStep } from '@/lib/adminApi';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { AdminError, AdminLoading, useAdminData, useAdminFormat } from '@/components/admin/adminShared';
@@ -147,11 +148,4 @@ function JourneyStep({ step, at }: { step: AdminVisitorJourneyStep; at: string }
       </span>
     </li>
   );
-}
-
-function formatDuration(ms: number): string {
-  const seconds = Math.round(ms / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  return minutes < 60 ? `${minutes}m ${seconds % 60}s` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }

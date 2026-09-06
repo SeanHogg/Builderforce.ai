@@ -23,10 +23,6 @@ import { faultMessage } from '@/lib/apiClient';
 
 type T = ReturnType<typeof useTranslations>;
 
-/** Mirrors PostmortemWhyService.MAX_WHY_STEPS — the server truncates past this. */
-const MAX_STEPS = 7;
-/** What "5-Why" means to the people using it; the ladder opens at one rung. */
-const CONVENTIONAL_STEPS = 5;
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -55,13 +51,17 @@ export function WhyLadderSection({
   onSaved?: () => void;
 }) {
   const [saved, setSaved] = useState<PostmortemWhy[]>([]);
+  // The cap and the convention arrive with the chain from the service that
+  // truncates at them; until they do, nothing can be added past what is there.
+  const [limits, setLimits] = useState<{ maxSteps: number; conventionalSteps: number } | null>(null);
+  const MAX_STEPS = limits?.maxSteps ?? 0;
   const [draft, setDraft] = useState<Draft[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    incidentsApi.whys(incidentId)
-      .then((rows) => { setSaved(rows); setDraft(null); })
+    incidentsApi.whyLadder(incidentId)
+      .then((ladder) => { setSaved(ladder.whys); setLimits({ maxSteps: ladder.maxSteps, conventionalSteps: ladder.conventionalSteps }); setDraft(null); })
       .catch((e: unknown) => setError(faultMessage(e)));
   }, [incidentId]);
   useEffect(() => { load(); }, [load]);
@@ -198,7 +198,7 @@ export function WhyLadderSection({
               {t('whys.add')}
             </button>
             <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>
-              {steps.length >= MAX_STEPS ? t('whys.capReached') : t('whys.cap', { conventional: CONVENTIONAL_STEPS, max: MAX_STEPS })}
+              {limits && (steps.length >= MAX_STEPS ? t('whys.capReached') : t('whys.cap', { conventional: limits.conventionalSteps, max: limits.maxSteps }))}
             </span>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>

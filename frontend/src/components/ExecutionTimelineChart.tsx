@@ -9,6 +9,7 @@
  * page (single source of truth for the visual — see [[view-toggle-convention]]).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { formatDurationPrecise as fmtDuration } from '@/lib/duration';
 import { scaleTime } from 'd3-scale';
 import { select } from 'd3-selection';
 import { axisBottom } from 'd3-axis';
@@ -37,12 +38,6 @@ const MARGIN = { top: 12, right: 24, bottom: 28, left: 168 };
 const LANE_H = 20;
 const LANE_GAP = 4;
 const AGENT_GAP = 12;
-
-function fmtDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${(ms / 60000).toFixed(1)}m`;
-}
 
 function statusColor(status: string): string {
   switch (status) {

@@ -12,9 +12,9 @@ import { LOCALE_HEADER, readLocaleCookie } from '@/i18n/config';
 import type { AuthUser, Tenant } from './types';
 import type { PsychometricProfile } from './psychometric';
 import { fetchWithTransportReport } from './errors/transportFailure';
+import { API_ORIGIN } from './apiOrigin';
 
-export const AUTH_API_URL =
-  process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
+export const AUTH_API_URL = API_ORIGIN;
 
 // ---------------------------------------------------------------------------
 // Storage helpers (localStorage)

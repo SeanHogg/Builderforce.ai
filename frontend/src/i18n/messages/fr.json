@@ -2607,7 +2607,10 @@
       "scope": "Portée",
       "scopeWorkspace": "Tout l'espace",
       "scopeProjects": "Projets",
-      "scopeInitiatives": "Initiatives"
+      "scopeInitiatives": "Initiatives",
+      "runway": "{months} mois de runway",
+      "burnUnavailable": "Pas encore de données de burn rate",
+      "burnSub": "dépense mensuelle"
     },
     "comp": {
       "title": "Conformité et audit",
@@ -3432,7 +3435,8 @@
     "errNameRequired": "Le nom est obligatoire",
     "errSaveFailed": "Échec de l'enregistrement",
     "errDeleteFailed": "Échec de la suppression",
-    "surfaceUnavailableOption": "{surface} — indisponible pour ce projet"
+    "surfaceUnavailableOption": "{surface} — indisponible pour ce projet",
+    "errSurfaceBlocked": "{surface} n’est pas disponible pour ce projet : choisissez une autre surface d’exécution."
   },
   "personalitySummary": {
     "title": "Personnalité",
@@ -5096,7 +5100,8 @@
         "vuln-scans": "Analyses de vulnérabilités",
         "dsr": "Demandes des personnes concernées",
         "suppression": "Liste de suppression"
-      }
+      },
+      "finBurnRate": "Burn rate et runway"
     },
     "loading": "Chargement…",
     "overview": {
@@ -5736,6 +5741,27 @@
       "page": "Affichage de {from} à {to}",
       "newer": "Plus récents",
       "older": "Plus anciens"
+    },
+    "webAdvisoryFeeds": "Flux d’avis de sécurité",
+    "webAdvisoryConfigured": "prêt",
+    "webAdvisoryUnconfigured": "non configuré ici",
+    "agreementsTab": "Accords",
+    "agreements": {
+      "title": "Vos accords",
+      "description": "Ce que vous avez accepté, par version, et ce qui reste en attente.",
+      "loading": "Chargement de vos accords…",
+      "error": "Impossible de charger vos accords.",
+      "outstanding": "En attente",
+      "accepted": "Accepté v{version} le {date}",
+      "notRequired": "Non requis",
+      "kind": {
+        "terms": "Conditions d’utilisation",
+        "privacy": "Politique de confidentialité",
+        "dpa": "Accord de traitement des données",
+        "aup": "Politique d’usage acceptable",
+        "nda": "Accord de confidentialité",
+        "cookie": "Politique de cookies"
+      }
     }
   },
   "catalogInsights": {
@@ -16321,7 +16347,9 @@
       "readFailed": "Ces couleurs n’ont pas pu être lues — saisissez-les à la main.",
       "candidates": "Autres couleurs trouvées — cliquez pour en faire la couleur principale :"
     },
-    "needManager": "Rôle Manager requis"
+    "needManager": "Rôle Manager requis",
+    "discard": "Abandonner la demande",
+    "discardConfirm": "Abandonner « {title} » ? Ses réponses et son registre des risques partent avec elle."
   },
   "planBadge": {
     "tier": {
@@ -16673,6 +16701,23 @@
     "admin": {
       "title": "Retours produit",
       "subtitle": "Demandes de fonctionnalités, bugs et idées recueillis par les collecteurs de retours de chaque espace de travail."
+    },
+    "voc": {
+      "title": "Boîte de retours clients",
+      "description": "Ce que les collecteurs de votre site ont recueilli : les mots de vos clients, triés ici.",
+      "filterLabel": "Filtrer par statut",
+      "status": {
+        "new": "Nouveaux",
+        "triaged": "Triés",
+        "dismissed": "Écartés"
+      },
+      "loading": "Chargement des retours…",
+      "error": "Impossible de charger les retours.",
+      "empty": "Rien ici.",
+      "sentiment": "sentiment {value}",
+      "markTriaged": "Marquer trié",
+      "dismiss": "Écarter",
+      "reopen": "Rouvrir"
     }
   },
   "onboardingPill": {
@@ -20794,7 +20839,8 @@
         "templateKey": "Modèle",
         "abTestKey": "Clé du test A/B",
         "trafficAllocation": "Répartition du trafic",
-        "evidence": "Preuves"
+        "evidence": "Preuves",
+        "daysToCliff": "Jours avant le cliff"
       },
       "column": {
         "actual": "Réel",
@@ -21934,7 +21980,9 @@
       "trialHint": {
         "full": "Tout le monde peut l’utiliser entièrement ; payer permet de vous soutenir et d’en garder une copie.",
         "preview": "Les visiteurs voient un aperçu ; la version fonctionnelle nécessite un achat."
-      }
+      },
+      "priceFreeOnly": "Ce type est toujours gratuit.",
+      "deliveryHostedHint": "Peut être livré hébergé : les acheteurs reçoivent une copie en marche, pas des fichiers."
     },
     "email": {
       "mailbox": "Boîte mail",
@@ -23417,7 +23465,8 @@
     "noticeStandupActionItemsAlreadyOnBoard": "{count, plural, one {L’action est déjà sur le tableau} other {Les # actions sont déjà sur le tableau}}",
     "noticeStandupActionItemsPlaced": "{count, plural, one {# action placée sur le tableau} other {# actions placées sur le tableau}}",
     "noticeStandupMinutesNeedsAccount": "Connectez-vous pour lire le compte rendu d’une mêlée",
-    "noticeStandupMinutesFailed": "Impossible de lire le compte rendu de la mêlée"
+    "noticeStandupMinutesFailed": "Impossible de lire le compte rendu de la mêlée",
+    "exportUnmaskedColumns": "Export refusé : {columns} contiennent des données personnelles non masquées. Masquez-les d’abord sur la carte."
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",
@@ -23739,7 +23788,9 @@
       "add": "Ajouter un formulaire",
       "raisesTickets": "Ouvrir un ticket pour chaque soumission",
       "raisesTicketsHint": "Une fois activé, chaque nouvelle soumission ouvre un ticket sur le tableau de ce projet afin que l'équipe puisse agir — la personne à l'origine de la soumission est prévenue une fois le ticket résolu.",
-      "genericError": "Une erreur est survenue. Réessayez."
+      "genericError": "Une erreur est survenue. Réessayez.",
+      "readPolicy": "Les visiteurs connectés peuvent relire leurs propres envois",
+      "readPolicyHint": "Désactivé par défaut. À activer pour une app avec comptes (« mes commandes ») : seules les lignes envoyées par cette personne lui sont renvoyées."
     },
     "traffic": {
       "title": "Trafic",
@@ -27287,7 +27338,8 @@
       "category": "Catégorie",
       "categoryPlaceholder": "e-mail, déploiement, congé…"
     },
-    "undatedLabel": "Pas encore de date"
+    "undatedLabel": "Pas encore de date",
+    "nextUp": "Prochain : {subject} · {when}"
   },
   "points": {
     "view": {

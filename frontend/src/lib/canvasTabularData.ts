@@ -12,6 +12,7 @@
  * kernel, and a median implemented four times is a median that will eventually
  * disagree with itself.
  */
+import { movingAverage } from '@builderforce/creation-canvas-contract';
 import { parseCSV } from './importHelpers';
 import { correlation, median, mode, percentile, stddev, summarize, variance, zScores, type NumericSummary } from './canvasStatistics';
 
@@ -672,6 +673,9 @@ export function applyWindows(
       // rather than inside the per-row switch below.
       const scores = window.op === 'zScore' ? zScores(values) : null;
       const bands = window.op === 'ntile' ? ntileBands(values, window.buckets) : null;
+      // The trailing mean is the contract's own window arithmetic — one pass over
+      // the partition rather than a slice per row.
+      const trailingMean = window.op === 'movingAverage' ? movingAverage(values, periods) : null;
 
       let running = 0;
       indices.forEach((rowIndex, position) => {
@@ -688,12 +692,7 @@ export function applyWindows(
           case 'denseRank': target[name] = denseByPosition.get(position) ?? position + 1; break;
           case 'runningTotal': target[name] = round(running); break;
           case 'percentOfTotal': target[name] = total ? round(value / total * 100) : 0; break;
-          case 'movingAverage': {
-            const start = Math.max(0, position - periods + 1);
-            const slice = values.slice(start, position + 1);
-            target[name] = slice.length ? round(slice.reduce((sum, entry) => sum + entry, 0) / slice.length) : 0;
-            break;
-          }
+          case 'movingAverage': target[name] = round(trailingMean?.[position] ?? 0); break;
           case 'lag': target[name] = previousValue == null ? '' : round(previousValue); break;
           case 'delta': target[name] = previousValue == null ? '' : round(value - previousValue); break;
           case 'percentChange': target[name] = previousValue == null || previousValue === 0 ? '' : round((value - previousValue) / Math.abs(previousValue) * 100); break;

@@ -4536,6 +4536,10 @@ export interface WebScanRunResult {
   stages: WebScanStage[];
 }
 
+/** An advisory feed this deployment could consult, and whether it can here. */
+export interface AdvisoryFeedOption { id: string; label: string; configured: boolean }
+export interface WebScanConfig { projectId: number | null; targetUrl: string | null; advisoryFeeds: AdvisoryFeedOption[] }
+
 export const securityAgentApi = {
   getAccess: (): Promise<SecurityAccessConfig> =>
     request<SecurityAccessConfig>('/api/security/access'),
@@ -4556,8 +4560,8 @@ export const securityAgentApi = {
     }),
 
   // ── Web (external URL) security scan ──────────────────────────────────────
-  getWebScanConfig: (): Promise<{ projectId: number | null; targetUrl: string | null }> =>
-    request<{ projectId: number | null; targetUrl: string | null }>('/api/security/web-scan/config'),
+  getWebScanConfig: (): Promise<WebScanConfig> =>
+    request<WebScanConfig>('/api/security/web-scan/config'),
 
   setWebScanTarget: (url: string | null): Promise<{ projectId: number; targetUrl: string | null }> =>
     request<{ projectId: number; targetUrl: string | null }>('/api/security/web-scan/config', {
@@ -5558,7 +5562,7 @@ export interface CustomerFeedbackRow {
   createdAt: string;
 }
 
-export const feedbackApi = {
+export const customerFeedbackApi = {
   /** List the segment's ingested feedback, optionally filtered by status. */
   list: (status?: 'new' | 'triaged' | 'dismissed') =>
     request<{ feedback: CustomerFeedbackRow[] }>(`/api/reports/feedback${status ? `?status=${status}` : ''}`),
@@ -6995,6 +6999,9 @@ export const rfpApi = {
     request<RfpRequestRow>('/api/rfp/requests', { method: 'POST', body: JSON.stringify(body) }),
   updateRequest: (id: string, body: Partial<RfpRequestInput>): Promise<RfpRequestRow> =>
     request<RfpRequestRow>(`/api/rfp/requests/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  /** Discard a request; its responses and risk register go with it. */
+  deleteRequest: (id: string): Promise<{ deleted: boolean }> =>
+    request<{ deleted: boolean }>(`/api/rfp/requests/${id}`, { method: 'DELETE' }),
   generate: (id: string): Promise<RfpGenerateResult> =>
     request<RfpGenerateResult>(`/api/rfp/requests/${id}/generate`, { method: 'POST' }),
   getResponse: (id: string): Promise<RfpResponseRow> =>
@@ -7193,6 +7200,9 @@ export interface CreateIncidentBody {
  * why₍ₙ₋₁₎. The server owns that invariant — a client never renumbers, it submits the
  * ladder it is showing and gets the normalised one back.
  */
+/** The chain plus the limits the server truncates at. */
+export interface PostmortemWhyLadder { whys: PostmortemWhy[]; maxSteps: number; conventionalSteps: number }
+
 export interface PostmortemWhy {
   id: string;
   stepNo: number;
@@ -7333,8 +7343,11 @@ export const incidentsApi = {
 
   // 5-Why ladder. The chain is replaced as a UNIT (PUT), because removing why₃ makes
   // why₄ an answer to a question nobody asked — see the API's PostmortemWhyService.
-  whys: (id: string): Promise<PostmortemWhy[]> =>
-    request<{ whys: PostmortemWhy[] }>(`/api/incidents/${id}/whys`).then((r) => r.whys ?? []),
+  // The read carries the ladder's cap and its convention from the service that
+  // enforces them, so the UI never mirrors a number it cannot enforce.
+  whyLadder: (id: string): Promise<PostmortemWhyLadder> =>
+    request<Partial<PostmortemWhyLadder>>(`/api/incidents/${id}/whys`)
+      .then((r) => ({ whys: r.whys ?? [], maxSteps: r.maxSteps ?? 7, conventionalSteps: r.conventionalSteps ?? 5 })),
   replaceWhys: (id: string, whys: PostmortemWhyInput[]): Promise<PostmortemWhy[]> =>
     request<{ whys: PostmortemWhy[] }>(`/api/incidents/${id}/whys`, { method: 'PUT', body: JSON.stringify({ whys }) })
       .then((r) => r.whys ?? []),

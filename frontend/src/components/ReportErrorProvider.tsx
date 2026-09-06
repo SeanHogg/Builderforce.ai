@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useToast } from './ToastProvider';
 import { reportProductError, REPORT_ERROR_EVENT, type ReportErrorPrefill } from '@/lib/reportError';
@@ -9,13 +9,12 @@ import { Select } from './Select';
 
 type OpenReporter = (prefill?: ReportErrorPrefill) => void;
 
-const ReportErrorContext = createContext<OpenReporter | null>(null);
-
 /**
  * App-wide "Report an error" host — mirrors {@link ConfirmProvider}: mounts ONE
- * shared reporter panel and exposes an imperative `useReportError()` opener any
- * surface can call (the global error toast's "Report" action, a project page, an
- * error boundary). Submitting files the error into BuilderForce.ai's fixed
+ * shared reporter panel and opens on the `REPORT_ERROR_EVENT` window event any
+ * surface can fire through `requestReportError` (the global error toast's
+ * "Report" action, a project page, an error boundary) — one door, above and
+ * below this provider alike. Submitting files the error into BuilderForce.ai's fixed
  * product Quality collector, including for visitors without an account.
  */
 export function ReportErrorProvider({ children }: { children: React.ReactNode }) {
@@ -67,12 +66,10 @@ export function ReportErrorProvider({ children }: { children: React.ReactNode })
     }
   }, [message, title, url, level, submitting, toast, t]);
 
-  const value = useMemo(() => reportError, [reportError]);
-
   const canSubmit = message.trim().length > 0 && !submitting;
 
   return (
-    <ReportErrorContext.Provider value={value}>
+    <>
       {children}
       <SlideOutPanel open={open} onClose={close} title={t('title')} width="sheet" widthStorageKey="report-error">
         <form onSubmit={submit} style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -132,15 +129,12 @@ export function ReportErrorProvider({ children }: { children: React.ReactNode })
           </div>
         </form>
       </SlideOutPanel>
-    </ReportErrorContext.Provider>
+    </>
   );
 }
 
 /** Imperative opener for the shared Report-error panel. Returns a no-op when the
  *  provider isn't mounted (SSR / isolated render), so callers never need to guard. */
-export function useReportError(): OpenReporter {
-  return useContext(ReportErrorContext) ?? (() => { /* provider not mounted */ });
-}
 
 const labelStyle: React.CSSProperties = {
   display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600,

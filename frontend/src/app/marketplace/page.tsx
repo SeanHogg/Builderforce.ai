@@ -3,6 +3,7 @@ import { Suspense } from 'react';
 import { pageMetadata } from '@/lib/seo';
 import JsonLd from '@/components/JsonLd';
 import { marketplaceAgentsSchema, talentMarketplaceSchema } from '@/lib/structured-data';
+import { publicApiGet } from '@/lib/publicApi';
 import MarketplacePageClient from './MarketplacePageClient';
 
 // Server-side data fetch (published-agents JSON-LD) must run on the edge runtime
@@ -25,29 +26,15 @@ interface PublicFreelancer { userId: string; displayName?: string | null; headli
  *  JSON-LD keywords [1241]. Best-effort; failure → no JSON-LD (the client page
  *  still renders its own list after hydration). */
 async function fetchPublishedAgents(): Promise<PublicAgent[]> {
-  const apiBase = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
-  try {
-    const res = await fetch(`${apiBase}/api/workforce/agents`, { next: { revalidate: 3600 } });
-    if (!res.ok) return [];
-    const rows = (await res.json()) as PublicAgent[];
-    return Array.isArray(rows) ? rows.filter((a) => a?.published) : [];
-  } catch {
-    return [];
-  }
+  const rows = await publicApiGet<PublicAgent[]>('/api/workforce/agents');
+  return Array.isArray(rows) ? rows.filter((a) => a?.published) : [];
 }
 
 /** Talent (freelancers) is now a category of this page, so its JSON-LD is emitted
  *  here too — the standalone /talent route redirects in. Best-effort. */
 async function fetchPublicFreelancers(): Promise<PublicFreelancer[]> {
-  const apiBase = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
-  try {
-    const res = await fetch(`${apiBase}/api/freelancers?pageSize=48`, { next: { revalidate: 3600 } });
-    if (!res.ok) return [];
-    const body = (await res.json()) as { items?: PublicFreelancer[] };
-    return Array.isArray(body.items) ? body.items : [];
-  } catch {
-    return [];
-  }
+  const body = await publicApiGet<{ items?: PublicFreelancer[] }>('/api/freelancers?pageSize=48');
+  return Array.isArray(body?.items) ? body.items : [];
 }
 
 export default async function MarketplacePage() {

@@ -129,10 +129,10 @@ export function EmbedIntegrationSettings() {
 
   return (
     <div style={cardStyle}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>
+      <div style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>
         {t('title')}
       </div>
-      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16 }}>
+      <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', marginBottom: 16 }}>
         {t('description')}
       </div>
 
@@ -140,7 +140,7 @@ export function EmbedIntegrationSettings() {
 
       <RoleGate capability="embed.manage" variant="block" style={divider}>
         {loading ? (
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('loading')}</div>
+          <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>{t('loading')}</div>
         ) : (
           <>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 14 }}>
@@ -152,10 +152,10 @@ export function EmbedIntegrationSettings() {
                   setEnabled(e.target.checked);
                 }}
               />
-              <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>{t('enable')}</span>
+              <span style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-primary)' }}>{t('enable')}</span>
             </label>
 
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>{t('capabilities')}</div>
+            <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>{t('capabilities')}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16, opacity: enabled ? 1 : 0.5 }}>
               {EMBED_CAPABILITIES.map((cap) => (
                 <label key={cap} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: enabled ? 'pointer' : 'default' }}>
@@ -165,7 +165,7 @@ export function EmbedIntegrationSettings() {
                     checked={capabilities.includes(cap)}
                     onChange={() => toggleCapability(cap)}
                   />
-                  <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>{t(`capability.${cap}`)}</span>
+                  <span style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-primary)' }}>{t(`capability.${cap}`)}</span>
                 </label>
               ))}
             </div>
@@ -176,15 +176,15 @@ export function EmbedIntegrationSettings() {
                 onClick={onSave}
                 disabled={saving}
                 style={{
-                  padding: '6px 14px', fontSize: 12, fontWeight: 600,
+                  padding: '6px 14px', fontSize: 'var(--font-size-small)', fontWeight: 600,
                   background: 'var(--accent)', color: 'var(--text-on-accent)',
                   border: 'none', borderRadius: 'var(--radius-md)', cursor: saving ? 'default' : 'pointer',
                 }}
               >
                 {saving ? t('saving') : needsConsent ? t('reviewEnable') : t('save')}
               </button>
-              {saved && <span style={{ fontSize: 12, color: 'var(--success-text)' }}>{t('saved')} <Icon source="✓" size="1em" /></span>}
-              {error && <span style={{ fontSize: 12, color: 'var(--error-text)' }} role="alert">{error}</span>}
+              {saved && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--success-text)' }}>{t('saved')} <Icon source="✓" size="1em" /></span>}
+              {error && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--error-text)' }} role="alert">{error}</span>}
             </div>
           </>
         )}
@@ -193,7 +193,7 @@ export function EmbedIntegrationSettings() {
       {showSnippet && (
         <div style={divider}>
           {!connected && (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }} role="note">{t('previewNote')}</div>
+            <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginBottom: 12 }} role="note">{t('previewNote')}</div>
           )}
           <EmbedInstallSnippet capabilities={connected ? persisted.capabilities : [...EMBED_CAPABILITIES]} />
         </div>

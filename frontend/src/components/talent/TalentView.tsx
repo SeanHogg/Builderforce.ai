@@ -16,7 +16,9 @@ import { getStoredTenant } from '@/lib/auth';
 import { listEmployerInvoices, payInvoice, type Invoice } from '@/lib/freelance/billing';
 import { listEngagementDeliverables, evaluateDeliverable, setDeliverableStatus, type Deliverable } from '@/lib/freelance/deliverables';
 import { listEngagements, terminateEngagement, reviewFreelancer, scheduleMeeting, type Engagement } from '@/lib/freelance/engagements';
-import { listMyJobs, postJob, updateJob, listJobProposals, acceptProposal, declineProposal, evaluateProposal, shortlistProposal, type JobPosting, type JobProposal, type PostingType, type EngagementType } from '@/lib/freelance/postings';
+import { listMyJobs, postJob, updateJob, listJobProposals, acceptProposal, declineProposal, evaluateProposal, shortlistProposal, type JobPosting, type JobProposal, type PostingAttachment, type PostingType, type EngagementType } from '@/lib/freelance/postings';
+import { deleteJobAttachment, openJobAttachment, openProposalAttachmentAsEmployer, uploadJobAttachment } from '@/lib/freelance/postingAttachments';
+import { AttachmentsPanel } from '@/components/talent/AttachmentsPanel';
 import {
   listEmployerTimecards, approveTimecard, rejectTimecard, getTimecardReview, type Timecard, type TimecardEntry,
 } from '@/lib/freelance/timecards';
@@ -79,6 +81,10 @@ export function TalentView() {
   const [entries, setEntries] = useState<Record<string, TimecardEntry[]>>({});
   const [openJob, setOpenJob] = useState<string | null>(null);
   const [proposals, setProposals] = useState<Record<string, JobProposal[]>>({});
+  // The posting's files, kept per job from the attachment routes' own answers so
+  // an upload shows without re-reading the whole postings list.
+  const [jobAttachments, setJobAttachments] = useState<Record<string, PostingAttachment[]>>({});
+  const attachmentsOf = (j: JobPosting): PostingAttachment[] => jobAttachments[j.id] ?? j.attachments ?? [];
   const [rateFor, setRateFor] = useState<string | null>(null);
   const [reviewForm, setReviewForm] = useState<{ rating: number; comment: string; wouldWorkAgain: boolean }>({ rating: 5, comment: '', wouldWorkAgain: true });
   const [showPost, setShowPost] = useState(false);
@@ -338,6 +344,16 @@ export function TalentView() {
                       {j.status === 'open' && <button type="button" style={btn('ghost')} disabled={busy === `close:${j.id}`} onClick={() => act(`close:${j.id}`, () => updateJob(j.id, { status: 'closed' }))}>{t('job.close')}</button>}
                     </div>
                   </div>
+                  {/* The brief's own files — what a bidder reads before quoting. */}
+                  <div style={{ marginTop: 10 }}>
+                    <AttachmentsPanel
+                      attachments={attachmentsOf(j)}
+                      readOnly={j.status !== 'open'}
+                      onOpen={(attachmentId) => openJobAttachment(j.id, attachmentId)}
+                      onUpload={async (file) => { const res = await uploadJobAttachment(j.id, file); setJobAttachments((prev) => ({ ...prev, [j.id]: res.attachments })); }}
+                      onRemove={async (attachmentId) => { const res = await deleteJobAttachment(j.id, attachmentId); setJobAttachments((prev) => ({ ...prev, [j.id]: res.attachments })); }}
+                    />
+                  </div>
                   {openJobSchedule === j.id && (
                     <div style={{ marginTop: 12, borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
                       <JobSchedulePanel jobId={j.id} />
@@ -369,6 +385,16 @@ export function TalentView() {
                                 </div>
                               )}
                               {p.status === 'declined' && p.declineReason && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, fontStyle: 'italic' }}>{p.declineReason}</div>}
+                              {/* The bidder's files, opened through the employer's door. */}
+                              {(p.attachments?.length ?? 0) > 0 && (
+                                <div style={{ marginTop: 8 }}>
+                                  <AttachmentsPanel
+                                    attachments={p.attachments ?? []}
+                                    readOnly
+                                    onOpen={(attachmentId) => openProposalAttachmentAsEmployer(j.id, p.id, attachmentId)}
+                                  />
+                                </div>
+                              )}
                             </div>
                             {actionable ? (
                               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>

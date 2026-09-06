@@ -8,8 +8,8 @@
  *    the moment they had invested enough to care. There is one sample workspace
  *    now, it lives in the visitor's own guest session, and entering it is a
  *    navigation rather than a round trip that could fail on a per-IP counter.
- *  - `trackDemoEvent` / `queueDemoEvent` attach the persona to a journey event
- *    and hand it to `visitorJourney`, which records EVERY logged-out visitor's
+ *  - `trackDemoEvent` attaches the persona to a journey event and hands it to
+ *    `visitorJourney`, which records EVERY logged-out visitor's
  *    navigation. The demo's funnel is one persona-shaped slice of that, not its
  *    own stream — it used to be the only one, which is why the rest of the site
  *    was unmeasured.
@@ -24,7 +24,7 @@
  */
 import { apiRequestStream } from './apiClient';
 import { getVisitorId } from './visitor';
-import { flushVisitorEvents, queueVisitorEvent, trackVisitorEvent } from './visitorJourney';
+import { trackVisitorEvent } from './visitorJourney';
 
 
 export type DemoPersona = 'ai-team' | 'insights' | 'pmo' | 'talent' | 'governance';
@@ -76,8 +76,10 @@ export function demoEntryPath(persona: DemoPersona): string {
 // all three, which is how the demo ended up as the only surface on the platform
 // whose navigation was measured.
 //
-// These wrappers exist only to attach the persona; a caller that has no persona
-// should use `visitorJourney` directly.
+// This wrapper exists only to attach the persona; a caller that has no persona
+// should use `visitorJourney` directly. The only door that fires it unloads the
+// page right after, so it fires immediately — `visitorJourney` owns the batching
+// and the page-hide flush for everything that stays on the page.
 // ---------------------------------------------------------------------------
 
 export interface DemoEventInput {
@@ -92,13 +94,6 @@ export interface DemoEventInput {
 export function trackDemoEvent(event: DemoEventInput): void {
   trackVisitorEvent(event);
 }
-
-/** Queue a demo funnel event; flushed on the next flush or page hide. */
-export function queueDemoEvent(event: DemoEventInput): void {
-  queueVisitorEvent(event);
-}
-
-export const flushDemoEvents = flushVisitorEvents;
 
 // ---------------------------------------------------------------------------
 // Book-a-demo / sales lead capture.

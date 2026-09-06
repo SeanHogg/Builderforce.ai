@@ -96,6 +96,73 @@ describe('ReadCoverage', () => {
   });
 });
 
+describe('ReadCoverage · the exact-repeat guard', () => {
+  it('knows nothing until a read has SUCCEEDED', () => {
+    const cov = new ReadCoverage();
+    expect(cov.isRepeat('read_file', { path: CSS })).toBe(false);
+    cov.record('read_file', { path: CSS });
+    expect(cov.isRepeat('read_file', { path: CSS })).toBe(true);
+  });
+
+  it('fingerprints arguments regardless of key order', () => {
+    const cov = new ReadCoverage();
+    cov.record('read_file', { path: CSS, offset: 140 });
+    expect(cov.isRepeat('read_file', { offset: 140, path: CSS })).toBe(true);
+    expect(cov.isRepeat('read_file', { path: CSS, offset: 141 })).toBe(false);
+  });
+
+  it('covers target-less platform reads too', () => {
+    const cov = new ReadCoverage();
+    expect(cov.record('builtin_tasks_list', { projectId: 11 })).toBeNull();
+    expect(cov.isRepeat('builtin_tasks_list', { projectId: 11 })).toBe(true);
+  });
+
+  it('forgets ONLY the edited file — a ticket write no longer re-arms every read in the run', () => {
+    // The old dedupe set was cleared by every non-read call, which is why a run that
+    // interleaves reads with platform writes never suppressed a single re-read.
+    const cov = new ReadCoverage();
+    cov.record('read_file', { path: CSS });
+    cov.record('read_file', { path: 'other.tsx' });
+    cov.invalidate('builtin_tickets_from_delta', { chatId: 99, summary: 'x' });
+    expect(cov.isRepeat('read_file', { path: CSS })).toBe(true);
+    expect(cov.isRepeat('read_file', { path: 'other.tsx' })).toBe(true);
+    cov.invalidate('edit_file', { path: CSS });
+    expect(cov.isRepeat('read_file', { path: CSS })).toBe(false);
+    expect(cov.isRepeat('read_file', { path: 'other.tsx' })).toBe(true);
+  });
+
+  it('a platform write forgets the platform reads, not the file reads', () => {
+    const cov = new ReadCoverage();
+    cov.record('builtin_tasks_list', { projectId: 11 });
+    cov.record('read_file', { path: CSS });
+    cov.invalidate('builtin_tasks_update', { id: 2394, status: 'in_review' });
+    expect(cov.isRepeat('builtin_tasks_list', { projectId: 11 })).toBe(false);
+    expect(cov.isRepeat('read_file', { path: CSS })).toBe(true);
+  });
+
+  it('a git status / diff / commit changes nothing a read would see, so forgets nothing', () => {
+    const cov = new ReadCoverage();
+    cov.record('read_file', { path: CSS });
+    cov.record('builtin_tasks_list', { projectId: 11 });
+    for (const tool of ['git_status', 'git_diff', 'git_commit', 'git_push', 'open_pull_request']) {
+      cov.invalidate(tool, { repo: 'Builderforce.ai' });
+    }
+    expect(cov.isRepeat('read_file', { path: CSS })).toBe(true);
+    expect(cov.isRepeat('builtin_tasks_list', { projectId: 11 })).toBe(true);
+  });
+
+  it('a shell command or a tree-rewriting git verb forgets everything', () => {
+    for (const tool of ['run_command', 'git_sync_latest', 'git_undo', 'git_redo']) {
+      const cov = new ReadCoverage();
+      cov.record('read_file', { path: CSS });
+      cov.record('builtin_tasks_list', { projectId: 11 });
+      cov.invalidate(tool, {});
+      expect(cov.isRepeat('read_file', { path: CSS })).toBe(false);
+      expect(cov.isRepeat('builtin_tasks_list', { projectId: 11 })).toBe(false);
+    }
+  });
+});
+
 describe('revisitAdvisory', () => {
   const visit = (count: number) => ({ count, priorArgs: ['{"path":"a.css","offset":1}', '{"path":"a.css","offset":2}'] });
 
@@ -110,8 +177,12 @@ describe('revisitAdvisory', () => {
     expect(note).toContain(CSS);
     expect(note).toContain('3 times');
     expect(note).toContain('offset');
-    // It has to offer the way OUT, not just report the problem.
-    expect(note).toMatch(/read the file whole|search for the specific symbol/i);
+    // It has to offer the way OUT, not just report the problem — and the way out is to
+    // page FORWARD from the last offset, never "read it whole" (the transcript budget
+    // delivers a large file in windows, so that advice asked for the impossible).
+    expect(note).toMatch(/page forward from the `offset`/i);
+    expect(note).toMatch(/search for the specific symbol/i);
+    expect(note).not.toMatch(/read the file whole/i);
   });
 
   it('escalates to an instruction once the nudge has demonstrably failed', () => {

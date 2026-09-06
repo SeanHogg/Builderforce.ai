@@ -17,12 +17,13 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
+import { AUTH_API_URL } from '@/lib/auth';
 
 type Lang = 'curl' | 'python' | 'javascript';
 const LANGS: Lang[] = ['curl', 'python', 'javascript'];
 const LANG_LABEL: Record<Lang, string> = { curl: 'cURL', python: 'Python', javascript: 'JavaScript' };
 
-const API_BASE = 'https://api.builderforce.ai';
+const API_BASE = AUTH_API_URL;
 
 function openAiSample(lang: Lang, modelRef: string): string {
   switch (lang) {

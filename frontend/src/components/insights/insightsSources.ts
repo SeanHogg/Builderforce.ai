@@ -27,7 +27,7 @@ import {
   type LlmUsageStats, type DashboardUsage,
 } from '@/lib/builderforceApi';
 import { aiImpactApi, type AiImpactInsights, type AiOverview } from '@/lib/aiImpactApi';
-import { recommendationsApi, type SpaceMetrics, type RecommendationsResult } from '@/lib/recommendationsApi';
+import { recommendationsApi, type SpaceMetrics } from '@/lib/recommendationsApi';
 import { benchmarkingApi, type BenchmarkingResult } from '@/lib/benchmarkingApi';
 import { autonomyApi, type AutonomySummary, type VerdictComplianceReport } from '@/lib/autonomyApi';
 import { useSharedSource, type SharedAsync } from '@/lib/widgets/sharedSource';
@@ -158,14 +158,6 @@ export function useEngineering(days: number): SharedAsync<EngineeringInsights> {
   return useSharedSource<EngineeringInsights>(
     `engineering:${days}:p:${scopeKey(currentProjectId)}`,
     () => insightsApi.engineering(days, currentProjectId),
-  );
-}
-
-/** Ranked prescriptive actions and anomalies. */
-export function useRecommendations(days: number): SharedAsync<RecommendationsResult> {
-  return useSharedSource<RecommendationsResult>(
-    `recommendations:${days}`,
-    () => recommendationsApi.recommendations(days),
   );
 }
 

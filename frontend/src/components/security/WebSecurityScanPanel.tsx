@@ -14,6 +14,7 @@ import {
   type WebScanFinding,
   type WebScanRunResult,
   type WebScanStage,
+  type AdvisoryFeedOption,
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
 
@@ -118,6 +119,7 @@ export function WebSecurityScanPanel() {
   const t = useTranslations('security');
   const [target, setTarget] = useState('');
   const [savedTarget, setSavedTarget] = useState<string | null>(null);
+  const [advisoryFeeds, setAdvisoryFeeds] = useState<AdvisoryFeedOption[]>([]);
   const [scans, setScans] = useState<WebScanRun[]>([]);
   const [result, setResult] = useState<WebScanRunResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -131,6 +133,7 @@ export function WebSecurityScanPanel() {
     Promise.all([securityAgentApi.getWebScanConfig(), securityAgentApi.listWebScans()])
       .then(([cfg, list]) => {
         setSavedTarget(cfg.targetUrl);
+        setAdvisoryFeeds(cfg.advisoryFeeds ?? []);
         setTarget((prev) => prev || cfg.targetUrl || '');
         setScans(list);
       })
@@ -234,6 +237,26 @@ export function WebSecurityScanPanel() {
       </div>
 
       {error && <div style={{ fontSize: 12, color: 'var(--coral-bright)', margin: '10px 0 0' }}>{t('error', { message: error })}</div>}
+
+      {/* Which advisory feed the dependency lookup uses — and whether this
+          environment can reach it. An unconfigured feed is why a scan reports the
+          lookup as "not performed" rather than as an all-clear. */}
+      {advisoryFeeds.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginTop: 10, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
+          <span>{t('webAdvisoryFeeds')}</span>
+          {advisoryFeeds.map((feed) => (
+            <span
+              key={feed.id}
+              style={{
+                padding: '2px 8px', borderRadius: 'var(--radius-full)', border: '1px solid var(--border-subtle)',
+                color: feed.configured ? 'var(--text-primary)' : 'var(--text-muted)',
+              }}
+            >
+              {feed.label} · {feed.configured ? t('webAdvisoryConfigured') : t('webAdvisoryUnconfigured')}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Latest result */}
       {result && (

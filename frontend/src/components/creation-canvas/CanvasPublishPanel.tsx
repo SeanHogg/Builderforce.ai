@@ -26,6 +26,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import {
+  allowsHostedDelivery,
+  allowsPricing,
   listingKindSpec,
   resolveTrialPolicy,
   type ListingTrialPolicy,
@@ -116,6 +118,11 @@ export function CanvasPublishPanel({
   // promises the seller and what the launch endpoint hands out are the same rule.
   const effectiveTrial = kind ? resolveTrialPolicy(kind, priceCents, trial) : trial;
   const spec = kind ? listingKindSpec(kind) : null;
+  // The contract's own gates, not a re-derivation from the price: a kind whose
+  // spec says `free` never shows a price box, whatever was typed before the kind
+  // changed, and a kind that can be hosted says so before the seller publishes.
+  const priceable = kind ? allowsPricing(kind) : false;
+  const hostable = kind ? allowsHostedDelivery(kind) : false;
 
   const submit = useCallback(async () => {
     if (!selected || !kind || !name.trim()) return;
@@ -235,10 +242,12 @@ export function CanvasPublishPanel({
                 type="number"
                 min="0"
                 step="0.01"
-                value={price}
+                value={priceable ? price : '0'}
                 onChange={(event) => setPrice(event.target.value)}
-                disabled={busy}
+                disabled={busy || !priceable}
               />
+              {!priceable && <small className={styles.publishHint}>{t('priceFreeOnly')}</small>}
+              {hostable && <small className={styles.publishHint}>{t('deliveryHostedHint')}</small>}
             </label>
 
             {/* The split, before the price is committed rather than after the sale. */}
@@ -263,13 +272,13 @@ export function CanvasPublishPanel({
               <select
                 value={effectiveTrial}
                 onChange={(event) => setTrial(event.target.value as ListingTrialPolicy)}
-                disabled={busy || priceCents === 0}
+                disabled={busy || !priceable || priceCents === 0}
               >
                 <option value="full">{t('trialFull')}</option>
                 <option value="preview">{t('trialPreview')}</option>
               </select>
               <small className={styles.publishHint}>
-                {priceCents === 0 ? t('trialHintFree') : t(`trialHint.${effectiveTrial}`)}
+                {!priceable || priceCents === 0 ? t('trialHintFree') : t(`trialHint.${effectiveTrial}`)}
               </small>
             </label>
 

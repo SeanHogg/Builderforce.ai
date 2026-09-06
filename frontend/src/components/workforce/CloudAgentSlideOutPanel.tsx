@@ -30,6 +30,7 @@ import {
   labelStyle,
   type CloudAgentFormState,
 } from './CloudAgentFormFields';
+import { useRuntimeSurfaceBlocked } from './RuntimeSurfaceSelect';
 
 /**
  * Manage an existing cloud agent in a right-side drawer (matches the remote
@@ -171,8 +172,12 @@ export function CloudAgentSlideOutPanel({
     return () => { cancelled = true; };
   }, [open, owner, activeTab, agent.id]);
 
+  // Same cached readiness the picker disables on, so the save cannot disagree
+  // with what the option said. Only a hard `false` blocks; unknown never does.
+  const surfaceBlocked = useRuntimeSurfaceBlocked(form.runtimeSurface);
   const saveDetails = useCallback(async () => {
     if (!form.name.trim()) { setError(t('errNameRequired')); return; }
+    if (surfaceBlocked) { setError(t('errSurfaceBlocked', { surface: t(`surfaceLabel.${form.runtimeSurface}` as 'surfaceLabel.durable') })); return; }
     setSaving(true); setError('');
     try {
       await updateAgent(agent.id, cloudAgentFormToInput(form));
@@ -182,7 +187,7 @@ export function CloudAgentSlideOutPanel({
     } finally {
       setSaving(false);
     }
-  }, [agent.id, form, onSaved]);
+  }, [agent.id, form, onSaved, surfaceBlocked, t]);
 
   const savePricing = useCallback(async (publish: boolean) => {
     setSaving(true); setError('');
@@ -220,7 +225,7 @@ export function CloudAgentSlideOutPanel({
   const patchForm = useCallback((patch: Partial<CloudAgentFormState>) => setForm((f) => ({ ...f, ...patch })), []);
   const saveFooter = (
     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 18 }}>
-      <button type="button" onClick={saveDetails} disabled={saving || !form.name.trim()} style={btnPrimary}>
+      <button type="button" onClick={saveDetails} disabled={saving || !form.name.trim() || surfaceBlocked} style={btnPrimary}>
         {saving ? t('saving') : t('save')}
       </button>
     </div>

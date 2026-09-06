@@ -14,6 +14,7 @@ import { fetchSite, publishSite, type SiteInfo } from '@/lib/api';
 import { formatBytes } from '@/lib/formatBytes';
 import { GitHubDeployPanel } from './builder/GitHubDeployPanel';
 import { SiteDomainPanel, SiteFormsPanel, SiteTrafficPanel } from './site/SiteGrowthPanels';
+import { ProjectAppPanel } from './apps/ProjectAppPanel';
 import { SiteReleasePanel } from './site/SiteReleasePanel';
 
 interface SitePublishPanelProps {
@@ -167,6 +168,9 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
       <SiteDomainPanel projectId={projectId} />
       <SiteFormsPanel projectId={projectId} />
       <SiteTrafficPanel projectId={projectId} />
+      {/* What the app IS — its address, its data and its people — for a project
+          that came from a board. Renders nothing for a project that is not an app. */}
+      <ProjectAppPanel projectId={projectId} />
     </div>
   );
 }

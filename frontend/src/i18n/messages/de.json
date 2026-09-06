@@ -2607,7 +2607,10 @@
       "scope": "Bereich",
       "scopeWorkspace": "Gesamter Workspace",
       "scopeProjects": "Projekte",
-      "scopeInitiatives": "Initiativen"
+      "scopeInitiatives": "Initiativen",
+      "runway": "{months} Monate Runway",
+      "burnUnavailable": "Noch keine Burn-Rate-Daten",
+      "burnSub": "monatlicher Burn"
     },
     "comp": {
       "title": "Compliance & Audit",
@@ -3432,7 +3435,8 @@
     "errNameRequired": "Name ist erforderlich",
     "errSaveFailed": "Speichern fehlgeschlagen",
     "errDeleteFailed": "Löschen fehlgeschlagen",
-    "surfaceUnavailableOption": "{surface} – für dieses Projekt nicht verfügbar"
+    "surfaceUnavailableOption": "{surface} – für dieses Projekt nicht verfügbar",
+    "errSurfaceBlocked": "{surface} ist für dieses Projekt nicht verfügbar – wählen Sie eine andere Laufzeitumgebung."
   },
   "personalitySummary": {
     "title": "Persönlichkeit",
@@ -5096,7 +5100,8 @@
         "vuln-scans": "Schwachstellen-Scans",
         "dsr": "Betroffenenanfragen",
         "suppression": "Sperrliste"
-      }
+      },
+      "finBurnRate": "Burn-Rate & Runway"
     },
     "loading": "Laden…",
     "overview": {
@@ -5736,6 +5741,27 @@
       "page": "Zeige {from}–{to}",
       "newer": "Neuere",
       "older": "Ältere"
+    },
+    "webAdvisoryFeeds": "Advisory-Feeds",
+    "webAdvisoryConfigured": "bereit",
+    "webAdvisoryUnconfigured": "hier nicht konfiguriert",
+    "agreementsTab": "Vereinbarungen",
+    "agreements": {
+      "title": "Ihre Vereinbarungen",
+      "description": "Was Sie akzeptiert haben, nach Version, und was noch aussteht.",
+      "loading": "Ihre Vereinbarungen werden geladen…",
+      "error": "Ihre Vereinbarungen konnten nicht geladen werden.",
+      "outstanding": "Ausstehend",
+      "accepted": "v{version} akzeptiert am {date}",
+      "notRequired": "Nicht erforderlich",
+      "kind": {
+        "terms": "Nutzungsbedingungen",
+        "privacy": "Datenschutzerklärung",
+        "dpa": "Auftragsverarbeitungsvertrag",
+        "aup": "Richtlinie zur zulässigen Nutzung",
+        "nda": "Geheimhaltungsvereinbarung",
+        "cookie": "Cookie-Richtlinie"
+      }
     }
   },
   "catalogInsights": {
@@ -16321,7 +16347,9 @@
       "readFailed": "Diese Farben konnten nicht gelesen werden – bitte manuell eingeben.",
       "candidates": "Weitere gefundene Farben – klicken Sie eine an, um sie als Primärfarbe zu setzen:"
     },
-    "needManager": "Erfordert Manager-Rolle"
+    "needManager": "Erfordert Manager-Rolle",
+    "discard": "Anfrage verwerfen",
+    "discardConfirm": "„{title}“ verwerfen? Antworten und Risikoregister werden mit gelöscht."
   },
   "planBadge": {
     "tier": {
@@ -16673,6 +16701,23 @@
     "admin": {
       "title": "Produkt-Feedback",
       "subtitle": "Funktionswünsche, Fehler und Ideen aus den Feedback-Collectorn jedes Arbeitsbereichs."
+    },
+    "voc": {
+      "title": "Kundenfeedback-Eingang",
+      "description": "Was die Feedback-Sammler Ihrer Website erfasst haben – die Worte Ihrer Kunden, hier sortiert.",
+      "filterLabel": "Nach Status filtern",
+      "status": {
+        "new": "Neu",
+        "triaged": "Sortiert",
+        "dismissed": "Verworfen"
+      },
+      "loading": "Feedback wird geladen…",
+      "error": "Feedback konnte nicht geladen werden.",
+      "empty": "Nichts vorhanden.",
+      "sentiment": "Stimmung {value}",
+      "markTriaged": "Als sortiert markieren",
+      "dismiss": "Verwerfen",
+      "reopen": "Wieder öffnen"
     }
   },
   "onboardingPill": {
@@ -20794,7 +20839,8 @@
         "templateKey": "Vorlage",
         "abTestKey": "A/B-Test-Schlüssel",
         "trafficAllocation": "Traffic-Verteilung",
-        "evidence": "Belege"
+        "evidence": "Belege",
+        "daysToCliff": "Tage bis zum Cliff"
       },
       "column": {
         "actual": "Ist",
@@ -21934,7 +21980,9 @@
       "trialHint": {
         "full": "Alle können es vollständig nutzen; die Zahlung unterstützt dich und sichert eine Kopie.",
         "preview": "Besucher sehen eine Vorschau; die funktionierende Version erfordert einen Kauf."
-      }
+      },
+      "priceFreeOnly": "Diese Art ist immer kostenlos.",
+      "deliveryHostedHint": "Kann gehostet geliefert werden – Käufer erhalten eine laufende Kopie, keine Dateien."
     },
     "email": {
       "mailbox": "Postfach",
@@ -23417,7 +23465,8 @@
     "noticeStandupActionItemsAlreadyOnBoard": "{count, plural, one {Die Aufgabe ist bereits auf dem Board} other {Alle # Aufgaben sind bereits auf dem Board}}",
     "noticeStandupActionItemsPlaced": "{count, plural, one {# Aufgabe auf dem Board platziert} other {# Aufgaben auf dem Board platziert}}",
     "noticeStandupMinutesNeedsAccount": "Melde dich an, um das Protokoll eines Stand-ups zu lesen",
-    "noticeStandupMinutesFailed": "Das Stand-up-Protokoll konnte nicht gelesen werden"
+    "noticeStandupMinutesFailed": "Das Stand-up-Protokoll konnte nicht gelesen werden",
+    "exportUnmaskedColumns": "Export abgelehnt: {columns} enthalten unmaskierte personenbezogene Daten. Maskieren Sie sie zuerst auf der Karte."
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",
@@ -23739,7 +23788,9 @@
       "add": "Formular hinzufügen",
       "raisesTickets": "Für jede Einsendung ein Ticket eröffnen",
       "raisesTicketsHint": "Wenn aktiviert, eröffnet jede neue Einsendung ein Ticket im Board dieses Projekts, damit das Team reagieren kann — die einsendende Person wird benachrichtigt, sobald es gelöst ist.",
-      "genericError": "Etwas ist schiefgelaufen. Bitte erneut versuchen."
+      "genericError": "Etwas ist schiefgelaufen. Bitte erneut versuchen.",
+      "readPolicy": "Angemeldete Besucher können ihre eigenen Einsendungen lesen",
+      "readPolicyHint": "Standardmäßig aus. Für Apps mit Konten („meine Bestellungen“) einschalten – zurückgegeben werden nur Zeilen, die diese Person selbst eingereicht hat."
     },
     "traffic": {
       "title": "Zugriffe",
@@ -27287,7 +27338,8 @@
       "category": "Kategorie",
       "categoryPlaceholder": "E-Mail, Deployment, Feiertag…"
     },
-    "undatedLabel": "Noch kein Datum"
+    "undatedLabel": "Noch kein Datum",
+    "nextUp": "Nächster Termin: {subject} · {when}"
   },
   "points": {
     "view": {

@@ -71,6 +71,14 @@ import {
 import { scopedToNullableTenant, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
 import { registerObject } from '../kernel/ObjectRegistry';
+import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+
+/**
+ * Version token over every PUBLIC website-page read of one owner. The three page
+ * writers below bump it, so the public route can cache by path — an unbounded
+ * keyspace — without ever having to name the entry it invalidates.
+ */
+export const websitePagesVersionKey = (tenantId: number | null): string => `web:pages:${tenantId ?? 'platform'}`;
 
 /** `landing_pages.status`. `ended` is terminal-by-intent and `archived` is
  *  terminal-by-housekeeping; both are off the live surface, and keeping them
@@ -586,6 +594,7 @@ export async function createWebsitePage(
     })
     .returning();
   if (!row) throw new WebSurfaceError('could not create website page');
+  await bumpCacheVersion(env, websitePagesVersionKey(tenantId));
 
   if (tenantId !== null) {
     await recordActivity(env, db, {
@@ -624,6 +633,7 @@ export async function updateWebsitePage(
     .where(scopedToNullableTenant(websitePages, tenantId, eq(websitePages.id, id)))
     .returning();
   if (!row) throw new WebSurfaceError('website page not found', 404);
+  await bumpCacheVersion(env, websitePagesVersionKey(tenantId));
 
   if (tenantId !== null) {
     await recordActivity(env, db, {
@@ -665,6 +675,7 @@ export async function deleteWebsitePage(
       .where(scopedToNullableTenant(websitePages, tenantId, eq(websitePages.id, id)));
   });
 
+  await bumpCacheVersion(env, websitePagesVersionKey(tenantId));
   if (tenantId !== null) {
     await recordActivity(env, db, {
       tenantId,
@@ -824,6 +835,21 @@ export async function publicWebsitePage(db: Db, tenantId: number | null, path: s
     .where(scopedToNullableTenant(websitePages, tenantId, eq(websitePages.path, requirePath(path))))
     .limit(1);
   return row ?? null;
+}
+
+/**
+ * The public read, served through the shared cache under the owner's version
+ * token: a published page is read far more often than it is edited, and the
+ * writers above are the only things that change the answer.
+ */
+export async function publicWebsitePageCached(db: Db, env: Env, tenantId: number | null, path: string) {
+  const version = await getCacheVersion(env, websitePagesVersionKey(tenantId));
+  return getOrSetCached(
+    env,
+    `web:page:v:${version}:${tenantId ?? 'platform'}:${requirePath(path)}`,
+    () => publicWebsitePage(db, tenantId, path),
+    { kvTtlSeconds: 3600, l1TtlMs: 60_000 },
+  );
 }
 
 /** A landing page view. Counter-only and deliberately not an `activity_log` row:

@@ -1,6 +1,7 @@
 'use client';
 
 import { Select } from '@/components/Select';
+import { formatDurationPrecise as fmtDuration } from '@/lib/duration';
 import type { Formatter } from '@/i18n/format';
 
 import Link from 'next/link';
@@ -128,12 +129,6 @@ function fmtTime(fmt: Formatter, ms: number): string {
     minute: '2-digit',
     second: '2-digit',
   });
-}
-
-function fmtDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${(ms / 60000).toFixed(1)}m`;
 }
 
 /** A terminal-failure trace event (the `run.failed` events emitted on

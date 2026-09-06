@@ -31,7 +31,7 @@ interface Props {
 }
 
 const chip: React.CSSProperties = {
-  fontFamily: 'var(--font-mono)', fontSize: 11, padding: '2px 8px',
+  fontFamily: 'var(--font-mono)', fontSize: 'var(--font-size-eyebrow)', padding: '2px 8px',
   background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)',
   color: 'var(--text-primary)',
 };
@@ -46,10 +46,10 @@ export function EmbedSurfaceCatalog({ enabledCapabilities = [] }: Props) {
 
   return (
     <section aria-label={t('catalogTitle')}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+      <div style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
         {t('catalogTitle')}
       </div>
-      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
+      <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', marginBottom: 12 }}>
         {t('catalogIntro')}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 12 }}>
@@ -65,12 +65,12 @@ export function EmbedSurfaceCatalog({ enabledCapabilities = [] }: Props) {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
-                <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>{t(`capability.${capability}`)}</strong>
+                <strong style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-primary)' }}>{t(`capability.${capability}`)}</strong>
                 {live && (
-                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)' }}>{t('live')}</span>
+                  <span style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 600, color: 'var(--accent)' }}>{t('live')}</span>
                 )}
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 10 }}>
+              <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', marginBottom: 10 }}>
                 {t('viewCount', { count: views.length })}
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>

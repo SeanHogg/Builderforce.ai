@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { pageMetadata } from '@/lib/seo';
 import JsonLd from '@/components/JsonLd';
 import { BRAND } from '@/lib/content';
+import { publicApiGet } from '@/lib/publicApi';
 import TalentDetailClient from './TalentDetailClient';
 
 export const runtime = 'edge';
@@ -12,14 +13,8 @@ interface PublicFreelancer {
 }
 
 async function fetchFreelancer(id: string): Promise<PublicFreelancer | null> {
-  const apiBase = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
-  try {
-    const res = await fetch(`${apiBase}/api/freelancers/${encodeURIComponent(id)}`, { next: { revalidate: 3600 } });
-    if (!res.ok) return null; // private/404 → generic metadata below
-    return (await res.json()) as PublicFreelancer;
-  } catch {
-    return null;
-  }
+  // private/404 → null → the generic metadata below
+  return publicApiGet<PublicFreelancer>(`/api/freelancers/${encodeURIComponent(id)}`);
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {

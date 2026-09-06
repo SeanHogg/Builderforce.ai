@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
+import { AUTH_API_URL } from '@/lib/auth';
 
 /**
  * Shared "save this key now" banner used by both the owner self-service mint
@@ -15,7 +16,7 @@ import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
  * variation in what's shown after a successful mint.
  */
 
-const BUILDERFORCE_BASE_URL = 'https://api.builderforce.ai';
+const BUILDERFORCE_BASE_URL = AUTH_API_URL;
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',

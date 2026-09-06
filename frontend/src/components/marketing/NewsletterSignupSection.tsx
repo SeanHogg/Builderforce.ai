@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { HomeSection, HomeSectionHeader, homePatternStyles as styles } from '@/components/home/HomePatterns';
 import { Button } from '@/components/ui';
+import { apiRequest } from '@/lib/apiClient';
 
 type NewsletterStatus = 'idle' | 'sending' | 'ok' | 'error';
 
@@ -22,12 +23,13 @@ export function NewsletterSignupSection({ source = 'builderforce-landing' }: New
 
     setStatus('sending');
     try {
-      const response = await fetch('/api/auth/newsletter/subscribers', {
+      // Through the transport, to the API origin: the relative path this used to
+      // post to was the marketing site's own origin, which has no such route.
+      await apiRequest('/api/auth/newsletter/subscribers', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        auth: 'none',
         body: JSON.stringify({ email: email.trim(), action: 'subscribe', source }),
       });
-      if (!response.ok) throw new Error('subscribe failed');
       setStatus('ok');
     } catch {
       setStatus('error');

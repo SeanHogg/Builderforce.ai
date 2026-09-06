@@ -5,5 +5,6 @@ export * from './EmptyState';
 export * from './Field';
 export * from './Icon';
 export * from './PageHeader';
+export * from './SectionState';
 export * from './Surface';
 export * from './SplitButton';

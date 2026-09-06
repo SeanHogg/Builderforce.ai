@@ -53,10 +53,17 @@ describe('the local workspace toolset', () => {
     expect(localToolsIn(['builtin_tasks_create', 'builtin_specs_create'])).toEqual([]);
   });
 
-  it('names run_command as the one tool whose blast radius is unknown', () => {
+  it('names the tools whose blast radius is unknown: the shell and the tree-rewriting git verbs', () => {
     // A codemod, a formatter, a checkout — the honest answer to "what did that touch?"
-    // is "anything", so per-target invalidation cannot apply to it.
+    // is "anything", so per-target invalidation cannot apply to it. A base-branch merge,
+    // an undo or a redo rewrites the working tree the same way and names no file.
     expect(isUnscopedMutationTool('run_command')).toBe(true);
+    expect(isUnscopedMutationTool('git_sync_latest')).toBe(true);
+    expect(isUnscopedMutationTool('git_undo')).toBe(true);
+    expect(isUnscopedMutationTool('git_redo')).toBe(true);
+    // Publishing moves work OUT of the tree without changing a byte a read would see.
+    expect(isUnscopedMutationTool('git_commit')).toBe(false);
+    expect(isUnscopedMutationTool('git_push')).toBe(false);
     expect(isUnscopedMutationTool('edit_file')).toBe(false);
     expect(LOCAL_WORKSPACE_TOOLS.has('run_command')).toBe(true);
   });

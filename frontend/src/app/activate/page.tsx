@@ -3,7 +3,8 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { AUTH_API_URL, getStoredWebToken, signInHref } from '@/lib/auth';
+import { getStoredWebToken, signInHref } from '@/lib/auth';
+import { ApiRequestError, apiRequest } from '@/lib/apiClient';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 
 type Mode = 'device' | 'key';
@@ -53,45 +54,37 @@ function ActivateInner() {
   }
 
   async function decide(decision: 'approve' | 'deny') {
-    const token = getStoredWebToken();
-    if (!token) return setPhase('redirecting');
+    if (!getStoredWebToken()) return setPhase('redirecting');
     setPhase('working');
     try {
-      const res = await fetch(`${AUTH_API_URL}/api/auth/device/approve`, {
+      await apiRequest('/api/auth/device/approve', {
         method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        auth: 'web',
         body: JSON.stringify({ user_code: code, decision }),
+        // Every refusal is worded by humanError below, so none is a system fault.
+        expectedErrors: [400, 403, 404, 409, 410, 429],
       });
-      if (!res.ok) {
-        const b = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(humanError(b.error, res.status, decision));
-        setPhase('error');
-        return;
-      }
       setPhase(decision === 'approve' ? 'approved' : 'denied');
-    } catch {
-      setError(t('errorNetwork'));
+    } catch (cause) {
+      if (cause instanceof ApiRequestError) {
+        setError(humanError(cause.code ?? cause.message, cause.status, decision));
+      } else {
+        setError(t('errorNetwork'));
+      }
       setPhase('error');
     }
   }
 
   async function createKey() {
-    const token = getStoredWebToken();
-    if (!token) return setPhase('redirecting');
+    if (!getStoredWebToken()) return setPhase('redirecting');
     setPhase('working');
     try {
-      const res = await fetch(`${AUTH_API_URL}/api/auth/editor-key`, {
+      const b = await apiRequest<{ access_key?: string }>('/api/auth/editor-key', {
         method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        auth: 'web',
         body: JSON.stringify({}),
+        expectedErrors: [400, 403, 404, 409, 410, 429],
       });
-      if (!res.ok) {
-        const b = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(humanError(b.error, res.status));
-        setPhase('error');
-        return;
-      }
-      const b = (await res.json()) as { access_key?: string };
       if (!b.access_key) {
         setError(t('errorNoKey'));
         setPhase('error');
@@ -99,8 +92,12 @@ function ActivateInner() {
       }
       setKey(b.access_key);
       setPhase('key-ready');
-    } catch {
-      setError(t('errorNetwork'));
+    } catch (cause) {
+      if (cause instanceof ApiRequestError) {
+        setError(humanError(cause.code ?? cause.message, cause.status));
+      } else {
+        setError(t('errorNetwork'));
+      }
       setPhase('error');
     }
   }

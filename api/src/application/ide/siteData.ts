@@ -273,6 +273,9 @@ export interface CollectionView {
   dailyWriteCap: number;
   /** Does a submission here open a board ticket (0920, R10)? */
   raisesTickets: boolean;
+  /** May a signed-in end user read back the rows THEY submitted? Owner-side; the
+   *  tenant decides, never the app. `none` unless the owner opts in. */
+  readPolicy: 'none' | 'owner';
   createdAt: Date;
 }
 
@@ -290,6 +293,7 @@ export async function listCollections(
       recordCount: siteCollections.recordCount,
       dailyWriteCap: siteCollections.dailyWriteCap,
       raisesTickets: siteCollections.raisesTickets,
+      readPolicy: sql<'none' | 'owner'>`${siteCollections.readPolicy}`,
       createdAt: siteCollections.createdAt,
     })
     .from(siteCollections)
@@ -338,6 +342,7 @@ export async function createCollection(
       recordCount: siteCollections.recordCount,
       dailyWriteCap: siteCollections.dailyWriteCap,
       raisesTickets: siteCollections.raisesTickets,
+      readPolicy: sql<'none' | 'owner'>`${siteCollections.readPolicy}`,
       createdAt: siteCollections.createdAt,
     });
   return { ok: true, collection: row! };
@@ -498,7 +503,7 @@ export async function updateCollection(
   db: Db,
   tenantId: number,
   collectionId: number,
-  patch: { acceptsPublicWrites?: boolean; audienceId?: number | null; dailyWriteCap?: number; raisesTickets?: boolean },
+  patch: { acceptsPublicWrites?: boolean; audienceId?: number | null; dailyWriteCap?: number; raisesTickets?: boolean; readPolicy?: 'none' | 'owner' },
 ): Promise<UpdateCollectionResult> {
   const set: Record<string, unknown> = { updatedAt: sql`NOW()` };
   if (typeof patch.acceptsPublicWrites === 'boolean') set.acceptsPublicWrites = patch.acceptsPublicWrites;
@@ -507,6 +512,9 @@ export async function updateCollection(
     set.dailyWriteCap = Math.max(0, Math.trunc(patch.dailyWriteCap));
   }
   if (typeof patch.raisesTickets === 'boolean') set.raisesTickets = patch.raisesTickets;
+  // The ONE writer of `read_policy`. Owner-side by construction: this runs behind
+  // the manager role on the tenant's own route, never from the app's data routes.
+  if (patch.readPolicy === 'none' || patch.readPolicy === 'owner') set.readPolicy = patch.readPolicy;
 
   const [row] = await db
     .update(siteCollections)
@@ -520,6 +528,7 @@ export async function updateCollection(
       recordCount: siteCollections.recordCount,
       dailyWriteCap: siteCollections.dailyWriteCap,
       raisesTickets: siteCollections.raisesTickets,
+      readPolicy: sql<'none' | 'owner'>`${siteCollections.readPolicy}`,
       createdAt: siteCollections.createdAt,
     });
   if (!row) return { ok: false, status: 404, error: 'Collection not found.' };
@@ -670,19 +679,4 @@ export async function exportOwnedSiteRecords(args: {
     byCollection.set(row.collection, list);
   }
   return [...byCollection.entries()].map(([collection, records]) => ({ collection, records }));
-}
-
-/** Set a collection's read policy. Owner-side; the tenant decides, never the app. */
-export async function setCollectionReadPolicy(
-  db: Db,
-  tenantId: number,
-  collectionId: number,
-  policy: 'none' | 'owner',
-): Promise<boolean> {
-  const updated = await db
-    .update(siteCollections)
-    .set({ readPolicy: policy, updatedAt: sql`NOW()` })
-    .where(and(eq(siteCollections.id, collectionId), eq(siteCollections.tenantId, tenantId)))
-    .returning({ id: siteCollections.id });
-  return updated.length > 0;
 }

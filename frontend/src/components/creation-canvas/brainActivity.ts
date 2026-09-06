@@ -1,4 +1,5 @@
 import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
+import { formatDurationCompact } from '@/lib/duration';
 
 /**
  * Brain activity narration — what to SAY while Brain works, and what it cost.
@@ -103,14 +104,9 @@ export function formatTokenCount(tokens: number): string {
   return `${millions < 10 ? millions.toFixed(1) : Math.round(millions)}M`;
 }
 
-/** `52_400` → `52s`; `74_000` → `1m 14s`. Matches the transcript's duration wording. */
-export function formatElapsed(durationMs: number): string {
-  const seconds = Math.max(0, Math.round(durationMs / 1_000));
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
-}
+/** `52_400` → `52s`; `74_000` → `1m 14s`. The transcript's duration wording — the
+ *  shared compact reading, re-exported under the name this module's callers use. */
+export const formatElapsed = formatDurationCompact;
 
 export interface BrainRunSummary {
   durationMs: number;

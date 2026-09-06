@@ -26,6 +26,7 @@ import {
   bindOrganisation,
   currentAcceptances,
   isDocumentKind,
+  outstandingFor,
   recordAcceptance,
   supersedeEarlierVersions,
   tenantComplianceSummary,
@@ -237,6 +238,15 @@ export function createConsentRoutes(db: Db): Hono<HonoEnv> {
 
   router.get('/consent/me/history', (c) => consent(async () =>
     Response.json({ history: await acceptanceHistory(db, String(c.get('userId') ?? '')) })));
+
+  /** What this person still owes, for the kinds the caller names (`?required=terms,privacy`;
+   *  every kind when absent). The required list is the CALLER's, because which documents
+   *  gate signup, an enterprise DPA and an embed are three different product decisions. */
+  router.get('/consent/me/outstanding', (c) => consent(async () => {
+    const raw = (c.req.query('required') ?? '').split(',').map((k) => k.trim()).filter(Boolean);
+    const required = raw.length ? raw.filter(isDocumentKind) : [...DOCUMENT_KINDS];
+    return Response.json(await outstandingFor(db, String(c.get('userId') ?? ''), required));
+  }));
 
   router.post('/consent/accept', (c) => consent(async () => {
     const body = await c.req.json<Record<string, unknown>>();

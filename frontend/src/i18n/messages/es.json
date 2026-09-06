@@ -2607,7 +2607,10 @@
       "scope": "Alcance",
       "scopeWorkspace": "Todo el espacio",
       "scopeProjects": "Proyectos",
-      "scopeInitiatives": "Iniciativas"
+      "scopeInitiatives": "Iniciativas",
+      "runway": "{months} meses de runway",
+      "burnUnavailable": "Aún no hay datos de burn rate",
+      "burnSub": "gasto mensual"
     },
     "comp": {
       "title": "Cumplimiento y auditoría",
@@ -3432,7 +3435,8 @@
     "errNameRequired": "El nombre es obligatorio",
     "errSaveFailed": "Error al guardar",
     "errDeleteFailed": "Error al eliminar",
-    "surfaceUnavailableOption": "{surface}: no disponible para este proyecto"
+    "surfaceUnavailableOption": "{surface}: no disponible para este proyecto",
+    "errSurfaceBlocked": "{surface} no está disponible para este proyecto: elige otra superficie de ejecución."
   },
   "personalitySummary": {
     "title": "Personalidad",
@@ -5096,7 +5100,8 @@
         "vuln-scans": "Análisis de vulnerabilidades",
         "dsr": "Solicitudes de interesados",
         "suppression": "Lista de supresión"
-      }
+      },
+      "finBurnRate": "Burn rate y runway"
     },
     "loading": "Cargando…",
     "overview": {
@@ -5736,6 +5741,27 @@
       "page": "Mostrando {from}–{to}",
       "newer": "Más recientes",
       "older": "Más antiguos"
+    },
+    "webAdvisoryFeeds": "Fuentes de avisos",
+    "webAdvisoryConfigured": "lista",
+    "webAdvisoryUnconfigured": "no configurada aquí",
+    "agreementsTab": "Acuerdos",
+    "agreements": {
+      "title": "Tus acuerdos",
+      "description": "Lo que has aceptado, por versión, y lo que sigue pendiente.",
+      "loading": "Cargando tus acuerdos…",
+      "error": "No se pudieron cargar tus acuerdos.",
+      "outstanding": "Pendiente",
+      "accepted": "Aceptado v{version} el {date}",
+      "notRequired": "No requerido",
+      "kind": {
+        "terms": "Términos del servicio",
+        "privacy": "Política de privacidad",
+        "dpa": "Acuerdo de tratamiento de datos",
+        "aup": "Política de uso aceptable",
+        "nda": "Acuerdo de confidencialidad",
+        "cookie": "Política de cookies"
+      }
     }
   },
   "catalogInsights": {
@@ -16321,7 +16347,9 @@
       "readFailed": "No se pudieron leer esos colores: introdúcelos a mano.",
       "candidates": "Otros colores encontrados: haz clic en uno para usarlo como principal:"
     },
-    "needManager": "Requiere rol de gestor"
+    "needManager": "Requiere rol de gestor",
+    "discard": "Descartar solicitud",
+    "discardConfirm": "¿Descartar «{title}»? Sus respuestas y su registro de riesgos se eliminarán con ella."
   },
   "planBadge": {
     "tier": {
@@ -16673,6 +16701,23 @@
     "admin": {
       "title": "Comentarios de producto",
       "subtitle": "Solicitudes de funciones, errores e ideas reunidas de los colectores de comentarios de cada espacio de trabajo."
+    },
+    "voc": {
+      "title": "Bandeja de opiniones de clientes",
+      "description": "Lo que recogieron los recolectores de tu sitio: las palabras de tus clientes, clasificadas aquí.",
+      "filterLabel": "Filtrar por estado",
+      "status": {
+        "new": "Nuevas",
+        "triaged": "Clasificadas",
+        "dismissed": "Descartadas"
+      },
+      "loading": "Cargando opiniones…",
+      "error": "No se pudieron cargar las opiniones.",
+      "empty": "Nada por aquí.",
+      "sentiment": "sentimiento {value}",
+      "markTriaged": "Marcar clasificada",
+      "dismiss": "Descartar",
+      "reopen": "Reabrir"
     }
   },
   "onboardingPill": {
@@ -20794,7 +20839,8 @@
         "templateKey": "Plantilla",
         "abTestKey": "Clave del test A/B",
         "trafficAllocation": "Reparto de tráfico",
-        "evidence": "Evidencia"
+        "evidence": "Evidencia",
+        "daysToCliff": "Días hasta el cliff"
       },
       "column": {
         "actual": "Real",
@@ -21934,7 +21980,9 @@
       "trialHint": {
         "full": "Cualquiera puede usarlo por completo; pagar es la forma de apoyarte y conservar una copia.",
         "preview": "Los visitantes ven una vista previa; la versión funcional requiere compra."
-      }
+      },
+      "priceFreeOnly": "Este tipo siempre es gratuito.",
+      "deliveryHostedHint": "Puede entregarse alojado: los compradores reciben una copia en ejecución, no archivos."
     },
     "email": {
       "mailbox": "Buzón",
@@ -23417,7 +23465,8 @@
     "noticeStandupActionItemsAlreadyOnBoard": "{count, plural, one {La acción ya está en el lienzo} other {Las # acciones ya están en el lienzo}}",
     "noticeStandupActionItemsPlaced": "{count, plural, one {# acción añadida al lienzo} other {# acciones añadidas al lienzo}}",
     "noticeStandupMinutesNeedsAccount": "Inicia sesión para leer el acta de una daily",
-    "noticeStandupMinutesFailed": "No se pudo leer el acta de la daily"
+    "noticeStandupMinutesFailed": "No se pudo leer el acta de la daily",
+    "exportUnmaskedColumns": "Exportación rechazada: {columns} contienen datos personales sin enmascarar. Enmascáralas primero en la tarjeta."
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",
@@ -23739,7 +23788,9 @@
       "add": "Añadir formulario",
       "raisesTickets": "Abrir un ticket por cada envío",
       "raisesTicketsHint": "Cuando está activado, cada nuevo envío abre un ticket en el tablero de este proyecto para que el equipo actúe — y se notifica a quien lo envió cuando se resuelve.",
-      "genericError": "Algo salió mal. Inténtalo de nuevo."
+      "genericError": "Algo salió mal. Inténtalo de nuevo.",
+      "readPolicy": "Los visitantes con sesión pueden leer sus propios envíos",
+      "readPolicyHint": "Desactivado por defecto. Actívalo para una app con cuentas («mis pedidos»): solo se devuelven las filas que envió esa persona."
     },
     "traffic": {
       "title": "Tráfico",
@@ -27287,7 +27338,8 @@
       "category": "Categoría",
       "categoryPlaceholder": "correo, despliegue, festivo…"
     },
-    "undatedLabel": "Sin fecha todavía"
+    "undatedLabel": "Sin fecha todavía",
+    "nextUp": "Siguiente: {subject} · {when}"
   },
   "points": {
     "view": {

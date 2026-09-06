@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next';
 import { BLOG_POSTS } from '@/lib/blogData';
 import { COMPETITOR_SEO, SEO_INTEGRATIONS } from '@/lib/content';
+import { publicApiGet } from '@/lib/publicApi';
 import {
   builtinPersonaSlugs,
   builtinSkillSlugs,
@@ -18,15 +19,8 @@ const BASE = 'https://builderforce.ai';
 /** Public (published + public-visibility) freelancer userIds for the sitemap.
  *  Best-effort: empty on any error so sitemap generation never fails. */
 async function listPublicFreelancerIds(): Promise<string[]> {
-  const apiBase = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
-  try {
-    const res = await fetch(`${apiBase}/api/freelancers?pageSize=48`, { next: { revalidate: 3600 } });
-    if (!res.ok) return [];
-    const body = (await res.json()) as { items?: { userId: string }[] };
-    return Array.isArray(body.items) ? body.items.map((f) => f.userId).filter(Boolean) : [];
-  } catch {
-    return [];
-  }
+  const body = await publicApiGet<{ items?: { userId: string }[] }>('/api/freelancers?pageSize=48');
+  return Array.isArray(body?.items) ? body.items.map((f) => f.userId).filter(Boolean) : [];
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

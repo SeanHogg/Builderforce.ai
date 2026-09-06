@@ -3,14 +3,13 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { innovationApi, pmoApi, type FunnelMetrics, type InnovationIdea, type FunnelStage, type Initiative } from '@/lib/builderforceApi';
-import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmCard, PmEmpty, PmError, StatCard, ProgressBar, StatusPill } from '@/components/pm/pmShared';
 import { Select } from '@/components/Select';
 import { KpiGrid } from './LensShell';
 import { pct, days as dDays } from './format';
-import { useProjectScope } from '@/lib/ProjectScopeContext';
+import { useProjects, useProjectScope } from '@/lib/ProjectScopeContext';
 
 const FUNNEL_ORDER: FunnelStage[] = ['idea', 'validated', 'in_build', 'shipped', 'measured'];
 
@@ -52,7 +51,7 @@ export function FunnelLens() {
   const [busy, setBusy] = useState(false);
   const [newIdea, setNewIdea] = useState('');
   const [newLink, setNewLink] = useState('none');
-  const [projects, setProjects] = useState<Project[]>([]);
+  const projects = useProjects();
   const [initiatives, setInitiatives] = useState<Initiative[]>([]);
   const funnelQ = usePmData<FunnelMetrics>(() => innovationApi.funnel(undefined, currentProjectId), [currentProjectId]);
   const ideasQ = usePmData<InnovationIdea[]>(() => innovationApi.ideas.list(currentProjectId), [currentProjectId]);
@@ -64,7 +63,6 @@ export function FunnelLens() {
   // Link targets: a project OR an initiative an idea can be tied to.
   useEffect(() => {
     let alive = true;
-    fetchProjects().then((p) => { if (alive) setProjects(p); }).catch(() => {});
     pmoApi.initiatives.list().then((i) => { if (alive) setInitiatives(i); }).catch(() => {});
     return () => { alive = false; };
   }, []);

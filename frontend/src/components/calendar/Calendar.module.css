@@ -108,12 +108,15 @@
 }
 
 .summary,
+.nextUp,
 .error {
   margin: 0;
   padding: 4px var(--cal-pad);
   color: var(--text-muted);
   font-size: var(--font-size-small);
 }
+
+.nextUp { color: var(--text-secondary); font-weight: 600; }
 
 .error { color: var(--error-text); background: var(--error-bg); }
 

@@ -13,6 +13,7 @@
  */
 
 import { Icon } from '@/components/ui/Icon';
+import { formatSpan } from '@/lib/duration';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type {
@@ -48,16 +49,9 @@ function fmtDelta(n: number): string {
   return `${r > 0 ? '+' : r < 0 ? '−' : ''}${v}`;
 }
 
-/** Compact duration: mm:ss under an hour, then Hh Mm, then Dd Hh. */
+/** Compact duration: mm:ss under an hour, then Hh Mm, then Dd Hh — the shared span reading. */
 export function fmtDuration(sec: number | null): string {
-  if (sec == null) return '—';
-  if (sec < 3600) {
-    const m = Math.floor(sec / 60);
-    const s = Math.round(sec % 60);
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  }
-  if (sec < 86_400) return `${Math.floor(sec / 3600)}h ${Math.round((sec % 3600) / 60)}m`;
-  return `${Math.floor(sec / 86_400)}d ${Math.round((sec % 86_400) / 3600)}h`;
+  return sec == null ? '—' : formatSpan(sec);
 }
 
 /**

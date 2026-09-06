@@ -66,6 +66,8 @@ export interface SiteCollection {
   dailyWriteCap: number;
   /** Does a submission here open a ticket on this project's board? */
   raisesTickets: boolean;
+  /** May a signed-in visitor read back the rows THEY submitted? Off unless the owner opts in. */
+  readPolicy: 'none' | 'owner';
   createdAt: string;
   /** Absolute URL a form should post to — computed server-side. */
   endpoint: string;
@@ -93,7 +95,7 @@ export const siteDataApi = {
   updateCollection: (
     projectId: number | string,
     collectionId: number,
-    patch: { acceptsPublicWrites?: boolean; audienceId?: number | null; dailyWriteCap?: number; raisesTickets?: boolean },
+    patch: { acceptsPublicWrites?: boolean; audienceId?: number | null; dailyWriteCap?: number; raisesTickets?: boolean; readPolicy?: 'none' | 'owner' },
   ): Promise<SiteCollection> =>
     apiRequest(`${siteBase(projectId)}/collections/${collectionId}`, {
       method: 'PATCH',

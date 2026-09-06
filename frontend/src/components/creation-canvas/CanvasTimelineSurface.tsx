@@ -5,6 +5,7 @@
  * header says it: the directive is sometimes the bug.
  */
 import { useMemo } from 'react';
+import { formatClock } from '@/lib/duration';
 import { useTranslations } from 'next-intl';
 import { canvasVideoDuration, canvasVideoTimelineFrom } from '@builderforce/creation-canvas-contract';
 import styles from './CreationCanvas.module.css';
@@ -36,19 +37,13 @@ export interface CanvasTimelineSurfaceProps {
   onEdit?: (patch: Partial<CreationNodeData>) => void;
 }
 
-/** `m:ss`, because a cut is read in minutes and seconds and never in float seconds. */
-function formatDuration(seconds: number): string {
-  const whole = Math.max(0, Math.round(seconds));
-  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
-}
-
 export function CanvasTimelineSurface({ data, onExit, onEdit }: CanvasTimelineSurfaceProps) {
   const t = useTranslations('creationCanvas');
   const timeline = useMemo(() => canvasVideoTimelineFrom(data.videoTimeline), [data.videoTimeline]);
   const duration = canvasVideoDuration(timeline);
 
   const actions = <span className={styles.timelineMeta}>
-    <strong>{formatDuration(duration)}</strong>
+    <strong>{formatClock(duration)}</strong>
     <small>{t('surface.timeline.clipCount', { count: timeline.clips.length })}</small>
   </span>;
 

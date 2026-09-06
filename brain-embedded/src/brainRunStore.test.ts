@@ -483,3 +483,61 @@ describe('a run that ships its change closes its own ticket', () => {
     expect(calls.some((c) => c.name === 'builtin_tasks_update' && (c.args as { status?: string }).status === 'done')).toBe(false);
   });
 });
+
+describe('what the model is handed for a large read (chat #99, the loop that never edited)', () => {
+  const persistence = { sendMessages: async () => [] };
+  const TOOLS = [
+    { type: 'function' as const, function: { name: 'read_file', description: 'read', parameters: {} } },
+    { type: 'function' as const, function: { name: 'builtin_tickets_from_delta', description: 'record', parameters: {} } },
+  ];
+  const bigContent = Array.from({ length: 800 }, (_, i) => `line ${i + 1} ${'x'.repeat(60)}`).join('\n');
+
+  it('pages a big read_file by LINE and keeps the continuation offset in front of the model', async () => {
+    const seen: string[] = [];
+    let turn = 0;
+    await startRun(4701, {
+      resolvedSystemPrompt: 'sys',
+      tools: TOOLS,
+      runTool: async () => ({ ok: true, path: 'api/src/ChatTicketService.ts', content: bigContent, truncated: false, totalLines: 800, offset: 1 }),
+      stream: async (opts) => {
+        for (const m of opts.messages) if (m.role === 'tool') seen.push(String(m.content));
+        turn += 1;
+        if (turn > 1 || opts.tools === undefined) return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
+        return { text: '', toolCalls: [{ id: 'c1', name: 'read_file', args: JSON.stringify({ path: 'api/src/ChatTicketService.ts' }) }], finishReason: 'tool_calls' };
+      },
+      persistence,
+      userTurn: 'fix the deep link',
+      maxIterations: 3,
+    });
+    const handed = JSON.parse(seen[0]) as Record<string, unknown>;
+    // Structured, parseable, and honest about where it stopped: the old cap cut the JSON
+    // mid-line and dropped these fields entirely.
+    expect(handed.truncated).toBe(true);
+    expect(handed.totalLines).toBe(800);
+    expect(String(handed.note)).toMatch(/offset \d+ to continue/);
+    expect(String(handed.content).split('\n').every((l) => /^line \d+ x+$/.test(l))).toBe(true);
+  });
+
+  it('still stubs an exact re-read after an unrelated ticket write (the dedupe used to be wiped)', async () => {
+    const executed: string[] = [];
+    let turn = 0;
+    const read = JSON.stringify({ path: 'a.css' });
+    await startRun(4702, {
+      resolvedSystemPrompt: 'sys',
+      tools: TOOLS,
+      runTool: async (name) => { executed.push(name); return { ok: true, content: 'body' }; },
+      stream: async (opts) => {
+        turn += 1;
+        if (opts.tools === undefined) return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
+        if (turn === 1) return { text: '', toolCalls: [{ id: 'c1', name: 'read_file', args: read }], finishReason: 'tool_calls' };
+        if (turn === 2) return { text: '', toolCalls: [{ id: 'c2', name: 'builtin_tickets_from_delta', args: JSON.stringify({ chatId: 99 }) }], finishReason: 'tool_calls' };
+        if (turn === 3) return { text: '', toolCalls: [{ id: 'c3', name: 'read_file', args: read }], finishReason: 'tool_calls' };
+        return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
+      },
+      persistence,
+      userTurn: 'reduce the height',
+      maxIterations: 6,
+    });
+    expect(executed.filter((n) => n === 'read_file')).toHaveLength(1);
+  });
+});

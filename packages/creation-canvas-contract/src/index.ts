@@ -93,6 +93,8 @@ export * from './marketing';
 // deployment, a holiday and an on-call shift are the same shape and were unreachable.
 export * from './calendar';
 export * from './slug';
+// Least squares and the trailing mean — the arithmetic every forecast shares.
+export * from './series';
 export * from './html';
 // `export *` re-exports a binding; it does not bring it INTO scope here, and the
 // kind list below spreads it — without this import the whole contract module
