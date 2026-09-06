@@ -777,7 +777,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
   router.get('/heatmap', async (c) => {
     const tenantId  = c.get('tenantId') as number;
     const sinceDays = c.req.query('sinceDays') ? Number(c.req.query('sinceDays')) : undefined;
-    const limit     = c.req.query('limit') ? Number(c.req.query('limit')) : undefined;
+    const limit     = c.req.query('limit') ? limitParam(c.req.query('limit'), 50, 500) : undefined;
     // A project-scoped read ranks that project's own site traffic (plus the
     // app-shell events that belong to no project); omitting it pools the tenant.
     const projectIdRaw = c.req.query('projectId');

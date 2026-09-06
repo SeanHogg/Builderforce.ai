@@ -5715,7 +5715,28 @@
     "sev_medium": "Moyen",
     "sev_low": "Faible",
     "sev_info": "Info",
-    "identityTab": "Identité"
+    "identityTab": "Identité",
+    "logTab": "Journal d'audit",
+    "auditLog": {
+      "title": "Journal d'audit de l'espace de travail",
+      "subtitle": "Chaque action enregistrée dans cet espace de travail : qui a fait quoi, sur quelle ressource et quand.",
+      "filterEventType": "Type d'événement (ex. task_created)",
+      "filterResourceType": "Type de ressource (ex. task)",
+      "apply": "Appliquer les filtres",
+      "export": "Exporter en CSV",
+      "loading": "Chargement du journal d'audit…",
+      "empty": "Aucun événement ne correspond à ces filtres.",
+      "loadFailed": "Impossible de charger le journal d'audit.",
+      "colWhen": "Quand",
+      "colEvent": "Événement",
+      "colActor": "Acteur",
+      "colResource": "Ressource",
+      "colDetails": "Détails",
+      "system": "Système",
+      "page": "Affichage de {from} à {to}",
+      "newer": "Plus récents",
+      "older": "Plus anciens"
+    }
   },
   "catalogInsights": {
     "total": {
@@ -13659,6 +13680,8 @@
       "usage": "Utilisation attribuée par BuilderForce, {days} derniers jours : {requests} requêtes · {tokens} jetons",
       "lastUsed": " · Dernière utilisation {when}",
       "failedFallback": "Échec du test de connexion : {status}.",
+      "localEgressRemedy": "Ce compte n’est joignable que depuis une machine à vous. Connectez un runtime Builderforce et chaque appel passera par lui ; l’identifiant lui-même n’a pas à changer.",
+      "localEgressRemedyLink": "Connecter un runtime sur la page Agents",
       "failedGeneric": "Échec du test de connexion",
       "failedTitle": "Échec de la connexion à {label}",
       "upstreamTitle": "{label} — erreur du fournisseur du modèle",
@@ -26614,7 +26637,8 @@
       "approve": "Accepter",
       "reject": "Demander des modifications",
       "release": "Libérer le paiement",
-      "cancel": "Annuler"
+      "cancel": "Annuler",
+      "dispute": "Ouvrir un litige"
     },
     "confirm": {
       "fund": "Placer {amount} sous séquestre pour ce jalon ? Le freelance sera autorisé à commencer dès que ce sera fait.",
@@ -26624,7 +26648,8 @@
     },
     "notePlaceholder": {
       "reject": "Qu’est-ce qui doit changer ?",
-      "submit": "Qu’avez-vous livré ? (facultatif)"
+      "submit": "Qu’avez-vous livré ? (facultatif)",
+      "dispute": "Pourquoi contestez-vous ce jalon ? (obligatoire)"
     },
     "summary": {
       "agreedCents": "Convenu",

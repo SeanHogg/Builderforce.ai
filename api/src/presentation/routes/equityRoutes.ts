@@ -34,6 +34,7 @@ import {
   recordGrant,
   upsertShareClass,
 } from '../../application/finance/equity';
+import { limitParam } from './queryParams';
 
 const handle = async (run: () => Promise<Response>): Promise<Response> => {
   try {
@@ -80,7 +81,7 @@ export function createEquityRoutes(db: Db): Hono<HonoEnv> {
         db,
         tenant(c),
         c.req.query('companyRef') ?? '',
-        Number(c.req.query('limit') ?? 50),
+        limitParam(c.req.query('limit'), 50, 500),
       ),
     })));
 

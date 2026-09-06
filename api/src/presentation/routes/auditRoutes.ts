@@ -5,6 +5,7 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { requirePermission } from '../middleware/requirePermission';
 import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import { TenantRole, asTenantId } from '../../domain/shared/types';
+import { limitParam, offsetParam } from './queryParams';
 
 /**
  * Audit routes – compliance & access review.
@@ -22,19 +23,23 @@ export function createAuditRoutes(auditService: AuditService): Hono<HonoEnv> {
 
   // GET /api/audit/events?limit=100&offset=0
   router.get('/events', async (c) => {
-    const limit  = Number(c.req.query('limit')  ?? '100');
-    const offset = Number(c.req.query('offset') ?? '0');
+    const limit  = limitParam(c.req.query('limit'), 100, 500);
+    const offset = offsetParam(c.req.query('offset'));
+    const eventType = c.req.query('eventType')?.trim() || undefined;
+    const resourceType = c.req.query('resourceType')?.trim() || undefined;
     const events = await auditService.query(
-      { tenantId: asTenantId(c.get('tenantId')), limit, offset },
+      { tenantId: asTenantId(c.get('tenantId')), limit, offset, ...(eventType ? { eventType } : {}), ...(resourceType ? { resourceType } : {}) },
       c.get('role'),
     );
-    return c.json(events.map(e => e.toPlain()));
+    // Enveloped, as the typed client (`auditApi.list`) has always read it — the bare
+    // array this used to return made that client resolve to an empty list every time.
+    return c.json({ events: events.map(e => e.toPlain()) });
   });
 
   // GET /api/audit/users/:userId/activity?limit=50
   router.get('/users/:userId/activity', async (c) => {
     const userId = c.req.param('userId');
-    const limit  = Number(c.req.query('limit') ?? '50');
+    const limit  = limitParam(c.req.query('limit'), 50, 500);
     const events = await auditService.userActivity(
       userId,
       c.get('tenantId'),

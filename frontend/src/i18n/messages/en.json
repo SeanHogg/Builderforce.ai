@@ -5715,7 +5715,28 @@
     "sev_medium": "Medium",
     "sev_low": "Low",
     "sev_info": "Info",
-    "identityTab": "Identity"
+    "identityTab": "Identity",
+    "logTab": "Audit log",
+    "auditLog": {
+      "title": "Workspace audit log",
+      "subtitle": "Every recorded action in this workspace — who did what, to which resource, and when.",
+      "filterEventType": "Event type (e.g. task_created)",
+      "filterResourceType": "Resource type (e.g. task)",
+      "apply": "Apply filters",
+      "export": "Export CSV",
+      "loading": "Loading the audit log…",
+      "empty": "No events match these filters.",
+      "loadFailed": "Could not load the audit log.",
+      "colWhen": "When",
+      "colEvent": "Event",
+      "colActor": "Actor",
+      "colResource": "Resource",
+      "colDetails": "Details",
+      "system": "System",
+      "page": "Showing {from}–{to}",
+      "newer": "Newer",
+      "older": "Older"
+    }
   },
   "catalogInsights": {
     "total": {
@@ -13659,6 +13680,8 @@
       "usage": "BuilderForce-attributed usage, last {days} days: {requests} requests · {tokens} tokens",
       "lastUsed": " · Last used {when}",
       "failedFallback": "Connection test failed: {status}.",
+      "localEgressRemedy": "This account is reachable only from a machine of your own. Connect a Builderforce runtime and every call routes through it; the credential itself needs no change.",
+      "localEgressRemedyLink": "Connect a runtime on the Agents page",
       "failedGeneric": "Connection test failed",
       "failedTitle": "{label} connection failed",
       "upstreamTitle": "{label} — model provider error",
@@ -26614,7 +26637,8 @@
       "approve": "Accept",
       "reject": "Request changes",
       "release": "Release payment",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "dispute": "Raise a dispute"
     },
     "confirm": {
       "fund": "Put {amount} into escrow for this milestone? The freelancer is cleared to start once you do.",
@@ -26624,7 +26648,8 @@
     },
     "notePlaceholder": {
       "reject": "What needs to change?",
-      "submit": "What did you deliver? (optional)"
+      "submit": "What did you deliver? (optional)",
+      "dispute": "Why are you disputing this milestone? (required)"
     },
     "summary": {
       "agreedCents": "Agreed",

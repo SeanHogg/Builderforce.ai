@@ -25,6 +25,7 @@ import {
 } from '../../application/sourcing/sourcingSources';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { limitParam } from './queryParams';
 
 interface NewSourceBody {
   name?: string;
@@ -49,7 +50,7 @@ export function createSourcingRoutes(db: Db): Hono<HonoEnv> {
     const rows = await listSourcedListings(db, c.env as Env, {
       tenantId: c.get('tenantId') as number,
       q: c.req.query('q'),
-      limit: Number(c.req.query('limit') ?? 50),
+      limit: limitParam(c.req.query('limit'), 50, 500),
     });
     return c.json({ rows });
   });

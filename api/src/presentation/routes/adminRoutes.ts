@@ -169,7 +169,7 @@ import { createTickDispatchBudget } from '../../application/runtime/tickDispatch
 import { API_VERSION } from '../../version';
 import { getPricingDraft, publishPricing, savePricingDraft } from '../../application/tenant/pricingConfiguration';
 import { coerceStringArray } from '../../domain/shared/jsonColumn';
-import { daysParam } from './queryParams';
+import { daysParam, limitParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 /**
@@ -3939,7 +3939,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const keyId  = c.req.param('keyId');
     const days   = Number(c.req.query('days')  ?? '30');
     const page   = Number(c.req.query('page')  ?? '1');
-    const limit  = Number(c.req.query('limit') ?? '100');
+    const limit  = limitParam(c.req.query('limit'), 100, 500);
     const result = await queryTenantApiKeyUsage(db, { tenantId, keyId, days, page, limit });
     return c.json(result);
   });
@@ -3978,7 +3978,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const filter = {
       tenantId,
       status: parseFeedbackStatus(c.req.query('status')),
-      limit: c.req.query('limit') ? Number(c.req.query('limit')) : undefined,
+      limit: c.req.query('limit') ? limitParam(c.req.query('limit'), 50, 500) : undefined,
       before: c.req.query('before') ?? null,
     };
     const [submissions, counts] = await Promise.all([

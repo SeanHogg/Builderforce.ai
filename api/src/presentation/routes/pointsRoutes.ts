@@ -21,6 +21,7 @@ import { pointsLeaderboard, pointsSummary } from '../../application/points/point
 import { cancelRedemption, redeemPoints } from '../../application/points/redeemPoints';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { limitParam } from './queryParams';
 
 /** Refusals the caller caused (400) vs. ones the server owes them (409/503). */
 const REFUSAL_STATUS: Record<string, 400 | 402 | 409 | 503> = {
@@ -45,7 +46,7 @@ export function createPointsRoutes(db: Db): Hono<HonoEnv> {
   // ── GET /api/points/leaderboard ─────────────────────────────────────────
   router.get('/leaderboard', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const limit = Number(c.req.query('limit') ?? 20);
+    const limit = limitParam(c.req.query('limit'), 20, 500);
     return c.json({ rows: await pointsLeaderboard(db, c.env as Env, tenantId, limit) });
   });
 

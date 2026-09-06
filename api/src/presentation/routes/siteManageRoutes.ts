@@ -40,6 +40,7 @@ import {
   updateCollection,
 } from '../../application/ide/siteData';
 import { HOSTING_APEX } from '../../application/ide/siteHosting';
+import { limitParam } from './queryParams';
 
 export function createSiteManageRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -163,7 +164,7 @@ export function createSiteManageRoutes(db: Db): Hono<HonoEnv> {
   router.get('/:projectId/site/collections/:collectionId/records', async (c) => {
     const collectionId = Number(c.req.param('collectionId'));
     if (!Number.isInteger(collectionId)) return c.json({ error: 'Invalid collection id.' }, 400);
-    const limit = Number(c.req.query('limit') ?? '50');
+    const limit = limitParam(c.req.query('limit'), 50, 500);
     const before = Number(c.req.query('before') ?? '0');
     const records = await listRecords(
       db,

@@ -5715,7 +5715,28 @@
     "sev_medium": "中",
     "sev_low": "低",
     "sev_info": "信息",
-    "identityTab": "身份"
+    "identityTab": "身份",
+    "logTab": "审计日志",
+    "auditLog": {
+      "title": "工作区审计日志",
+      "subtitle": "此工作区中记录的每一项操作——谁在何时对哪个资源做了什么。",
+      "filterEventType": "事件类型（例如 task_created）",
+      "filterResourceType": "资源类型（例如 task）",
+      "apply": "应用筛选",
+      "export": "导出 CSV",
+      "loading": "正在加载审计日志…",
+      "empty": "没有符合这些筛选条件的事件。",
+      "loadFailed": "无法加载审计日志。",
+      "colWhen": "时间",
+      "colEvent": "事件",
+      "colActor": "操作者",
+      "colResource": "资源",
+      "colDetails": "详情",
+      "system": "系统",
+      "page": "显示第 {from}–{to} 条",
+      "newer": "较新",
+      "older": "较早"
+    }
   },
   "catalogInsights": {
     "total": {
@@ -13659,6 +13680,8 @@
       "usage": "BuilderForce 归因用量，最近 {days} 天：{requests} 次请求 · {tokens} 个令牌",
       "lastUsed": " · 上次使用 {when}",
       "failedFallback": "连接测试失败：{status}。",
+      "localEgressRemedy": "此账户只能从您自己的机器访问。连接一个 Builderforce 运行时后，所有调用都会经由它发出；凭证本身无需更改。",
+      "localEgressRemedyLink": "在“智能体”页面连接运行时",
       "failedGeneric": "连接测试失败",
       "failedTitle": "{label} 连接失败",
       "upstreamTitle": "{label} — 模型提供方出错",
@@ -26614,7 +26637,8 @@
       "approve": "验收",
       "reject": "要求修改",
       "release": "放款",
-      "cancel": "取消"
+      "cancel": "取消",
+      "dispute": "发起争议"
     },
     "confirm": {
       "fund": "为该里程碑托管 {amount}？托管后自由职业者即可开始工作。",
@@ -26624,7 +26648,8 @@
     },
     "notePlaceholder": {
       "reject": "需要修改什么？",
-      "submit": "你交付了什么？（可选）"
+      "submit": "你交付了什么？（可选）",
+      "dispute": "您为什么对此里程碑提出争议？（必填）"
     },
     "summary": {
       "agreedCents": "已约定",

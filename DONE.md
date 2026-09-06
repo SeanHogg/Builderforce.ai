@@ -1,3 +1,35 @@
+## ✅ RESOLVED 2026-09-05 — Kimi drawer said "Current status: ready" one line above a Test that said "needs a runtime of your own"
+
+**What was wrong.** The provider status read (`GET /llm/provider-keys/:provider/status`) derived its verdict from
+"the credential resolves and has no alert", so a connected Kimi Code subscription painted **ready** in green while the
+Test button — which rides the real dispatch path — correctly answered `local_egress_required` because Kimi's edge
+refuses the hosted gateway and no runtime of the tenant's own was online. Two verdicts for one account, and the
+page never explained what a "runtime of your own" is or where to connect one: the server's remedy prose is not
+what the drawer renders (every status is localized from the state catalog), and the prose itself pointed at a
+"Settings ▸ Agent hosts" destination that does not exist.
+
+**Fix.**
+- **One verdict, one module** — `api/src/application/llm/providerKeyHealth.ts`: `deriveProviderKeyHealth()` is the
+  pure precedence (not connected → capacity → needs attention → unresolved reason → **local_egress_required** →
+  ready) and `resolveProviderKeyHealth()` feeds it, consulting the cached online-host lookup ONLY when the vendor
+  declares `requiresLocalEgress` (Kimi Code, self-hosted Ollama, freetoken) and the credential is otherwise healthy —
+  no new round-trip for every other provider. The status route now calls it instead of inlining its own ladder.
+- **The remedy reaches the operator** — `ProviderKeysSettings.tsx`: the two duplicated status headers (provider
+  card + self-hosted Ollama card) collapsed into one `ProviderHealthHeader`, whose tone comes from a single
+  `healthTone()` (amber for an alert OR `local_egress_required` — the credential is not the thing to fix), and a
+  `LocalEgressRemedy` that decides its own visibility and links to `/agents` (Quick start), where a Builderforce
+  runtime is actually installed and paired. The route's prose now names that page too.
+- Localized in all five catalogs (`providerKeys.diagnostic.localEgressRemedy` / `localEgressRemedyLink`).
+- Tests: `providerKeyHealth.test.ts` (precedence, auth-type-aware egress declaration, lookup only when needed) and
+  `ProviderKeysSettings.localEgress.test.tsx` (verdict + link rendered; absent for a directly-reachable account).
+  api + frontend typecheck clean; llmRoutes, provider-settings and catalog-parity suites green.
+- Versions: api 2026.9.10, frontend 2026.9.9.
+
+**Not changed (by design):** the probe itself already reached the right verdict and raises no alert against a key it
+never presented; the gateway still skips `requiresLocalEgress` vendors with no host online rather than spending a
+doomed subrequest. The remaining step for the operator in the screenshot is to connect a runtime on /agents — the
+page now says so.
+
 ## ✅ RESOLVED 2026-09-05 — Codebase review against the 17 domains: what was fixed in the pass
 
 A review of the whole repository (api, frontend, packages, VS Code client, worker,
@@ -126,6 +158,43 @@ was captured by `bfApi` and accepted by the reviewer, and the row never passed i
 other rows keep starting a session. Localized in all five bundles; extension 2026.9.14,
 VSIX packaged.
 
+**One terminal-status rule.** `domain/shared/terminalStatus.ts` — `EXECUTION_TERMINAL_STATUSES`
+/ `EXECUTION_TERMINAL_SET` / `isTerminalExecutionStatus`, with the non-terminal list DERIVED as the
+complement, and `TASK_TERMINAL_SET` (the DONE class plus `cancelled`) — replaced the six literal
+execution sets (`scoreRunOutcome`, `resumeParkedWorkflows`, `stageScheduling`, `agentHostRoutes`,
+`agentRuntimeRoutes`, `RuntimeService.NON_TERMINAL_STATUSES`) and the two task sets
+(`bottleneckInsights`, and `computeProject360`'s tolerant superset now widens the canonical one
+rather than restating it).
+
+**Request-path fan-out collapsed.** `metrics/engagement` runs its four aggregates in one
+`Promise.all` and persists the roster in chunked multi-row upserts (`excluded.*`) instead of one
+statement per member; the workspace rollup reads initiatives and projects together; the plan-limit
+guard reads the (cached) plan beside its counts in both `checkProjectLimit` and
+`seatCapacityForTenant`; `POST /api/analytics/sync-agents` is ONE chunked upsert per fleet, with
+Postgres' `xmax = 0` telling created from updated, instead of a probe + update per host. A second
+pagination sweep closed the 35 UNCLAMPED `Number(c.req.query('limit'|'offset'))` parses in 23
+route files that the first (Math.min/max-keyed) sweep could not see — including the tenant audit
+route, which had no ceiling at all.
+
+**The dispute button works.** The escrow transition table has always listed `dispute` for a
+funded, submitted or approved milestone, for BOTH parties, so every such row rendered a button —
+labelled with the raw key `milestones.action.dispute` and posting `{note}` to a route that requires
+`reason`, a 400 every time. `runMilestoneAction` now files it through the right door for the party
+(`raiseMyDispute` on the web token, `raiseClientDispute` on the tenant token), the row's note prompt
+collects the reason first, and the action is labelled in all five locales.
+
+**Security → Audit log.** The workspace's own event trail (`GET /api/audit/events`) had a typed
+client and no surface; `WorkspaceAuditLogPanel` (filters by event and resource type, paged,
+CSV export, gated on the compliance capability) is now a Security tab. Building it found the route
+returned a bare array where the client read an `events` envelope — the panel would have rendered
+empty forever — and ignored the two filters the client sent; both fixed, and the audit repository
+filters by event type in SQL.
+
+**Kimi Code discovery memoized.** `gateway.ts` read `config.toml` and the credential file
+synchronously three times per proxied request; one 30-second memo (`MODELS_TTL_MS` pattern),
+dropped on a local-model settings change, and never the source of the token, which
+`authorizeLocalEndpoint` still resolves fresh at request time. Extension 2026.9.14, VSIX packaged.
+
 **Re-validated as NOT gaps** (the review's dead-code flags that did not survive a second
 look): `DELTA_DIRECTIVE` is superseded by brain-embedded's chat-scoped directive in
 `chatWorkLinking.ts` plus its from_delta backstop (its docblock now says so);
@@ -141,7 +210,12 @@ the natural-language dashboard query ships as `POST /api/dashboards/query` throu
 `composeAnswer`, which widened `answerQuery` to situations; VS Code's `recallSystemMessage`
 is superseded by the api run-context section both chat surfaces already fetch (its
 `memory` block is the same facts store), and `onGroundingChange` has no subscriber because
-every reader takes the grounding at turn time — both docblocks now say so.
+every reader takes the grounding at turn time — both docblocks now say so;
+`installHasScope` duplicates the token-level scope enforcement `extensionInstallTokens` already
+performs through `installGrants`; `cooldownStore` is KV-backed and its per-isolate Map is the
+documented fallback for a process with no KV bound; the login-path invite loop in `tenantRoutes`
+iterates the signing-in user's OWN pending invites (found by one read, each seat a distinct
+authorized membership write), so it does not scale with roster size.
 
 **Validated as obsolete by a later decision, and left in place pending confirmation:**
 the BurnRateOS tenant/company ETL planner (`burnrateTenantCompanyMapping.ts` — closed

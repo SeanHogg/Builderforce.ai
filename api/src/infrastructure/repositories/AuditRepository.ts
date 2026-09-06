@@ -1,5 +1,5 @@
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { IAuditRepository, AuditQueryOptions } from '../../domain/audit/IAuditRepository';
 import { AuditEvent, AuditEventProps } from '../../domain/audit/AuditEvent';
 import { AuditEventType, asTenantId } from '../../domain/shared/types';
@@ -79,6 +79,10 @@ export class AuditRepository implements IAuditRepository {
     const conditions = [];
     if (opts.tenantId !== undefined) conditions.push(eq(activityLog.tenantId, Number(opts.tenantId)));
     if (opts.userId !== undefined) conditions.push(eq(activityLog.actorRef, opts.userId));
+    // The event type is the verb with dots underscored (see eventTypeForVerb); compare
+    // in that form on the SQL side so a verb with two dots still matches exactly.
+    if (opts.eventType) conditions.push(sql`replace(${activityLog.verb}, '.', '_') = ${opts.eventType}`);
+    if (opts.resourceType) conditions.push(eq(activityLog.targetType, opts.resourceType));
 
     const rows = await this.db
       .select()

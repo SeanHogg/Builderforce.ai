@@ -32,6 +32,7 @@ import { phonePlan } from '../../application/phone/phonePlan';
 import { authenticatePhoneWebhook } from '../../application/phone/phoneWebhookAuth';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { limitParam } from './queryParams';
 
 /** Twilio expects TwiML. An empty response is the documented way to say
  *  "received, do nothing" — anything else makes the carrier read our JSON as
@@ -68,17 +69,17 @@ export function createPhoneRoutes(db: Db): Hono<HonoEnv> {
 
   router.get('/statement', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    return c.json({ rows: await commsStatement(db, tenantId, Number(c.req.query('limit') ?? 50)) });
+    return c.json({ rows: await commsStatement(db, tenantId, limitParam(c.req.query('limit'), 50, 500)) });
   });
 
   router.get('/messages', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    return c.json({ rows: await smsLog(db, tenantId, Number(c.req.query('limit') ?? 50)) });
+    return c.json({ rows: await smsLog(db, tenantId, limitParam(c.req.query('limit'), 50, 500)) });
   });
 
   router.get('/calls', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    return c.json({ rows: await callLog(db, tenantId, Number(c.req.query('limit') ?? 50)) });
+    return c.json({ rows: await callLog(db, tenantId, limitParam(c.req.query('limit'), 50, 500)) });
   });
 
   // ── Numbers ─────────────────────────────────────────────────────────────

@@ -6,6 +6,10 @@ export interface AuditQueryOptions {
   userId?:      string;
   limit?:       number;
   offset?:      number;
+  /** Exact match on the event type (the verb in its underscored form). */
+  eventType?:   string;
+  /** Exact match on the resource type the event targeted. */
+  resourceType?: string;
 }
 
 export interface IAuditRepository {

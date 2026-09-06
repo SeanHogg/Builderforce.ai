@@ -34,6 +34,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { isUniqueViolation } from '../../infrastructure/database/uniqueViolation';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
+import { limitParam } from './queryParams';
 
 /**
  * The public webhook address for one (collector, provider). Built in ONE place so
@@ -335,7 +336,7 @@ export function createFeedbackRoutes(db: Db): Hono<HonoEnv> {
       tenantId,
       projectId,
       status: parseFeedbackStatus(c.req.query('status')),
-      limit: c.req.query('limit') ? Number(c.req.query('limit')) : undefined,
+      limit: c.req.query('limit') ? limitParam(c.req.query('limit'), 50, 500) : undefined,
       before: c.req.query('before') ?? null,
     };
     const [submissions, counts] = await Promise.all([

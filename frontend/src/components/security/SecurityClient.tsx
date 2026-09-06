@@ -20,6 +20,7 @@ import { SessionList } from '@/components/security/SessionList';
 import AccountSecurityPanel from '@/components/security/AccountSecurityPanel';
 import { SecurityTicketAccessCard } from '@/components/security/SecurityTicketAccessCard';
 import { SecurityAuditPanel } from '@/components/security/SecurityAuditPanel';
+import { WorkspaceAuditLogPanel } from '@/components/security/WorkspaceAuditLogPanel';
 import { WebSecurityScanPanel } from '@/components/security/WebSecurityScanPanel';
 import PolicyPacksPanel from '@/components/security/PolicyPacksPanel';
 import IdentityProvidersPanel from '@/components/security/IdentityProvidersPanel';
@@ -109,6 +110,8 @@ export default function SecurityClient() {
     { id: 'agents', label: t('agentsTab'), icon: '🛡', href: '/security?sub=agents' },
     { id: 'webscan', label: t('webTab'), icon: '🌐', href: '/security?sub=webscan' },
     { id: 'soc2', label: t('auditTab'), icon: '📋', href: '/security?sub=soc2' },
+    // The workspace's own event trail — the evidence the SOC 2 tab's audits cite.
+    { id: 'log', label: t('logTab'), icon: '🧾', href: '/security?sub=log' },
     { id: 'policies', label: t('policiesTab'), icon: '⚖️', href: '/security?sub=policies' },
     // Enterprise SSO and the LMS platforms that launch into this workspace. One
     // tab, because a university's IT department configures both from the same two
@@ -256,6 +259,7 @@ export default function SecurityClient() {
             : sub === 'agents' ? renderAgents()
             : sub === 'webscan' ? <WebSecurityScanPanel />
               : sub === 'soc2' ? renderSoc2()
+              : sub === 'log' ? <WorkspaceAuditLogPanel />
                 : sub === 'policies' ? <PolicyPacksPanel />
                   : sub === 'identity' ? <IdentityProvidersPanel />
                     : renderMembers()}

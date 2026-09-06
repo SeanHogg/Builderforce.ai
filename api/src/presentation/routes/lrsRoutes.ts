@@ -49,6 +49,7 @@ import {
   addressFor, deleteDocument, getDocument, listDocumentIds, postDocument, putDocument,
   type DocumentScope,
 } from '../../application/learning/lrsDocuments';
+import { limitParam } from './queryParams';
 
 /** Which query parameters each document resource reads. The whole difference
  *  between State, Activity Profile and Agent Profile is this table. */
@@ -164,7 +165,7 @@ export function createLrsRoutes(db: Db): Hono<HonoEnv> {
       registration: c.req.query('registration') ?? undefined,
       since: dateParam(c.req.query('since')),
       until: dateParam(c.req.query('until')),
-      limit: Number(c.req.query('limit')) || undefined,
+      limit: c.req.query('limit') ? limitParam(c.req.query('limit'), 50, 500) : undefined,
       ascending: c.req.query('ascending') === 'true',
     });
 

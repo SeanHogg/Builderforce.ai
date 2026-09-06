@@ -31,7 +31,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { brainChatRoomName } from '../../infrastructure/relay/broadcastRoom';
 import { relayToRoom } from './realtimeRelay';
-import { limitParam } from './queryParams';
+import { limitParam, offsetParam } from './queryParams';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -82,8 +82,8 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       c.get('userId') as string,
       {
         projectId: c.req.query('projectId'),
-        limit: Number(c.req.query('limit') ?? 50),
-        offset: Number(c.req.query('offset') ?? 0),
+        limit: limitParam(c.req.query('limit'), 50, 500),
+        offset: offsetParam(c.req.query('offset')),
       },
     );
     return c.json({ chats: rows });
@@ -210,7 +210,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
 
-    const limit = Number(c.req.query('limit') ?? 100);
+    const limit = limitParam(c.req.query('limit'), 100, 500);
     const result = await brainService.getMessages(id, c.get('tenantId') as number, c.get('userId') as string, limit);
     if ('error' in result) return c.json({ error: result.error }, 404);
     return c.json({ messages: result });
@@ -694,7 +694,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
   router.get('/memories', async (c) => {
     const rows = await brainService.listMemories(c.get('tenantId') as number, {
       projectId: c.req.query('projectId'),
-      limit: Number(c.req.query('limit') ?? 50),
+      limit: limitParam(c.req.query('limit'), 50, 500),
     });
     return c.json({ memories: rows });
   });

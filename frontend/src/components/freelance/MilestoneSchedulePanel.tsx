@@ -61,7 +61,7 @@ const STATUS_TONE: Record<MilestoneStatus, string> = {
 };
 
 /** The moves that need a reason typed before they are sent. */
-const NEEDS_NOTE: ReadonlySet<MilestoneAction> = new Set<MilestoneAction>(['reject', 'submit']);
+const NEEDS_NOTE: ReadonlySet<MilestoneAction> = new Set<MilestoneAction>(['reject', 'submit', 'dispute']);
 /** The moves that ask first, because they end something or move money out. */
 const NEEDS_CONFIRM: ReadonlySet<MilestoneAction> = new Set<MilestoneAction>(['cancel', 'release', 'fund']);
 
@@ -201,7 +201,7 @@ function MilestoneRows({ milestones, busy, onAction, onRemove, showContext }: Ro
               {(row.actions ?? []).map((action) => (
                 <button key={action} type="button" disabled={busy === `${row.id}:${action}`}
                   onClick={() => void run(row, action)}
-                  style={btn(action === 'cancel' ? 'danger' : action === 'reject' ? 'ghost' : 'primary')}>
+                  style={btn(action === 'cancel' ? 'danger' : action === 'reject' || action === 'dispute' ? 'ghost' : 'primary')}>
                   {busy === `${row.id}:${action}` ? t('working') : t(`action.${action}`)}
                 </button>
               ))}
@@ -470,7 +470,7 @@ export function MyMilestonesPanel() {
             milestones={data.milestones}
             busy={busy}
             showContext
-            onAction={(row, action, note) => void act(`${row.id}:${action}`, () => runMilestoneAction(row.id, action, note))}
+            onAction={(row, action, note) => void act(`${row.id}:${action}`, () => runMilestoneAction(row.id, action, note, 'freelancer'))}
           />
         )}
     </div>

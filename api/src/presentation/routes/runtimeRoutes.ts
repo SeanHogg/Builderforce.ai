@@ -1400,7 +1400,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
 
   // List executions for the caller's tenant
   router.get('/executions', async (c) => {
-    const limit = Number(c.req.query('limit') ?? '50');
+    const limit = limitParam(c.req.query('limit'), 50, 500);
     const sessionId = (c.req.query('sessionId') ?? '').trim();
     const executions = sessionId
       ? await runtimeService.listBySession(c.get('tenantId'), sessionId, limit)
@@ -1805,7 +1805,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // Full execution timeline for one session (newest first)
   router.get('/sessions/:sessionId/executions', async (c) => {
     const sessionId = c.req.param('sessionId').trim();
-    const limit = Number(c.req.query('limit') ?? '200');
+    const limit = limitParam(c.req.query('limit'), 200, 500);
     if (!sessionId) {
       return c.json({ error: 'sessionId is required' }, 400);
     }
@@ -2019,8 +2019,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   router.get('/agents/:ref/tool-audit', async (c) => {
     const ref = c.req.param('ref');
     const tenantId = c.get('tenantId');
-    const limitRaw = Number(c.req.query('limit'));
-    const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 500) : 200;
+    const limit = limitParam(c.req.query('limit'), 200, 500);
     // Optional per-execution scope: when set, return only this run's events
     // (precise per-execution telemetry, robust to later agent re-assignment).
     const execRaw = Number(c.req.query('executionId'));

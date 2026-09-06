@@ -58,6 +58,7 @@ import {
   setBetaEnrollment,
 } from '../../application/product/releaseNoteBetas';
 import { runReleaseDigest } from '../../application/email/releaseDigest';
+import { limitParam } from './queryParams';
 
 /** What a join/leave/dismiss request may ask for, and the enrolment status each
  *  one lands on. Declaring it as data keeps the route free of a three-branch
@@ -97,8 +98,7 @@ export function createReleaseNoteRoutes(db: Db) {
   // GET / — PUBLIC published changelog (cached).
   // -------------------------------------------------------------------------
   router.get('/', async (c) => {
-    const limitRaw = Number(c.req.query('limit') ?? '50');
-    const limit = Number.isFinite(limitRaw) ? limitRaw : 50;
+    const limit = limitParam(c.req.query('limit'), 50, 500);
     const releaseNotes = await listPublishedReleaseNotes(c.env as Env, db, limit);
     // Sent-state is an internal marketing flag — not part of the public shape.
     return c.json({

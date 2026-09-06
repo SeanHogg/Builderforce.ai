@@ -27,6 +27,7 @@ import {
   updateTenantApiKey,
   isTenantApiScope,
 } from '../../application/llm/tenantApiKeyService';
+import { limitParam } from './queryParams';
 
 /**
  * Normalize a caller-supplied origins array — trim, drop empties, enforce
@@ -89,7 +90,7 @@ export function createTenantApiKeyRoutes(db: Db): Hono<HonoEnv> {
     const keyId    = c.req.param('keyId');
     const days     = Number(c.req.query('days')  ?? '30');
     const page     = Number(c.req.query('page')  ?? '1');
-    const limit    = Number(c.req.query('limit') ?? '100');
+    const limit    = limitParam(c.req.query('limit'), 100, 500);
     const result = await queryTenantApiKeyUsage(db, { tenantId, keyId, days, page, limit });
     return c.json(result);
   });

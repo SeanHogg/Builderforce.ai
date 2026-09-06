@@ -89,7 +89,6 @@ import {
   isSupportedProvider,
   byoVendorIdFor,
   byoVendorIdsFromCredentials,
-  providersFromCredentials,
   formatByoUnresolvedHeader,
   providersConnectedInOtherWorkspaces,
   SUPPORTED_PROVIDERS,

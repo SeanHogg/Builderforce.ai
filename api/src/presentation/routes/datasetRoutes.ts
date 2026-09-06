@@ -18,6 +18,7 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import { buildSftDataset, buildDpoDataset, toJsonl } from '../../application/dataset/trainingDataset';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { limitParam } from './queryParams';
 
 export function createDatasetRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -30,7 +31,7 @@ export function createDatasetRoutes(db: Db): Hono<HonoEnv> {
       minScore: c.req.query('minScore') ? Number(c.req.query('minScore')) : undefined,
       requireMerged: c.req.query('requireMerged') === 'true',
       requireCiGreen: c.req.query('requireCiGreen') === 'true',
-      limit: c.req.query('limit') ? Number(c.req.query('limit')) : undefined,
+      limit: c.req.query('limit') ? limitParam(c.req.query('limit'), 50, 500) : undefined,
     });
     if (c.req.query('format') === 'jsonl') {
       return new Response(toJsonl(records), { headers: { 'content-type': 'application/x-ndjson; charset=utf-8' } });

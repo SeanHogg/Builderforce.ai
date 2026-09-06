@@ -5715,7 +5715,28 @@
     "sev_medium": "Mittel",
     "sev_low": "Niedrig",
     "sev_info": "Info",
-    "identityTab": "Identität"
+    "identityTab": "Identität",
+    "logTab": "Audit-Protokoll",
+    "auditLog": {
+      "title": "Audit-Protokoll des Arbeitsbereichs",
+      "subtitle": "Jede aufgezeichnete Aktion in diesem Arbeitsbereich – wer hat was, an welcher Ressource und wann getan.",
+      "filterEventType": "Ereignistyp (z. B. task_created)",
+      "filterResourceType": "Ressourcentyp (z. B. task)",
+      "apply": "Filter anwenden",
+      "export": "CSV exportieren",
+      "loading": "Audit-Protokoll wird geladen…",
+      "empty": "Keine Ereignisse entsprechen diesen Filtern.",
+      "loadFailed": "Das Audit-Protokoll konnte nicht geladen werden.",
+      "colWhen": "Wann",
+      "colEvent": "Ereignis",
+      "colActor": "Akteur",
+      "colResource": "Ressource",
+      "colDetails": "Details",
+      "system": "System",
+      "page": "Zeige {from}–{to}",
+      "newer": "Neuere",
+      "older": "Ältere"
+    }
   },
   "catalogInsights": {
     "total": {
@@ -13659,6 +13680,8 @@
       "usage": "Von BuilderForce zugeordnete Nutzung, letzte {days} Tage: {requests} Anfragen · {tokens} Token",
       "lastUsed": " · Zuletzt verwendet {when}",
       "failedFallback": "Verbindungstest fehlgeschlagen: {status}.",
+      "localEgressRemedy": "Dieses Konto ist nur von einer eigenen Maschine aus erreichbar. Verbinden Sie eine Builderforce-Runtime, dann laufen alle Aufrufe darüber; die Anmeldedaten selbst müssen nicht geändert werden.",
+      "localEgressRemedyLink": "Runtime auf der Seite „Agenten“ verbinden",
       "failedGeneric": "Verbindungstest fehlgeschlagen",
       "failedTitle": "{label}-Verbindung fehlgeschlagen",
       "upstreamTitle": "{label} — Fehler des Modellanbieters",
@@ -26614,7 +26637,8 @@
       "approve": "Abnehmen",
       "reject": "Änderungen anfordern",
       "release": "Zahlung freigeben",
-      "cancel": "Stornieren"
+      "cancel": "Stornieren",
+      "dispute": "Streitfall eröffnen"
     },
     "confirm": {
       "fund": "{amount} für diesen Meilenstein treuhänderisch hinterlegen? Danach darf die freiberufliche Person beginnen.",
@@ -26624,7 +26648,8 @@
     },
     "notePlaceholder": {
       "reject": "Was muss geändert werden?",
-      "submit": "Was wurde geliefert? (optional)"
+      "submit": "Was wurde geliefert? (optional)",
+      "dispute": "Warum bestreiten Sie diesen Meilenstein? (erforderlich)"
     },
     "summary": {
       "agreedCents": "Vereinbart",

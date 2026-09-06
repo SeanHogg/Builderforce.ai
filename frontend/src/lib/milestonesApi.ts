@@ -25,13 +25,19 @@
  */
 import { apiRequestStream } from './apiClient';
 import { jsonOrThrow } from './apiEnvelope';
+import { raiseClientDispute, raiseMyDispute } from './disputesApi';
 
 /** Where a milestone is. Mirrors the CHECK constraint in migration 0924. */
 export type MilestoneStatus =
   | 'draft' | 'funded' | 'submitted' | 'approved' | 'released' | 'cancelled' | 'disputed';
 
 /** What somebody is trying to do to a milestone. */
-export type MilestoneAction = 'fund' | 'submit' | 'approve' | 'reject' | 'release' | 'cancel';
+export type MilestoneAction = 'fund' | 'submit' | 'approve' | 'reject' | 'release' | 'cancel' | 'dispute';
+
+/** Which side of the deal is acting — the token split, not a policy flag: the same
+ *  move goes through the employer's door on a tenant token and the worker's door on
+ *  a web token, and `dispute` is the one move both sides own. */
+export type MilestoneParty = 'client' | 'freelancer';
 
 export interface MilestoneRow {
   id: string;
@@ -159,7 +165,21 @@ export async function submitMilestone(milestoneId: string, note?: string): Promi
  * endpoint and the token. Keeping the fan-out here means the panel that renders the
  * buttons stays party-agnostic and there is one place that knows the split.
  */
-export function runMilestoneAction(milestoneId: string, action: MilestoneAction, note?: string): Promise<unknown> {
+export function runMilestoneAction(
+  milestoneId: string,
+  action: MilestoneAction,
+  note?: string,
+  party: MilestoneParty = 'client',
+): Promise<unknown> {
+  // A dispute is the one move BOTH sides own (the escrow table lists it for each), so
+  // the action alone cannot name the door: the worker files through the web-token
+  // route, the employer through the tenant one. The note is the dispute's REASON,
+  // which the server requires — the row's note prompt collects it first.
+  if (action === 'dispute') {
+    return party === 'freelancer'
+      ? raiseMyDispute(milestoneId, note ?? '')
+      : raiseClientDispute(milestoneId, note ?? '');
+  }
   return action === 'submit'
     ? submitMilestone(milestoneId, note)
     : moveMilestone(milestoneId, action, note);

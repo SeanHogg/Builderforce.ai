@@ -46,7 +46,7 @@ import {
   type WithdrawalRefusal,
 } from '../../application/finance/withdrawalMethods';
 import { describePayoutProviders } from '../../application/payouts/payoutProviders';
-import { boundedIntParam } from './queryParams';
+import { boundedIntParam, limitParam } from './queryParams';
 
 /** A withdrawal refusal as an HTTP answer. */
 function refusalStatus(reason: WithdrawalRefusal): 400 | 404 | 500 {
@@ -95,7 +95,7 @@ export function createEarningsRoutes(db: Db): Hono<HonoEnv> {
       from: parseRangeDate(c.req.query('from'), range.from),
       to: parseRangeDate(c.req.query('to'), range.to),
       period,
-      limit: Number(c.req.query('limit') ?? 100),
+      limit: limitParam(c.req.query('limit'), 100, 500),
     });
     return c.json({ report });
   });

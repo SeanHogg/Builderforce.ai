@@ -32,6 +32,7 @@ import {
   withdrawDispute,
   type DisputeRefusal,
 } from '../../application/marketplace/disputes';
+import { limitParam } from './queryParams';
 
 /**
  * A dispute refusal as an HTTP answer.
@@ -82,7 +83,7 @@ export function createDisputeRoutes(db: Db): Hono<HonoEnv> {
   router.get('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const [disputes, openCount, authority] = await Promise.all([
-      listTenantDisputes(db, c.env as Env, tenantId, Number(c.req.query('limit') ?? 100)),
+      listTenantDisputes(db, c.env as Env, tenantId, limitParam(c.req.query('limit'), 100, 500)),
       openDisputeCount(db, tenantId),
       authorityFor(c),
     ]);

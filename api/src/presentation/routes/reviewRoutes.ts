@@ -32,6 +32,7 @@ import { COMPANY_OBJECT_KIND } from '../../application/companies/companyDirector
 import { resolveHumanActor } from '../../application/activity/activityLog';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { limitParam } from './queryParams';
 
 /** Employer reviews publish user-authored claims about a NAMED organisation that
  *  never agreed to be described. They are held until a human approves them. */
@@ -55,7 +56,7 @@ export function createReviewRoutes(db: Db): Hono<HonoEnv> {
       rows: await listEmployers(db, c.env as Env, {
         tenantId: c.get('tenantId') as number,
         q: c.req.query('q'),
-        limit: Number(c.req.query('limit') ?? 50),
+        limit: limitParam(c.req.query('limit'), 50, 500),
       }),
     });
   });
@@ -83,7 +84,7 @@ export function createReviewRoutes(db: Db): Hono<HonoEnv> {
   router.get('/moderation/queue', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const [rows, waiting] = await Promise.all([
-      pendingReviews(db, tenantId, Number(c.req.query('limit') ?? 50)),
+      pendingReviews(db, tenantId, limitParam(c.req.query('limit'), 50, 500)),
       pendingReviewCount(db, tenantId),
     ]);
     return c.json({ rows, waiting });

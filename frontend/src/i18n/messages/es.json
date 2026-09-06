@@ -5715,7 +5715,28 @@
     "sev_medium": "Medio",
     "sev_low": "Bajo",
     "sev_info": "Información",
-    "identityTab": "Identidad"
+    "identityTab": "Identidad",
+    "logTab": "Registro de auditoría",
+    "auditLog": {
+      "title": "Registro de auditoría del espacio de trabajo",
+      "subtitle": "Cada acción registrada en este espacio de trabajo: quién hizo qué, sobre qué recurso y cuándo.",
+      "filterEventType": "Tipo de evento (p. ej. task_created)",
+      "filterResourceType": "Tipo de recurso (p. ej. task)",
+      "apply": "Aplicar filtros",
+      "export": "Exportar CSV",
+      "loading": "Cargando el registro de auditoría…",
+      "empty": "Ningún evento coincide con estos filtros.",
+      "loadFailed": "No se pudo cargar el registro de auditoría.",
+      "colWhen": "Cuándo",
+      "colEvent": "Evento",
+      "colActor": "Actor",
+      "colResource": "Recurso",
+      "colDetails": "Detalles",
+      "system": "Sistema",
+      "page": "Mostrando {from}–{to}",
+      "newer": "Más recientes",
+      "older": "Más antiguos"
+    }
   },
   "catalogInsights": {
     "total": {
@@ -13659,6 +13680,8 @@
       "usage": "Uso atribuido por BuilderForce, últimos {days} días: {requests} solicitudes · {tokens} tokens",
       "lastUsed": " · Último uso {when}",
       "failedFallback": "La prueba de conexión falló: {status}.",
+      "localEgressRemedy": "A esta cuenta solo se puede acceder desde una máquina tuya. Conecta un runtime de Builderforce y todas las llamadas se enrutarán por él; la credencial en sí no necesita cambios.",
+      "localEgressRemedyLink": "Conectar un runtime en la página Agentes",
       "failedGeneric": "La prueba de conexión falló",
       "failedTitle": "Falló la conexión con {label}",
       "upstreamTitle": "{label} — error del proveedor del modelo",
@@ -26614,7 +26637,8 @@
       "approve": "Aceptar",
       "reject": "Solicitar cambios",
       "release": "Liberar el pago",
-      "cancel": "Cancelar"
+      "cancel": "Cancelar",
+      "dispute": "Abrir una disputa"
     },
     "confirm": {
       "fund": "¿Depositar {amount} en garantía para este hito? El freelance queda autorizado a empezar en cuanto lo hagas.",
@@ -26624,7 +26648,8 @@
     },
     "notePlaceholder": {
       "reject": "¿Qué hay que cambiar?",
-      "submit": "¿Qué has entregado? (opcional)"
+      "submit": "¿Qué has entregado? (opcional)",
+      "dispute": "¿Por qué disputas este hito? (obligatorio)"
     },
     "summary": {
       "agreedCents": "Acordado",

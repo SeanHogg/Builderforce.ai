@@ -18,7 +18,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { verifyAgentHostApiKey } from '../../infrastructure/auth/agentHostAuth';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { limitParam } from './queryParams';
+import { limitParam, offsetParam } from './queryParams';
 
 export function createChatRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -123,7 +123,7 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
   router.get('/chats', authMiddleware as never, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const limit  = limitParam(c.req.query('limit'), 50, 100);
-    const offset = Number(c.req.query('offset') ?? 0);
+    const offset = offsetParam(c.req.query('offset'));
 
     const rows = await db
       .select({

@@ -55,6 +55,7 @@ import { notSystemTask, SYSTEM_TASK_SOURCE_MANAGER } from '../../application/tas
 import { getTenantTokenAvailability } from '../../application/llm/tenantTokenAvailability';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
+import { limitParam } from './queryParams';
 
 /**
  * The `reason` a `merge_blocked` decision recorded, out of its raw `detail` TEXT.
@@ -782,7 +783,7 @@ export function createManagerRoutes(
     if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
       return c.json({ error: 'Project not found' }, 404);
     }
-    const directives = await listManagerDirectives(db, tenantId, projectId, Number(c.req.query('limit')) || 50);
+    const directives = await listManagerDirectives(db, tenantId, projectId, limitParam(c.req.query('limit'), 50, 500));
     return c.json({ directives });
   });
 
@@ -808,7 +809,7 @@ export function createManagerRoutes(
     if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
       return c.json({ error: 'Project not found' }, 404);
     }
-    const limit = Number(c.req.query('limit')) || 50;
+    const limit = limitParam(c.req.query('limit'), 50, 500);
     const actions = await listManagerActions(db, tenantId, projectId, limit);
     return c.json({ actions });
   });

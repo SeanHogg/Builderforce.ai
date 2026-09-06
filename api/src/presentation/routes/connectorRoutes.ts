@@ -45,6 +45,7 @@ import { executeConnectorAction, ConnectorCallError } from '../../application/co
 import { manifestFromOpenApi, fetchOpenApiSpec, SpecFetchError } from '../../application/connectors/openapiImport';
 import { CONNECTOR_CATEGORIES } from '../../application/connectors/connectorManifest';
 import { connectorActionCatalog } from '../../application/connectors/connectorActionCatalog';
+import { limitParam } from './queryParams';
 
 function fail(c: Context<HonoEnv>, e: unknown) {
   if (e instanceof SpecFetchError) {
@@ -295,7 +296,7 @@ export function createConnectorRoutes(db: Db): Hono<HonoEnv> {
   router.get('/logs/recent', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const connectionId = c.req.query('connectionId');
-    const limit = Number(c.req.query('limit') ?? 25);
+    const limit = limitParam(c.req.query('limit'), 25, 500);
     const logs = await listCallLogs(db, {
       tenantId,
       ...(connectionId ? { connectionId } : {}),

@@ -38,6 +38,7 @@ import {
   isPayoutProviderName,
   type PayoutCredential,
 } from '../../application/payouts/payoutProviders';
+import { limitParam } from './queryParams';
 
 /** Where the connect flow sends the browser back to when it is not told. */
 const DEFAULT_RETURN_TO = '/billing/payouts';
@@ -168,7 +169,7 @@ export function createPayoutRoutes(db: Db): Hono<HonoEnv> {
   });
 
   r.get('/history', async (c) => c.json({
-    payouts: await service(c).payouts(c.get('tenantId') as number, userAccount(c.get('userId') as string), Number(c.req.query('limit') ?? 50)),
+    payouts: await service(c).payouts(c.get('tenantId') as number, userAccount(c.get('userId') as string), limitParam(c.req.query('limit'), 50, 500)),
     paidCents: await service(c).paidCents(c.get('tenantId') as number, userAccount(c.get('userId') as string)),
   }));
 

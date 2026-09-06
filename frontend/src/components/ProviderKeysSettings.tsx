@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useToast } from '@/components/ToastProvider';
@@ -85,6 +86,29 @@ const PROVIDERS: ProviderConfig[] = [
  * would spin against an endpoint that has nothing left to say.
  */
 const OAUTH_DEVICE_WINDOW_MS = 15 * 60 * 1000;
+
+/**
+ * Run `attempt` on an interval until it says stop or the window closes.
+ *
+ * A `slow_down` widens the interval — the provider telling us it is being asked too
+ * often; ignoring it is how a poll starts getting rejected outright. Module-level rather
+ * than inside the component so the clock reads are plainly event-time, never render-time.
+ */
+async function pollWithinWindow(
+  windowMs: number,
+  intervalSeconds: number,
+  attempt: () => Promise<'continue' | 'slow_down' | 'stop'>,
+): Promise<'stopped' | 'expired'> {
+  const deadline = Date.now() + windowMs;
+  let waitMs = Math.max(1, intervalSeconds) * 1000;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+    const step = await attempt();
+    if (step === 'stop') return 'stopped';
+    if (step === 'slow_down') waitMs += 2000;
+  }
+  return 'expired';
+}
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20,
@@ -402,6 +426,73 @@ function probeVerdict(
 }
 
 /**
+ * The remedy for `local_egress_required` — decides its OWN visibility off the status.
+ *
+ * The state label alone ("needs a runtime of your own") told an operator WHAT was missing
+ * and nothing about what a runtime is or where to connect one; the server's full remedy
+ * prose never reached the page because every status is rendered from the localized state
+ * catalog. This is the one line that turns the verdict into an action: the Agents page is
+ * where a Builderforce runtime is installed and paired, and the credential itself is fine.
+ */
+function LocalEgressRemedy({ status, t }: { status: string | undefined; t: TFn }) {
+  if (status !== 'local_egress_required') return null;
+  return (
+    <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
+      {t('diagnostic.localEgressRemedy')}{' '}
+      <Link href="/agents" style={{ color: 'var(--accent)', fontWeight: 600, textDecoration: 'underline' }}>
+        {t('diagnostic.localEgressRemedyLink')}
+      </Link>
+    </div>
+  );
+}
+
+/**
+ * How loudly the status READ should paint — ONE rule for every provider card.
+ *
+ * `usable` alone painted this green for a credential that decrypts and then 403s on every
+ * call, and green again for a Kimi subscription with no runtime online — a "ready" one line
+ * above a Test button that answered "needs a runtime". Both are amber: the credential is
+ * not the thing to fix, but the account is not serving anything either.
+ */
+function healthTone(diagnostic: ProviderDiagnostic | null): ProbeTone | 'muted' {
+  if (!diagnostic) return 'muted';
+  if (diagnostic.authAlert || diagnostic.status === 'local_egress_required') return 'warn';
+  return diagnostic.usable ? 'ok' : 'muted';
+}
+
+/**
+ * "Current status: …" plus the Test button — the header of every provider drawer's health
+ * box. Shared by the provider card and the self-hosted Ollama card so the two cannot drift
+ * in colour, copy, or the remedy they offer; the remedy renders itself only for the status
+ * that has one.
+ */
+function ProviderHealthHeader({
+  diagnostic, configured, testing, onTest, t,
+}: {
+  diagnostic: ProviderDiagnostic | null;
+  configured: boolean;
+  testing: boolean;
+  onTest: () => void;
+  t: TFn;
+}) {
+  const tone = healthTone(diagnostic);
+  const color = tone === 'warn' ? 'var(--warning-text)' : tone === 'ok' ? 'var(--success-text)' : 'var(--text-muted)';
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 'var(--font-size-small)', fontWeight: 700, color }}>
+          {t('diagnostic.currentStatus', { status: diagnostic?.status ? stateLabel(t, diagnostic.status) : t('diagnostic.checking') })}
+        </span>
+        <button type="button" onClick={onTest} disabled={testing || !configured} style={{ ...buttonPrimary, opacity: testing || !configured ? 0.5 : 1 }}>
+          {testing ? t('diagnostic.testing') : t('diagnostic.test')}
+        </button>
+      </div>
+      <LocalEgressRemedy status={diagnostic?.status} t={t} />
+    </div>
+  );
+}
+
+/**
  * The verdict line under a Test button — same colour rules and a11y role wherever a probe
  * reports back. Amber for an upstream outage, red only for something the owner can fix.
  *
@@ -706,28 +797,27 @@ function ProviderConnectionCard({
    * too often — ignoring it is how a poll starts getting rejected outright.
    */
   const pollForApproval = async (state: string, intervalSeconds: number) => {
-    const deadline = Date.now() + OAUTH_DEVICE_WINDOW_MS;
-    let waitMs = Math.max(1, intervalSeconds) * 1000;
-    while (Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    const outcome = await pollWithinWindow(OAUTH_DEVICE_WINDOW_MS, intervalSeconds, async () => {
       // The operator cancelled, or the component moved on — stop rather than completing
       // a connect nobody is waiting for.
-      if (!pollingRef.current) return;
+      if (!pollingRef.current) return 'stop';
       try {
         const result = await providerKeysApi.oauthComplete(config.id, '', state);
-        if (result.status === 'slow_down') { waitMs += 2000; continue; }
-        if (result.status === 'pending') continue;
+        if (result.status === 'slow_down') return 'slow_down';
+        if (result.status === 'pending') return 'continue';
         onChange('oauth');
         stopDeviceConnect();
-        return;
+        return 'stop';
       } catch (e) {
         setError(e instanceof Error ? e.message : t('errConnectSubscription'));
         stopDeviceConnect();
-        return;
+        return 'stop';
       }
+    });
+    if (outcome === 'expired') {
+      setError(t('errCodeExpired'));
+      stopDeviceConnect();
     }
-    setError(t('errCodeExpired'));
-    stopDeviceConnect();
   };
 
   /** Tear down a device connect — the ONE place that clears it, so a cancel, a success,
@@ -783,17 +873,7 @@ function ProviderConnectionCard({
       <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '0 0 12px' }}>{blurb}</p>
 
       <div style={{ padding: 12, marginBottom: 14, borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
-          {/* `usable` alone would paint this green for a credential that decrypts and then
-              403s on every call, so an outstanding alert downgrades it the same way it
-              downgrades the chip below. */}
-          <span style={{ flex: 1, minWidth: 0, fontSize: 'var(--font-size-small)', fontWeight: 700, color: diagnostic?.authAlert ? 'var(--warning-text)' : diagnostic?.usable ? 'var(--success-text)' : 'var(--text-muted)' }}>
-            {t('diagnostic.currentStatus', { status: diagnostic?.status ? stateLabel(t, diagnostic.status) : t('diagnostic.checking') })}
-          </span>
-          <button type="button" onClick={testConnection} disabled={testing || !configured} style={{ ...buttonPrimary, opacity: testing || !configured ? 0.5 : 1 }}>
-            {testing ? t('diagnostic.testing') : t('diagnostic.test')}
-          </button>
-        </div>
+        <ProviderHealthHeader diagnostic={diagnostic} configured={configured} testing={testing} onTest={testConnection} t={t} />
         <UsageStrip
           t={t}
           days={diagnostic?.usage.periodDays ?? 30}
@@ -995,14 +1075,7 @@ function OllamaLocalConnectionCard({
       <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', margin: '0 0 12px' }}>{t('ollamaLocal.hostNote')}</p>
 
       <div style={{ padding: 12, marginBottom: 14, borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
-          <span style={{ flex: 1, minWidth: 0, fontSize: 'var(--font-size-small)', fontWeight: 700, color: diagnostic?.authAlert ? 'var(--warning-text)' : diagnostic?.usable ? 'var(--success-text)' : 'var(--text-muted)' }}>
-            {t('diagnostic.currentStatus', { status: diagnostic?.status ? stateLabel(t, diagnostic.status) : t('diagnostic.checking') })}
-          </span>
-          <button type="button" onClick={testConnection} disabled={testing || !configured} style={{ ...buttonPrimary, opacity: testing || !configured ? 0.5 : 1 }}>
-            {testing ? t('diagnostic.testing') : t('diagnostic.test')}
-          </button>
-        </div>
+        <ProviderHealthHeader diagnostic={diagnostic} configured={configured} testing={testing} onTest={testConnection} t={t} />
         <UsageStrip
           t={t}
           days={diagnostic?.usage.periodDays ?? 30}

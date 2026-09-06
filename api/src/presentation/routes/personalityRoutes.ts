@@ -81,6 +81,7 @@ import {
 } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
+import { limitParam } from './queryParams';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n));
@@ -161,7 +162,7 @@ export function createPersonalityRoutes(db: Db): Hono<HonoEnv> {
   router.get('/agents/:agentId/events', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const agentRef = c.req.param('agentId');
-    const limit = clamp(Number(c.req.query('limit')) || 20, 1, 100);
+    const limit = limitParam(c.req.query('limit'), 20, 100);
     const agent = await ownedAgentProfile(tenantId, agentRef);
     if (!agent) return c.json({ error: 'Agent not found' }, 404);
 
