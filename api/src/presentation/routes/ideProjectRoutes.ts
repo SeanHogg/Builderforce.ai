@@ -24,6 +24,7 @@ import { ProjectService } from '../../application/project/ProjectService';
 import { ensureProjectTemplate } from '../../application/project/projectTemplate';
 import { applyEvermindRecipe, toEvermindRecipeId } from '../../application/llm/evermindRecipes';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { loadProjectInTenant } from '../../application/project/projectOwnership';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -76,12 +77,8 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
   /** Validate a candidate container project belongs to the tenant and is itself a
    *  real (non-storage) project. Returns the id, or null when invalid. */
   const validContainer = async (tenantId: number, containerId: number): Promise<number | null> => {
-    const [row] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(and(eq(projects.id, containerId), eq(projects.tenantId, tenantId), eq(projects.isIdeStorage, false)))
-      .limit(1);
-    return row ? row.id : null;
+    const row = await loadProjectInTenant(db, tenantId, containerId, { id: projects.id, isIdeStorage: projects.isIdeStorage });
+    return row && !row.isIdeStorage ? row.id : null;
   };
 
   /** Tenant-ownership gate for an assignable workflow definition (prevents

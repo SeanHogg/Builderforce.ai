@@ -73,6 +73,7 @@ import { enforceCloudRunCap } from '../../application/runtime/cloudRunLedger';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { forLane, laneAgentAssignments, laneAssignmentValues } from '../../application/swimlane/laneAgentAssignments';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { invalidateBoardLaneOrdinals, invalidateSwimlaneOrdinals } from '../../application/swimlane/laneOrdinals';
 
 const WORKFLOW_STATUSES: WorkflowStatus[] = ['pending', 'running', 'completed', 'failed', 'cancelled'];
 
@@ -189,6 +190,9 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       needsAttentionLane: body.needsAttentionLane,
       seedDefaultLanes: body.seedDefaultLanes,
     });
+    // A project with no board cached an EMPTY ordinal map; the new board's lanes
+    // must replace it or every ticket move reads "no lanes" until the TTL.
+    if (created) await invalidateSwimlaneOrdinals(c.env as Env, body.projectId);
 
     return c.json(board, created ? 201 : 200);
   });
@@ -334,6 +338,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       .insert(swimlanes)
       .values(buildDefaultLaneRows(tenantId, board.segmentId ?? null, boardId, now))
       .onConflictDoNothing();
+    await invalidateBoardLaneOrdinals(c.env as Env, db, boardId);
 
     const lanes = await db
       .select()
@@ -404,6 +409,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         updatedAt: now,
       })
       .returning();
+    await invalidateBoardLaneOrdinals(c.env as Env, db, boardId);
     return c.json(row, 201);
   });
 
@@ -471,6 +477,9 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         updatedAt: new Date(),
       })
       .where(and(eq(swimlanes.id, laneId), eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)));
+    // Position, terminal, parking and key (via the rename above) all live in the
+    // cached ordinal map every ticket move reads.
+    await invalidateBoardLaneOrdinals(c.env as Env, db, boardId);
 
     const [row] = await db
       .select()
@@ -515,6 +524,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     await db
       .delete(swimlanes)
       .where(and(eq(swimlanes.id, laneId), eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)));
+    await invalidateBoardLaneOrdinals(c.env as Env, db, boardId);
     return c.json({ ok: true, reassignedTasks: reassigned.movedCount, reassignedTo: reassigned.movedTo });
   });
 

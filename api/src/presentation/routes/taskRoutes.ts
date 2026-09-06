@@ -51,6 +51,7 @@ import { resolveTicketViewer } from '../../application/security/resolveTicketVie
 import { executionTokenGate } from './executionTokenGate';
 import { broadcastProjectChanged } from '../../infrastructure/relay/broadcastRoom';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { loadProjectInTenant } from '../../application/project/projectOwnership';
 
 /** Parse a swimlane assignment's `required_capabilities` (JSON array stored as
  *  text) into a clean string[]. Tolerates null / malformed / non-array values by
@@ -388,8 +389,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const tenantId = c.get('tenantId');
     const projectId = parseProjectId(c.req.query('project'));
     if (projectId === undefined) return c.json({ error: 'project is required' }, 400);
-    const [proj] = await db.select({ id: projects.id }).from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId))).limit(1);
+    const proj = await loadProjectInTenant(db, tenantId, projectId, { id: projects.id });
     if (!proj) return c.json({ error: 'project not found' }, 404);
     const env = c.env as Env;
     const ver = await getCacheVersion(env, `task-deps-version:project:${projectId}`);

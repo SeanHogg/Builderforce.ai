@@ -23,7 +23,7 @@ import { sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { boards, executions, swimlanes, tasks, taskStatusTransitions } from '../../infrastructure/database/schema';
-import { getOrSetCached, invalidateCached, projectScoreCacheKey, tenantRollupCacheKey } from '../../infrastructure/cache/readThroughCache';
+import { invalidateCached, projectScoreCacheKey, tenantRollupCacheKey } from '../../infrastructure/cache/readThroughCache';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { parseMachineSubject } from '../../infrastructure/auth/machineSubject';
 import { bumpWorkforceMetricsVersion } from '../metrics/workforceMetrics';
@@ -32,6 +32,7 @@ import { fireEventTriggers } from '../workflow/eventTriggers';
 import { TaskStatus, ExecutionStatus } from '../../domain/shared/types';
 import { DONE_CLASS, isDoneLane } from '../../domain/shared/doneClass';
 import { awardForCompletedTask } from "../points/taskEarning";
+import { loadLaneOrdinals, type OrdinalMap } from '../swimlane/laneOrdinals';
 
 /**
  * Lane keys whose work is JUDGING work someone else already did.
@@ -52,48 +53,6 @@ export const REVIEW_CLASS = new Set<string>([TaskStatus.IN_REVIEW]);
 /** True when the lane's work is a judgement on someone else's output. */
 export function isReviewLane(status: string | null | undefined): boolean {
   return !!status && REVIEW_CLASS.has(status);
-}
-
-export type LaneInfo = {
-  position: number;
-  isTerminal: boolean;
-  /** PARKED — off the delivery path (`swimlanes.is_parking`, migration 1080). Optional so
-   *  a caller building an OrdinalMap by hand (tests, a non-board status) need not know
-   *  about it; absent reads as "not parked". */
-  isParking?: boolean;
-};
-export type OrdinalMap = Record<string, LaneInfo>;
-
-function ordinalsCacheKey(projectId: number): string {
-  return `swimlane-ordinals:project:${projectId}`;
-}
-
-/** Per-project lane-key → {position, isTerminal} map, cached (board layout is
- *  slow-changing). Empty object when the project has no board yet (free-form
- *  status with no swimlane → direction undeterminable, recorded as null).
- *
- *  Exported because "where is this ticket in its board's sequence" is the same
- *  question the ticket-context read asks (lane N of M ⇒ %-complete); sharing the
- *  loader keeps both answers on one cached board layout instead of two. */
-export async function loadLaneOrdinals(env: Env, db: Db, projectId: number): Promise<OrdinalMap> {
-  return getOrSetCached(env, ordinalsCacheKey(projectId), async () => {
-    const rows = await db
-      .select({
-        key: swimlanes.key, position: swimlanes.position,
-        isTerminal: swimlanes.isTerminal, isParking: swimlanes.isParking,
-      })
-      .from(swimlanes)
-      .innerJoin(boards, eq(boards.id, swimlanes.boardId))
-      .where(eq(boards.projectId, projectId));
-    const map: OrdinalMap = {};
-    for (const r of rows) map[r.key] = { position: r.position, isTerminal: r.isTerminal, isParking: r.isParking };
-    return map;
-  });
-}
-
-/** Call when a project's swimlanes change so the cached ordinal map re-loads. */
-export async function invalidateSwimlaneOrdinals(env: Env, projectId: number): Promise<void> {
-  await invalidateCached(env, ordinalsCacheKey(projectId));
 }
 
 const isDoneClass = (status: string, ordinals: OrdinalMap): boolean => isDoneLane(status, ordinals);

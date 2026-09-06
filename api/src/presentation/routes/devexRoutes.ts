@@ -35,6 +35,7 @@ import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { positiveIntOrNull, daysParam } from './queryParams';
 import { positiveIntParam } from './queryParams';
+import { loadProjectInTenant } from '../../application/project/projectOwnership';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 // The cross-tenant benchmark is the same for everyone and expensive to compute,
@@ -181,8 +182,7 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
     // verified here: a campaign must not be able to name another tenant's project.
     const projectId = positiveIntOrNull(typeof body.projectId === 'number' ? String(body.projectId) : (body.projectId as string | undefined));
     if (projectId != null) {
-      const [owned] = await db.select({ id: projects.id }).from(projects)
-        .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId))).limit(1);
+      const owned = await loadProjectInTenant(db, tenantId, projectId, { id: projects.id });
       if (!owned) return c.json({ error: 'project not found' }, 404);
     }
     const [row] = await db.insert(devexCampaigns).values({

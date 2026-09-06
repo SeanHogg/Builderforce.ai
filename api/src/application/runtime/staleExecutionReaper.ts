@@ -34,6 +34,7 @@ import { cloudOrphanReason, cloudSilenceCeilingMs, PAUSED_DEADLINE_MS, PAUSED_OR
 import { markReaperRequeued, parseExecutor } from './cloudDispatch';
 import { isSelfHealEligible, buildDurableStartBody, dispatchDurableStart } from './cloudSelfHeal';
 import { runParkAgeTimeoutSweep, type ParkAgeTimeoutResult } from '../maintenance/parkAgeTimeout';
+import { revokeRunPrincipalsForExecutions } from '../agentIdentity/agentRunIdentity';
 
 /** A self-hosted host run executing longer than this is treated as hung. */
 export const RUNNING_DEADLINE_MS = 30 * 60_000; // 30 min
@@ -265,6 +266,16 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
       } } });
     }
   }));
+
+  // A reaped run is terminal, so its callback principal must stop authenticating —
+  // the same revocation the happy-path finalize performs, done in bulk here because
+  // these sweeps bypass it. Best-effort: the per-callback DB check already refuses a
+  // terminal run, this keeps the principal rows honest.
+  await revokeRunPrincipalsForExecutions(db, reaped.map(({ row }) => row.id))
+    .catch((error) => reportCaughtError(error, { source: "application/runtime/staleExecutionReaper.ts", operation: "reapStaleExecutions", context: { logMessage: '[execution-reaper] principal revocation failed', details: {
+      executionIds: reaped.map(({ row }) => row.id),
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    } } }));
 
   // …and narrate each reaped failure into the ticket's linked Brain chats. The
   // bulk sweeps above bypass RuntimeService.update, so without this a run that

@@ -51,7 +51,7 @@ import {
   templateNeedsBackfill,
   type SeedableProject,
 } from '../../application/project/projectTemplate';
-import { projectInTenant as projectOwnedByTenant } from '../../application/project/projectOwnership';
+import { projectInTenant as projectOwnedByTenant, loadProjectInTenant } from '../../application/project/projectOwnership';
 import {
   listWorkspaceFiles,
   readWorkspaceFile,
@@ -201,16 +201,12 @@ async function resolveProjectId(db: Db, tenantId: number, param: string): Promis
 
 /** Fetch the fields the template-seeding decision needs, by numeric project id. */
 async function fetchSeedableProject(db: Db, tenantId: number, id: number): Promise<SeedableProject | null> {
-  const [row] = await db
-    .select({
+  const row = await loadProjectInTenant(db, tenantId, id, {
       template: projects.template,
       modality: projects.modality,
       sourceControlRepoFullName: projects.sourceControlRepoFullName,
       githubRepoUrl: projects.githubRepoUrl,
-    })
-    .from(projects)
-    .where(and(eq(projects.id, id), eq(projects.tenantId, tenantId)))
-    .limit(1);
+    });
   if (!row) return null;
   return {
     id,
@@ -548,11 +544,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
-    const [project] = await db
-      .select({ name: projects.name })
-      .from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
-      .limit(1);
+    const project = await loadProjectInTenant(db, tenantId, projectId, { name: projects.name });
     if (!project) return c.json({ error: 'Project not found' }, 404);
 
     const form = await c.req.formData();

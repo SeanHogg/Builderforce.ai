@@ -15,17 +15,11 @@
  */
 import { Hono } from 'hono';
 import { escapeHtml } from '@builderforce/creation-canvas-contract';
-import { eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { HonoEnv, Env } from '../../env';
-import { users } from '../../infrastructure/database/schema';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import type { UserId } from '../../domain/shared/types';
-import {
-  getEmailPreferences,
-  setEmailPreferences,
-  type EmailPreferenceState,
-} from '../../application/email/emailPreferences';
+import { getEmailPreferences, setEmailPreferences, type EmailPreferenceState, accountForUser, unsubscribeAll } from '../../application/email/emailPreferences';
 import { verifyUnsubscribeToken } from '../../application/email/sendEmail';
 import { setUserLocale } from '../../application/email/emailLocaleResolver';
 import {
@@ -49,11 +43,7 @@ export function createEmailPreferenceRoutes(db: Db) {
   // -------------------------------------------------------------------------
   router.get('/', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as UserId;
-    const [user] = await db
-      .select({ email: users.email, locale: users.locale })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
+    const user = await accountForUser(db, userId);
     if (!user) return c.json({ error: 'User not found' }, 404);
 
     const preferences = await getEmailPreferences(c.env as Env, db, user.email);
@@ -75,11 +65,7 @@ export function createEmailPreferenceRoutes(db: Db) {
     const body = await c.req.json<Partial<EmailPreferenceState> & { locale?: string; resubscribe?: boolean }>()
       .catch(() => ({} as Partial<EmailPreferenceState> & { locale?: string; resubscribe?: boolean }));
 
-    const [user] = await db
-      .select({ email: users.email })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
+    const user = await accountForUser(db, userId);
     if (!user) return c.json({ error: 'User not found' }, 404);
 
     if (body.locale !== undefined) {
@@ -114,21 +100,15 @@ export function createEmailPreferenceRoutes(db: Db) {
     // The confirmation page is rendered in the locale of the account when we know
     // it — the person just clicked a link in a mail written in that language, so
     // switching them to English at the last step would be jarring.
-    const locale = email ? await localeForEmail(db, email) : DEFAULT_EMAIL_LOCALE;
-
     if (!email) {
-      return c.html(unsubscribePage(emailCopy(locale).common.unsubscribeLabel, INVALID_MESSAGE), 400);
+      return c.html(unsubscribePage(emailCopy(DEFAULT_EMAIL_LOCALE).common.unsubscribeLabel, INVALID_MESSAGE), 400);
     }
 
-    // Link the row to the account when the address has one, so /settings shows the
-    // same state the mail footer just changed.
-    const [user] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.email, email))
-      .limit(1);
-
-    await setEmailPreferences(c.env as Env, db, email, { unsubscribedAll: true }, { userId: user?.id ?? null });
+    // The one-click opt-out is the application's, not this handler's: it links the
+    // row to the account when the address has one and hands back that account's
+    // locale for the confirmation page.
+    const { locale: storedLocale } = await unsubscribeAll(c.env as Env, db, email);
+    const locale = normalizeLocale(storedLocale) ?? DEFAULT_EMAIL_LOCALE;
 
     return c.html(unsubscribePage(
       emailCopy(locale).common.unsubscribeLabel,
@@ -137,17 +117,6 @@ export function createEmailPreferenceRoutes(db: Db) {
   });
 
   return router;
-}
-
-/** The account's stored locale for an address, defaulted. Read directly rather
- *  than through the send-path resolver: there is no send happening here. */
-async function localeForEmail(db: Db, email: string) {
-  const [row] = await db
-    .select({ locale: users.locale })
-    .from(users)
-    .where(eq(users.email, email))
-    .limit(1);
-  return normalizeLocale(row?.locale) ?? DEFAULT_EMAIL_LOCALE;
 }
 
 const INVALID_MESSAGE = 'This unsubscribe link is not valid. '

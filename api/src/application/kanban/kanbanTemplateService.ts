@@ -30,6 +30,7 @@ import { seedLaneStaffingFromWorkforce } from '../swimlane/seedLaneStaffing';
 import { BUILTIN_TEMPLATES, getBuiltinTemplate, isBuiltinTemplateId } from './templateCatalog';
 import type { KanbanTemplate, TemplateLane, TemplateVisibility } from './types';
 import { slugify as slugifyBase } from '@builderforce/creation-canvas-contract';
+import { invalidateSwimlaneOrdinals } from '../swimlane/laneOrdinals';
 
 const listKey = (tenantId: number) => `kanban:templates:${tenantId}`;
 const publicKey = () => `kanban:templates:public`;
@@ -398,6 +399,9 @@ export class KanbanTemplateService {
     // (that stays the manager's budgeted job) and never overwrites an existing binding.
     const seeded = await seedLaneStaffingFromWorkforce(env, this.db, { tenantId, projectId, boardId });
 
+    // Every lane's position/terminal/parking just changed (or the board is new):
+    // drop the cached ordinal map the ticket-move path reads.
+    await invalidateSwimlaneOrdinals(env, projectId);
     return { boardId, lanesApplied: template.lanes.length, requirementsApplied, lanesStaffed: seeded.staffed };
   }
 

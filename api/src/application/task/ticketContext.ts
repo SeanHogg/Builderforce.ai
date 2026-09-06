@@ -31,7 +31,7 @@ import {
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { isDoneLane, isDoneStatus } from '../../domain/shared/doneClass';
 import { keyResultProgress, objectiveProgress } from '../pmo/portfolioRollup';
-import { loadLaneOrdinals, type OrdinalMap } from './taskLifecycle';
+import { loadLaneOrdinals, type OrdinalMap } from '../swimlane/laneOrdinals';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';
 
 // ── Wire types ───────────────────────────────────────────────────────────────

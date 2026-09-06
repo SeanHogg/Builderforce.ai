@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   computeCompletion, laneRank, pickNearestLineage, rollupChildren,
 } from './ticketContext';
-import type { OrdinalMap } from './taskLifecycle';
+import type { OrdinalMap } from '../swimlane/laneOrdinals';
 
 /**
  * Locks the ticket-context math: the headline %-complete a manager reads at the

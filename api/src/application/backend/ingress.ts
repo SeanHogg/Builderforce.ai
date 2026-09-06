@@ -42,7 +42,7 @@ import { completeForTenant } from '../llm/tenantProxy';
 import { readTenantEntities } from './entityRead';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { checkSlidingWindow } from '../ratelimit/slidingWindow';
-import { loadProjectSecretValues } from '../secrets/projectSecrets';
+import { loadProjectSecretValues, redactSecretValues } from '../secrets/projectSecrets';
 import { listSiteRecordsForHandler } from '../ide/siteData';
 import { loadHandlersCached, projectDisplayName, recordBackendRequest, type RequestVerdict } from './index';
 import { executeHandler, type HandlerRuntimeDeps } from './handlerRuntime';
@@ -316,6 +316,10 @@ export async function dispatchIngressRequest(args: {
     return { matched: true, response: new Response('Storage not configured', { status: 503 }) };
   }
 
+  // Secrets are loaded further down, and only for verification; anything this
+  // request RECORDS about itself (a handler's thrown message, a failed step's error)
+  // is scrubbed of them first, so a secret can never reach the request log.
+  let secretValues: Record<string, string> = {};
   const finish = async (status: number, verdict: RequestVerdict, error?: string): Promise<void> => {
     await recordBackendRequest(db, {
       projectId: target.projectId,
@@ -325,7 +329,7 @@ export async function dispatchIngressRequest(args: {
       statusCode: status,
       verdict,
       durationMs: Date.now() - started,
-      ...(error ? { error } : {}),
+      ...(error ? { error: redactSecretValues(error, secretValues) } : {}),
     });
   };
 
@@ -424,6 +428,7 @@ export async function dispatchIngressRequest(args: {
   // — see the scope note in handlerSpec.ts.
   const secrets =
     handler.verify === 'none' ? {} : await loadProjectSecretValues(db, env, target.tenantId, target.projectId);
+  secretValues = secrets;
 
   const verified = await verifyRequest(handler, request, parsed, secrets);
   if (!verified.ok) {

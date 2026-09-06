@@ -95,7 +95,7 @@ import { resolveAppBaseUrl } from '../../env';
 import type { Env } from '../../env';
 import { isAgentRunnable } from '../../domain/containment/agentState';
 import { recordCodeCompletionClaim, recordTypedExecutionClaim } from '../provenance/finishClaimService';
-import { authorizeCredentialDelegation, delegateCredential, ensureAgentRunIdentity } from '../agentIdentity/agentRunIdentity';
+import { authorizeCredentialDelegation, delegateCredential, ensureAgentRunIdentity, revokeRunPrincipal } from '../agentIdentity/agentRunIdentity';
 import { checkRunLimits } from '../../domain/containment/runLimits';
 import { isHumanOrExternalOutputTool, trustNotice } from '../../domain/trust/contentTrust';
 import { inspectOutboundContent, recordContextContribution } from '../trust/trustService';
@@ -3432,6 +3432,12 @@ export async function finalizeCloudRun(
       .where(eq(executions.id, executionId))
       .catch((error) => reportCaughtError(error, { source: 'application/runtime/cloudAgentEngine.ts', operation: 'finalizeCloudRun', context: { logMessage: '[cloud-finalize] produced-stamp failed — this run will not count toward the autonomy breaker', details: { tenantId, executionId, taskId: taskRow.id, error } } }));
   }
+
+  // The run is terminal: its callback principal stops authenticating NOW, not at its
+  // 24h expiry. Best-effort — the DB-state check on every callback already refuses a
+  // terminal run; this is what makes the revocation visible in the principal row.
+  await revokeRunPrincipal(db, tenantId, executionId)
+    .catch((error) => reportCaughtError(error, { source: 'application/runtime/cloudAgentEngine.ts', operation: 'finalizeCloudRun', context: { logMessage: '[cloud-finalize] run principal revocation failed', details: { tenantId, executionId, error } } }));
 
   return { ok: !autoMergeFailed, output: output + unverifiedNote };
 }

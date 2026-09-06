@@ -18,7 +18,7 @@
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { and, eq } from 'drizzle-orm';
+import { and } from 'drizzle-orm';
 import { EvermindModelPackage } from '@seanhogg/builderforce-memory-engine';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { requireFrontierAccess } from '../middleware/featureGate';
@@ -65,15 +65,12 @@ import {
   reseedProjectEvermind,
   generateDefaultEvermindBase,
 } from '../../application/llm/projectEvermind';
+import { loadProjectInTenant } from '../../application/project/projectOwnership';
 
 /** Verify the project exists AND belongs to this tenant (IDOR guard). */
 async function ownsProject(db: Db, tenantId: number, projectId: number): Promise<boolean> {
   if (!Number.isInteger(projectId) || projectId <= 0) return false;
-  const [row] = await db
-    .select({ id: projects.id })
-    .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
-    .limit(1);
+  const row = await loadProjectInTenant(db, tenantId, projectId, { id: projects.id });
   return !!row;
 }
 

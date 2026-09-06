@@ -32,6 +32,7 @@ import { resolveLiveMemberNames } from '../../application/workforce/liveMemberNa
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { loadProjectInTenant } from '../../application/project/projectOwnership';
 
 const MEMBER_KINDS = ['human', 'cloud_agent', 'host_agent'] as const;
 type MemberKind = (typeof MEMBER_KINDS)[number];
@@ -309,10 +310,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
     if (!projectId) return c.json({ error: 'projectId is required' }, 400);
 
     // The project must belong to the same tenant (no cross-tenant attachment).
-    const [project] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)));
+    const project = await loadProjectInTenant(db, tenantId, projectId, { id: projects.id });
     if (!project) return c.json({ error: 'Project not found' }, 404);
 
     const [link] = await db

@@ -82,6 +82,8 @@ import { summariseEscrow } from '../../application/marketplace/escrow';
 import type { EvalJudge } from '../../application/eval/semanticEval';
 import type { Env, HonoEnv } from '../../env';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { closePipeline } from '../../application/hiring/pipeline';
+import { pipelineRefForPosting } from '../../domain/hiring/pipelineStages';
 
 // `JOBS_PUBLIC_CACHE_KEY`, the posting-type vocabulary and the discipline vocabulary all
 // live with the writer now (`application/marketplace/jobPostings.ts` and `jobFilters.ts`).
@@ -830,6 +832,9 @@ export function createJobRoutes(): Hono<HonoEnv> {
     if (!accepted) return c.json({ error: 'Not found' }, 404);
     if (accepted.conflict) return c.json({ error: 'This job has already been filled' }, 409);
     await invalidatePostingCaches(c.env as Env, tenantId, accepted.proposal.source_ticket_id as number | null);
+    // The requisition is filled: everyone still open in its ATS pipeline leaves it
+    // now, without a stage — this is the pipeline ending, not a candidate outcome.
+    await closePipeline(db, c.env as Env, { tenantId, pipelineRef: pipelineRefForPosting(String(accepted.proposal.job_id)) });
     const [ten] = await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId));
     await notify(db, c.env, { userId: accepted.proposal.freelancer_user_id, tenantId, kind: 'hired', title: `${ten?.name ?? 'A workspace'} accepted your proposal for "${accepted.proposal.job_title}"`, ref: accepted.engagementId });
     return c.json({ ok: true, engagementId: accepted.engagementId });
@@ -1197,6 +1202,10 @@ export function createJobRoutes(): Hono<HonoEnv> {
     // Every cache a posting write dirties, in one call — including the per-ticket board
     // badge, which the old inline invalidation here forgot.
     await invalidatePostingCaches(c.env as Env, tenantId, updated.source_ticket_id);
+    // A posting that was closed or filled ends its ATS pipeline with it.
+    if (status === 'closed' || status === 'filled') {
+      await closePipeline(db, c.env as Env, { tenantId, pipelineRef: pipelineRefForPosting(id) });
+    }
     return c.json({ ok: true });
   });
 

@@ -187,17 +187,31 @@ export async function unsubscribeAll(
   env: Env,
   db: Db,
   email: string,
-  opts?: { userId?: string | null },
-): Promise<void> {
-  await setEmailPreferences(env, db, email, { unsubscribedAll: true }, opts);
+): Promise<{ locale: string | null }> {
+  // Link the row to the account when the address has one, so /settings shows the
+  // same state the mail footer just changed. A cold invite's address has no account
+  // and is opted out all the same.
+  const account = await accountForEmail(db, email);
+  await setEmailPreferences(env, db, email, { unsubscribedAll: true }, { userId: account?.id ?? null });
+  return { locale: account?.locale ?? null };
 }
 
-/** The account a signed-in user's preferences hang off, resolved to their address. */
-export async function emailForUser(db: Db, userId: string): Promise<string | null> {
+/** The account a signed-in user's preferences hang off: its address and stored locale. */
+export async function accountForUser(db: Db, userId: string): Promise<{ email: string; locale: string | null } | null> {
   const [row] = await db
-    .select({ email: users.email })
+    .select({ email: users.email, locale: users.locale })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
-  return row?.email ?? null;
+  return row ?? null;
+}
+
+/** The account behind an address, when one exists — a cold invite has none. */
+export async function accountForEmail(db: Db, email: string): Promise<{ id: string; locale: string | null } | null> {
+  const [row] = await db
+    .select({ id: users.id, locale: users.locale })
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+  return row ?? null;
 }

@@ -75,6 +75,7 @@ import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import { resolveScheduledAgentBinding } from '../../application/agentHost/scheduledAgentBinding';
 import { limitParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { loadProjectInTenant } from '../../application/project/projectOwnership';
 
 // Extend HonoEnv bindings type to include the Durable Object
 type AgentHostHonoEnv = HonoEnv & {
@@ -610,10 +611,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHostId = Number(c.req.param('id'));
     const projectId = Number(c.req.param('projectId'));
 
-    const [project] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)));
+    const project = await loadProjectInTenant(db, tenantId, projectId, { id: projects.id });
     if (!project) return c.json({ error: 'Project not found in tenant' }, 404);
 
     await db
@@ -770,11 +768,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     if (!absPath) return c.json({ error: 'absPath is required' }, 400);
 
     if (body.projectId != null) {
-      const [project] = await db
-        .select({ id: projects.id })
-        .from(projects)
-        .where(and(eq(projects.id, body.projectId), eq(projects.tenantId, agentHost.tenantId)))
-        .limit(1);
+      const project = await loadProjectInTenant(db, agentHost.tenantId, body.projectId, { id: projects.id });
 
       if (!project) {
         return c.json({ error: 'project not found in tenant' }, 404);

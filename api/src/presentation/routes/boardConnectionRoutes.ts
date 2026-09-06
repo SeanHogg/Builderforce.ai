@@ -26,6 +26,7 @@ import { isItsmProvider, syncItsmConnection } from '../../application/boardsync/
 import { BOARD_PROVIDERS, BOARD_PROVIDER_IDS } from '../../application/boardsync/providerCatalog';
 import { invalidateProjectConnections } from '../../application/repos/projectConnectionStatus';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { loadProjectInTenant } from '../../application/project/projectOwnership';
 
 export function createBoardConnectionRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -58,11 +59,7 @@ export function createBoardConnectionRoutes(db: Db): Hono<HonoEnv> {
     }
 
     // Ensure the project belongs to the tenant.
-    const [project] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(and(eq(projects.id, body.projectId), eq(projects.tenantId, tenantId)))
-      .limit(1);
+    const project = await loadProjectInTenant(db, tenantId, body.projectId, { id: projects.id });
     if (!project) return c.json({ error: 'Project not found' }, 404);
 
     const [row] = await db

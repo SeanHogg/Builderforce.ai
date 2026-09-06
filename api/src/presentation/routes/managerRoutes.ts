@@ -54,6 +54,7 @@ import {
 import { notSystemTask, SYSTEM_TASK_SOURCE_MANAGER } from '../../application/task/taskScope';
 import { getTenantTokenAvailability } from '../../application/llm/tenantTokenAvailability';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
+import { loadProjectInTenant } from '../../application/project/projectOwnership';
 
 /**
  * The `reason` a `merge_blocked` decision recorded, out of its raw `detail` TEXT.
@@ -88,11 +89,7 @@ export function createManagerRoutes(
 
   /** Verify the project belongs to the caller's tenant; returns it or null. */
   async function ownProject(tenantId: number, projectId: number) {
-    const [p] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
-      .limit(1);
+    const p = await loadProjectInTenant(db, tenantId, projectId, { id: projects.id });
     return p ?? null;
   }
 

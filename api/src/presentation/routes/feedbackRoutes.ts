@@ -33,6 +33,7 @@ import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { isUniqueViolation } from '../../infrastructure/database/uniqueViolation';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { loadProjectInTenant } from '../../application/project/projectOwnership';
 
 /**
  * The public webhook address for one (collector, provider). Built in ONE place so
@@ -57,11 +58,7 @@ async function ownedCollector(db: Db, tenantId: number, collectorId: string): Pr
 
 /** Assert a project belongs to the caller's tenant; returns its name or null. */
 async function ownedProjectName(db: Db, tenantId: number, projectId: number): Promise<string | null> {
-  const [row] = await db
-    .select({ name: projects.name })
-    .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
-    .limit(1);
+  const row = await loadProjectInTenant(db, tenantId, projectId, { name: projects.name });
   return row?.name ?? null;
 }
 

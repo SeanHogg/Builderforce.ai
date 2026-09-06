@@ -61,11 +61,12 @@ application/swimlane/DrizzleCoordinatorStore.ts:4
 application/swimlane/evaluateAutoRun.ts:2
 application/swimlane/findOrCreateBoard.ts:1
 application/swimlane/laneEntryTrigger.ts:2
+application/swimlane/laneOrdinals.ts:2
 application/swimlane/laneRequirementGate.ts:4
 application/swimlane/resumeParkedWorkflows.ts:1
 application/task/taskDependencies.ts:1
 application/task/taskKeys.ts:1
-application/task/taskLifecycle.ts:3
+application/task/taskLifecycle.ts:2
 application/templates/outputKinds.ts:1
 application/tools/AuditRunner.ts:1
 application/tools/ToolService.ts:1

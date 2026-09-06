@@ -489,6 +489,34 @@ export async function closePipelineEntry(
   return { closed: true };
 }
 
+/**
+ * Close EVERY open entry of a pipeline — the requisition itself ended (filled or
+ * withdrawn), so nobody still in it reached a stage. One UPDATE: days-in-stage is
+ * computed in SQL with the same rounding {@link daysInStage} applies row by row.
+ */
+export async function closePipeline(
+  db: Db,
+  env: Env | undefined,
+  input: { tenantId: number; pipelineRef: string },
+): Promise<{ closed: number }> {
+  const rows = await db
+    .update(jobPipelineEntries)
+    .set({
+      exitedAt: sql`now()`,
+      daysInStage: sql`greatest(0, round(extract(epoch from (now() - ${jobPipelineEntries.enteredAt})) / 86400))::int`,
+      updatedAt: sql`now()`,
+    })
+    .where(scopedToTenant(
+      jobPipelineEntries,
+      input.tenantId,
+      eq(jobPipelineEntries.pipelineRef, input.pipelineRef),
+      isNull(jobPipelineEntries.exitedAt),
+    ))
+    .returning({ id: jobPipelineEntries.id });
+  if (rows.length > 0) await invalidatePipeline(env, input.tenantId, input.pipelineRef);
+  return { closed: rows.length };
+}
+
 /** One pipeline, as the picker above the board lists it. */
 export interface PipelineSummary {
   pipelineRef: string;

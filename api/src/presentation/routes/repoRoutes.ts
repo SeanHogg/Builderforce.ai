@@ -51,6 +51,7 @@ import { ensureAgentWorkflow, githubActionsAvailable } from '../../application/r
 import { AGENT_WORKFLOW_PATH } from '../../application/runtime/githubActionsWorkflow';
 import { ingestOpenAlertsForRepo } from '../../application/security/githubAlerts';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { loadProjectInTenant } from '../../application/project/projectOwnership';
 
 /** Read-through cache key for a project's repo list (the picker + SourceControl read
  *  this; it changes only on the CRUD routes below, which all invalidate it). */
@@ -185,10 +186,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid projectId' }, 400);
 
     // Verify project belongs to tenant.
-    const [project] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)));
+    const project = await loadProjectInTenant(db, tenantId, projectId, { id: projects.id });
     if (!project) return c.json({ error: 'Project not found' }, 404);
 
     const body = await c.req.json<{

@@ -24,6 +24,7 @@ import { TenantRole, AssignmentScope } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import { invalidateProjectGovernance } from '../../application/runtime/runContextSource';
 import type { Db } from '../../infrastructure/database/connection';
+import { loadProjectInTenant } from '../../application/project/projectOwnership';
 
 const VALID_KINDS = new Set(['workforce', 'registered']);
 
@@ -158,10 +159,6 @@ export function createProjectAgentRoutes(db: Db): Hono<HonoEnv> {
 // ---------------------------------------------------------------------------
 
 async function projectBelongsToTenant(db: Db, tenantId: number, projectId: number): Promise<boolean> {
-  const [row] = await db
-    .select({ id: projects.id })
-    .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
-    .limit(1);
+  const row = await loadProjectInTenant(db, tenantId, projectId, { id: projects.id });
   return !!row;
 }

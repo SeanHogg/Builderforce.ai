@@ -32,6 +32,7 @@ import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { loadAgentManifests, invalidateAgentManifests } from '../../application/artifact/agentManifest';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { loadProjectInTenant } from '../../application/project/projectOwnership';
 
 const VALID_TYPES = new Set(Object.values(ArtifactType));
 const VALID_SCOPES = new Set(Object.values(AssignmentScope));
@@ -226,11 +227,7 @@ async function verifyScopeOwnership(
     }
 
     case AssignmentScope.PROJECT: {
-      const [row] = await db
-        .select({ id: projects.id })
-        .from(projects)
-        .where(and(eq(projects.id, scopeId), eq(projects.tenantId, tenantId)))
-        .limit(1);
+      const row = await loadProjectInTenant(db, tenantId, scopeId, { id: projects.id });
       return !!row;
     }
 

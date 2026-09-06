@@ -34,6 +34,7 @@ import {
 import { getMissingIntegrationRecommendations } from '../../application/integrations/integrationGapRecommendations';
 import { limitParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { loadProjectInTenant } from '../../application/project/projectOwnership';
 
 /**
  * Credential providers accepted by this endpoint come from ONE registry
@@ -96,10 +97,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
     // project must belong to this tenant (prevents cross-tenant scoping).
     let projectId: number | null = null;
     if (body.projectId != null) {
-      const [proj] = await db
-        .select({ id: projects.id })
-        .from(projects)
-        .where(and(eq(projects.id, body.projectId), eq(projects.tenantId, tenantId)));
+      const proj = await loadProjectInTenant(db, tenantId, body.projectId, { id: projects.id });
       if (!proj) return c.json({ error: 'projectId not found in this workspace' }, 400);
       projectId = proj.id;
     }
@@ -187,8 +185,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
       return c.json({ error: 'projectId must be a positive integer' }, 400);
     }
     if (projectId != null) {
-      const [project] = await db.select({ id: projects.id }).from(projects)
-        .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)));
+      const project = await loadProjectInTenant(db, tenantId, projectId, { id: projects.id });
       if (!project) return c.json({ error: 'projectId not found in this workspace' }, 404);
     }
 

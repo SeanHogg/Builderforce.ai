@@ -26,6 +26,7 @@
     "check:model-coverage": "node scripts/check-model-coverage.mjs",
     "check:layering": "node scripts/check-layering.mjs",
     "check:application-layering": "node scripts/check-application-layering.mjs",
+    "check:project-ownership": "node scripts/check-project-ownership.mjs",
     "check:tenant-scope": "node scripts/check-tenant-scope.mjs",
     "check:source": "node scripts/check-source-text.mjs",
     "check:silent-catches": "node ../scripts/check-silent-catches.mjs",

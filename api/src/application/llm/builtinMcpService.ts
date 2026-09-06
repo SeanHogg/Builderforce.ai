@@ -2535,10 +2535,11 @@ const CATALOG: BuiltinTool[] = [
       const [board] = await ctx.db.select({ id: boards.id }).from(boards).where(and(eq(boards.id, str(a.boardId)), eq(boards.tenantId, ctx.tenantId), eq(boards.segmentId, seg))).limit(1);
       if (!board) throw new Error('board not found');
       const [row] = await ctx.db.insert(swimlanes).values({ tenantId: ctx.tenantId, segmentId: seg, boardId: board.id, key: str(a.key), name: str(a.name), ...(a.position != null ? { position: num(a.position) } : {}) }).returning();
+      await invalidateBoardLaneOrdinals(ctx.env, ctx.db, board.id);
       return row;
     },
   },
-  { tool: 'swimlanes.remove', mutates: true, description: 'Delete a swimlane.', parameters: obj({ boardId: S, laneId: S }, ['boardId', 'laneId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const [board] = await ctx.db.select({ id: boards.id }).from(boards).where(and(eq(boards.id, str(a.boardId)), eq(boards.tenantId, ctx.tenantId), eq(boards.segmentId, seg))).limit(1); if (!board) return { deleted: null }; const rows = await ctx.db.delete(swimlanes).where(and(eq(swimlanes.id, str(a.laneId)), eq(swimlanes.boardId, board.id), eq(swimlanes.tenantId, ctx.tenantId), eq(swimlanes.segmentId, seg))).returning({ id: swimlanes.id }); return { deleted: rows.length > 0 ? str(a.laneId) : null }; } },
+  { tool: 'swimlanes.remove', mutates: true, description: 'Delete a swimlane.', parameters: obj({ boardId: S, laneId: S }, ['boardId', 'laneId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const [board] = await ctx.db.select({ id: boards.id }).from(boards).where(and(eq(boards.id, str(a.boardId)), eq(boards.tenantId, ctx.tenantId), eq(boards.segmentId, seg))).limit(1); if (!board) return { deleted: null }; const rows = await ctx.db.delete(swimlanes).where(and(eq(swimlanes.id, str(a.laneId)), eq(swimlanes.boardId, board.id), eq(swimlanes.tenantId, ctx.tenantId), eq(swimlanes.segmentId, seg))).returning({ id: swimlanes.id }); if (rows.length > 0) await invalidateBoardLaneOrdinals(ctx.env, ctx.db, board.id); return { deleted: rows.length > 0 ? str(a.laneId) : null }; } },
 
   { tool: 'swimlane_agents.list', mutates: false, description: 'Agents assigned to a swimlane.', parameters: obj({ boardId: S, laneId: S }, ['boardId', 'laneId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const [lane] = await ctx.db.select({ id: swimlanes.id }).from(swimlanes).innerJoin(boards, eq(swimlanes.boardId, boards.id)).where(and(eq(swimlanes.id, str(a.laneId)), eq(boards.id, str(a.boardId)), eq(swimlanes.tenantId, ctx.tenantId), eq(swimlanes.segmentId, seg))).limit(1); if (!lane) return []; return ctx.db.select().from(laneAgentAssignments).where(forLane(lane.id, eq(laneAgentAssignments.tenantId, ctx.tenantId), eq(laneAgentAssignments.segmentId, seg))).orderBy(laneAgentAssignments.position); } },
   {
@@ -4079,6 +4080,7 @@ export function listBuiltinTools(): McpToolEntry[] {
  */
 export { CLOUD_AGENT_PLATFORM_TOOLS, CHAT_SCOPED_AGENT_TOOLS } from './cloudAgentToolset';
 import { CLOUD_AGENT_PLATFORM_TOOLS } from './cloudAgentToolset';
+import { invalidateBoardLaneOrdinals } from '../swimlane/laneOrdinals';
 
 const CLOUD_AGENT_PLATFORM_SET: ReadonlySet<string> = new Set(CLOUD_AGENT_PLATFORM_TOOLS);
 const ORIGINATING_CHAT_TOOL = 'chats.post_to_brain';

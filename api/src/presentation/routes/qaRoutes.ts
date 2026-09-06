@@ -56,7 +56,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { isValidCron, nextCronTime } from '../../domain/workflowSchedule';
-import { projectInTenant } from '../../application/project/projectOwnership';
+import { projectInTenant, loadProjectInTenant } from '../../application/project/projectOwnership';
 import { deriveTargetZones } from '../../application/qa/deriveTargetRoutes';
 import { fireEventTriggers } from '../../application/workflow/eventTriggers';
 import { getFindingScreenshot, putFindingScreenshot } from '../../application/qa/findingScreenshots';
@@ -1250,8 +1250,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
     // Ownership gate: projects.id is an enumerable serial and qaRoutingSettings.projectId
     // is UNIQUE (global conflict target), so without this check tenant A could upsert
     // over tenant B's routing row by supplying B's projectId in the URL.
-    const [ownedProject] = await db.select({ id: projects.id }).from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId))).limit(1);
+    const ownedProject = await loadProjectInTenant(db, tenantId, projectId, { id: projects.id });
     if (!ownedProject) return c.json({ error: 'Project not found' }, 404);
 
     const now = new Date();

@@ -20,11 +20,17 @@ import type { Env } from '../../env';
 import { projects, tasks } from '../../infrastructure/database/schema';
 import { broadcastProjectChanged } from '../../infrastructure/relay/broadcastRoom';
 import type { ExecutionEventSink, ExecutionSubscriberEvent } from './executionEvents';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 
-/** Per-isolate taskId→{projectId, tenantId} memo so repeated events for a run skip
- *  the lookup. The tenant is needed because the project live room is tenant-scoped
- *  (`project:<tenantId>:<id>`) — publish must match the subscribe side. */
-const projectRefByTask = new Map<number, { projectId: number; tenantId: number }>();
+/** taskId→{projectId, tenantId}, read through the ONE cache helper (L1 + KV) so
+ *  repeated events for a run skip the lookup. The tenant is needed because the
+ *  project live room is tenant-scoped (`project:<tenantId>:<id>`) — publish must
+ *  match the subscribe side. This used to be a module-level Map that was never
+ *  pruned: every task that ever ran on the isolate stayed in it for the isolate's
+ *  life. The helper's L1 expires entries and the KV tier is shared across isolates. */
+function projectRefCacheKey(taskId: number): string {
+  return `task:project-ref:${taskId}`;
+}
 
 function taskIdOf(event: ExecutionSubscriberEvent): number | null {
   if (event.type !== 'status_change' && event.type !== 'done') return null;
@@ -43,18 +49,16 @@ export function makeExecutionBoardSink(env: Env, db: Db): ExecutionEventSink {
     // Fire-and-forget: notifyExecutionSubscribers is synchronous and must not block.
     void (async () => {
       try {
-        let ref = projectRefByTask.get(taskId);
-        if (ref == null) {
+        const ref = await getOrSetCached(env, projectRefCacheKey(taskId), async () => {
           const [row] = await db
             .select({ projectId: tasks.projectId, tenantId: projects.tenantId })
             .from(tasks)
             .innerJoin(projects, eq(tasks.projectId, projects.id))
             .where(eq(tasks.id, taskId))
             .limit(1);
-          if (!row) return;
-          ref = { projectId: row.projectId, tenantId: row.tenantId };
-          projectRefByTask.set(taskId, ref);
-        }
+          return row ? { projectId: row.projectId, tenantId: row.tenantId } : null;
+        }, { kvTtlSeconds: 3600 });
+        if (!ref) return;
         await broadcastProjectChanged(env, ref.tenantId, ref.projectId);
       } catch (error) {
         reportCaughtError(error, { source: "application/runtime/executionBoardBroadcast.ts", operation: "makeExecutionBoardSink", context: { logMessage: '[execution-board] project change broadcast failed', details: { taskId, error } } });

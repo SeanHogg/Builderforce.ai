@@ -18,7 +18,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * requested, or not run and why — because a report that omits a check it never made
  * reads exactly like a report of a check that passed.
  */
-import { and, desc, eq, isNotNull } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
 import { projects, securityAudits } from '../../infrastructure/database/schema';
 import { SecurityAuditService } from './SecurityAuditService';
 import { openTaskMarkers } from './findingMarkers';
@@ -35,6 +35,7 @@ import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { projectInTenant, loadProjectInTenant } from '../project/projectOwnership';
+import { acrossTenants } from '../../infrastructure/database/tenantScope';
 
 /** How the current scan compares to the previous scan of the same URL. */
 export interface ScanBaseline {
@@ -267,15 +268,24 @@ export async function runWebScanSweep(env: Env): Promise<WebScanSweepResult> {
   const db = buildDatabase(env);
   const out: WebScanSweepResult = { projectsWithTarget: 0, scanned: 0, findingsFiled: 0, skippedOverCap: 0 };
 
-  const rows = await db
-    .select({ id: projects.id, tenantId: projects.tenantId, url: projects.securityTargetUrl })
-    .from(projects)
-    .where(and(isNotNull(projects.securityTargetUrl), eq(projects.isIdeStorage, false)))
-    .orderBy(desc(projects.updatedAt));
+  // Count and pick in SQL, least-recently web-scanned FIRST. This used to load every
+  // scannable project ordered by `updated_at` and slice the first hundred in JS — so a
+  // project ranked past the cap was never scanned, on any week. A DECLARED cross-tenant
+  // read: the weekly sweep covers every tenant at once.
+  const scope = acrossTenants(projects, 'scheduled_sweep', isNotNull(projects.securityTargetUrl), eq(projects.isIdeStorage, false));
+  const lastWebScan = sql`(select max(${securityAudits.startedAt}) from ${securityAudits} where ${securityAudits.projectId} = ${projects.id} and ${securityAudits.scanKind} = 'web')`;
+  const [[counted], batch] = await Promise.all([
+    db.select({ total: sql<number>`count(*)::int` }).from(projects).where(scope),
+    db
+      .select({ id: projects.id, tenantId: projects.tenantId, url: projects.securityTargetUrl })
+      .from(projects)
+      .where(scope)
+      .orderBy(sql`${lastWebScan} asc nulls first`, desc(projects.updatedAt))
+      .limit(WEB_SCAN_SWEEP_CAP),
+  ]);
 
-  out.projectsWithTarget = rows.length;
-  const batch = rows.slice(0, WEB_SCAN_SWEEP_CAP);
-  out.skippedOverCap = rows.length - batch.length;
+  out.projectsWithTarget = Number(counted?.total ?? batch.length);
+  out.skippedOverCap = Math.max(0, out.projectsWithTarget - batch.length);
 
   for (const row of batch) {
     if (!row.url) continue;

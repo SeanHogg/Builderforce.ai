@@ -40,6 +40,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { isUniqueViolation } from '../../infrastructure/database/uniqueViolation';
 import { daysParam, limitParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { loadProjectInTenant } from '../../application/project/projectOwnership';
 
 /** Encryption secret for sealing webhook/pull credentials (same resolver integrations use). */
 function integrationSecret(env: Env): string {
@@ -275,8 +276,7 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
     if (body.status !== undefined && ['active', 'paused'].includes(body.status)) patch.status = body.status;
     if (body.defaultProjectId !== undefined) {
       if (body.defaultProjectId !== null) {
-        const [p] = await db.select({ id: projects.id }).from(projects)
-          .where(and(eq(projects.id, body.defaultProjectId), eq(projects.tenantId, tenantId))).limit(1);
+        const p = await loadProjectInTenant(db, tenantId, body.defaultProjectId, { id: projects.id });
         if (!p) return c.json({ error: 'Project not found' }, 404);
       }
       patch.defaultProjectId = body.defaultProjectId;
@@ -502,8 +502,7 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
     const matchOp = body.matchOp && MAPPING_OPS.includes(body.matchOp) ? body.matchOp : 'equals';
     if (!body.matchValue) return c.json({ error: 'matchValue is required' }, 400);
     if (!body.projectId) return c.json({ error: 'projectId is required' }, 400);
-    const [p] = await db.select({ id: projects.id }).from(projects)
-      .where(and(eq(projects.id, body.projectId), eq(projects.tenantId, tenantId))).limit(1);
+    const p = await loadProjectInTenant(db, tenantId, body.projectId, { id: projects.id });
     if (!p) return c.json({ error: 'Project not found' }, 404);
 
     const [row] = await db

@@ -11,7 +11,7 @@
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { and, eq } from 'drizzle-orm';
+import { and } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { resolveHostAuth } from '../../infrastructure/auth/agentHostAuth';
 import { projects } from '../../infrastructure/database/schema';
@@ -20,15 +20,12 @@ import type { Env, HonoEnv } from '../../env';
 import { recallProjectFacts, upsertProjectFact } from '../../application/llm/projectFacts';
 import { resolveMemoryAnswer, cacheProjectAnswer } from '../../application/llm/projectMemory';
 import { evermindGenerate, type ArtifactStore } from '../../application/llm/evermindRuntime';
+import { loadProjectInTenant } from '../../application/project/projectOwnership';
 
 /** Verify the project exists AND belongs to this tenant (IDOR guard). */
 async function ownsProject(db: Db, tenantId: number, projectId: number): Promise<boolean> {
   if (!Number.isInteger(projectId) || projectId <= 0) return false;
-  const [row] = await db
-    .select({ id: projects.id })
-    .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
-    .limit(1);
+  const row = await loadProjectInTenant(db, tenantId, projectId, { id: projects.id });
   return !!row;
 }
 

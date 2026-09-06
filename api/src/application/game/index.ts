@@ -20,7 +20,7 @@ import { projectGameTargets, projectSites, projects } from '../../infrastructure
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
-import { listProjectSecrets, loadProjectSecretValues } from '../secrets/projectSecrets';
+import { listProjectSecrets, loadProjectSecretValues, redactSecretValues } from '../secrets/projectSecrets';
 import { publishStaticSite } from '../ide/publishStaticSite';
 import { HOSTING_APEX } from '../ide/siteHosting';
 import { writeWorkspaceBinary, writeWorkspaceFile } from '../ide/workspaceStore';
@@ -481,7 +481,9 @@ export async function publishGameToRoblox(args: {
   }
 
   const published = await publishRobloxPlace(apiKey, target, rbxlx);
-  if (!published.ok) return { ok: false, status: published.status, error: published.error };
+  // Roblox echoes request details into some error bodies; the key must not ride
+  // back to the caller (or into the run log) inside one.
+  if (!published.ok) return { ok: false, status: published.status, error: redactSecretValues(published.error, secrets) };
 
   const directory = robloxTarget.directory(game.slug);
   for (const [path, contents] of Object.entries(files)) {

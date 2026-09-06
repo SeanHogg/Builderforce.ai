@@ -23,7 +23,7 @@ import { createSegmentRoutes } from './segmentRoutes';
 function makeDb(opts: { selectRows?: unknown[]; insertRows?: unknown[]; updateRows?: unknown[]; deleteRows?: unknown[] } = {}) {
   const captured: { insertValues?: any; updateSet?: any } = {};
   const db = {
-    select: () => ({ from: () => ({ where: () => ({ orderBy: async () => opts.selectRows ?? [] }) }) }),
+    select: () => ({ from: () => ({ where: () => ({ orderBy: () => ({ limit: async () => opts.selectRows ?? [] }) }) }) }),
     insert: () => ({
       values: (v: any) => {
         captured.insertValues = v;

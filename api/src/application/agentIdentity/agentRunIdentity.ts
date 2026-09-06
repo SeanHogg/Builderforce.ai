@@ -16,7 +16,7 @@ import {
   agentRegistrations,
 } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { scopedToTenant, acrossTenants } from '../../infrastructure/database/tenantScope';
 import { selectAgentRelease } from '../../domain/agentIdentity/releaseSelection';
 
 export interface FrozenAgentDefinition {
@@ -193,6 +193,24 @@ export async function listIdeAgentVersions(db: Db, tenantId: number, agentRef: s
   return { versions, release: release[0] ?? null };
 }
 
+/**
+ * Revoke the principals of runs a SWEEP just made terminal — every tenant at once.
+ * A DECLARED cross-tenant write: the reaper sweeps all tenants, and the execution ids
+ * it hands over ARE the access predicate (each came from a row its own update owned).
+ */
+export async function revokeRunPrincipalsForExecutions(db: Db, executionIds: number[]): Promise<number> {
+  if (executionIds.length === 0) return 0;
+  const rows = await db.update(agentRunPrincipals).set({ status: 'revoked', revokedAt: new Date() }).where(acrossTenants(
+    agentRunPrincipals,
+    'scheduled_sweep',
+    and(inArray(agentRunPrincipals.executionId, executionIds), eq(agentRunPrincipals.status, 'active')),
+  )).returning({ id: agentRunPrincipals.id });
+  return rows.length;
+}
+
+/** Revoke a run's callback principal the moment the run is terminal, rather than at its
+ *  24h expiry. `authorizeExecutionPrincipal` already refuses a terminal run; this is the
+ *  audit-visible half — the row says 'revoked' and when. */
 export async function revokeRunPrincipal(db: Db, tenantId: number, executionId: number): Promise<boolean> {
   const rows = await db.update(agentRunPrincipals).set({ status: 'revoked', revokedAt: new Date() }).where(and(
     eq(agentRunPrincipals.tenantId, tenantId), eq(agentRunPrincipals.executionId, executionId), eq(agentRunPrincipals.status, 'active'),
