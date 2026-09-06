@@ -78,8 +78,23 @@ export function outputKindSpec(kind: string): OutputKindSpec<TemplateOutput> | n
   return (REGISTRY.get(kind as TemplateOutputKind) as OutputKindSpec<TemplateOutput> | undefined) ?? null;
 }
 
+/** The kinds something can install — the registry's keys, in registration order. */
 export function registeredOutputKinds(): TemplateOutputKind[] {
   return [...REGISTRY.keys()];
+}
+
+/**
+ * The sentence for an output kind `outputKindSpec` has no materialiser for —
+ * naming what IS installable.
+ *
+ * ONE sentence for both places an output kind meets the registry: the installer,
+ * which cannot silently skip a bound output, and the publisher's save path, which
+ * must refuse a manifest before a customer's install discovers the hole. A message
+ * that says only "unknown kind" sends a person to the source; one that lists the
+ * installable kinds lets them fix the manifest.
+ */
+export function uninstallableOutputError(kind: string): string {
+  return `Nothing knows how to install a "${kind}" output. Installable kinds: ${registeredOutputKinds().join(', ')}.`;
 }
 
 // ---------------------------------------------------------------------------

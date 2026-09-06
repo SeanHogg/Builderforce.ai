@@ -2355,10 +2355,20 @@ export const vulnerabilityFindings = pgTable('vulnerability_findings', {
   cve:               varchar('cve', { length: 40 }),
   description:       text('description'),
   remediation:       text('remediation'),
+  // 'open' | 'triaged' | 'fixed' | 'accepted_risk' | 'false_positive'
+  // (VULNERABILITY_FINDING_STATUSES in application/security/vulnerabilityFindings.ts)
   status:            varchar('status', { length: 20 }).notNull().default('open'),
+  /** sha-256 hex prefix of the finding's identity tuple — unique per scan, so
+   *  re-posting the same report is a no-op (migration 1132). */
+  fingerprint:       varchar('fingerprint', { length: 64 }),
+  /** Board ticket this finding was routed to, mirroring `qa_findings.task_id`.
+   *  Cross-domain reference by value — no FK. */
+  taskId:            integer('task_id'),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+  uniqueIndex('uq_vulnerability_findings_scan_fingerprint').on(t.scanId, t.fingerprint),
+]);
 
 
 // ---------------------------------------------------------------------------

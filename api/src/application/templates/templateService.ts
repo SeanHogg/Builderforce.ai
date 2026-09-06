@@ -26,6 +26,7 @@ import {
   type TemplateManifest,
 } from '../../domain/template/templateManifest';
 import { isReservedTemplateKey } from './defaults';
+import { outputKindSpec, uninstallableOutputError } from './outputKinds';
 import { invalidateTemplateCatalog, TEMPLATE_CATALOG_KIND } from './templateRegistry';
 
 export class TemplateServiceError extends Error {
@@ -36,14 +37,24 @@ export class TemplateServiceError extends Error {
 }
 
 function validateOrThrow(raw: unknown): TemplateManifest {
+  let manifest: TemplateManifest;
   try {
-    return parseTemplateManifest(raw);
+    manifest = parseTemplateManifest(raw);
   } catch (e) {
     if (e instanceof TemplateManifestError) {
       throw new TemplateServiceError('The template is not valid', 400, e.errors);
     }
     throw e;
   }
+  // The shape check above holds the manifest to the DOMAIN's kind list; this holds
+  // it to what the registry can actually install, with the same sentence the
+  // installer would otherwise emit — at publish time, not at a customer's install.
+  const uninstallable = manifest.outputs.flatMap((output, index) =>
+    outputKindSpec(output.kind) ? [] : [`outputs[${index}].kind: ${uninstallableOutputError(output.kind)}`]);
+  if (uninstallable.length > 0) {
+    throw new TemplateServiceError('The template is not valid', 400, uninstallable);
+  }
+  return manifest;
 }
 
 export interface SaveTemplateArgs {

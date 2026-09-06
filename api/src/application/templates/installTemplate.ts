@@ -26,7 +26,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { bindAnswers } from '../../domain/guidedSetup/guidedPlan';
 import type { GuidedAnswers } from '../../domain/guidedSetup/guidedStep';
 import type { TemplateOutput } from '../../domain/template/templateManifest';
-import { outputKindSpec, type MaterializeOutputContext, type OutputResult } from './outputKinds';
+import { outputKindSpec, uninstallableOutputError, type MaterializeOutputContext, type OutputResult } from './outputKinds';
 import { invalidateTemplateCatalog, TEMPLATE_CATALOG_KIND, type ResolvedTemplate } from './templateRegistry';
 import { resolveTemplateSetup } from './templateSetup';
 import { loadProjectInTenant } from '../project/projectOwnership';
@@ -172,7 +172,8 @@ export async function installTemplate(args: InstallTemplateArgs): Promise<Instal
     const spec = outputKindSpec(output.kind);
     if (!spec) {
       // Only reachable if a manifest outlived a registry change; the contract
-      // test asserts every declared kind has a materialiser.
+      // test asserts every declared kind has a materialiser, and the publisher's
+      // save path refuses the manifest with the same sentence.
       outputs.push({
         outputId: output.id,
         kind: output.kind,
@@ -181,7 +182,7 @@ export async function installTemplate(args: InstallTemplateArgs): Promise<Instal
         ref: null,
         detail: 'Not created',
         ok: false,
-        error: `Nothing knows how to install a "${output.kind}" output.`,
+        error: uninstallableOutputError(output.kind),
       });
       continue;
     }

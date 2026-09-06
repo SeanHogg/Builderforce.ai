@@ -1,34 +1,28 @@
-import { Context } from 'hono';
-import {
-  NotFoundError,
-  ConflictError,
-  ValidationError,
-  ForbiddenError,
-  UnauthorizedError,
-  ServiceUnavailableError,
-} from '../../domain/shared/errors';
+import type { Context } from 'hono';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
+import { isClientError } from '../../domain/shared/errors';
 import { reportUnhandledError } from '../../application/observability/caughtErrorReporter';
 import type { HonoEnv } from '../../env';
 import { addCorsToResponse } from './cors';
+import { errorResponseBody } from './errorResponse';
 
 /**
  * Global error handler for the Hono application.
  *
- * Maps domain errors to HTTP status codes and returns a consistent JSON body.
- * Unknown errors use the same durable reporter as explicitly caught exceptions:
- * platform logs, api_error_log, and Product Quality.
+ * Runs on `statusOf` (domain/shared/errors.ts) — the same rule `failResponse`
+ * uses for caught errors — so a thrown `NotFoundError`, a thrown `PublisherError`
+ * carrying `status: 409`, and a `RequestValidationError` with per-field issues
+ * all answer exactly as they would from inside a handler's own catch.
+ *
+ * A 5xx is an invariant failure: it goes to the same durable reporter as
+ * explicitly caught exceptions (platform logs, api_error_log, Product Quality)
+ * and is answered with a GENERIC message. The thrown message used to be echoed
+ * to the caller; `relation "x" does not exist` is a diagnostic, not a response.
  */
 export async function errorHandler(err: Error, c: Context): Promise<Response> {
-  let res: Response;
-  if (err instanceof ValidationError)  res = c.json({ error: err.message }, 400);
-  else if (err instanceof UnauthorizedError) res = c.json({ error: err.message }, 401);
-  else if (err instanceof ForbiddenError)   res = c.json({ error: err.message }, 403);
-  else if (err instanceof NotFoundError)    res = c.json({ error: err.message }, 404);
-  else if (err instanceof ConflictError)    res = c.json({ error: err.message }, 409);
-  else if (err instanceof ServiceUnavailableError) res = c.json({ error: err.message }, 503);
-  else {
-    const message = err instanceof Error ? err.message : String(err);
-    const honoContext = c as Context<HonoEnv>;
+  const { status, body } = errorResponseBody(err);
+  const honoContext = c as Context<HonoEnv>;
+  if (!isClientError(status)) {
     await reportUnhandledError(err, {
       source: 'presentation/middleware/errorHandler.ts',
       operation: 'request',
@@ -39,7 +33,6 @@ export async function errorHandler(err: Error, c: Context): Promise<Response> {
       tenantId: honoContext.get('tenantId'),
       userId: honoContext.get('userId'),
     });
-    res = c.json({ error: message }, 500);
   }
-  return addCorsToResponse(c as Context<HonoEnv>, res);
+  return addCorsToResponse(honoContext, c.json(body, status as ContentfulStatusCode));
 }

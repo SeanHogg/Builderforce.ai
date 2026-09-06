@@ -20,7 +20,7 @@ import {
   BUILTIN_TEMPLATE_SOURCES,
   normalizeBuiltinTemplate,
 } from './defaults';
-import { registeredOutputKinds } from './outputKinds';
+import { outputKindSpec, registeredOutputKinds, uninstallableOutputError } from './outputKinds';
 import { listTemplatesForTenant } from './templateRegistry';
 import type { Db } from '../../infrastructure/database/connection';
 import {
@@ -81,6 +81,17 @@ describe('output kinds', () => {
     // kind declared in one and absent from the other installs nothing and says
     // nothing, which is the worst available outcome.
     expect([...registeredOutputKinds()].sort()).toEqual([...TEMPLATE_OUTPUT_KINDS].sort());
+  });
+
+  it('names what IS installable when a kind is not', () => {
+    // The sentence the installer files against a stranded output and the save path
+    // refuses a manifest with. "Unknown kind" sends a person to the source; the
+    // list lets them fix the manifest.
+    expect(outputKindSpec('dashboard')).toBeNull();
+    const reason = uninstallableOutputError('dashboard');
+    expect(reason).toContain('"dashboard"');
+    for (const kind of TEMPLATE_OUTPUT_KINDS) expect(reason).toContain(kind);
+    expect(reason).toMatch(/Installable kinds: /);
   });
 });
 
