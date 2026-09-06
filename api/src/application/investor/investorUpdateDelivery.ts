@@ -26,6 +26,7 @@
  */
 
 import type { Env } from '../../env';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
 import { deliveries } from '../../infrastructure/database/schema';
 import {
@@ -69,9 +70,6 @@ export interface SendInvestorUpdateResult {
   transport: string;
   fromLabel: string;
 }
-
-const escapeHtml = (value: string): string =>
-  value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 
 const section = (heading: string, rows: readonly string[]): string =>
   rows.length ? `<h3 style="margin:24px 0 8px;font:600 15px/1.4 system-ui,sans-serif">${escapeHtml(heading)}</h3><ul style="margin:0;padding-left:20px;font:400 14px/1.6 system-ui,sans-serif">${rows.map((r) => `<li>${r}</li>`).join('')}</ul>` : '';

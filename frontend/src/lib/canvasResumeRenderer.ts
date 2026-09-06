@@ -1,4 +1,5 @@
-import { escapeHtml, markdownToHtml } from './richText';
+import { markdownToHtml } from './richText';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 import {
   RESUME_TEMPLATES,
   activeResumeRevision,

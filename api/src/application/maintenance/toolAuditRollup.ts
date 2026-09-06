@@ -12,8 +12,9 @@
  * WHAT A FOLD KEEPS. Every number the two consumers compute — the compliance summary
  * and the evidence pack — is a sum over (tenant, day, tool_name, category, agent):
  * total volume, sensitive-action count, per-tool / per-category / per-agent
- * breakdown, duration. Folding to exactly that grain measured 170:1 in production
- * (655,700 raw rows → 3,859 tallies) and changes none of those figures. The tally is
+ * breakdown, duration. Folding to exactly that grain measured 188:1 in production —
+ * 651,664 raw rows became 3,464 tallies, and the relation went from 176 MB to 11 MB —
+ * and changes none of those figures. The tally is
  * a defensible audit artifact in its own right: it states that this agent called this
  * tool this many times on this day, first at this time and last at that one.
  *

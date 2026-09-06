@@ -26,19 +26,12 @@
  */
 
 import {
+  escapeHtml,
   hasRichMarks, isRichAlign, mergeRichMarks, normalizeRichColor, normalizeRichFont, readRichBlock,
   richAlignFromCss, richMarksCss, richMarksFromCss, richSizeFromFontElement, sameRichMarks,
   splitRichSpans, wrapRichSpan, writeRichBlock,
   type RichAlign, type RichMarks,
 } from '@builderforce/creation-canvas-contract';
-
-const HTML_ESCAPES: Readonly<Record<string, string>> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' };
-
-/** Escape text for interpolation into markup. Exported because the print
- * document builds a `<title>` from a user-authored string. */
-export function escapeHtml(value: string): string {
-  return value.replace(/[&<>"]/g, (character) => HTML_ESCAPES[character]!);
-}
 
 /* ── markdown → HTML ─────────────────────────────────────────────────────── */
 

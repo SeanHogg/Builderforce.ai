@@ -46,6 +46,7 @@
  */
 
 import type { Env } from '../../env';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 import { sendRawEmail } from '../../infrastructure/email/EmailService';
 import { emailCopy, fillCopy } from '../../infrastructure/email/emailMessages';
 import { DEFAULT_EMAIL_LOCALE, type EmailLocale } from '../../infrastructure/email/emailLocale';
@@ -88,11 +89,6 @@ export interface ShareInvitationDelivery {
   sent: number;
   failed: number;
 }
-
-const escapeHtml = (value: string): string =>
-  value.replace(/[&<>"']/g, (character) => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] as string
-  ));
 
 /**
  * The one template.

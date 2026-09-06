@@ -6,8 +6,9 @@
 -- it is the window the SOC 2 evidence export reads — but the GRAIN is. Every figure
 -- the compliance lens and the evidence pack compute (volume, sensitive-action count,
 -- per-tool / per-category / per-agent breakdown, duration) is a sum over
--- (tenant, day, tool_name, category, agent). Folding to that grain measured 170:1:
--- 655,700 raw rows → 3,859 tallies.
+-- (tenant, day, tool_name, category, agent). Folding to that grain measured 188:1
+-- when it ran: 651,664 raw rows became 3,464 tallies, and the relation went from
+-- 176 MB to 11 MB — 163 MB off a 431 MB database.
 --
 -- WHAT IT COSTS. The ability to cite ONE tool call older than the fold boundary. The
 -- three stages are 14d redact → 30d fold → 90d purge, so a row is only ever folded

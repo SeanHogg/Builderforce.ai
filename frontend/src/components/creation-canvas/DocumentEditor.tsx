@@ -41,9 +41,9 @@ import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import styles from './CreationCanvas.module.css';
-import { escapeHtml, htmlToMarkdown, markdownToHtml } from '@/lib/richText';
+import { htmlToMarkdown, markdownToHtml } from '@/lib/richText';
 import {
-  RICH_FONTS, RICH_SIZES, richMarksCss, type RichAlign, type RichMarks,
+  RICH_FONTS, RICH_SIZES, escapeHtml, richMarksCss, type RichAlign, type RichMarks,
 } from '@builderforce/creation-canvas-contract';
 
 /** Write the body back this long after the last keystroke, so a session that

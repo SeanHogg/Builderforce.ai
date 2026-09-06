@@ -27,7 +27,8 @@
  */
 
 import type { GameTarget, GameTargetContext, GameTargetResult } from '../gameTarget';
-import { escapeHtml, injectIntoHead, withTouchControls } from '../gameDocument';
+import { injectIntoHead, withTouchControls } from '../gameDocument';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 import { gameIconPng } from '../pngIcon';
 
 /** Everything the worker precaches. The game is the shell; there is nothing else. */

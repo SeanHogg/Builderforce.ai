@@ -3,15 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { adminApi, type AdminSystemHealth } from '@/lib/adminApi';
 import { errText } from '../adminShared';
+import { formatBytes } from '@/lib/formatBytes';
 import { useAdminFormat } from '../adminShared';
-
-const bytes = (n: number) => {
-  if (n < 1024) return `${n} B`;
-  const units = ['KB', 'MB', 'GB', 'TB'];
-  let v = n; let i = -1;
-  do { v /= 1024; i += 1; } while (v >= 1024 && i < units.length - 1);
-  return `${v.toFixed(v >= 10 ? 0 : 1)} ${units[i]}`;
-};
 
 export function SystemHealthSection() {
   const { fmtDateTime, fmtNum } = useAdminFormat();
@@ -61,9 +54,9 @@ export function SystemHealthSection() {
         {health.databases.map((db) => <div key={db.name} className="health-card" style={{ padding: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <div><strong style={{ textTransform: 'capitalize' }}>{db.name} Neon database</strong><div className="text-muted" style={{ fontSize: 12 }}>{db.databaseName ?? 'unavailable'} · {db.ok ? `${db.latencyMs} ms` : db.error}</div></div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><strong>{bytes(db.totalBytes)}</strong><button className="btn-ghost" type="button" disabled={Boolean(busy) || !db.ok} onClick={() => void maintain('vacuum_analyze', db.name)}>Vacuum & analyze</button></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><strong>{formatBytes(db.totalBytes)}</strong><button className="btn-ghost" type="button" disabled={Boolean(busy) || !db.ok} onClick={() => void maintain('vacuum_analyze', db.name)}>Vacuum & analyze</button></div>
           </div>
-          <div className="table-wrap" style={{ marginTop: 12 }}><table className="data-table" style={{ fontSize: 12 }}><thead><tr><th>Table</th><th>Size</th><th>Rows</th><th>Writes since stats reset</th><th>Last vacuum</th><th></th></tr></thead><tbody>{db.tables.map((table) => <tr key={table.name}><td>{table.name}</td><td>{bytes(Number(table.totalBytes))}</td><td>{fmtNum(Number(table.estimatedRows))}</td><td>{fmtNum(Number(table.insertsSinceStatsReset) + Number(table.updatesSinceStatsReset) + Number(table.deletesSinceStatsReset))}</td><td>{table.lastAutovacuum ? fmtDateTime(table.lastAutovacuum) : '—'}</td><td><button className="btn-ghost" type="button" disabled={Boolean(busy)} onClick={() => void maintain('vacuum_analyze', db.name, table.name)}>Vacuum</button></td></tr>)}</tbody></table></div>
+          <div className="table-wrap" style={{ marginTop: 12 }}><table className="data-table" style={{ fontSize: 12 }}><thead><tr><th>Table</th><th>Size</th><th>Rows</th><th>Writes since stats reset</th><th>Last vacuum</th><th></th></tr></thead><tbody>{db.tables.map((table) => <tr key={table.name}><td>{table.name}</td><td>{formatBytes(Number(table.totalBytes))}</td><td>{fmtNum(Number(table.estimatedRows))}</td><td>{fmtNum(Number(table.insertsSinceStatsReset) + Number(table.updatesSinceStatsReset) + Number(table.deletesSinceStatsReset))}</td><td>{table.lastAutovacuum ? fmtDateTime(table.lastAutovacuum) : '—'}</td><td><button className="btn-ghost" type="button" disabled={Boolean(busy)} onClick={() => void maintain('vacuum_analyze', db.name, table.name)}>Vacuum</button></td></tr>)}</tbody></table></div>
         </div>)}
       </>}
     </section>

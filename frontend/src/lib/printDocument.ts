@@ -13,7 +13,8 @@
  * print call, and it steals focus from the canvas.
  */
 
-import { escapeHtml, markdownToHtml } from './richText';
+import { markdownToHtml } from './richText';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 import { PICTURE_KINDS } from './canvasExports';
 import { canvasDiagram, canvasObjectMarkdown, canvasSlides, type CanvasSlide } from './canvasDocuments';
 import { creativePreviewImageUrl } from './creationDeliverables';

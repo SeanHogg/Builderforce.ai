@@ -145,6 +145,50 @@ const PRIMITIVES = [
       { name: 'stopPropagation on save', test: /stopPropagation\(\)[\s\S]{0,120}void\s+save\(\)/ },
     ],
   },
+  {
+    id: 'format-bytes',
+    owner: 'lib/formatBytes.ts',
+    primitive: 'lib/formatBytes.ts',
+    why:
+      'A byte count rendered as "1.2 MB" is one function. Six copies existed — canvasDocuments,\n' +
+      '   CreationNode, SitePublishPanel, SiteReleasePanel, jobVocabulary and an inline one in\n' +
+      '   AgentHostWorkspaceContent — and they disagreed on decimals, on where KB became MB, and\n' +
+      '   on what an empty file says.',
+    fix:
+      'import { formatBytes } from \'@/lib/formatBytes\' and call it. Guard the empty case at the\n' +
+      '   call site (`size > 0 ? formatBytes(size) : \'\'`) if your label wants to say nothing.',
+    threshold: 2,
+    signals: [
+      // The unit ladder every re-implementation writes out.
+      { name: 'byte unit ladder', test: /\[\s*['"]B['"]\s*,\s*['"]KB['"]/ },
+      // Stepping down by 1024 (a loop, a log, or a chain of divisions).
+      { name: 'divide by 1024', test: /\/=?\s*1024\b|Math\.log\(1024\)|1024\s*\*\*/ },
+      // The "is it still bytes" comparison a hand-rolled formatter branches on.
+      { name: 'kilobyte branch', test: /\b(?:bytes|size|value|n)\s*[<>]=?\s*1024\b/ },
+    ],
+  },
+  {
+    id: 'slugify',
+    owner: '../packages/creation-canvas-contract/',
+    primitive: '@builderforce/creation-canvas-contract slugify (packages/creation-canvas-contract/src/slug.ts)',
+    why:
+      'Lower-case, fold to [a-z0-9], collapse to dashes, trim the edges: fourteen copies across\n' +
+      '   the api, the frontend and the contract package, each with its own max length, its own\n' +
+      '   fallback and its own view on diacritics — so the same title produced different slugs on\n' +
+      '   different surfaces.',
+    fix:
+      'import { slugify } from \'@builderforce/creation-canvas-contract\' and pass what is yours as\n' +
+      '   options: { maxLength, fallback, separator, foldDiacritics, unicode }.',
+    threshold: 2,
+    signals: [
+      // Everything that is not [a-z0-9] becomes the separator.
+      { name: 'non-alphanumerics to separator', test: /replace\(\/\[\^a-z0-9\]\+?\/[gi]*,\s*['"][-_]['"]\)/ },
+      // Leading/trailing separators stripped.
+      { name: 'edge separators trimmed', test: /replace\(\/(?:\(\^-\+\|-\+\$\)|\^-\+\|-\+\$|\^-\|-\$|\^_\+\|_\+\$)\/g?,\s*['"]['"]\)/ },
+      // Lower-cased immediately before the character fold.
+      { name: 'lowercase before slugging', test: /toLowerCase\(\)\s*\.\s*(?:trim\(\)\s*\.\s*)?(?:normalize\(['"]NFKD['"]\)\s*\.\s*)?replace\(\/\[\^[^\/]*\/[gi]*,\s*['"][-_]['"]\)/ },
+    ],
+  },
 ];
 
 /** The module name a caller would import the primitive by, e.g. `TenantOverrideCard`. */

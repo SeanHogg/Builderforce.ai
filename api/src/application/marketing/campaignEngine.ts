@@ -27,6 +27,7 @@
  */
 
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import {
@@ -426,14 +427,6 @@ export function smsStatusUrl(ctx: RenderContext): string {
 }
 
 /** Escape a string for safe interpolation into HTML. */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
 /**
  * Render the message actually sent to one recipient.
  *

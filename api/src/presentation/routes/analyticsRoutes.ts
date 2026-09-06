@@ -19,7 +19,6 @@ import {
   contributors,
   contributorDailyMetrics,
   telemetrySpans,
-  toolAuditEvents,
   agentHosts,
   ideAgents,
   tenantMembers,
@@ -29,6 +28,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { countAuditByAgentDay } from '../../application/audit/toolAuditTrail';
 import { getTenantActivityRollup } from '../../application/analytics/tenantActivity';
 import { computeInteractionActivity } from '../../application/analytics/interactionActivity';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
@@ -164,19 +164,10 @@ async function buildActivityCalendar(
     ))
     .groupBy(telemetrySpans.agentHostId, sql`date_trunc('day', ${telemetrySpans.ts})`);
 
-  const toolRows = await db
-    .select({
-      agentHostId: toolAuditEvents.agentHostId,
-      day: sql<string>`to_char(date_trunc('day', ${toolAuditEvents.ts}), 'YYYY-MM-DD')`,
-      c: sql<number>`count(*)::int`,
-    })
-    .from(toolAuditEvents)
-    .where(and(
-      eq(toolAuditEvents.tenantId, tenantId),
-      gte(toolAuditEvents.ts, fromFloor),
-      lte(toolAuditEvents.ts, toDate),
-    ))
-    .groupBy(toolAuditEvents.agentHostId, sql`date_trunc('day', ${toolAuditEvents.ts})`);
+  // Across BOTH grains of the tool-audit trail. Reading `tool_audit_events` alone
+  // under-reports any range reaching past the rollup boundary — silently, as a smaller
+  // number rather than an error — so the union lives in the trail module.
+  const toolRows = await countAuditByAgentDay(db, tenantId, fromFloor, toDate);
 
   // 5. Usage/interaction ledgers (AI calls + code-change deltas).
   const interaction = await computeInteractionActivity(db, tenantId, fromFloor, toDate);
@@ -215,7 +206,7 @@ async function buildActivityCalendar(
     m.set(day, (m.get(day) ?? 0) + n);
   };
   for (const r of spanRows) addAgent(r.agentHostId, r.day, Number(r.c));
-  for (const r of toolRows) addAgent(r.agentHostId, r.day, Number(r.c));
+  for (const r of toolRows) addAgent(r.agentHostId, r.day, r.count);
   for (const [hostId, days] of interaction.agentDaysByHostId) {
     for (const [day, n] of days) addAgent(hostId, day, n);
   }

@@ -1,3 +1,157 @@
+## ✅ RESOLVED 2026-09-05 — Codebase review against the 17 domains: what was fixed in the pass
+
+A review of the whole repository (api, frontend, packages, VS Code client, worker,
+brain-embedded) against the domain manifest, for anti-patterns, performance, DRY and
+dead code. **Dead-code candidates were VALIDATED, never deleted** (operator rule,
+2026-09-05): each was classified as a false positive, an unwired feature that should
+be wired, an obsolete leftover of a later decision, or a test seam. Everything not
+fixed here is in the Consolidated Gap Register under the domain that owns it, one
+entry per cluster, each with what it unblocks. The fixes below all typecheck (api,
+frontend, VS Code extension), pass the api guard suite (28/28 with the new ratchet)
+and the unit tests of every touched module.
+
+**Baseline guards were red before the review started.** Migration `1127` was declared
+twice (`1127_brain_chat_trace_occurred_at.sql` → `1128`, idempotent `ADD COLUMN IF NOT
+EXISTS`, so the renumber is safe), and `ProviderKeysSettings.tsx:848` used an
+undeclared token (`--bg-subtle` → `--bg-muted`).
+
+**Five public routes accepted signed-out tokens.** `freelancerRoutes`, `jobRoutes`,
+`marketplaceRoutes`, `marketplaceStatsRoutes` and `freelancerMessagingRoutes` each
+re-implemented the SIGNATURE half of web-token auth and skipped the `jti` revocation
+check that `webAuthMiddleware` enforces — a token the person had already signed out of
+still identified them. One `optionalWebUserId(c)` on the middleware now does the whole
+contract (signature, then `assertActiveToken`), and `marketplaceRoutes`' private
+`requireMarketplaceAuth` is simply `webAuthMiddleware`.
+
+**The tenant plan row was read from the database on every gateway request, in ten
+different spellings.** `resolveTenantPlan` lived in `llmRoutes.ts` (a route module
+imported by six application services — the worst of 23 inward-layer inversions) and
+selected eleven columns per call; `rateLimitMiddleware` then read three of them AGAIN
+on the same request, and the plan-limits guard, token availability, monthly cap,
+team-spend overview, architect runner and two dashboards each had their own copy.
+`application/tenant/tenantPlanSnapshot.ts` is now the ONE cached read
+(`getOrSetCached`, key `tenant:plan:<id>`, L1 + KV, one-hour safety TTL) with the
+effective plan recomputed per read because a trial expires without a write, and
+`tenantPlanCache.ts` is the invalidation every writer calls: the five admin overrides,
+the four card-validation transitions, `TenantService.persist` (so the billing webhook,
+downgrade and every other entity write drop it), the demo seed and the member
+spend-cap route. `TenantAccess` extends the snapshot type instead of restating it.
+`keyResolutionCache.ts`'s comment that plan changes "need no invalidation because
+`resolveTenantPlan` runs fresh" is corrected.
+
+**Two sweeps scanned every tenant every five minutes.** `runStakeholderReminderSweep`
+and `runStakeholderDigestSweep` began with `SELECT id FROM tenants` and ran one query
+per workspace whether or not a single escalation existed. Each is now one declared
+cross-tenant read (`acrossTenants(…, 'scheduled_sweep')`, LIMIT 500 / 2,000, oldest
+deadline first), one hoisted service, and chunked multi-row activity inserts.
+
+**Three finished features had no caller.** `runMailboxPushSweep` (the Gmail/Graph
+push-subscription arm/renew/drain machine — ~70h subscriptions were expiring and push
+silently degraded to nothing while the docs said renewal shipped),
+`reapStaleStageSandboxRuns` (its docblock named "a future cron sweep") and
+`retryPendingRedemption` (points were debited, the reward grant could fail after the
+debit, and the row sat `pending` forever — a customer paid and never received) are
+registered in `CRON_SWEEPS` as `mailbox-push`, `stage-sandbox-reap` and
+`points-redemption-retry`, the last through a new bounded
+`runPendingRedemptionSweep`. Also wired: `expandTemplateWorkflows` into
+`CreationCanvas.applyTemplate` (three marketplace packs still author a legacy
+`workflow` card, which placement would have minted; they are lowered to a frame of
+`flowStep`s first), `PlatformFeeCard` now loads its own fee schedule (its one consumer
+passed `schedule={null}`, so "where the fee applies" never rendered), and the VS Code
+`refreshEvermind` command now drops the 60-second head cache the way `bfApi.ts`
+claimed it did.
+
+**Four primitives replaced 33 copies.** `formatBytes` (7 copies → `lib/formatBytes.ts`;
+the same 1,536 bytes read `1.5 KB`, `1.5KB` and `1.50 KB` depending on the panel),
+`slugify` (17 copies across api, frontend and the contract package → the contract's
+`slug.ts` with `{ maxLength, fallback, separator, foldDiacritics, unicode }`, plus a
+shared `gameSlug` so the canvas game panel and the server can no longer key the same
+game two ways), `escapeHtml` (12 copies with THREE escape sets — some skipped `"`,
+some `'` — → the contract's `html.ts`, safe in text and attribute positions alike;
+`gameDocument`, `richText` and `websiteDocument` no longer export their own), and
+`optionalWebUserId` above.
+
+**Two guards now hold the line.** `check:application-layering` (api) forbids
+application/domain/infrastructure importing presentation, with the 14 remaining
+offenders frozen in a baseline that may only shrink (`resolveTenantPlan`'s six were
+paid down in the same pass). The frontend primitive-duplication ratchet gained
+`format-bytes` and `slugify` signal sets — and on its first run caught a seventh
+byte formatter (`SystemHealthSection`) and three more slug copies
+(`CanvasGamePanel`, `browserRuntime/factory`), all migrated. `rateLimitMiddleware`
+left the presentation→infrastructure baseline.
+
+**Validated as obsolete by a later decision, and left in place pending confirmation:**
+the BurnRateOS tenant/company ETL planner (`burnrateTenantCompanyMapping.ts` — closed
+by the operator's 2026-09-05 decision that existing BurnRateOS data is NOT migrated;
+the program consolidates functionality only, and PRD 19 / ROADMAP now say so),
+`CanvasSwitcher` (superseded by the sidebar decision recorded in `TopBar.tsx`) and
+`RolePreviewBar` (the TopBar renders the preview badge and exit inline). The full
+retire-candidate lists sit in the register under Agents, Canvas and Platform.
+
+## ✅ RESOLVED 2026-09-05 — Daily execution rollup: `tool_audit_events` 176 MB → 11 MB, primary 431 MB → 268 MB
+
+`tool_audit_events` was **176 MB of a 431 MB database — 41% of it** — and neither existing
+retention knob could touch it. `retentionDays` may not delete these rows: 90 days is the window
+the SOC 2 evidence export reads. `redact.afterDays` had already blanked the fat `args`/`result`
+payloads, taking the relation from 298 MB to 176 MB, and then stopped — what remained was
+**665,014 NARROW rows**, whose cost is the row COUNT, not the row width. 97% of them were the
+July re-dispatch loop (`auto_run_skipped`, 212,330 calls).
+
+**A third retention stage: GRAIN.** Every figure the two consumers compute — the compliance
+summary and the evidence pack — is a sum over `(tenant, day, tool_name, category, agent)`. A day
+of calls folded to one row per that grain preserves all of them, and the tally is a defensible
+audit artifact in its own right: this agent called this tool this many times on this day, first
+at this time and last at that one. Measured **188:1 — 651,664 raw rows became 3,464 tallies**
+in a 1.1 MB table.
+
+The ladder is now three windows, each of which does real work:
+
+| age | what is kept | why |
+|---|---|---|
+| 0–14d | full fidelity, `args`/`result` readable | the window in which anyone debugs a run or reads a skip reason off the lifecycle ledger |
+| 14–30d | row-level identity, payload blanked | still cites an individual call |
+| 30d–400d | a daily tally | every compliance figure intact; no individual call |
+
+The redaction window moved **30d → 14d** in the same pass. With a fold at 30 days, redaction at
+the same boundary would never have found a row — the fold drops the whole row, not two columns
+of it — so it would have become a dead knob dressed as a policy.
+
+**The fold boundary was corrected by running it.** The first choice was 45 days, on the reasoning
+that pushing past the redaction boundary bought row-level history for free because "the space is
+in the backlog, not the margin". The run disproved that: folding at 45 days cleared 229,944 rows
+and **left 421,719** — the loop sits almost entirely in the 30-to-45-day band, so the margin was
+where nearly all of the space was.
+
+**Correctness properties, each by construction rather than by care:**
+- **Whole days only.** The cutoff is floored to a calendar day, so a day is either entirely
+  folded or entirely raw — the one way this could double-count is excluded outright.
+- **One statement, one snapshot.** Aggregate, insert and delete are CTEs of a single statement,
+  so the delete removes exactly the rows the aggregate counted.
+- **Idempotent.** A re-fold finds no rows; a late arrival with an old `ts` hits
+  `ON CONFLICT DO UPDATE` and is ADDED to the tally rather than duplicating the grain.
+- **Provenance survives.** `execution_claim_evidence` cites individual audit rows under an
+  `ON DELETE RESTRICT` FK; those ids are excluded from both halves. Verified after the run:
+  **4 cited events, 0 dangling.**
+- **Rollup before purge.** The sweep order is load-bearing — a purge running first would have
+  silently dropped every row already past `retentionDays`, the oldest third of the relation.
+
+**Both readers span both grains.** `summarizeAudit` folds weighted tallies (a raw row weighs 1, a
+tally weighs its `events`), so the totals are identical either side of the boundary; the evidence
+pack unions the two and states `grain` + `events` per row, and its CSV gained those columns —
+an auditor reading "312" can tell it from 312 lines that were dropped. `distinctExecutions` is
+the one figure that is a per-day sum rather than a set, and it is documented as an upper bound
+rather than quietly presented as exact. The compliance lens says which half of its window is
+still itemised, localised in all five catalogs.
+
+`tool_audit_daily` is itself a `SWEPT_TABLES` member, retained **400 days** — far longer than its
+source, which is affordable precisely because it is ~4k rows per quarter rather than 665k. It is
+in the registry for the vacuum half as much as the purge: unlike every other member it is
+UPDATEd in place, so it accrues dead tuples without the per-table autovacuum tuning.
+
+**Result: `tool_audit_events` 176 MB → 11 MB; primary database 431 MB → 268 MB.**
+Combined with the earlier passes: **3,150 MB → 423 MB across both endpoints (−87%)**, with
+transactional at 155 MB and primary at 268 MB — both under the Neon Free 0.5 GB per-branch limit.
+
 ## ✅ RESOLVED 2026-09-05 — Collapsed the 510k-row dispatch residue: transactional 379 MB → 155 MB, with the diagnostic evidence intact
 
 `activity_log` on the transactional endpoint was **310 MB**, of which **510,632 of 624,491 rows

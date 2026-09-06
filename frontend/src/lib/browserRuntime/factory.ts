@@ -8,6 +8,7 @@
 import * as gitMod from 'isomorphic-git';
 import http from 'isomorphic-git/http/web';
 import LightningFS from '@isomorphic-git/lightning-fs';
+import { slugify } from '@builderforce/creation-canvas-contract';
 import { BrowserGitClient, type GitOps, type FsLike } from './gitClient';
 import { runBuildInWebContainer, type WebContainerLike } from './webcontainer';
 import { parseProposedChanges, type CodingDeps, type RepoContext } from './coding';
@@ -86,15 +87,7 @@ export async function bootWebContainer(): Promise<WebContainerLike> {
   return (await WebContainer.boot()) as unknown as WebContainerLike;
 }
 
-function slug(text: string): string {
-  return (
-    text
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 40) || 'task'
-  );
-}
+const slug = (text: string): string => slugify(text, { maxLength: 40, fallback: 'task' });
 
 function codingPrompt(role: string, input: string): string {
   return [

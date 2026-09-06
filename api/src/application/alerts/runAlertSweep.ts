@@ -1,4 +1,5 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 /**
  * Alert sweep — the scheduled evaluator for user-defined threshold alert rules.
  *
@@ -106,10 +107,6 @@ export async function notifyAlert(
     }
   }
   return { slack, email };
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 /**

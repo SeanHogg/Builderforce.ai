@@ -235,7 +235,19 @@ describe('the entity catalog', () => {
     //     one member of a family on the generic reader and leaves the rest invisible,
     //     which reads as coverage the seat does not have. These two leave the baseline
     //     WITH their family, not before it.
-    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(26);
+    //
+    // Ceiling moved 25 → 26 (2026-09-05) with `tool_audit_daily` (migration 1130),
+    // adjudicated rather than counted: it is the daily rollup `tool_audit_events`
+    // becomes past its 30-day fold boundary — one row per (tenant, day, tool, category,
+    // agent) holding counts, a duration sum and the day's first/last timestamp. It lands
+    // on the NO IDENTITY A PERSON OPENS reason written above, in its plainest form: it
+    // has no title, no status and no key a person could hold, because it is not a thing
+    // that happened — it is an ARITHMETIC SUMMARY of things that did. Its readers are
+    // the two aggregates in `insights/complianceInsights.ts`, which union it with the
+    // raw relation and re-fold it; nobody opens a tally. The relation it summarises is
+    // not in the catalog either, so this is the append-only-fact case, not a family
+    // split like `job_invites`.
+    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(27);
   });
 
   it('declares nothing that no migration creates', () => {

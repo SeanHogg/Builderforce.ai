@@ -1,4 +1,5 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 /**
  * pendingAgentsUpgradeEmail — the "you have agents waiting but you're out of
  * tokens" nudge sent by {@link runAutonomousExecutionSweep} when a tenant's
@@ -50,10 +51,6 @@ export function buildUpgradeCopy(args: Pick<PendingAgentsUpgradeArgs, 'pendingAg
       ? 'Upgrade to Teams for an even higher budget so your agents never wait.'
       : 'Your budget resets automatically — or contact us to raise your limit so your agents never wait.';
   return { subject, intro, upgradeHint };
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 /**

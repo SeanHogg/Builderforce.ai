@@ -5,7 +5,6 @@ presentation/middleware/authMiddleware.ts
 presentation/middleware/emulationMiddleware.ts
 presentation/middleware/featureGate.ts
 presentation/middleware/planLimitsGuard.ts
-presentation/middleware/rateLimitMiddleware.ts
 presentation/middleware/serviceTokenAuth.ts
 presentation/middleware/superAdminMiddleware.ts
 presentation/middleware/webAuthMiddleware.ts

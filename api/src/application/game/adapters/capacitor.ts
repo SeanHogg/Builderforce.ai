@@ -24,7 +24,8 @@
  */
 
 import type { GameTargetContext } from '../gameTarget';
-import { withTouchControls, injectIntoHead, escapeHtml } from '../gameDocument';
+import { withTouchControls, injectIntoHead } from '../gameDocument';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 import { gameIconPng } from '../pngIcon';
 
 /** The one directory both native targets materialise into. */

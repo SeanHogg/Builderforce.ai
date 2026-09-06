@@ -17,9 +17,10 @@
  * "what does this cost", shown to the person paying it.
  */
 
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
-import type { PlatformFeeQuote, PlatformFeeSchedule } from '@/lib/earningsApi';
+import { getPlatformFee, type PlatformFeeQuote, type PlatformFeeSchedule } from '@/lib/earningsApi';
 
 /** Basis points as a trimmed percentage — whole for a round rate, two decimals
  *  otherwise, so 1500 reads "15" and 1050 reads "10.50". */
@@ -27,15 +28,22 @@ function bpsLabel(bps: number): string {
   return (bps / 100).toFixed(bps % 100 === 0 ? 0 : 2);
 }
 
-export function PlatformFeeCard({
-  quote,
-  schedule,
-}: {
-  quote: PlatformFeeQuote;
-  schedule: PlatformFeeSchedule | null;
-}) {
+export function PlatformFeeCard({ quote }: { quote: PlatformFeeQuote }) {
   const t = useTranslations('earnings');
   const { formatCents } = useMoneyFormat();
+  // The schedule — WHERE the fee applies, fact 3 above — is this card's own read.
+  // The earnings report carries the quote but not the schedule, and its one
+  // consumer used to pass `schedule={null}`, so the line that distinguishes a
+  // catalogue sale from an escrow release never rendered. Additive: the quote
+  // renders regardless, and a failed schedule read leaves that line out.
+  const [schedule, setSchedule] = useState<PlatformFeeSchedule | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getPlatformFee(quote.grossCents)
+      .then((fee) => { if (!cancelled) setSchedule(fee.schedule); })
+      .catch(() => { if (!cancelled) setSchedule(null); });
+    return () => { cancelled = true; };
+  }, [quote.grossCents]);
 
   const progress = quote.thresholdCents > 0
     ? Math.min(100, Math.max(0, (quote.lifetimeCents / quote.thresholdCents) * 100))

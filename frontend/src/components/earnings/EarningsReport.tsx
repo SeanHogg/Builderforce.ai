@@ -90,7 +90,7 @@ export function EarningsReportView({
         }}>{t('settlementManual')}</p>
       )}
 
-      <PlatformFeeCard quote={report.fee} schedule={null} />
+      <PlatformFeeCard quote={report.fee} />
 
       <section aria-label={t('byPeriod')} style={{
         display: 'grid', gap: 12, padding: 18, borderRadius: 'var(--radius-lg)',

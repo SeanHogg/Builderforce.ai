@@ -24,6 +24,7 @@ export default [
   ['check:model-coverage', 'check-model-coverage.mjs'],
   ['check:table-adoption', 'check-table-adoption.mjs'],
   ['check:layering', 'check-layering.mjs'],
+  ['check:application-layering', 'check-application-layering.mjs'],
   ['check:tenant-scope', 'check-tenant-scope.mjs'],
   ['check:source', 'check-source-text.mjs'],
   // Repo-level: ONE silent-catch guard scans every package's source tree against

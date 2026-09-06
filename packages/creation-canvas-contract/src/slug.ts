@@ -57,3 +57,13 @@ export function slugify(input: string, opts: SlugifyOptions = {}): string {
   const slug = value.replace(nonWord, separator).replace(edge, '').slice(0, maxLength).replace(edge, '');
   return slug || (opts.fallback ?? '');
 }
+
+/**
+ * The slug of a canvas game: the stem of every file the game produces on the
+ * server AND the key the canvas game panel stores state under. One rule, shared,
+ * so a state row can never miss the game on screen because the two sides trimmed
+ * a title differently.
+ */
+export function gameSlug(title: string): string {
+  return slugify(title, { maxLength: 48, fallback: 'builderforce-game' });
+}

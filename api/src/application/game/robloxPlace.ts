@@ -30,7 +30,8 @@
  * with no network and no key.
  */
 
-import { escapeHtml, hexToRgb } from './gameDocument';
+import { hexToRgb } from './gameDocument';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 
 /* ---------- the spec a model is allowed to author ---------- */
 

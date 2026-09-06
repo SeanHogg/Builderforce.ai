@@ -32,7 +32,8 @@ import { pwaTarget } from './adapters/pwa';
 import { robloxTarget } from './adapters/roblox';
 import { webTarget } from './adapters/web';
 import { authorRobloxSpec, robloxFiles } from './adapters/roblox';
-import { accentFromTitle, gameSlug, normalizeGameDocument, validateGameDocument } from './gameDocument';
+import { accentFromTitle, normalizeGameDocument, validateGameDocument } from './gameDocument';
+import { gameSlug } from '@builderforce/creation-canvas-contract';
 import {
   isGameTarget,
   type ComposeStructured,

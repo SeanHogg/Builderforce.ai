@@ -197,6 +197,7 @@ import { presentationSequence, presentationStepAt, presentationViewport, stepPre
 import { localCheckpointSummaries, readLocalCheckpoint, saveLocalCheckpoint, type LocalCheckpointSummary } from '@/lib/creationCheckpoints';
 import { CREATION_OBJECT_REGISTRY, createDefaultCreationData, creationObjectDefinition, creationObjectMutableFields, emptyShellProblem, sanitizeCreationObjectPatch, type CreationObjectGroup } from './creationObjectRegistry';
 import { CREATION_TEMPLATES, type CreationTemplate } from './creationTemplates';
+import { expandTemplateWorkflows } from './expandTemplateWorkflows';
 import { describeMailboxFilter, mailboxApi, resolveMailboxConnection, type MailboxFilter } from '@/lib/mailboxApi';
 import { describeSocialFilter, socialApi, totalEngagement, type SocialCampaign, type SocialFeedFilter, type SocialFeedItem, type SocialNetwork } from '@/lib/socialApi';
 import { canvasSocialToolRedirect, isSocialNetworkName, socialCampaignNodeData, socialFeedPatch, socialPostNodeData, socialPostProjection } from '@/lib/canvasSocial';
@@ -3866,8 +3867,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     [addFilesToCanvas],
   );
 
-  const applyTemplate = useCallback((template: CreationTemplate) => {
+  const applyTemplate = useCallback((pack: CreationTemplate) => {
     if (!canEdit) return;
+    // A pack that still authors a legacy `workflow` card is lowered to a frame of
+    // `flowStep`s first — the same lowering opening a legacy card performs — so
+    // placing a marketplace pack never mints the object the deprecation removed.
+    const template = expandTemplateWorkflows(pack, {
+      untitledStep: (position: number) => t('flowStep.untitledStep', { position }),
+      framePurpose: t('flowStep.framePurpose'),
+    });
     const center = flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 260 };
     const created = template.objects.map((item) => { const node = newNode(item.kind, { x: center.x + item.x - 520, y: center.y + item.y - 180 }); node.data = { ...node.data, ...(item.data ?? {}), ...(item.title ? { title: item.title } : {}) }; return node; });
     const createdEdges = (template.connections ?? []).map((edge) => ({ id: crypto.randomUUID(), source: created[edge.source].id, target: created[edge.target].id, type: 'smoothstep', label: edge.label }));

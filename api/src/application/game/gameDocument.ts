@@ -18,16 +18,11 @@
  * written or an APK is built from it.
  */
 
-/** Lowercase, hyphenated, non-empty. The stem for every file this game produces. */
-export function gameSlug(value: string): string {
-  return (
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 48) || 'builderforce-game'
-  );
-}
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
+
+// `gameSlug` — lowercase, hyphenated, non-empty; the stem for every file this game
+// produces — lives in the contract package now, because the canvas game panel keys
+// its state rows by the same rule and the two copies had to be kept in step by hand.
 
 /**
  * A stable accent colour for a title.
@@ -72,14 +67,6 @@ export function hexToRgb(hex: string): [number, number, number] {
     parseInt(value.slice(2, 4), 16) || 0,
     parseInt(value.slice(4, 6), 16) || 0,
   ];
-}
-
-export function escapeHtml(value: string): string {
-  return value.replace(
-    /[&<>'"]/g,
-    (character) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]!,
-  );
 }
 
 export type GameValidation = { ok: true } | { ok: false; reason: string };

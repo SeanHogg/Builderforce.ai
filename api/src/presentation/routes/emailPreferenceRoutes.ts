@@ -14,6 +14,7 @@
  * address we actually mailed, and cannot be used to enumerate or target others.
  */
 import { Hono } from 'hono';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 import { eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { HonoEnv, Env } from '../../env';
@@ -168,10 +169,6 @@ const CONFIRMED: Record<string, string> = {
 
 function confirmedMessage(locale: string, email: string): string {
   return (CONFIRMED[locale] ?? CONFIRMED.en!).replaceAll('{{Email}}', escapeHtml(email));
-}
-
-function escapeHtml(str: string): string {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 /**

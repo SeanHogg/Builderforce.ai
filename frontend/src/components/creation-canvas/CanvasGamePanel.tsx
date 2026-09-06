@@ -23,6 +23,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
+// The server's slug rule, shared — a state row keyed here must match the game on screen.
+import { gameSlug } from '@builderforce/creation-canvas-contract';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { qrSvg } from '@/lib/qrCode';
 import {
@@ -75,7 +77,7 @@ export function CanvasGamePanel({ open, onClose, projectId, game, onNotice }: Ca
   const stateFor = useMemo(() => {
     const bySlug = new Map<GameTargetKey, GameTargetState>();
     for (const state of view?.states ?? []) {
-      if (!game || state.slug === slugOf(game.title)) bySlug.set(state.target, state);
+      if (!game || state.slug === gameSlug(game.title)) bySlug.set(state.target, state);
     }
     return bySlug;
   }, [view, game]);
@@ -229,13 +231,3 @@ export function CanvasGamePanel({ open, onClose, projectId, game, onNotice }: Ca
   </SlideOutPanel>;
 }
 
-/** Mirrors the server's slug rule, so a state row matches the game on screen. */
-function slugOf(title: string): string {
-  return (
-    title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 48) || 'builderforce-game'
-  );
-}

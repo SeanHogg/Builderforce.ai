@@ -231,8 +231,8 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
         'Folds a day of tool calls to one row per (tenant, day, tool, category, agent) in '
         + '`tool_audit_daily`. That is exactly the grain the compliance summary and the evidence '
         + 'pack aggregate to, so volume, sensitive-action count, the per-tool/per-category/per-agent '
-        + 'breakdowns and duration all come out unchanged — measured 196:1 in production '
-        + '(651,663 rows → 3,325 tallies). What it gives up is citing ONE call older than the '
+        + 'breakdowns and duration all come out unchanged — measured 188:1 in production '
+        + '(651,664 rows → 3,464 tallies; 176 MB → 11 MB). What it gives up is citing ONE call older than the '
         + 'boundary, by which point `redact` has already emptied that row of everything but the '
         + 'dimensions the tally keeps.',
       run: (db, cutoff) => rollUpToolAudit(db, cutoff),

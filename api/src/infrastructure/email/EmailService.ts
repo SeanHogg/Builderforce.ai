@@ -15,6 +15,7 @@
  */
 
 import { emailCopy, fillCopy, type EmailCopy, type NextStepsCopy } from './emailMessages';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 import { DEFAULT_EMAIL_LOCALE, type EmailLocale } from './emailLocale';
 
 // ---------------------------------------------------------------------------
@@ -214,14 +215,6 @@ export async function sendRawEmail(
 // ---------------------------------------------------------------------------
 // Template helpers
 // ---------------------------------------------------------------------------
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
 
 function render(template: string, vars: Record<string, string>): string {
   // Same substitution as `fill`, with every value escaped FIRST — the two differ

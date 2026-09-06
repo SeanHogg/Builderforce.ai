@@ -14,6 +14,7 @@
  * gets a sending domain blocklisted.
  */
 import { Hono } from 'hono';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
@@ -557,10 +558,6 @@ export function createMarketingAssetRoutes(db: Db): Hono<HonoEnv> {
   });
 
   return router;
-}
-
-function escapeHtml(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 /**

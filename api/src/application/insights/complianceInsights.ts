@@ -21,6 +21,7 @@
 import { and, desc, eq, gte } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { toolAuditDaily, toolAuditEvents } from '../../infrastructure/database/schema';
+import { auditWindowDays, readAuditWindow, type AuditRow } from '../audit/toolAuditTrail';
 import { TOOL_AUDIT_ROLLUP_AFTER_DAYS } from '../maintenance/toolAuditRollup';
 import { csvMatrix } from '../export/tabularExport';
 
@@ -39,28 +40,9 @@ export function classifyToolRisk(toolName: string): ToolRisk {
     : 'normal';
 }
 
-/**
- * One unit of audit evidence — EITHER a single raw tool call or a day already folded
- * to a tally by the rollup ({@link TOOL_AUDIT_ROLLUP_AFTER_DAYS}).
- *
- * The two are one type on purpose. Every figure below is a sum over the dimensions
- * both shapes carry, so a window that straddles the fold boundary is summarised by
- * ONE fold over ONE list rather than by two code paths that have to agree.
- */
-export interface AuditRow {
-  toolName: string;
-  category: string | null;
-  agentHostId: number | null;
-  cloudAgentRef: string | null;
-  /** Raw rows only: the execution this single call belongs to. */
-  executionId?: number | null;
-  /** Calls represented. Absent on a raw row, which is one call. */
-  events?: number;
-  /** Rollup rows only: distinct executions WITHIN that day. Summed across days it is
-   *  an upper bound — a run spanning midnight counts in both — which is why it is
-   *  kept apart from the exact `executionId` set below rather than merged into it. */
-  distinctExecutions?: number;
-}
+/** The summary's input row is the trail's — re-exported so a caller of this module
+ *  does not have to know the read lives next door. */
+export type { AuditRow };
 
 export interface ComplianceSummary {
   windowDays: number;
@@ -131,52 +113,6 @@ export function summarizeAudit(
   };
 }
 
-/**
- * The window start, as both the timestamp the raw table is keyed by and the calendar
- * day the tallies are. One helper because every read below needs both and they must
- * describe the same instant, or the fold boundary would leak a gap or an overlap into
- * the totals.
- */
-function windowStart(days: number): { since: Date; sinceDay: string } {
-  const since = new Date(Date.now() - days * 24 * HOUR_MS);
-  return { since, sinceDay: since.toISOString().slice(0, 10) };
-}
-
-/**
- * Read a window of audit evidence spanning BOTH grains.
- *
- * The rollup deletes a raw row in the same statement that writes its tally, so the two
- * relations never describe the same call and the union double-counts nothing. Reading
- * both unconditionally is deliberate: the boundary is a retention policy that moves,
- * and a read that decided which relation to consult from the requested window would go
- * wrong the moment the two disagreed.
- */
-async function readAuditWindow(db: Db, tenantId: number, days: number): Promise<AuditRow[]> {
-  const { since, sinceDay } = windowStart(days);
-  const [raw, tallies] = await Promise.all([
-    db.select({
-      toolName: toolAuditEvents.toolName,
-      category: toolAuditEvents.category,
-      agentHostId: toolAuditEvents.agentHostId,
-      cloudAgentRef: toolAuditEvents.cloudAgentRef,
-      executionId: toolAuditEvents.executionId,
-    })
-      .from(toolAuditEvents)
-      .where(and(eq(toolAuditEvents.tenantId, tenantId), gte(toolAuditEvents.ts, since))),
-    db.select({
-      toolName: toolAuditDaily.toolName,
-      category: toolAuditDaily.category,
-      agentHostId: toolAuditDaily.agentHostId,
-      cloudAgentRef: toolAuditDaily.cloudAgentRef,
-      events: toolAuditDaily.events,
-      distinctExecutions: toolAuditDaily.distinctExecutions,
-    })
-      .from(toolAuditDaily)
-      .where(and(eq(toolAuditDaily.tenantId, tenantId), gte(toolAuditDaily.day, sinceDay))),
-  ]);
-  return [...(raw as AuditRow[]), ...(tallies as AuditRow[])];
-}
-
 export async function computeComplianceSummary(db: Db, tenantId: number, days: number): Promise<ComplianceSummary> {
   return summarizeAudit(await readAuditWindow(db, tenantId, days), days);
 }
@@ -205,13 +141,13 @@ const agentKeyOf = (agentHostId: number | null, cloudAgentRef: string | null): s
 /**
  * Bounded evidence-pack rows for an audit export (newest first, capped).
  *
- * Spans both grains for the reason {@link readAuditWindow} gives, and the cap is
+ * Spans both grains for the reason `audit/toolAuditTrail.ts` gives, and the cap is
  * applied to the MERGED list rather than to each relation: a 90-day pack is now
  * mostly tallies, and taking 5,000 of each would have let the older half crowd out
  * the recent calls an auditor opens the file to read.
  */
 export async function buildEvidencePack(db: Db, tenantId: number, days: number): Promise<EvidenceRow[]> {
-  const { since, sinceDay } = windowStart(days);
+  const { since, sinceDay } = auditWindowDays(days);
   const [raw, tallies] = await Promise.all([
     db.select({
       ts: toolAuditEvents.ts,

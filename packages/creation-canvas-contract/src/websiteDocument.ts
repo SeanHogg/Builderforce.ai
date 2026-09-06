@@ -13,6 +13,7 @@
  */
 
 import { WEBSITE_CONTENT_FRAME_SANDBOX, activeWebsitePage, isMarkupSectionBody } from './website';
+import { escapeHtml } from './html';
 import type { WebsitePage, WebsiteSection, WebsiteTheme } from './website';
 
 interface Palette { bg: string; fg: string; muted: string; accent: string; onAccent: string; line: string; panel: string }
@@ -66,14 +67,6 @@ function paletteFor(theme: WebsiteTheme, mode: 'light' | 'dark'): Palette {
     ...(safeColor(theme.foreground) ? { fg: safeColor(theme.foreground)! } : {}),
     ...(safeColor(theme.accent) ? { accent: safeColor(theme.accent)! } : {}),
   };
-}
-
-const ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-
-/** Escape for text and attribute positions alike. Everything in this document comes
- *  from creator-authored fields, so nothing is exempt. */
-export function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (char) => ESCAPES[char] ?? char);
 }
 
 function cssVars(palette: Palette): string {

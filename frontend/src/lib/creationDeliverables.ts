@@ -1,4 +1,4 @@
-import { brandDirective, slugify, type BrandBinding } from '@builderforce/creation-canvas-contract';
+import { brandDirective, escapeHtml as escapeHtmlText, slugify, type BrandBinding } from '@builderforce/creation-canvas-contract';
 import { apiRequest } from './apiClient';
 import { dxfPreviewSvg, meshFormatFromHint, stlPreviewSvg, svgDataUrl, type MeshFormat } from './creativeGeometry';
 import { gamePosterDataUrl } from './gamePoster';
@@ -36,8 +36,9 @@ export function withCreationDeliverable(data: CreationNodeData, deliverable: Cre
   return [deliverable, ...creationDeliverables(data).filter((item) => item.id !== deliverable.id)].slice(0, 50);
 }
 
+/** The shared escaper over a loosely-typed field: a missing value renders empty. */
 function escapeHtml(value: unknown): string {
-  return String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]!);
+  return escapeHtmlText(String(value ?? ''));
 }
 
 function safeColor(value: unknown): string {

@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import { canManageActiveWorkspace, getTenantJwt } from "./bfApi";
+import { canManageActiveWorkspace, getTenantJwt, invalidateProjectEvermind } from "./bfApi";
 import { getBaseUrl, SECRET_KEY } from "./gateway";
 import { getSelectedProject } from "./projectState";
 import { renderWebviewHtml } from "./webviewShared";
@@ -47,6 +47,10 @@ export class EvermindViewProvider implements vscode.WebviewViewProvider {
   /** Ask the live view to reload its data in place — driven by the view's title-bar
    *  refresh action (the relocated inline `↻`). No-op when the view isn't resolved. */
   triggerRefresh(): void {
+    // A refresh the person asked for must not be answered from the 60s head cache —
+    // that is the very read they are trying to redo (the toggle they just flipped
+    // in the web app). Drop it first so the next chat turn re-resolves too.
+    invalidateProjectEvermind();
     void this.view?.webview.postMessage({ type: "refresh" });
   }
 

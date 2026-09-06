@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { robloxScriptsFrom, robloxWorldReading, STUDS_TO_UNITS } from '@builderforce/creation-canvas-contract';
+import { escapeHtml, gameSlug, robloxScriptsFrom, robloxWorldReading, STUDS_TO_UNITS } from '@builderforce/creation-canvas-contract';
 import {
   CANVAS_GAME_ACCOUNT_GATE,
   CANVAS_GAME_TOOL,
@@ -11,8 +11,6 @@ import {
 } from '@builderforce/creation-canvas-contract';
 import {
   accentFromTitle,
-  escapeHtml,
-  gameSlug,
   injectIntoHead,
   normalizeGameDocument,
   validateGameDocument,
