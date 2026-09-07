@@ -1,4 +1,4 @@
-import { apiRequest } from './apiClient';
+import { apiRequest, type RequestOptions } from './apiClient';
 
 /**
  * OpenTelemetry collectors this workspace exports agent runs to.

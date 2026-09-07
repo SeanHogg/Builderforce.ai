@@ -1,4 +1,4 @@
-import { apiRequest } from './apiClient';
+import { apiRequest, type RequestOptions } from './apiClient';
 
 /**
  * Bring-your-own MCP servers — the external tool servers a workspace registers so
