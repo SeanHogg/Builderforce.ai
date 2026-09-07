@@ -236,6 +236,18 @@
 .handoffGroup > .moreMenu,
 .handoffGroup > .templateMenu,
 .rosterInviteAnchor > .shareMenu { z-index:60; }
+/* …and the CARD those sheets open out of has to rise WITH them, which the rule above
+   cannot do on its own. `.floatCard` gives the bar `position:absolute; z-index:20`, so
+   the bar is its own stacking context: a sheet inside it at 60 is 60 *within the bar*,
+   and the bar entire still paints under `.composerDock` (21). That is exactly what the
+   invite sheet hit on the conversation surface — the prompt is the tallest thing on
+   that board, so "Invite collaborators" opened behind it, which is the same "a sheet
+   that opens behind the row that spawned it" failure the rule above was written for.
+   Raised only WHILE a sheet is open, so a resting bar keeps the prompt on top of it,
+   which is what the composer's 21 was for. One rule for all three sheets rather than a
+   flag threaded down to the bar: whether a sheet is open is already stated by the sheet
+   being in the DOM. */
+.commandBar:has(.shareMenu, .moreMenu, .templateMenu) { z-index:22; }
 
 /* ── WHERE ANYTHING UNDER THE TOP CHROME STARTS ───────────────────────────────────
    The remaining two cards on this line float at z-index 20. Everything that opens
@@ -489,6 +501,10 @@
    no width fills its whole 22px chip while the `1em` ones sit at 11px beside it — the
    same mismatch the phone rail had before the shared icon set. */
 .moreMenu button > span > svg,.moreMenu label i > svg { display:block; width:14px; height:14px; }
+/* A row whose label is a SENTENCE takes both columns rather than wrapping to three
+   lines inside a 113px half. Declared by the row itself (`data-wide`), not by an
+   nth-child rule here, so the sheet keeps working whichever rows the session offers. */
+.moreMenu button[data-wide='true'] { grid-column:1 / -1; }
 .moreMenu button:hover,.moreMenu button:focus-visible { outline:none; background:var(--canvas-hover); color:var(--canvas-accent); }.moreMenu button:hover > span,.moreMenu button:focus-visible > span { background:color-mix(in srgb,var(--canvas-accent) 24%,var(--canvas-panel)); color:var(--canvas-accent); }
 .moreMenuHeading { grid-column:1 / -1; margin:5px 5px 1px; color:var(--canvas-muted); font-size:8px; font-weight:750; letter-spacing:.1em; text-transform:uppercase; }.moreMenuHeading:first-child { margin-top:1px; }
 .moreMenu label { grid-column:1 / -1; display:flex; align-items:center; justify-content:space-between; margin-top:3px; border-top:1px solid var(--canvas-line); border-radius:0; cursor:default; }.moreMenu label > span { display:flex; align-items:center; gap:8px; }.moreMenu label i { width:22px; height:22px; display:grid; place-items:center; border-radius:var(--radius-sm); font-style:normal; }

@@ -317,7 +317,6 @@ export async function recall(
         // of the two, not whichever arm happened to return first.
         const fused = fuseRecallArms(vectorRows, lexicalRows);
         return dedupeBySpecificity<MemoryEntry>(fused).slice(0, n);
-
       },
       { l1TtlMs: RECALL_L1_TTL_MS },
     );

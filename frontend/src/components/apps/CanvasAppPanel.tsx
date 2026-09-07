@@ -27,6 +27,19 @@
  *
  * A slide-out rather than a modal: this is a form, and centred dialogs are
  * reserved for terminal destructive approvals.
+ *
+ * ── WHERE THE TRIGGER IS DRAWN ───────────────────────────────────────────────
+ * A row in the canvas's ••• sheet, not a worded button in the command bar: a
+ * board becomes one project, ONCE, so it does not earn permanent width beside
+ * the actions somebody presses all day.
+ *
+ * It carries no chrome class of its own, which is the same decision
+ * `CanvasSessionActions variant="menu"` makes for the session actions it puts in
+ * that sheet: the host's own `button` rules dress it, so it reads as one of the
+ * sheet's rows rather than as a visitor, and a different host dresses it its own
+ * way without this file knowing the host exists. What it DOES declare is
+ * `data-wide`, because "this label is a sentence" is a fact about the copy and
+ * only the host can act on it.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -48,9 +61,17 @@ export interface CanvasAppPanelProps {
    * nothing — which is the correct answer, not an error state.
    */
   sessionId: string | null | undefined;
+  /**
+   * The panel opening and closing, for a host whose own chrome has to react —
+   * an overflow sheet closes itself once the drawer it launched is dismissed,
+   * rather than being left open behind it. The panel still OWNS the state:
+   * this reports it, it does not control it, so a host that does not care
+   * passes nothing and nothing changes.
+   */
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function CanvasAppPanel({ sessionId }: CanvasAppPanelProps) {
+export function CanvasAppPanel({ sessionId, onOpenChange }: CanvasAppPanelProps) {
   const t = useTranslations('canvas.app');
   const [state, setState] = useState<SessionAppState | null>(null);
   const [open, setOpen] = useState(false);
@@ -120,24 +141,28 @@ export function CanvasAppPanel({ sessionId }: CanvasAppPanelProps) {
   const hasAddress = !!(url ?? app?.subdomain);
   const addressUsable = !!availability?.label && availability.available;
 
+  const label = app ? t('triggerOpen', { name: app.name }) : t('triggerConvert');
+  const glyph = app ? '◆' : '+';
+  const setPanel = (next: boolean) => { setOpen(next); onOpenChange?.(next); };
+
   return (
     <>
+      {/* `data-wide` so a two-column sheet gives this row both of its columns: the
+          label is a sentence, not the one or two words the glyph rows beside it
+          carry. A host that does not lay out in columns ignores it. */}
       <button
         type="button"
-        className={styles.trigger}
-        onClick={() => setOpen(true)}
+        data-wide="true"
+        onClick={() => setPanel(true)}
         aria-haspopup="dialog"
         aria-expanded={open}
       >
-        <span aria-hidden="true">{app ? '◆' : '+'}</span>
-        <span className={styles.triggerLabel}>
-          {app ? t('triggerOpen', { name: app.name }) : t('triggerConvert')}
-        </span>
+        <span aria-hidden="true">{glyph}</span>{label}
       </button>
 
       <SlideOutPanel
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={() => setPanel(false)}
         crumb={t('crumb')}
         title={app ? t('titleConverted') : t('titleConvert')}
         width="sheet"

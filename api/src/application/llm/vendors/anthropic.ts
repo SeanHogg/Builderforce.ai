@@ -326,9 +326,7 @@ function toOpenAIResponse(raw: unknown, model: string): Record<string, unknown> 
   const outTok = Number(u['output_tokens'] ?? 0) || 0;
   const message: Record<string, unknown> = { role: 'assistant', content: text || (toolCalls.length ? null : '') };
   if (toolCalls.length) message.tool_calls = toolCalls;
-  if (reasoning.length) message.reasoning_content = reasoning.join('
-
-');
+  if (reasoning.length) message.reasoning_content = reasoning.join('\n\n');
   return {
     id: r?.id ?? 'anthropic-direct',
     object: 'chat.completion',

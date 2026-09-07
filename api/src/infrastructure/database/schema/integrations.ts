@@ -19,6 +19,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  real,
   serial,
   text,
   timestamp,
@@ -804,4 +805,39 @@ export const ltiLearnerBoards = pgTable('lti_learner_boards', {
 }, (t) => [
   uniqueIndex('uq_lti_learner_boards_learner').on(t.bindingId, t.assignmentRef, t.learnerRef),
   index('idx_lti_learner_boards_tenant_user').on(t.tenantId, t.learnerUserId),
+]);
+
+/**
+ * A tenant's OpenTelemetry collector (migration 1136).
+ *
+ * The platform records every run's lifecycle transitions and tool calls, and until
+ * now none of it could leave: a buyer already running Honeycomb, Datadog or Grafana
+ * could not see agent work beside the rest of their system. This row is where they
+ * say where to send it.
+ *
+ * `headersEnc`/`headersIv` hold the collector's auth header AES-GCM encrypted with
+ * the shared credential helper — unlike a webhook signing secret, this credential is
+ * SENT on every request, so it is stored as a bearer credential. The health columns
+ * are read by both the export sweep and the settings panel, which is why this is its
+ * own table rather than a generic settings row.
+ */
+export const otelExporters = pgTable('otel_exporters', {
+  id:                  uuid('id').primaryKey().defaultRandom(),
+  tenantId:            integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  name:                varchar('name', { length: 255 }).notNull(),
+  /** OTLP/HTTP base; spans POST to `${endpoint}/v1/traces`. */
+  endpoint:            text('endpoint').notNull(),
+  headersEnc:          text('headers_enc'),
+  headersIv:           varchar('iv', { length: 64 }),
+  serviceName:         varchar('service_name', { length: 255 }),
+  sampleRate:          real('sample_rate').notNull().default(1),
+  enabled:             boolean('enabled').notNull().default(true),
+  lastExportAt:        timestamp('last_export_at'),
+  lastError:           text('last_error'),
+  consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+  createdBy:           varchar('created_by', { length: 36 }),
+  createdAt:           timestamp('created_at').notNull().defaultNow(),
+  updatedAt:           timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('otel_exporters_tenant_idx').on(t.tenantId, t.enabled),
 ]);

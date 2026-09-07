@@ -137,3 +137,35 @@ describe('CanvasAppPanel — the one click', () => {
       .toHaveAttribute('href', 'https://sunday-rsvp.builderforce.app');
   });
 });
+
+describe('CanvasAppPanel — the trigger in its host sheet', () => {
+  /**
+   * The row wears the HOST sheet's chrome, applied from that sheet's own `button`
+   * rules — so the trigger brings no class of its own. A class here would make one
+   * row in the sheet look like a visitor.
+   */
+  it('brings no chrome class of its own', async () => {
+    api.sessionAppState.mockResolvedValue({ app: null, role: 'owner', title: 'Sunday RSVP' });
+    render(<CanvasAppPanel sessionId="board-1" />);
+    const trigger = await screen.findByRole('button', { name: /triggerConvert/ });
+    expect(trigger.className).toBe('');
+    // The label is a sentence; the sheet gives it both columns on this signal.
+    expect(trigger).toHaveAttribute('data-wide', 'true');
+  });
+
+  /**
+   * The host sheet closes itself when the drawer is DISMISSED, not when the row is
+   * pressed: closing on press would unmount this component and take the drawer with
+   * it. So both edges are reported, and the panel keeps owning the state.
+   */
+  it('reports the drawer opening and closing to its host', async () => {
+    api.sessionAppState.mockResolvedValue({ app: null, role: 'owner', title: 'Sunday RSVP' });
+    const onOpenChange = vi.fn();
+    render(<CanvasAppPanel sessionId="board-1" onOpenChange={onOpenChange} />);
+    fireEvent.click(await screen.findByRole('button', { name: /triggerConvert/ }));
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+
+    fireEvent.click(screen.getByRole('button', { name: /closePanel/ }));
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+  });
+});

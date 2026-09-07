@@ -19,8 +19,6 @@
 export const DEFAULT_HYBRID_VECTOR_WEIGHT = 0.7;
 /** Weight on the lexical arm when a caller states none. */
 export const DEFAULT_HYBRID_TEXT_WEIGHT = 0.3;
-/** Pull this many times the final result count from EACH arm before fusing. */
-export const DEFAULT_HYBRID_CANDIDATE_MULTIPLIER = 4;
 
 export interface HybridWeights {
   vectorWeight: number;

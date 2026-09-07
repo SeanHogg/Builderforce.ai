@@ -49,6 +49,8 @@ import { createMemberRoutes }      from './presentation/routes/memberRoutes';
 import { createTenantRoutes }      from './presentation/routes/tenantRoutes';
 import { createSegmentRoutes }     from './presentation/routes/segmentRoutes';
 import { createEmbedRoutes }       from './presentation/routes/embedRoutes';
+import { createTenantSkillRoutes } from './presentation/routes/tenantSkillRoutes';
+import { createObservabilityExportRoutes } from './presentation/routes/observabilityExportRoutes';
 import { createGovernanceRoutes }  from './presentation/routes/governanceRoutes';
 import { createAgentOpsRoutes }    from './presentation/routes/agentOpsRoutes';
 import { createProductRoutes }     from './presentation/routes/productRoutes';
@@ -865,6 +867,12 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/segments', createSegmentRoutes(db));
   app.route('/api/embed',    createEmbedRoutes(db));
   app.route('/api/governance', createGovernanceRoutes(db));
+  // The workspace's OWN skills (including agent-authored drafts). `/api/skills` is
+  // already the built-in skill catalogue's read surface, so the tenant store gets
+  // its own path rather than a second router competing for the same prefix.
+  app.route('/api/workspace-skills', createTenantSkillRoutes(db));
+  // Where a workspace sends its agent telemetry (OpenTelemetry collectors).
+  app.route('/api/observability/exporters', createObservabilityExportRoutes(db));
   // Agent Ops: coordination (leases + blackboard), memory governance, rehearsal (0370-0372).
   app.route('/api/agent-ops',  createAgentOpsRoutes(db));
   app.route('/api/product',  createProductRoutes(db));

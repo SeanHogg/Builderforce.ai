@@ -25,11 +25,16 @@ import type { Db } from '../../infrastructure/database/connection';
 import { setExecutionEventSinks } from './executionEvents';
 import { makeExecutionRelaySink } from './executionRelayBroadcast';
 import { makeExecutionBoardSink } from './executionBoardBroadcast';
+import { makeOtelExecutionSink } from '../observability/otelExecutionSink';
 
 export function wireExecutionEventSinks(env: Env, db: Db): void {
   // RELAY first: it carries each frame into the run's own DO room (the per-execution
   // tail — status, messages, file changes, tool events), which is the stream a viewer
   // is attached to. BOARD second: a lifecycle event also signals the project room so
   // every board / calendar / list refetches, not just whoever opened the drawer.
-  setExecutionEventSinks(makeExecutionRelaySink(env), makeExecutionBoardSink(env, db));
+  // OTEL third: a tenant-configured OpenTelemetry collector, so agent runs appear in
+  // the observability stack a buyer already runs instead of only in this product.
+  // Best-effort and last in the list — an external collector must never delay the two
+  // sinks a person is actually watching.
+  setExecutionEventSinks(makeExecutionRelaySink(env), makeExecutionBoardSink(env, db), makeOtelExecutionSink(env, db));
 }

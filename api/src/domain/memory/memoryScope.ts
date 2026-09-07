@@ -121,18 +121,36 @@ export interface ScopedEntryLike {
 }
 
 /**
- * Collapse a recall result so each key appears once, keeping the NARROWEST scope.
- * Input must already be narrowest-scope-first (as {@link visibleScopeChain} produces),
- * so this is a stable first-wins pass — order within a scope is preserved, which keeps
- * the caller's importance ranking intact.
+ * Collapse a recall result so each key appears once, keeping the NARROWEST scope —
+ * a ticket-local override beats the project default beats the workspace one.
+ *
+ * The rule is enforced HERE, from each row's own `scope`, rather than assumed from
+ * the caller's ordering. It used to be a plain first-wins pass that was correct only
+ * while every caller happened to pass rows narrowest-scope-first; the moment recall
+ * started ordering by RELEVANCE instead of by scope chain (semantic retrieval, 1134),
+ * that assumption silently inverted the override — a workspace-wide fact could
+ * outrank the ticket-local one that was meant to supersede it.
+ *
+ * Everything else about the caller's ordering is preserved: each surviving key keeps
+ * the position of its FIRST appearance, so an importance or relevance ranking still
+ * decides the order of the result.
  */
 export function dedupeBySpecificity<T extends ScopedEntryLike>(entries: readonly T[]): T[] {
-  const seen = new Set<string>();
-  const out: T[] = [];
-  for (const e of entries) {
-    if (seen.has(e.key)) continue;
-    seen.add(e.key);
-    out.push(e);
-  }
-  return out;
+  // Lower rank = narrower. An entry with no scope reported is treated as the widest,
+  // so a surface that does not report one can never displace a scoped override.
+  const rankOf = (entry: T): number => {
+    const index = entry.scope ? MEMORY_SCOPES.indexOf(entry.scope) : -1;
+    return index === -1 ? -1 : index;
+  };
+  const bestByKey = new Map<string, { entry: T; rank: number; position: number }>();
+  entries.forEach((entry, position) => {
+    const rank = rankOf(entry);
+    const current = bestByKey.get(entry.key);
+    // Strictly narrower wins; a tie keeps the earlier row, so the caller's ordering
+    // decides between two rows at the same scope.
+    if (!current || rank > current.rank) {
+      bestByKey.set(entry.key, { entry, rank, position: current?.position ?? position });
+    }
+  });
+  return [...bestByKey.values()].sort((a, b) => a.position - b.position).map((v) => v.entry);
 }

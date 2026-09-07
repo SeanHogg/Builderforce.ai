@@ -31,6 +31,8 @@ import { and, count, desc, eq, isNull, or, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { invitations } from '../../infrastructure/database/schema/kernel';
+import { acrossTenants } from '../../infrastructure/database/tenantScope';
+import { SEAT_KIND, type SeatKind, consumesSeat } from '../../domain/tenant/SeatKind';
 import type { Env } from '../../env';
 
 /** What an invitation invites you to. `objectId` is null for `tenant`, because a
@@ -46,6 +48,9 @@ export type InvitationRow = {
   email: string | null;
   inviteeRef: string | null;
   role: string;
+  /** 'seat' | 'collaborator' — what accepting it costs the workspace. See
+   *  `domain/tenant/SeatKind.ts`. */
+  seatKind: string;
   state: string;
   invitedBy: string | null;
   message: string | null;
@@ -65,6 +70,7 @@ const PUBLIC = {
   email: invitations.email,
   inviteeRef: invitations.inviteeRef,
   role: invitations.role,
+  seatKind: invitations.seatKind,
   state: invitations.state,
   invitedBy: invitations.invitedBy,
   message: invitations.message,
@@ -129,6 +135,9 @@ export async function invite(
     kind: InvitationKind;
     email: string;
     role?: string;
+    /** Defaults to a paid seat. Pass `collaborator` for an invitation whose
+     *  membership exists only to make a shared object resolve — a canvas guest. */
+    seatKind?: SeatKind;
     invitedBy?: string | null;
     objectId?: string | null;
     message?: string | null;
@@ -139,6 +148,7 @@ export async function invite(
 ): Promise<InvitationRow> {
   const email = normaliseEmail(input.email);
   const role = input.role ?? 'member';
+  const seatKind = input.seatKind ?? SEAT_KIND.SEAT;
 
   // Idempotent on (tenant, kind, email) — AND on the object when the kind carries
   // one. Without the object clause, inviting the same address to a second canvas
@@ -162,14 +172,18 @@ export async function invite(
 
   if (existing && !input.tokenHash) {
     // A re-invite with no new token updates in place: same row, current role.
-    if (existing.role !== role || (input.invitedBy && existing.invitedBy !== input.invitedBy)) {
+    // `seatKind` is refreshed with it — a workspace invite that follows a canvas
+    // share is a genuine upgrade from guest to seat, and leaving the row saying
+    // 'collaborator' would seat that person without ever counting them.
+    if (existing.role !== role || existing.seatKind !== seatKind
+      || (input.invitedBy && existing.invitedBy !== input.invitedBy)) {
       await db
         .update(invitations)
-        .set({ role, invitedBy: input.invitedBy ?? existing.invitedBy, updatedAt: new Date() })
+        .set({ role, seatKind, invitedBy: input.invitedBy ?? existing.invitedBy, updatedAt: new Date() })
         .where(and(eq(invitations.id, existing.id), eq(invitations.tenantId, input.tenantId)));
     }
     await invalidateInvitations(env, input.tenantId);
-    return { ...existing, role };
+    return { ...existing, role, seatKind };
   }
 
   const [row] = await db
@@ -180,6 +194,7 @@ export async function invite(
       objectId: input.objectId ?? null,
       email,
       role,
+      seatKind,
       invitedBy: input.invitedBy ?? null,
       message: input.message ?? null,
       expiresAt: input.expiresAt ?? null,
@@ -233,8 +248,14 @@ export async function countPending(
   env: Env,
   tenantId: number,
   kind?: InvitationKind,
+  seatKind?: SeatKind,
 ): Promise<number> {
-  return (await listPending(db, env, tenantId, kind)).length;
+  const rows = await listPending(db, env, tenantId, kind);
+  if (!seatKind) return rows.length;
+  // Filtered in memory ON PURPOSE: a second SQL count would be a second
+  // definition of "pending", and the whole reason this function exists is that
+  // the seat guard and the members page must never disagree about the number.
+  return rows.filter((row) => consumesSeat(row.seatKind) === consumesSeat(seatKind)).length;
 }
 
 /**
@@ -272,6 +293,40 @@ export async function findByTokenHash(db: Db, tokenHash: string): Promise<Invita
     .select(PUBLIC)
     .from(invitations)
     .where(and(eq(invitations.tokenHash, tokenHash), isPending()))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * The same lookup for an invitation this exact person has ALREADY accepted.
+ *
+ * `findByTokenHash` is pending-only, which is right — a consumed token is not a
+ * grant. But it made the invite link a one-shot: opening it a second time (a
+ * bookmarked email, a reload, a first attempt that failed downstream and was
+ * retried) answered "invalid, expired, or already used" to somebody who is a
+ * member of the thing the link points at. `inviteeRef` is the whole safety
+ * property here: this returns a row only to the account that redeemed it, so it
+ * re-opens nothing for anybody else.
+ */
+export async function findAcceptedByTokenHash(
+  db: Db,
+  tokenHash: string,
+  inviteeRef: string,
+): Promise<InvitationRow | null> {
+  const [row] = await db
+    .select(PUBLIC)
+    .from(invitations)
+    .where(acrossTenants(
+      invitations,
+      'share_token',
+      // The token is the credential, exactly as in `findByTokenHash` — the holder
+      // is establishing which workspace admitted them, so there is no tenant to
+      // scope BY. `inviteeRef` narrows it further than a tenant filter could: to
+      // the single account that redeemed this single token.
+      eq(invitations.tokenHash, tokenHash),
+      eq(invitations.state, 'accepted'),
+      eq(invitations.inviteeRef, inviteeRef),
+    ))
     .limit(1);
   return row ?? null;
 }

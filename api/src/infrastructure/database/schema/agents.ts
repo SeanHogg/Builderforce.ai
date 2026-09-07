@@ -767,6 +767,45 @@ export const skillAssignments = pgTable('skill_assignments', {
  * project, or task). Precedence during resolution: task > project > agentHost > tenant.
  * scopeId holds the FK for the scope entity (tenantId / agentHostId / projectId / taskId).
  */
+/**
+ * A workspace's OWN skills — including the ones its agents wrote (migration 1135).
+ *
+ * `marketplace_skills` is the public catalogue (no tenant, human author, browser-gated
+ * INSERT) and the bundled SKILL.md dirs are files in the runtime image, so neither
+ * could hold a procedure a RUN discovered. This can: it is tenant-scoped, authored by
+ * an execution, and inert until reviewed.
+ *
+ * `status` carries the whole safety property — only `approved` rows are injected into
+ * a prompt, so an agent proposing a skill cannot change what other agents are told to
+ * do. `originExecutionId` / `originTaskId` are plain ids with no FK (the same call
+ * `tool_audit_events.execution_id` makes): they cross a domain boundary, and a cascade
+ * from a deleted run would erase the provenance of an approved instruction.
+ */
+export const tenantSkills = pgTable('tenant_skills', {
+  id:                uuid('id').primaryKey().defaultRandom(),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  /** Narrower home when the procedure is project-specific; null = whole workspace. */
+  projectId:         integer('project_id'),
+  slug:              varchar('slug', { length: 255 }).notNull(),
+  name:              varchar('name', { length: 255 }).notNull(),
+  description:       text('description').notNull(),
+  body:              text('body').notNull(),
+  status:            varchar('status', { length: 16 }).notNull().default('draft'),
+  authorKind:        varchar('author_kind', { length: 16 }).notNull().default('agent'),
+  authorLabel:       varchar('author_label', { length: 255 }),
+  evidence:          text('evidence'),
+  originExecutionId: integer('origin_execution_id'),
+  originTaskId:      integer('origin_task_id'),
+  reviewedBy:        varchar('reviewed_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  reviewedAt:        timestamp('reviewed_at'),
+  reviewNote:        text('review_note'),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_tenant_skills_slug').on(t.tenantId, t.slug),
+  index('tenant_skills_status_idx').on(t.tenantId, t.status, t.updatedAt),
+]);
+
 export const artifactAssignments = pgTable('artifact_assignments', {
   id:            serial('id').primaryKey(),
   tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
@@ -2791,3 +2830,55 @@ export const tenantModels = pgTable('tenant_models', {
   byTenant: index('idx_tenant_models_tenant').on(t.tenantId),
   uqSlug:   uniqueIndex('uq_tenant_models_slug').on(t.tenantId, t.slug),
 }));
+
+/**
+ * The FIXED agent benchmark (migration 1136).
+ *
+ * `semanticEval`, `driftMonitor` and the variant promotion gate all score whatever
+ * traffic arrived, so "did agent quality improve" has never had an answer that was
+ * not confounded by which tickets came in. A case is a stable prompt plus what a
+ * good answer must contain; changing one resets its series, which is the point.
+ *
+ * Named `agent_benchmark_*` because `industry_benchmarks` / `tenant_benchmark_profiles`
+ * already mean "how do we compare to our industry" — one word doing two jobs in a
+ * schema is how a dashboard plots the wrong number.
+ */
+export const agentBenchmarkCases = pgTable('agent_benchmark_cases', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  /** Narrower scope when the case is about one codebase; null = workspace-wide. */
+  projectId:    integer('project_id'),
+  slug:         varchar('slug', { length: 255 }).notNull(),
+  name:         varchar('name', { length: 255 }).notNull(),
+  prompt:       text('prompt').notNull(),
+  /** JSON string[] of substrings a good answer must contain. */
+  expectations: text('expectations').notNull().default('[]'),
+  category:     varchar('category', { length: 64 }).notNull().default('general'),
+  enabled:      boolean('enabled').notNull().default(true),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_agent_benchmark_cases_slug').on(t.tenantId, t.slug),
+]);
+
+/** One scored attempt at one case. The regression series IS these rows over time. */
+export const agentBenchmarkResults = pgTable('agent_benchmark_results', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  caseId:        uuid('case_id').notNull().references(() => agentBenchmarkCases.id, { onDelete: 'cascade' }),
+  cloudAgentRef: varchar('cloud_agent_ref', { length: 255 }),
+  model:         varchar('model', { length: 255 }),
+  /** No FK: crosses a domain boundary, and a deleted run must not erase the series. */
+  executionId:   integer('execution_id'),
+  score:         real('score').notNull(),
+  /** Fraction of the case's expectations present — kept apart from `score` so a
+   *  rubric miss and a quality drop are told apart. */
+  coverage:      real('coverage').notNull().default(0),
+  passed:        boolean('passed').notNull().default(false),
+  answer:        text('answer'),
+  durationMs:    integer('duration_ms'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('agent_benchmark_results_series_idx').on(t.tenantId, t.caseId, t.createdAt),
+  index('agent_benchmark_results_agent_idx').on(t.tenantId, t.cloudAgentRef, t.createdAt),
+]);

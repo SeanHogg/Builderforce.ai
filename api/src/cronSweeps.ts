@@ -25,6 +25,8 @@
 import type { Env } from './env';
 import type { CronSweepDef } from './application/runtime/cronSweepRunner';
 
+import { runMemoryEmbeddingBackfill } from './application/memory/memoryEmbeddingBackfill';
+import { runAgentBenchmarkSweep } from './application/eval/agentBenchmarkSweep';
 import { projectRegistry } from './application/kernel/registryProjection';
 import { METRIC_ROLLUPS } from './application/kernel/rollupRegistry';
 import { runRollups } from './application/kernel/metricRollup';
@@ -293,6 +295,27 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     run: async ({ env, db }) => {
       const result = await runStakeholderDigestSweep(db);
       return result.distributed > 0 ? `projects=${result.projects} distributed=${result.distributed}` : null;
+    },
+  },
+  {
+    key: 'memory-embedding-backfill',
+    cadence: 'daily',
+    description: 'Vectorise memories written before semantic recall existed, or whose embed failed at write time.',
+    run: async ({ env, db }) => {
+      const r = await runMemoryEmbeddingBackfill(env, db);
+      if (r.skipped) return null;
+      return r.memories + r.projectFacts > 0 ? `memories=${r.memories} facts=${r.projectFacts}` : null;
+    },
+  },
+  {
+    key: 'agent-benchmark',
+    cadence: 'daily',
+    description: "Run each workspace's fixed benchmark set so agent quality is a series, not an anecdote.",
+    // It spends model tokens on the tenant's own plan, so it declares that.
+    dispatches: true,
+    run: async ({ env, db }) => {
+      const r = await runAgentBenchmarkSweep(env, db);
+      return r.attempts > 0 ? `tenants=${r.tenants} attempts=${r.attempts}` : null;
     },
   },
   {

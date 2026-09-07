@@ -12,6 +12,7 @@ import { NotFoundError, ValidationError } from '../../domain/shared/errors';
 import { trialDaysRemaining } from '../../domain/tenant/effectivePlan';
 import type { PaymentProvider, WebhookEvent } from '../../infrastructure/payment/PaymentProvider';
 import { PLAN_LIMITS } from '../../domain/tenant/PlanLimits';
+import { SEAT_KIND, type SeatKind } from '../../domain/tenant/SeatKind';
 import { membershipChanged } from './membershipChanged';
 import type { Env } from '../../env';
 import { invalidateTenantPlan } from './tenantPlanCache';
@@ -204,15 +205,27 @@ export class TenantService {
     return this.persist(updated);
   }
 
+  /** `seatKind` defaults to a paid seat; pass `collaborator` when the membership
+   *  exists only so a shared canvas resolves (see `domain/tenant/SeatKind.ts`). */
   async addMember(
     tenantId: number,
     actorUserId: string,
     newUserId: string,
     role: TenantRole,
+    seatKind: SeatKind = SEAT_KIND.SEAT,
   ): Promise<Tenant> {
     const tenant = await this.getTenant(tenantId);
-    const updated = tenant.addMember(actorUserId, newUserId, role);
+    const updated = tenant.addMember(actorUserId, newUserId, role, seatKind);
     const persisted = await this.persist(updated);
+    await this.announceMembership(tenantId, [newUserId]);
+    return persisted;
+  }
+
+  /** Admit a canvas guest, authorized by the board invitation they redeemed
+   *  rather than by a workspace role — see `Tenant.admitCollaborator`. */
+  async admitCollaborator(tenantId: number, newUserId: string, role: TenantRole): Promise<Tenant> {
+    const tenant = await this.getTenant(tenantId);
+    const persisted = await this.persist(tenant.admitCollaborator(newUserId, role));
     await this.announceMembership(tenantId, [newUserId]);
     return persisted;
   }

@@ -16,14 +16,29 @@
  */
 
 import { Hono } from 'hono';
-import { authMiddleware } from '../middleware/authMiddleware';
+import { z } from 'zod';
+import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { TenantRole } from '../../domain/shared/types';
+import { parseBody } from './requestBody';
 import { evaluateResponse, type EvalJudge } from '../../application/eval/semanticEval';
 import { gatewayJudge } from '../../application/eval/gatewayJudge';
+import { benchmarkTrend, listCases, summarizeTrend, upsertCase } from '../../application/eval/agentBenchmark';
 import { getTenantDriftReport } from '../../application/eval/driftReport';
 import { evaluateVariant } from '../../application/eval/variantEval';
 import { resolveTenantPlan } from '../../application/tenant/tenantPlanSnapshot';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+
+/** A benchmark case: a stable prompt plus what a good answer must contain. */
+const benchmarkCaseSchema = z.object({
+  slug: z.string().min(1).max(255),
+  name: z.string().min(1).max(255),
+  prompt: z.string().min(1).max(8_000),
+  expectations: z.array(z.string().max(500)).max(20).optional(),
+  category: z.string().max(64).optional(),
+  projectId: z.number().int().positive().nullable().optional(),
+  enabled: z.boolean().optional(),
+});
 
 export function createEvalRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -60,6 +75,32 @@ export function createEvalRoutes(db: Db): Hono<HonoEnv> {
   router.get('/drift', async (c) => {
     const tenantId = c.get('tenantId') as number;
     return c.json(await getTenantDriftReport(db, c.env as Env, tenantId));
+  });
+
+  // ── GET /api/eval/benchmark ───────────────────────────────────────────────
+  // The FIXED task set's series: attempts over a window, plus the summary a chart
+  // puts a headline on. This is the number that answers "did agent quality move",
+  // which the drift and variant reports cannot — they score whatever traffic arrived.
+  router.get('/benchmark', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const windowDays = Math.min(365, Math.max(1, Number(c.req.query('windowDays')) || 30));
+    const since = new Date(Date.now() - windowDays * 86_400_000);
+    const [cases, points] = await Promise.all([
+      listCases(db, tenantId),
+      benchmarkTrend(db, tenantId, since),
+    ]);
+    return c.json({ windowDays, cases, points, summary: summarizeTrend(points) });
+  });
+
+  // ── POST /api/eval/benchmark/cases ────────────────────────────────────────
+  // Author or revise a case. Manager-level: a case defines what "good" means for
+  // every future comparison, and revising one resets what its series measures.
+  router.post('/benchmark/cases', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const body = await parseBody(c, benchmarkCaseSchema);
+    const r = await upsertCase(db, tenantId, body);
+    if (!r.ok) return c.json({ error: r.error }, 400);
+    return c.json({ ok: true }, 201);
   });
 
   // ── GET /api/eval/variant-compare ─────────────────────────────────────────

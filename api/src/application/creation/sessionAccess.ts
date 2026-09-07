@@ -20,6 +20,7 @@ import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { creationSessionMembers, creationSessions, users } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { TenantRole } from '../../domain/shared/types';
 
 export type SessionRole = 'viewer' | 'commenter' | 'editor' | 'runner' | 'owner';
 
@@ -83,6 +84,25 @@ export async function resolveSessionAccess(
     ))
     .limit(1);
   return adminMember ?? null;
+}
+
+/**
+ * The WORKSPACE role a board role implies for somebody whose only reason to be in
+ * the workspace is that board.
+ *
+ * Canvas reads are tenant-scoped, so sharing a board with a stranger has to seat
+ * them in the workspace as well ({@link resolveSessionAccess} cannot resolve a
+ * board for a non-member). That companion membership used to be granted as
+ * `developer` regardless of the board role — so inviting somebody to LOOK at one
+ * canvas handed them write access to every project, ticket and agent in the
+ * workspace. The board role is the ceiling: a viewer or commenter gets a
+ * workspace `viewer`, and only a role that edits or runs the board gets
+ * `developer`, which the canvas write paths need.
+ */
+export function tenantRoleForSessionRole(role: SessionRole): TenantRole {
+  return SESSION_ROLE_RANK[role] >= SESSION_ROLE_RANK.editor
+    ? TenantRole.DEVELOPER
+    : TenantRole.VIEWER;
 }
 
 /** The same resolution, with a minimum role applied. Null means "no, and do not say why" —

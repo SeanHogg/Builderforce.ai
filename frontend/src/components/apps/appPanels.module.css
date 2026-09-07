@@ -9,39 +9,9 @@
  * slide-out on a phone as often as in a page column.
  */
 
-/* --- trigger ------------------------------------------------------------- */
-
-.trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  max-width: 100%;
-  min-height: 36px;
-  padding: 6px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-full);
-  background: var(--surface-2);
-  color: var(--text-primary);
-  font-size: var(--font-size-small);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.trigger:hover {
-  background: var(--surface-interactive-hover);
-}
-
-.trigger:focus-visible {
-  outline: 2px solid var(--focus-color);
-  outline-offset: 2px;
-}
-
-.triggerLabel {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* No `.trigger` chrome here. `CanvasAppPanel`'s button is a row in the canvas's
+   ••• sheet and takes that sheet's own `button` rules, the way every other row in
+   it does — a pill declared here would have been one row dressed as a visitor. */
 
 /* --- panel body ---------------------------------------------------------- */
 

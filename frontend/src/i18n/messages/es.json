@@ -5122,7 +5122,8 @@
         "dsr": "Solicitudes de interesados",
         "suppression": "Lista de supresión"
       },
-      "finBurnRate": "Burn rate y runway"
+      "finBurnRate": "Burn rate y runway",
+      "aiHubBenchmark": "Prueba de referencia de agentes"
     },
     "loading": "Cargando…",
     "overview": {
@@ -5350,7 +5351,8 @@
       "delivHubVerdictDesc": "Estado de la entrega de un vistazo: un veredicto y una puntuación de 0 a 100 que combinan DORA, el tiempo de ciclo y los cuellos de botella en vivo.",
       "overviewAsk": "Pregunta por cualquier métrica en lenguaje natural y obtén el número junto con la métrica que coincidió.",
       "paidMediaSpend": "Lo que cobraron las plataformas conectadas en el periodo.",
-      "paidMediaCostPerResult": "Inversión dividida entre los resultados atribuidos."
+      "paidMediaCostPerResult": "Inversión dividida entre los resultados atribuidos.",
+      "aiHubBenchmarkDesc": "Calidad de los agentes frente a un conjunto fijo de tareas, para que un cambio signifique que cambiaron los agentes y no la carga de trabajo."
     },
     "paidMedia": {
       "noSpend": "No hay entregas de pago registradas en este periodo.",
@@ -10527,7 +10529,8 @@
     "catTesting": "Pruebas",
     "catDevops": "DevOps",
     "catDocumentation": "Documentación",
-    "catSecurity": "Seguridad"
+    "catSecurity": "Seguridad",
+    "tabProposed": "Propuestas por agentes"
   },
   "personasPage": {
     "title": "Personas",
@@ -28282,6 +28285,76 @@
       "error": "No se pudo completar la conexión. Inténtalo de nuevo.",
       "invalid_state": "Ese enlace de conexión caducó. Inicia la conexión de nuevo.",
       "no_pending_consent": "No había ninguna conexión pendiente de finalizar. Inicia la conexión de nuevo."
+    }
+  },
+  "workspaceSkills": {
+    "intro": "Una ejecución que llega a un resultado verificado puede destilar lo que hizo en una habilidad. Nada de esto llega a otro agente hasta que lo apruebes.",
+    "loading": "Cargando propuestas…",
+    "approve": "Aprobar",
+    "reject": "Rechazar",
+    "delete": "Eliminar",
+    "unknownAgent": "un agente",
+    "writtenByPerson": "Escrita por una persona.",
+    "proposedByAgent": "Propuesta por {agent} en la ejecución n.º {run}.",
+    "evidence": "Evidencia: {evidence}",
+    "confirmApprove": "¿Aprobar «{name}»? Todos los agentes de este espacio la seguirán desde su próxima ejecución.",
+    "confirmDelete": "¿Eliminar «{name}»? La propuesta se borra definitivamente.",
+    "filter": {
+      "draft": "Pendientes de revisión",
+      "approved": "Aprobadas",
+      "rejected": "Rechazadas"
+    },
+    "empty": {
+      "draft": "No hay propuestas pendientes. Los agentes proponen una habilidad solo tras una ejecución con resultado verificado.",
+      "approved": "Aún no hay habilidades aprobadas. Aprueba una propuesta y todos los agentes aquí la seguirán.",
+      "rejected": "No hay nada rechazado."
+    }
+  },
+  "agentBenchmark": {
+    "title": "Prueba de referencia de agentes",
+    "subtitle": "{cases} casos, últimos {days} días",
+    "loading": "Cargando resultados de la prueba…",
+    "noCases": "Aún no hay casos. Añade uno para empezar a medir la calidad de los agentes con un conjunto fijo de tareas.",
+    "noAttempts": "Aún no hay intentos en este periodo. La prueba se ejecuta una vez al día.",
+    "steady": "Se mantiene estable",
+    "regressing": "Baja {points} respecto a la primera mitad",
+    "statPassRate": "Tasa de aprobación",
+    "statMeanScore": "Puntuación media",
+    "statMeanCoverage": "Cobertura media",
+    "statAttempts": "Intentos",
+    "seriesScore": "Puntuación",
+    "seriesCoverage": "Cobertura",
+    "chartLabel": "Puntuación y cobertura de la prueba a lo largo del tiempo"
+  },
+  "otelExport": {
+    "title": "Exportación a OpenTelemetry",
+    "intro": "Envía las ejecuciones de agentes a tu propio recolector, para que aparezcan junto al resto de tu sistema y no solo en este producto.",
+    "loading": "Cargando recolectores…",
+    "empty": "No hay ningún recolector configurado. La telemetría de los agentes se queda en BuilderForce.",
+    "requiresRole": "Requiere el rol {role}. Pide a un gestor del espacio que configure la exportación de telemetría.",
+    "lastExport": "Última exportación: {at}.",
+    "lastError": "Último fallo: {error}",
+    "neverExported": "Aún no se ha exportado nada.",
+    "pause": "Pausar",
+    "resume": "Reanudar",
+    "clearHeaders": "Borrar credencial",
+    "remove": "Eliminar",
+    "confirmRemove": "¿Eliminar {name}? Las ejecuciones de agentes dejarán de exportarse de inmediato.",
+    "status": {
+      "healthy": "Exportando",
+      "failing": "Fallando ({count} seguidos)",
+      "paused": "En pausa"
+    },
+    "form": {
+      "nameLabel": "Nombre",
+      "namePlaceholder": "p. ej. Honeycomb producción",
+      "endpointLabel": "Endpoint del recolector",
+      "endpointHint": "OTLP sobre HTTP. Los spans se envían a /v1/traces bajo esta dirección.",
+      "endpointMustBeHttps": "Introduce una dirección https:// pública.",
+      "headerNameLabel": "Nombre de la cabecera de autenticación",
+      "headerValueLabel": "Valor de la cabecera de autenticación",
+      "headerHint": "Se guarda cifrada y no se vuelve a mostrar. Deja ambos vacíos si el recolector no necesita credencial.",
+      "add": "Añadir recolector"
     }
   }
 }

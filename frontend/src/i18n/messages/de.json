@@ -5122,7 +5122,8 @@
         "dsr": "Betroffenenanfragen",
         "suppression": "Sperrliste"
       },
-      "finBurnRate": "Burn-Rate & Runway"
+      "finBurnRate": "Burn-Rate & Runway",
+      "aiHubBenchmark": "Agenten-Benchmark"
     },
     "loading": "Laden…",
     "overview": {
@@ -5350,7 +5351,8 @@
       "delivHubVerdictDesc": "Lieferzustand auf einen Blick — ein Urteil und ein Wert von 0–100, gebildet aus DORA, Durchlaufzeit und aktuellen Engpässen.",
       "overviewAsk": "Fragen Sie in natürlicher Sprache nach einer beliebigen Kennzahl und erhalten Sie den Wert samt der zugeordneten Kennzahl.",
       "paidMediaSpend": "Was die verbundenen Werbenetzwerke im Zeitraum berechnet haben.",
-      "paidMediaCostPerResult": "Ausgaben geteilt durch die zugeordneten Ergebnisse."
+      "paidMediaCostPerResult": "Ausgaben geteilt durch die zugeordneten Ergebnisse.",
+      "aiHubBenchmarkDesc": "Agentenqualität an einem festen Aufgabensatz, sodass eine Veränderung an den Agenten liegt und nicht an der Arbeitslast."
     },
     "paidMedia": {
       "noSpend": "In diesem Zeitraum wurde keine bezahlte Auslieferung erfasst.",
@@ -10527,7 +10529,8 @@
     "catTesting": "Testen",
     "catDevops": "DevOps",
     "catDocumentation": "Dokumentation",
-    "catSecurity": "Sicherheit"
+    "catSecurity": "Sicherheit",
+    "tabProposed": "Von Agenten vorgeschlagen"
   },
   "personasPage": {
     "title": "Personas",
@@ -28282,6 +28285,76 @@
       "error": "Die Verbindung konnte nicht abgeschlossen werden. Versuchen Sie es erneut.",
       "invalid_state": "Dieser Verbindungslink ist abgelaufen. Starten Sie die Verbindung erneut.",
       "no_pending_consent": "Es wartete keine Verbindung auf den Abschluss. Starten Sie die Verbindung erneut."
+    }
+  },
+  "workspaceSkills": {
+    "intro": "Ein Lauf mit einem verifizierten Ergebnis kann sein Vorgehen zu einem Skill verdichten. Nichts davon erreicht einen anderen Agenten, bevor Sie es freigeben.",
+    "loading": "Vorschläge werden geladen…",
+    "approve": "Freigeben",
+    "reject": "Ablehnen",
+    "delete": "Löschen",
+    "unknownAgent": "einem Agenten",
+    "writtenByPerson": "Von einer Person verfasst.",
+    "proposedByAgent": "Vorgeschlagen von {agent} in Lauf #{run}.",
+    "evidence": "Nachweis: {evidence}",
+    "confirmApprove": "„{name}“ freigeben? Alle Agenten dieses Workspace folgen ihr ab ihrem nächsten Lauf.",
+    "confirmDelete": "„{name}“ löschen? Der Vorschlag wird endgültig entfernt.",
+    "filter": {
+      "draft": "Wartet auf Prüfung",
+      "approved": "Freigegeben",
+      "rejected": "Abgelehnt"
+    },
+    "empty": {
+      "draft": "Keine offenen Vorschläge. Agenten schlagen einen Skill erst nach einem Lauf mit verifiziertem Ergebnis vor.",
+      "approved": "Noch keine freigegebenen Skills. Geben Sie einen Vorschlag frei, und alle Agenten hier folgen ihm.",
+      "rejected": "Nichts abgelehnt."
+    }
+  },
+  "agentBenchmark": {
+    "title": "Agenten-Benchmark",
+    "subtitle": "{cases} Fälle, letzte {days} Tage",
+    "loading": "Benchmark-Ergebnisse werden geladen…",
+    "noCases": "Noch keine Benchmark-Fälle. Fügen Sie einen hinzu, um die Agentenqualität an einem festen Aufgabensatz zu messen.",
+    "noAttempts": "In diesem Zeitraum noch keine Versuche. Der Benchmark läuft einmal täglich.",
+    "steady": "Stabil",
+    "regressing": "{points} unter der ersten Hälfte",
+    "statPassRate": "Bestehensquote",
+    "statMeanScore": "Durchschnittliche Bewertung",
+    "statMeanCoverage": "Durchschnittliche Abdeckung",
+    "statAttempts": "Versuche",
+    "seriesScore": "Bewertung",
+    "seriesCoverage": "Abdeckung",
+    "chartLabel": "Benchmark-Bewertung und -Abdeckung im Zeitverlauf"
+  },
+  "otelExport": {
+    "title": "OpenTelemetry-Export",
+    "intro": "Senden Sie Agentenläufe an Ihren eigenen Collector, damit sie neben dem Rest Ihres Systems stehen und nicht nur in diesem Produkt.",
+    "loading": "Collectors werden geladen…",
+    "empty": "Kein Collector konfiguriert. Agenten-Telemetrie bleibt in BuilderForce.",
+    "requiresRole": "Erfordert die Rolle {role}. Bitten Sie eine Workspace-Managerin oder einen Workspace-Manager, den Telemetrie-Export einzurichten.",
+    "lastExport": "Letzter Export: {at}.",
+    "lastError": "Letzter Fehler: {error}",
+    "neverExported": "Noch nichts exportiert.",
+    "pause": "Pausieren",
+    "resume": "Fortsetzen",
+    "clearHeaders": "Zugangsdaten löschen",
+    "remove": "Entfernen",
+    "confirmRemove": "{name} entfernen? Agentenläufe werden sofort nicht mehr exportiert.",
+    "status": {
+      "healthy": "Export läuft",
+      "failing": "Fehlgeschlagen ({count} in Folge)",
+      "paused": "Pausiert"
+    },
+    "form": {
+      "nameLabel": "Name",
+      "namePlaceholder": "z. B. Honeycomb Produktion",
+      "endpointLabel": "Collector-Endpunkt",
+      "endpointHint": "OTLP über HTTP. Spans werden an /v1/traces unter dieser Adresse gesendet.",
+      "endpointMustBeHttps": "Geben Sie eine öffentliche https://-Adresse ein.",
+      "headerNameLabel": "Name des Auth-Headers",
+      "headerValueLabel": "Wert des Auth-Headers",
+      "headerHint": "Verschlüsselt gespeichert und nie wieder angezeigt. Beide leer lassen, wenn der Collector keine Zugangsdaten braucht.",
+      "add": "Collector hinzufügen"
     }
   }
 }

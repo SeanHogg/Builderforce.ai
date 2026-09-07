@@ -5122,7 +5122,8 @@
         "dsr": "数据主体请求",
         "suppression": "屏蔽名单"
       },
-      "finBurnRate": "烧钱率与跑道"
+      "finBurnRate": "烧钱率与跑道",
+      "aiHubBenchmark": "智能体基准"
     },
     "loading": "加载中…",
     "overview": {
@@ -5350,7 +5351,8 @@
       "delivHubVerdictDesc": "交付健康度一览——由 DORA、周期时间和实时瓶颈融合得出的单一结论与 0–100 分评分。",
       "overviewAsk": "用自然语言询问任何指标，获得数值以及所匹配的指标。",
       "paidMediaSpend": "此时间范围内已连接广告平台的收费金额。",
-      "paidMediaCostPerResult": "花费除以广告平台归因的转化数。"
+      "paidMediaCostPerResult": "花费除以广告平台归因的转化数。",
+      "aiHubBenchmarkDesc": "以固定任务集衡量智能体质量，因此变化反映的是智能体本身，而不是工作量。"
     },
     "paidMedia": {
       "noSpend": "此时间范围内没有付费投放记录。",
@@ -10527,7 +10529,8 @@
     "catTesting": "测试",
     "catDevops": "DevOps",
     "catDocumentation": "文档",
-    "catSecurity": "安全"
+    "catSecurity": "安全",
+    "tabProposed": "智能体提议"
   },
   "personasPage": {
     "title": "人设",
@@ -28282,6 +28285,76 @@
       "error": "连接未能完成。请重试。",
       "invalid_state": "该连接链接已过期。请重新发起连接。",
       "no_pending_consent": "没有待完成的连接。请重新发起连接。"
+    }
+  },
+  "workspaceSkills": {
+    "intro": "取得可验证结果的运行可以把做法提炼成技能。在你批准之前，这里的内容不会提供给任何智能体。",
+    "loading": "正在加载提议…",
+    "approve": "批准",
+    "reject": "拒绝",
+    "delete": "删除",
+    "unknownAgent": "某个智能体",
+    "writtenByPerson": "由人编写。",
+    "proposedByAgent": "由 {agent} 在第 #{run} 次运行中提议。",
+    "evidence": "证据：{evidence}",
+    "confirmApprove": "批准“{name}”？本工作区的所有智能体将从下次运行开始遵循它。",
+    "confirmDelete": "删除“{name}”？该提议将被永久移除。",
+    "filter": {
+      "draft": "待审核",
+      "approved": "已批准",
+      "rejected": "已拒绝"
+    },
+    "empty": {
+      "draft": "没有待处理的提议。智能体只有在运行取得可验证结果后才会提议技能。",
+      "approved": "尚无已批准的技能。批准一个提议后，这里的所有智能体都会遵循它。",
+      "rejected": "没有被拒绝的内容。"
+    }
+  },
+  "agentBenchmark": {
+    "title": "智能体基准",
+    "subtitle": "{cases} 个案例，最近 {days} 天",
+    "loading": "正在加载基准结果…",
+    "noCases": "尚无基准案例。添加一个即可开始以固定任务集衡量智能体质量。",
+    "noAttempts": "此时间段内尚无尝试。基准每天运行一次。",
+    "steady": "保持稳定",
+    "regressing": "较前半段下降 {points}",
+    "statPassRate": "通过率",
+    "statMeanScore": "平均分",
+    "statMeanCoverage": "平均覆盖率",
+    "statAttempts": "尝试次数",
+    "seriesScore": "得分",
+    "seriesCoverage": "覆盖率",
+    "chartLabel": "基准得分与覆盖率随时间变化"
+  },
+  "otelExport": {
+    "title": "OpenTelemetry 导出",
+    "intro": "将智能体运行发送到你自己的采集器，让它们与系统其余部分并列展示，而不仅存在于本产品中。",
+    "loading": "正在加载采集器…",
+    "empty": "未配置采集器。智能体遥测数据仅保留在 BuilderForce 中。",
+    "requiresRole": "需要 {role} 角色。请让工作区管理者配置遥测导出。",
+    "lastExport": "上次导出：{at}。",
+    "lastError": "上次失败：{error}",
+    "neverExported": "尚未导出任何内容。",
+    "pause": "暂停",
+    "resume": "恢复",
+    "clearHeaders": "清除凭据",
+    "remove": "移除",
+    "confirmRemove": "移除 {name}？智能体运行将立即停止导出。",
+    "status": {
+      "healthy": "正在导出",
+      "failing": "连续失败 {count} 次",
+      "paused": "已暂停"
+    },
+    "form": {
+      "nameLabel": "名称",
+      "namePlaceholder": "例如：Honeycomb 生产环境",
+      "endpointLabel": "采集器端点",
+      "endpointHint": "使用 HTTP 的 OTLP。Span 将发送到该地址下的 /v1/traces。",
+      "endpointMustBeHttps": "请输入公开的 https:// 地址。",
+      "headerNameLabel": "认证头名称",
+      "headerValueLabel": "认证头值",
+      "headerHint": "加密保存且不再显示。若采集器无需凭据，请两项都留空。",
+      "add": "添加采集器"
     }
   }
 }

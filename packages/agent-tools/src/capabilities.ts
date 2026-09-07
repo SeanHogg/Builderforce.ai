@@ -99,7 +99,11 @@ export type Capability =
   /** Send messages on a docked channel (Slack/Discord/Telegram/…). */
   | "message"
   /** Render / generate media (image, tts, canvas). */
-  | "media";
+  | "media"
+  /** Propose a reusable SKILL from what this run learned. Distinct from `memory`:
+   *  a memory is a fact the agent recalls, a skill is a PROCEDURE another agent
+   *  follows, and it reaches other runs only after a human approves it. */
+  | "skill.author";
 
 /** A capability-scoped service. Each concrete capability interface extends this so
  *  the registry can reason about providers uniformly. Marker only — no members. */
@@ -183,6 +187,56 @@ export interface PrdWriteCapability {
   /** Replace the body of the `## <heading>` section. Fails (never throws) with the
    *  available headings when `heading` names no section. */
   editSection(heading: string, body: string): Promise<PrdUpdateResult>;
+}
+
+/**
+ * Propose a SKILL — a reusable procedure — from what a run just did (capability
+ * `skill.author`).
+ *
+ * A run that produced graded proof has, by definition, executed a procedure that
+ * worked. Nothing in the product could turn that into something the next agent
+ * follows: every skill write path was human-gated, so the only way a procedure
+ * spread was a person writing it down. This is the agent's half of that loop, and
+ * it stops at a DRAFT on purpose — an agent proposes, a human approves, and only
+ * an approved skill is injected into anyone's prompt. The surface stamps the
+ * workspace, the project and the authoring run; the model supplies only the
+ * procedure, exactly as `memory` lets it narrow a scope but never choose an owner.
+ */
+export interface SkillAuthoringCapability {
+  /** Draft a skill for review. Re-using a slug revises that draft, never an
+   *  approved skill — an approved procedure changes only through a human. */
+  propose(input: SkillProposal): Promise<SkillProposalResult>;
+  /** The skills already available to this run (approved) or awaiting review, so a
+   *  run can revise its own draft rather than proposing a near-duplicate. */
+  list(): Promise<SkillListResult>;
+}
+
+/** What an agent proposes as a skill. */
+export interface SkillProposal {
+  /** Stable, kebab-case identifier — reusing it revises this workspace's draft. */
+  slug: string;
+  /** Short human title, e.g. "Ship a schema change end to end". */
+  name: string;
+  /** One line saying WHEN to use it — this is what a future agent matches on. */
+  description: string;
+  /** The procedure itself, as Markdown: steps, commands, and what "done" looks like. */
+  body: string;
+  /** Evidence the procedure worked, e.g. the graded proof or the merged PR. */
+  evidence?: string;
+}
+
+export interface SkillProposalResult {
+  ok: boolean;
+  slug?: string;
+  /** 'created' for a new draft, 'revised' when an existing draft was rewritten. */
+  outcome?: "created" | "revised";
+  error?: string;
+}
+
+export interface SkillListResult {
+  ok: boolean;
+  skills?: Array<{ slug: string; name: string; description: string; status: "draft" | "approved" | "rejected" }>;
+  error?: string;
 }
 
 /** Result of a {@link PrdWriteCapability} write. */
@@ -294,6 +348,7 @@ export interface CapabilityProvider {
   readonly web?: WebCapability;
   readonly memory?: MemoryCapability;
   readonly coordination?: CoordinationCapability;
+  readonly skillAuthor?: SkillAuthoringCapability;
 }
 
 // Surfaces declare their capability set EXPLICITLY (it is the source of truth for

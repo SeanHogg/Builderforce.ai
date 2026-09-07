@@ -116,6 +116,39 @@ describe('dedupeBySpecificity', () => {
     ]);
     expect(out.map((e) => e.key)).toEqual(['a', 'b', 'c']);
   });
+
+  /**
+   * The override must hold however the caller ordered its rows. Semantic recall
+   * (1134) orders by RELEVANCE, so the wider row can arrive first — and a plain
+   * first-wins pass would then let a workspace-wide fact beat the ticket-local one
+   * that exists precisely to supersede it.
+   */
+  it('keeps the narrowest scope even when a wider one is ranked first', () => {
+    const out = dedupeBySpecificity([
+      { key: 'deploy', scope: 'tenant' as const },
+      { key: 'deploy', scope: 'ticket' as const },
+    ]);
+    expect(out).toEqual([{ key: 'deploy', scope: 'ticket' }]);
+  });
+
+  it("holds the winner at the position of the key's first appearance", () => {
+    const out = dedupeBySpecificity([
+      { key: 'first', scope: 'project' as const },
+      { key: 'deploy', scope: 'tenant' as const },
+      { key: 'last', scope: 'project' as const },
+      { key: 'deploy', scope: 'ticket' as const },
+    ]);
+    expect(out.map((e) => e.key)).toEqual(['first', 'deploy', 'last']);
+    expect(out[1]?.scope).toBe('ticket');
+  });
+
+  it('never lets an unscoped row displace a scoped override', () => {
+    const out = dedupeBySpecificity([
+      { key: 'deploy' },
+      { key: 'deploy', scope: 'project' as const },
+    ]);
+    expect(out).toEqual([{ key: 'deploy', scope: 'project' }]);
+  });
 });
 
 describe('guards', () => {

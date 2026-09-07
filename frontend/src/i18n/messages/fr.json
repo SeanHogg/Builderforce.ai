@@ -5122,7 +5122,8 @@
         "dsr": "Demandes des personnes concernées",
         "suppression": "Liste de suppression"
       },
-      "finBurnRate": "Burn rate et runway"
+      "finBurnRate": "Burn rate et runway",
+      "aiHubBenchmark": "Référentiel des agents"
     },
     "loading": "Chargement…",
     "overview": {
@@ -5350,7 +5351,8 @@
       "delivHubVerdictDesc": "L'état de la livraison en un coup d'œil : un verdict et un score de 0 à 100 combinant DORA, le temps de cycle et les goulots d'étranglement en direct.",
       "overviewAsk": "Posez une question sur n'importe quelle métrique en langage naturel et obtenez le chiffre ainsi que la métrique correspondante.",
       "paidMediaSpend": "Ce que les régies connectées ont facturé sur la période.",
-      "paidMediaCostPerResult": "Dépense divisée par les résultats attribués."
+      "paidMediaCostPerResult": "Dépense divisée par les résultats attribués.",
+      "aiHubBenchmarkDesc": "Qualité des agents sur un jeu de tâches fixe : une variation traduit un changement des agents, pas de la charge de travail."
     },
     "paidMedia": {
       "noSpend": "Aucune diffusion payante enregistrée sur cette période.",
@@ -10527,7 +10529,8 @@
     "catTesting": "Tests",
     "catDevops": "DevOps",
     "catDocumentation": "Documentation",
-    "catSecurity": "Sécurité"
+    "catSecurity": "Sécurité",
+    "tabProposed": "Proposées par les agents"
   },
   "personasPage": {
     "title": "Personas",
@@ -28282,6 +28285,76 @@
       "error": "La connexion n'a pas pu aboutir. Réessayez.",
       "invalid_state": "Ce lien de connexion a expiré. Relancez la connexion.",
       "no_pending_consent": "Aucune connexion n'était en attente. Relancez la connexion."
+    }
+  },
+  "workspaceSkills": {
+    "intro": "Une exécution qui aboutit à un résultat vérifié peut distiller sa démarche en compétence. Rien ici n'atteint un autre agent tant que vous ne l'avez pas approuvé.",
+    "loading": "Chargement des propositions…",
+    "approve": "Approuver",
+    "reject": "Rejeter",
+    "delete": "Supprimer",
+    "unknownAgent": "un agent",
+    "writtenByPerson": "Rédigée par une personne.",
+    "proposedByAgent": "Proposée par {agent} lors de l'exécution n° {run}.",
+    "evidence": "Preuve : {evidence}",
+    "confirmApprove": "Approuver « {name} » ? Tous les agents de cet espace la suivront dès leur prochaine exécution.",
+    "confirmDelete": "Supprimer « {name} » ? La proposition est définitivement retirée.",
+    "filter": {
+      "draft": "En attente de revue",
+      "approved": "Approuvées",
+      "rejected": "Rejetées"
+    },
+    "empty": {
+      "draft": "Aucune proposition en attente. Un agent ne propose une compétence qu'après une exécution au résultat vérifié.",
+      "approved": "Aucune compétence approuvée pour l'instant. Approuvez une proposition et tous les agents la suivront.",
+      "rejected": "Rien de rejeté."
+    }
+  },
+  "agentBenchmark": {
+    "title": "Référentiel des agents",
+    "subtitle": "{cases} cas, {days} derniers jours",
+    "loading": "Chargement des résultats…",
+    "noCases": "Aucun cas pour l'instant. Ajoutez-en un pour mesurer la qualité des agents sur un jeu de tâches fixe.",
+    "noAttempts": "Aucune tentative sur cette période. Le référentiel s'exécute une fois par jour.",
+    "steady": "Stable",
+    "regressing": "En baisse de {points} par rapport à la première moitié",
+    "statPassRate": "Taux de réussite",
+    "statMeanScore": "Score moyen",
+    "statMeanCoverage": "Couverture moyenne",
+    "statAttempts": "Tentatives",
+    "seriesScore": "Score",
+    "seriesCoverage": "Couverture",
+    "chartLabel": "Score et couverture du référentiel dans le temps"
+  },
+  "otelExport": {
+    "title": "Export OpenTelemetry",
+    "intro": "Envoyez les exécutions d'agents vers votre propre collecteur, pour qu'elles côtoient le reste de votre système au lieu de rester dans ce produit.",
+    "loading": "Chargement des collecteurs…",
+    "empty": "Aucun collecteur configuré. La télémétrie des agents reste dans BuilderForce.",
+    "requiresRole": "Nécessite le rôle {role}. Demandez à un responsable de l'espace de configurer l'export de télémétrie.",
+    "lastExport": "Dernier export : {at}.",
+    "lastError": "Dernier échec : {error}",
+    "neverExported": "Rien n'a encore été exporté.",
+    "pause": "Mettre en pause",
+    "resume": "Reprendre",
+    "clearHeaders": "Effacer les identifiants",
+    "remove": "Supprimer",
+    "confirmRemove": "Supprimer {name} ? Les exécutions d'agents cesseront aussitôt d'être exportées.",
+    "status": {
+      "healthy": "Export en cours",
+      "failing": "En échec ({count} d'affilée)",
+      "paused": "En pause"
+    },
+    "form": {
+      "nameLabel": "Nom",
+      "namePlaceholder": "p. ex. Honeycomb production",
+      "endpointLabel": "Point de terminaison du collecteur",
+      "endpointHint": "OTLP sur HTTP. Les spans sont envoyés vers /v1/traces sous cette adresse.",
+      "endpointMustBeHttps": "Saisissez une adresse https:// publique.",
+      "headerNameLabel": "Nom de l'en-tête d'authentification",
+      "headerValueLabel": "Valeur de l'en-tête d'authentification",
+      "headerHint": "Enregistré chiffré et jamais réaffiché. Laissez les deux vides pour un collecteur sans identifiants.",
+      "add": "Ajouter un collecteur"
     }
   }
 }

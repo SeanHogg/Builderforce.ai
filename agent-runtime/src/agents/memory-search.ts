@@ -1,5 +1,9 @@
 import os from "node:os";
 import path from "node:path";
+import {
+  DEFAULT_HYBRID_TEXT_WEIGHT as SHARED_TEXT_WEIGHT,
+  DEFAULT_HYBRID_VECTOR_WEIGHT as SHARED_VECTOR_WEIGHT,
+} from "@builderforce/agent-tools";
 import type { BuilderForceAgentsConfig, MemorySearchConfig } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
 import { clampInt, clampNumber, resolveUserPath } from "../utils.js";
@@ -89,8 +93,11 @@ const DEFAULT_SESSION_DELTA_MESSAGES = 50;
 const DEFAULT_MAX_RESULTS = 6;
 const DEFAULT_MIN_SCORE = 0.35;
 const DEFAULT_HYBRID_ENABLED = true;
-const DEFAULT_HYBRID_VECTOR_WEIGHT = 0.7;
-const DEFAULT_HYBRID_TEXT_WEIGHT = 0.3;
+// The fusion weights come from the SHARED retrieval primitive, not a local copy —
+// the cloud recall path reads the same two constants, so on-prem and cloud rank a
+// hybrid result identically by construction rather than by coincidence.
+const DEFAULT_HYBRID_VECTOR_WEIGHT = SHARED_VECTOR_WEIGHT;
+const DEFAULT_HYBRID_TEXT_WEIGHT = SHARED_TEXT_WEIGHT;
 const DEFAULT_HYBRID_CANDIDATE_MULTIPLIER = 4;
 const DEFAULT_MMR_ENABLED = false;
 const DEFAULT_MMR_LAMBDA = 0.7;

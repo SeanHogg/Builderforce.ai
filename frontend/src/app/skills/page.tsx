@@ -21,6 +21,7 @@ import { CatalogInsightsBar, type CatalogInsightsItem } from '@/components/Catal
 import PageContainer from '@/components/PageContainer';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { WorkspaceSkillReview } from '@/components/skills/WorkspaceSkillReview';
 import { SkillAssignmentsContent } from '@/components/SkillAssignmentsContent';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
@@ -48,7 +49,7 @@ export default function SkillsPage() {
   const tenantId = tenant?.id ?? '';
   const tenantNum = Number(tenantId);
 
-  const [tab, setTab] = useState<'assigned' | 'marketplace' | 'my-skills'>('assigned');
+  const [tab, setTab] = useState<'assigned' | 'marketplace' | 'my-skills' | 'proposed'>('assigned');
   const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -217,6 +218,9 @@ export default function SkillsPage() {
         <button type="button" className={`btn ${tab === 'assigned' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('assigned')}>{t('tabAssigned', { n: assigned.length })}</button>
         <button type="button" className={`btn ${tab === 'marketplace' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('marketplace')}>{t('tabMarketplace', { n: marketplaceItems.length })}</button>
         <button type="button" className={`btn ${tab === 'my-skills' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('my-skills')}>{t('tabMySkills', { n: userSkills.length })}</button>
+        {/* Skills the workspace's own agents proposed. A draft here is inert until
+            someone approves it, so this tab is where that decision is made. */}
+        <button type="button" className={`btn ${tab === 'proposed' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('proposed')}>{t('tabProposed')}</button>
         {tab !== 'assigned' && (
           <div style={{ marginLeft: 'auto' }}>
             <ViewToggle value={viewMode} onChange={setViewMode} />
@@ -235,6 +239,8 @@ export default function SkillsPage() {
             <div className="empty-state-title">{t('noTenant')}</div>
           </div>
         )
+      ) : tab === 'proposed' ? (
+        <WorkspaceSkillReview />
       ) : tab === 'my-skills' ? (
         userSkills.length === 0 ? (
           <div className="empty-state">

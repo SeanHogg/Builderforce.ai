@@ -13,7 +13,7 @@
  *   • the step budgets and the finish-honesty matcher (loop policy).
  */
 
-import { buildCoreToolRegistry, type Capability } from '@builderforce/agent-tools';
+import { buildCoreToolRegistry, type Capability, SKILL_TOOLS } from '@builderforce/agent-tools';
 import { classifyDeliverablePaths } from '../delivery/deliverableEvidence';
 
 /** Shape of one tool call in an OpenAI-compatible completion response. */
@@ -98,6 +98,10 @@ export function policyGateCallKey(gateId: string, toolName: string, args: Record
  *  shared core tools — adding a tool there makes it available to every surface that
  *  backs its capability, with no array edit here. */
 export const cloudToolRegistry = buildCoreToolRegistry();
+// Skill authoring is not a "core" task tool (it writes back into the capability
+// catalogue, not into the ticket), so it is registered here rather than baked into
+// every surface's core set — a surface gets it only by advertising `skill.author`.
+for (const tool of SKILL_TOOLS) cloudToolRegistry.register(tool);
 
 /**
  * The durable/Worker surface: provider-API-backed, no shell. It can list/read/search
@@ -131,6 +135,10 @@ export const cloudToolRegistry = buildCoreToolRegistry();
 export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   'repo.read', 'repo.search', 'repo.write', 'repo.edit', 'repo.delete', 'static-check', 'human', 'memory', 'memory.forget',
   'coordinate', 'prd.write', 'web', 'web.search',
+  // A run that produced a working procedure can propose it as a skill for review.
+  // Safe to advertise because the proposal lands as a DRAFT: the tool cannot make
+  // anything binding, and the backing service is the only writer that can.
+  'skill.author',
 ]);
 
 /**
@@ -177,6 +185,9 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
  */
 export const CONTAINER_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   'repo.read', 'repo.write', 'shell', 'memory', 'memory.forget', 'coordinate', 'prd.write', 'human',
+  // Parity with the durable surface — the container relays the proposal back through
+  // the same Worker-side service, so the draft path is identical.
+  'skill.author',
   // `web.search` — PARITY with the durable surface, and only now safe to advertise.
   // It was absent because the container's capabilities come from the image's own tool
   // loop and there was no op behind them, so the tool would have 400'd mid-run. The

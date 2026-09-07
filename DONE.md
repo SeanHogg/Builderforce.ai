@@ -1,3 +1,177 @@
+## ✅ RESOLVED 2026-09-07 — Canvas invitations could never be accepted on the two plans that sell canvas collaboration
+
+**Symptom (support ticket, 2026-09-07).** A Free workspace owner invited someone to a canvas. The
+invitee received the mail, signed in with the invited address, and
+`POST /api/tenants/creation-invitations/:token/accept` answered
+`409 TENANT_SEAT_LIMIT — "The invited workspace cannot add another member yet"`. Retrying eventually
+produced `410 — "Invitation is invalid, expired, or already used"`. Both accounts were on Free.
+
+**Root cause — the wrong cap was being enforced.** Canvas reads are tenant-scoped
+(`application/creation/sessionAccess.ts`), so sharing a board with somebody outside the workspace has
+to seat them in the workspace too; `POST /api/creation-sessions/:id/invite` therefore writes a
+companion `kind: 'tenant'` invitation beside the `kind: 'session'` one. That companion invitation was
+counted against `PlanLimits.maxSeats`, which is **1 on Free and 1 on Pro** — already spent on the
+owner. `acceptPendingInvitations` re-checks seat capacity at accept time, found none, left the invite
+pending, and the accept route's `assertTenantMember` check then answered 409. The same plans declare
+`maxCreationSessionCollaborators: 3` (Free) and `25` (Pro): collaboration is sold on both tiers, and
+the seat cap made it impossible on both. Nothing about this was plan-specific to Free — a Pro
+workspace could not share a canvas either.
+
+**What closed it.**
+
+1. *A membership now says what it costs.* `domain/tenant/SeatKind.ts` is the one place that answers
+   "does this occupy a paid seat?": `seat` (a workspace member, what `maxSeats` governs) or
+   `collaborator` (a canvas guest, whose membership is the mechanism that makes a shared board
+   resolve). Migration 1138 adds `seat_kind` to `tenant_members` and `invitations`; existing rows are
+   seats, which is correct — every one came from the workspace-invite motion.
+2. *The canvas invite writes a collaborator, not a seat*, and `acceptPendingInvitations` skips the
+   seat gate for one. A collaborator is capped where the plan actually caps them, at invite time.
+3. *The collaborator cap is now ONE definition and it counts pending invitations.* It was enforced
+   only on the branch where the invitee already had an account and not at all on the cold-email
+   branch — so whether a Free board could take a fourth collaborator depended on whether that person
+   had signed up yet, and twenty queued cold invites could all land on a cap of three.
+   `collaboratorCapacity()` is shared by both branches and counts members + pending invites for the
+   board, excluding the invitee's own row so a re-invite costs nothing.
+4. *Sharing one canvas no longer hands over the workspace.* The companion membership was granted
+   `developer` regardless of the board role — invite someone to LOOK at one canvas and they could
+   write every project, ticket and agent in the workspace. `tenantRoleForSessionRole()` makes the
+   board role the ceiling: viewer/commenter → workspace `viewer`, editor/runner/owner → `developer`,
+   which the canvas write paths need.
+5. *The 410 dead end.* `findByTokenHash` is pending-only, so a consumed token made the invite link a
+   one-shot: a reload, a second click, or a first attempt that failed at step (2) and was retried told
+   the person who had already joined that their own invitation was invalid. `findAcceptedByTokenHash`
+   resolves a token THIS account redeemed — `invitee_ref` is the safety property, it re-opens nothing
+   for anybody else — and the route returns the session instead of the 410. Declared via
+   `acrossTenants(…, 'share_token')` rather than added to the frozen tenant-scope baseline.
+6. *The 409 that remains says something true.* Only a genuine paid-seat invitation can reach it now,
+   so it names the remedy (free a seat or upgrade, then re-open the link) instead of describing every
+   invitation as blocked.
+
+**Two adjacent defects the same code path forced open.**
+
+- *`TenantRepository.update()` deleted the entire roster and re-inserted it on every membership
+  write.* `tenant_members` carries per-seat state the aggregate does not model — the monthly spend cap
+  and its notify bookkeeping (migration 0359) — so adding one person silently reset everybody's spend
+  limits. It is now an upsert on `(tenant_id, user_id)` (unique as of 1138, which also collapses any
+  duplicates the missing constraint allowed), writing only the four columns the aggregate owns, with
+  members the aggregate no longer carries deactivated rather than deleted.
+- *The seat tally counted DEACTIVATED members.* `is_active = false` is how a member is removed
+  (`Tenant.removeMember` never deletes the row), so removing somebody never gave the seat back — the
+  tally was the last thing in the product that still believed they were there.
+
+**Verified.** `npx tsgo --noEmit` clean for every touched file; `npm run check` — the four failing
+guards are another session's in-flight memory-embedding/otel work, and `check:tenant-scope` no longer
+names `InvitationService`; `vitest run src/domain/tenant src/application/kernel src/application/creation
+src/infrastructure/database` — 142 passed, including new `SeatKind.test.ts` (the plan-matrix invariant
+that made this a permanent bug) and `sessionAccess.test.ts` (the privilege ceiling). Release note
+shipped as migration 1139, `category = 'fix'` — making something work as advertised is not news.
+
+## ✅ RESOLVED 2026-09-07 — Eight competitive-parity gaps: three capabilities that were built and unreachable now have doors, agents write their own skills, and cloud memory finally searches by meaning
+
+**Symptom (2026-09-07 rubric assessment, 163/216).** Three complete subsystems could not be reached
+by anyone using the product; two advertised behaviours silently did not happen; two table-stakes
+observability facts were absent; and the one frontier capability a competitor holds outright had no
+object in the schema to land in.
+
+**What was wrong, and what closed it — eight, in the order they shipped.**
+
+1. *On-prem mid-run steering was accepted, persisted and dropped.* `relay-steering.ts` built a
+   `chat.send` into `sessionKey: "main"`, a session the V2 engine no longer runs in — task dispatch
+   had moved to the Claude Agent SDK's own stream. Cancel worked; a steer went nowhere.
+   **Fixed:** the SDK runner now takes STREAMING INPUT (`query({ prompt: AsyncIterable<SDKUserMessage> })`,
+   the only mode that accepts further user turns), fed by a queue-backed `SteeringChannel`. The relay
+   keys one channel per execution beside its abort handle, `execution.message` pushes into it, and the
+   run applies it as its next turn. Each applied steer emits `steer.applied` on the timeline — the same
+   event, category and `args.text` the cloud loop already wrote, so both modalities read identically.
+   A frame with no live run is now logged as dropped rather than silently forwarded.
+
+2. *VSIX governance gates were unreachable, so policy was silently absent in the editor.* The gate
+   evaluation, the blocked-by-policy label and the system-prompt prepend were all implemented and
+   tested; no production caller ever supplied gates, so `blockedByPolicy` could not fire and the
+   prepend always yielded `''`. **Fixed:** one resolver (`policyGates.ts`) pulls the tenant's effective
+   gates from the same `GET /api/governance/policy-gates/effective` the server's own
+   `withPolicyGates` resolves, and both editor callers use it — the chat participant directly, the
+   webview run host through a new optional port. Fail-closed like the server: an unreadable policy
+   refuses the turn instead of starting it ungated.
+
+3. *BYO MCP server registration had no UI — the largest built-to-reachable delta in the repo.*
+   Three-legged OAuth with authorization-server discovery and dynamic client registration, per-tool
+   consent, AES-GCM secrets, a server-to-server relay, routes mounted — and nothing in `frontend/src`
+   or `clients/vscode/src` called any of it. **Fixed:** a typed client plus a self-gating gallery
+   (hook + card + form, owner-gated, `?mcp=` callback outcomes read once and stripped) under
+   Settings › Integrations, and a `builderforce.registerMcpServer` command driving the same routes
+   from the editor. Registered servers' tools already reach the VSIX catalogue, so the command clears
+   the platform-tools cache and they appear on the next turn.
+
+4. *No reasoning traces.* `parseLlmChoice` read only `message.content` and `message.tool_calls`, and
+   the direct-Anthropic normaliser dropped `thinking` blocks on the floor — while
+   `tool_audit_events.category` documented a `thinking` value no writer emitted. **Fixed:** one reader
+   (`splitReasoning`) covers all four vendor shapes — Anthropic thinking blocks (now carried as
+   `reasoning_content`), `reasoning_content`, OpenRouter's `reasoning`/`reasoning_details`, and inline
+   `<think>` lifted out of the visible text. `recordCloudLlmTurn` writes an `agent.thinking` /
+   `thinking` row, so all four cloud surfaces inherit it; the timeline gives it its own track kind and
+   the Tools tab stops counting it as a tool call.
+
+5. *No per-execution cost figure*, despite `llm_usage_log.execution_id` on every row since 0096.
+   **Fixed:** one `usageCostSummary` use case now serves both grains — the ticket total (the route's
+   inline SQL was migrated onto it) and the new per-run figure, folded into the trace response so the
+   drawer needs no second round-trip. Rendered in the Model tab beside the token totals. The three
+   inline sub-cent dollar ternaries became one `formatUsdSpend`.
+
+6. *No OpenTelemetry emission and no benchmark harness.* **Fixed, both:** an `otel_exporters` row per
+   tenant (endpoint, AES-GCM headers, sample rate, and the health columns that make a silently-failing
+   collector visible) feeds a third execution-event sink — subscribed to the same hub the relay and
+   board sinks use, so it cannot miss an event some writer forgot about. Spans are OTLP/HTTP JSON, and
+   a run is sampled whole so a trace is never half-exported. Separately `agent_benchmark_cases` /
+   `agent_benchmark_results` give quality a FIXED task set: a daily sweep answers each case through the
+   metered gateway, scores it on the shared evaluator plus mechanical expectation coverage, and the AI
+   hub plots both series with a halves-comparison regression rather than a last-two-points slope.
+
+7. *Agents could not author skills.* 54 bundled `SKILL.md` dirs and a marketplace, every write path
+   human-gated, the sole marketplace INSERT behind a browser session with an FK to `users.id`.
+   **Fixed:** `tenant_skills` is a workspace-scoped store whose `status` carries the whole safety
+   property — an agent's `skill_propose` always lands a DRAFT, `reviewSkill` is the only writer that
+   can set `approved`, and only approved rows are injected into a prompt. A reflection directive rides
+   in every repo-backed run's prompt (the agent knows at the end which of its steps were repeatable);
+   `runEarnedReflection` runs at finalize, where merge state is known, and records whether a run that
+   cleared the bar proposed anything. Review lives on a new Skills tab.
+
+8. *Cloud `memory_recall` was not semantic.* With no embedding key it ILIKE'd; WITH one it did
+   something worse — dropped the query predicate entirely, took a ~10-row window ordered by
+   `importance, updated_at`, and re-ranked THAT, so a relevant memory outside the window was
+   unreachable. **Fixed:** migration 1134 adds a pgvector column, an HNSW cosine index and an
+   `embedding_model` filter to both `agent_memory` and `project_facts` (Neon allowlists `vector` for the
+   ordinary role, which is why the repo's standing refusal of `CREATE EXTENSION` — written for
+   `pg_trgm` — does not apply). Recall is now a real ANN arm fused with the lexical arm on the SHARED
+   0.7/0.3 formula extracted to `@builderforce/agent-tools`, which the on-prem sqlite-vec + FTS5 store
+   now calls too, so the two surfaces cannot drift apart. The embedding model is PINNED (vendor
+   included) because the cascade fails over between a 2048-d and a 512-d model and a fixed-width column
+   cannot hold both; writes embed inline, a daily sweep backfills what predates this or failed.
+
+**Tests added.** `agent-runtime`: `relay-steering.test.ts` (rewritten — queue semantics, wake-on-push,
+wake-on-close, drain-then-end), `claude-agent-sdk-runner.steering.test.ts` (mocked SDK: a steer pushed
+mid-run becomes the next turn), `sdk-agent-engine.test.ts` (+channel pass-through).
+`clients/vscode`: `policyGates.test.ts`, `brainRunHost.test.ts` (+5 — block, prepend, project scoping,
+approval-with-auto-on, fail-closed refusal). `api`: `reasoningContent.test.ts`,
+`anthropicReasoningPassthrough.test.ts`, `parseLlmChoice.test.ts`, `usageCostSummary.test.ts`,
+`memoryEmbedding.test.ts`, `tenantSkillService.test.ts`, `skillReflection.test.ts`,
+`otelSpans.test.ts`, `agentBenchmark.test.ts`. `packages/agent-tools`: `hybrid-rank.test.ts`.
+
+**Also closed — a latent defect gap 8 would otherwise have armed.** `dedupeBySpecificity` is what makes
+a ticket-local memory override the workspace default, and it was a plain first-wins pass: correct only
+while every caller happened to hand it rows narrowest-scope-first. Ordering recall by RELEVANCE would
+have silently inverted the rule, letting a workspace-wide fact beat the ticket-local one that exists to
+supersede it. The helper now reads each row's own `scope` and keeps the narrowest regardless of input
+order, holding the winner at the key's first position so the relevance ranking still decides the order.
+
+**Also closed —** the source-package graph guard fired on an unrelated in-flight package; its named
+remedy (a `paths` entry in `clients/vscode/webview/tsconfig.canvas.json`) was applied in the same pass.
+
+**Still open from the same assessment.** Subagent spawn in the cloud engine — in the rubric, not in
+this pass's scope; it stays in the Gap Register.
+
+---
+
 ## ✅ RESOLVED 2026-09-07 — ONE agent loop: eight hand-rolled model→tools→model loops across five processes are now one kernel, and the cloud engine seam has production callers
 
 **Symptom (2026-09-07 competitive assessment, architectural note).** There was no single agent

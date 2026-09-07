@@ -36,6 +36,7 @@
       "@builderforce/creation-canvas-contract": [
         "../../../packages/creation-canvas-contract/src/index.ts"
       ],
+      "@builderforce/agent-loop": ["../../../packages/agent-loop/src/index.ts"],
       "@builderforce/ide-file-contract": ["../../../packages/ide-file-contract/src/index.ts"],
       "@builderforce/ide-templates": ["../../../packages/ide-templates/src/index.ts"],
       // The three Next couplings, resolved to the shims the bundler also uses —

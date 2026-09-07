@@ -11821,9 +11821,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               action left in this corner, and it is worded for the reason it always
               was: a glyph acts on the board, a word opens somewhere else. */}
           <CanvasSessionActions variant="handoff" surface={surface} collapsed={barCollapsed} handlers={sessionActionHandlers} />
-          {/* Turn the board into an app. Self-gating: a local board, a viewer, and a
-              board that is not yet an app and cannot become one all render nothing. */}
-          {canvasChromeShows('actions', barCollapsed) && <CanvasAppPanel sessionId={persistence === 'server' ? sessionId : null} />}
+          {/* "Make this a project" used to sit HERE, worded, between Publish and the
+              overflow — three doors-out abreast in the corner of a bar that already
+              carries the roster, the clusters and the add-object circles. It is a
+              once-per-board act (a board becomes one project, ever), so it does not
+              earn permanent width beside the actions someone presses all day: it is a
+              row in the ••• sheet below, which is where the rest of the once-in-a-while
+              session errands already live. */}
           {canvasChromeShows('actions', barCollapsed) && <button className={`${styles.secondaryButton} ${styles.iconAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} title={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}><MoreActionsIcon /></button>}
           {/* NO SAVE BUTTON HERE. A guest board is kept by taking an account, and the
               header already offers exactly that — its CTA becomes "Keep your work" as
@@ -11846,6 +11850,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               <CanvasSessionActions variant="menu" surface={surface} handlers={sessionActionHandlers} />
             </div>
             <span className={styles.moreMenuHeading}>{t('createAndView')}</span>
+            {/* Turn the board into a project. Self-gating: a local board, a viewer, and
+                a board that is not yet an app and cannot become one all render nothing,
+                so the sheet asks it nothing and the section never holds a dead row. The
+                sheet closes when the drawer it opened is dismissed, not when the row is
+                pressed — closing on press would unmount the drawer with it. */}
+            <CanvasAppPanel
+              sessionId={persistence === 'server' ? sessionId : null}
+              onOpenChange={(panelOpen) => { if (!panelOpen) setMoreOpen(false); }}
+            />
             <button onClick={() => { setTemplateOpen(true); setMoreOpen(false); }}><span aria-hidden><Icon source="▦" size="1em" /></span>{t('templates')}</button>
             <button onClick={() => { setConversationOpen((value) => !value); setMoreOpen(false); }}><span aria-hidden><Icon source="◌" size="1em" /></span>{t('conversation')}</button>
             <button aria-pressed={drawingMode} onClick={() => { setDrawing((current) => current ? null : readDrawingPreferences()); setMoreOpen(false); }}><span aria-hidden>⌁</span>{drawingMode ? t('stopDrawing') : t('draw')}</button>

@@ -539,6 +539,10 @@ export const invitations = pgTable('invitations', {
   email:      varchar('email', { length: 320 }),
   inviteeRef: varchar('invitee_ref', { length: 64 }),
   role:       varchar('role', { length: 32 }).notNull().default('member'),
+  /** 'seat' | 'collaborator' — what accepting this invitation will cost the
+   *  workspace. A canvas share carries a companion `tenant` invitation that must
+   *  NOT be counted against `maxSeats`; see `domain/tenant/SeatKind.ts`. Migration 1138. */
+  seatKind:   varchar('seat_kind', { length: 16 }).notNull().default('seat'),
   tokenHash:  varchar('token_hash', { length: 64 }).notNull().unique(),
   /** 'pending' | 'accepted' | 'declined' | 'revoked' | 'expired'. */
   state:      varchar('state', { length: 16 }).notNull().default('pending'),

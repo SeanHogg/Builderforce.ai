@@ -5122,7 +5122,8 @@
         "dsr": "Data Subject Requests",
         "suppression": "Suppression List"
       },
-      "finBurnRate": "Burn & runway"
+      "finBurnRate": "Burn & runway",
+      "aiHubBenchmark": "Agent benchmark"
     },
     "loading": "Loading…",
     "overview": {
@@ -5350,7 +5351,8 @@
       "delivHubVerdictDesc": "Delivery health at a glance — one verdict and a 0–100 score fused from DORA, cycle time and live bottlenecks.",
       "overviewAsk": "Ask for any metric in plain English and get the number, plus the metric it matched.",
       "paidMediaSpend": "What the connected ad networks charged over the window.",
-      "paidMediaCostPerResult": "Spend divided by the results the networks attributed."
+      "paidMediaCostPerResult": "Spend divided by the results the networks attributed.",
+      "aiHubBenchmarkDesc": "Agent quality against a fixed task set, so a change means the agents changed and not the workload."
     },
     "paidMedia": {
       "noSpend": "No paid delivery recorded in this window.",
@@ -10527,7 +10529,8 @@
     "catTesting": "Testing",
     "catDevops": "DevOps",
     "catDocumentation": "Documentation",
-    "catSecurity": "Security"
+    "catSecurity": "Security",
+    "tabProposed": "Proposed by agents"
   },
   "personasPage": {
     "title": "Personas",
@@ -28282,6 +28285,76 @@
       "error": "The connection could not be completed. Try connecting again.",
       "invalid_state": "That connection link expired. Start the connection again.",
       "no_pending_consent": "There was no connection waiting to finish. Start the connection again."
+    }
+  },
+  "workspaceSkills": {
+    "intro": "A run that reaches a verified result can distil what it did into a skill. Nothing here reaches another agent until you approve it.",
+    "loading": "Loading proposals…",
+    "approve": "Approve",
+    "reject": "Reject",
+    "delete": "Delete",
+    "unknownAgent": "an agent",
+    "writtenByPerson": "Written by a person.",
+    "proposedByAgent": "Proposed by {agent} on run #{run}.",
+    "evidence": "Evidence: {evidence}",
+    "confirmApprove": "Approve “{name}”? Every agent in this workspace will follow it from their next run.",
+    "confirmDelete": "Delete “{name}”? The proposal is removed for good.",
+    "filter": {
+      "draft": "Awaiting review",
+      "approved": "Approved",
+      "rejected": "Rejected"
+    },
+    "empty": {
+      "draft": "No proposals waiting. Agents propose a skill only after a run reaches a verified result.",
+      "approved": "No approved skills yet. Approve a proposal and every agent here follows it.",
+      "rejected": "Nothing rejected."
+    }
+  },
+  "agentBenchmark": {
+    "title": "Agent benchmark",
+    "subtitle": "{cases} cases, last {days} days",
+    "loading": "Loading benchmark results…",
+    "noCases": "No benchmark cases yet. Add one to start measuring agent quality against a fixed task set.",
+    "noAttempts": "No attempts in this window yet. The benchmark runs once a day.",
+    "steady": "Holding steady",
+    "regressing": "Down {points} on the older half",
+    "statPassRate": "Pass rate",
+    "statMeanScore": "Mean score",
+    "statMeanCoverage": "Mean coverage",
+    "statAttempts": "Attempts",
+    "seriesScore": "Score",
+    "seriesCoverage": "Coverage",
+    "chartLabel": "Benchmark score and coverage over time"
+  },
+  "otelExport": {
+    "title": "OpenTelemetry export",
+    "intro": "Send agent runs to your own collector, so they sit beside the rest of your system instead of only in this product.",
+    "loading": "Loading collectors…",
+    "empty": "No collector configured. Agent telemetry stays in BuilderForce.",
+    "requiresRole": "Requires the {role} role. Ask a workspace manager to configure telemetry export.",
+    "lastExport": "Last export {at}.",
+    "lastError": "Last failure: {error}",
+    "neverExported": "Nothing exported yet.",
+    "pause": "Pause",
+    "resume": "Resume",
+    "clearHeaders": "Clear credential",
+    "remove": "Remove",
+    "confirmRemove": "Remove {name}? Agent runs stop being exported immediately.",
+    "status": {
+      "healthy": "Exporting",
+      "failing": "Failing ({count} in a row)",
+      "paused": "Paused"
+    },
+    "form": {
+      "nameLabel": "Name",
+      "namePlaceholder": "e.g. Honeycomb production",
+      "endpointLabel": "Collector endpoint",
+      "endpointHint": "OTLP over HTTP. Spans are posted to /v1/traces under this address.",
+      "endpointMustBeHttps": "Enter a public https:// address.",
+      "headerNameLabel": "Auth header name",
+      "headerValueLabel": "Auth header value",
+      "headerHint": "Stored encrypted and never shown again. Leave both empty for a collector that needs no credential.",
+      "add": "Add collector"
     }
   }
 }

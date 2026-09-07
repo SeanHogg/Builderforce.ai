@@ -13,6 +13,8 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, eq, sql } from 'drizzle-orm';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { buildMemoryCapability } from '../memory/memoryService';
+import { approvedSkillsForRun, buildSkillAuthoringCapability, renderSkillBlock } from '../skills/tenantSkillService';
+import { runEarnedReflection, skillReflectionDirective } from '../skills/skillReflection';
 import { isMemoryScope } from '../../domain/memory/memoryScope';
 import { buildCoordinationCapability, claimWriteLease, guardRepoWrite } from '../coordination/coordinationCapability';
 import { releaseAllForExecution, type LeaseHolder } from '../coordination/leaseService';
@@ -2204,6 +2206,11 @@ function buildCloudProvider(args: {
     memory: buildMemoryCapability({ db, env, tenantId, projectId, ticketId: taskRow.id, origin: 'cloud-run', executionId }),
     // Multi-agent coordination for this ticket: leases + the shared blackboard.
     coordination: buildCoordinationCapability({ env, db, holder: leaseHolder }),
+    // Skill authoring: a run that worked out a repeatable procedure can PROPOSE it
+    // for review. Drafts only — approval is a human write, so a run can never change
+    // what other agents are instructed to do. The workspace/project/run are stamped
+    // here, exactly as `memory` resolves its own scope.
+    skillAuthor: buildSkillAuthoringCapability({ env, db, tenantId, projectId, executionId, taskId: taskRow.id, agentLabel }),
     // Read a public URL (docs / an API spec / a linked issue) so the agent isn't
     // limited to what the repo already contains — and discover that URL in the first
     // place. `search` checks the tenant's OWNED crawled index first and only falls back
@@ -3510,6 +3517,18 @@ export async function finalizeCloudRun(
       .catch((error) => reportCaughtError(error, { source: 'application/runtime/cloudAgentEngine.ts', operation: 'finalizeCloudRun', context: { logMessage: '[cloud-finalize] produced-stamp failed — this run will not count toward the autonomy breaker', details: { tenantId, executionId, taskId: taskRow.id, error } } }));
   }
 
+  // Did this run clear the reflection bar? Recorded either way, because "a run that
+  // produced verified work proposed no skill" is a fact a reviewer should be able to
+  // see — a silence is otherwise indistinguishable from a run that had nothing to say.
+  if (runEarnedReflection({ merged, prOpened, producedChanges: writtenPaths.size > 0 })) {
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef, executionId,
+      toolName: 'skill.reflection', category: 'lifecycle',
+      detail: { merged, prOpened, producedChanges: writtenPaths.size > 0 },
+      result: 'run cleared the reflection bar',
+    }).catch(() => { /* telemetry must never fail a finalize */ });
+  }
+
   // The run is terminal: its callback principal stops authenticating NOW, not at its
   // 24h expiry. Best-effort — the DB-state check on every callback already refuses a
   // terminal run; this is what makes the revocation visible in the principal row.
@@ -3574,13 +3593,17 @@ export async function prepareCloudRun(
   // keeping it overlapped with every other read exactly as the old inline `Promise.all`
   // did. Only the CLOUD path may create a PRD; every other surface reads the stored one.
   const prdPromise = ensureTaskPrd(env, db, executionId, taskRow, tenantId, projectId, taskRow.id, agentLabel, model, opts?.readOnly === true);
-  const [capabilities, workspace] = await Promise.all([
+  const [capabilities, workspace, workspaceSkills] = await Promise.all([
     loadCapabilityContext(env, db, artifacts, agentPsychometric),
     // The repo the agent runs against — its identity + top-level shape (so a wrong/
     // empty binding is visible before any LLM spend) AND what a prior pass already
     // committed to this branch (so a re-run reconciles instead of blindly appending).
     // Best-effort: a clean first run / no repo yields an empty workspace.
     loadWorkspaceContext(env, db, gitSecret(env), tenantId, taskRow.id),
+    // Procedures THIS workspace approved — including ones an earlier run proposed
+    // after producing graded proof. Cached read; only `approved` rows are returned,
+    // so a draft never reaches a prompt.
+    approvedSkillsForRun(env, db, tenantId, projectId ?? null),
   ]);
   const prd = await prdPromise;
   const priorChanges = workspace.priorChanges;
@@ -3788,6 +3811,22 @@ export async function prepareCloudRun(
       kind: 'capabilities', subject: `capabilities:${executionId}`, channel: 'system',
       order: RUN_CONTEXT_ORDER.capabilities, trustTier: 'tenant', pinned: true,
       body: capabilities.promptBlock || '',
+    },
+    {
+      // Reflection: a run that reaches a verified result may distil what it did into
+      // a skill DRAFT for review. Prompt-side because only the agent knows which of
+      // the things it did were the repeatable ones, and it knows that at the end.
+      kind: 'directive', subject: `reflection:${executionId}`, channel: 'user',
+      order: RUN_CONTEXT_ORDER.followUp, trustTier: 'operator', pinned: true,
+      body: skillReflectionDirective(repoLabel != null),
+    },
+    {
+      // The workspace's OWN approved skills — procedures earlier runs worked out and
+      // a human signed off. Same trust tier as assigned capabilities: a person
+      // approved them, and an unapproved draft can never appear here.
+      kind: 'capabilities', subject: `workspace-skills:${executionId}`, channel: 'system',
+      order: RUN_CONTEXT_ORDER.capabilities, trustTier: 'tenant', pinned: true,
+      body: renderSkillBlock(workspaceSkills),
     },
   ];
 

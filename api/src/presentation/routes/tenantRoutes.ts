@@ -7,6 +7,7 @@ import { revokeSessionTokens } from '../../application/auth/sessionRevocation';
 import {
   acceptInvitation,
   acceptInvitationStatement,
+  findAcceptedByTokenHash,
   findByTokenHash,
   findPendingByEmail,
   invalidateInvitations,
@@ -28,6 +29,7 @@ import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import { buildPlanLimitsGuard, seatCapacityForTenant } from '../middleware/planLimitsGuard';
 import { resolveCanvasCapabilities } from '../middleware/featureGate';
 import { canAddSeat } from '../../domain/tenant/PlanLimits';
+import { asSeatKind, consumesSeat } from '../../domain/tenant/SeatKind';
 import { trialDaysRemaining } from '../../domain/tenant/effectivePlan';
 import { buildPaymentProvider } from '../../infrastructure/payment';
 import {
@@ -153,6 +155,7 @@ async function acceptPendingInvitations(
     id: row.id,
     tenantId: row.tenantId,
     role: row.role,
+    seatKind: asSeatKind(row.seatKind),
     invitedByUserId: row.invitedBy,
   }));
 
@@ -162,9 +165,6 @@ async function acceptPendingInvitations(
   const seatState = new Map<number, { plan: TenantPlan; seated: number }>();
 
   for (const invite of pending) {
-    // The invitee can't authorize their own membership — replay the add under
-    // the manager who sent the invite (guaranteed a manager/owner at invite time).
-    if (!invite.invitedByUserId) continue;
     try {
       // Already a member? Resolve the invite without re-adding (addMember would
       // throw "already a member" and leave the row stuck pending).
@@ -176,17 +176,38 @@ async function acceptPendingInvitations(
         // over-subscribe. If the plan can't seat it, leave the invite pending
         // (visible in the manager's invitations list, auto-retries once a seat
         // frees up or they upgrade) instead of silently auto-accepting past the cap.
-        let state = seatState.get(invite.tenantId);
-        if (!state) {
-          const cap = await seatCapacityForTenant(db, env, invite.tenantId);
-          state = { plan: cap.plan, seated: cap.members };
-          seatState.set(invite.tenantId, state);
+        //
+        // A CANVAS COLLABORATOR skips this entirely: their membership is the
+        // mechanism that makes a shared board resolve, not a workspace seat, and
+        // it was capped at invite time against `maxCreationSessionCollaborators`.
+        // Gating it on `maxSeats` — 1 on both Free and Pro — is what made canvas
+        // sharing impossible on the plans that advertise it.
+        if (consumesSeat(invite.seatKind)) {
+          // The invitee can't authorize their own membership — replay the add
+          // under the manager who sent the invite (a manager or owner at invite
+          // time, which `Tenant.addMember` re-checks).
+          if (!invite.invitedByUserId) continue;
+          let state = seatState.get(invite.tenantId);
+          if (!state) {
+            const cap = await seatCapacityForTenant(db, env, invite.tenantId);
+            state = { plan: cap.plan, seated: cap.members };
+            seatState.set(invite.tenantId, state);
+          }
+          if (!canAddSeat(state.plan, state.seated)) {
+            continue; // over cap — leave pending, do not seat
+          }
+          state.seated += 1;
+          await tenantService.addMember(
+            invite.tenantId, invite.invitedByUserId, userId, invite.role as TenantRole, invite.seatKind,
+          );
+        } else {
+          // A canvas guest is NOT replayed under the inviter: board ownership is
+          // per-board and carries no workspace authority, so a developer who
+          // creates a canvas and shares it would fail the manager check and leave
+          // the invitation stuck pending forever. The board invite gate and the
+          // redeemed token are the authorization — see `Tenant.admitCollaborator`.
+          await tenantService.admitCollaborator(invite.tenantId, userId, invite.role as TenantRole);
         }
-        if (!canAddSeat(state.plan, state.seated)) {
-          continue; // over cap — leave pending, do not seat
-        }
-        await tenantService.addMember(invite.tenantId, invite.invitedByUserId, userId, invite.role as TenantRole);
-        state.seated += 1;
       }
       await acceptInvitation(db, env, { id: invite.id, tenantId: invite.tenantId, inviteeRef: userId });
       await invalidateTaskAssignees(env, invite.tenantId);
@@ -272,6 +293,18 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     // re-derives "still usable" from four nullable columns.
     const invitation = await findByTokenHash(db, tokenHash);
     if (!invitation || invitation.kind !== 'session') {
+      // Not pending. If THIS account already redeemed it, the link is not a dead
+      // end — it is a bookmark to a board they belong to. Answering 410 to the
+      // person who accepted it (a reload, a second click in the mail client, a
+      // first attempt that failed further down and was retried) told them their
+      // own invitation was invalid. Anyone else still gets the 410.
+      const redeemed = await findAcceptedByTokenHash(db, tokenHash, userId);
+      const redeemedObject = redeemed?.kind === 'session' && redeemed.objectId
+        ? await getObject(db, c.env as Env, redeemed.tenantId, redeemed.objectId)
+        : null;
+      if (redeemed && redeemedObject && await assertTenantMember(db, redeemed.tenantId, userId)) {
+        return c.json({ sessionId: redeemedObject.refId, tenantId: redeemed.tenantId, role: redeemed.role });
+      }
       return c.json({ error: 'Invitation is invalid, expired, or already used' }, 410);
     }
     if (!account?.email || !invitation.email
@@ -287,7 +320,14 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const sessionId = target.refId;
     await acceptPendingInvitations(db, c.env as Env, tenantService, userId, account.email);
     if (!(await assertTenantMember(db, invitation.tenantId, userId))) {
-      return c.json({ error: 'The invited workspace cannot add another member yet', code: 'TENANT_SEAT_LIMIT' }, 409);
+      // Reached only when the companion workspace invitation could not be seated:
+      // a real, paid seat the plan cannot honour. A canvas guest never lands here
+      // (see `acceptPendingInvitations`), so the message can say the one true
+      // thing about this state instead of describing every invite as blocked.
+      return c.json({
+        error: 'That workspace has no seat available. Ask the person who invited you to free a seat or upgrade, then open this link again.',
+        code: 'TENANT_SEAT_LIMIT',
+      }, 409);
     }
     const role = ['viewer', 'commenter', 'editor', 'runner', 'owner'].includes(invitation.role)
       ? invitation.role as 'viewer' | 'commenter' | 'editor' | 'runner' | 'owner'

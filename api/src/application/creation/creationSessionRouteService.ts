@@ -105,11 +105,13 @@ import {
   invalidateInvitations,
   invite as inviteToObject,
   listForObject,
+  listPending,
   revokeInvitation,
 } from '../kernel/InvitationService';
 import {
-  resolveSessionAccess, SESSION_ROLE_RANK, type SessionRole as SharedSessionRole,
+  resolveSessionAccess, SESSION_ROLE_RANK, tenantRoleForSessionRole, type SessionRole as SharedSessionRole,
 } from './sessionAccess';
+import { SEAT_KIND } from '../../domain/tenant/SeatKind';
 import { boundedIntParam, limitParam, offsetParam } from '../../domain/shared/boundedInt';
 // THE graph write. The delete/re-insert/bump/event/snapshot sequence below used to be
 // spelled out twice in this file (`PUT /:id/graph` and `POST /:id/commands`) and had
@@ -513,6 +515,45 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   async function countRows(tableName: 'creation_sessions' | 'creation_session_members' | 'creation_session_templates', clause: ReturnType<typeof sql>): Promise<number> {
     const result = await db.execute(sql.raw(`SELECT COUNT(*)::int AS count FROM ${tableName} WHERE `).append(clause));
     return Number((result.rows[0] as { count?: number } | undefined)?.count ?? 0);
+  }
+
+  /**
+   * "May this board take one more collaborator?" — the plan cap that actually
+   * governs canvas sharing (`maxCreationSessionCollaborators`).
+   *
+   * ONE definition, because there were nearly two: the invite route enforced it
+   * for somebody who already had an account and enforced NOTHING for a cold
+   * email, so the cap was whatever the invitee's signup status happened to be.
+   * A pending invitation counts, exactly as a pending seat does — it is a promise
+   * of a slot, and without counting it a Free board could queue twenty invites
+   * under a cap of three and let them all land.
+   *
+   * Returns null when there is room, or the 403 body to answer with.
+   */
+  async function collaboratorCapacity(
+    env: Env,
+    tenantId: number,
+    sessionId: string,
+    objectId: string | null,
+    /** Who is being invited. `alreadyMember` — a re-invite or a role change —
+     *  consumes nothing, and neither does a repeat invite to an address that
+     *  already holds a pending row for this board, which is why the address is
+     *  excluded from the pending tally rather than counted against itself. */
+    invitee: { alreadyMember: boolean; email?: string },
+  ): Promise<{ error: string; code: string; usage: number; limit: number } | null> {
+    if (invitee.alreadyMember) return null;
+    const limit = (await creationLimits(tenantId)).maxCreationSessionCollaborators;
+    if (limit === -1) return null;
+    const [members, pending] = await Promise.all([
+      countRows('creation_session_members', sql`session_id = ${sessionId}`),
+      objectId
+        ? listPending(db, env, tenantId, 'session').then((rows) => rows.filter((row) =>
+          row.objectId === objectId && row.email !== (invitee.email ?? null)).length)
+        : Promise.resolve(0),
+    ]);
+    const usage = members + pending;
+    if (usage < limit) return null;
+    return { error: 'Collaborator limit reached', code: 'CREATION_COLLABORATOR_QUOTA', usage, limit };
   }
 
   async function sessionQuota(c: Context<HonoEnv>, tenantId: number) {
@@ -2488,6 +2529,13 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       const expiresInHours = Math.min(24 * 30, Math.max(1, Math.floor(Number(body.expiresInHours) || 24 * 7)));
       const expiresAt = new Date(Date.now() + expiresInHours * 3_600_000);
       const object = await ensureSessionObject(db, c.env, access.session);
+      // The SAME cap the already-has-an-account branch applies. It used to be
+      // enforced on one branch only, so whether a Free board could take a fourth
+      // collaborator depended on whether that person had signed up yet.
+      const overCap = await collaboratorCapacity(
+        c.env, tenantId, access.session.id, object.id, { alreadyMember: false, email },
+      );
+      if (overCap) return c.json(overCap, 403);
       const invitation = await inviteToObject(db, c.env, {
         tenantId,
         kind: 'session',
@@ -2498,14 +2546,22 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
         expiresAt,
         invitedBy: c.get('userId') as string,
       });
-      // A canvas invite to a stranger implies a workspace invite. No pre-check:
-      // `invite()` is idempotent on (tenant, kind, email) for a pending row, which
-      // is the select-then-insert race the service exists to remove.
+      // A canvas invite to a stranger implies a workspace invite — canvas reads are
+      // tenant-scoped, so without a membership the board cannot resolve for them at
+      // all. No pre-check: `invite()` is idempotent on (tenant, kind, email) for a
+      // pending row, which is the select-then-insert race the service exists to remove.
+      //
+      // It is a COLLABORATOR, not a seat. Counting it against `maxSeats` (1 on Free
+      // AND on Pro, already filled by the owner) meant the invitation could never be
+      // accepted: the invitee got 409 TENANT_SEAT_LIMIT on a plan that advertises 3
+      // and 25 canvas collaborators. And the workspace role is the board role's
+      // ceiling — sharing one canvas must not hand over the whole workspace.
       await inviteToObject(db, c.env, {
         tenantId,
         kind: 'tenant',
         email,
-        role: 'developer',
+        role: tenantRoleForSessionRole(role),
+        seatKind: SEAT_KIND.COLLABORATOR,
         invitedBy: c.get('userId') as string,
       });
       const acceptPath = `/create/invitations/${rawToken}`;
@@ -2542,19 +2598,17 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       }, 201);
     }
     const [existingMember] = await db.select({ userId: creationSessionMembers.userId }).from(creationSessionMembers).where(and(eq(creationSessionMembers.sessionId, access.session.id), eq(creationSessionMembers.userId, target.id))).limit(1);
-    if (!existingMember) {
-      const limits = await creationLimits(tenantId);
-      const memberCount = await countRows('creation_session_members', sql`session_id = ${access.session.id}`);
-      if (limits.maxCreationSessionCollaborators !== -1 && memberCount >= limits.maxCreationSessionCollaborators) {
-        return c.json({ error: 'Collaborator limit reached', code: 'CREATION_COLLABORATOR_QUOTA', usage: memberCount, limit: limits.maxCreationSessionCollaborators }, 403);
-      }
-    }
+    const auditObject = await ensureSessionObject(db, c.env, access.session);
+    const overCap = await collaboratorCapacity(
+      c.env, tenantId, access.session.id, auditObject.id,
+      { alreadyMember: Boolean(existingMember), email: target.email },
+    );
+    if (overCap) return c.json(overCap, 403);
     await db.insert(creationSessionMembers).values({ sessionId: access.session.id, userId: target.id, role, invitedBy: c.get('userId') as string })
       .onConflictDoUpdate({ target: [creationSessionMembers.sessionId, creationSessionMembers.userId], set: { role } });
     // Keep a durable invitation record even when the person already has an
     // account. acceptedAt distinguishes this immediate membership grant from a
     // pending cold-email invite while preserving the campaign/audit evidence.
-    const auditObject = await ensureSessionObject(db, c.env, access.session);
     const auditRow = await inviteToObject(db, c.env, {
       tenantId,
       kind: 'session',

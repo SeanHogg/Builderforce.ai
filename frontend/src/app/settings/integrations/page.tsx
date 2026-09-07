@@ -10,6 +10,7 @@ import { IntegrationsGallery } from '@/components/integrations/IntegrationsGalle
 import { MailboxIntegrations } from '@/components/integrations/MailboxIntegrations';
 import { ConnectorsGallery } from '@/components/connectors/ConnectorsGallery';
 import { McpServersGallery } from '@/components/mcp/McpServersGallery';
+import { OtelExporterSettings } from '@/components/observability/OtelExporterSettings';
 import { ApiKeysContent } from '@/components/settings/ApiKeysContent';
 import { PayoutConnections } from '@/components/payouts/PayoutConnections';
 import { getStoredTenant } from '@/lib/auth';
@@ -88,7 +89,9 @@ export default function SettingsIntegrationsPage() {
       {/* The SAME component `/billing/payouts` and the Sales Hub render — one
           surface for "where does my money go", reached from three doors. */}
       {show('payments') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.payments')}</h2><p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 12px' }}>{t('paymentsIntro')}</p><PayoutConnections returnTo="/settings/integrations" search={search} /></section>}
-      {isOwner && show('developer') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.developer')}</h2><ApiKeysContent embedded showProviderKeys={false} search={search} externalViewMode={viewMode} /></section>}
+      {isOwner && show('developer') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.developer')}</h2><ApiKeysContent embedded showProviderKeys={false} search={search} externalViewMode={viewMode} />{/* Where agent runs are exported to — the workspace's own observability
+          stack. Developer-facing like the API keys it sits beside. */}
+        <div style={{ marginTop: 20 }}><OtelExporterSettings /></div></section>}
     </PageContainer>
   );
 }

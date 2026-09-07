@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import { ITenantRepository } from '../../domain/tenant/ITenantRepository';
 import { Tenant, TenantMemberProps } from '../../domain/tenant/Tenant';
 import {
@@ -10,6 +10,7 @@ import {
   TenantBillingStatus,
   asTenantId,
 } from '../../domain/shared/types';
+import { asSeatKind } from '../../domain/tenant/SeatKind';
 import { tenants as tenantsTable, tenantMembers as membersTable, segments as segmentsTable } from '../database/schema';
 import type { Db } from '../database/connection';
 
@@ -114,6 +115,7 @@ export class TenantRepository implements ITenantRepository {
           role:     m.role,
           isActive: m.isActive,
           joinedAt: m.joinedAt,
+          seatKind: m.seatKind,
         })),
       );
     }
@@ -145,19 +147,48 @@ export class TenantRepository implements ITenantRepository {
       })
       .where(eq(tenantsTable.id, plain.id));
 
-    // Replace members: delete all then re-insert
-    await this.db.delete(membersTable).where(eq(membersTable.tenantId, plain.id));
+    // UPSERT the roster, never "delete every row and re-insert it".
+    //
+    // The old shape lost data on every single membership write: `tenant_members`
+    // carries per-seat state the aggregate does not model — the monthly spend cap
+    // and its notify bookkeeping (migration 0359) — and deleting the row threw all
+    // of it away, so adding one person silently reset everybody's spend limits.
+    // A membership is now identified by (tenant_id, user_id), unique since
+    // migration 1138, and only the four columns the aggregate actually owns are
+    // written.
     if (plain.members.length > 0) {
-      await this.db.insert(membersTable).values(
-        plain.members.map(m => ({
-          tenantId: plain.id,
-          userId:   m.userId,
-          role:     m.role,
-          isActive: m.isActive,
-          joinedAt: m.joinedAt,
-        })),
-      );
+      await this.db
+        .insert(membersTable)
+        .values(
+          plain.members.map(m => ({
+            tenantId: plain.id,
+            userId:   m.userId,
+            role:     m.role,
+            isActive: m.isActive,
+            joinedAt: m.joinedAt,
+            seatKind: m.seatKind,
+          })),
+        )
+        .onConflictDoUpdate({
+          target: [membersTable.tenantId, membersTable.userId],
+          set: {
+            role:     sql`excluded.role`,
+            isActive: sql`excluded.is_active`,
+            seatKind: sql`excluded.seat_kind`,
+          },
+        });
     }
+    // A member the aggregate no longer carries at all was dropped by something
+    // other than `removeMember` (which deactivates in place). Deactivate rather
+    // than delete, so the audit trail and the spend history survive.
+    const kept = plain.members.map(m => m.userId);
+    await this.db
+      .update(membersTable)
+      .set({ isActive: false })
+      .where(and(
+        eq(membersTable.tenantId, plain.id),
+        kept.length > 0 ? notInArray(membersTable.userId, kept) : undefined,
+      ));
 
     const updated = await this.findById(plain.id);
     return updated!;
@@ -184,6 +215,7 @@ export class TenantRepository implements ITenantRepository {
       role:     m.role as TenantRole,
       isActive: m.isActive,
       joinedAt: m.joinedAt,
+      seatKind: asSeatKind(m.seatKind),
     }));
 
     return Tenant.reconstitute({

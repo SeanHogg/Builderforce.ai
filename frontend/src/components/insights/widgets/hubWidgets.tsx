@@ -27,6 +27,7 @@
  */
 
 import type { ComponentType } from 'react';
+import { AgentBenchmarkPanel } from '../AgentBenchmarkPanel';
 import type { ComponentSurfaceProps, ComponentDef } from '@/lib/components/types';
 import { AiConsumptionHeader } from '../AiConsumptionHeader';
 import { DeliveryVerdict } from '../DeliveryVerdict';
@@ -107,6 +108,18 @@ const AI_PANEL_COMPONENTS: ComponentDef[] = AI_INSIGHT_PANEL_IDS.map((id) => {
 });
 
 export const AI_HUB_COMPONENTS: ComponentDef[] = [
+  {
+    // Agent quality against a FIXED task set — the one quality number that is not
+    // confounded by which tickets happened to arrive this month. Registered as a
+    // widget so it can be pinned to a dashboard or dropped on a canvas like any
+    // other, rather than living only on this hub.
+    id: 'ai-hub.agentBenchmark',
+    group: 'aiHub',
+    titleKey: 'aiHubBenchmark',
+    descKey: 'aiHubBenchmarkDesc',
+    size: 'lg',
+    Surface: AgentBenchmarkPanel,
+  },
   {
     id: 'ai-hub.consumption',
     group: 'aiHub',

@@ -8,12 +8,16 @@ import {
 } from '../shared/types';
 import { ValidationError, ForbiddenError } from '../shared/errors';
 import { resolveEffectivePlan, TRIAL_DURATION_DAYS } from './effectivePlan';
+import { SEAT_KIND, type SeatKind } from './SeatKind';
 
 export interface TenantMemberProps {
   userId: string;
   role: TenantRole;
   isActive: boolean;
   joinedAt: Date;
+  /** Whether this membership occupies a paid seat or is a canvas guest.
+   *  See `domain/tenant/SeatKind.ts` — the seat tally reads it. */
+  seatKind: SeatKind;
 }
 
 export interface TenantProps {
@@ -92,7 +96,7 @@ export class Tenant {
       seatCount: null,
       trialEndsAt,
       members: [
-        { userId: ownerUserId, role: TenantRole.OWNER, isActive: true, joinedAt: now },
+        { userId: ownerUserId, role: TenantRole.OWNER, isActive: true, joinedAt: now, seatKind: SEAT_KIND.SEAT },
       ],
       createdAt: now,
       updatedAt: now,
@@ -140,7 +144,12 @@ export class Tenant {
     return member?.role === TenantRole.OWNER || member?.role === TenantRole.MANAGER;
   }
 
-  addMember(actorUserId: string, newUserId: string, role: TenantRole): Tenant {
+  addMember(
+    actorUserId: string,
+    newUserId: string,
+    role: TenantRole,
+    seatKind: SeatKind = SEAT_KIND.SEAT,
+  ): Tenant {
     if (!this.canManageMembers(actorUserId)) {
       throw new ForbiddenError('Only owners and managers can add members');
     }
@@ -156,7 +165,42 @@ export class Tenant {
       ...this.props,
       members: [
         ...this.props.members,
-        { userId: newUserId, role, isActive: true, joinedAt: new Date() },
+        { userId: newUserId, role, isActive: true, joinedAt: new Date(), seatKind },
+      ],
+      updatedAt: new Date(),
+    });
+  }
+
+  /**
+   * Admit a CANVAS COLLABORATOR — a membership whose authorization is the board
+   * invitation they just redeemed, not a workspace role.
+   *
+   * Separate from {@link addMember} because it is a different intent with a
+   * different gate, and collapsing them would mean weakening the workspace one.
+   * `addMember` replays the add under the person who sent the invite and requires
+   * them to be an owner or manager, which is right for a workspace invite and
+   * wrong for this: board ownership is per-board (`creation_session_members.role`)
+   * and carries no workspace authority, so a developer who creates a canvas and
+   * shares it produced an invitation that could never be seated. The check that
+   * matters already happened — `POST /api/creation-sessions/:id/invite` requires
+   * board `owner`, the token is unguessable and single-use, and the redeemer had
+   * to sign in as the address it was addressed to.
+   *
+   * It can only ever create a `collaborator`, so no caller can reach a paid seat
+   * through the door that has no role gate on it.
+   */
+  admitCollaborator(newUserId: string, role: TenantRole): Tenant {
+    if (role === TenantRole.OWNER || role === TenantRole.MANAGER) {
+      throw new ValidationError('A collaborator cannot be admitted as an owner or manager');
+    }
+    if (this.getMember(newUserId)) {
+      throw new ValidationError(`User '${newUserId}' is already a member`);
+    }
+    return new Tenant({
+      ...this.props,
+      members: [
+        ...this.props.members,
+        { userId: newUserId, role, isActive: true, joinedAt: new Date(), seatKind: SEAT_KIND.COLLABORATOR },
       ],
       updatedAt: new Date(),
     });

@@ -532,6 +532,10 @@ export const tenantMembers = pgTable('tenant_members', {
   role:      tenantRoleEnum('role').notNull().default('developer'),
   isActive:  boolean('is_active').notNull().default(true),
   joinedAt:  timestamp('joined_at').notNull().defaultNow(),
+  /** 'seat' | 'collaborator' — whether this membership occupies a PAID seat or
+   *  exists only so a shared canvas resolves for its guest. Migration 1138; the
+   *  rule itself lives in `domain/tenant/SeatKind.ts`, which every reader uses. */
+  seatKind:  varchar('seat_kind', { length: 16 }).notNull().default('seat'),
   /** Per-seat monthly AI spend cap in millicents (1/100000 USD) — migration 0359.
    *  NULL → inherit `tenants.member_default_spend_cap_millicents`; -1 → unlimited
    *  (override a team default); >= 0 → explicit cap (0 = no paid spend). Resolved by
@@ -542,7 +546,14 @@ export const tenantMembers = pgTable('tenant_members', {
   /** Highest % threshold (0/50/80/100) already notified this period — dedupes the
    *  budget/spend notifications so a seat's owner is pinged once per threshold. */
   spendNotifyLevel:   smallint('spend_notify_level').notNull().default(0),
-});
+}, (t) => [
+  // One membership per person per workspace. Absent until migration 1138, which
+  // is why `TenantRepository.update` could only "replace" the roster by deleting
+  // it — and took the per-seat spend caps with it every time.
+  uniqueIndex('uq_tenant_members_tenant_user').on(t.tenantId, t.userId),
+  // The seat tally reads exactly these three columns (see `seatCapacityForTenant`).
+  index('idx_tenant_members_seat_tally').on(t.tenantId, t.isActive, t.seatKind),
+]);
 
 
 /**
