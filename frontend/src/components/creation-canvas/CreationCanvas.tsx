@@ -3043,6 +3043,44 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [edges, nodes, restoreGraphState]);
 
   const selectionIds = useCallback(() => selectedIds.length ? selectedIds : selectedId ? [selectedId] : [], [selectedId, selectedIds]);
+
+  /**
+   * REMOVE OBJECTS — and every connection into or out of them.
+   *
+   * ONE path for all three ways of asking: the Delete key, the trash on a card's own
+   * header (`CanvasNodeDeleteButton`), and Delete in the selection toolbar. Written
+   * three times it would have been three answers to "what happens to the edges", "does
+   * a locked object go too" and "what is the selection afterwards" — and the keyboard
+   * path already answered the second one differently from `arrange`, `align` and the
+   * nudge keys, all of which skip a locked object.
+   *
+   * It reads `nodesRef` rather than `nodes` deliberately: this callback is handed to
+   * every card through `canvasNodeTypes`, and a dependency on the board itself would
+   * give React Flow a new `nodeTypes` object on every edit and remount the whole board.
+   */
+  const deleteObjects = useCallback((ids: readonly string[]) => {
+    if (!canEdit) return;
+    const requested = new Set(ids);
+    // A locked object is locked against being moved, resized AND removed — the lock is
+    // the one thing standing between a finished board and an accidental drag, and a
+    // delete that ignored it would make that promise worth nothing.
+    const removable = new Set(nodesRef.current.filter((node) => requested.has(node.id) && canvasPlacementUnlocked(node)).map((node) => node.id));
+    if (!removable.size) {
+      setNotice(requested.size ? t('noticeDeleteLocked') : t('noticeSelectToDelete'));
+      return;
+    }
+    setNodes((current) => current.filter((node) => !removable.has(node.id)));
+    setEdges((current) => current.filter((edge) => !removable.has(edge.source) && !removable.has(edge.target)));
+    // Only what actually went. Clearing the whole selection would drop the other cards a
+    // person had gathered, which is a second, unasked-for edit.
+    setSelectedIds((current) => current.filter((id) => !removable.has(id)));
+    setSelectedId((current) => (current && removable.has(current) ? null : current));
+    setNotice(t('noticeObjectsDeleted', { count: removable.size }));
+  }, [canEdit, setEdges, setNodes, setNotice, t]);
+  /** Stable across renders so `canvasNodeTypes` keeps its identity — see above. */
+  const deleteNodeFromCard = useCallback((nodeId: string) => deleteObjects([nodeId]), [deleteObjects]);
+  const deleteSelection = useCallback(() => deleteObjects(selectionIds()), [deleteObjects, selectionIds]);
+
   const duplicateSelection = useCallback(() => {
     if (!canEdit) return;
     const ids = new Set(selectionIds());
@@ -3229,7 +3267,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') { event.preventDefault(); redo(); return; }
       const ids = new Set(selectionIds());
       if ((event.key === 'Delete' || event.key === 'Backspace') && ids.size && canEdit) {
-        event.preventDefault(); setNodes((current) => current.filter((node) => !ids.has(node.id))); setEdges((current) => current.filter((edge) => !ids.has(edge.source) && !ids.has(edge.target))); setSelectedId(null); setSelectedIds([]);
+        event.preventDefault(); deleteObjects([...ids]);
       }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') { event.preventDefault(); duplicateSelection(); return; }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c') { event.preventDefault(); copySelection(); return; }
@@ -3252,7 +3290,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       }
     };
     window.addEventListener('keydown', keyboard); return () => window.removeEventListener('keydown', keyboard);
-  }, [canEdit, copySelection, duplicateSelection, goToPresentationStep, movePresentation, pasteSelection, presentationSteps.length, redo, selectionIds, setEdges, setNodes, setPresentMode, undo]);
+  }, [canEdit, copySelection, deleteObjects, duplicateSelection, goToPresentationStep, movePresentation, pasteSelection, presentationSteps.length, redo, selectionIds, setNodes, setPresentMode, undo]);
 
   /**
    * Apply what a materialisation use case decided.
@@ -12073,7 +12111,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    */
   const boardMenuChrome = (
       <span className={styles.handoffGroup} data-testid="canvas-board-menu">
-          <button type="button" className={`${styles.secondaryButton} ${styles.iconAction}`} aria-expanded={moreOpen} aria-haspopup="menu" aria-label={t('moreActions')} title={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); setRealOpen(false); }}><MoreActionsIcon /></button>
+          <button type="button" className={styles.sessionActionButton} aria-expanded={moreOpen} aria-haspopup="menu" aria-label={t('moreActions')} title={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); setRealOpen(false); }}><MoreActionsIcon /></button>
           {/* NO SAVE BUTTON HERE. A guest board is kept by taking an account, and the
               header already offers exactly that — its CTA becomes "Keep your work" as
               soon as this browser holds a local board (`MarketingHeader`). Carrying a

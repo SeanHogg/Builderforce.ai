@@ -53,6 +53,7 @@ import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepo
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/shared/types';
 import { parseJsonObject } from '../../domain/shared/json';
+import { findNearDuplicateByTitle } from '../../domain/shared/nearDuplicateTitle';
 import { signJwt } from '../../infrastructure/auth/JwtService';
 import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, taskFileChanges, tasks, chatSessions, chatMessages, swimlanes, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -229,8 +230,6 @@ const dt = (v: unknown): Date | undefined => {
 /** Parse the `tenants.settings` JSON-as-text blob into a mutable object (embed lives at .embed). */
 const parseTenantSettings = (raw: string | null | undefined): Json => parseJsonObject<Json>(raw);
 
-/** Normalize a title for idempotent-create dedup: whitespace-collapsed, trimmed, lowercased. */
-const normTitle = (v: unknown): string => str(v).replace(/\s+/g, ' ').trim().toLowerCase();
 
 /** True when an uploads R2 key belongs to this tenant. Upload keys are minted as
  *  `${tenantId}/${userId}/${file}` (see brainRoutes `/uploads`), so the leading path
@@ -992,7 +991,7 @@ const CATALOG: BuiltinTool[] = [
   } },
   {
     tool: 'tasks.create', mutates: true,
-    description: 'Create an ACCOUNTABLE ticket on a project board. The assignee is the ticket Coordinator/Manager (not necessarily its producer): pass exactly one of assignedUserId, assignedAgentRef, or assignedAgentHostId. If omitted, the project Delivery Manager is assigned, falling back to the requesting human. Creation also derives the board process-template participation manifest. AFTER creation, scope the required workforce with kanban.assess_resource for every role implied by the work, inspect kanban.accountability, and use kanban.materialize_work_items to create one child task per resource. Set taskType="epic" for a planning Epic, "gap" for missing follow-up work, or parentTaskId to nest under an Epic. An Epic is not an OKR. PLAN IT IN TIME: pass startDate AND dueDate (ISO dates) whenever the work has a known window — a ticket with neither is invisible on the planning spine, the Gantt and the calendar until the AI Manager back-fills one, and sequence between tickets belongs in tasks.add_dependency, not in prose. Idempotent by project + normalized title; reconciliation also repairs missing coordination/manifest data on the existing ticket. The result carries `autoRun: { dispatched, reason, detail }` when the created ticket landed in a lane that could start work — `dispatched:false` means no agent picked it up, so relay `detail` rather than implying work started.',
+    description: 'Create an ACCOUNTABLE ticket on a project board. The assignee is the ticket Coordinator/Manager (not necessarily its producer): pass exactly one of assignedUserId, assignedAgentRef, or assignedAgentHostId. If omitted, the project Delivery Manager is assigned, falling back to the requesting human. Creation also derives the board process-template participation manifest. AFTER creation, scope the required workforce with kanban.assess_resource for every role implied by the work, inspect kanban.accountability, and use kanban.materialize_work_items to create one child task per resource. Set taskType="epic" for a planning Epic, "gap" for missing follow-up work, or parentTaskId to nest under an Epic. An Epic is not an OKR. PLAN IT IN TIME: pass startDate AND dueDate (ISO dates) whenever the work has a known window — a ticket with neither is invisible on the planning spine, the Gantt and the calendar until the AI Manager back-fills one, and sequence between tickets belongs in tasks.add_dependency, not in prose. Idempotent by project + title, and the match is a NEAR-duplicate one: a rephrasing of a ticket already on the board ("Login redirect loop needs fixing" against "Fix login redirect loop") returns THAT ticket with `deduped:true` instead of filing a second one, so do not re-file work you already recorded — read the returned ticket and advance it. Reconciliation also repairs missing coordination/manifest data on the existing ticket. The result carries `autoRun: { dispatched, reason, detail }` when the created ticket landed in a lane that could start work — `dispatched:false` means no agent picked it up, so relay `detail` rather than implying work started.',
     parameters: obj({ projectId: N, title: S, description: S, priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] }, startDate: S, dueDate: S, taskType: { type: 'string', enum: ['task', 'epic', 'gap'] }, parentTaskId: N, assignedUserId: S, assignedAgentRef: S, assignedAgentHostId: N }, ['projectId', 'title']),
     run: async (ctx, a) => {
       const title = str(a.title).trim(); if (!title) throw new Error('title is required');
@@ -1001,7 +1000,7 @@ const CATALOG: BuiltinTool[] = [
       // (flagged `deduped`) rather than duplicated — the caller (e.g. the Brain
       // reconciling a roadmap, often across retries) gets the existing id back.
       const existingTasks = (await ctx.tasks.listTasks(ctx.tenantId, projectId)) ?? [];
-      const dupeTask = existingTasks.find((t) => normTitle((t.toPlain() as { title?: unknown }).title) === normTitle(title));
+      const dupeTask = findNearDuplicateByTitle(title, existingTasks, (t) => (t.toPlain() as { title?: unknown }).title);
       const explicitAssignee = {
         assignedUserId: a.assignedUserId != null ? str(a.assignedUserId) : null,
         assignedAgentRef: a.assignedAgentRef != null ? str(a.assignedAgentRef) : null,
@@ -1029,7 +1028,17 @@ const CATALOG: BuiltinTool[] = [
           reconciled = await ctx.tasks.updateTask(Number(plain.id), coordinator);
         }
         if (ctx.env) await new TicketParticipantsService(ctx.db).deriveManifest(ctx.env, ctx.tenantId, Number(plain.id));
-        return { deduped: true, ...(reconciled.toPlain() as object) };
+        // Say WHY nothing was created. A bare `deduped:true` reads as a successful
+        // create to a model mid-run, which is how a run ends up re-deriving the same
+        // analysis instead of working the ticket it already filed — the reported
+        // "duplicated the analysis twice and didn't fix them". Name the matched title
+        // and the lane so the next move is obviously "advance this", not "file again".
+        return {
+          ...(reconciled.toPlain() as object),
+          deduped: true,
+          dedupedOn: String(plain.title ?? ''),
+          note: `This work is already tracked as ticket ${plain.id} ("${String(plain.title ?? '')}", status ${String(plain.status ?? 'unknown')}). Nothing was created. Do NOT re-analyse or re-file it — work THIS ticket (tasks.update to move its lane, tasks.add_comment to record findings).`,
+        };
       }
       const created = await ctx.tasks.createTask({
         projectId,
@@ -1586,8 +1595,8 @@ const CATALOG: BuiltinTool[] = [
       // Idempotent create — a same-title objective in this tenant/segment is returned
       // rather than duplicated (guards roadmap-reconciliation reruns).
       const existingObjectives = await ctx.db.select().from(objectives).where(and(eq(objectives.tenantId, ctx.tenantId), eq(objectives.segmentId, seg)));
-      const dupeObjective = (existingObjectives as Array<{ title?: unknown }>).find((o) => normTitle(o.title) === normTitle(title));
-      if (dupeObjective) return { deduped: true, ...(dupeObjective as object) };
+      const dupeObjective = findNearDuplicateByTitle(title, existingObjectives as Array<{ title?: unknown }>, (o) => o.title);
+      if (dupeObjective) return { ...(dupeObjective as object), deduped: true, dedupedOn: String((dupeObjective as { title?: unknown }).title ?? ''), note: 'An objective for this work already exists. Nothing was created — update that objective instead of filing another.' };
       const [row] = await ctx.db.insert(objectives).values({
         tenantId: ctx.tenantId, segmentId: seg, title,
         description: a.description != null ? str(a.description) : null,
@@ -1695,8 +1704,8 @@ const CATALOG: BuiltinTool[] = [
       // Idempotent create — a same-title KR already under this objective is returned
       // rather than duplicated.
       const existingKrs = await ctx.db.select().from(keyResults).where(and(eq(keyResults.tenantId, ctx.tenantId), eq(keyResults.segmentId, seg), eq(keyResults.objectiveId, str(a.objectiveId))));
-      const dupeKr = (existingKrs as Array<{ title?: unknown }>).find((k) => normTitle(k.title) === normTitle(title));
-      if (dupeKr) return { deduped: true, ...(dupeKr as object) };
+      const dupeKr = findNearDuplicateByTitle(title, existingKrs as Array<{ title?: unknown }>, (k) => k.title);
+      if (dupeKr) return { ...(dupeKr as object), deduped: true, dedupedOn: String((dupeKr as { title?: unknown }).title ?? ''), note: 'A key result for this measure already exists under the objective. Nothing was created — update that key result instead of filing another.' };
       const [row] = await ctx.db.insert(keyResults).values({
         tenantId: ctx.tenantId, segmentId: seg, objectiveId: str(a.objectiveId), title,
         ...(a.metricType != null ? { metricType: str(a.metricType) } : {}),

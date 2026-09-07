@@ -2,7 +2,9 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 32px;
+  /* The command bar's one control height when this renders in `extras`, its own 32px
+     anywhere else - it was the third distinct height in the Board group alone. */
+  min-height: var(--canvas-bar-control, 32px);
   padding: 0 10px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);

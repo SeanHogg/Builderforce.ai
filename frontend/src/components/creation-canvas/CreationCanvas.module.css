@@ -273,6 +273,27 @@
    this file needing to know which surfaces exist. */
 .commandBar {
   bottom:14px; gap:7px; padding:6px 7px; flex-wrap:nowrap;
+  /* -- ONE HEIGHT FOR EVERY CONTROL ON THIS BAR ---------------------------------
+     The bar draws controls from six different places - the session-action registry,
+     the host's own contributions (Add, the prompt toggle, the green Run, the •••
+     trigger), the live roster, `TeamBar`, `CanvasHostActions` and whatever a vendor
+     panel puts in `extras` - and every one of them used to state its own size. The
+     census was 24, 26, 28, 30, 32, 33, 34 and 36 pixels IN ONE ROW: seven heights
+     across a strip 36px tall, which reads as a row that has not been laid out.
+
+     So it is declared here, once, and everything the bar draws takes it from here:
+
+       --canvas-bar-control  the height of any single control - a glyph button, an
+                             avatar, the green Run, a worded segment.
+       --canvas-bar-row      the height of a GROUP's row: the control plus the
+                             trough's own 3px padding and 1px border on each side.
+
+     They are custom properties rather than a shared class because the contributors
+     are in other modules (`TeamBar.module.css`, `TwilioCanvasSetup.module.css`) that
+     cannot compose from this one; a property inherits into them, and each states a
+     fallback for the surfaces where it renders outside this bar. */
+  --canvas-bar-control:28px;
+  --canvas-bar-row:calc(var(--canvas-bar-control) + 8px);
   /* BOTTOM, not centre. Every group now carries a caption above it and the loose pieces
      between them (the grip, the dividers, the green Run, the collapse chevron) do not, so
      centring would leave the captioned groups' buttons sitting lower than their
@@ -282,9 +303,12 @@
   transform:translateX(-50%);
   max-width:calc(100% - 28px - var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px));
 }
-.commandBarDivider { flex:none; width:1px; height:22px; background:var(--canvas-line); }
+/* No `.commandBarDivider` here any more: the bar separated its sets with hairlines
+   before they were captioned groups, and a captioned trough already says where one set
+   ends. It had no consumer left, so it went with the layout it drew. */
 .commandBarCollapse {
-  flex:none; display:grid; place-items:center; width:28px; height:28px; padding:0;
+  flex:none; display:grid; place-items:center;
+  width:var(--canvas-bar-control,28px); height:var(--canvas-bar-control,28px); padding:0;
   border:0; border-radius:var(--radius-sm); background:transparent; color:var(--canvas-muted); cursor:pointer;
 }
 .commandBarCollapse:hover, .commandBarCollapse:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
@@ -301,6 +325,12 @@
 }
 .dragHandle:hover, .dragHandle:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
 .dragHandle:active { cursor:grabbing; }
+/* ON THE BAR the grip is the one thing with no caption over it and no trough around it,
+   so at its own 24px it hung below the centre line every button on the bar shares - the
+   bar is `align-items:flex-end`, and a short ungrouped child bottoms out against the
+   trough's padding rather than against its buttons. Given the ROW's height it centres
+   with them. Scoped, because the prompt composer's grip has no row to match. */
+.commandBar > .dragHandle { width:var(--canvas-bar-control); height:var(--canvas-bar-row); }
 .dragHandle > svg { display:block; width:14px; height:14px; }
 
 /* Folded, the bar reports and does not act: who is here, and what the runtime is doing.
@@ -318,7 +348,12 @@
    a fill. Positive rather than brand: the accent is already spent on "which surface am I
    on", and two blues at the same weight in one window is a decision nobody can read. */
 .runButton {
-  flex:none; display:inline-flex; align-items:center; gap:6px; padding:6px 12px;
+  flex:none; display:inline-flex; align-items:center; gap:6px;
+  /* Height from the token and NO vertical padding: padding plus an inherited 1.5
+     line-height made this the tallest thing on the bar at ~33px, so the Run group's
+     trough stood 5px prouder than the four beside it. `line-height:1` keeps the word
+     centred in the box the token sets rather than setting the box itself. */
+  height:var(--canvas-bar-control,28px); padding:0 11px; line-height:1;
   border:1px solid var(--tone-success-mark); border-radius:var(--radius-md);
   background:var(--tone-success-mark); color:var(--text-on-accent);
   font-family:inherit; font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap;
@@ -335,7 +370,8 @@
 .saved { min-width:0; overflow:hidden; color:var(--canvas-muted); font-size:11px; white-space:nowrap; text-overflow:ellipsis; }
 .sessionActions { gap:8px; position:relative; }
 .collaborators span, .collaborators button {
-  width:28px; height:28px; border-radius:50%; display:grid; place-items:center; margin-left:-5px;
+  width:var(--canvas-bar-control,28px); height:var(--canvas-bar-control,28px);
+  border-radius:50%; display:grid; place-items:center; margin-left:-5px;
   border:2px solid var(--canvas-panel); color:var(--text-on-accent); font-size:10px; font-weight:750;
 }
 /* Every avatar IS a button (press one to follow that person's viewport), so the dashed
@@ -352,7 +388,10 @@
    adds one — sized to sit with them rather than announce itself as a separate
    control. No text: the roster it trails already says who is part of this. */
 .rosterInvite {
-  flex:none; display:grid; place-items:center; width:26px; height:26px; margin-left:4px; padding:0;
+  flex:none; display:grid; place-items:center; margin-left:4px; padding:0;
+  /* The same circle as the avatars it trails - it was 26px against their 28px, which
+     is close enough to read as a mistake rather than as a different kind of thing. */
+  width:var(--canvas-bar-control,26px); height:var(--canvas-bar-control,26px);
   border:1.5px dashed var(--canvas-line); border-radius:50%; background:transparent; color:var(--canvas-muted); cursor:pointer;
 }
 .rosterInvite:hover, .rosterInvite:focus-visible { border-color:var(--canvas-accent); border-style:solid; color:var(--canvas-accent); outline:none; }
@@ -372,8 +411,10 @@
 /* Editor-only capture actions (VS Code). Same segmented-group shape as the session
    so the session bar reads as one row of controls rather than a bolted-on strip;
    it inherits the canvas palette, so both themes come from the tokens above. */
-.hostActions { display:inline-flex; gap:0; overflow:hidden; border:1px solid var(--canvas-line); border-radius:var(--radius-md); }
-.hostActions .secondaryButton { width:36px; height:34px; display:grid; place-items:center; padding:0; border:0; border-radius:0; font-size:14px; }
+.hostActions { display:inline-flex; gap:0; overflow:hidden; height:var(--canvas-bar-control,36px); border:1px solid var(--canvas-line); border-radius:var(--radius-md); }
+/* `height:100%` of the strip, not 34px of its own: the strip is a control on the command
+   bar and takes the bar's one height, and its segments fill whatever that leaves. */
+.hostActions .secondaryButton { width:36px; height:100%; display:grid; place-items:center; padding:0; border:0; border-radius:0; font-size:14px; }
 .hostActions .secondaryButton + .secondaryButton { border-left:1px solid var(--canvas-line); }
 .hostActions .secondaryButton:hover,.hostActions .secondaryButton:focus-visible { z-index:1; background:var(--canvas-hover); outline:none; }
 .hostActions .secondaryButton:disabled { opacity:.45; cursor:not-allowed; }
@@ -431,9 +472,16 @@
 .barGroupRow[data-shell='trough'] { padding:3px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel-muted); }
 /* A group whose members set their own spacing keeps room between them — 2px is the gap
    BETWEEN segments of one control, not between a Run button and the switcher beside it. */
-.barGroupRow[data-shell='bare'] { gap:6px; }
+.barGroupRow[data-shell='bare'] { gap:6px; padding:3px; border:1px solid transparent; }
+/* THE BARE SHELL CARRIES THE TROUGH'S BOX, invisibly. The bar is `align-items:flex-end`,
+   so a bare row 8px shorter than the troughs beside it put its own controls 4px lower
+   than theirs - one row of buttons drawn on two baselines, which is exactly what the
+   flex-end was chosen to prevent. Invisible box, identical box.
+   And whatever the shell, the row is ONE height, so a group holding an avatar or a
+   worded segment lines up with the group of glyphs next to it. */
+.barGroupRow { min-height:var(--canvas-bar-row,36px); }
 .sessionActionButton {
-  width:30px; height:28px; display:inline-grid; place-items:center; padding:0;
+  width:30px; height:var(--canvas-bar-control,28px); display:inline-grid; place-items:center; padding:0;
   border:0; border-radius:var(--radius-sm); background:transparent;
   color:var(--canvas-muted); font-family:inherit; cursor:pointer;
 }
@@ -475,7 +523,7 @@
    the last segment IN it. */
 .barGroupRow[data-shell='trough'] > .sessionActionLabelled,
 .barGroupRow[data-shell='trough'] > .handoffGroup > .sessionActionLabelled {
-  min-height:28px; padding:5px 9px; border:0; border-radius:var(--radius-sm);
+  height:var(--canvas-bar-control,28px); min-height:0; padding:0 9px; border:0; border-radius:var(--radius-sm);
   background:transparent; color:var(--canvas-muted);
 }
 .barGroupRow[data-shell='trough'] > .sessionActionLabelled:hover,
@@ -494,13 +542,11 @@
    that repeats the row above it is a menu with two answers. */
 .moreMenuPhoneOnly { display:none; }
 
-.iconAction { width:34px; min-width:34px; height:34px; display:inline-grid; place-items:center; padding:0; font-size:14px; line-height:1; }
-/* An <svg> with a viewBox and no width/height fills its box, so an icon action
-   would paint a 34px glyph next to a 14px character one. Pin the drawn size here,
-   once, rather than on each icon — the icons are shared with the canvas rails,
-   which size them differently. */
-.iconAction > svg { display:block; width:15px; height:15px; }
-.iconAction[aria-pressed='true'] { border-color:var(--canvas-accent); color:var(--canvas-accent); background:color-mix(in srgb,var(--canvas-accent) 12%,var(--canvas-panel)); }
+/* No `.iconAction` here any more. It sized a 34px bordered square and had exactly one
+   consumer left - the board menu's trigger - which sat in the Board trough at 34px beside
+   a 28px full-screen glyph and drew its own border inside a shell that already has one.
+   It wears `.sessionActionButton` now, the class every other glyph on this bar wears, so
+   the trigger's height, its hover and its lit state come from where theirs do. */
 /* Anchored to the END of the action row, not to a hard-coded offset from it. The two
    menus used to sit at `right:76px` and `right:150px`, which were measurements of the
    buttons that happened to follow them — so both drifted the moment the save button was
@@ -581,7 +627,11 @@
 /* Undo the sheet's row chrome for these: `.moreMenu button` makes every child a
    full-width flex row with a 22px glyph chip, which is right for a named errand and wrong
    for a zoom control. */
-.moreMenuTools button { width:auto; padding:0; }
+/* `display` and `width` are restated rather than released - these ARE
+   `.sessionActionButton`s, and `.moreMenu button` outranks that class on both, so letting
+   go of the width collapsed each one onto its 15px glyph and left a trough of ragged
+   targets under a heading that promised a set. */
+.moreMenuTools button { display:inline-grid; width:var(--canvas-bar-control,30px); padding:0; }
 .moreMenu label { grid-column:1 / -1; display:flex; align-items:center; justify-content:space-between; margin-top:3px; border-top:1px solid var(--canvas-line); border-radius:0; cursor:default; }.moreMenu label > span { display:flex; align-items:center; gap:8px; }.moreMenu label i { width:22px; height:22px; display:grid; place-items:center; border-radius:var(--radius-sm); font-style:normal; }
 .moreMenu select { max-width:105px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); padding:4px; background:var(--canvas-panel); color:var(--canvas-ink); font:inherit; }
 /* Native option lists are painted by the OS and inherit nothing from the control,
@@ -3032,12 +3082,21 @@
      The troughs go with them — a segmented shell around two 30px buttons is border on a
      screen that has none to spare — leaving the commands themselves at a 40px touch
      target, which is what they were missing even where they did survive. */
+  .barGroupRow { min-height:0; }
   .barGroupRow[data-shell='trough'] { gap:2px; padding:0; border:0; border-radius:0; background:transparent; }
+  /* The bare shell carries the trough's padding on a desktop so the two line up; on a
+     phone the trough gives that padding back, so the bare row has to give back the
+     same or it becomes the one group inset from the rest. */
+  .barGroupRow[data-shell='bare'] { padding:0; border:0; }
   /* The captions go too, and for the same reason the troughs do: a 360px bar spends its
      width on 40px touch targets, and the ••• sheet already names every section it
      carries (`.moreMenuHeading`) — which is where a phone reads what a group is for. */
   .barGroupCaption { display:none; }
-  .sessionActionButton { width:40px; height:40px; border-radius:var(--radius-md); }
+  /* A phone raises the ONE token rather than this one class, so the roster circles, the
+     green Run and the ••• trigger grow to the same touch target instead of staying at
+     their desktop size beside 40px neighbours. */
+  .commandBar { --canvas-bar-control:40px; }
+  .sessionActionButton { width:40px; border-radius:var(--radius-md); }
   .sessionActionButton > svg { width:17px; height:17px; }
   /* Keyed on `data-phone` alone, not on the chrome class beside it. A cluster used to
      hold only icon buttons, so `.sessionActionButton[data-phone='menu']` was enough —
@@ -4573,6 +4632,21 @@
 .densityToggle:hover, .densityToggle:focus-visible { background: var(--canvas-hover); color: var(--canvas-ink); outline: none; }
 .densityToggle > svg { display: block; width: 14px; height: 14px; }
 
+/* ── THE TRASH ────────────────────────────────────────────────────────────────────
+   Same 22px icon slot as the density toggle — it is one of the card's own controls, not
+   a special one — with the canonical danger tokens on hover so the one control that
+   REMOVES something does not look identical to the four that only change a view.
+
+   It takes the auto margin that used to sit on `•••`, which puts the pair together at
+   the right end of the header rather than leaving the trash buried in the left-hand
+   icon group where nothing distinguishes it from the badges. */
+.nodeDelete { margin-left: auto; }
+.nodeDelete + .moreButton { margin-left: 0; }
+.nodeDelete:hover:not(:disabled), .nodeDelete:focus-visible:not(:disabled) { background: var(--danger-bg); color: var(--danger-text); outline: none; }
+/* Locked: present and explained (its title says so) rather than absent, which is the
+   difference between "you cannot do this yet" and "this object is not deletable". */
+.nodeDelete:disabled { opacity: .38; cursor: not-allowed; }
+
 /* PREVIEW — the header plus a few lines, so the object is recognisable without claiming
    a screen. The body is clamped rather than truncated at a character count: a document,
    a chart and a data grid have nothing in common to count, and every one of them reads
@@ -4621,6 +4695,10 @@
   background: var(--canvas-panel);
   box-shadow: 0 2px 8px var(--canvas-shadow);
 }
+/* The orb's controls are placed by hand rather than laid out in a row, so the trash
+   needs its own slot beside the density toggle instead of the auto margin it takes in
+   the card header. */
+.nodeOrb .nodeDelete { right: 40px; margin-left: 0; }
 .nodeOrbName { display: grid; gap: 1px; text-align: center; max-width: 120px; }
 .nodeOrbName b { font-size: 12px; font-weight: 650; color: var(--canvas-ink); overflow-wrap: anywhere; }
 .nodeOrbName small { font-size: 10px; color: var(--canvas-ink-soft); }

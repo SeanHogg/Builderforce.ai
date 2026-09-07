@@ -49,6 +49,7 @@ import { campaignSendReadiness } from '@/lib/canvasMarketing';
 import { GAME_FRAME_SANDBOX, gameDocumentFrom, gameRuntimeFor } from '@/lib/gameTargets';
 import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import { CanvasObjectSurfaceButton } from './CanvasObjectSurfaceButton';
+import { CanvasNodeDeleteButton } from './CanvasNodeDeleteButton';
 import { controlLabels, readGameControls } from '@/lib/gamePoster';
 import { canvasBuildBinding } from '@/lib/canvasBuild';
 import { canvasWebPageUrl, WEB_PAGE_KINDS } from '@/lib/canvasWebPage';
@@ -2546,6 +2547,15 @@ type CreationNodeProps = NodeProps<CreationFlowNode> & {
   /** Take the object away as a file, from the card that holds it. */
   onExport?: (nodeId: string, action: CanvasExportAction) => void;
   /**
+   * Take the object OFF the board, from the card itself.
+   *
+   * Until this existed, removal was reachable only by selecting an object and pressing
+   * Delete — nothing on the board said a card could be removed at all. Absent on a
+   * read-only or lock-blocked board, which is what makes the trash absent there rather
+   * than present and silently inert. See `CanvasNodeDeleteButton`.
+   */
+  onDeleteNode?: (nodeId: string) => void;
+  /**
    * Open one of the card's own panels BESIDE it. The anchor is a screen rect, not a
    * board coordinate: the panel is a fixed overlay, so it never has to be re-projected
    * through the viewport transform and it lands where the badge is regardless of zoom.
@@ -2760,7 +2770,7 @@ function DensityIcon({ density }: { density: CanvasNodeDensity }) {
   </svg>;
 }
 
-export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport, onOpenPanel, onInsertFrom, onOpenSurface, onRevealObject, onMoveDeal, onOpenFrame }: CreationNodeProps) {
+export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport, onOpenPanel, onInsertFrom, onOpenSurface, onRevealObject, onMoveDeal, onOpenFrame, onDeleteNode }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
   const specBoard = useSpecDeriveBoard(data.kind);
   const calendarBoard = useCalendarBoardObjects(data.kind === 'calendar' && data.source === 'board');
@@ -2873,6 +2883,16 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
     onClick={(event) => { event.stopPropagation(); onEditData(id, { density: nextCanvasNodeDensity(density) }); }}
   ><DensityIcon density={density} /></button> : null;
 
+  // Built once and drawn on BOTH the card and the orb, for the same reason the badges
+  // are: a folded board is exactly where someone reaches for "get rid of this", and an
+  // affordance that only exists at full size is one you have to unfold a card to find.
+  const deleteButton = <CanvasNodeDeleteButton
+    nodeId={id}
+    data={data}
+    {...(onDeleteNode ? { onDelete: onDeleteNode } : {})}
+    className={`${styles.densityToggle} ${styles.nodeDelete} nodrag`}
+  />;
+
   // The mark, the name, the badges, the connectors. Drawn as its own element rather than
   // as a CSS treatment of the card, because a circle is not a small rectangle: the header
   // row, the resizer, the body and the status chip all have to be ABSENT, not hidden, or
@@ -2890,6 +2910,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         <Icon source={typeof data.toolIcon === 'string' ? data.toolIcon : creationObjectDefinition(data.kind).icon} size={30} />
       </span>
       {densityToggle}
+      {deleteButton}
       {affordances}
       {insertButton}
       <span className={styles.nodeOrbName}><b>{data.title}</b>{data.status && <small>{data.status}</small>}</span>
@@ -2934,7 +2955,20 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
           onOpen={(surface) => onOpenSurface(id, surface)}
           className={`${styles.densityToggle} nodrag`}
         />}
-        <button className={styles.moreButton} aria-label={t('moreOptions', { title: data.title })}>•••</button>
+        {deleteButton}
+        {/* "Everything about this object" — the wide inspector. It carried an accessible
+            name and no handler for as long as it has existed, which is a control that
+            announces itself to a screen reader and then does nothing when pressed. It
+            opens what its label promises now; the gear beside it still opens the SHORT
+            settings list, which is the narrower of the two readings, not the same one. */}
+        {onOpenDetails && <button
+          type="button"
+          className={`${styles.moreButton} nodrag`}
+          data-testid={`canvas-node-more-${id}`}
+          aria-label={t('moreOptions', { title: data.title })}
+          title={t('moreOptions', { title: data.title })}
+          onClick={(event) => { event.stopPropagation(); onOpenDetails(id); }}
+        >•••</button>}
       </header>
       {insertButton}
       <div className={styles.nodeBody}>

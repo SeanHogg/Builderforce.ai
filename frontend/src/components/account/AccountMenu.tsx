@@ -24,7 +24,7 @@ import { useAccountMenu, type AccountMenuRow } from './useAccountMenu';
 function RowBody({ row }: { row: AccountMenuRow }) {
   return (
     <>
-      <Icon name={row.icon} size={17} className="account-menu__row-icon" />
+      <Icon name={row.icon} size={17} className="ui-icon account-menu__row-icon" />
       <span className="account-menu__row-label">{row.label}</span>
       {row.hint && <span className="account-menu__row-hint">{row.hint}</span>}
       {row.count != null && (
@@ -81,7 +81,7 @@ export function AccountMenu() {
           size={30}
           active
         />
-        <Icon name="chevron-down" size={14} className="account-menu__chevron" />
+        <Icon name="chevron-down" size={14} className="ui-icon account-menu__chevron" />
       </button>
 
       {open && (

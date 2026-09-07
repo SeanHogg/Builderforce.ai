@@ -62,6 +62,21 @@ export type CanvasObjectData = {
 export type CanvasObject = Node<CanvasObjectData, 'creation'>;
 
 /**
+ * WHAT A PLACEMENT LOCK ACTUALLY FORBIDS, as graph flags.
+ *
+ * `placementLocked` is the fact; these are the two things the graph library has to
+ * be told about it. They are ONE function because they were three separate spellings
+ * — the hydrator, the lock toggle and the Brain's layout applier each wrote
+ * `draggable: !locked` by hand — and every one of them left `deletable` alone. So a
+ * locked object could not be dragged by a pixel and could still be erased outright
+ * with the Delete key, which is the opposite of what a person locking a finished
+ * board is asking for. Anything that learns the lock now learns both halves of it.
+ */
+export function canvasPlacementFlags(locked: boolean): { draggable: boolean; deletable: boolean } {
+  return { draggable: !locked, deletable: !locked };
+}
+
+/**
  * Palette groups — the sections the object palette is drawn in.
  *
  * Declared beside the object rather than in the registry because two modules
