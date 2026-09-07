@@ -926,6 +926,14 @@ async function summarizeMiddle(
         { role: 'user', content: renderForSummary(msgs) },
       ],
       model,
+      // A compaction note is a UTILITY completion: a bounded answer with no thinking.
+      // Left unset, it inherited the run's full output ceiling and, on a thinking-
+      // capable model, the run's reasoning depth — the most expensive way to write a
+      // paragraph the user never sees. ~1.2k tokens holds a dense memory of any
+      // middle this loop compacts (the tail is 8 turns; the middle is summarised
+      // afresh at most once per 8 new turns).
+      maxTokens: 1_200,
+      reasoning: { level: 'off' },
       signal,
     });
     const out = (res.text ?? '').trim();

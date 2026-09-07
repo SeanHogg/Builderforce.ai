@@ -68,6 +68,22 @@ describe('selectToolsForTurn', () => {
       .toEqual(sel.tools.map((t) => t.function.name));
   });
 
+  it('keeps CATALOG order whichever pass chose a tool, so the advertised bytes are stable across turns', () => {
+    // Turn 1: nothing pinned. Turn 2: the run has called a tool that turn 1 already
+    // advertised by relevance. The SET is identical, so the ORDER — what the vendor's
+    // prompt cache hashes — must be identical too; before this, the pinned pass moved
+    // the called tool ahead of its neighbours and the cached prefix missed every turn.
+    const catalog = bigCatalog();
+    const turn1 = selectToolsForTurn(catalog, { query: 'list my tasks and specs' });
+    const called = turn1.tools[turn1.tools.length - 1]!.function.name; // the LAST advertised tool
+    const turn2 = selectToolsForTurn(catalog, { query: 'list my tasks and specs', pinned: [called] });
+    expect(turn2.tools.map((t) => t.function.name)).toEqual(turn1.tools.map((t) => t.function.name));
+    // And the order is the catalog's own.
+    const index = new Map(catalog.map((t, i) => [t.function.name, i] as const));
+    const positions = turn2.tools.map((t) => index.get(t.function.name)!);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+  });
+
   it('never emits duplicates even when a pinned tool also scores', () => {
     const sel = selectToolsForTurn(bigCatalog(), { query: 'tasks', pinned: ['builtin_tasks_list'] });
     const names = sel.tools.map((t) => t.function.name);

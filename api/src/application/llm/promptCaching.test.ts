@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyPromptCaching, modelSupportsExplicitCaching } from './promptCaching';
+import { applyPromptCaching, markAnthropicHistoryBreakpoint, modelSupportsExplicitCaching } from './promptCaching';
 
 // ---------------------------------------------------------------------------
 // modelSupportsExplicitCaching — gate to the Anthropic family (the only gateway
@@ -87,7 +87,7 @@ describe('applyPromptCaching — system prefix', () => {
 });
 
 describe('applyPromptCaching — history boundary', () => {
-  it('marks the message before the final turn for multi-turn conversations', () => {
+  it('marks the LATEST turn so the next request reads the whole conversation as a cached prefix', () => {
     const messages = [
       { role: 'system', content: 'sys' },
       { role: 'user', content: 'q1' },
@@ -95,21 +95,46 @@ describe('applyPromptCaching — history boundary', () => {
       { role: 'user', content: 'q2' },
     ];
     const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-5');
-    // system (index 0) and history boundary (index 2 = assistant a1) marked.
+    // system (index 0) and the latest turn (index 3) marked; the middle untouched.
     expect(out[0]!.content).toEqual([{ type: 'text', text: 'sys', cache_control: { type: 'ephemeral' } }]);
-    expect(out[2]!.content).toEqual([{ type: 'text', text: 'a1', cache_control: { type: 'ephemeral' } }]);
-    // Final volatile turn unmarked.
-    expect(out[3]!.content).toBe('q2');
+    expect(out[2]!.content).toBe('a1');
+    expect(out[3]!.content).toEqual([{ type: 'text', text: 'q2', cache_control: { type: 'ephemeral' } }]);
   });
 
-  it('skips the boundary when it is not a user/assistant turn', () => {
+  it('walks back past tool turns and text-less tool-call turns to the nearest markable one', () => {
     const messages = [
       { role: 'system', content: 'sys' },
-      { role: 'tool', content: 'tool-result' },
       { role: 'user', content: 'q' },
+      { role: 'assistant', content: '', tool_calls: [{ id: 'c1' }] },
+      { role: 'tool', content: 'tool-result' },
     ];
     const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-5');
-    expect(out[1]!.content).toBe('tool-result'); // tool turn not marked
+    expect(out[3]!.content).toBe('tool-result'); // tool turn never promoted on this path
+    expect(out[2]!.content).toBe(''); // nothing to attach to
+    expect(out[1]!.content).toEqual([{ type: 'text', text: 'q', cache_control: { type: 'ephemeral' } }]);
+  });
+});
+
+describe('markAnthropicHistoryBreakpoint (direct Messages shape)', () => {
+  it('marks the last block of the last message — a tool_result included — and clones only that', () => {
+    const messages = [
+      { role: 'user', content: [{ type: 'text', text: 'q' }] },
+      { role: 'assistant', content: [{ type: 'tool_use', id: 'c1', name: 'read_file', input: {} }] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'c1', content: '...' }, { type: 'tool_result', tool_use_id: 'c2', content: '...' }] },
+    ];
+    const out = markAnthropicHistoryBreakpoint(messages);
+    expect(out).toHaveLength(3);
+    expect(out[0]).toBe(messages[0]);
+    expect(out[1]).toBe(messages[1]);
+    expect(out[2]!.content[0]).toBe(messages[2]!.content[0]);
+    expect(out[2]!.content[1]).toEqual({ type: 'tool_result', tool_use_id: 'c2', content: '...', cache_control: { type: 'ephemeral' } });
+    expect(messages[2]!.content[1]).not.toHaveProperty('cache_control'); // input untouched
+  });
+
+  it('leaves an empty final message alone', () => {
+    const messages = [{ role: 'user', content: [] as Array<Record<string, unknown>> }];
+    expect(markAnthropicHistoryBreakpoint(messages)[0]!.content).toEqual([]);
+    expect(markAnthropicHistoryBreakpoint([])).toEqual([]);
   });
 });
 
@@ -136,8 +161,8 @@ describe('applyPromptCaching — cache TTL', () => {
     ];
     const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-5', '1h');
     expect(out[0]!.content).toEqual([{ type: 'text', text: 'sys', cache_control: { type: 'ephemeral', ttl: '1h' } }]);
-    expect(out[2]!.content).toEqual([{ type: 'text', text: 'a1', cache_control: { type: 'ephemeral', ttl: '1h' } }]);
-    expect(out[3]!.content).toBe('q2'); // final turn still unmarked
+    expect(out[2]!.content).toBe('a1');
+    expect(out[3]!.content).toEqual([{ type: 'text', text: 'q2', cache_control: { type: 'ephemeral', ttl: '1h' } }]);
   });
 
   it("treats ttl='5m' as the default bare ephemeral marker", () => {

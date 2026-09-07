@@ -47,6 +47,7 @@ import {
   type VendorStreamResult,
 } from './types';
 import { ANTHROPIC_OAUTH_BETA, CLAUDE_CODE_SYSTEM_PROMPT } from '../anthropicOAuth';
+import { markAnthropicHistoryBreakpoint } from '../promptCaching';
 
 const ENDPOINT = 'https://api.anthropic.com/v1/messages';
 
@@ -428,7 +429,10 @@ function prepareAnthropicRequest(
   const body: Record<string, unknown> = {
     model: params.model,
     max_tokens: maxTokens,
-    messages: req.messages,
+    // Third breakpoint (tools, system, and now the latest turn): the conversation so far
+    // becomes a cached prefix the NEXT turn reads at ~0.1x, instead of the transcript
+    // being re-billed in full on every turn of a tool loop.
+    messages: markAnthropicHistoryBreakpoint(req.messages, CACHE),
     ...(system ? { system } : {}),
     ...(tools ? { tools } : {}),
     ...(req.tool_choice ? { tool_choice: req.tool_choice } : {}),

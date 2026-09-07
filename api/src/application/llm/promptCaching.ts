@@ -12,10 +12,15 @@
  * — completing the caching+metering pair the gateway was missing.
  *
  * Prefix-match invariant (see Anthropic prompt-caching docs): a breakpoint
- * caches everything *before* it, so we mark the stable prefix — the system
- * prompt, plus the conversation-history boundary — and leave the volatile final
- * user turn unmarked so it never enters the cached prefix. Byte-stable: only
- * static `cache_control` objects are added, never timestamps or ids.
+ * caches everything *before and including* it, so we mark the system prompt and
+ * the LATEST conversation turn. Marking the latest turn is Anthropic's documented
+ * incremental-conversation pattern: turn N writes the prefix through its last
+ * turn (a ~1.25x write on that small tail), and turn N+1 finds that boundary and
+ * reads everything before it at ~0.1x. The earlier layout left the final turn
+ * unmarked "so it never enters the cached prefix" — which meant the NEXT request
+ * could never read it either, so a tool loop re-billed its whole growing history
+ * at full price every turn. Byte-stable: only static `cache_control` objects are
+ * added, never timestamps or ids.
  * Non-destructive: returns a new array and clones only the messages it marks —
  * the caller's `messages` is shared by reference across cascade candidates, so a
  * non-Anthropic candidate must still see clean, unmarked messages.
@@ -99,8 +104,11 @@ function withCacheControl(msg: Msg, marker: Record<string, unknown>): Msg {
  *
  * Breakpoints (≤ 2, well within Anthropic's cap of 4):
  *   1. the last `system` message — the largest stable prefix, the biggest win;
- *   2. the message immediately before the final turn (history boundary) — so a
- *      follow-up request reads the whole prior-conversation prefix.
+ *   2. the LATEST user/assistant turn that carries text — so the next request
+ *      reads the whole conversation so far as a cached prefix. `tool` turns are
+ *      skipped: an OpenAI-format tool message carries string content, and this
+ *      OpenRouter path does not promote it to a block (the direct vendor marks
+ *      tool results natively — see {@link markAnthropicHistoryBreakpoint}).
  *
  * `ttl` (default `'5m'`) selects the breakpoint retention — pass `'1h'` (from a
  * caller's `_builderforce.cacheTtl` hint) to keep the prefix warm across idle
@@ -122,17 +130,45 @@ export function applyPromptCaching(messages: Array<Msg>, model: string, ttl?: Ca
   }
   if (lastSystem >= 0) marks.add(lastSystem);
 
-  // (2) Conversation-history boundary — only a user/assistant turn carries a
-  // stable text block worth a breakpoint; tool turns and the volatile final
-  // turn are skipped.
-  if (messages.length >= 3) {
-    const boundary = messages.length - 2;
-    const role = (messages[boundary] as { role?: unknown }).role;
-    if (boundary !== lastSystem && (role === 'user' || role === 'assistant')) {
-      marks.add(boundary);
-    }
+  // (2) The latest user/assistant turn that can carry a marker — walking back
+  // past tool turns and past an assistant tool-call turn with no text.
+  for (let i = messages.length - 1; i > lastSystem; i--) {
+    const role = (messages[i] as { role?: unknown }).role;
+    if (role !== 'user' && role !== 'assistant') continue;
+    if (withCacheControl(messages[i]!, marker) === messages[i]) continue; // nothing markable
+    marks.add(i);
+    break;
   }
 
   if (marks.size === 0) return messages;
   return messages.map((m, i) => (marks.has(i) ? withCacheControl(m, marker) : m));
+}
+
+/** A block-content message as the direct Anthropic Messages vendor sends it. */
+export interface AnthropicBlockMessage {
+  role: string;
+  content: Array<Record<string, unknown>>;
+}
+
+/**
+ * Mark the FINAL message's last content block for the direct Anthropic vendor — the
+ * same incremental-conversation breakpoint as above, in native Messages shape, where
+ * ANY block may carry it (text, tool_use, tool_result, image). The direct vendor
+ * cached tools + system and nothing else, so a 26-turn tool loop with a 24k-token
+ * transcript (chat #101) paid full price for that transcript on every turn. With the
+ * breakpoint on the last block, turn N+1 reads turn N's whole prefix at ~0.1x.
+ * Non-destructive: a new array, and only the last message and block are cloned. An
+ * empty final message (nothing to attach to) is returned untouched.
+ */
+export function markAnthropicHistoryBreakpoint<M extends AnthropicBlockMessage>(
+  messages: readonly M[],
+  marker: Record<string, unknown> = EPHEMERAL,
+): M[] {
+  if (messages.length === 0) return [...messages];
+  const last = messages[messages.length - 1]!;
+  if (!Array.isArray(last.content) || last.content.length === 0) return [...messages];
+  const blocks = last.content;
+  const marked = { ...blocks[blocks.length - 1]!, cache_control: marker };
+  const next = { ...last, content: [...blocks.slice(0, -1), marked] } as M;
+  return [...messages.slice(0, -1), next];
 }

@@ -39,11 +39,31 @@ Evermind reported `not-seeded` on every turn (v0, "connected", learned 0). Promp
    re-resolves targets. `invalidateProjectEvermindHead()` is now the ONE head-cache
    invalidation (nine inline `bumpCacheVersion(versionKey…)` calls migrated).
 
+6. *The prompt cache was armed but rarely hit.* The gateway already marked tools + system for
+   the direct Anthropic vendor and system + a history boundary on the OpenRouter path, so the
+   stored note claiming "gateway not caching" was stale. What defeated it: (a)
+   `selectToolsForTurn` emitted tools in PASS order — a newly used tool moved from the
+   relevance pass to the pinned pass and ahead of its neighbours, and because tools precede
+   the system prompt in Anthropic's cached prefix, that re-order invalidated the whole ~13k-
+   token prefix on most early turns of a tool loop; (b) the direct vendor placed no
+   breakpoint on the conversation, so the 24k-token transcript was re-billed in full every
+   turn, and the OpenRouter path deliberately left the final turn unmarked, which meant the
+   next request could never read it. Fixed: selection sorts the chosen set by catalog index
+   (same set ⇒ same bytes); `markAnthropicHistoryBreakpoint` marks the last block of the
+   latest turn on the direct vendor (tools + system + latest turn = 3 of the 4 allowed);
+   `applyPromptCaching` walks back to the latest markable user/assistant turn. The
+   compaction summarizer (`summarizeMiddle`) is now a bounded utility call (1.2k tokens,
+   reasoning off) rather than a full-ceiling frontier completion.
+
 **Tests added.** brain-embedded: replay cache (`readCoverage.test.ts`), replay-after-compaction
 loop scenario (`brainRunStore.test.ts`), memory-tool pin (`localWorkspaceTools.test.ts`). VSIX:
 `workspaceSearch.test.ts` (parser, file scope, walk, ripgrep parity when present),
-`brainRunHost.test.ts` (run-context port). api: `brainEvermindLearning.test.ts` (seed-then-learn,
-no-store stays not-seeded, sibling build untouched). VSIX bumped to 2026.9.23 (CHANGELOG).
+`brainRunHost.test.ts` (run-context port), stable tool order (`selectTools.test.ts`). api:
+`brainEvermindLearning.test.ts` (seed-then-learn, no-store stays not-seeded, sibling build
+untouched), `promptCaching.test.ts` (latest-turn breakpoint, direct-shape marker),
+`anthropicCaching.test.ts` (three breakpoints on a tool-loop body). VSIX 2026.9.23 carries the
+loop/search/memory/Evermind fixes (cut 09:34 by a concurrent session); 2026.9.24 adds the cache-
+prefix stability, the bounded summarizer and the `ripgrep-universal` probe (CHANGELOG, packaged).
 
 **Also closed — Memory-first Phase E (stale roadmap item).** The item asked to collapse the VSIX
 native `runAgent` onto the shared `brain-embedded` loop with host tools, persistence, approvals,

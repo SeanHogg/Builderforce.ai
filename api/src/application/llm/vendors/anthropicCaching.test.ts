@@ -55,4 +55,31 @@ describe('direct-Anthropic prompt caching', () => {
     expect(body.tools[body.tools.length - 1].cache_control).toEqual({ type: 'ephemeral' });
     expect(body.tools[0].cache_control).toBeUndefined();
   });
+
+  it('marks the latest turn too, so a tool loop reads its growing transcript from the cache', async () => {
+    const cap = captureBody();
+    await anthropicModule.call({
+      apiKey: 'sk-ant-test',
+      model: 'claude-sonnet-5',
+      messages: [
+        { role: 'system', content: 'Large stable coding instructions + repo context.' },
+        { role: 'user', content: 'Add the avatar filter.' },
+        { role: 'assistant', content: '', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'read_file', arguments: '{"path":"a.ts"}' } }] },
+        { role: 'tool', tool_call_id: 'c1', content: '{"ok":true,"content":"..."}' },
+      ],
+      extraBody: {
+        tools: [{ type: 'function', function: { name: 'read_file', description: 'read', parameters: { type: 'object', properties: {} } } }],
+      },
+    });
+    const body = cap.get();
+    const last = body.messages[body.messages.length - 1];
+    const lastBlock = last.content[last.content.length - 1];
+    expect(lastBlock.type).toBe('tool_result');
+    expect(lastBlock.cache_control).toEqual({ type: 'ephemeral' });
+    // Three breakpoints in all — tools, system, latest turn — inside Anthropic's cap of four.
+    const count = JSON.stringify(body).split('"cache_control"').length - 1;
+    expect(count).toBe(3);
+    // Earlier turns carry none.
+    expect(JSON.stringify(body.messages.slice(0, -1))).not.toContain('cache_control');
+  });
 });

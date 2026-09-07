@@ -165,5 +165,16 @@ export function selectToolsForTurn(
     take(tool);
   }
 
+  // Emit in CATALOG order, whichever pass chose each tool. The passes above decide
+  // the SET; they must not decide the ORDER, because the order is what the vendor's
+  // prompt cache hashes. Tools precede the system prompt in Anthropic's cached prefix,
+  // so any reordering — a tool the run just called moving from the "relevant" pass to
+  // the "pinned" pass and therefore ahead of its neighbours — invalidated the cached
+  // tools block AND the system prompt behind it on the very next turn. A tool loop
+  // pins a new tool on most of its early turns, so the ~13k-token prefix was re-billed
+  // at full price for most of the run. Same set ⇒ same bytes ⇒ a cache read.
+  const position = new Map(tools.map((t, i) => [t, i] as const));
+  chosen.sort((a, b) => (position.get(a) ?? 0) - (position.get(b) ?? 0));
+
   return { tools: chosen, trimmed: true, available };
 }
