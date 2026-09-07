@@ -225,6 +225,12 @@
         "icon": "$(organization)"
       },
       {
+        "command": "builderforce.registerMcpServer",
+        "title": "%command.registerMcpServer%",
+        "category": "BuilderForce",
+        "icon": "$(plug)"
+      },
+      {
         "command": "builderforce.refreshProjects",
         "title": "%command.refreshProjects%",
         "icon": "$(sync)"

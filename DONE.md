@@ -1,3 +1,92 @@
+## ✅ RESOLVED 2026-09-07 — ONE agent loop: eight hand-rolled model→tools→model loops across five processes are now one kernel, and the cloud engine seam has production callers
+
+**Symptom (2026-09-07 competitive assessment, architectural note).** There was no single agent
+loop. Eight copies of the same skeleton — step cap, cancel poll, argument parsing, the
+assistant/tool rows, the `finish` / `ask_human` control signals — lived in
+`cloudAgentEngine.ts` (30 steps), `api/container/server.mjs` (40), the GitHub Actions
+runner template (40), `agent-runtime/agent-loop.ts` (uncapped, pi-shaped),
+`brainRunStore.ts` (25), `creationCanvasAi.ts` (8) and `BrainService.agentReply` (6), plus
+the Claude Agent SDK runner. What was shared was the tool registry, not the loop, so every
+loop-level capability had to be built up to eight times, and cross-modality drift was the
+default (two of the three Class A parity gaps were exactly that drift). Compounding it, the
+cloud `AgentEngine` seam (`CloudLimbicEngine` / `resolveAgentEngine`) — built so the next
+engine is a one-line swap — had **zero production callers**: `CloudRunnerDO` and
+`rehearsalService` each re-implemented the composition inline against `runCloudToolLoop`.
+
+**Fix — one kernel, six surfaces on it, the seam live.**
+
+1. *`packages/agent-loop` (`@builderforce/agent-loop`).* Zero dependencies, no Node builtins, no
+   inter-package edges (its `LoopControl` is structurally the tool contract's `ToolControl`,
+   restated so a consumer that only wants the loop never resolves `agent-tools`). `runAgentLoop`
+   owns exactly the skeleton: the budget (`startStep` for resume, `maxSteps` per invocation,
+   an absolute `stepCap`), the cancel poll (hook + `AbortSignal`, an abort thrown mid-port is
+   reported as `cancelled`), argument parsing (malformed JSON → `{}` + `malformed: true`,
+   never a crash), the assistant/tool rows through a `LoopCodec<M>` (so OpenAI rows and
+   pi `AgentMessage` rows share one loop), and the two control signals — `finish` through an
+   `onFinish` gate that can refuse it, `ask_human` as `awaitingInput`. Everything a surface does
+   differently arrives through two ports (`complete`, `dispatch`) and nine hooks
+   (`isCancelled`, `beforeTurn`, `afterTurn`, `onNoToolCalls`, `beforeToolCalls`,
+   `beforeDispatch` — short-circuit or rewrite a call — `onFinish`, `onAskHuman`,
+   `afterDispatch` — skip the rest of a turn — `afterToolCalls`). It never catches: a throwing
+   port aborts the run and the surface's own `try/finally` records it, exactly as before.
+   `openAiChatCodec(serialize)` is the shared row shape for the four OpenAI-transcript
+   surfaces; each keeps its own payload budgeting in `serialize`. 19 kernel tests + codec tests.
+2. *Cloud (`runCloudToolLoop`).* Containment limit, steering drain and compaction are
+   `beforeTurn`; the outbound-content inspection, containment block, governance `block` and
+   `require-approval` gates are `beforeDispatch` (a governance park now travels as the SAME
+   `ask_human` control an `ask_human` tool call does); the four finish gates + the completion
+   claim are `onFinish`; the timeline event + typed claims are `afterDispatch`; the per-turn
+   cascade and metering are the `complete` port; platform tools vs the registry are `dispatch`.
+   `CloudLoopState`, resume, `deferFinalize`, the paused/finalize tails are unchanged.
+   `runCloudToolLoop` is no longer exported — the engine is the only entry.
+3. *The seam is live.* `CloudEngineContext` gained `surface` (`worker` | `durable {maxSteps,
+   limbicState}` | `rehearsal {maxSteps, decorateProvider, frozenReadRef}`) and
+   `requiredSignoff`; `CloudLimbicEngine.run` derives every loop option from it, takes
+   `AgentRunInput.resume` as the durable resume state, and seeds affect itself except on a
+   durable tick, which runs under the cursor-held state the DO evolves. `CloudRunnerDO` and
+   `rehearsalService` now call `resolveAgentEngine(rc).run(input)` — a rehearsal therefore gets
+   the same affect layer a live run does. The DO narration test mocks the seam, not the loop.
+4. *Server Brain reply (`BrainService.agentReply`).* Compaction is `beforeTurn`; stall recovery,
+   model failover and the exhausted notice are `onNoToolCalls`; the terminal `ask_user` turn is
+   `beforeToolCalls` (stops without pushing the row, as before); the malformed-`ask_user`
+   corrective result is `beforeDispatch`; the trace row is `afterDispatch`; platform-tool
+   dispatch with the catalog id is `dispatch`. `text` is the settled output; a spent budget still
+   forces the tool-less synthesis.
+5. *Embedded Brain (`brainRunStore.runLoop`).* Per-turn tool selection, the router, TTFT and the
+   `llm.complete` step are the `complete` port; the router rewrite, the confirm gate, the
+   read-dedupe stub/replay are `beforeDispatch` (a replay anchors its cache to the pushed row in
+   `afterDispatch`); the run bookkeeping, loop guards, budgeted trim are `dispatch`; the
+   durable step + pin are `afterDispatch`; narration persistence is `beforeToolCalls`; stall
+   recovery / failover / the final answer are `onNoToolCalls`. The local `parseArgs` is gone —
+   the kernel parser has the same `{}`-on-failure contract. The forced synthesis tail is
+   unchanged and reached only on a spent budget.
+6. *Creation canvas (`runCreationCanvasAi`).* The reserved authoring phase and the
+   stalled-provider ladder are the `complete` port (`{skip}` retries, `{failed}` stops); every
+   per-call gate (authoring-only, narrow-search cap, unknown tool, tenant-mutation confirm) is
+   `dispatch`; the interruption / degenerate / mutation / executive ladders are `onNoToolCalls`;
+   a settled `finish(...)` is carried out of the loop; a user Stop between round-trips is
+   re-raised as `CanvasRunAbortedError` so the surface still records "you stopped this".
+7. *On-prem runtime (`agent-loop.ts`).* The pi protocol is a codec (`assistant` = the streamed
+   `AssistantMessage`, `tool` = a `ToolResultMessage`) plus hooks: pending steering/follow-up
+   injection and `turn_start` in `beforeTurn`, the `tool_execution_*` / `message_*` events in
+   `beforeDispatch`/`afterDispatch`, steering-skips-the-rest as a `beforeDispatch`
+   short-circuit, `turn_end` in `afterToolCalls`/`onNoToolCalls`, error/aborted termination and
+   the stall budget in `onNoToolCalls`. `executeToolCalls`/`skipToolCall` are deleted. The
+   outer follow-up loop and `Agent` are untouched; the kernel gets no signal on purpose, so an
+   abort still surfaces as a recorded `stopReason: "aborted"` message.
+
+**Wiring.** `api`, `frontend`, `agent-runtime` tsconfig `paths`; brain-embedded `link:` devDep
+(its tsup `dts.resolve` already inlines `@builderforce/*`); vitest/esbuild/canvas-bundle
+aliases derive from `scripts/sourcePackages.mjs`. The graph guard sees a leaf package.
+
+**Residual (logged, blocked).** `api/container/server.mjs` and the GitHub Actions runner
+template are plain-Node ESM with no build step — see the Architectural residual in ROADMAP.
+
+**Verify.** `node scripts/check-source-package-graph.mjs` · `cd packages/agent-loop && npx vitest run` ·
+`cd api && pnpm tsgo && npx vitest run src/application/runtime src/infrastructure/relay` ·
+`cd brain-embedded && npm run type-check && npx vitest run` · `cd frontend && npx tsc --noEmit` ·
+`cd agent-runtime && pnpm tsgo && npx vitest run src/builderforce/agent-loop`.
+
 ## ✅ RESOLVED 2026-09-07 — VSIX: the run loop stopped lying about what the model could see, `search_code` stopped saying "not found" for things that exist, runs recall project memory, and an unseeded Evermind seeds itself
 
 **Symptom (measured, chat #101, VSIX 2026.9.20).** "Add the % complete to the chat list" ran 26 turns

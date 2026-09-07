@@ -71,6 +71,7 @@ import {
   specStatusEnum,
   taskPriorityEnum,
   taskTypeEnum,
+  vector,
   workflowTaskStatusEnum,
 } from './kernel';
 import { integrationCredentials } from './platform';
@@ -772,6 +773,12 @@ export const projectFacts = pgTable('project_facts', {
    *  governs both stores. `source` is this table's origin marker. */
   originExecutionId: integer('origin_execution_id'),
   expiresAt:  timestamp('expires_at'),
+  /** SEMANTIC RECALL (1134) — the same three columns `agent_memory` carries, because
+   *  governed recall unions both stores and a half-embedded union ranks half by
+   *  meaning and half by keyword. */
+  embedding:      vector('embedding', { dimensions: 1536 }),
+  embeddingModel: varchar('embedding_model', { length: 64 }),
+  embeddedAt:     timestamp('embedded_at'),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
 });

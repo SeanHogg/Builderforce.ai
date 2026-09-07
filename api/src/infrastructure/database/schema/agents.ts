@@ -33,7 +33,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { brainChats, knowledgeDocuments } from './canvas';
-import { agentHostDirectoryStatusEnum, agentHostStatusEnum, agentTypeEnum, artifactTypeEnum, assignmentScopeEnum, executionStatusEnum, managedAgentHostRequestStatusEnum, objects, pricingModelEnum, tsvector, workflowStatusEnum, workflowTypeEnum } from './kernel';
+import { agentHostDirectoryStatusEnum, agentHostStatusEnum, agentTypeEnum, artifactTypeEnum, assignmentScopeEnum, executionStatusEnum, managedAgentHostRequestStatusEnum, objects, pricingModelEnum, tsvector, vector, workflowStatusEnum, workflowTypeEnum } from './kernel';
 import {
   boards,
   projectAgents,
@@ -1280,8 +1280,9 @@ export const agentHostChannels = pgTable('agent_host_channels', {
 
 // Cloud agent memory — durable key→fact store backing the shared `memory` capability
 // (memory_recall / memory_remember) for Worker/DO agents, scoped per tenant. The
-// Worker-safe twin of the on-prem SSM MemoryStore: same tool contract, lexical recall
-// (Postgres ILIKE) instead of SSM embeddings. Unique (tenant_id, key) (migration 0200)
+// Worker-safe twin of the on-prem SSM MemoryStore: same tool contract, and since
+// migration 1134 the same RETRIEVAL — a pgvector cosine arm fused with the lexical
+// arm on the shared 0.7/0.3 formula, rather than an ILIKE standing in for meaning. Unique (tenant_id, key) (migration 0200)
 // makes remember() an upsert.
 export const agentMemory = pgTable('agent_memory', {
   id:         uuid('id').primaryKey().defaultRandom(),
@@ -1306,6 +1307,13 @@ export const agentMemory = pgTable('agent_memory', {
   originExecutionId: integer('origin_execution_id'),
   /** TTL. NULL = durable. Recall filters expired rows; the retention sweep deletes them. */
   expiresAt:  timestamp('expires_at'),
+  /** SEMANTIC RECALL (1134). The content embedding, its model, and when it was
+   *  taken. NULL embedding = not embedded yet: recall answers from the lexical arm
+   *  and the backfill sweep fills it. The model is recorded because the ANN read
+   *  filters on it — vectors from two model generations are not comparable. */
+  embedding:      vector('embedding', { dimensions: 1536 }),
+  embeddingModel: varchar('embedding_model', { length: 64 }),
+  embeddedAt:     timestamp('embedded_at'),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
 });

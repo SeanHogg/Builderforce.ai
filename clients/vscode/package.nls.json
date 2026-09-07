@@ -23,6 +23,7 @@
   "command.selectProject": "BuilderForce: Select Project",
   "command.createProject": "BuilderForce: New Project",
   "command.createWorkspace": "BuilderForce: Create / Switch Workspace",
+  "command.registerMcpServer": "BuilderForce: Register MCP Server",
   "command.refreshProjects": "BuilderForce: Refresh Tasks",
   "command.hideDoneTasks": "BuilderForce: Hide Done Tasks",
   "command.showDoneTasks": "BuilderForce: Show Done Tasks",

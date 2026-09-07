@@ -68,6 +68,7 @@ import {
   promisesUnfinishedWork,
   continuationDirective,
 } from '@builderforce/agent-stall';
+import { runAgentLoop, openAiChatCodec, type LoopHooks, type LoopPorts, type LoopTurn } from '@builderforce/agent-loop';
 import {
   formatEvermindMemoryBlock,
   countReconciledMemories,
@@ -679,14 +680,6 @@ function nowMs(): number {
 
 function nowIso(): string {
   return typeof Date !== 'undefined' ? new Date().toISOString() : '';
-}
-
-function parseArgs(raw: string): unknown {
-  try {
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
 }
 
 /**
@@ -1760,196 +1753,29 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     }
   };
 
-  for (let iter = 0; iter < maxIterations; iter++) {
-    // User hit Stop between turns (or after a tool call) — unwind cleanly.
-    if (c.abort?.signal.aborted) return;
-    c.streamingText = '';
-    emit(c);
-    // Auto-compact BEFORE the turn: summarize the older middle into a memory note
-    // when the transcript exceeds the token budget (instead of silently dropping it
-    // and making the model thrash into "LOOP EXHAUSTED"). Falls back to the
-    // drop-oldest window when no summarizer is reachable.
-    const working = await buildWorkingTranscript(c, systemPrompt, stream, activeModel);
-    if (c.abort?.signal.aborted) return;
-    const llmStart = nowMs();
-    // Time-to-first-token: stamped on the FIRST streamed delta of this turn so
-    // the timeline's "Thought for Xs" reflects latency-to-first-token, not the
-    // whole turn. Stays undefined for a pure tool-call / empty turn.
-    let firstTokenAt: number | undefined;
-    let result;
-    // Advertise a RELEVANT subset rather than the whole catalog. ~300 tool
-    // definitions push most providers past the point where they reliably emit any
-    // tool call at all (observed: 308 tools → three consecutive turns with zero
-    // calls), besides dominating the prompt budget. No-ops for small catalogs.
-    const selection = selectToolsForTurn(allTools, {
-      // The REQUEST, captured once before the loop — never "the latest user message".
-      // The loop pushes its own `role:'user'` turns (the stall-recovery nudge, the
-      // tool-budget close-out), so reading the newest one re-rolled the advertised
-      // set from text WE wrote: after one recovery the query became "…made zero tool
-      // calls… answer using its result…", which scores `key_results`/`dashboards`/
-      // `incidents` and drops the ticket tools the user actually asked for. The tool
-      // the model was told to call then genuinely did not exist, and it narrated.
-      // Holding the request steady also keeps the advertised set STABLE across turns
-      // — a tool must not vanish between one turn and the next.
-      query: requestQuery,
-      pinned: usedTools,
-      // Tools the SYSTEM PROMPT instructs the model to call (e.g. the chat↔ticket
-      // directive names `builtin_chats_list_tickets`) are never optional: telling a
-      // model to call a tool we then decline to advertise is the exact contradiction
-      // that produces a narrated call. Derived from the prompt text, so a directive
-      // edit can never silently desync from this list — plus the local workspace
-      // tools, which the prompt names in prose the pattern cannot see.
-      required: alwaysAdvertised,
-    });
-    // The ROUTER rides along whenever selection actually trimmed something, so the
-    // tools that missed the cut stay REACHABLE instead of silently ceasing to exist.
-    // Three fixed schemas buy back the whole catalog; see toolRouter.ts.
-    const advertised = selection.trimmed
-      ? [...selection.tools, ...routerToolSpecs(allTools?.length ?? 0)]
-      : selection.tools;
-    const tools = advertised.length > 0 ? advertised : undefined;
-    // What the model could actually call THIS turn. Kept as a set so the turn can
-    // answer, at the only point that knows both halves, "did it narrate a tool it was
-    // never shown?" — see `narratedUnadvertised` below.
-    const advertisedNames = new Set(advertised.map((t) => t.function.name));
-    if (selection.trimmed) {
-      pushTrace(c, {
-        ts: nowIso(),
-        category: 'message',
-        label: 'tools.selected',
-        args: { step: iter },
-        result: `${selection.tools.length} of ${selection.available} tools advertised this turn (relevance-selected; ${usedTools.size} pinned from earlier calls)`,
-      });
-    }
-    // The completion is open and no token has arrived yet — the phase that used to
-    // be indistinguishable from a hang. It flips to `writing` on the first delta.
-    setActivity(c, { phase: 'thinking', startedAt: Date.now(), step: iter });
-    try {
-      result = await stream(
-        { messages: working, tools, tool_choice: tools ? 'auto' : undefined, model: activeModel, modelStrict: !!activeModel && modelStrict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
-        {
-          onTextDelta: (d) => {
-            c.streamingText += d;
-            if (firstTokenAt === undefined) {
-              firstTokenAt = nowMs();
-              // First token: the reply is visibly forming, so the indicator stops
-              // claiming the model is still thinking. A PHASE change, so it repaints
-              // now (one repaint carrying the first token too); every later delta
-              // is text only and coalesces into a frame.
-              c.activity = { phase: 'writing', startedAt: Date.now(), step: iter };
-              emit(c);
-              return;
-            }
-            emitStreaming(c);
-          },
-        },
-      );
-    } catch (e) {
-      // Aborting the fetch rejects the stream — that's a user Stop, exit quietly
-      // (no error trace, no error message).
-      if (c.abort?.signal.aborted) return;
-      pushTrace(c, {
-        ts: nowIso(),
-        category: 'error',
-        label: 'llm.complete',
-        durationMs: nowMs() - llmStart,
-        args: { model: activeModel ?? 'default', step: iter },
-        result: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
-        isError: true,
-      });
-      throw e;
-    }
-    // Surface a connected-but-unresolved BYO account for a live banner (and reset
-    // clears it when the account is reconnected). Emit happens with the trace below.
-    accrueByoUnresolved(c, result.byoUnresolved);
-    // Surface any BYO provider usage cap so the user knows to manage their keys.
-    accrueProviderCap(c, result.providerCap);
-    // Silent-downgrade detection: the gateway can fail over mid-run to a
-    // different (often smaller-window) model than we requested. That's a prime
-    // context-exhaustion symptom, so surface it as its own warning step instead
-    // of leaving it buried in the model field — the diagnostics block counts it.
-    const resolved = result.resolvedModel ?? activeModel ?? 'default';
-    const requested = activeModel ?? 'default';
-    // Record what ACTUALLY served this turn so `builtin_session_current_model` can
-    // report the exact model (an MCP call is a separate request and can't see it).
-    // Keyed by CHAT: runs are concurrent on a host that owns them, so one slot would
-    // let this chat's tool call answer with the model that served a different one.
-    setLastResolvedModel(chatId, result.resolvedModel);
-    if (requested !== 'default' && resolved !== 'default' && resolved !== requested) {
-      pushTrace(c, {
-        ts: nowIso(),
-        category: 'message',
-        label: 'llm.model_downgrade',
-        args: { requestedModel: requested, model: resolved, step: iter },
-        result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) — a smaller context window can truncate long transcripts.`,
-      });
-    }
-    // Tool names this turn WROTE OUT as prose while emitting no structured call, that
-    // were never advertised to it. Computed here because this is the only place that
-    // holds BOTH the turn's text and the exact set the turn was offered — after the
-    // fact a reader can only see the catalog total, which is why "the model is broken,
-    // pick another one" was the standing (and sometimes wrong) verdict for a run whose
-    // real fault was that the tool it was told to call had been selected away. Cheap:
-    // a handful of strings, and empty on every healthy turn.
-    const narratedUnadvertised =
-      result.toolCalls.length === 0
-        ? toolNamesMentionedIn(result.text).filter((n) => !advertisedNames.has(n))
-        : [];
-    // DURABLE, not just live: an `llm` turn carries the token usage, finish reason
-    // and resolved model the A-vs-B triage runs on. Kept in memory only, a chat
-    // copied after a reload reported `Turns: 0` / "Tokens: not reported" and could
-    // never separate context exhaustion from model degradation. The payload is a
-    // handful of scalars — no transcript text — so the row stays small.
-    pushDurableStep(c, chatId, persistence, {
-      ts: nowIso(),
-      category: 'llm',
-      label: 'llm.complete',
-      durationMs: nowMs() - llmStart,
-      ttftMs: firstTokenAt !== undefined ? firstTokenAt - llmStart : undefined,
-      // `model` is the model the gateway ACTUALLY used (resolved), falling back to
-      // what we requested when the gateway didn't report one. `requestedModel`
-      // keeps the caller's ask (empty/'default' ⇒ gateway auto-selects) so triage
-      // can tell "what I asked for" from "what answered".
-      args: {
-        model: resolved,
-        requestedModel: requested,
-        step: iter,
-        toolCalls: result.toolCalls.length,
-        // Which account served the turn + any connected-BYO provider the gateway
-        // could NOT resolve — so triage tells "ran on the shared pool despite a
-        // connected Claude account (expired?)" apart from "nothing connected".
-        account: result.account,
-        byoUnresolved: result.byoUnresolved,
-        // How many tools the turn was actually OFFERED, out of the whole catalog.
-        // A zero here is the difference between "the model refused to act" and "it had
-        // nothing to act with" — previously unanswerable from a copied report, which
-        // only ever carried the registry-wide total.
-        advertisedTools: advertised.length,
-        catalogTools: allTools?.length ?? 0,
-        ...(narratedUnadvertised.length ? { narratedUnadvertised } : {}),
-      },
-      // Structured diagnostics fields — the A-vs-B triage reads these directly.
-      usage: result.usage,
-      finishReason: result.finishReason,
-      textChars: result.text.length,
-      result: `${result.toolCalls.length} tool call(s) · ${result.text.length} chars · finish: ${result.finishReason ?? '—'}${result.usage?.prompt != null ? ` · prompt ${result.usage.prompt} tok` : ''}`,
-    });
-    if (result.text.trim()) {
-      pushTrace(c, { ts: nowIso(), category: 'message', label: 'agent.message', args: { step: iter }, result: result.text });
-    }
+  // ── THE loop ────────────────────────────────────────────────────────────────
+  // The model→tools→model skeleton lives ONCE in `@builderforce/agent-loop` — the same
+  // kernel the cloud engine, the creation canvas and the on-prem runtime drive.
+  // Everything the Brain does differently — per-turn tool selection and the router,
+  // the confirm gate, read de-duplication and the loop guards, stall recovery and
+  // model failover, the timeline — is a hook or a port closing over this run's state.
+  // Nothing below iterates.
+  type StreamResult = Awaited<ReturnType<typeof stream>>;
+  /** Per-turn facts BOTH the tool path and the final-answer path read, carried on the turn. */
+  interface TurnMeta { result: StreamResult; resolved: string; requested: string; advertised: number; advertisedNames: Set<string> }
+  const metaOf = (turn: LoopTurn): TurnMeta => turn.meta as TurnMeta;
+  // The tool row's content: a STRING payload was already budgeted by `trimToolResult`
+  // in dispatch (advisory attached after the cut); anything else is a small stub or
+  // error object the model should read whole.
+  const codec = openAiChatCodec<ChatCompletionMessage>((r) => (typeof r.data === 'string' ? r.data : JSON.stringify(r.data)));
+  /** A replayed read waits for its row to be pushed so the cache can anchor to it. */
+  let pendingReplay: { name: string; args: unknown; result: unknown } | null = null;
+  /** What dispatch learned about the call it just ran — for the durable step + the read cache. */
+  let pendingRun: { out: unknown; toolStart: number; isReadTool: boolean; threw: boolean; bytes?: number; truncated?: boolean } | null = null;
 
-    if (result.toolCalls.length > 0 && runTool) {
-      convo.push({
-        role: 'assistant',
-        content: result.text,
-        tool_calls: result.toolCalls.map((tc) => ({
-          id: tc.id,
-          type: 'function' as const,
-          // An empty `arguments` string is not valid JSON; strict vendors (Gemini)
-          // reject it. Normalize a no-arg call to an empty object.
-          function: { name: tc.name, arguments: tc.args && tc.args.trim() ? tc.args : '{}' },
-        })),
-      });
+  const hooks: LoopHooks<ChatCompletionMessage> = {
+    beforeToolCalls: async (_ctx, turn) => {
+      const { result } = metaOf(turn);
       // Commit this turn's visible narration as its OWN permanent message block
       // before we clear the streaming buffer for the next iteration. Without
       // this, the narration only lived in the transient `streamingText` bubble,
@@ -1964,341 +1790,573 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       }
       c.streamingText = '';
       emit(c);
-      for (const rawCall of result.toolCalls) {
-        // Router calls resolve against the in-memory catalog FIRST. `find`/`describe`
-        // are answered locally (no network, no host dispatch); `invoke` unwraps to the
-        // real tool and then falls through to the normal path below — so a routed call
-        // still passes the confirm gate, the read-dedupe, the audit step and the
-        // auto-link, exactly like a directly-advertised one.
-        let tc = rawCall;
-        if (isRouterTool(tc.name)) {
-          const routed = handleRouterCall(allTools ?? [], tc.name, parseArgs(tc.args));
-          if ('result' in routed) {
-            convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(routed.result) });
-            pushDurableStep(c, chatId, persistence, {
+      return undefined;
+    },
+
+    beforeDispatch: async (rawCall, ctx) => {
+      const iter = ctx.step;
+      pendingReplay = null;
+      pendingRun = null;
+      // Router calls resolve against the in-memory catalog FIRST. `find`/`describe`
+      // are answered locally (no network, no host dispatch); `invoke` unwraps to the
+      // real tool and then falls through to the normal path below — so a routed call
+      // still passes the confirm gate, the read-dedupe, the audit step and the
+      // auto-link, exactly like a directly-advertised one.
+      let call = rawCall;
+      if (isRouterTool(call.name)) {
+        const routed = handleRouterCall(allTools ?? [], call.name, call.args);
+        if ('result' in routed) {
+          pushDurableStep(c, chatId, persistence, {
+            ts: nowIso(),
+            category: 'tool',
+            label: call.name,
+            args: call.args,
+            result: routed.result,
+          });
+          return { result: { data: routed.result } };
+        }
+        const routedArgs = routed.dispatch.args ?? {};
+        call = { ...call, name: routed.dispatch.name, args: routedArgs, raw: { ...call.raw, name: routed.dispatch.name, arguments: JSON.stringify(routedArgs) } };
+        pushTrace(c, {
+          ts: nowIso(),
+          category: 'message',
+          label: 'tools.routed',
+          args: { step: iter, via: rawCall.name },
+          result: `Called ${call.name} through the tool router (it was not advertised directly this turn).`,
+        });
+      }
+      const args = call.args;
+      // ONE ticket per run. The run opens its own delta ticket on the first edit
+      // (see below), and the model — following the same directive, from the other
+      // end — often records the delta too. Left alone that is two tickets for one
+      // change, which is worse on the board than the missing ticket this all exists
+      // to prevent. `from_delta` already takes `taskId` to attach rather than mint,
+      // so the model's call is pointed at the ticket the run has: the deterministic
+      // form of the advice the directive gives it in prose.
+      attachDeltaToRunTicket(call.name, args, c.deltaTicketId);
+      // Human-in-the-loop gate: pause for an explicit confirm when the host's
+      // predicate says so. The resolver lives on the cell, so whichever Brain
+      // instance is mounted (even after a navigation swapped it) can answer.
+      if (needsConfirm && needsConfirm({ name: call.name, args })) {
+        const ok = await new Promise<boolean>((resolve) => {
+          c.pendingConfirm = { name: call.name, args };
+          c.confirmResolver = resolve;
+          // Waiting on a HUMAN, not on us. The indicator must stop animating as
+          // though work is happening — nothing advances until the user answers.
+          c.activity = { ...toolActivity(call.name, args, iter, Date.now()), phase: 'awaiting' };
+          emit(c);
+        });
+        if (!ok) {
+          const declined = { cancelled: true, reason: 'User declined this action.' };
+          pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: 'tool', label: call.name, args, result: declined });
+          return { result: { data: declined } };
+        }
+      }
+      // Read-dedupe: suppress an EXACT repeat of a read-only file/search OR read-only
+      // platform call (its result is already above). Any other call invalidates what
+      // it could have changed — and ONLY that (see `ReadCoverage.invalidate`): an edit
+      // forgets its own file, a platform write forgets the platform reads, a git status
+      // forgets nothing. The old set was cleared wholesale by every non-read call, so
+      // one ticket write re-armed a full re-read of every file in the run.
+      if (isDedupableRead(call.name)) {
+        if (readCoverage.isRepeat(call.name, args)) {
+          // The stub below is only honest while the earlier result is still in the
+          // WORKING context. Once auto-compaction has summarized it away, "it is
+          // above you" points at nothing — the model reads that as "I lack the
+          // file", asks again, gets the stub again, and circles (chat #101: five
+          // stubbed re-reads of one file, zero edits). So the run keeps what each
+          // read returned and, when the carrying message has left the window,
+          // RE-SERVES it from memory: no disk read, no lie, and the model can act.
+          const cached = readCoverage.cachedResult(call.name, args);
+          if (cached && !stillInWorkingContext(c, cached.anchor)) {
+            const replayNote = `Replayed from this run's read cache: this exact ${call.name} call succeeded earlier in the run, but its result was compressed out of the working context, so here it is again — served from memory, not re-read. Act on it now; do not request it again.`;
+            // A replay is still the model going back to the same target, so it
+            // counts as a visit and carries the circling advisory when it earns one.
+            const visit = readCoverage.record(call.name, args);
+            const target = visit ? activityTarget(args) : undefined;
+            const revisit = visit && target ? revisitAdvisory(call.name, target, visit) : null;
+            const replayed = trimToolResult(call.name, cached.result ?? null, { advisory: revisit ? `${replayNote}\n\n${revisit}` : replayNote });
+            pendingReplay = { name: call.name, args, result: cached.result };
+            pushTrace(c, {
               ts: nowIso(),
               category: 'tool',
-              label: tc.name,
-              args: parseArgs(tc.args),
-              result: routed.result,
+              label: call.name,
+              args,
+              result: { replayed: true, note: replayNote },
+              resultBytes: replayed.bytes,
+              truncated: replayed.truncated,
             });
-            continue;
+            return { result: { data: replayed.content } };
           }
-          tc = { ...tc, name: routed.dispatch.name, args: JSON.stringify(routed.dispatch.args ?? {}) };
-          pushTrace(c, {
-            ts: nowIso(),
-            category: 'message',
-            label: 'tools.routed',
-            args: { step: iter, via: rawCall.name },
-            result: `Called ${tc.name} through the tool router (it was not advertised directly this turn).`,
-          });
+          const stub = {
+            note: `Duplicate ${call.name} call — identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping).`,
+          };
+          pushTrace(c, { ts: nowIso(), category: 'tool', label: call.name, args, result: stub });
+          return { result: { data: stub } };
         }
-        const args = parseArgs(tc.args);
-        // ONE ticket per run. The run opens its own delta ticket on the first edit
-        // (see below), and the model — following the same directive, from the other
-        // end — often records the delta too. Left alone that is two tickets for one
-        // change, which is worse on the board than the missing ticket this all exists
-        // to prevent. `from_delta` already takes `taskId` to attach rather than mint,
-        // so the model's call is pointed at the ticket the run has: the deterministic
-        // form of the advice the directive gives it in prose.
-        attachDeltaToRunTicket(tc.name, args, c.deltaTicketId);
-        // Human-in-the-loop gate: pause for an explicit confirm when the host's
-        // predicate says so. The resolver lives on the cell, so whichever Brain
-        // instance is mounted (even after a navigation swapped it) can answer.
-        if (needsConfirm && needsConfirm({ name: tc.name, args })) {
-          const ok = await new Promise<boolean>((resolve) => {
-            c.pendingConfirm = { name: tc.name, args };
-            c.confirmResolver = resolve;
-            // Waiting on a HUMAN, not on us. The indicator must stop animating as
-            // though work is happening — nothing advances until the user answers.
-            c.activity = { ...toolActivity(tc.name, args, iter, Date.now()), phase: 'awaiting' };
-            emit(c);
-          });
-          if (!ok) {
-            convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify({ cancelled: true, reason: 'User declined this action.' }) });
-            pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: 'tool', label: tc.name, args, result: { cancelled: true, reason: 'User declined this action.' } });
-            continue;
-          }
-        }
-        // Read-dedupe: suppress an EXACT repeat of a read-only file/search OR read-only
-        // platform call (its result is already above). Any other call invalidates what
-        // it could have changed — and ONLY that (see `ReadCoverage.invalidate`): an edit
-        // forgets its own file, a platform write forgets the platform reads, a git status
-        // forgets nothing. The old set was cleared wholesale by every non-read call, so
-        // one ticket write re-armed a full re-read of every file in the run.
-        const isReadTool = isDedupableRead(tc.name);
-        if (isReadTool) {
-          if (readCoverage.isRepeat(tc.name, args)) {
-            // The stub below is only honest while the earlier result is still in the
-            // WORKING context. Once auto-compaction has summarized it away, "it is
-            // above you" points at nothing — the model reads that as "I lack the
-            // file", asks again, gets the stub again, and circles (chat #101: five
-            // stubbed re-reads of one file, zero edits). So the run keeps what each
-            // read returned and, when the carrying message has left the window,
-            // RE-SERVES it from memory: no disk read, no lie, and the model can act.
-            const cached = readCoverage.cachedResult(tc.name, args);
-            if (cached && !stillInWorkingContext(c, cached.anchor)) {
-              const replayNote = `Replayed from this run's read cache: this exact ${tc.name} call succeeded earlier in the run, but its result was compressed out of the working context, so here it is again — served from memory, not re-read. Act on it now; do not request it again.`;
-              // A replay is still the model going back to the same target, so it
-              // counts as a visit and carries the circling advisory when it earns one.
-              const visit = readCoverage.record(tc.name, args);
-              const target = visit ? activityTarget(args) : undefined;
-              const revisit = visit && target ? revisitAdvisory(tc.name, target, visit) : null;
-              const replayed = trimToolResult(tc.name, cached.result ?? null, { advisory: revisit ? `${replayNote}\n\n${revisit}` : replayNote });
-              const message: ChatCompletionMessage = { role: 'tool', tool_call_id: tc.id, content: replayed.content };
-              convo.push(message);
-              readCoverage.cacheResult(tc.name, args, { result: cached.result, anchor: message });
-              pushTrace(c, {
-                ts: nowIso(),
-                category: 'tool',
-                label: tc.name,
-                args,
-                result: { replayed: true, note: replayNote },
-                resultBytes: replayed.bytes,
-                truncated: replayed.truncated,
-              });
-              continue;
-            }
-            const stub = {
-              note: `Duplicate ${tc.name} call — identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping).`,
-            };
-            convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(stub) });
-            pushTrace(c, { ts: nowIso(), category: 'tool', label: tc.name, args, result: stub });
-            continue;
-          }
-        } else {
-          readCoverage.invalidate(tc.name, args);
-        }
-        const toolStart = nowMs();
-        // Name the tool AND what it is working on, before it runs. This is the
-        // step that most often takes tens of seconds, and the one the trace could
-        // never show until it was already over.
-        setActivity(c, toolActivity(tc.name, args, iter, Date.now()));
-        let out: unknown;
-        try {
-          // The ONE place a tool call is told which model is serving THIS chat (see
-          // `lastResolvedModel.ts`). Applied here rather than in a relay because this is
-          // the only layer that knows both the conversation and the call — which is what
-          // makes it work on every surface, instead of only the one relay that had a copy.
-          out = await runTool(tc.name, withObservedModel(chatId, tc.name, args));
-        } catch (e) {
-          const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-          out = { ok: false, error: message };
-          // A throw is a failure like any other: the same call thrown three times is a
-          // loop, not persistence, and the model needs to be told so on the result it
-          // reads. The DURABLE step keeps the untouched error.
-          const repeat = failureAdvisoryFor(tc.name, args, out, iter);
-          // Errors are small; push as-is (trimming a short error would only add noise).
-          convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(repeat ? withAdvisory(out, repeat) : out) });
-          pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: 'tool', label: tc.name, durationMs: nowMs() - toolStart, args, result: out, isError: true });
-          continue;
-        }
-        // Backstop bookkeeping (see startRun's finally): a successful workspace
-        // file-change marks the run as code-changing (and remembers the file), while
-        // the model recording its own delta/link/review clears the need for the
-        // auto-capture. A failed call above `continue`d out, so this counts successes.
-        if (isCodeChangeTool(tc.name)) {
-          const first = !c.codeChanged;
-          c.codeChanged = true;
-          const f = codeChangeFile(args);
-          if (f && !c.touchedFiles.includes(f)) c.touchedFiles.push(f);
-          // OPEN THE TICKET NOW, on the first edit — not in the `finally`, which a
-          // Stop skips and a closed/reloaded surface never reaches. One call per run,
-          // and from here on the work is on the board and linked to this chat whatever
-          // becomes of the rest of the turn.
-          if (first && !c.ticketRecorded && req.projectId != null && req.runTool) {
-            await recordCodeChangeTicket(chatId, c, req, 'open').catch(() => { /* never fail the run on the backstop */ });
-          }
-        }
-        if (isTicketRecordingTool(tc.name)) c.ticketRecorded = true;
-        // Deterministic traceability: whenever this turn CREATED a work item via an
-        // MCP create tool (task/epic/gap, objective, spec, portfolio, initiative),
-        // tie it to THIS conversation right now — instead of relying on the model to
-        // remember the advisory builtin_chats_link_ticket call (which it often skips,
-        // leaving the item created but orphaned from the chat). Fires the same shared
-        // link tool the model would, tied to the run's resolved chatId.
-        if (runTool) await autoLinkCreatedItem(chatId, c, persistence, runTool, tc.name, out);
-        // The MODEL transcript gets a size-capped copy so a big list result can't
-        // flood the context window; the TRACE keeps the full result (bounded by
-        // MAX_TRACE_EVENTS) for the timeline + triage copy, plus the pre-trim byte
-        // size and a truncation flag the diagnostics block reads.
-        // LOOP GUARD. A read that keeps circling the same target gets an advisory
-        // attached to the copy the MODEL sees — the only moment it can act on the
-        // fact that it is going round. The trace keeps the untouched result (the
-        // timeline must show what the tool actually returned), and the intervention
-        // is recorded as its own step so triage can see the loop was fought rather
-        // than inferring it from the repetition alone.
-        let advisory: string | null = null;
-        if (isFailedToolResult(out)) {
-          // The OTHER loop the guards missed. `readCoverage` records successes only, by
-          // design — a failed read has no result above to reuse, so a retry must not be
-          // stubbed. That left an identical FAILING call with no pushback whatsoever:
-          // the same `git_status` answered with the same "pass `repo`" remedy three
-          // times, the same platform read answered 502 twice, the model repeating itself
-          // each time. The first retry is still free; the second says so.
-          advisory = failureAdvisoryFor(tc.name, args, out, iter);
-        } else {
-          // It worked — earlier failures of this exact call were transient after all.
-          failures.clear(tc.name, args);
-          if (isReadTool) {
-            // Recording a SUCCESSFUL read is also what arms the exact-repeat stub for it;
-            // a failed read is not recorded, so it can be retried.
-            const visit = readCoverage.record(tc.name, args);
-            const target = visit ? activityTarget(args) : undefined;
-            advisory = visit && target ? revisitAdvisory(tc.name, target, visit) : null;
-            if (advisory) {
-              pushTrace(c, {
-                ts: nowIso(),
-                category: 'message',
-                label: 'tools.revisit_guard',
-                args: { step: iter, tool: tc.name, target, visits: visit!.count },
-                result: advisory,
-              });
-            }
-          }
-        }
-        // Trimmed to the transcript budget with the advisory attached AFTER the cut, so
-        // the budget can never delete the guard — and a `read_file` is paged by LINE with
-        // its continuation offset intact, instead of sliced mid-line with the paging
-        // fields (which sit after the content) thrown away. See `toolResultBudget.ts`.
-        const trimmedOut = trimToolResult(tc.name, out ?? null, { advisory });
-        const toolMessage: ChatCompletionMessage = { role: 'tool', tool_call_id: tc.id, content: trimmedOut.content };
-        convo.push(toolMessage);
-        // Keep what a successful read returned, anchored to the message that carries
-        // it, so an exact repeat can be replayed once compaction removes that message.
-        if (isReadTool && !isFailedToolResult(out)) readCoverage.cacheResult(tc.name, args, { result: out ?? null, anchor: toolMessage });
-        pushDurableStep(c, chatId, persistence, {
-          ts: nowIso(),
-          category: 'tool',
-          label: tc.name,
-          durationMs: nowMs() - toolStart,
-          args,
-          result: out ?? null,
-          isError: isFailedToolResult(out),
-          resultBytes: trimmedOut.bytes,
-          truncated: trimmedOut.truncated,
-        });
-        // Pin this tool into every later turn's selection — a multi-step task must
-        // never lose a tool it is mid-way through using.
-        usedTools.add(tc.name);
+      } else {
+        readCoverage.invalidate(call.name, args);
       }
-      continue;
-    }
+      return call === rawCall ? undefined : { rewrite: call };
+    },
 
-    // The model ended the turn without acting — it ANNOUNCED a call it never made
-    // ("Calling the tool now." → finish: stop, 0 tool calls), said nothing at all, or
-    // HANDED the remaining commands to the user to run. Accepting any of those as a
-    // final answer strands the user with a promise, a blank, or homework instead of a
-    // result. Nudge and let the loop run another turn — bounded to
-    // MAX_ANNOUNCEMENT_RECOVERIES per run so a model that keeps narrating can't spin.
-    //
-    // `availableToolNames` + `requestText` are what let the HANDOFF shape fire: it is a
-    // stall only where this run could have run the commands itself AND the user asked
-    // for a change. The request is the one captured before the loop — `latestUserText`
-    // here would return the loop's own nudge from the previous iteration.
-    const stallInput = {
-      text: result.text,
-      toolCallCount: result.toolCalls.length,
-      availableToolCount: toolSpecs?.length ?? 0,
-      recoveriesUsed: announcementRecoveries,
-      availableToolNames: [...advertisedNames],
-      requestText: userRequest,
-    };
-    const shape = stallShape(stallInput);
-    if (runTool && shouldRecoverStalledTurn(stallInput)) {
-      announcementRecoveries += 1;
-      const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
-      // Keep what the user already watched stream in, as its own durable block —
-      // same treatment a narration-before-tool-calls turn gets.
-      const narration = result.text.trim();
-      if (narration) {
-        const meta = provenanceMetadata(result);
-        const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: narration, ...(meta ? { metadata: meta } : {}) }]);
-        recordAppended(c, narrationMsg);
+    afterDispatch: (call, _result, row) => {
+      if (pendingReplay) {
+        // Keep the replayed read anchored to the message that now carries it.
+        readCoverage.cacheResult(pendingReplay.name, pendingReplay.args, { result: pendingReplay.result, anchor: row });
+        pendingReplay = null;
+        return undefined;
       }
-      convo.push({ role: 'assistant', content: result.text });
-      convo.push({ role: 'user', content: stallRecoveryNudge(lastChance, shape) });
-      // Durable: "the loop caught this and re-prompted" is a fact a triage report must
-      // still carry after a reload. Live-only, a reopened chat showed nine narrating
-      // turns and no sign the loop had ever fought back. The SHAPE rides along, because
-      // "re-prompted" alone cannot tell a reader whether the model narrated a call it
-      // never made or wrote the user a correct list of commands to go run.
+      const run = pendingRun;
+      pendingRun = null;
+      // Router answers, declined confirms and dedupe stubs carry no run of their own.
+      if (!run) return undefined;
+      const args = call.args;
+      if (run.threw) {
+        pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: 'tool', label: call.name, durationMs: nowMs() - run.toolStart, args, result: run.out, isError: true });
+        return undefined;
+      }
+      // Keep what a successful read returned, anchored to the message that carries
+      // it, so an exact repeat can be replayed once compaction removes that message.
+      if (run.isReadTool && !isFailedToolResult(run.out)) readCoverage.cacheResult(call.name, args, { result: run.out ?? null, anchor: row });
       pushDurableStep(c, chatId, persistence, {
         ts: nowIso(),
-        category: 'message',
-        label: shape === 'handed-off' ? 'loop.recover_handed_off_work' : 'loop.recover_announced_tool_call',
-        args: { step: iter, attempt: announcementRecoveries, of: MAX_ANNOUNCEMENT_RECOVERIES, advertisedTools: advertised.length, shape },
-        result: shape === 'handed-off'
-          ? `Model ended by telling the user to run the commands itself holds tools for — re-prompted to run them (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`
-          : `Model announced a tool call without making one — re-prompted (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`,
+        category: 'tool',
+        label: call.name,
+        durationMs: nowMs() - run.toolStart,
+        args,
+        result: run.out ?? null,
+        isError: isFailedToolResult(run.out),
+        resultBytes: run.bytes,
+        truncated: run.truncated,
       });
-      c.streamingText = '';
-      emit(c);
-      continue;
-    }
+      // Pin this tool into every later turn's selection — a multi-step task must
+      // never lose a tool it is mid-way through using.
+      usedTools.add(call.name);
+      return undefined;
+    },
 
-    // Final text — record in the transcript, persist, broadcast to mounted views.
-    const finalText = result.text.trim() || 'No response.';
-    convo.push({ role: 'assistant', content: finalText });
-    const finalMeta = provenanceMetadata(result);
-    const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: finalText, ...(finalMeta ? { metadata: finalMeta } : {}) }]);
-    c.streamingText = '';
-    recordAppended(c, assistantMsg);
-
-    // This model spent its whole recovery budget still DESCRIBING calls instead of
-    // making them — or still handing them to the user. Re-prompting it again is spent — the only remedy that works is a
-    // different model, so the run switches to one itself rather than handing the user
-    // a promise and telling them to go pick one (the "it doesn't execute, it just
-    // dies" report). Bounded by MAX_MODEL_FAILOVERS: a run that has burned two models
-    // stops and says so rather than walking the catalog on the tenant's money.
-    if (runTool && isExhaustedStall(stallInput)) {
-      // The SHARED decision — record both the asked-for and the resolved model (a
-      // gateway auto-select run pinned nothing, so `resolved` is the only id that
-      // identifies the model to skip), check the budget, pick a different route. The
-      // server-side addressed-reply loop calls the same function.
-      const next = chooseStallFailover({
-        activeModel,
-        resolvedModel: resolved,
-        tried: triedModels,
-        failoversUsed: modelFailovers,
-        pick: pickFallbackModel,
-      });
-      if (next) {
-        modelFailovers += 1;
+    onNoToolCalls: async (ctx, turn) => {
+      const iter = ctx.step;
+      const { result, resolved, advertised, advertisedNames } = metaOf(turn);
+      // The model ended the turn without acting — it ANNOUNCED a call it never made
+      // ("Calling the tool now." → finish: stop, 0 tool calls), said nothing at all, or
+      // HANDED the remaining commands to the user to run. Accepting any of those as a
+      // final answer strands the user with a promise, a blank, or homework instead of a
+      // result. Nudge and let the loop run another turn — bounded to
+      // MAX_ANNOUNCEMENT_RECOVERIES per run so a model that keeps narrating can't spin.
+      //
+      // `availableToolNames` + `requestText` are what let the HANDOFF shape fire: it is a
+      // stall only where this run could have run the commands itself AND the user asked
+      // for a change. The request is the one captured before the loop — `latestUserText`
+      // here would return the loop's own nudge from the previous iteration.
+      const stallInput = {
+        text: result.text,
+        toolCallCount: result.toolCalls.length,
+        availableToolCount: toolSpecs?.length ?? 0,
+        recoveriesUsed: announcementRecoveries,
+        availableToolNames: [...advertisedNames],
+        requestText: userRequest,
+      };
+      const shape = stallShape(stallInput);
+      if (runTool && shouldRecoverStalledTurn(stallInput)) {
+        announcementRecoveries += 1;
+        const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
+        // Keep what the user already watched stream in, as its own durable block —
+        // same treatment a narration-before-tool-calls turn gets.
+        const narration = result.text.trim();
+        if (narration) {
+          const meta = provenanceMetadata(result);
+          const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: narration, ...(meta ? { metadata: meta } : {}) }]);
+          recordAppended(c, narrationMsg);
+        }
+        convo.push({ role: 'assistant', content: result.text });
+        convo.push({ role: 'user', content: stallRecoveryNudge(lastChance, shape) });
+        // Durable: "the loop caught this and re-prompted" is a fact a triage report must
+        // still carry after a reload. Live-only, a reopened chat showed nine narrating
+        // turns and no sign the loop had ever fought back. The SHAPE rides along, because
+        // "re-prompted" alone cannot tell a reader whether the model narrated a call it
+        // never made or wrote the user a correct list of commands to go run.
         pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
           category: 'message',
-          label: 'loop.model_failover',
-          args: { step: iter, from: resolved, to: next, attempt: modelFailovers, of: MAX_MODEL_FAILOVERS },
-          result: modelFailoverNotice(resolved, next, shape),
+          label: shape === 'handed-off' ? 'loop.recover_handed_off_work' : 'loop.recover_announced_tool_call',
+          args: { step: iter, attempt: announcementRecoveries, of: MAX_ANNOUNCEMENT_RECOVERIES, advertisedTools: advertised, shape },
+          result: shape === 'handed-off'
+            ? `Model ended by telling the user to run the commands itself holds tools for — re-prompted to run them (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`
+            : `Model announced a tool call without making one — re-prompted (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`,
         });
-        activeModel = next;
-        // The new model starts with a full stall budget — the old one's failures say
-        // nothing about this one, and carrying the count over would give it no chance.
-        announcementRecoveries = 0;
-        convo.push({ role: 'user', content: stallRecoveryNudge(false, shape) });
         c.streamingText = '';
         emit(c);
-        continue;
+        return { action: 'continue' };
       }
-      const notice = stallExhaustedNotice(resolved, triedModels, shape);
+
+      // Final text — record in the transcript, persist, broadcast to mounted views.
+      const finalText = result.text.trim() || 'No response.';
+      convo.push({ role: 'assistant', content: finalText });
+      const finalMeta = provenanceMetadata(result);
+      const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: finalText, ...(finalMeta ? { metadata: finalMeta } : {}) }]);
+      c.streamingText = '';
+      recordAppended(c, assistantMsg);
+
+      // This model spent its whole recovery budget still DESCRIBING calls instead of
+      // making them — or still handing them to the user. Re-prompting it again is spent — the only remedy that works is a
+      // different model, so the run switches to one itself rather than handing the user
+      // a promise and telling them to go pick one (the "it doesn't execute, it just
+      // dies" report). Bounded by MAX_MODEL_FAILOVERS: a run that has burned two models
+      // stops and says so rather than walking the catalog on the tenant's money.
+      if (runTool && isExhaustedStall(stallInput)) {
+        // The SHARED decision — record both the asked-for and the resolved model (a
+        // gateway auto-select run pinned nothing, so `resolved` is the only id that
+        // identifies the model to skip), check the budget, pick a different route. The
+        // server-side addressed-reply loop calls the same function.
+        const next = chooseStallFailover({
+          activeModel,
+          resolvedModel: resolved,
+          tried: triedModels,
+          failoversUsed: modelFailovers,
+          pick: pickFallbackModel,
+        });
+        if (next) {
+          modelFailovers += 1;
+          pushDurableStep(c, chatId, persistence, {
+            ts: nowIso(),
+            category: 'message',
+            label: 'loop.model_failover',
+            args: { step: iter, from: resolved, to: next, attempt: modelFailovers, of: MAX_MODEL_FAILOVERS },
+            result: modelFailoverNotice(resolved, next, shape),
+          });
+          activeModel = next;
+          // The new model starts with a full stall budget — the old one's failures say
+          // nothing about this one, and carrying the count over would give it no chance.
+          announcementRecoveries = 0;
+          convo.push({ role: 'user', content: stallRecoveryNudge(false, shape) });
+          c.streamingText = '';
+          emit(c);
+          return { action: 'continue' };
+        }
+        const notice = stallExhaustedNotice(resolved, triedModels, shape);
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: 'error',
+          label: 'loop.stall_unrecovered',
+          args: { step: iter, model: resolved, attempts: announcementRecoveries, tried: triedModels, advertisedTools: advertised, shape },
+          result: notice,
+          isError: true,
+        });
+        c.error = notice;
+      }
+      emit(c);
+
+      emitEvermindLearnReconcile(assistantMsg, finalText);
+
+      onActivity?.(chatId);
+      return { action: 'stop', ok: true, output: finalText };
+    },
+  };
+
+  const ports: LoopPorts<ChatCompletionMessage> = {
+    complete: async (ctx) => {
+      const iter = ctx.step;
+      c.streamingText = '';
+      emit(c);
+      // Auto-compact BEFORE the turn: summarize the older middle into a memory note
+      // when the transcript exceeds the token budget (instead of silently dropping it
+      // and making the model thrash into "LOOP EXHAUSTED"). Falls back to the
+      // drop-oldest window when no summarizer is reachable.
+      const working = await buildWorkingTranscript(c, systemPrompt, stream, activeModel);
+      // User hit Stop while compacting — the kernel reports it as `cancelled` (the
+      // run's signal is the one it watches) and the run unwinds quietly.
+      if (c.abort?.signal.aborted) throw new Error('run stopped');
+      const llmStart = nowMs();
+      // Time-to-first-token: stamped on the FIRST streamed delta of this turn so
+      // the timeline's "Thought for Xs" reflects latency-to-first-token, not the
+      // whole turn. Stays undefined for a pure tool-call / empty turn.
+      let firstTokenAt: number | undefined;
+      let result: StreamResult;
+      // Advertise a RELEVANT subset rather than the whole catalog. ~300 tool
+      // definitions push most providers past the point where they reliably emit any
+      // tool call at all (observed: 308 tools → three consecutive turns with zero
+      // calls), besides dominating the prompt budget. No-ops for small catalogs.
+      const selection = selectToolsForTurn(allTools, {
+        // The REQUEST, captured once before the loop — never "the latest user message".
+        // The loop pushes its own `role:'user'` turns (the stall-recovery nudge, the
+        // tool-budget close-out), so reading the newest one re-rolled the advertised
+        // set from text WE wrote: after one recovery the query became "…made zero tool
+        // calls… answer using its result…", which scores `key_results`/`dashboards`/
+        // `incidents` and drops the ticket tools the user actually asked for. The tool
+        // the model was told to call then genuinely did not exist, and it narrated.
+        // Holding the request steady also keeps the advertised set STABLE across turns
+        // — a tool must not vanish between one turn and the next.
+        query: requestQuery,
+        pinned: usedTools,
+        // Tools the SYSTEM PROMPT instructs the model to call (e.g. the chat↔ticket
+        // directive names `builtin_chats_list_tickets`) are never optional: telling a
+        // model to call a tool we then decline to advertise is the exact contradiction
+        // that produces a narrated call. Derived from the prompt text, so a directive
+        // edit can never silently desync from this list — plus the local workspace
+        // tools, which the prompt names in prose the pattern cannot see.
+        required: alwaysAdvertised,
+      });
+      // The ROUTER rides along whenever selection actually trimmed something, so the
+      // tools that missed the cut stay REACHABLE instead of silently ceasing to exist.
+      // Three fixed schemas buy back the whole catalog; see toolRouter.ts.
+      const advertised = selection.trimmed
+        ? [...selection.tools, ...routerToolSpecs(allTools?.length ?? 0)]
+        : selection.tools;
+      const tools = advertised.length > 0 ? advertised : undefined;
+      // What the model could actually call THIS turn. Kept as a set so the turn can
+      // answer, at the only point that knows both halves, "did it narrate a tool it was
+      // never shown?" — see `narratedUnadvertised` below.
+      const advertisedNames = new Set(advertised.map((t) => t.function.name));
+      if (selection.trimmed) {
+        pushTrace(c, {
+          ts: nowIso(),
+          category: 'message',
+          label: 'tools.selected',
+          args: { step: iter },
+          result: `${selection.tools.length} of ${selection.available} tools advertised this turn (relevance-selected; ${usedTools.size} pinned from earlier calls)`,
+        });
+      }
+      // The completion is open and no token has arrived yet — the phase that used to
+      // be indistinguishable from a hang. It flips to `writing` on the first delta.
+      setActivity(c, { phase: 'thinking', startedAt: Date.now(), step: iter });
+      try {
+        result = await stream(
+          { messages: working, tools, tool_choice: tools ? 'auto' : undefined, model: activeModel, modelStrict: !!activeModel && modelStrict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
+          {
+            onTextDelta: (d) => {
+              c.streamingText += d;
+              if (firstTokenAt === undefined) {
+                firstTokenAt = nowMs();
+                // First token: the reply is visibly forming, so the indicator stops
+                // claiming the model is still thinking. A PHASE change, so it repaints
+                // now (one repaint carrying the first token too); every later delta
+                // is text only and coalesces into a frame.
+                c.activity = { phase: 'writing', startedAt: Date.now(), step: iter };
+                emit(c);
+                return;
+              }
+              emitStreaming(c);
+            },
+          },
+        );
+      } catch (e) {
+        // Aborting the fetch rejects the stream — that's a user Stop; the kernel
+        // reports it as `cancelled` (no error trace, no error message).
+        if (c.abort?.signal.aborted) throw e;
+        pushTrace(c, {
+          ts: nowIso(),
+          category: 'error',
+          label: 'llm.complete',
+          durationMs: nowMs() - llmStart,
+          args: { model: activeModel ?? 'default', step: iter },
+          result: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+          isError: true,
+        });
+        throw e;
+      }
+      // Surface a connected-but-unresolved BYO account for a live banner (and reset
+      // clears it when the account is reconnected). Emit happens with the trace below.
+      accrueByoUnresolved(c, result.byoUnresolved);
+      // Surface any BYO provider usage cap so the user knows to manage their keys.
+      accrueProviderCap(c, result.providerCap);
+      // Silent-downgrade detection: the gateway can fail over mid-run to a
+      // different (often smaller-window) model than we requested. That's a prime
+      // context-exhaustion symptom, so surface it as its own warning step instead
+      // of leaving it buried in the model field — the diagnostics block counts it.
+      const resolved = result.resolvedModel ?? activeModel ?? 'default';
+      const requested = activeModel ?? 'default';
+      // Record what ACTUALLY served this turn so `builtin_session_current_model` can
+      // report the exact model (an MCP call is a separate request and can't see it).
+      // Keyed by CHAT: runs are concurrent on a host that owns them, so one slot would
+      // let this chat's tool call answer with the model that served a different one.
+      setLastResolvedModel(chatId, result.resolvedModel);
+      if (requested !== 'default' && resolved !== 'default' && resolved !== requested) {
+        pushTrace(c, {
+          ts: nowIso(),
+          category: 'message',
+          label: 'llm.model_downgrade',
+          args: { requestedModel: requested, model: resolved, step: iter },
+          result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) — a smaller context window can truncate long transcripts.`,
+        });
+      }
+      // Tool names this turn WROTE OUT as prose while emitting no structured call, that
+      // were never advertised to it. Computed here because this is the only place that
+      // holds BOTH the turn's text and the exact set the turn was offered — after the
+      // fact a reader can only see the catalog total, which is why "the model is broken,
+      // pick another one" was the standing (and sometimes wrong) verdict for a run whose
+      // real fault was that the tool it was told to call had been selected away. Cheap:
+      // a handful of strings, and empty on every healthy turn.
+      const narratedUnadvertised =
+        result.toolCalls.length === 0
+          ? toolNamesMentionedIn(result.text).filter((n) => !advertisedNames.has(n))
+          : [];
+      // DURABLE, not just live: an `llm` turn carries the token usage, finish reason
+      // and resolved model the A-vs-B triage runs on. Kept in memory only, a chat
+      // copied after a reload reported `Turns: 0` / "Tokens: not reported" and could
+      // never separate context exhaustion from model degradation. The payload is a
+      // handful of scalars — no transcript text — so the row stays small.
       pushDurableStep(c, chatId, persistence, {
         ts: nowIso(),
-        category: 'error',
-        label: 'loop.stall_unrecovered',
-        args: { step: iter, model: resolved, attempts: announcementRecoveries, tried: triedModels, advertisedTools: advertised.length, shape },
-        result: notice,
-        isError: true,
+        category: 'llm',
+        label: 'llm.complete',
+        durationMs: nowMs() - llmStart,
+        ttftMs: firstTokenAt !== undefined ? firstTokenAt - llmStart : undefined,
+        // `model` is the model the gateway ACTUALLY used (resolved), falling back to
+        // what we requested when the gateway didn't report one. `requestedModel`
+        // keeps the caller's ask (empty/'default' ⇒ gateway auto-selects) so triage
+        // can tell "what I asked for" from "what answered".
+        args: {
+          model: resolved,
+          requestedModel: requested,
+          step: iter,
+          toolCalls: result.toolCalls.length,
+          // Which account served the turn + any connected-BYO provider the gateway
+          // could NOT resolve — so triage tells "ran on the shared pool despite a
+          // connected Claude account (expired?)" apart from "nothing connected".
+          account: result.account,
+          byoUnresolved: result.byoUnresolved,
+          // How many tools the turn was actually OFFERED, out of the whole catalog.
+          // A zero here is the difference between "the model refused to act" and "it had
+          // nothing to act with" — previously unanswerable from a copied report, which
+          // only ever carried the registry-wide total.
+          advertisedTools: advertised.length,
+          catalogTools: allTools?.length ?? 0,
+          ...(narratedUnadvertised.length ? { narratedUnadvertised } : {}),
+        },
+        // Structured diagnostics fields — the A-vs-B triage reads these directly.
+        usage: result.usage,
+        finishReason: result.finishReason,
+        textChars: result.text.length,
+        result: `${result.toolCalls.length} tool call(s) · ${result.text.length} chars · finish: ${result.finishReason ?? '—'}${result.usage?.prompt != null ? ` · prompt ${result.usage.prompt} tok` : ''}`,
       });
-      c.error = notice;
-    }
-    emit(c);
+      if (result.text.trim()) {
+        pushTrace(c, { ts: nowIso(), category: 'message', label: 'agent.message', args: { step: iter }, result: result.text });
+      }
+      const meta: TurnMeta = { result, resolved, requested, advertised: advertised.length, advertisedNames };
+      // A host that advertised tools but cannot run them gets the turn as a final
+      // answer — a tool call nobody can execute is not a tool call.
+      const toolCalls = runTool
+        ? result.toolCalls.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.args }))
+        : [];
+      return { content: result.text, toolCalls, meta };
+    },
 
-    emitEvermindLearnReconcile(assistantMsg, finalText);
+    dispatch: async (call, ctx) => {
+      const iter = ctx.step;
+      const args = call.args;
+      const isReadTool = isDedupableRead(call.name);
+      const toolStart = nowMs();
+      // Name the tool AND what it is working on, before it runs. This is the
+      // step that most often takes tens of seconds, and the one the trace could
+      // never show until it was already over.
+      setActivity(c, toolActivity(call.name, args, iter, Date.now()));
+      // Unreachable: the model port advertises no tool calls without a runner.
+      if (!runTool) throw new Error('tool call without a tool runner');
+      let out: unknown;
+      try {
+        // The ONE place a tool call is told which model is serving THIS chat (see
+        // `lastResolvedModel.ts`). Applied here rather than in a relay because this is
+        // the only layer that knows both the conversation and the call — which is what
+        // makes it work on every surface, instead of only the one relay that had a copy.
+        out = await runTool(call.name, withObservedModel(chatId, call.name, args));
+      } catch (e) {
+        const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+        out = { ok: false, error: message };
+        // A throw is a failure like any other: the same call thrown three times is a
+        // loop, not persistence, and the model needs to be told so on the result it
+        // reads. The DURABLE step keeps the untouched error.
+        const repeat = failureAdvisoryFor(call.name, args, out, iter);
+        pendingRun = { out, toolStart, isReadTool, threw: true };
+        // Errors are small; push as-is (trimming a short error would only add noise).
+        return { data: repeat ? withAdvisory(out, repeat) : out, isError: true };
+      }
+      // Backstop bookkeeping (see startRun's finally): a successful workspace
+      // file-change marks the run as code-changing (and remembers the file), while
+      // the model recording its own delta/link/review clears the need for the
+      // auto-capture. A failed call above returned out, so this counts successes.
+      if (isCodeChangeTool(call.name)) {
+        const first = !c.codeChanged;
+        c.codeChanged = true;
+        const f = codeChangeFile(args);
+        if (f && !c.touchedFiles.includes(f)) c.touchedFiles.push(f);
+        // OPEN THE TICKET NOW, on the first edit — not in the `finally`, which a
+        // Stop skips and a closed/reloaded surface never reaches. One call per run,
+        // and from here on the work is on the board and linked to this chat whatever
+        // becomes of the rest of the turn.
+        if (first && !c.ticketRecorded && req.projectId != null && req.runTool) {
+          await recordCodeChangeTicket(chatId, c, req, 'open').catch(() => { /* never fail the run on the backstop */ });
+        }
+      }
+      if (isTicketRecordingTool(call.name)) c.ticketRecorded = true;
+      // Deterministic traceability: whenever this turn CREATED a work item via an
+      // MCP create tool (task/epic/gap, objective, spec, portfolio, initiative),
+      // tie it to THIS conversation right now — instead of relying on the model to
+      // remember the advisory builtin_chats_link_ticket call (which it often skips,
+      // leaving the item created but orphaned from the chat). Fires the same shared
+      // link tool the model would, tied to the run's resolved chatId.
+      await autoLinkCreatedItem(chatId, c, persistence, runTool, call.name, out);
+      // The MODEL transcript gets a size-capped copy so a big list result can't
+      // flood the context window; the TRACE keeps the full result (bounded by
+      // MAX_TRACE_EVENTS) for the timeline + triage copy, plus the pre-trim byte
+      // size and a truncation flag the diagnostics block reads.
+      // LOOP GUARD. A read that keeps circling the same target gets an advisory
+      // attached to the copy the MODEL sees — the only moment it can act on the
+      // fact that it is going round. The trace keeps the untouched result (the
+      // timeline must show what the tool actually returned), and the intervention
+      // is recorded as its own step so triage can see the loop was fought rather
+      // than inferring it from the repetition alone.
+      let advisory: string | null = null;
+      if (isFailedToolResult(out)) {
+        // The OTHER loop the guards missed. `readCoverage` records successes only, by
+        // design — a failed read has no result above to reuse, so a retry must not be
+        // stubbed. That left an identical FAILING call with no pushback whatsoever:
+        // the same `git_status` answered with the same "pass `repo`" remedy three
+        // times, the same platform read answered 502 twice, the model repeating itself
+        // each time. The first retry is still free; the second says so.
+        advisory = failureAdvisoryFor(call.name, args, out, iter);
+      } else {
+        // It worked — earlier failures of this exact call were transient after all.
+        failures.clear(call.name, args);
+        if (isReadTool) {
+          // Recording a SUCCESSFUL read is also what arms the exact-repeat stub for it;
+          // a failed read is not recorded, so it can be retried.
+          const visit = readCoverage.record(call.name, args);
+          const target = visit ? activityTarget(args) : undefined;
+          advisory = visit && target ? revisitAdvisory(call.name, target, visit) : null;
+          if (advisory) {
+            pushTrace(c, {
+              ts: nowIso(),
+              category: 'message',
+              label: 'tools.revisit_guard',
+              args: { step: iter, tool: call.name, target, visits: visit!.count },
+              result: advisory,
+            });
+          }
+        }
+      }
+      // Trimmed to the transcript budget with the advisory attached AFTER the cut, so
+      // the budget can never delete the guard — and a `read_file` is paged by LINE with
+      // its continuation offset intact, instead of sliced mid-line with the paging
+      // fields (which sit after the content) thrown away. See `toolResultBudget.ts`.
+      const trimmedOut = trimToolResult(call.name, out ?? null, { advisory });
+      pendingRun = { out, toolStart, isReadTool, threw: false, bytes: trimmedOut.bytes, truncated: trimmedOut.truncated };
+      return { data: trimmedOut.content, isError: isFailedToolResult(out) };
+    },
+  };
 
-    onActivity?.(chatId);
-    return;
-  }
+  const loop = await runAgentLoop<ChatCompletionMessage>({
+    messages: convo,
+    codec,
+    ports,
+    hooks,
+    signal: c.abort?.signal,
+    budget: { stepCap: maxIterations },
+  });
+  // A settled reply (the final-answer hook stopped the loop) or a user Stop ends the
+  // run here; only a SPENT tool budget falls through to the forced synthesis below.
+  if (loop.finished || loop.cancelled) return;
 
   // Loop exhausted without a final text answer. Rather than drop the whole run with
   // "kept calling tools without finishing", force ONE final completion WITHOUT tools so

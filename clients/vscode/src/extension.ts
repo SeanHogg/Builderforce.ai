@@ -1,4 +1,5 @@
 import * as os from "os";
+import { manageMcpServers } from "./mcpServers";
 import * as vscode from "vscode";
 import { BuilderForceAuthProvider } from "./auth";
 import * as bfApi from "./bfApi";
@@ -327,6 +328,12 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.selectProject", () => selectProject(context, projects)),
     vscode.commands.registerCommand("builderforce.createProject", () => createProject(context, projects)),
     vscode.commands.registerCommand("builderforce.createWorkspace", () => manageWorkspace(context, projects)),
+    // Bring-your-own MCP servers: the same owner-gated routes the web settings
+    // panel drives, so a server registered from either surface serves both.
+    vscode.commands.registerCommand("builderforce.registerMcpServer", async () => {
+      if (!(await ensureSignedIn(context))) return;
+      await manageMcpServers(context.secrets);
+    }),
     vscode.commands.registerCommand("builderforce.refreshProjects", () => {
       bfApi.invalidateTasks();
       projects.refresh();

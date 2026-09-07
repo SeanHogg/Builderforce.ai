@@ -1,3 +1,8 @@
+import {
+  bm25RankToScore as sharedBm25RankToScore,
+  hybridScore,
+  normalizeHybridWeights,
+} from "@builderforce/agent-tools";
 import { applyMMRToHybridResults, type MMRConfig, DEFAULT_MMR_CONFIG } from "./mmr.js";
 import {
   applyTemporalDecayToHybridResults,
@@ -43,10 +48,9 @@ export function buildFtsQuery(raw: string): string | null {
   return quoted.join(" AND ");
 }
 
-export function bm25RankToScore(rank: number): number {
-  const normalized = Number.isFinite(rank) ? Math.max(0, rank) : 999;
-  return 1 / (1 + normalized);
-}
+/** Re-exported from the shared retrieval primitive so on-prem and the cloud map
+ *  a lexical rank onto the same (0,1] scale. */
+export const bm25RankToScore = sharedBm25RankToScore;
 
 export async function mergeHybridResults(params: {
   vector: HybridVectorResult[];
@@ -118,8 +122,12 @@ export async function mergeHybridResults(params: {
     }
   }
 
+  // The fused score comes from the SHARED formula (`@builderforce/agent-tools`),
+  // so an on-prem ranking and a cloud ranking are the same arithmetic on the same
+  // weights rather than two copies that can drift apart.
+  const weights = normalizeHybridWeights(params.vectorWeight, params.textWeight);
   const merged = Array.from(byId.values()).map((entry) => {
-    const score = params.vectorWeight * entry.vectorScore + params.textWeight * entry.textScore;
+    const score = hybridScore({ vectorScore: entry.vectorScore, textScore: entry.textScore }, weights);
     return {
       path: entry.path,
       startLine: entry.startLine,

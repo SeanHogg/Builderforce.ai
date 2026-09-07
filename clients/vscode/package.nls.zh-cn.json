@@ -23,6 +23,7 @@
   "command.selectProject": "BuilderForce：选择项目",
   "command.createProject": "BuilderForce：新建项目",
   "command.createWorkspace": "BuilderForce：创建 / 切换工作区",
+  "command.registerMcpServer": "BuilderForce：注册 MCP 服务器",
   "command.refreshProjects": "BuilderForce：刷新任务",
   "command.hideDoneTasks": "BuilderForce：隐藏已完成任务",
   "command.showDoneTasks": "BuilderForce：显示已完成任务",

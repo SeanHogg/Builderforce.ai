@@ -33,6 +33,7 @@ import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
 import { listBuiltinTools, callBuiltinTool, CLOUD_AGENT_PLATFORM_TOOLS, CHAT_SCOPED_AGENT_TOOLS } from '../llm/builtinMcpService';
 import { shouldRecoverStalledTurn, isExhaustedStall, stallShape, stallRecoveryNudge, stallExhaustedNotice, modelFailoverNotice, chooseStallFailover, MAX_ANNOUNCEMENT_RECOVERIES, MAX_MODEL_FAILOVERS, type ModelFallbackSurface } from '@builderforce/agent-stall';
+import { runAgentLoop, openAiChatCodec, readOpenAiToolCalls } from '@builderforce/agent-loop';
 import {
   BRAIN_ORIGIN, TEAM_ORIGIN, MANAGER_ORIGIN, ACCESSIBLE_ORIGINS,
   resolveChatAccess, syncPendingMemberships as syncPendingMembershipsShared,
@@ -1381,177 +1382,200 @@ export class BrainService {
       apiKey, tenantId, userId, useCase: 'brain_agent_reply',
       chatId, projectId: projectHint, agentRef: input.agentRef,
     };
-    for (let i = 0; i < MAX_ITERS; i++) {
-      iterations = i + 1;
-      const compaction = await compactMessages(convo, CLOUD_COMPACT_DEFAULTS, summarize);
-      if (compaction.compacted) convo.splice(0, convo.length, ...compaction.messages);
-      const result = await this.completeTraced(service, {
-        model: activeModel,
-        messages: convo as never,
-        tools,
-        temperature: replyTemp,
-        max_tokens: 1200,
-      } as never, call);
-      lastModel = readModel(result) || lastModel;
-      lastVendor = readVendor(result) || lastVendor;
-      lastByoFunded = readByoFunded(result);
-      noteByoFailure(result);
-      // ProxyResult.response is an HTTP Response — the body MUST be parsed (readProxyChoice),
-      // NOT read as if it were the choices envelope (that silently empties every reply).
-      const { message, content, toolCalls, finishReason } = await readProxyChoice(result);
-      lastFinish = finishReason || lastFinish;
-      // The MODEL turn itself, recorded whether or not it called anything. A turn with
-      // `toolCalls: 0` and prose that merely names tools is the announced-but-untaken
-      // stall, and without this row it is indistinguishable from a turn whose tools all
-      // failed — the two have opposite fixes.
-      record({
-        kind: 'llm',
-        label: readModel(result) || activeModel || '(gateway default)',
-        result: {
-          finishReason,
-          toolCalls: toolCalls.length,
-          toolNames: toolCalls.map((tc) => tc.function.name),
-          replyChars: content.length,
-          advertisedTools: tools.length,
+    // ── THE loop ─────────────────────────────────────────────────────────────
+    // The model→tools→model skeleton lives ONCE in `@builderforce/agent-loop` (the same
+    // kernel the cloud engine, the embedded Brain and the canvas drive). This reply's
+    // own concerns — compaction, the trace, stall recovery + failover, the terminal
+    // `ask_user` turn, platform-tool dispatch — are hooks and ports closing over the
+    // reply's state. Nothing below iterates.
+    /** The CATALOG id a call dispatches to — the label a reader greps for, not the
+     *  advertised name. A name the model invented that resolves to nothing lands in
+     *  the trace verbatim, which is itself the diagnosis. */
+    const toolIdOf = (name: string): string => nameToTool.get(name) ?? name;
+    let tStart = 0;
+    const loop = await runAgentLoop<Record<string, unknown>>({
+      messages: convo,
+      // Every tool result is size-capped for the transcript.
+      codec: openAiChatCodec<Record<string, unknown>>((r) => JSON.stringify(r.data ?? null).slice(0, 8000)),
+      budget: { stepCap: MAX_ITERS },
+      hooks: {
+        beforeTurn: async () => {
+          const compaction = await compactMessages(convo, CLOUD_COMPACT_DEFAULTS, summarize);
+          if (compaction.compacted) convo.splice(0, convo.length, ...compaction.messages);
+          return undefined;
         },
-        turnSeq: iterations,
-      });
-
-      if (toolCalls.length === 0) {
-        // The model ANNOUNCED an action and then ended the turn without taking it
-        // ("I'll search the codebase…" → finish: stop, 0 tool calls) — or returned
-        // nothing at all. Breaking here hands the user a promise, or a 400, as the
-        // answer. Re-prompt instead, bounded per reply by the shared budget. Same gate
-        // + wording as the Brain run loop and the cloud agent loop (`agent-stall`).
-        const stallInput = {
-          text: content,
-          toolCallCount: 0,
-          availableToolCount: tools.length,
-          recoveriesUsed: announcementRecoveries,
-          availableToolNames: tools.map((t) => t.function.name),
-          requestText: userRequest,
-        };
-        // Which SHAPE, so the notices describe what actually happened. A blank turn told
-        // the operator its model had "described tool calls instead of making them" —
-        // narration they could not find anywhere in the transcript, because there was none.
-        // A HANDED-OFF turn is the same misdescription in the other direction: this
-        // reply holds `chats.execute_as_agent`, so "you should run the build and push"
-        // is work it could have handed to its own runtime, not a limit it reported.
-        const shape = stallShape(stallInput);
-        if (shouldRecoverStalledTurn(stallInput)) {
-          announcementRecoveries += 1;
-          convo.push({ role: 'assistant', content });
-          convo.push({
-            role: 'user',
-            content: stallRecoveryNudge(announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES, shape),
-          });
-          continue;
-        }
-        // Every recovery spent and the reply is STILL only a description of calls it
-        // never made. Re-prompting THIS model is finished — so move to a DIFFERENT one
-        // rather than hand the requester a promise dressed as an answer.
-        if (isExhaustedStall(stallInput)) {
-          // The SHARED decision — record both the asked-for and the resolved model, check
-          // the budget, pick a genuinely different route. Identical to the Brain run
-          // loop's, because it is the same function.
-          const next = chooseStallFailover({
-            activeModel,
-            resolvedModel: lastModel,
-            tried: triedModels,
-            failoversUsed: modelFailovers,
-            surface: fallbackSurface,
-          });
-          if (next) {
-            modelFailovers += 1;
-            // Traced, because a chat that quietly changes model is its own support
-            // ticket — and because the diagnostics report cannot otherwise tell a
-            // failover that happened from one that never ran.
-            // A DISTINCT kind, not another `llm` row: it records a decision, not a model
-            // turn, and counting it as one would corrupt the "every turn was toolless"
-            // rollup the diagnostics report computes.
-            record({
-              kind: 'failover',
-              label: next,
-              args: { from: lastModel || activeModel || null, to: next, attempt: modelFailovers, of: MAX_MODEL_FAILOVERS },
-              result: { notice: modelFailoverNotice(lastModel || activeModel, next, shape) },
-              turnSeq: iterations,
-            });
-            activeModel = next;
-            // The new model starts with a full stall budget — the old one's failures say
-            // nothing about this one, and carrying the count over would give it no chance.
-            announcementRecoveries = 0;
+        onNoToolCalls: (_ctx, turn) => {
+          const content = turn.content;
+          // The model ANNOUNCED an action and then ended the turn without taking it
+          // ("I'll search the codebase…" → finish: stop, 0 tool calls) — or returned
+          // nothing at all. Stopping here hands the user a promise, or a 400, as the
+          // answer. Re-prompt instead, bounded per reply by the shared budget. Same gate
+          // + wording as the Brain run loop and the cloud agent loop (`agent-stall`).
+          const stallInput = {
+            text: content,
+            toolCallCount: 0,
+            availableToolCount: tools.length,
+            recoveriesUsed: announcementRecoveries,
+            availableToolNames: tools.map((t) => t.function.name),
+            requestText: userRequest,
+          };
+          // Which SHAPE, so the notices describe what actually happened. A blank turn told
+          // the operator its model had "described tool calls instead of making them" —
+          // narration they could not find anywhere in the transcript, because there was none.
+          // A HANDED-OFF turn is the same misdescription in the other direction: this
+          // reply holds `chats.execute_as_agent`, so "you should run the build and push"
+          // is work it could have handed to its own runtime, not a limit it reported.
+          const shape = stallShape(stallInput);
+          if (shouldRecoverStalledTurn(stallInput)) {
+            announcementRecoveries += 1;
             convo.push({ role: 'assistant', content });
-            convo.push({ role: 'user', content: stallRecoveryNudge(false, shape) });
-            continue;
+            convo.push({
+              role: 'user',
+              content: stallRecoveryNudge(announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES, shape),
+            });
+            return { action: 'continue' };
           }
-          // A blank turn leaves no `content` to lead with, so the notice IS the reply —
-          // and it is a far better one than the 400 this used to fall through to.
-          const notice = stallExhaustedNotice(lastModel, triedModels, shape);
-          text = content ? `${content}\n\n${notice}` : notice;
-          break;
-        }
-        text = content;
-        break;
-      }
-
-      // `ask_user` is a TERMINAL turn: the agent is blocked on the user's decision, so
-      // stop the loop and return the question (any lead-in prose + the canonical
-      // ```ask-user block the UI renders as a clickable card). Falls through to prose
-      // when the args are malformed, so a question is never swallowed.
-      const askCall = toolCalls.find((tc) => tc.function.name === ASK_USER_TOOL);
-      if (askCall) {
-        let block: string | null = null;
-        try { block = askUserBlock(JSON.parse(askCall.function.arguments || '{}')); } catch { block = null; }
-        if (block) {
-          const lead = (message?.content ?? '').trim();
-          text = lead ? `${lead}\n\n${block}` : block;
-          break;
-        }
-        // Malformed ask_user → keep any prose the model wrote and stop asking so we
-        // don't loop; the empty-turn synthesis below covers a bare call.
-        if (message?.content?.trim()) { text = message.content.trim(); break; }
-      }
-
-      // Echo the assistant tool-call turn, then execute each call and feed results.
-      toolCallCount += toolCalls.length;
-      convo.push({ role: 'assistant', content: message?.content ?? '', tool_calls: toolCalls });
-      for (const tc of toolCalls) {
-        if (tc.function.name === ASK_USER_TOOL) {
-          // Reached only when ask_user args were malformed AND the model wrote no prose.
-          // Emit a corrective tool result (so the call isn't left unanswered) telling it
-          // to retry with a valid question + options, or just answer in prose.
-          convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify({ error: 'ask_user needs { question, options:[{label}] } with 2+ options. Retry or answer in prose.' }) });
-          continue;
-        }
-        const toolId = nameToTool.get(tc.function.name) ?? tc.function.name;
-        let out: unknown;
-        let isError = false;
-        const startedAt = Date.now();
-        let argObj: unknown = {};
-        try {
-          argObj = tc.function.arguments ? JSON.parse(tc.function.arguments) : {};
-          out = await callBuiltinTool(this.db, {
-            tenantId, tool: toolId, arguments: argObj as Record<string, unknown>, env,
-            userId, role: opts?.role as never, authToken: opts?.authToken, executionCtx: opts?.executionCtx,
-            // The reply IS this agent acting: the ref is what lets a tool act "as me"
-            // (`chats.execute_as_agent` hands work to this agent's own runtime) and what
-            // credits a replayed write to the agent rather than to the person who asked.
-            agentRef: input.agentRef,
+          // Every recovery spent and the reply is STILL only a description of calls it
+          // never made. Re-prompting THIS model is finished — so move to a DIFFERENT one
+          // rather than hand the requester a promise dressed as an answer.
+          if (isExhaustedStall(stallInput)) {
+            // The SHARED decision — record both the asked-for and the resolved model, check
+            // the budget, pick a genuinely different route. Identical to the Brain run
+            // loop's, because it is the same function.
+            const next = chooseStallFailover({
+              activeModel,
+              resolvedModel: lastModel,
+              tried: triedModels,
+              failoversUsed: modelFailovers,
+              surface: fallbackSurface,
+            });
+            if (next) {
+              modelFailovers += 1;
+              // Traced, because a chat that quietly changes model is its own support
+              // ticket — and because the diagnostics report cannot otherwise tell a
+              // failover that happened from one that never ran.
+              // A DISTINCT kind, not another `llm` row: it records a decision, not a model
+              // turn, and counting it as one would corrupt the "every turn was toolless"
+              // rollup the diagnostics report computes.
+              record({
+                kind: 'failover',
+                label: next,
+                args: { from: lastModel || activeModel || null, to: next, attempt: modelFailovers, of: MAX_MODEL_FAILOVERS },
+                result: { notice: modelFailoverNotice(lastModel || activeModel, next, shape) },
+                turnSeq: iterations,
+              });
+              activeModel = next;
+              // The new model starts with a full stall budget — the old one's failures say
+              // nothing about this one, and carrying the count over would give it no chance.
+              announcementRecoveries = 0;
+              convo.push({ role: 'assistant', content });
+              convo.push({ role: 'user', content: stallRecoveryNudge(false, shape) });
+              return { action: 'continue' };
+            }
+            // A blank turn leaves no `content` to lead with, so the notice IS the reply —
+            // and it is a far better one than the 400 this used to fall through to.
+            const notice = stallExhaustedNotice(lastModel, triedModels, shape);
+            return { action: 'stop', ok: true, output: content ? `${content}\n\n${notice}` : notice };
+          }
+          return { action: 'stop', ok: true, output: content };
+        },
+        beforeToolCalls: (_ctx, turn, calls) => {
+          const message = (turn.meta as { message?: { content?: string | null } | null }).message;
+          // `ask_user` is a TERMINAL turn: the agent is blocked on the user's decision, so
+          // stop the loop and return the question (any lead-in prose + the canonical
+          // ```ask-user block the UI renders as a clickable card). Falls through to prose
+          // when the args are malformed, so a question is never swallowed.
+          const askCall = calls.find((tc) => tc.name === ASK_USER_TOOL);
+          if (askCall) {
+            let block: string | null = null;
+            try { block = askCall.malformed ? null : askUserBlock(askCall.args); } catch { block = null; }
+            if (block) {
+              const lead = (message?.content ?? '').trim();
+              return { action: 'stop', ok: true, output: lead ? `${lead}\n\n${block}` : block };
+            }
+            // Malformed ask_user → keep any prose the model wrote and stop asking so we
+            // don't loop; the empty-turn synthesis below covers a bare call.
+            if (message?.content?.trim()) return { action: 'stop', ok: true, output: message.content.trim() };
+          }
+          toolCallCount += calls.length;
+          return undefined;
+        },
+        beforeDispatch: (call) => {
+          tStart = Date.now();
+          if (call.name === ASK_USER_TOOL) {
+            // Reached only when ask_user args were malformed AND the model wrote no prose.
+            // Emit a corrective tool result (so the call isn't left unanswered) telling it
+            // to retry with a valid question + options, or just answer in prose.
+            return { result: { data: { error: 'ask_user needs { question, options:[{label}] } with 2+ options. Retry or answer in prose.' } } };
+          }
+          return undefined;
+        },
+        afterDispatch: (call, result) => {
+          if (call.name === ASK_USER_TOOL) return undefined;
+          record({
+            kind: 'tool', label: toolIdOf(call.name), args: call.args, result: result.data,
+            isError: result.isError === true, durationMs: Date.now() - tStart, turnSeq: iterations,
           });
-        } catch (e) {
-          isError = true;
-          out = { error: e instanceof Error ? e.message : 'tool call failed' };
-        }
-        // The CATALOG id is the label, not the advertised name: it is what a reader greps
-        // for and what the prompt/allowlist are written in. A name the model invented that
-        // resolves to nothing lands here verbatim, which is itself the diagnosis.
-        record({
-          kind: 'tool', label: toolId, args: argObj, result: out,
-          isError, durationMs: Date.now() - startedAt, turnSeq: iterations,
-        });
-        convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out ?? null).slice(0, 8000) });
-      }
-    }
+          return undefined;
+        },
+      },
+      ports: {
+        complete: async (ctx) => {
+          iterations = ctx.step + 1;
+          const result = await this.completeTraced(service, {
+            model: activeModel,
+            messages: convo as never,
+            tools,
+            temperature: replyTemp,
+            max_tokens: 1200,
+          } as never, call);
+          lastModel = readModel(result) || lastModel;
+          lastVendor = readVendor(result) || lastVendor;
+          lastByoFunded = readByoFunded(result);
+          noteByoFailure(result);
+          // ProxyResult.response is an HTTP Response — the body MUST be parsed (readProxyChoice),
+          // NOT read as if it were the choices envelope (that silently empties every reply).
+          const { message, content, toolCalls, finishReason } = await readProxyChoice(result);
+          lastFinish = finishReason || lastFinish;
+          // The MODEL turn itself, recorded whether or not it called anything. A turn with
+          // `toolCalls: 0` and prose that merely names tools is the announced-but-untaken
+          // stall, and without this row it is indistinguishable from a turn whose tools all
+          // failed — the two have opposite fixes.
+          record({
+            kind: 'llm',
+            label: readModel(result) || activeModel || '(gateway default)',
+            result: {
+              finishReason,
+              toolCalls: toolCalls.length,
+              toolNames: toolCalls.map((tc) => tc.function.name),
+              replyChars: content.length,
+              advertisedTools: tools.length,
+            },
+            turnSeq: iterations,
+          });
+          return { content, toolCalls: readOpenAiToolCalls({ tool_calls: toolCalls }), meta: { message } };
+        },
+        dispatch: async (call) => {
+          if (call.malformed) return { data: { error: 'malformed tool arguments' }, isError: true };
+          try {
+            const out = await callBuiltinTool(this.db, {
+              tenantId, tool: toolIdOf(call.name), arguments: call.args, env,
+              userId, role: opts?.role as never, authToken: opts?.authToken, executionCtx: opts?.executionCtx,
+              // The reply IS this agent acting: the ref is what lets a tool act "as me"
+              // (`chats.execute_as_agent` hands work to this agent's own runtime) and what
+              // credits a replayed write to the agent rather than to the person who asked.
+              agentRef: input.agentRef,
+            });
+            return { data: out };
+          } catch (e) {
+            return { data: { error: e instanceof Error ? e.message : 'tool call failed' }, isError: true };
+          }
+        },
+      },
+    });
+    // A reply that SETTLED — final prose, an `ask_user` question, an exhausted-stall
+    // notice — is the text. A spent tool budget leaves it empty for the synthesis below.
+    text = loop.finished ? loop.output : '';
 
     // The tool loop ended with no prose (only tool calls across every iteration, or a
     // model that returned an empty turn): force ONE final synthesis WITHOUT tools so

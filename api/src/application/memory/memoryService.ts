@@ -55,34 +55,49 @@ import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrast
 import { QA_CACHE_SOURCE, deleteProjectFact, projectFactsVersion, recallProjectFacts, upsertProjectFact } from '../llm/projectFacts';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { dispatchEmbeddingVendor } from '../llm/embeddingVendors/registry';
-import { cosineSimilarity } from '../llm/vectorMath';
+import { fuseHybridArms } from '@builderforce/agent-tools';
+import { embedMemoryText, memoryEmbeddingText, toVectorLiteral, MEMORY_EMBEDDING_MODEL } from './memoryEmbedding';
+import { annRecallProject, annRecallScoped, type RecalledRow } from './memorySemanticRecall';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { clamp01 } from '../../domain/shared/numbers';
 
 const RECALL_DEFAULT = 5;
 const RECALL_MAX = 20;
 const RECALL_L1_TTL_MS = 30_000;
+/** Candidates pulled per arm per scope, as a multiple of the caller's limit —
+ *  the same widening on-prem hybrid retrieval uses before it fuses. */
+const CANDIDATE_MULTIPLIER = 4;
 
 const errMessage = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 const versionKey = (tenantId: number): string => `mem:ver:${tenantId}`;
 
-async function semanticRank(env: Env, query: string, entries: MemoryEntry[]): Promise<MemoryEntry[]> {
-  if (!query.trim() || entries.length < 2 || (!env.OPENROUTER_API_KEY && !env.VOYAGE_API_KEY)) return entries;
-  try {
-    const embedded = await dispatchEmbeddingVendor({
-      env: { OPENROUTER_API_KEY: env.OPENROUTER_API_KEY, VOYAGE_API_KEY: env.VOYAGE_API_KEY },
-      input: [query, ...entries.map((entry) => `${entry.key}\n${entry.content}`)],
-    });
-    const vectors = [...embedded.data].sort((a, b) => a.index - b.index).map((row) => row.embedding);
-    const queryVector = vectors[0];
-    if (!queryVector || vectors.length !== entries.length + 1) return entries;
-    return entries.map((entry, index) => ({ entry, score: cosineSimilarity(queryVector, vectors[index + 1] ?? []) }))
-      .sort((a, b) => b.score - a.score).map(({ entry }) => entry);
-  } catch (error) {
-    reportCaughtError(error, { source: 'application/memory/memoryService.ts', operation: 'semanticRank', level: 'warning' });
-    return entries;
-  }
+/**
+ * Fuse the semantic and lexical arms of a recall into one ordering.
+ *
+ * This replaced a helper that could not do what its name claimed: with an
+ * embedding key present it embedded a ~10-row window that had ALREADY been chosen
+ * by `importance, updated_at` and re-ranked that, so a relevant memory outside the
+ * window was unreachable. The vector arm below is an ANN read over the whole store
+ * (migration 1134), and the two arms are combined with the SHARED 0.7/0.3 formula
+ * — the same arithmetic the on-prem sqlite-vec + FTS5 store ranks with.
+ */
+function fuseRecallArms(vectorRows: RecalledRow[], lexicalRows: RecalledRow[]): MemoryEntry[] {
+  return fuseHybridArms<RecalledRow, RecalledRow, MemoryEntry>({
+    vector: vectorRows,
+    text: lexicalRows,
+    vectorScoreOf: (r) => r.vectorScore,
+    // The lexical arm is an ILIKE: it either matched or it did not, so every hit
+    // carries the same evidence. Scoring them equally is honest about that, and the
+    // vector arm supplies the ordering within the overlap.
+    textScoreOf: () => 1,
+    merge: (row) => ({
+      key: row.key,
+      content: row.content,
+      scope: row.scopeKind as MemoryScopeKind,
+      origin: row.origin,
+      expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
+    }),
+  });
 }
 
 /**
@@ -159,12 +174,22 @@ export async function remember(env: Env, db: Db, ctx: MemoryWriteContext, input:
       return { ok: true, key };
     }
 
+    // Embed on write so the fact is semantically reachable on the very next recall.
+    // Best-effort: a failed embed leaves the columns null and the backfill sweep
+    // retries — a memory that is stored but not yet vectorised is still recalled by
+    // the lexical arm, whereas refusing the write would lose the fact entirely.
+    const vector = toVectorLiteral((await embedMemoryText(env, memoryEmbeddingText(key, content))) ?? []);
+    const embeddingFields = vector
+      ? { embedding: vector, embeddingModel: MEMORY_EMBEDDING_MODEL, embeddedAt: now }
+      : { embedding: null, embeddingModel: null, embeddedAt: null };
+
     await db
       .insert(agentMemory)
       .values({
         tenantId: ctx.tenantId,
         key,
         content,
+        ...embeddingFields,
         tags: JSON.stringify(input.tags ?? []),
         importance: clamp01(input.importance ?? 0.5),
         scopeKind: scope.kind,
@@ -185,6 +210,9 @@ export async function remember(env: Env, db: Db, ctx: MemoryWriteContext, input:
           origin: ctx.origin,
           originExecutionId: ctx.executionId ?? null,
           expiresAt,
+          // Re-remembering REPLACES the vector too — a stale embedding of the old
+          // content would rank the fact by what it used to say.
+          ...embeddingFields,
           updatedAt: now,
         },
       });
@@ -214,13 +242,18 @@ export async function recall(
       env,
       `mem:recall:${ctx.tenantId}:${token}:${n}:${query}`,
       async () => {
-        const semanticEnabled = Boolean(env.OPENROUTER_API_KEY || env.VOYAGE_API_KEY);
-        // The two backings are read CONCURRENTLY — a fan-out of two, not an N+1: the
-        // scoped store answers tenant+ticket in ONE query via an IN over the chain.
+        // The semantic arm needs a query vector; without one (no key, or the vendor
+        // failed) recall is the lexical arm alone, which is the pre-1134 behaviour.
+        const queryVector = query.trim() ? toVectorLiteral((await embedMemoryText(env, query)) ?? []) : null;
+        // Pull more candidates per arm than the caller asked for, so fusion has
+        // something to choose between rather than re-ordering the final N.
+        const perArm = n * CANDIDATE_MULTIPLIER;
         const scopedKinds = chain.filter((s) => s.kind !== 'project');
         const projectScope = chain.find((s) => s.kind === 'project');
 
-        const [scopedRows, projectRows] = await Promise.all([
+        // Four reads, fanned out — not an N+1: each store answers its whole scope
+        // chain in ONE query per arm.
+        const [scopedLexical, projectLexical, scopedVector, projectVector] = await Promise.all([
           scopedKinds.length === 0
             ? Promise.resolve([] as Array<{ key: string; content: string; scopeKind: string; origin: string; expiresAt: Date | null }>)
             : (() => {
@@ -229,8 +262,8 @@ export async function recall(
                 const scopeClause = or(
                   ...scopedKinds.map((s) => and(eq(agentMemory.scopeKind, s.kind), eq(agentMemory.scopeId, s.id))),
                 );
-                const unexpired = or(isNull(agentMemory.expiresAt), gt(agentMemory.expiresAt, new Date()));
-                const lexical: SQL | undefined = !semanticEnabled && matchers.length > 0 ? or(...matchers) : undefined;
+                const unexpiredNow = or(isNull(agentMemory.expiresAt), gt(agentMemory.expiresAt, new Date()));
+                const lexical: SQL | undefined = matchers.length > 0 ? or(...matchers) : undefined;
                 return db
                   .select({
                     key: agentMemory.key,
@@ -240,38 +273,51 @@ export async function recall(
                     expiresAt: agentMemory.expiresAt,
                   })
                   .from(agentMemory)
-                  .where(scopedToTenant(agentMemory, ctx.tenantId, scopeClause, unexpired, lexical))
+                  .where(scopedToTenant(agentMemory, ctx.tenantId, scopeClause, unexpiredNow, lexical))
                   .orderBy(desc(agentMemory.importance), desc(agentMemory.updatedAt))
-                  .limit(n * chain.length);
+                  .limit(perArm);
               })(),
           projectScope
-            ? recallProjectFacts(env, db, ctx.tenantId, projectScope.id, { query: semanticEnabled ? '' : query, limit: semanticEnabled ? n * 4 : n })
+            ? recallProjectFacts(env, db, ctx.tenantId, projectScope.id, { query, limit: perArm })
             : Promise.resolve([] as Array<{ key: string; content: string }>),
+          queryVector && scopedKinds.length > 0
+            ? annRecallScoped(db, ctx.tenantId, scopedKinds, queryVector, perArm)
+            : Promise.resolve([] as RecalledRow[]),
+          queryVector && projectScope
+            ? annRecallProject(db, ctx.tenantId, projectScope.id, queryVector, perArm, QA_CACHE_SOURCE)
+            : Promise.resolve([] as RecalledRow[]),
         ]);
 
-        // Order by the CHAIN, not by the query order, so `dedupeBySpecificity` (a
-        // stable first-wins pass) resolves a key collision toward the narrower scope.
-        const byScope = new Map<MemoryScopeKind, MemoryEntry[]>();
-        for (const r of scopedRows) {
-          const kind = r.scopeKind as MemoryScopeKind;
-          const list = byScope.get(kind) ?? [];
-          list.push({
+        const lexicalRows: RecalledRow[] = [
+          ...scopedLexical.map((r) => ({
+            id: `scoped:${r.scopeKind}:${r.key}`,
             key: r.key,
             content: r.content,
-            scope: kind,
+            scopeKind: r.scopeKind,
             origin: r.origin,
-            expiresAt: r.expiresAt ? new Date(r.expiresAt).toISOString() : null,
-          });
-          byScope.set(kind, list);
-        }
-        if (projectScope) {
-          byScope.set(
-            'project',
-            projectRows.map((r) => ({ key: r.key, content: r.content, scope: 'project' as const, origin: 'agent' })),
-          );
-        }
-        const ordered: MemoryEntry[] = chain.flatMap((s) => byScope.get(s.kind) ?? []);
-        return (await semanticRank(env, query, dedupeBySpecificity<MemoryEntry>(ordered))).slice(0, n);
+            expiresAt: r.expiresAt ? new Date(r.expiresAt) : null,
+            vectorScore: 0,
+          })),
+          ...(projectScope
+            ? projectLexical.map((r) => ({
+                id: `project:${r.key}`,
+                key: r.key,
+                content: r.content,
+                scopeKind: 'project',
+                origin: 'agent',
+                expiresAt: null,
+                vectorScore: 0,
+              }))
+            : []),
+        ];
+        const vectorRows = [...scopedVector, ...projectVector];
+
+        // Fuse, then collapse a key that appears at two scopes onto the narrower
+        // one. Dedupe runs AFTER fusion so the surviving row is the better-ranked
+        // of the two, not whichever arm happened to return first.
+        const fused = fuseRecallArms(vectorRows, lexicalRows);
+        return dedupeBySpecificity<MemoryEntry>(fused).slice(0, n);
+
       },
       { l1TtlMs: RECALL_L1_TTL_MS },
     );

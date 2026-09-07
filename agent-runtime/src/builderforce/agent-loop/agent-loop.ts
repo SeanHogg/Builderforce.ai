@@ -1,6 +1,7 @@
 /**
  * Native agent loop — the pi-free replacement for `@mariozechner/pi-agent-core`'s
- * `agentLoop` + `Agent` (PI cutover, loop stage). Drives a turn loop over an injected
+ * `agentLoop` + `Agent` (PI cutover, loop stage). Drives THE shared agent loop
+ * (`@builderforce/agent-loop`) over an injected
  * {@link StreamFn}: stream an assistant message, execute its tool calls against the
  * provided {@link AgentTool}s, append results, repeat until no tool calls — honoring
  * mid-run steering + queued follow-ups. Emits the `AgentEvent` protocol the on-prem
@@ -15,7 +16,8 @@ import type {
   AgentToolResult,
   ThinkingLevel,
 } from "../model/agent-types.js";
-import type { Message, Model, ToolResultMessage } from "../model/types.js";
+import type { AssistantMessage, Message, Model, ToolResultMessage } from "../model/types.js";
+import { runAgentLoop, type LoopCodec, type LoopHooks, type LoopPorts } from "@builderforce/agent-loop";
 import { EventStream } from "./event-stream.js";
 import type { StreamFn } from "./stream.js";
 import {
@@ -102,116 +104,6 @@ function createAgentStream(): EventStream<AgentEvent, AgentMessage[]> {
   );
 }
 
-async function executeToolCalls(
-  tools: AgentTool[] | undefined,
-  assistantMessage: import("../model/types.js").AssistantMessage,
-  signal: AbortSignal | undefined,
-  stream: EventStream<AgentEvent, AgentMessage[]>,
-  getSteeringMessages?: () => AgentMessage[] | Promise<AgentMessage[]>,
-): Promise<{ toolResults: ToolResultMessage[]; steeringMessages?: AgentMessage[] }> {
-  const toolCalls = assistantMessage.content.filter(isToolCall);
-  const results: ToolResultMessage[] = [];
-  let steeringMessages: AgentMessage[] | undefined;
-
-  for (let index = 0; index < toolCalls.length; index++) {
-    const toolCall = toolCalls[index];
-    const tool = tools?.find((t) => t.name === toolCall.name);
-    stream.push({
-      type: "tool_execution_start",
-      toolCallId: toolCall.id,
-      toolName: toolCall.name,
-      args: toolCall.arguments,
-    });
-
-    let result: ToolResultLike;
-    let isError = false;
-    try {
-      if (!tool) throw new Error(`Tool ${toolCall.name} not found`);
-      result = await tool.execute(toolCall.id, toolCall.arguments, signal, (partialResult) => {
-        stream.push({
-          type: "tool_execution_update",
-          toolCallId: toolCall.id,
-          toolName: toolCall.name,
-          args: toolCall.arguments,
-          partialResult,
-        });
-      });
-    } catch (e) {
-      result = {
-        content: [{ type: "text", text: e instanceof Error ? e.message : String(e) }],
-        details: {},
-      };
-      isError = true;
-    }
-
-    stream.push({
-      type: "tool_execution_end",
-      toolCallId: toolCall.id,
-      toolName: toolCall.name,
-      result,
-      isError,
-    });
-    const toolResultMessage: ToolResultMessage = {
-      role: "toolResult",
-      toolCallId: toolCall.id,
-      toolName: toolCall.name,
-      content: result.content,
-      details: result.details,
-      isError,
-      timestamp: Date.now(),
-    };
-    results.push(toolResultMessage);
-    stream.push({ type: "message_start", message: toolResultMessage });
-    stream.push({ type: "message_end", message: toolResultMessage });
-
-    if (getSteeringMessages) {
-      const steering = await getSteeringMessages();
-      if (steering.length > 0) {
-        steeringMessages = steering;
-        for (const skipped of toolCalls.slice(index + 1))
-          results.push(skipToolCall(skipped, stream));
-        break;
-      }
-    }
-  }
-  return { toolResults: results, steeringMessages };
-}
-
-function skipToolCall(
-  toolCall: import("../model/types.js").ToolCall,
-  stream: EventStream<AgentEvent, AgentMessage[]>,
-): ToolResultMessage {
-  const result: ToolResultLike = {
-    content: [{ type: "text", text: "Skipped due to queued user message." }],
-    details: {},
-  };
-  stream.push({
-    type: "tool_execution_start",
-    toolCallId: toolCall.id,
-    toolName: toolCall.name,
-    args: toolCall.arguments,
-  });
-  stream.push({
-    type: "tool_execution_end",
-    toolCallId: toolCall.id,
-    toolName: toolCall.name,
-    result,
-    isError: true,
-  });
-  const toolResultMessage: ToolResultMessage = {
-    role: "toolResult",
-    toolCallId: toolCall.id,
-    toolName: toolCall.name,
-    content: result.content,
-    details: {},
-    isError: true,
-    timestamp: Date.now(),
-  };
-  stream.push({ type: "message_start", message: toolResultMessage });
-  stream.push({ type: "message_end", message: toolResultMessage });
-  return toolResultMessage;
-}
-
 async function streamAssistantResponse(
   context: AgentContext,
   config: AgentLoopConfig,
@@ -278,63 +170,104 @@ async function runLoop(
     .find((m): m is Extract<AgentMessage, { role: "user" }> => m.role === "user")
     ?.content ?? "";
 
-  while (true) {
-    let hasMoreToolCalls = true;
-    while (hasMoreToolCalls || pendingMessages.length > 0) {
+  // ── THE loop ────────────────────────────────────────────────────────────────
+  // The model→tools→model skeleton lives ONCE in `@builderforce/agent-loop` (the same
+  // kernel the cloud engine, the Brain and the canvas drive). The pi-shaped protocol —
+  // `AgentMessage` rows, the event stream, steering that skips the rest of a turn,
+  // follow-ups after the run would stop — is the codec and the hooks below.
+  /** The model errored or was aborted: the whole run ends, follow-ups included. */
+  let terminated = false as boolean;
+  /** The assistant message of the turn in flight, and its tool results, for `turn_end`. */
+  let turnMessage: AssistantMessage | null = null;
+  let turnResults: ToolResultMessage[] = [];
+  /** Steering that arrived mid-turn: the remaining calls of this turn are skipped. */
+  let steeringAfterTools: AgentMessage[] | null = null;
+  const skipped: ToolResultLike = {
+    content: [{ type: "text", text: "Skipped due to queued user message." }],
+    details: {},
+  };
+  const pushBoth = (m: AgentMessage): void => {
+    currentContext.messages.push(m);
+    newMessages.push(m);
+  };
+  const isTerminal = (m: AssistantMessage): boolean => m.stopReason === "error" || m.stopReason === "aborted";
+
+  const codec: LoopCodec<AgentMessage> = {
+    assistant: (turn) => turn.meta as AssistantMessage,
+    tool: (call, result) => {
+      const r = result.data as ToolResultLike;
+      return {
+        role: "toolResult",
+        toolCallId: call.id,
+        toolName: call.name,
+        content: r.content,
+        details: r.details,
+        isError: result.isError === true,
+        timestamp: Date.now(),
+      };
+    },
+  };
+
+  const ports: LoopPorts<AgentMessage> = {
+    complete: async () => {
+      const message = await streamAssistantResponse(currentContext, config, signal, stream, streamFn);
+      // An errored / aborted turn never executes its calls: it is handed to the
+      // no-tool-calls path, which records it and ends the run.
+      const toolCalls = isTerminal(message)
+        ? []
+        : message.content.filter(isToolCall).map((tc) => ({ id: tc.id, name: tc.name, arguments: JSON.stringify(tc.arguments ?? {}) }));
+      return { content: assistantText(message), toolCalls, meta: message };
+    },
+    dispatch: async (call) => {
+      const tool = currentContext.tools?.find((t) => t.name === call.name);
+      try {
+        if (!tool) throw new Error(`Tool ${call.name} not found`);
+        const result = await tool.execute(call.id, call.args, signal, (partialResult) => {
+          stream.push({
+            type: "tool_execution_update",
+            toolCallId: call.id,
+            toolName: call.name,
+            args: call.args,
+            partialResult,
+          });
+        });
+        return { data: result };
+      } catch (e) {
+        const result: ToolResultLike = {
+          content: [{ type: "text", text: e instanceof Error ? e.message : String(e) }],
+          details: {},
+        };
+        return { data: result, isError: true };
+      }
+    },
+  };
+
+  const hooks: LoopHooks<AgentMessage> = {
+    beforeTurn: () => {
       if (!firstTurn) stream.push({ type: "turn_start" });
       else firstTurn = false;
-
       if (pendingMessages.length > 0) {
         for (const message of pendingMessages) {
           stream.push({ type: "message_start", message });
           stream.push({ type: "message_end", message });
-          currentContext.messages.push(message);
-          newMessages.push(message);
+          pushBoth(message);
         }
         pendingMessages = [];
       }
-
-      const message = await streamAssistantResponse(
-        currentContext,
-        config,
-        signal,
-        stream,
-        streamFn,
-      );
-      currentContext.messages.push(message);
-      newMessages.push(message);
-
-      if (message.stopReason === "error" || message.stopReason === "aborted") {
-        stream.push({ type: "turn_end", message, toolResults: [] });
-        stream.push({ type: "agent_end", messages: newMessages });
-        stream.end(newMessages);
-        return;
+      turnMessage = null;
+      turnResults = [];
+      steeringAfterTools = null;
+      return undefined;
+    },
+    onNoToolCalls: async (_ctx, turn) => {
+      const message = turn.meta as AssistantMessage;
+      pushBoth(message);
+      stream.push({ type: "turn_end", message, toolResults: [] });
+      if (isTerminal(message)) {
+        terminated = true;
+        return { action: "stop", ok: false };
       }
-
-      const toolCalls = message.content.filter(isToolCall);
-      hasMoreToolCalls = toolCalls.length > 0;
-      const toolResults: ToolResultMessage[] = [];
-      let steeringAfterTools: AgentMessage[] | null = null;
-      if (hasMoreToolCalls) {
-        const exec = await executeToolCalls(
-          currentContext.tools,
-          message,
-          signal,
-          stream,
-          config.getSteeringMessages,
-        );
-        toolResults.push(...exec.toolResults);
-        steeringAfterTools = exec.steeringMessages ?? null;
-        for (const result of toolResults) {
-          currentContext.messages.push(result);
-          newMessages.push(result);
-        }
-      }
-      stream.push({ type: "turn_end", message, toolResults });
-
-      if (steeringAfterTools && steeringAfterTools.length > 0) pendingMessages = steeringAfterTools;
-      else pendingMessages = (await config.getSteeringMessages?.()) || [];
-
+      pendingMessages = (await config.getSteeringMessages?.()) || [];
       // The model ANNOUNCED an action and then ended the turn without taking it
       // ("I'll search the codebase for the handler." → stopReason: stop, 0 tool
       // calls). Treating that as "no tool calls, therefore done" ends the run with a
@@ -343,7 +276,7 @@ async function runLoop(
       // narrating can't spin. Nothing to do when steering already queued work.
       const stallInput = {
         text: assistantText(message),
-        toolCallCount: toolCalls.length,
+        toolCallCount: 0,
         availableToolCount: currentContext.tools?.length ?? 0,
         recoveriesUsed: announcementRecoveries,
         availableToolNames: toolNames,
@@ -353,7 +286,7 @@ async function runLoop(
       // the tests and commit" is a no-op dressed as a completed step, and the ticket
       // ledger records it as done. Same budget, different correction; see `stallShape`.
       const shape = stallShape(stallInput);
-      if (!hasMoreToolCalls && pendingMessages.length === 0 && shouldRecoverStalledTurn(stallInput)) {
+      if (pendingMessages.length === 0 && shouldRecoverStalledTurn(stallInput)) {
         announcementRecoveries += 1;
         pendingMessages = [
           {
@@ -362,22 +295,80 @@ async function runLoop(
             timestamp: Date.now(),
           },
         ];
-      } else if (!hasMoreToolCalls && pendingMessages.length === 0 && isExhaustedStall(stallInput)) {
+      } else if (pendingMessages.length === 0 && isExhaustedStall(stallInput)) {
         // Every recovery spent and the model is STILL only describing calls. Ending
         // here silently leaves a promise as the run's result — for an autonomous run
         // that reads as a completed step that did nothing. Append the reason to the
         // transcript so the run output, the ticket ledger and any human reviewer see
         // WHY it produced nothing, instead of inferring success from a clean exit.
-        const notice: AgentMessage = {
+        pushBoth({
           role: "user",
           content: stallExhaustedNotice(config.model?.id, undefined, shape),
           timestamp: Date.now(),
-        };
-        currentContext.messages.push(notice);
-        newMessages.push(notice);
+        });
       }
-    }
+      return pendingMessages.length > 0 ? { action: "continue" } : { action: "stop", ok: true };
+    },
+    beforeToolCalls: (_ctx, turn) => {
+      // The kernel pushes the assistant row onto the context; the run's own
+      // `newMessages` ledger gets it here.
+      turnMessage = turn.meta as AssistantMessage;
+      newMessages.push(turnMessage);
+      return undefined;
+    },
+    beforeDispatch: (call) => {
+      stream.push({
+        type: "tool_execution_start",
+        toolCallId: call.id,
+        toolName: call.name,
+        args: call.args,
+      });
+      if (steeringAfterTools) {
+        // A queued user message outranks the rest of this turn's calls.
+        stream.push({ type: "tool_execution_end", toolCallId: call.id, toolName: call.name, result: skipped, isError: true });
+        return { result: { data: skipped, isError: true } };
+      }
+      return undefined;
+    },
+    afterDispatch: async (call, result, row) => {
+      const toolResultMessage = row as ToolResultMessage;
+      if (!steeringAfterTools) {
+        stream.push({
+          type: "tool_execution_end",
+          toolCallId: call.id,
+          toolName: call.name,
+          result: result.data as ToolResultLike,
+          isError: result.isError === true,
+        });
+      }
+      turnResults.push(toolResultMessage);
+      newMessages.push(toolResultMessage);
+      stream.push({ type: "message_start", message: toolResultMessage });
+      stream.push({ type: "message_end", message: toolResultMessage });
+      if (!steeringAfterTools && config.getSteeringMessages) {
+        const steering = await config.getSteeringMessages();
+        if (steering.length > 0) steeringAfterTools = steering;
+      }
+      return undefined;
+    },
+    afterToolCalls: async () => {
+      if (turnMessage) stream.push({ type: "turn_end", message: turnMessage, toolResults: turnResults });
+      pendingMessages = steeringAfterTools ?? ((await config.getSteeringMessages?.()) || []);
+      return undefined;
+    },
+  };
 
+  while (true) {
+    // No `signal` for the kernel: the stream and the tools receive it directly and an
+    // abort surfaces as a `stopReason: "aborted"` message, recorded like any other.
+    await runAgentLoop<AgentMessage>({
+      messages: currentContext.messages,
+      codec,
+      ports,
+      hooks,
+      budget: { stepCap: Number.POSITIVE_INFINITY },
+    });
+    if (terminated) break;
     const followUpMessages = (await config.getFollowUpMessages?.()) || [];
     if (followUpMessages.length > 0) {
       pendingMessages = followUpMessages;

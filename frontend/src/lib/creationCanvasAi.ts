@@ -37,6 +37,7 @@ import { founderCanvasSystemPrompt } from '@/lib/founderCanvasPrompt';
 import { CANVAS_STREAM_STALL_MS, CanvasStreamStalledError, streamBoundedByActivity } from '@/lib/canvasStreamWatchdog';
 import { canvasModeDirective } from '@/lib/canvasModeDirective';
 import type { CanvasNotices } from '@/lib/canvasNotices';
+import { runAgentLoop, openAiChatCodec } from '@builderforce/agent-loop';
 
 type CanvasAiOptions = {
   prompt: string;
@@ -513,257 +514,289 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   const requestedPages = requestedPagesForTurn(options);
   let documentWords: number | null = requestedPages == null ? null : documentWordsInSnapshot(options.canvasSnapshot);
   let documentWordCountExact = false;
-  for (let turn = 0; turn < MAX_CANVAS_TOOL_TURNS; turn += 1) {
-    throwIfStopped();
-    // The authoring phase arms on EITHER trigger. Turn count alone made it unreachable
-    // for the failure it exists to stop: a model that answers in prose instead of
-    // calling a tool is told once to act, ignores it, and the loop gives up on turn 4 —
-    // three turns before the reserved window it never reaches. Having already ignored
-    // an explicit act-now directive is the stronger signal of the two, so it arms the
-    // same phase: research and re-reads withdrawn, authoring tools only.
-    const authoringOnly = mutationRequested && !proposedCanvasMutation
-      && (mutationRecoveries > 0 || MAX_CANVAS_TOOL_TURNS - turn <= RESERVED_AUTHORING_TURNS);
-    if (authoringOnly && !authoringDirectiveIssued) {
-      authoringDirectiveIssued = true;
-      messages.push({
-        role: 'system',
-        content: 'The research phase is over. Use the remaining turns only to create or update the requested Canvas artifacts with canvas_* tools. Build from what you already have — you have the board snapshot and do not need to read it again — state any evidence gap inside the artifact, and do not make another search or fetch call.',
-      });
-    }
-    const availableActions = authoringOnly
-      ? actions.filter((action) => !NON_AUTHORING_TOOL_NAMES.has(action.name))
-      : actions;
-    let result: Awaited<ReturnType<typeof streamChatCompletion>>;
-    try {
-      result = await streamBoundedByActivity(streamChatCompletion, {
-        transport,
-        messages,
-        tools: specsFor(availableActions),
-        tool_choice: 'auto',
-        maxTokens: CANVAS_RESPONSE_TOKENS,
-        reasoning: { level: 'low' },
-        model: activeModel,
-        modelStrict: activeModelStrict,
-        routingMode: options.routingMode,
-        // Models this session (or this turn) already proved will not execute a Canvas
-        // command. Only meaningful while UNPINNED — with a pin the caller has made the
-        // choice — and the gateway ignores it rather than emptying the cascade, so this
-        // can steer routing without ever refusing to answer.
-        ...(!activeModel && (excludeModels.length || commandFailedModels.size)
-          ? { excludeModels: [...new Set([...excludeModels, ...commandFailedModels])] }
-          : {}),
-        metadata: { guestTurnId, guestTurnInput: options.guestTurnInput ?? options.prompt },
-      }, (delta) => { finalText += delta; options.onText?.(finalText); }, options.signal);
-    } catch (error) {
-      // A STALLED provider is a routing problem, not a content problem, so the ladder is
-      // shorter than the interruption one: try again once (a stall is often a single bad
-      // connection), then hand the turn to a model that has already worked in it, then
-      // stop. Stopping is the point — the alternative is the four-minute spinner this
-      // exists to end, and by here the turn still delivers whatever it already has.
-      if (!(error instanceof CanvasStreamStalledError)) throw error;
-      throwIfStopped();
-      stalledStreams += 1;
-      options.onTrace?.({
-        ts: new Date().toISOString(), category: 'error', label: 'provider stopped responding', isError: true,
-        result: { model: activeModel ?? null, seconds: Math.round(CANVAS_STREAM_STALL_MS / 1_000), attempt: stalledStreams },
-      });
-      finalText = '';
-      if (stalledStreams < MAX_STALLED_STREAMS) continue;
-      if (switchToProvenModel(activeModel, 'The prior model stopped responding mid-request and has been disabled for this session.')) {
-        stalledStreams = 0;
-        continue;
-      }
-      break;
-    }
-    throwIfStopped();
-    options.onCompletion?.({
-      at: new Date().toISOString(), iteration: turn + 1,
-      requestedModel: activeModel ?? null,
-      resolvedModel: result.resolvedModel ?? null,
-      resolvedVendor: result.resolvedVendor ?? null,
-      account: result.account ?? null,
-      routingMode: options.routingMode ?? 'auto',
-      toolsAdvertised: availableActions.length,
-      toolCalls: result.toolCalls.map((call) => call.name),
-      finishReason: result.finishReason,
-    });
-    if (result.toolCalls.length && result.resolvedModel && !toolCallingModels.includes(result.resolvedModel)) {
-      toolCallingModels.push(result.resolvedModel);
-    }
-    // A bounded tool loop is one logical agent turn. Keep its continuations on
-    // the model that began it instead of asking Auto to reroute every tool result
-    // independently (which previously moved research from MiniMax to Gemini just
-    // before the required Canvas write). This is a preference, not a strict pin:
-    // the gateway may still substitute when the provider becomes unavailable.
-    if (!activeModel && result.resolvedModel) {
-      activeModel = result.resolvedModel;
-      activeModelStrict = false;
-    }
-    if (!result.toolCalls.length) {
-      // An INTERRUPTED turn is not a turn the model chose to end. Truncation at the
-      // output ceiling drops the tool call it was mid-way through emitting (its JSON
-      // never closes), and an unparseable call is discarded by the provider — both
-      // arrive here looking exactly like "the model declined to act", and both used
-      // to be answered with "you repeated yourself, answer again", which reproduces
-      // the same failure. Handled FIRST, with the directive that matches the actual
-      // interruption: author smaller, or re-encode the call.
-      const interruption = turnInterruption(result.finishReason);
-      if (interruption && interruptedTurnRecoveries < MAX_INTERRUPTED_TURN_RECOVERIES) {
-        interruptedTurnRecoveries += 1;
-        options.onTrace?.({
-          ts: new Date().toISOString(), category: 'error',
-          label: interruption === 'truncated' ? 'response truncated' : 'malformed tool call',
-          isError: true,
-          result: { finishReason: result.finishReason, model: result.resolvedModel ?? null, attempt: interruptedTurnRecoveries },
-        });
-        messages.push({
-          role: 'system',
-          content: interruption === 'truncated' ? TRUNCATED_TURN_DIRECTIVE : MALFORMED_TOOL_CALL_DIRECTIVE,
-        });
-        finalText = '';
-        continue;
-      }
-      if (interruption && switchToProvenModel(
-        result.resolvedModel,
-        interruption === 'truncated'
-          ? 'The prior model kept running past the output limit without finishing and has been disabled for this session. Author the requested artifact in small steps.'
-          : 'The prior model kept emitting tool calls the provider could not parse and has been disabled for this session.',
-      )) {
-        finalText = '';
-        continue;
-      }
-      // A DEGENERATE turn — the model returned nothing at all, or reproduced an
-      // earlier assistant message instead of answering. Neither is an answer, and
-      // neither is caught by the intent-based recoveries below (a plain question
-      // degenerates just as easily as a command). Checked FIRST because an echoed
-      // reply otherwise reaches the user as a fresh one and is stored, which is what
-      // let a single failed turn become the template for every turn after it.
-      const spoken = stripSpeakerLabel(result.text || finalText, speakerLabels).trim();
-      if (!spoken || echoesEarlierAnswer(spoken, options.conversation, speakerLabels)) {
-        if (!degenerateAnswerRecoveryUsed) {
-          degenerateAnswerRecoveryUsed = true;
+  // ── THE loop ────────────────────────────────────────────────────────────────
+  // The model→tools→model skeleton lives ONCE in `@builderforce/agent-loop` (the same
+  // kernel the cloud engine, the Brain and the on-prem runtime drive). The canvas's own
+  // concerns — the reserved authoring phase, the stalled-provider and interruption
+  // ladders, the mutation escalation, the confirm gate, the completion diagnostics —
+  // are hooks and ports closing over this turn's state. Nothing below iterates.
+  type CanvasTurn = Awaited<ReturnType<typeof streamChatCompletion>>;
+  /** The answer a turn SETTLED on inside the loop (a `finish(...)` return), or null
+   *  when the loop stopped without one and the tail below decides what the user gets. */
+  let settled = null as string | null;
+  /** Whether THIS round-trip ran in the reserved authoring phase — set per turn by the
+   *  model port, read by dispatch to refuse research calls. */
+  let authoringOnly = false;
+  const loop = await runAgentLoop<ChatCompletionMessage>({
+    messages,
+    codec: openAiChatCodec<ChatCompletionMessage>(),
+    signal: options.signal,
+    budget: { stepCap: MAX_CANVAS_TOOL_TURNS },
+    ports: {
+      complete: async (ctx) => {
+        const turn = ctx.step;
+        // The authoring phase arms on EITHER trigger. Turn count alone made it unreachable
+        // for the failure it exists to stop: a model that answers in prose instead of
+        // calling a tool is told once to act, ignores it, and the loop gives up on turn 4 —
+        // three turns before the reserved window it never reaches. Having already ignored
+        // an explicit act-now directive is the stronger signal of the two, so it arms the
+        // same phase: research and re-reads withdrawn, authoring tools only.
+        authoringOnly = mutationRequested && !proposedCanvasMutation
+          && (mutationRecoveries > 0 || MAX_CANVAS_TOOL_TURNS - turn <= RESERVED_AUTHORING_TURNS);
+        if (authoringOnly && !authoringDirectiveIssued) {
+          authoringDirectiveIssued = true;
           messages.push({
             role: 'system',
-            content: 'Your prior response was empty or repeated an earlier message in this conversation, so it did not answer anything. Do not restate a previous reply, and do not prefix your answer with a speaker name. Answer the user\'s latest message directly now, and call the canvas_* tools for any change it asks for.',
+            content: 'The research phase is over. Use the remaining turns only to create or update the requested Canvas artifacts with canvas_* tools. Build from what you already have — you have the board snapshot and do not need to read it again — state any evidence gap inside the artifact, and do not make another search or fetch call.',
+          });
+        }
+        const availableActions = authoringOnly
+          ? actions.filter((action) => !NON_AUTHORING_TOOL_NAMES.has(action.name))
+          : actions;
+        let result: CanvasTurn;
+        try {
+          result = await streamBoundedByActivity(streamChatCompletion, {
+            transport,
+            messages,
+            tools: specsFor(availableActions),
+            tool_choice: 'auto',
+            maxTokens: CANVAS_RESPONSE_TOKENS,
+            reasoning: { level: 'low' },
+            model: activeModel,
+            modelStrict: activeModelStrict,
+            routingMode: options.routingMode,
+            // Models this session (or this turn) already proved will not execute a Canvas
+            // command. Only meaningful while UNPINNED — with a pin the caller has made the
+            // choice — and the gateway ignores it rather than emptying the cascade, so this
+            // can steer routing without ever refusing to answer.
+            ...(!activeModel && (excludeModels.length || commandFailedModels.size)
+              ? { excludeModels: [...new Set([...excludeModels, ...commandFailedModels])] }
+              : {}),
+            metadata: { guestTurnId, guestTurnInput: options.guestTurnInput ?? options.prompt },
+          }, (delta) => { finalText += delta; options.onText?.(finalText); }, options.signal);
+        } catch (error) {
+          // A STALLED provider is a routing problem, not a content problem, so the ladder is
+          // shorter than the interruption one: try again once (a stall is often a single bad
+          // connection), then hand the turn to a model that has already worked in it, then
+          // stop. Stopping is the point — the alternative is the four-minute spinner this
+          // exists to end, and by here the turn still delivers whatever it already has.
+          if (!(error instanceof CanvasStreamStalledError)) throw error;
+          throwIfStopped();
+          stalledStreams += 1;
+          options.onTrace?.({
+            ts: new Date().toISOString(), category: 'error', label: 'provider stopped responding', isError: true,
+            result: { model: activeModel ?? null, seconds: Math.round(CANVAS_STREAM_STALL_MS / 1_000), attempt: stalledStreams },
           });
           finalText = '';
-          continue;
+          if (stalledStreams < MAX_STALLED_STREAMS) return { skip: true };
+          if (switchToProvenModel(activeModel, 'The prior model stopped responding mid-request and has been disabled for this session.')) {
+            stalledStreams = 0;
+            return { skip: true };
+          }
+          // Out of providers: stop, and let the tail deliver whatever the turn already has.
+          return { failed: 'provider stopped responding' };
         }
-        if (switchToProvenModel(result.resolvedModel, 'The prior model returned an empty or repeated response twice and has been disabled for this session.')) {
+        throwIfStopped();
+        options.onCompletion?.({
+          at: new Date().toISOString(), iteration: turn + 1,
+          requestedModel: activeModel ?? null,
+          resolvedModel: result.resolvedModel ?? null,
+          resolvedVendor: result.resolvedVendor ?? null,
+          account: result.account ?? null,
+          routingMode: options.routingMode ?? 'auto',
+          toolsAdvertised: availableActions.length,
+          toolCalls: result.toolCalls.map((call) => call.name),
+          finishReason: result.finishReason,
+        });
+        if (result.toolCalls.length && result.resolvedModel && !toolCallingModels.includes(result.resolvedModel)) {
+          toolCallingModels.push(result.resolvedModel);
+        }
+        // A bounded tool loop is one logical agent turn. Keep its continuations on
+        // the model that began it instead of asking Auto to reroute every tool result
+        // independently (which previously moved research from MiniMax to Gemini just
+        // before the required Canvas write). This is a preference, not a strict pin:
+        // the gateway may still substitute when the provider becomes unavailable.
+        if (!activeModel && result.resolvedModel) {
+          activeModel = result.resolvedModel;
+          activeModelStrict = false;
+        }
+        return {
+          content: result.text,
+          toolCalls: result.toolCalls.map((call) => ({ id: call.id, name: call.name, arguments: call.args })),
+          meta: result,
+        };
+      },
+      dispatch: async (call) => {
+        const toolStartedAt = Date.now();
+        const action = byName.get(call.name);
+        const args: unknown = call.args;
+        const words = call.name === 'canvas_add_object' ? authoredDocumentWords(args) : null;
+        if (words != null) {
+          documentWords = Math.max(documentWords ?? 0, words);
+          documentWordCountExact = true;
+        }
+        let outcome: unknown;
+        if (authoringOnly && NON_AUTHORING_TOOL_NAMES.has(call.name)) {
+          outcome = { error: 'The bounded research phase has ended. Create the requested Canvas artifacts from the evidence already gathered and the board snapshot you already have.' };
+        } else if (call.name === 'builtin_web_search' && narrowSearches >= MAX_NARROW_SEARCHES) {
+          outcome = { error: 'Search stopped after two encyclopedic results. Fetch a known official URL directly or create the requested Canvas artifacts with the evidence already gathered.' };
+        } else if (!action) {
+          outcome = { error: `Unknown tool: ${call.name}` };
+        } else if (!call.name.startsWith('canvas_') && mutates(action, args) && !options.autoApprove) {
+          const approved = options.confirmAction ? await options.confirmAction({ name: call.name, args }) : false;
+          if (!approved) outcome = { error: options.confirmAction ? 'The user declined this tenant mutation.' : 'This tenant mutation requires in-app approval.' };
+          else {
+            try { outcome = await action.run(args); } catch (error) { outcome = { error: error instanceof Error ? error.message : 'Tool failed' }; }
+          }
+        } else {
+          try { outcome = await action.run(args); } catch (error) { outcome = { error: error instanceof Error ? error.message : 'Tool failed' }; }
+        }
+        if (call.name === 'builtin_web_search' && isNarrowSearchResult(outcome)) narrowSearches += 1;
+        if (outcome && typeof outcome === 'object') {
+          const result = outcome as { proposed?: unknown; error?: unknown };
+          if (result.proposed === true) proposedCanvasMutation = true;
+          if (typeof result.error === 'string' && result.error.trim()
+            && !(NON_AUTHORING_TOOL_NAMES.has(call.name) && (authoringOnly || narrowSearches >= MAX_NARROW_SEARCHES))) {
+            lastToolError = result.error.trim();
+          }
+        }
+        const isError = !!(outcome && typeof outcome === 'object' && 'error' in outcome);
+        options.onTrace?.({ ts: new Date().toISOString(), category: isError ? 'error' : 'tool', label: call.name, durationMs: Math.max(0, Date.now() - toolStartedAt), args, result: outcome, isError });
+        return { data: outcome, isError };
+      },
+    },
+    hooks: {
+      // A stopped run must not START another tool. One already in flight is left to
+      // settle (its own transport owns the cancellation); nothing after it runs.
+      beforeDispatch: () => { throwIfStopped(); return undefined; },
+      afterToolCalls: () => { finalText = ''; return undefined; },
+      onNoToolCalls: async (_ctx, turn) => {
+        const result = turn.meta as CanvasTurn;
+        // An INTERRUPTED turn is not a turn the model chose to end. Truncation at the
+        // output ceiling drops the tool call it was mid-way through emitting (its JSON
+        // never closes), and an unparseable call is discarded by the provider — both
+        // arrive here looking exactly like "the model declined to act", and both used
+        // to be answered with "you repeated yourself, answer again", which reproduces
+        // the same failure. Handled FIRST, with the directive that matches the actual
+        // interruption: author smaller, or re-encode the call.
+        const interruption = turnInterruption(result.finishReason);
+        if (interruption && interruptedTurnRecoveries < MAX_INTERRUPTED_TURN_RECOVERIES) {
+          interruptedTurnRecoveries += 1;
+          options.onTrace?.({
+            ts: new Date().toISOString(), category: 'error',
+            label: interruption === 'truncated' ? 'response truncated' : 'malformed tool call',
+            isError: true,
+            result: { finishReason: result.finishReason, model: result.resolvedModel ?? null, attempt: interruptedTurnRecoveries },
+          });
+          messages.push({
+            role: 'system',
+            content: interruption === 'truncated' ? TRUNCATED_TURN_DIRECTIVE : MALFORMED_TOOL_CALL_DIRECTIVE,
+          });
           finalText = '';
-          continue;
+          return { action: 'continue' };
         }
-        finalText = '';
-        break;
-      }
-      lastSpokenAnswer = spoken;
-      // ESCALATION LADDER for a model that discussed an imperative canvas request
-      // instead of executing it. Each rung is tried only when the one before it is
-      // spent, hardest-available remedy first:
-      //   1. re-state the command;
-      //   2. hand the turn to a model that already emitted valid tool calls;
-      //   3. no such model exists — re-state once more, now with research and board
-      //      re-reads withdrawn, and say why prose is not an artifact;
-      //   4. stop, and deliver what the model actually said (see the tail of this
-      //      function) instead of a dead-end notice.
-      // Rung 3 is what the measured 2026-08-14 failure needed and never got: the only
-      // tool-calling model in that turn WAS the stalled one, so rung 2 was a no-op and
-      // the loop went straight from rung 1 to giving up, four turns early.
-      if (!options.participant && !proposedCanvasMutation && mutationRequested
-        && (byName.has('canvas_add_object') || byName.has('canvas_update_object'))) {
-        if (mutationRecoveries === 0 || (
-          !switchToProvenModel(
-            result.resolvedModel,
-            'The prior model did not execute the Canvas command after a retry and has been disabled for this session. Stop researching and use canvas_add_object or canvas_update_object now to complete the user\'s requested artifact.',
-          ) && mutationRecoveries < MAX_MUTATION_RECOVERIES
+        if (interruption && switchToProvenModel(
+          result.resolvedModel,
+          interruption === 'truncated'
+            ? 'The prior model kept running past the output limit without finishing and has been disabled for this session. Author the requested artifact in small steps.'
+            : 'The prior model kept emitting tool calls the provider could not parse and has been disabled for this session.',
         )) {
-          mutationRecoveries += 1;
+          finalText = '';
+          return { action: 'continue' };
+        }
+        // A DEGENERATE turn — the model returned nothing at all, or reproduced an
+        // earlier assistant message instead of answering. Neither is an answer, and
+        // neither is caught by the intent-based recoveries below (a plain question
+        // degenerates just as easily as a command). Checked FIRST because an echoed
+        // reply otherwise reaches the user as a fresh one and is stored, which is what
+        // let a single failed turn become the template for every turn after it.
+        const spoken = stripSpeakerLabel(result.text || finalText, speakerLabels).trim();
+        if (!spoken || echoesEarlierAnswer(spoken, options.conversation, speakerLabels)) {
+          if (!degenerateAnswerRecoveryUsed) {
+            degenerateAnswerRecoveryUsed = true;
+            messages.push({
+              role: 'system',
+              content: 'Your prior response was empty or repeated an earlier message in this conversation, so it did not answer anything. Do not restate a previous reply, and do not prefix your answer with a speaker name. Answer the user\'s latest message directly now, and call the canvas_* tools for any change it asks for.',
+            });
+            finalText = '';
+            return { action: 'continue' };
+          }
+          if (switchToProvenModel(result.resolvedModel, 'The prior model returned an empty or repeated response twice and has been disabled for this session.')) {
+            finalText = '';
+            return { action: 'continue' };
+          }
+          finalText = '';
+          return { action: 'stop', ok: false };
+        }
+        lastSpokenAnswer = spoken;
+        // ESCALATION LADDER for a model that discussed an imperative canvas request
+        // instead of executing it. Each rung is tried only when the one before it is
+        // spent, hardest-available remedy first:
+        //   1. re-state the command;
+        //   2. hand the turn to a model that already emitted valid tool calls;
+        //   3. no such model exists — re-state once more, now with research and board
+        //      re-reads withdrawn, and say why prose is not an artifact;
+        //   4. stop, and deliver what the model actually said (see the tail of this
+        //      function) instead of a dead-end notice.
+        // Rung 3 is what the measured 2026-08-14 failure needed and never got: the only
+        // tool-calling model in that turn WAS the stalled one, so rung 2 was a no-op and
+        // the loop went straight from rung 1 to giving up, four turns early.
+        if (!options.participant && !proposedCanvasMutation && mutationRequested
+          && (byName.has('canvas_add_object') || byName.has('canvas_update_object'))) {
+          if (mutationRecoveries === 0 || (
+            !switchToProvenModel(
+              result.resolvedModel,
+              'The prior model did not execute the Canvas command after a retry and has been disabled for this session. Stop researching and use canvas_add_object or canvas_update_object now to complete the user\'s requested artifact.',
+            ) && mutationRecoveries < MAX_MUTATION_RECOVERIES
+          )) {
+            mutationRecoveries += 1;
+            messages.push({ role: 'assistant', content: result.text || finalText });
+            messages.push({
+              role: 'system',
+              // The later attempt runs with research and board re-reads already withdrawn,
+              // so repeating "act now" adds nothing. What the first directive never
+              // supplies is the reason a model stalls here: it has written the answer in
+              // prose and has no idea the prose is not the artifact. Say that, and name
+              // the one call left to it.
+              content: mutationRecoveries > 1
+                ? 'You have now answered twice in prose without creating anything. Prose in a reply is NOT a canvas artifact and the user cannot keep, edit or export it — only a canvas_add_object call puts it on their board. Make that call now, passing the full text you just wrote as the new object\'s authored content, and write nothing else in this response.'
+                : 'Your prior response described or discussed an imperative Canvas request without executing it. Act now with the available canvas_add_object or canvas_update_object tool. If a non-Chat object is selected, update that exact object unless the user explicitly requested another one. For a Website/WYSIWYG change, send the complete authored fields.pages structure and websiteTheme; do not ask another optional question and do not rely on renderer defaults.',
+            });
+            finalText = '';
+            return { action: 'continue' };
+          }
+          // Either the turn moved to a proven model (which reset the ladder) or every
+          // rung is spent. Continue in the first case, stop in the second.
+          finalText = '';
+          if (mutationRecoveries === 0) return { action: 'continue' };
+          return { action: 'stop', ok: false };
+        }
+        if (!options.participant && !proposedCanvasMutation && !executiveRequestRecoveryUsed
+          && isExecutiveTeammateRequest(options.prompt) && byName.has('canvas_add_object')) {
+          executiveRequestRecoveryUsed = true;
           messages.push({ role: 'assistant', content: result.text || finalText });
           messages.push({
             role: 'system',
-            // The later attempt runs with research and board re-reads already withdrawn,
-            // so repeating "act now" adds nothing. What the first directive never
-            // supplies is the reason a model stalls here: it has written the answer in
-            // prose and has no idea the prose is not the artifact. Say that, and name
-            // the one call left to it.
-            content: mutationRecoveries > 1
-              ? 'You have now answered twice in prose without creating anything. Prose in a reply is NOT a canvas artifact and the user cannot keep, edit or export it — only a canvas_add_object call puts it on their board. Make that call now, passing the full text you just wrote as the new object\'s authored content, and write nothing else in this response.'
-              : 'Your prior response described or discussed an imperative Canvas request without executing it. Act now with the available canvas_add_object or canvas_update_object tool. If a non-Chat object is selected, update that exact object unless the user explicitly requested another one. For a Website/WYSIWYG change, send the complete authored fields.pages structure and websiteTheme; do not ask another optional question and do not rely on renderer defaults.',
+            content: 'Your prior response did not execute the requested teammate action. Act now: add the named executive Agent, add the fully authored requested deliverable, and connect them with the available Canvas tools. A new canvas is sufficient context; put assumptions and open questions in the deliverable instead of asking a follow-up question.',
           });
           finalText = '';
-          continue;
+          return { action: 'continue' };
         }
-        // Either the turn moved to a proven model (which reset the ladder) or every
-        // rung is spent. Continue in the first case, stop in the second.
-        finalText = '';
-        if (mutationRecoveries === 0) continue;
-        break;
-      }
-      if (!options.participant && !proposedCanvasMutation && !executiveRequestRecoveryUsed
-        && isExecutiveTeammateRequest(options.prompt) && byName.has('canvas_add_object')) {
-        executiveRequestRecoveryUsed = true;
-        messages.push({ role: 'assistant', content: result.text || finalText });
-        messages.push({
-          role: 'system',
-          content: 'Your prior response did not execute the requested teammate action. Act now: add the named executive Agent, add the fully authored requested deliverable, and connect them with the available Canvas tools. A new canvas is sufficient context; put assumptions and open questions in the deliverable instead of asking a follow-up question.',
-        });
-        finalText = '';
-        continue;
-      }
-      if (requestedPages != null && documentWords != null && documentWords < requestedPages * WORDS_PER_DRAFT_PAGE) {
-        return finish(incompleteDocumentAnswer(notices, requestedPages, documentWords, documentWordCountExact));
-      }
-      // `spoken` is the answer with any copied speaker label already removed, so a
-      // model that relapses cannot seed the next turn with a prefix to extend.
-      return finish(verified(spoken));
-    }
-    messages.push({
-      role: 'assistant', content: result.text,
-      tool_calls: result.toolCalls.map((call) => ({ id: call.id, type: 'function', function: { name: call.name, arguments: call.args } })),
-    });
-    for (const call of result.toolCalls) {
-      // A stopped run must not START another tool. One already in flight is left to
-      // settle (its own transport owns the cancellation); nothing after it runs.
-      throwIfStopped();
-      const toolStartedAt = Date.now();
-      const action = byName.get(call.name);
-      let args: unknown = {};
-      try { args = JSON.parse(call.args || '{}'); } catch { args = {}; }
-      const words = call.name === 'canvas_add_object' ? authoredDocumentWords(args) : null;
-      if (words != null) {
-        documentWords = Math.max(documentWords ?? 0, words);
-        documentWordCountExact = true;
-      }
-      let outcome: unknown;
-      if (authoringOnly && NON_AUTHORING_TOOL_NAMES.has(call.name)) {
-        outcome = { error: 'The bounded research phase has ended. Create the requested Canvas artifacts from the evidence already gathered and the board snapshot you already have.' };
-      } else if (call.name === 'builtin_web_search' && narrowSearches >= MAX_NARROW_SEARCHES) {
-        outcome = { error: 'Search stopped after two encyclopedic results. Fetch a known official URL directly or create the requested Canvas artifacts with the evidence already gathered.' };
-      } else if (!action) {
-        outcome = { error: `Unknown tool: ${call.name}` };
-      } else if (!call.name.startsWith('canvas_') && mutates(action, args) && !options.autoApprove) {
-        const approved = options.confirmAction ? await options.confirmAction({ name: call.name, args }) : false;
-        if (!approved) outcome = { error: options.confirmAction ? 'The user declined this tenant mutation.' : 'This tenant mutation requires in-app approval.' };
-        else {
-          try { outcome = await action.run(args); } catch (error) { outcome = { error: error instanceof Error ? error.message : 'Tool failed' }; }
+        if (requestedPages != null && documentWords != null && documentWords < requestedPages * WORDS_PER_DRAFT_PAGE) {
+          settled = await finish(incompleteDocumentAnswer(notices, requestedPages, documentWords, documentWordCountExact));
+          return { action: 'stop', ok: true };
         }
-      } else {
-        try { outcome = await action.run(args); } catch (error) { outcome = { error: error instanceof Error ? error.message : 'Tool failed' }; }
-      }
-      if (call.name === 'builtin_web_search' && isNarrowSearchResult(outcome)) narrowSearches += 1;
-      if (outcome && typeof outcome === 'object') {
-        const result = outcome as { proposed?: unknown; error?: unknown };
-        if (result.proposed === true) proposedCanvasMutation = true;
-        if (typeof result.error === 'string' && result.error.trim()
-          && !(NON_AUTHORING_TOOL_NAMES.has(call.name) && (authoringOnly || narrowSearches >= MAX_NARROW_SEARCHES))) {
-          lastToolError = result.error.trim();
-        }
-      }
-      options.onTrace?.({ ts: new Date().toISOString(), category: outcome && typeof outcome === 'object' && 'error' in outcome ? 'error' : 'tool', label: call.name, durationMs: Math.max(0, Date.now() - toolStartedAt), args, result: outcome, isError: !!(outcome && typeof outcome === 'object' && 'error' in outcome) });
-      messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(outcome) });
-    }
-    finalText = '';
-  }
+        // `spoken` is the answer with any copied speaker label already removed, so a
+        // model that relapses cannot seed the next turn with a prefix to extend.
+        settled = await finish(verified(spoken));
+        return { action: 'stop', ok: true };
+      },
+    },
+  });
+  // The user pressed Stop between round-trips (a stop mid-stream or mid-tool throws
+  // on its own): typed, so the surface records "you stopped this", not a failure.
+  if (loop.cancelled) throw new CanvasRunAbortedError();
+  if (settled !== null) return settled;
   if (requestedPages != null && documentWords != null && documentWords < requestedPages * WORDS_PER_DRAFT_PAGE) {
     return finish(incompleteDocumentAnswer(notices, requestedPages, documentWords, documentWordCountExact));
   }

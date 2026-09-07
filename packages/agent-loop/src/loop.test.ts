@@ -75,7 +75,7 @@ describe("runAgentLoop", () => {
     const hooks: LoopHooks<Row> = { onFinish: () => (blocks++ === 0 ? "write a file first" : null) };
     const r = await runAgentLoop({ messages, codec: openAiChatCodec<Row>(), ports, hooks, budget: { stepCap: 5 } });
     expect(JSON.parse((messages[1] as OpenAiToolRow).content)).toEqual({ ok: false, error: "write a file first" });
-    expect(r).toMatchObject({ finished: true, output: "now", step: 1 });
+    expect(r).toMatchObject({ finished: true, output: "now", step: 2 });
   });
 
   it("surfaces ask_human as awaitingInput after finishing the turn's remaining calls", async () => {

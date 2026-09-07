@@ -1348,6 +1348,16 @@ export const tsvector = customType<{ data: string }>({
   dataType() { return 'tsvector'; },
 });
 
+/**
+ * pgvector's `vector(N)`. Written and read as the driver's text form (`[1,2,3]`)
+ * — Drizzle has no vector builder, and the ANN comparison happens in SQL anyway
+ * (`embedding <=> $query`), so the TS side only ever carries the literal.
+ * The extension is created by migration 1134.
+ */
+export const vector = customType<{ data: string; config: { dimensions: number } }>({
+  dataType(config) { return `vector(${config?.dimensions ?? 1536})`; },
+});
+
 
 // ---------------------------------------------------------------------------
 // Enum columns (Builderforce orchestration)

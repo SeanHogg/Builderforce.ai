@@ -16,6 +16,7 @@
  * write, so a recall never serves a stale fact set.
  */
 import { and, desc, eq, gt, ilike, isNull, ne, or, type SQL } from 'drizzle-orm';
+import { embedMemoryText, memoryEmbeddingText, toVectorLiteral, MEMORY_EMBEDDING_MODEL } from '../memory/memoryEmbedding';
 import { projectFacts } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
@@ -91,15 +92,25 @@ export async function upsertProjectFact(
   if (!k || !c || !Number.isInteger(projectId) || projectId <= 0) return false;
   const expiresAt = opts?.expiresAt ?? null;
   const originExecutionId = opts?.originExecutionId ?? null;
+  // Embed on write so the fact is semantically reachable on the next recall (1134).
+  // Best-effort: a failed embed leaves the columns null, the lexical arm still finds
+  // the fact, and the backfill sweep vectorises it later.
+  const now = new Date();
+  const vector = toVectorLiteral((await embedMemoryText(env, memoryEmbeddingText(k, c))) ?? []);
+  const embeddingFields = vector
+    ? { embedding: vector, embeddingModel: MEMORY_EMBEDDING_MODEL, embeddedAt: now }
+    : { embedding: null, embeddingModel: null, embeddedAt: null };
   await db
     .insert(projectFacts)
-    .values({ tenantId, projectId, key: k, content: c, source: source.slice(0, 64), expiresAt, originExecutionId })
+    .values({ tenantId, projectId, key: k, content: c, source: source.slice(0, 64), expiresAt, originExecutionId, ...embeddingFields })
     .onConflictDoUpdate({
       target: [projectFacts.tenantId, projectFacts.projectId, projectFacts.key],
       // A re-write REPLACES the governance metadata too: re-remembering a fact without
       // a TTL makes it durable again, which is the only reading of "update == replace"
-      // that does not leave a stale expiry silently attached to fresh content.
-      set: { content: c, source: source.slice(0, 64), expiresAt, originExecutionId, updatedAt: new Date() },
+      // that does not leave a stale expiry silently attached to fresh content. The
+      // vector goes with it — an embedding of superseded content ranks the fact by
+      // what it used to say.
+      set: { content: c, source: source.slice(0, 64), expiresAt, originExecutionId, ...embeddingFields, updatedAt: now },
     });
   await bumpCacheVersion(env, versionKey(tenantId, projectId));
   return true;

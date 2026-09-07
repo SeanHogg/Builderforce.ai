@@ -64,7 +64,7 @@ export async function runAgentLoop<M>(args: LoopRunArgs<M>): Promise<LoopResult>
       break;
     }
 
-    let turnResult: LoopTurnResult;
+    let turnResult!: LoopTurnResult;
     try {
       turnResult = await ports.complete(ctx);
     } catch (err) {
