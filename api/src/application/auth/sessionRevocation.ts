@@ -29,6 +29,7 @@ import { sessionIntrospectCacheKey } from '@builderforce/session-introspection';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { authTokens, authUserSessions } from '../../infrastructure/database/schema';
+import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { UnauthorizedError } from '../../domain/shared/errors';
 
@@ -79,7 +80,12 @@ export async function findActiveToken(db: Db, userId: string, jti: string): Prom
       ),
     )
     .where(
-      and(
+      // `session_credential`: the row IS the presented token. `jti` names one row
+      // and `user_id` names its holder — both stronger than a tenant filter, and
+      // the token's own nullable `tenant_id` describes it rather than gating it.
+      acrossTenants(
+        authTokens,
+        'session_credential',
         eq(authTokens.jti, jti),
         eq(authTokens.userId, userId),
         isNull(authTokens.revokedAt),
@@ -118,7 +124,10 @@ export function lastSeenWrites(db: Db, row: ActiveTokenRow, now = Date.now()): P
   const writes: Promise<unknown>[] = [];
 
   if (stale(row.tokenLastSeenAt)) {
-    writes.push(db.update(authTokens).set({ lastSeenAt: sql`now()` }).where(eq(authTokens.jti, row.jti)));
+    // `session_credential`: `row` came from {@link findActiveToken}, so the jti is
+    // the one this request presented — one row, already authenticated.
+    writes.push(db.update(authTokens).set({ lastSeenAt: sql`now()` })
+      .where(acrossTenants(authTokens, 'session_credential', eq(authTokens.jti, row.jti))));
   }
   if (row.sessionRowId && stale(row.sessionLastSeenAt)) {
     writes.push(
@@ -166,8 +175,20 @@ function sessionPredicate(selector: RevokeSelector): SQL | undefined {
   return and(eq(authUserSessions.userId, selector.userId), eq(authUserSessions.isActive, true));
 }
 
-/** The live `auth_tokens` rows a selector revokes. */
-function tokenPredicate(selector: RevokeSelector): SQL {
+/**
+ * The live `auth_tokens` rows a selector revokes.
+ *
+ * Returned as CLAUSES rather than a finished predicate so the statement that runs
+ * them states its own scope — `acrossTenants(authTokens, 'session_credential', …)`
+ * at the call site, where a reader and `check-tenant-scope` both see it.
+ *
+ * Declared `session_credential` (see tenantScope.ts): a person holds ONE session
+ * across every workspace they belong to, so a revoke that stopped at one tenant
+ * would report success and leave live tokens behind. `tenantId` on the selector
+ * NARROWS to one workspace's tokens where the calling route means to; it is not
+ * the gate. The gate is the server-established `userId`/`jti` every branch adds.
+ */
+function tokenClauses(selector: RevokeSelector): SQL[] {
   const clauses: SQL[] = [isNull(authTokens.revokedAt)];
   if ('userId' in selector) clauses.push(eq(authTokens.userId, selector.userId));
   if ('tenantId' in selector && selector.tenantId !== undefined) clauses.push(eq(authTokens.tenantId, selector.tenantId));
@@ -176,8 +197,7 @@ function tokenPredicate(selector: RevokeSelector): SQL {
   // NOT swept by "sign out everywhere else" — they were never part of a session.
   if ('exceptSessionId' in selector) clauses.push(ne(authTokens.sessionId, selector.exceptSessionId));
   if ('jti' in selector) clauses.push(eq(authTokens.jti, selector.jti));
-  // `and` is only undefined with zero clauses; the revokedAt clause is always present.
-  return and(...clauses) as SQL;
+  return clauses;
 }
 
 /**
@@ -205,7 +225,8 @@ export async function revokeSessionTokens(
   const rows = await db
     .update(authTokens)
     .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-    .where(tokenPredicate(selector))
+    // See {@link tokenClauses} for why the credential tables are not tenant-filtered.
+    .where(acrossTenants(authTokens, 'session_credential', ...tokenClauses(selector)))
     .returning({ jti: authTokens.jti });
 
   const revokedJtis = rows.map((row) => row.jti);

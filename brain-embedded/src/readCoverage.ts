@@ -62,6 +62,15 @@ export interface ReadVisit {
   count: number;
   /** The distinct argument sets already used against it, oldest first, capped. */
   priorArgs: string[];
+  /**
+   * Something with an UNKNOWN blast radius (a shell command, a merge, an undo) ran
+   * between the previous read of this target and this one, so this read may well be
+   * returning different bytes. The advisory stays silent for it — re-reading after a
+   * build or a codemod is exactly the right move — but the COUNT still stands, so a
+   * model circling one file across three `run_command`s is still caught on the next
+   * read. See {@link ReadCoverage.invalidate}.
+   */
+  mayHaveChanged: boolean;
 }
 
 /** Distinct argument sets remembered per target — enough to quote back, not a log. */
@@ -114,15 +123,21 @@ export class ReadCoverage {
       argText = String(args ?? '');
     }
     if (!existing) {
-      const fresh: ReadVisit = { count: 1, priorArgs: [argText] };
+      const fresh: ReadVisit = { count: 1, priorArgs: [argText], mayHaveChanged: false };
       this.visits.set(key, fresh);
-      return fresh;
+      return { ...fresh };
     }
     existing.count += 1;
     if (!existing.priorArgs.includes(argText) && existing.priorArgs.length < MAX_REMEMBERED_ARGS) {
       existing.priorArgs.push(argText);
     }
-    return existing;
+    // The "something ran that could have changed this" pass is spent by the read it
+    // excuses: the NEXT read of the same target, with nothing unscoped in between, is
+    // circling again. Returned as a SNAPSHOT so the caller cannot hold — or reset — the
+    // live tally behind the class's back.
+    const visit: ReadVisit = { ...existing };
+    existing.mayHaveChanged = false;
+    return visit;
   }
 
   /**
@@ -130,7 +145,19 @@ export class ReadCoverage {
    * no less — for BOTH guards:
    *
    * - A tool whose blast radius is unknown (`run_command`, a base-branch merge, an
-   *   undo) forgets everything: the honest answer to "what did that touch?" is "anything".
+   *   undo) forgets every cached ANSWER: the honest answer to "what did that touch?" is
+   *   "anything", so no exact repeat may be stubbed out afterwards. It does NOT forget
+   *   the visit TALLY, and that distinction is the whole difference between a guard that
+   *   works and one that is inert. The tally counts the MODEL's behaviour — how many
+   *   times it has gone back to one target, with every one of those results still sitting
+   *   in the transcript above it — and a build running in between changes none of that.
+   *   Clearing it wholesale is what made the advisory unreachable in any run that
+   *   verifies its work: read, read, `run_command` (typecheck), read, read, `run_command`
+   *   … never reaches three, so the nudge at 3 and the hard stop at 5 never fired, and a
+   *   run spent 46% of its calls re-reading ground it had already covered with the loop
+   *   guard silent throughout. Instead each target is marked {@link ReadVisit.mayHaveChanged}
+   *   so the NEXT read of it is excused — a re-read after a build is the right move — and
+   *   the one after that is not.
    * - A file write/edit/delete forgets its own target, across every tool that reads it —
    *   `read_file` and `search_code` on one path are the same stale picture. A re-read of
    *   what was just changed is genuinely new information; nagging about it would punish
@@ -145,8 +172,8 @@ export class ReadCoverage {
    */
   invalidate(tool: string, args: unknown): void {
     if (isUnscopedMutationTool(tool)) {
-      this.visits.clear();
       this.exact.clear();
+      for (const visit of this.visits.values()) visit.mayHaveChanged = true;
       return;
     }
     if (isCodeChangeTool(tool)) {
@@ -191,6 +218,10 @@ export class ReadCoverage {
  */
 export function revisitAdvisory(tool: string, target: string, visit: ReadVisit): string | null {
   if (visit.count < REVISIT_NUDGE_AT) return null;
+  // A shell command / merge / undo ran since the last read of this target, so this one
+  // is genuinely fetching news rather than circling. Nagging here would punish exactly
+  // the behaviour the guard wants (verify, then look at what changed).
+  if (visit.mayHaveChanged) return null;
 
   const shape = visit.priorArgs.length > 1
     ? ` The argument sets you have already used on it: ${visit.priorArgs.map((a) => `\`${a}\``).join(', ')}.`

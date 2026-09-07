@@ -19,3 +19,4 @@ export * from "./psychometric-dims.js";
 export * from "./limbic.js";
 export * from "./psychometrics.js";
 export * from "./knowledge-notes.js";
+export * from "./git-tools.js";

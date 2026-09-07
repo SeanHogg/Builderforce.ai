@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildCoreToolRegistry, gitCommitTool, gitPushTool, openPullRequestTool } from "./core-tools.js";
+import { buildCoreToolRegistry } from "./core-tools.js";
+import { gitCommitTool, gitPushTool, openPullRequestTool } from "./git-tools.js";
 import type { Capability } from "./capabilities.js";
 import type { ToolResult } from "./tool.js";
 
@@ -50,7 +51,12 @@ describe("git_commit", () => {
   it("stages ONLY the named paths", async () => {
     const sh = recordingShell();
     await gitCommitTool.execute({ message: "fix", paths: ["src/a.ts", "src/b.ts"] }, sh as never);
-    expect(sh.scripts[0]).toContain("git add -- 'src/a.ts' 'src/b.ts'");
+    // Each path is resolved through `pick` first (see commitPathCandidates) and then
+    // staged from its own variable — so the assertion is that BOTH named paths, and
+    // nothing else, reach `git add`.
+    expect(sh.scripts[0]).toContain("P0=\"$(pick 'src/a.ts')\"");
+    expect(sh.scripts[0]).toContain("P1=\"$(pick 'src/b.ts')\"");
+    expect(sh.scripts[0]).toContain('git add -- "$P0" "$P1"');
     expect(sh.scripts[0]).not.toContain("git add -A");
     expect(sh.scripts[0]).not.toContain("git add .");
   });
@@ -69,7 +75,7 @@ describe("git_commit", () => {
     const sh = recordingShell();
     await gitCommitTool.execute({ message: "m", paths: ["a.ts"], allowBaseBranch: true }, sh as never);
     expect(sh.scripts[0]).not.toContain("ON_BASE_BRANCH");
-    expect(sh.scripts[0]).toContain("git add -- 'a.ts'");
+    expect(sh.scripts[0]).toContain("P0=\"$(pick 'a.ts')\"");
     // A named ticket branch still wins over the declaration: it says where to commit.
     const withBranch = recordingShell();
     await gitCommitTool.execute({ message: "m", paths: ["a.ts"], allowBaseBranch: true, branch: "ticket/1-x" }, withBranch as never);

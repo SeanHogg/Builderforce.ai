@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildGitCommand } from "./core-tools.js";
+import { buildGitCommand } from "./git-tools.js";
 
 /**
  * The workspace root is not always the repository root. A folder holding several

@@ -41,6 +41,9 @@ __export(src_exports, {
   DEFAULT_MODEL_IDENTITY: () => DEFAULT_MODEL_IDENTITY,
   DEFAULT_TOOL_LIMIT: () => DEFAULT_TOOL_LIMIT,
   EVERMIND_LEARN_MIN_CHARS: () => EVERMIND_LEARN_MIN_CHARS,
+  FAILURE_HARD_AT: () => FAILURE_HARD_AT,
+  FAILURE_NUDGE_AT: () => FAILURE_NUDGE_AT,
+  FailureTally: () => FailureTally,
   LOCAL_WORKSPACE_TOOLS: () => LOCAL_WORKSPACE_TOOLS,
   MAX_TOOL_RESULT_CHARS: () => MAX_TOOL_RESULT_CHARS,
   MODEL_CATEGORIES: () => MODEL_CATEGORIES,
@@ -108,6 +111,7 @@ __export(src_exports, {
   displayModelName: () => displayModelName,
   effortProfile: () => effortProfile,
   extractXmlToolCalls: () => extractXmlToolCalls,
+  failureReason: () => failureReason,
   fetchApiVersionVia: () => fetchApiVersionVia,
   fetchMcpToolEntries: () => fetchMcpToolEntries,
   filterMentionCandidates: () => filterMentionCandidates,
@@ -183,6 +187,7 @@ __export(src_exports, {
   ratedTurnContext: () => ratedTurnContext,
   ratedTurnTool: () => ratedTurnTool,
   reasoningForRun: () => reasoningForRun,
+  repeatedFailureAdvisory: () => repeatedFailureAdvisory,
   resetApiVersionCache: () => resetApiVersionCache,
   resetBrainRunStore: () => resetBrainRunStore,
   resolveRecipient: () => resolveRecipient,
@@ -1777,6 +1782,84 @@ function continuationDirective() {
   return `The user's last message is a bare directive ("fix", "do it", "go ahead") with no subject of its own. It refers to the proposal in YOUR immediately preceding message, which described work you had not yet carried out. Carry out that exact proposal now, using the tools, starting from the files and the change it already named \u2014 do NOT ask the user what to fix, and do NOT re-derive the analysis you have already done and can read above. If the earlier proposal named a specific file and edit, apply that edit. Report what you changed when it is done.`;
 }
 
+// ../packages/agent-stall/src/handoff.ts
+var EXECUTION_TOOLS = /* @__PURE__ */ new Set([
+  "run_command",
+  "run_shell_command",
+  "execute_command",
+  "bash",
+  "shell",
+  "terminal",
+  "git_commit",
+  "git_push",
+  "git_sync_latest",
+  "open_pull_request"
+]);
+function canExecuteCommands(toolNames) {
+  return (toolNames ?? []).some((n) => EXECUTION_TOOLS.has(n.toLowerCase()));
+}
+var RUNNER = "(?:npm|pnpm|yarn|npx|bun|deno|node|git|make|cargo|go|dotnet|mvn|gradle|python3?|pip3?|poetry|uv|ruby|rake|bundle|composer|php|docker(?:\\s+compose)?|kubectl|helm|terraform|wrangler|vercel|netlify|vite|webpack|tsc|tsgo|eslint|prettier|pytest|jest|vitest|playwright|cypress|bash|sh|zsh|pwsh|powershell|curl|wget|sed|awk|rsync|vsce)\\b";
+var SCRIPT_NOUN = "(?:build|tests?|test suite|type-?check(?:ing)?|typecheck|lint(?:er|ing)?|guards?|checks?|install|dev server|migrations?|deploy(?:ment)?|codegen|bundle|vsix|package|commit|push|pull request|pr\\b|branch|lockfile|extension host)";
+var CMD_MARK = "\u2983cmd\u2984";
+var ID_MARK = "\u2983id\u2984";
+var OUT_OF_REACH = /\b(credential|password|api ?key|secret|auth token|\.env\b|environment variable|2fa|mfa|sign ?in|log ?in|browser|incognito|restart vs ?code|reload the window|reinstall the extension|github ui|web ui|dashboard|billing|payment|admin console|approve|permission|by hand|manually)\b/i;
+var TAIL_CHARS = 900;
+var WINDOW_BEFORE = 80;
+var WINDOW_AFTER = 220;
+function normalise2(text) {
+  const mark = (body) => new RegExp(RUNNER, "i").test(body) ? ` ${CMD_MARK} ` : ` ${ID_MARK} `;
+  return text.replace(/```[\s\S]*?(?:```|$)/g, (m) => mark(m)).replace(/`[^`\n]+`/g, (m) => mark(m));
+}
+var HANDOFF_VERB = "(?:re-?run|run|execute|apply|install|re-?install|rebuild|build|compile|commit|push|deploy|publish|restart|relaunch|launch|start|test|verify|lint|type-?check|typecheck|migrate|regenerate|package|bump|trigger|kick off)";
+var HANDS_OFF = new RegExp(
+  [
+    // "you can run", "you'll need to run", "you should now commit", "you must rebuild"
+    `\\byou(?:'ll|'d|'ve| will| would| should| must| may| might| can| could| still| then| now)?(?:\\s+(?:then|now|also|just|still|next|first|finally|want to|need to|have to|be able to))*\\s+${HANDOFF_VERB}\\b`,
+    // "please run the guards"
+    `\\bplease\\s+(?:now\\s+|then\\s+)?${HANDOFF_VERB}\\b`,
+    // "once you've run the build", "after you push"
+    `\\b(?:once|after|when|before)\\s+you(?:'ve| have| had)?\\s+${HANDOFF_VERB}\\b`,
+    // "run the following", "apply these changes", "execute this command"
+    `\\b${HANDOFF_VERB}\\s+(?:the\\s+following|these|this)\\b`,
+    // "to verify, run …" / "to apply the fix you need to run …"
+    `\\bto\\s+(?:apply|verify|confirm|finish|complete|deploy|ship|land|pick up|see)\\b[^.\\n]{0,60}?,?\\s*(?:you\\s+(?:can|should|must|will|need to|have to)\\s+)?${HANDOFF_VERB}\\b`,
+    // A steps list: "1. Run the type-check", "- Commit the change", "Then push to main"
+    `(?:^|\\n)[ \\t]*(?:\\d+[.)]|[-*+]|#{1,6}|>)?[ \\t]*(?:then|now|next|finally|first)?[,:]?[ \\t]*${HANDOFF_VERB}\\b`,
+    // The same imperative mid-paragraph: "I applied the fix. Now run the type-check."
+    // The adverb is REQUIRED here, unlike the line-leading form above — without it a
+    // plain sentence that happens to open with one of these words ("Build output is
+    // clean now.") would read as an instruction.
+    `[.!?]\\s+(?:then|now|next|finally|first)[,:]?\\s+${HANDOFF_VERB}\\b`
+  ].join("|"),
+  "gi"
+);
+var COMMAND_NEARBY = new RegExp(`${CMD_MARK}|${RUNNER}|\\b${SCRIPT_NOUN}`, "i");
+function handsWorkToUser(text) {
+  const t = (text ?? "").trim();
+  if (!t) return false;
+  const scanned = normalise2(t.slice(-TAIL_CHARS));
+  HANDS_OFF.lastIndex = 0;
+  for (let m = HANDS_OFF.exec(scanned); m; m = HANDS_OFF.exec(scanned)) {
+    const window2 = scanned.slice(
+      Math.max(0, m.index - WINDOW_BEFORE),
+      m.index + m[0].length + WINDOW_AFTER
+    );
+    if (!COMMAND_NEARBY.test(window2)) continue;
+    if (OUT_OF_REACH.test(window2)) continue;
+    HANDS_OFF.lastIndex = 0;
+    return true;
+  }
+  return false;
+}
+function delegatesExecutableWork(text, ctx) {
+  if (!canExecuteCommands(ctx.availableToolNames)) return false;
+  if (!asksForChange(ctx.requestText)) return false;
+  return handsWorkToUser(text);
+}
+function handoffRecoveryNudge(lastChance) {
+  return "Your last turn ended by telling the USER to run commands. You are the one holding the tools \u2014 `run_command` for shell steps, the git tools to commit and push \u2014 so those steps are yours, not theirs. Carry them out NOW in this turn: run the commands you just listed, read their output, and fix anything that fails before you answer. Verification you hand to the user is verification nobody does. Only leave a step to the user when you genuinely cannot do it here \u2014 it needs a credential, a browser, or a decision that is theirs \u2014 and then say which step and why." + (lastChance ? " This is your last chance to act: your answer after this turn is shown to the user as-is, so either run the commands now or state plainly, at the top of your reply, that the change is UNVERIFIED and exactly which steps were never run." : "");
+}
+
 // ../packages/agent-stall/src/index.ts
 var ANNOUNCE_SUBJECT = "\\b(?:i(?: will|'ll| am going to|'m going to| am about to| plan to|'d need to| would need to| will need to| need to)|let(?:'?s| me| us)|going to|about to|next,? i'?l?l?|now)";
 var ANNOUNCE_FILLER = "(?:\\s+(?:now|then|first|next|quickly|briefly|just|also|actually|go ahead and|try to|attempt to))*";
@@ -1805,11 +1888,11 @@ var ANNOUNCED_ACTION = new RegExp(
   ].join("|"),
   "i"
 );
-var TAIL_CHARS = 240;
+var TAIL_CHARS2 = 240;
 function announcesUntakenAction(text) {
   const t = text.trim();
   if (!t) return false;
-  return ANNOUNCED_ACTION.test(t.slice(-TAIL_CHARS));
+  return ANNOUNCED_ACTION.test(t.slice(-TAIL_CHARS2));
 }
 var FILE_EXTENSION = "(?:ts|tsx|js|jsx|mjs|cjs|json|md|ya?ml|sql|toml|lock|txt|env|html|css|py|go|rs|sh|png|svg|csv|xml)\\b";
 var DOTTED_TOOL_IDENT = `\\b[a-z][a-z0-9_]{2,}\\.(?!${FILE_EXTENSION})[a-z][a-z0-9_]{2,}\\b`;
@@ -1847,7 +1930,8 @@ function claimsMissingToolData(text) {
   return UNCALLED_TOOL_CLAIM.test(t);
 }
 var MAX_ANNOUNCEMENT_RECOVERIES = 3;
-function stallRecoveryNudge(lastChance) {
+function stallRecoveryNudge(lastChance, shape) {
+  if (shape === "handed-off") return handoffRecoveryNudge(lastChance);
   return (
     // Covers BOTH stall shapes: the promise ("I'll check…") and the missing-data claim
     // ("the required tools have not returned results"). The second wording matters —
@@ -1859,8 +1943,16 @@ function stallRecoveryNudge(lastChance) {
 function isEmptyTurn(input) {
   return input.toolCallCount === 0 && input.availableToolCount > 0 && input.text.trim() === "";
 }
+function stallShape(input) {
+  if (input.toolCallCount !== 0 || input.availableToolCount <= 0) return null;
+  if (isEmptyTurn(input)) return "empty";
+  if (delegatesExecutableWork(input.text, input)) return "handed-off";
+  if (announcesUntakenAction(input.text)) return "announced";
+  if (claimsMissingToolData(input.text)) return "missing-data";
+  return null;
+}
 function isStalledTurn(input) {
-  return input.toolCallCount === 0 && input.availableToolCount > 0 && (announcesUntakenAction(input.text) || claimsMissingToolData(input.text) || isEmptyTurn(input));
+  return stallShape(input) !== null;
 }
 function shouldRecoverStalledTurn(input) {
   return isStalledTurn(input) && input.recoveriesUsed < MAX_ANNOUNCEMENT_RECOVERIES;
@@ -1868,17 +1960,43 @@ function shouldRecoverStalledTurn(input) {
 function isExhaustedStall(input) {
   return isStalledTurn(input) && input.recoveriesUsed >= MAX_ANNOUNCEMENT_RECOVERIES;
 }
-function whatItDid(emptyTurn) {
-  return emptyTurn ? `returned an empty turn \u2014 no tool call and no words \u2014 ${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row` : `described tool calls instead of making them, ${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row`;
+function resolveShape(arg) {
+  if (arg === true) return "empty";
+  if (typeof arg === "string") return arg;
+  return "announced";
 }
-function modelFailoverNotice(from, to, emptyTurn = false) {
+function whatItDid(shape) {
+  const rounds = `${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row`;
+  switch (shape) {
+    case "empty":
+      return `returned an empty turn \u2014 no tool call and no words \u2014 ${rounds}`;
+    case "handed-off":
+      return `handed the remaining work back to you as commands to run yourself, ${rounds}, rather than running them with the tools it holds`;
+    case "missing-data":
+      return `reported that tool results were missing without ever calling a tool, ${rounds}`;
+    default:
+      return `described tool calls instead of making them, ${rounds}`;
+  }
+}
+function whatYouGot(shape) {
+  switch (shape) {
+    case "empty":
+      return "there is no answer above to show you.";
+    case "handed-off":
+      return "the steps above are still yours to run \u2014 treat the change as UNVERIFIED.";
+    default:
+      return "the answer above is only a description of intended actions.";
+  }
+}
+function modelFailoverNotice(from, to, shape = false) {
   const who = from && from !== "default" ? `\`${from}\`` : "The previous model";
-  return `${who} ${whatItDid(emptyTurn)}, so it cannot complete this request. Retrying on \`${to}\`.`;
+  return `${who} ${whatItDid(resolveShape(shape))}, so it cannot complete this request. Retrying on \`${to}\`.`;
 }
-function stallExhaustedNotice(model, tried, emptyTurn = false) {
+function stallExhaustedNotice(model, tried, shape = false) {
   const who = model && model !== "default" ? `The model \`${model}\`` : "The model";
+  const kind = resolveShape(shape);
   const others = (tried ?? []).filter((m) => m && m !== model);
-  return `${who} ${whatItDid(emptyTurn)}, so nothing was actually run and ` + (emptyTurn ? "there is no answer above to show you." : "the answer above is only a description of intended actions.") + (others.length ? ` This run already failed over from ${others.map((m) => `\`${m}\``).join(", ")}, so the problem is unlikely to be any single model \u2014 check that the tool catalog loaded (see the "Tools available to the model" line in a copied diagnostics report).` : " Before switching models, check your runtime or gateway log for this turn: a request REJECTED upstream \u2014 a prompt over the context limit, an exhausted quota \u2014 produces exactly these symptoms, and no other model will fix it. If the log is clean, this is a model limitation and a different model is the answer.");
+  return `${who} ${whatItDid(kind)}, so nothing was actually run and ` + whatYouGot(kind) + (others.length ? ` This run already failed over from ${others.map((m) => `\`${m}\``).join(", ")}, so the problem is unlikely to be any single model \u2014 check that the tool catalog loaded (see the "Tools available to the model" line in a copied diagnostics report).` : kind === "handed-off" ? " Nothing upstream failed here \u2014 the model reached the right answer and declined to carry it out, which is an agency limitation. Run the steps it listed, or retry on a model from the coding pool, which is selected for exactly this." : " Before switching models, check your runtime or gateway log for this turn: a request REJECTED upstream \u2014 a prompt over the context limit, an exhausted quota \u2014 produces exactly these symptoms, and no other model will fix it. If the log is clean, this is a model limitation and a different model is the answer.");
 }
 function ids(list) {
   return (list ?? []).map((m) => m.id).filter((id) => !!id);
@@ -2006,7 +2124,13 @@ var LOCAL_WORKSPACE_TOOLS = /* @__PURE__ */ new Set([
   "git_redo",
   "git_commit",
   "git_push",
-  "open_pull_request"
+  "open_pull_request",
+  // Cleanup after a merge is the LAST step of shipping and the one most easily trimmed:
+  // by the time the agent reaches it, the turn's text is about the change, not about
+  // branches, so "cleanup" shares no stem with anything the user said. Unpinned, the
+  // agent falls back to hand-rolled `run_command` git — which is exactly how
+  // `git push origin --delete <branch>` → `remote ref does not exist` happened.
+  "git_cleanup_merged"
 ]);
 var CODE_CHANGE_TOOLS = /* @__PURE__ */ new Set([
   "write_file",
@@ -2017,7 +2141,11 @@ var UNSCOPED_MUTATION_TOOLS = /* @__PURE__ */ new Set([
   "run_command",
   "git_sync_latest",
   "git_undo",
-  "git_redo"
+  "git_redo",
+  // Cleanup checks out the base branch and fast-forwards it, so every file in the
+  // checkout can differ from what a read before it returned — the same reason the
+  // three above are here.
+  "git_cleanup_merged"
 ]);
 function isLocalWorkspaceTool(name) {
   return LOCAL_WORKSPACE_TOOLS.has(name);
@@ -2910,11 +3038,14 @@ function outputOf(ev) {
 function succeeded(ev) {
   return !ev.isError && !isFailedToolResult(ev.result);
 }
+function isPush(ev) {
+  return ev.label === "git_push" || GIT_PUSH.test(commandOf(ev));
+}
 function shippedToBaseBranch(events) {
   const steps = events.filter((e) => e.category === "tool");
   let pushedAt = -1;
   for (let i = 0; i < steps.length; i += 1) {
-    if (succeeded(steps[i]) && GIT_PUSH.test(commandOf(steps[i]))) pushedAt = i;
+    if (succeeded(steps[i]) && isPush(steps[i])) pushedAt = i;
   }
   if (pushedAt < 0) return false;
   for (let i = pushedAt + 1; i < steps.length; i += 1) {
@@ -2966,22 +3097,36 @@ var ReadCoverage = class _ReadCoverage {
       argText = String(args ?? "");
     }
     if (!existing) {
-      const fresh = { count: 1, priorArgs: [argText] };
+      const fresh = { count: 1, priorArgs: [argText], mayHaveChanged: false };
       this.visits.set(key, fresh);
-      return fresh;
+      return { ...fresh };
     }
     existing.count += 1;
     if (!existing.priorArgs.includes(argText) && existing.priorArgs.length < MAX_REMEMBERED_ARGS) {
       existing.priorArgs.push(argText);
     }
-    return existing;
+    const visit = { ...existing };
+    existing.mayHaveChanged = false;
+    return visit;
   }
   /**
    * A non-read call has run. Forget exactly the reads it could have changed — no more,
    * no less — for BOTH guards:
    *
    * - A tool whose blast radius is unknown (`run_command`, a base-branch merge, an
-   *   undo) forgets everything: the honest answer to "what did that touch?" is "anything".
+   *   undo) forgets every cached ANSWER: the honest answer to "what did that touch?" is
+   *   "anything", so no exact repeat may be stubbed out afterwards. It does NOT forget
+   *   the visit TALLY, and that distinction is the whole difference between a guard that
+   *   works and one that is inert. The tally counts the MODEL's behaviour — how many
+   *   times it has gone back to one target, with every one of those results still sitting
+   *   in the transcript above it — and a build running in between changes none of that.
+   *   Clearing it wholesale is what made the advisory unreachable in any run that
+   *   verifies its work: read, read, `run_command` (typecheck), read, read, `run_command`
+   *   … never reaches three, so the nudge at 3 and the hard stop at 5 never fired, and a
+   *   run spent 46% of its calls re-reading ground it had already covered with the loop
+   *   guard silent throughout. Instead each target is marked {@link ReadVisit.mayHaveChanged}
+   *   so the NEXT read of it is excused — a re-read after a build is the right move — and
+   *   the one after that is not.
    * - A file write/edit/delete forgets its own target, across every tool that reads it —
    *   `read_file` and `search_code` on one path are the same stale picture. A re-read of
    *   what was just changed is genuinely new information; nagging about it would punish
@@ -2996,8 +3141,8 @@ var ReadCoverage = class _ReadCoverage {
    */
   invalidate(tool, args) {
     if (isUnscopedMutationTool(tool)) {
-      this.visits.clear();
       this.exact.clear();
+      for (const visit of this.visits.values()) visit.mayHaveChanged = true;
       return;
     }
     if (isCodeChangeTool(tool)) {
@@ -3023,6 +3168,7 @@ var ReadCoverage = class _ReadCoverage {
 };
 function revisitAdvisory(tool, target, visit) {
   if (visit.count < REVISIT_NUDGE_AT) return null;
+  if (visit.mayHaveChanged) return null;
   const shape = visit.priorArgs.length > 1 ? ` The argument sets you have already used on it: ${visit.priorArgs.map((a) => `\`${a}\``).join(", ")}.` : "";
   if (visit.count >= REVISIT_HARD_AT) {
     return `STOP RE-READING. This is call ${visit.count} of \`${tool}\` against ${target} in this run, and the previous ${visit.count - 1} results are all still above you in this conversation.${shape} Re-reading it again will return content you already have and will not move the task forward \u2014 this pattern is how a run exhausts its tool budget without producing a single change. Do ONE of these now: (a) if you still need more of the file, continue from the \`offset\` the last result's note gave you and page forward in order \u2014 never re-open a window you already have; (b) otherwise stop reading and make the edit, or state plainly what is blocking you. Do not issue another partial read of this target.`;
@@ -3038,6 +3184,47 @@ ${advisory}` : advisory;
     return { ...result, note };
   }
   return { result, note: advisory };
+}
+
+// src/repeatedFailure.ts
+var FAILURE_NUDGE_AT = 2;
+var FAILURE_HARD_AT = 3;
+var FailureTally = class _FailureTally {
+  failures = /* @__PURE__ */ new Map();
+  static key(tool, args) {
+    return `${tool}:${stableStringify(args ?? {})}`;
+  }
+  /** Record a FAILED call. Returns how many times this exact call has now failed,
+   *  including this one. */
+  record(tool, args) {
+    const key = _FailureTally.key(tool, args);
+    const attempts = (this.failures.get(key) ?? 0) + 1;
+    this.failures.set(key, attempts);
+    return attempts;
+  }
+  /** This exact call SUCCEEDED. Its earlier failures were transient after all, so they
+   *  are no longer evidence of anything — a later failure starts counting from one. */
+  clear(tool, args) {
+    this.failures.delete(_FailureTally.key(tool, args));
+  }
+  /** Calls that failed more than once, most-repeated first — for the run's own reporting. */
+  repeated() {
+    return [...this.failures.entries()].filter(([, attempts]) => attempts > 1).map(([call, attempts]) => ({ call, attempts })).sort((a, b) => b.attempts - a.attempts);
+  }
+};
+function failureReason(result) {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return void 0;
+  const error = result.error;
+  return typeof error === "string" && error.trim() ? error.trim().slice(0, 400) : void 0;
+}
+function repeatedFailureAdvisory(tool, attempts, reason) {
+  if (attempts < FAILURE_NUDGE_AT) return null;
+  const got = reason ? ` Both times it answered: "${reason}".` : "";
+  if (attempts >= FAILURE_HARD_AT) {
+    const said = reason ? ` It has answered "${reason}" every time.` : "";
+    return `STOP CALLING \`${tool}\` WITH THESE ARGUMENTS. This is failure ${attempts} of the identical call in this run.${said} The arguments are the problem, not the timing \u2014 repeating them will fail again and will spend the rest of this run's tool budget. Do ONE of these now: (a) re-read the error above and change the argument it names (a failing tool usually says exactly what to pass instead \u2014 a scope, a path, an id \u2014 so pass it); (b) reach the same goal with a different tool; (c) stop and tell the user plainly what is blocking you and what you need from them. Do not issue this call again.`;
+  }
+  return `\`${tool}\` has now failed ${attempts} times in this run with these exact arguments.${got} Another identical attempt will not behave differently \u2014 this is not a flake. Read the error above and change what it names (most failures state the argument to pass instead), use a different tool to reach the same goal, or say plainly what is blocking you. Do not simply repeat the call.`;
 }
 
 // src/toolResultBudget.ts
@@ -3795,7 +3982,8 @@ ${extra}`;
 ${chatModeDirective(runMode, chatId, { canEditHere })}
 
 ${turnOptimizationDirective()}`;
-  if (isContinuationDirective(latestUserText(convo)) && promisesUnfinishedWork(lastAssistantText(convo))) {
+  const userRequest = latestUserText(convo);
+  if (isContinuationDirective(userRequest) && promisesUnfinishedWork(lastAssistantText(convo))) {
     systemPrompt = `${systemPrompt}
 
 ${continuationDirective()}`;
@@ -3807,6 +3995,21 @@ ${continuationDirective()}`;
     });
   }
   const readCoverage = new ReadCoverage();
+  const failures = new FailureTally();
+  const failureAdvisoryFor = (name, args, out, step) => {
+    const attempts = failures.record(name, args);
+    const advisory = repeatedFailureAdvisory(name, attempts, failureReason(out));
+    if (advisory) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "tools.repeat_failure_guard",
+        args: { step, tool: name, attempts },
+        result: advisory
+      });
+    }
+    return advisory;
+  };
   let announcementRecoveries = 0;
   let activeModel = model;
   const triedModels = [];
@@ -4054,7 +4257,8 @@ ${continuationDirective()}`;
         } catch (e) {
           const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
           out = { ok: false, error: message };
-          convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(out) });
+          const repeat = failureAdvisoryFor(tc.name, args, out, iter);
+          convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(repeat ? withAdvisory(out, repeat) : out) });
           pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: "tool", label: tc.name, durationMs: nowMs2() - toolStart, args, result: out, isError: true });
           continue;
         }
@@ -4066,18 +4270,23 @@ ${continuationDirective()}`;
         if (isTicketRecordingTool(tc.name)) c.ticketRecorded = true;
         if (runTool) await autoLinkCreatedItem(chatId, c, persistence, runTool, tc.name, out);
         let advisory = null;
-        if (isReadTool && !isFailedToolResult(out)) {
-          const visit = readCoverage.record(tc.name, args);
-          const target = visit ? activityTarget(args) : void 0;
-          advisory = visit && target ? revisitAdvisory(tc.name, target, visit) : null;
-          if (advisory) {
-            pushTrace(c, {
-              ts: nowIso(),
-              category: "message",
-              label: "tools.revisit_guard",
-              args: { step: iter, tool: tc.name, target, visits: visit.count },
-              result: advisory
-            });
+        if (isFailedToolResult(out)) {
+          advisory = failureAdvisoryFor(tc.name, args, out, iter);
+        } else {
+          failures.clear(tc.name, args);
+          if (isReadTool) {
+            const visit = readCoverage.record(tc.name, args);
+            const target = visit ? activityTarget(args) : void 0;
+            advisory = visit && target ? revisitAdvisory(tc.name, target, visit) : null;
+            if (advisory) {
+              pushTrace(c, {
+                ts: nowIso(),
+                category: "message",
+                label: "tools.revisit_guard",
+                args: { step: iter, tool: tc.name, target, visits: visit.count },
+                result: advisory
+              });
+            }
           }
         }
         const trimmedOut = trimToolResult(tc.name, out ?? null, { advisory });
@@ -4097,12 +4306,16 @@ ${continuationDirective()}`;
       }
       continue;
     }
-    if (runTool && shouldRecoverStalledTurn({
+    const stallInput = {
       text: result.text,
       toolCallCount: result.toolCalls.length,
       availableToolCount: toolSpecs?.length ?? 0,
-      recoveriesUsed: announcementRecoveries
-    })) {
+      recoveriesUsed: announcementRecoveries,
+      availableToolNames: [...advertisedNames],
+      requestText: userRequest
+    };
+    const shape = stallShape(stallInput);
+    if (runTool && shouldRecoverStalledTurn(stallInput)) {
       announcementRecoveries += 1;
       const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
       const narration = result.text.trim();
@@ -4112,13 +4325,13 @@ ${continuationDirective()}`;
         recordAppended(c, narrationMsg);
       }
       convo.push({ role: "assistant", content: result.text });
-      convo.push({ role: "user", content: stallRecoveryNudge(lastChance) });
+      convo.push({ role: "user", content: stallRecoveryNudge(lastChance, shape) });
       pushDurableStep(c, chatId, persistence, {
         ts: nowIso(),
         category: "message",
-        label: "loop.recover_announced_tool_call",
-        args: { step: iter, attempt: announcementRecoveries, of: MAX_ANNOUNCEMENT_RECOVERIES, advertisedTools: advertised.length },
-        result: `Model announced a tool call without making one \u2014 re-prompted (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`
+        label: shape === "handed-off" ? "loop.recover_handed_off_work" : "loop.recover_announced_tool_call",
+        args: { step: iter, attempt: announcementRecoveries, of: MAX_ANNOUNCEMENT_RECOVERIES, advertisedTools: advertised.length, shape },
+        result: shape === "handed-off" ? `Model ended by telling the user to run the commands itself holds tools for \u2014 re-prompted to run them (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).` : `Model announced a tool call without making one \u2014 re-prompted (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`
       });
       c.streamingText = "";
       emit(c);
@@ -4130,12 +4343,7 @@ ${continuationDirective()}`;
     const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText, ...finalMeta ? { metadata: finalMeta } : {} }]);
     c.streamingText = "";
     recordAppended(c, assistantMsg);
-    if (runTool && isExhaustedStall({
-      text: result.text,
-      toolCallCount: result.toolCalls.length,
-      availableToolCount: toolSpecs?.length ?? 0,
-      recoveriesUsed: announcementRecoveries
-    })) {
+    if (runTool && isExhaustedStall(stallInput)) {
       const next = chooseStallFailover({
         activeModel,
         resolvedModel: resolved,
@@ -4150,21 +4358,21 @@ ${continuationDirective()}`;
           category: "message",
           label: "loop.model_failover",
           args: { step: iter, from: resolved, to: next, attempt: modelFailovers, of: MAX_MODEL_FAILOVERS },
-          result: modelFailoverNotice(resolved, next)
+          result: modelFailoverNotice(resolved, next, shape)
         });
         activeModel = next;
         announcementRecoveries = 0;
-        convo.push({ role: "user", content: stallRecoveryNudge(false) });
+        convo.push({ role: "user", content: stallRecoveryNudge(false, shape) });
         c.streamingText = "";
         emit(c);
         continue;
       }
-      const notice = stallExhaustedNotice(resolved, triedModels);
+      const notice = stallExhaustedNotice(resolved, triedModels, shape);
       pushDurableStep(c, chatId, persistence, {
         ts: nowIso(),
         category: "error",
         label: "loop.stall_unrecovered",
-        args: { step: iter, model: resolved, attempts: announcementRecoveries, tried: triedModels, advertisedTools: advertised.length },
+        args: { step: iter, model: resolved, attempts: announcementRecoveries, tried: triedModels, advertisedTools: advertised.length, shape },
         result: notice,
         isError: true
       });
@@ -5376,6 +5584,9 @@ function artifactRoutePath(kind, ref, projectId) {
   DEFAULT_MODEL_IDENTITY,
   DEFAULT_TOOL_LIMIT,
   EVERMIND_LEARN_MIN_CHARS,
+  FAILURE_HARD_AT,
+  FAILURE_NUDGE_AT,
+  FailureTally,
   LOCAL_WORKSPACE_TOOLS,
   MAX_TOOL_RESULT_CHARS,
   MODEL_CATEGORIES,
@@ -5443,6 +5654,7 @@ function artifactRoutePath(kind, ref, projectId) {
   displayModelName,
   effortProfile,
   extractXmlToolCalls,
+  failureReason,
   fetchApiVersionVia,
   fetchMcpToolEntries,
   filterMentionCandidates,
@@ -5518,6 +5730,7 @@ function artifactRoutePath(kind, ref, projectId) {
   ratedTurnContext,
   ratedTurnTool,
   reasoningForRun,
+  repeatedFailureAdvisory,
   resetApiVersionCache,
   resetBrainRunStore,
   resolveRecipient,

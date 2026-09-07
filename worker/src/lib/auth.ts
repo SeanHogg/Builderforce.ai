@@ -38,9 +38,10 @@
 import type { MiddlewareHandler } from 'hono';
 import { verifyHs256 } from '@builderforce/hs256-jwt';
 import { introspectSession, type SessionIntrospectionEnv } from './sessionIntrospection';
+import { reportWorkerError, type WorkerErrorReportEnv } from './reportWorkerError';
 
 /** Bindings every worker route already carries plus the shared JWT signing secret. */
-export interface WorkerAuthBindings extends SessionIntrospectionEnv {
+export interface WorkerAuthBindings extends SessionIntrospectionEnv, WorkerErrorReportEnv {
   JWT_SECRET?: string;
 }
 
@@ -87,7 +88,14 @@ export const requireAuth: MiddlewareHandler<{ Bindings: WorkerAuthBindings }> = 
     try {
       verdict = await introspectSession(c.env, token, payload.jti);
     } catch (error) {
-      console.error('[worker:auth] session introspection failed — refusing request (fail closed).', error instanceof Error ? error.message : error);
+      // Durable, not a log line: a 503 here means every session-bearing request to
+      // this worker is being refused, and that has to be answerable after the fact.
+      await reportWorkerError(c.env, {
+        source: 'worker:auth',
+        operation: 'session-introspection',
+        error,
+        context: { outcome: 'fail-closed-503', jti: payload.jti },
+      });
       return c.json({ error: 'Session check unavailable' }, 503);
     }
     if (!verdict.active) return c.json({ error: 'Unauthorized' }, 401);

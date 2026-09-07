@@ -48,13 +48,15 @@ import { isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTi
 import { isCodeChangeTool, canChangeCodeHere, localToolsIn } from './localWorkspaceTools';
 import { shippedToBaseBranch } from './shipVerification';
 import { toolActivity, activityTarget, type BrainRunActivity } from './runActivity';
-import { ReadCoverage, revisitAdvisory } from './readCoverage';
+import { ReadCoverage, revisitAdvisory, withAdvisory } from './readCoverage';
+import { FailureTally, failureReason, repeatedFailureAdvisory } from './repeatedFailure';
 import { trimToolResult } from './toolResultBudget';
 import { chatModeDirective, normalizeChatMode, type ChatMode } from './chatMode';
 import { routingQueryForTurn, turnOptimizationDirective } from './turnOptimization';
 import {
   shouldRecoverStalledTurn,
   isExhaustedStall,
+  stallShape,
   stallRecoveryNudge,
   stallExhaustedNotice,
   modelFailoverNotice,
@@ -408,6 +410,23 @@ interface RunCell {
   ticketRecorded: boolean;
   touchedFiles: string[];
   /**
+   * The ticket this run opened for its own code change, the MOMENT it made the first
+   * one — not at the end.
+   *
+   * Traceability that only happens in the `finally` block is traceability that a long
+   * run does not get: the finally is skipped on a user Stop, and never reached at all
+   * if the surface is closed or reloaded mid-run. A measured run edited files for
+   * thirteen hours and ended with nothing on the board, because the one moment it would
+   * have recorded anything was a moment it never reached. Opening the ticket on the
+   * FIRST edit means the work is visible and linked to the chat from the first edit
+   * onward, whatever happens to the rest of the turn; the end-of-run pass then attaches
+   * the remaining files to THIS id rather than minting a second ticket.
+   */
+  deltaTicketId: number | null;
+  /** Files already attached to {@link deltaTicketId}, so the settle pass only sends what
+   *  is new (and sends nothing when the first edit was the only one). */
+  deltaRecordedFiles: string[];
+  /**
    * Cached compressed-memory of the run's older turns. When the transcript exceeds
    * {@link HISTORY_TOKEN_BUDGET} the loop SUMMARIZES the bulky middle (instead of
    * dropping it, which made a weak model re-read and thrash into "LOOP EXHAUSTED"),
@@ -476,6 +495,8 @@ function makeCell(): RunCell {
     codeChanged: false,
     ticketRecorded: false,
     touchedFiles: [],
+    deltaTicketId: null,
+    deltaRecordedFiles: [],
     compactMemo: null,
     snapshot: EMPTY_SNAPSHOT,
   };
@@ -1103,6 +1124,8 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
   c.codeChanged = false;
   c.ticketRecorded = false;
   c.touchedFiles = [];
+  c.deltaTicketId = null;
+  c.deltaRecordedFiles = [];
   // Fresh abort handle for this run, so Stop can cancel the LLM stream and unwind
   // the loop (a stale, already-aborted controller never bleeds into a new run).
   c.abort = new AbortController();
@@ -1148,8 +1171,12 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
       c.activity = { phase: 'finishing', startedAt: Date.now(), step: 0 };
       emit(c);
     }
-    if (!aborted && c.codeChanged && !c.ticketRecorded && req.projectId != null && req.runTool) {
-      await recordCodeChangeTicket(chatId, c, req).catch(() => { /* never fail the run on the backstop */ });
+    // The ticket itself was already opened on the run's first edit (see the tool loop),
+    // so this pass ATTACHES whatever was touched afterwards to that same ticket — and
+    // still mints one in the case the opening call failed. It is skipped on a Stop, but
+    // a stopped run is no longer the case where nothing gets recorded.
+    if (!aborted && c.codeChanged && req.projectId != null && req.runTool && (!c.ticketRecorded || c.deltaTicketId != null)) {
+      await recordCodeChangeTicket(chatId, c, req, 'settle').catch(() => { /* never fail the run on the backstop */ });
     }
     // Keep the board honest about STATUS: if this run CHANGED code, advance any
     // task/epic/gap linked to this chat that is still sitting in a not-started lane
@@ -1177,40 +1204,75 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
 }
 
 /**
- * Post-run backstop for the "a code change is always tied to a ticket" guarantee.
- * Calls the shared platform tool `builtin_tickets_from_delta` (via the run's own
- * `runTool` dispatcher, so it rides the same gateway MCP relay the model uses),
- * passing the chatId so the minted ticket is linked to this conversation. Records a
- * durable tool step so the auto-capture is visible on the timeline. Never throws.
+ * Record this run's code change as a work delta on the board, linked to the chat.
+ *
+ * ONE function for both moments it happens, because they are the same act with a
+ * different `taskId`:
+ *
+ *  - `open` fires on the FIRST successful code-change tool call, mints the ticket, and
+ *    remembers its id on the cell. This is what makes the guarantee survive a run that
+ *    never finishes — a Stop, a closed webview, a thirteen-hour turn the user gives up
+ *    on. Traceability recorded only in a `finally` block is traceability an abandoned
+ *    run does not get, and an abandoned run is precisely the one whose changes are on
+ *    disk with nothing on the board to explain them.
+ *  - `settle` fires after the run and attaches whatever else was touched to the SAME
+ *    ticket by passing `taskId`, so the second call never mints a duplicate. It also
+ *    covers the case where the `open` call failed (no id, so it mints then).
+ *
+ * Best-effort throughout: records a durable tool step so the auto-capture is visible on
+ * the timeline, and never throws.
  */
-async function recordCodeChangeTicket(chatId: number, c: RunCell, req: BrainRunRequest): Promise<void> {
+async function recordCodeChangeTicket(
+  chatId: number,
+  c: RunCell,
+  req: BrainRunRequest,
+  phase: 'open' | 'settle',
+): Promise<void> {
   if (!req.runTool || req.projectId == null) return;
-  const files = c.touchedFiles.slice(0, 50);
+  const known = new Set(c.deltaRecordedFiles);
+  const files = c.touchedFiles.filter((f) => !known.has(f)).slice(0, 50);
+  // Nothing new to say about a ticket that already exists — don't spend a call on it.
+  if (phase === 'settle' && c.deltaTicketId != null && files.length === 0) return;
+  const attachTo = c.deltaTicketId;
   const summary = files.length
     ? `Code change (${files.length} file${files.length === 1 ? '' : 's'}) from Brain chat #${chatId}`
     : `Code change from Brain chat #${chatId}`;
   const toolStart = nowMs();
+  const args = {
+    projectId: req.projectId,
+    summary,
+    detail:
+      attachTo != null
+        ? 'Auto-captured: further files changed by the same chat, attached to the ticket this run opened.'
+        : 'Auto-captured: this chat changed code without recording a ticket, so the platform minted one to keep the work visible on the board and linked to the conversation.',
+    files,
+    kind: 'improvement',
+    modality: 'ide',
+    chatId,
+    ...(attachTo != null ? { taskId: attachTo } : {}),
+  };
   let out: unknown;
   try {
-    out = await req.runTool('builtin_tickets_from_delta', {
-      projectId: req.projectId,
-      summary,
-      detail:
-        'Auto-captured: this chat changed code without recording a ticket, so the platform minted one to keep the work visible on the board and linked to the conversation.',
-      files,
-      kind: 'improvement',
-      modality: 'ide',
-      chatId,
-    });
+    out = await req.runTool('builtin_tickets_from_delta', args);
   } catch (e) {
     out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  if (!isFailedToolResult(out)) {
+    c.deltaRecordedFiles = [...c.deltaRecordedFiles, ...files];
+    // Only a MINT yields an id to attach to; an attach returns the same ticket, so
+    // reading the id back off either result is correct and keeps this one branch.
+    const id = (out as { id?: unknown } | null)?.id;
+    if (c.deltaTicketId == null && typeof id === 'number') c.deltaTicketId = id;
+    // The model's own from_delta/link call is what `ticketRecorded` tracks; a mint we
+    // performed satisfies the same guarantee, so the settle pass must not mint again.
+    c.ticketRecorded = true;
   }
   pushDurableStep(c, chatId, req.persistence, {
     ts: nowIso(),
     category: 'tool',
     label: 'builtin_tickets_from_delta',
     durationMs: nowMs() - toolStart,
-    args: { projectId: req.projectId, summary, files, auto: true, chatId },
+    args: { ...args, auto: true, phase },
     result: out ?? null,
     isError: isFailedToolResult(out),
   });
@@ -1513,7 +1575,11 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // structural and cheap to verify — a contentless directive landing directly on a
   // turn that promised unfinished work — and because a model that misreads it burns a
   // whole turn asking.
-  if (isContinuationDirective(latestUserText(convo)) && promisesUnfinishedWork(lastAssistantText(convo))) {
+  // The user's OWN request for this run, captured once. Every later read of the
+  // transcript would find the loop's own recovery nudge instead — and the handoff gate
+  // below asks "did the USER ask for a change?", a question a nudge cannot answer.
+  const userRequest = latestUserText(convo);
+  if (isContinuationDirective(userRequest) && promisesUnfinishedWork(lastAssistantText(convo))) {
     systemPrompt = `${systemPrompt}\n\n${continuationDirective()}`;
     pushTrace(c, {
       ts: nowIso(),
@@ -1530,6 +1596,33 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // starts circling. Both are invalidated together, and only for what a later
   // mutation actually touched — never wiped wholesale by an unrelated call.
   const readCoverage = new ReadCoverage();
+  // What this run has already FAILED at (see `repeatedFailure.ts`). The read guards
+  // above deliberately record only SUCCESSES, so an identical failing call — the same
+  // `git_status` answered with the same remedy three times, the same platform read
+  // answered 502 twice — got no pushback at all and could repeat until the budget was
+  // gone. The first retry stays free; from the second the model reads the count and the
+  // error it already has, and the moves that remain.
+  const failures = new FailureTally();
+  /**
+   * Record a failed call and return the advisory the MODEL should read with it, or null
+   * while a retry is still reasonable. The intervention is its own trace step — exactly
+   * as the revisit guard's is — so triage can see the loop was fought rather than
+   * inferring it from the repetition.
+   */
+  const failureAdvisoryFor = (name: string, args: unknown, out: unknown, step: number): string | null => {
+    const attempts = failures.record(name, args);
+    const advisory = repeatedFailureAdvisory(name, attempts, failureReason(out));
+    if (advisory) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: 'message',
+        label: 'tools.repeat_failure_guard',
+        args: { step, tool: name, attempts },
+        result: advisory,
+      });
+    }
+    return advisory;
+  };
   // Bounded counter for the announced-but-never-made tool call recovery below, so a
   // model that keeps narrating instead of acting cannot spin the loop. Not one-shot:
   // a model that stalls once frequently stalls again on the very next turn, and
@@ -1850,6 +1943,14 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           });
         }
         const args = parseArgs(tc.args);
+        // ONE ticket per run. The run opens its own delta ticket on the first edit
+        // (see below), and the model — following the same directive, from the other
+        // end — often records the delta too. Left alone that is two tickets for one
+        // change, which is worse on the board than the missing ticket this all exists
+        // to prevent. `from_delta` already takes `taskId` to attach rather than mint,
+        // so the model's call is pointed at the ticket the run has: the deterministic
+        // form of the advice the directive gives it in prose.
+        attachDeltaToRunTicket(tc.name, args, c.deltaTicketId);
         // Human-in-the-loop gate: pause for an explicit confirm when the host's
         // predicate says so. The resolver lives on the cell, so whichever Brain
         // instance is mounted (even after a navigation swapped it) can answer.
@@ -1898,8 +1999,12 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         } catch (e) {
           const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
           out = { ok: false, error: message };
+          // A throw is a failure like any other: the same call thrown three times is a
+          // loop, not persistence, and the model needs to be told so on the result it
+          // reads. The DURABLE step keeps the untouched error.
+          const repeat = failureAdvisoryFor(tc.name, args, out, iter);
           // Errors are small; push as-is (trimming a short error would only add noise).
-          convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out) });
+          convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(repeat ? withAdvisory(out, repeat) : out) });
           pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: 'tool', label: tc.name, durationMs: nowMs() - toolStart, args, result: out, isError: true });
           continue;
         }
@@ -1908,9 +2013,17 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         // the model recording its own delta/link/review clears the need for the
         // auto-capture. A failed call above `continue`d out, so this counts successes.
         if (isCodeChangeTool(tc.name)) {
+          const first = !c.codeChanged;
           c.codeChanged = true;
           const f = codeChangeFile(args);
           if (f && !c.touchedFiles.includes(f)) c.touchedFiles.push(f);
+          // OPEN THE TICKET NOW, on the first edit — not in the `finally`, which a
+          // Stop skips and a closed/reloaded surface never reaches. One call per run,
+          // and from here on the work is on the board and linked to this chat whatever
+          // becomes of the rest of the turn.
+          if (first && !c.ticketRecorded && req.projectId != null && runTool) {
+            await recordCodeChangeTicket(chatId, c, req, 'open').catch(() => { /* never fail the run on the backstop */ });
+          }
         }
         if (isTicketRecordingTool(tc.name)) c.ticketRecorded = true;
         // Deterministic traceability: whenever this turn CREATED a work item via an
@@ -1931,20 +2044,32 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         // is recorded as its own step so triage can see the loop was fought rather
         // than inferring it from the repetition alone.
         let advisory: string | null = null;
-        if (isReadTool && !isFailedToolResult(out)) {
-          // Recording a SUCCESSFUL read is also what arms the exact-repeat stub for it;
-          // a failed read is not recorded, so it can be retried.
-          const visit = readCoverage.record(tc.name, args);
-          const target = visit ? activityTarget(args) : undefined;
-          advisory = visit && target ? revisitAdvisory(tc.name, target, visit) : null;
-          if (advisory) {
-            pushTrace(c, {
-              ts: nowIso(),
-              category: 'message',
-              label: 'tools.revisit_guard',
-              args: { step: iter, tool: tc.name, target, visits: visit!.count },
-              result: advisory,
-            });
+        if (isFailedToolResult(out)) {
+          // The OTHER loop the guards missed. `readCoverage` records successes only, by
+          // design — a failed read has no result above to reuse, so a retry must not be
+          // stubbed. That left an identical FAILING call with no pushback whatsoever:
+          // the same `git_status` answered with the same "pass `repo`" remedy three
+          // times, the same platform read answered 502 twice, the model repeating itself
+          // each time. The first retry is still free; the second says so.
+          advisory = failureAdvisoryFor(tc.name, args, out, iter);
+        } else {
+          // It worked — earlier failures of this exact call were transient after all.
+          failures.clear(tc.name, args);
+          if (isReadTool) {
+            // Recording a SUCCESSFUL read is also what arms the exact-repeat stub for it;
+            // a failed read is not recorded, so it can be retried.
+            const visit = readCoverage.record(tc.name, args);
+            const target = visit ? activityTarget(args) : undefined;
+            advisory = visit && target ? revisitAdvisory(tc.name, target, visit) : null;
+            if (advisory) {
+              pushTrace(c, {
+                ts: nowIso(),
+                category: 'message',
+                label: 'tools.revisit_guard',
+                args: { step: iter, tool: tc.name, target, visits: visit!.count },
+                result: advisory,
+              });
+            }
           }
         }
         // Trimmed to the transcript budget with the advisory attached AFTER the cut, so
@@ -1971,20 +2096,27 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       continue;
     }
 
-    // The model ANNOUNCED an action and then ended the turn without taking it
-    // ("Calling the tool now." → finish: stop, 0 tool calls). Accepting that as a
-    // final answer strands the user with a promise instead of a result. Nudge and
-    // let the loop run another turn — bounded to MAX_ANNOUNCEMENT_RECOVERIES per run
-    // so a model that keeps narrating can't spin.
-    if (
-      runTool
-      && shouldRecoverStalledTurn({
-        text: result.text,
-        toolCallCount: result.toolCalls.length,
-        availableToolCount: toolSpecs?.length ?? 0,
-        recoveriesUsed: announcementRecoveries,
-      })
-    ) {
+    // The model ended the turn without acting — it ANNOUNCED a call it never made
+    // ("Calling the tool now." → finish: stop, 0 tool calls), said nothing at all, or
+    // HANDED the remaining commands to the user to run. Accepting any of those as a
+    // final answer strands the user with a promise, a blank, or homework instead of a
+    // result. Nudge and let the loop run another turn — bounded to
+    // MAX_ANNOUNCEMENT_RECOVERIES per run so a model that keeps narrating can't spin.
+    //
+    // `availableToolNames` + `requestText` are what let the HANDOFF shape fire: it is a
+    // stall only where this run could have run the commands itself AND the user asked
+    // for a change. The request is the one captured before the loop — `latestUserText`
+    // here would return the loop's own nudge from the previous iteration.
+    const stallInput = {
+      text: result.text,
+      toolCallCount: result.toolCalls.length,
+      availableToolCount: toolSpecs?.length ?? 0,
+      recoveriesUsed: announcementRecoveries,
+      availableToolNames: [...advertisedNames],
+      requestText: userRequest,
+    };
+    const shape = stallShape(stallInput);
+    if (runTool && shouldRecoverStalledTurn(stallInput)) {
       announcementRecoveries += 1;
       const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
       // Keep what the user already watched stream in, as its own durable block —
@@ -1996,16 +2128,20 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         recordAppended(c, narrationMsg);
       }
       convo.push({ role: 'assistant', content: result.text });
-      convo.push({ role: 'user', content: stallRecoveryNudge(lastChance) });
+      convo.push({ role: 'user', content: stallRecoveryNudge(lastChance, shape) });
       // Durable: "the loop caught this and re-prompted" is a fact a triage report must
       // still carry after a reload. Live-only, a reopened chat showed nine narrating
-      // turns and no sign the loop had ever fought back.
+      // turns and no sign the loop had ever fought back. The SHAPE rides along, because
+      // "re-prompted" alone cannot tell a reader whether the model narrated a call it
+      // never made or wrote the user a correct list of commands to go run.
       pushDurableStep(c, chatId, persistence, {
         ts: nowIso(),
         category: 'message',
-        label: 'loop.recover_announced_tool_call',
-        args: { step: iter, attempt: announcementRecoveries, of: MAX_ANNOUNCEMENT_RECOVERIES, advertisedTools: advertised.length },
-        result: `Model announced a tool call without making one — re-prompted (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`,
+        label: shape === 'handed-off' ? 'loop.recover_handed_off_work' : 'loop.recover_announced_tool_call',
+        args: { step: iter, attempt: announcementRecoveries, of: MAX_ANNOUNCEMENT_RECOVERIES, advertisedTools: advertised.length, shape },
+        result: shape === 'handed-off'
+          ? `Model ended by telling the user to run the commands itself holds tools for — re-prompted to run them (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`
+          : `Model announced a tool call without making one — re-prompted (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`,
       });
       c.streamingText = '';
       emit(c);
@@ -2021,20 +2157,12 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     recordAppended(c, assistantMsg);
 
     // This model spent its whole recovery budget still DESCRIBING calls instead of
-    // making them. Re-prompting it again is spent — the only remedy that works is a
+    // making them — or still handing them to the user. Re-prompting it again is spent — the only remedy that works is a
     // different model, so the run switches to one itself rather than handing the user
     // a promise and telling them to go pick one (the "it doesn't execute, it just
     // dies" report). Bounded by MAX_MODEL_FAILOVERS: a run that has burned two models
     // stops and says so rather than walking the catalog on the tenant's money.
-    if (
-      runTool
-      && isExhaustedStall({
-        text: result.text,
-        toolCallCount: result.toolCalls.length,
-        availableToolCount: toolSpecs?.length ?? 0,
-        recoveriesUsed: announcementRecoveries,
-      })
-    ) {
+    if (runTool && isExhaustedStall(stallInput)) {
       // The SHARED decision — record both the asked-for and the resolved model (a
       // gateway auto-select run pinned nothing, so `resolved` is the only id that
       // identifies the model to skip), check the budget, pick a different route. The
@@ -2053,23 +2181,23 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           category: 'message',
           label: 'loop.model_failover',
           args: { step: iter, from: resolved, to: next, attempt: modelFailovers, of: MAX_MODEL_FAILOVERS },
-          result: modelFailoverNotice(resolved, next),
+          result: modelFailoverNotice(resolved, next, shape),
         });
         activeModel = next;
         // The new model starts with a full stall budget — the old one's failures say
         // nothing about this one, and carrying the count over would give it no chance.
         announcementRecoveries = 0;
-        convo.push({ role: 'user', content: stallRecoveryNudge(false) });
+        convo.push({ role: 'user', content: stallRecoveryNudge(false, shape) });
         c.streamingText = '';
         emit(c);
         continue;
       }
-      const notice = stallExhaustedNotice(resolved, triedModels);
+      const notice = stallExhaustedNotice(resolved, triedModels, shape);
       pushDurableStep(c, chatId, persistence, {
         ts: nowIso(),
         category: 'error',
         label: 'loop.stall_unrecovered',
-        args: { step: iter, model: resolved, attempts: announcementRecoveries, tried: triedModels, advertisedTools: advertised.length },
+        args: { step: iter, model: resolved, attempts: announcementRecoveries, tried: triedModels, advertisedTools: advertised.length, shape },
         result: notice,
         isError: true,
       });

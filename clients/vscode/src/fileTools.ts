@@ -107,6 +107,14 @@ export function describeTool(name: string, args: Record<string, unknown>): strin
       return args.allowBaseBranch === true
         ? "push to the BASE BRANCH (main) — skips pull-request review"
         : "push the current branch to origin";
+    // The one thing an approver needs to weigh here is WHICH branch is about to be
+    // deleted, and whether the merge check is being skipped.
+    case "git_cleanup_merged": {
+      const branch = typeof args.branch === "string" && args.branch ? args.branch : "the current branch";
+      return args.force === true
+        ? `clean up ${branch} — FORCE-deletes it without git seeing the merge`
+        : `clean up ${branch}: return to main and delete the merged branch`;
+    }
     case "open_pull_request":
       return `open pull request: ${typeof args.title === "string" ? args.title.slice(0, 70) : ""}`;
     default:

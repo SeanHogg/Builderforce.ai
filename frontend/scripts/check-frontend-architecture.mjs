@@ -30,6 +30,18 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   948 → 949 (`useClientFiles`, 2026-09-07) — `components/ui/SectionState.tsx`.
+ *   The "935 → 936" entry below records it as the one importer of
+ *   `GuestAccountPrompt` that had NO directive, and that is what changed: it now
+ *   pulls the invitation in with `dynamic(…, { ssr: false })` to keep it out of
+ *   the root layout's static closure, and `ssr: false` is not a thing a Server
+ *   Component may ask for. So the directive is not a preference here, it is what
+ *   makes the `check:root-closure` cut legal — the two ratchets pull opposite
+ *   ways on this file and the client boundary is the price of the cheaper paint.
+ *   It is also the answer the "808 → 868" rule gives on its own terms: a `ui`
+ *   barrel export is reachable from a Server Component by construction, so the
+ *   boundary belongs on the shared module rather than on whoever mounts it.
+ *
  *   935 → 936 (`useClientFiles`, 2026-09-06) — `components/guest/GuestAccountPrompt.tsx`,
  *   the invitation a signed-out visitor sees where a read that needs an account
  *   would have rendered, in place of the raw 401 text (`Missing or malformed

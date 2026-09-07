@@ -9,24 +9,32 @@
  *
  * The failure it fixes: a turn ends with `stopReason: stop` and ZERO tool calls while
  * tools were available, and a loop that treats "no tool calls" as "done" hands the user
- * words instead of a result. It wears four faces, all of them observed in production and
+ * words instead of a result. It wears five faces, all of them observed in production and
  * all of them a model-behaviour class rather than a vendor bug:
  *
  *   1. the PROMISE — `"I'll search the codebase for the handler."`
  *   2. the PSEUDO-CALL — `"run tool builtin_chats_list_tickets with chatId is 85"`
  *   3. the MISSING-DATA CLAIM — `"The required tools have not returned results yet."`
  *   4. the BLANK TURN — nothing at all: no call, no words.
+ *   5. the HANDOFF — `"Now run `pnpm type-check`, then commit and push."` (`handoff.ts`)
  *
  * The third is the one that reads like an answer, and it is why the manager's
  * accountability chat shipped "I have no data" to a person asking it to account for a
  * dead board (project 11 / chat 86, 2026-07-28: 7 turns, 102 tools, 0 calls). The
  * fourth is the one that reads like a blip, and it is why the same chat answered a
- * 400 saying "this usually clears on a retry" four days running (2026-07-31).
+ * 400 saying "this usually clears on a retry" four days running (2026-07-31). The
+ * fifth is the one that reads like a FINISHED answer — it is well written, correct,
+ * and complete except for the part where somebody has to do it — and it is the shape
+ * a coding agent in the user's own workspace fails with most: it edits the files, then
+ * writes out the verification and the commit for the user to run. Every other detector
+ * here is first-person by construction and scores it a clean finish.
  *
  * Deliberately zero-dependency, framework-free and free of Node builtins: the Brain
  * run loop imports this into a BROWSER bundle (VS Code webview / Next.js client)
  * while the on-prem + cloud agent loop imports it into Node and the Worker.
  */
+
+import { delegatesExecutableWork, handoffRecoveryNudge, type HandoffContext } from './handoff';
 
 /**
  * First-person commitment to act. REQUIRED — this is the discriminator that makes a
@@ -241,7 +249,10 @@ export const MAX_ANNOUNCEMENT_RECOVERIES = 3;
  * @param lastChance the caller has exhausted {@link MAX_ANNOUNCEMENT_RECOVERIES} —
  * escalate, because after this turn the reply is shown to the user as-is.
  */
-export function stallRecoveryNudge(lastChance: boolean): string {
+export function stallRecoveryNudge(lastChance: boolean, shape?: StallShape | null): string {
+  // The HANDOFF shape gets its own correction — see `handoffRecoveryNudge` for why the
+  // wording below is actively counterproductive against it.
+  if (shape === 'handed-off') return handoffRecoveryNudge(lastChance);
   return (
     // Covers BOTH stall shapes: the promise ("I'll check…") and the missing-data claim
     // ("the required tools have not returned results"). The second wording matters —
@@ -262,7 +273,7 @@ export function stallRecoveryNudge(lastChance: boolean): string {
 }
 
 /** The facts a loop knows about the turn it just finished. */
-export interface StalledTurnInput {
+export interface StalledTurnInput extends HandoffContext {
   /** Text the assistant produced this turn. */
   text: string;
   /** Tool calls the assistant made this turn. Non-empty means it acted — never a stall. */
@@ -271,6 +282,9 @@ export interface StalledTurnInput {
   availableToolCount: number;
   /** Recoveries already spent in this run. */
   recoveriesUsed: number;
+  // `availableToolNames` + `requestText` come from HandoffContext. BOTH are optional and
+  // BOTH are required for the HANDOFF shape below to fire, so a loop that has not
+  // adopted them keeps exactly the four shapes it shipped with.
 }
 
 /**
@@ -295,21 +309,36 @@ export function isEmptyTurn(input: StalledTurnInput): boolean {
 }
 
 /**
- * Is this turn a stall at all — tools were offered, none were called, and the model
- * either only promised, blamed the absence of results it never asked for, or said
- * nothing whatsoever? The budget-independent half, so the two gates below cannot drift
- * on WHAT a stall is while disagreeing only on what to do about it.
+ * WHICH stall this is. The remedy is the same for all five — re-prompt, then swap
+ * models — but the WORDS are not, and using one wording for five shapes is how a model
+ * that wrote a perfectly clear set of instructions got told it had "said you would call
+ * a tool and did not", disputed the premise, and repeated itself. Callers pass this to
+ * {@link stallRecoveryNudge} and the notices so the correction fits what happened.
+ *
+ * Ordered by specificity: `handed-off` is checked before `announced` because a closing
+ * "Then run the build" satisfies both readings and only one of them is useful.
  */
+export type StallShape = 'empty' | 'handed-off' | 'announced' | 'missing-data';
+
+/**
+ * Is this turn a stall at all — tools were offered, none were called, and the model
+ * either only promised, blamed the absence of results it never asked for, handed the
+ * remaining work to the user, or said nothing whatsoever? The budget-independent half,
+ * so the gates below cannot drift on WHAT a stall is while disagreeing only on what to
+ * do about it. Returns the SHAPE (or null), because every caller that needs the boolean
+ * also needs the wording that goes with it.
+ */
+export function stallShape(input: StalledTurnInput): StallShape | null {
+  if (input.toolCallCount !== 0 || input.availableToolCount <= 0) return null;
+  if (isEmptyTurn(input)) return 'empty';
+  if (delegatesExecutableWork(input.text, input)) return 'handed-off';
+  if (announcesUntakenAction(input.text)) return 'announced';
+  if (claimsMissingToolData(input.text)) return 'missing-data';
+  return null;
+}
+
 function isStalledTurn(input: StalledTurnInput): boolean {
-  return (
-    input.toolCallCount === 0
-    && input.availableToolCount > 0
-    && (
-      announcesUntakenAction(input.text)
-      || claimsMissingToolData(input.text)
-      || isEmptyTurn(input)
-    )
-  );
+  return stallShape(input) !== null;
 }
 
 /**
@@ -338,17 +367,51 @@ export function isExhaustedStall(input: StalledTurnInput): boolean {
 }
 
 /**
+ * How the notices below name the shape. `boolean` is the original signature — `true`
+ * meant "empty turn" — and is still accepted so a caller that has not been taught the
+ * shapes keeps working.
+ */
+export type StallShapeArg = boolean | StallShape | null | undefined;
+
+function resolveShape(arg: StallShapeArg): StallShape {
+  if (arg === true) return 'empty';
+  if (typeof arg === 'string') return arg;
+  return 'announced';
+}
+
+/**
  * WHAT the spent model actually did, in the notices' words.
  *
- * Split out because the notices below assert it and there are now two answers. Telling an
- * operator a model "described tool calls instead of making them" when it in fact returned
- * a blank turn sends them looking for narration that is not in the transcript — the same
- * class of misdirection as a report naming the wrong cause. One phrase, both notices.
+ * Split out because the notices below assert it and there are now several answers.
+ * Telling an operator a model "described tool calls instead of making them" when it in
+ * fact returned a blank turn — or wrote them a correct, complete list of commands to run
+ * themselves — sends them looking for narration that is not in the transcript, the same
+ * class of misdirection as a report naming the wrong cause. One phrase, every notice.
  */
-function whatItDid(emptyTurn: boolean): string {
-  return emptyTurn
-    ? `returned an empty turn — no tool call and no words — ${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row`
-    : `described tool calls instead of making them, ${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row`;
+function whatItDid(shape: StallShape): string {
+  const rounds = `${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row`;
+  switch (shape) {
+    case 'empty':
+      return `returned an empty turn — no tool call and no words — ${rounds}`;
+    case 'handed-off':
+      return `handed the remaining work back to you as commands to run yourself, ${rounds}, rather than running them with the tools it holds`;
+    case 'missing-data':
+      return `reported that tool results were missing without ever calling a tool, ${rounds}`;
+    default:
+      return `described tool calls instead of making them, ${rounds}`;
+  }
+}
+
+/** The consequence clause — what the reply above IS, given what the model did. */
+function whatYouGot(shape: StallShape): string {
+  switch (shape) {
+    case 'empty':
+      return 'there is no answer above to show you.';
+    case 'handed-off':
+      return 'the steps above are still yours to run — treat the change as UNVERIFIED.';
+    default:
+      return 'the answer above is only a description of intended actions.';
+  }
 }
 
 /**
@@ -356,11 +419,12 @@ function whatItDid(emptyTurn: boolean): string {
  * on the timeline, so the swap is visible rather than a silent change of who is
  * answering — a chat that quietly changes model is its own support ticket.
  *
- * @param emptyTurn the spent model returned nothing at all rather than narrating.
+ * @param shape what the spent model actually did — see {@link StallShape}. Legacy
+ * callers pass `true` for "returned nothing at all".
  */
-export function modelFailoverNotice(from: string | null | undefined, to: string, emptyTurn = false): string {
+export function modelFailoverNotice(from: string | null | undefined, to: string, shape: StallShapeArg = false): string {
   const who = from && from !== 'default' ? `\`${from}\`` : 'The previous model';
-  return `${who} ${whatItDid(emptyTurn)}, so it cannot complete this request. Retrying on \`${to}\`.`;
+  return `${who} ${whatItDid(resolveShape(shape))}, so it cannot complete this request. Retrying on \`${to}\`.`;
 }
 
 /**
@@ -382,22 +446,32 @@ export function modelFailoverNotice(from: string | null | undefined, to: string,
  *
  * @param model the model that actually answered last, when the loop resolved one.
  * @param tried every model attempted this run, when the loop failed over.
- * @param emptyTurn the run ended on blank turns rather than on narration.
+ * @param shape what the run ended on — see {@link StallShape}. Legacy callers pass
+ * `true` for "blank turns rather than narration".
  */
-export function stallExhaustedNotice(model?: string | null, tried?: readonly string[], emptyTurn = false): string {
+export function stallExhaustedNotice(model?: string | null, tried?: readonly string[], shape: StallShapeArg = false): string {
   const who = model && model !== 'default' ? `The model \`${model}\`` : 'The model';
+  const kind = resolveShape(shape);
   const others = (tried ?? []).filter((m) => m && m !== model);
   return (
-    `${who} ${whatItDid(emptyTurn)}, so nothing was actually run and `
-    + (emptyTurn ? 'there is no answer above to show you.' : 'the answer above is only a description of intended actions.')
+    `${who} ${whatItDid(kind)}, so nothing was actually run and `
+    + whatYouGot(kind)
     + (others.length
       ? ` This run already failed over from ${others.map((m) => `\`${m}\``).join(', ')}, so the problem`
         + ' is unlikely to be any single model — check that the tool catalog loaded (see the'
         + ' "Tools available to the model" line in a copied diagnostics report).'
-      : ' Before switching models, check your runtime or gateway log for this turn: a request'
-        + ' REJECTED upstream — a prompt over the context limit, an exhausted quota — produces'
-        + ' exactly these symptoms, and no other model will fix it. If the log is clean, this is'
-        + ' a model limitation and a different model is the answer.')
+      // A HANDED-OFF run proves the opposite of an upstream rejection: the model was
+      // reached, understood the task, and wrote out the right commands — it simply
+      // would not run them. Sending that reader to their gateway log wastes their time
+      // on a request that plainly succeeded.
+      : kind === 'handed-off'
+        ? ' Nothing upstream failed here — the model reached the right answer and declined to'
+          + ' carry it out, which is an agency limitation. Run the steps it listed, or retry on a'
+          + ' model from the coding pool, which is selected for exactly this.'
+        : ' Before switching models, check your runtime or gateway log for this turn: a request'
+          + ' REJECTED upstream — a prompt over the context limit, an exhausted quota — produces'
+          + ' exactly these symptoms, and no other model will fix it. If the log is clean, this is'
+          + ' a model limitation and a different model is the answer.')
   );
 }
 
@@ -552,3 +626,15 @@ export {
   isContinuationDirective,
   continuationDirective,
 } from './requestIntent';
+
+// The HANDOFF shape — the turn that ends by assigning the user the commands it holds
+// the tools to run. Its own module (this file is already large) and re-exported so
+// consumers still have one import; `stallShape` above folds it into the shared gate.
+export {
+  canExecuteCommands,
+  handsWorkToUser,
+  delegatesExecutableWork,
+  handoffRecoveryNudge,
+  EXECUTION_TOOLS,
+  type HandoffContext,
+} from './handoff';

@@ -155,6 +155,29 @@ export function scopedToNullableTenant(
  *     `jobRoutes.ts`) for a decision nobody disagrees with, which is the same thing
  *     `scheduled_sweep` was added to stop: debt that reports work which is not owed,
  *     then dares the next reader to pay it down by breaking a feature.
+ *
+ *   `session_credential` — the row IS the credential, and a credential is not a
+ *     tenant's property. `auth_tokens` and `auth_user_sessions` are addressed by
+ *     the token's own `jti` or by the `user_id` it was minted for; the `tenant_id`
+ *     on a token records which workspace it was minted UNDER and is nullable, so it
+ *     describes the token rather than gating it.
+ *
+ *     Tenant-filtering these reads is not the tighter answer, it is the WRONG one,
+ *     and it fails open in the direction that matters. A person belongs to several
+ *     workspaces and holds ONE session across all of them, so "sign out everywhere"
+ *     or an admin force-logout that stopped at one tenant would leave live tokens
+ *     behind — a revoke that reports success and does not revoke. That is the
+ *     security failure; the missing tenant predicate is what prevents it.
+ *
+ *     The access control is the predicate itself and it is strictly STRONGER than a
+ *     tenant filter: `jti = <the presented token>` names one row, and `user_id =
+ *     <the subject>` names one person's rows, where a tenant filter names an entire
+ *     workspace's. Use it ONLY on the credential tables, and ONLY where the subject
+ *     is established by the SERVER — the verified `jti` off the presented token, or
+ *     a `userId` the calling route has already authorized the actor to act on
+ *     (`authRoutes` for self, `adminRoutes`/`tenantRoutes` behind their role gates).
+ *     A revoke MAY still narrow to one workspace's tokens, and `revokeSessionTokens`
+ *     takes an optional `tenantId` for exactly that; it is a narrowing, not the gate.
  */
 export type CrossTenantReason =
   | 'public_catalogue'
@@ -163,7 +186,8 @@ export type CrossTenantReason =
   | 'platform_aggregate'
   | 'scheduled_sweep'
   | 'global_uniqueness'
-  | 'subject_own_rows';
+  | 'subject_own_rows'
+  | 'session_credential';
 
 /**
  * A DECLARED cross-tenant read.

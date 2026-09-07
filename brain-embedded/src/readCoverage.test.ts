@@ -86,13 +86,49 @@ describe('ReadCoverage', () => {
     expect(cov.record('read_file', { path: CSS })!.count).toBe(3);
   });
 
-  it('invalidates EVERYTHING after a shell command — its blast radius is unknown', () => {
+  /**
+   * The hole that made this guard inert for any run that VERIFIES its work.
+   *
+   * A shell command's blast radius is unknown, so no cached answer may survive it —
+   * but the visit TALLY is a record of the model's own behaviour, not of the bytes on
+   * disk, and clearing it handed a clean slate to every run that interleaves reads with
+   * a build. Measured on a real run: 99 calls, 46% of them revisiting ground already
+   * covered (one directory searched 6 times, one migrations folder listed 5), 14 exact
+   * duplicates — and the advisory never fired once, because a `run_command` typecheck
+   * kept resetting the counter below the threshold of 3.
+   */
+  it('keeps counting across a shell command, excusing only the FIRST read after it', () => {
     const cov = new ReadCoverage();
     cov.record('read_file', { path: CSS });
-    cov.record('read_file', { path: 'other.tsx' });
+    cov.record('read_file', { path: CSS });
+    cov.invalidate('run_command', { command: 'pnpm typecheck' });
+    // The read straight after the build is genuinely new information — counted, excused.
+    const afterBuild = cov.record('read_file', { path: CSS })!;
+    expect(afterBuild.count).toBe(3);
+    expect(afterBuild.mayHaveChanged).toBe(true);
+    expect(revisitAdvisory('read_file', CSS, afterBuild)).toBeNull();
+    // The one after that, with nothing in between, is circling — and now says so.
+    const circling = cov.record('read_file', { path: CSS })!;
+    expect(circling.count).toBe(4);
+    expect(circling.mayHaveChanged).toBe(false);
+    expect(revisitAdvisory('read_file', CSS, circling)).toContain(CSS);
+  });
+
+  it('drops every cached ANSWER after a shell command, so no repeat is stubbed out', () => {
+    const cov = new ReadCoverage();
+    cov.record('read_file', { path: CSS });
+    cov.record('builtin_tasks_list', { projectId: 11 });
     cov.invalidate('run_command', { command: 'npx prettier --write .' });
-    expect(cov.record('read_file', { path: CSS })!.count).toBe(1);
-    expect(cov.record('read_file', { path: 'other.tsx' })!.count).toBe(1);
+    expect(cov.isRepeat('read_file', { path: CSS })).toBe(false);
+    expect(cov.isRepeat('builtin_tasks_list', { projectId: 11 })).toBe(false);
+  });
+
+  it('hands back a SNAPSHOT, so a caller cannot reset the live tally', () => {
+    const cov = new ReadCoverage();
+    cov.record('read_file', { path: CSS });
+    const visit = cov.record('read_file', { path: CSS })!;
+    visit.count = 0;
+    expect(cov.record('read_file', { path: CSS })!.count).toBe(3);
   });
 });
 
@@ -164,7 +200,17 @@ describe('ReadCoverage · the exact-repeat guard', () => {
 });
 
 describe('revisitAdvisory', () => {
-  const visit = (count: number) => ({ count, priorArgs: ['{"path":"a.css","offset":1}', '{"path":"a.css","offset":2}'] });
+  const visit = (count: number) => ({
+    count,
+    priorArgs: ['{"path":"a.css","offset":1}', '{"path":"a.css","offset":2}'],
+    mayHaveChanged: false,
+  });
+
+  it('stays silent — at any count — when something unscoped ran since the last read', () => {
+    // Re-reading after a build or a codemod is the RIGHT move; the guard must not
+    // punish it. The count still stands, so the read after that is caught.
+    expect(revisitAdvisory('read_file', CSS, { ...visit(REVISIT_HARD_AT), mayHaveChanged: true })).toBeNull();
+  });
 
   it('stays silent for ordinary navigation', () => {
     for (let n = 1; n < REVISIT_NUDGE_AT; n += 1) {

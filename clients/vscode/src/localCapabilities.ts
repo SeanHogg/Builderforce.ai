@@ -34,7 +34,7 @@ import type {
   ShellResult,
 } from "@builderforce/agent-tools";
 
-import { needsPosixShell, findBash, posixShellOption } from "./posixShell";
+import { needsPosixShell, findBash, posixShellOption, cmdCannotRun } from "./posixShell";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -280,6 +280,38 @@ export function buildLocalCapabilityProvider(root: string): CapabilityProvider {
     },
   };
 
+  /** Execute once, in a named interpreter. `bash` null ⇒ the platform default shell. */
+  async function execOnce(command: string, bash: string | null): Promise<ShellResult> {
+    try {
+      // A POSIX script goes to bash EXPLICITLY (`bash -c <script>`), not through the
+      // platform shell with an override: the one thing that must not vary between
+      // machines is which interpreter parses `set -e`. A one-liner keeps the default.
+      const { stdout, stderr } = bash
+        ? await execFileAsync(bash, ["-c", command], {
+            cwd: rootResolved,
+            timeout: RUN_TIMEOUT_MS,
+            maxBuffer: RUN_MAX_BUFFER,
+            windowsHide: true,
+          })
+        : await execAsync(command, {
+            cwd: rootResolved,
+            timeout: RUN_TIMEOUT_MS,
+            maxBuffer: RUN_MAX_BUFFER,
+            windowsHide: true,
+          });
+      const out = [stdout, stderr].filter((s) => s && s.trim()).join("\n").trim();
+      return { ok: true, exitCode: 0, stdout: clamp(out || "(no output)", RUN_MAX_OUTPUT) };
+    } catch (e) {
+      const err = e as { code?: number | string; killed?: boolean; signal?: string; stdout?: string; stderr?: string; message?: string };
+      const out = [err.stdout, err.stderr].filter((s) => s && String(s).trim()).join("\n").trim();
+      if (err.killed || err.signal === "SIGTERM") {
+        return { ok: false, error: `timed out after ${RUN_TIMEOUT_MS / 1000}s`, stdout: clamp(out, RUN_MAX_OUTPUT) };
+      }
+      const code = typeof err.code === "number" ? err.code : 1;
+      return { ok: false, exitCode: code, stdout: clamp(out || err.message || "(no output)", RUN_MAX_OUTPUT) };
+    }
+  }
+
   const shell = {
     async run(command: string): Promise<ShellResult> {
       // A POSIX script with no POSIX shell to run it must say so. Letting it through
@@ -290,39 +322,24 @@ export function buildLocalCapabilityProvider(root: string): CapabilityProvider {
         return {
           ok: false,
           error:
-            "this command is a POSIX shell script (it uses set -e / $(…) / [ … ]) and no POSIX shell was found on this Windows machine. "
+            "this command needs a POSIX shell (it uses set -e / $(…) / [ … ], or a unix utility such as head/grep/sed that cmd.exe does not have) "
+            + "and no POSIX shell was found on this Windows machine. "
             + "Install Git for Windows (which ships bash), or re-run the work as plain single-line commands instead.",
         };
       }
-      try {
-        // A POSIX script goes to bash EXPLICITLY (`bash -c <script>`), not through the
-        // platform shell with an override: the one thing that must not vary between
-        // machines is which interpreter parses `set -e`. A one-liner keeps the default.
-        const bash = posixShellOption(command).shell;
-        const { stdout, stderr } = bash
-          ? await execFileAsync(bash, ["-c", command], {
-              cwd: rootResolved,
-              timeout: RUN_TIMEOUT_MS,
-              maxBuffer: RUN_MAX_BUFFER,
-              windowsHide: true,
-            })
-          : await execAsync(command, {
-              cwd: rootResolved,
-              timeout: RUN_TIMEOUT_MS,
-              maxBuffer: RUN_MAX_BUFFER,
-              windowsHide: true,
-            });
-        const out = [stdout, stderr].filter((s) => s && s.trim()).join("\n").trim();
-        return { ok: true, exitCode: 0, stdout: clamp(out || "(no output)", RUN_MAX_OUTPUT) };
-      } catch (e) {
-        const err = e as { code?: number | string; killed?: boolean; signal?: string; stdout?: string; stderr?: string; message?: string };
-        const out = [err.stdout, err.stderr].filter((s) => s && String(s).trim()).join("\n").trim();
-        if (err.killed || err.signal === "SIGTERM") {
-          return { ok: false, error: `timed out after ${RUN_TIMEOUT_MS / 1000}s`, stdout: clamp(out, RUN_MAX_OUTPUT) };
-        }
-        const code = typeof err.code === "number" ? err.code : 1;
-        return { ok: false, exitCode: code, stdout: clamp(out || err.message || "(no output)", RUN_MAX_OUTPUT) };
-      }
+      const bash = posixShellOption(command).shell ?? null;
+      const first = await execOnce(command, bash);
+      if (first.ok || bash) return first;
+      // cmd.exe could not even ATTEMPT the command — an unlisted unix utility, a
+      // single-quoted argument, a `$VAR`. `needsPosixShell` is a whitelist and will
+      // always be incomplete, so the failure that reaches the agent must not be
+      // `'head' is not recognized as an internal or external command`: retry once in
+      // bash, which is what the command was written for. A genuine non-zero exit from
+      // a program that DID run (a failing build) does not match, so nothing that
+      // legitimately failed is run twice.
+      const retryBash = findBash();
+      if (!retryBash || !cmdCannotRun(first.stdout ?? "")) return first;
+      return execOnce(command, retryBash);
     },
   };
 

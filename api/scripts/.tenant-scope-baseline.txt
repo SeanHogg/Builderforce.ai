@@ -6,7 +6,6 @@ application/approvals/runApprovalExpirySweep.ts:2
 application/artifact/capabilityContext.ts:1
 application/audit/ticketAuditService.ts:2
 application/auth/DeviceAuthService.ts:6
-application/auth/sessionRevocation.ts:2
 application/backend/index.ts:2
 application/boardsync/drizzleStore.ts:9
 application/boardsync/runBoardSyncSweep.ts:1
@@ -81,7 +80,7 @@ infrastructure/relay/CloudRunnerDO.ts:1
 infrastructure/repositories/AgentHostRepository.ts:4
 presentation/middleware/emulationMiddleware.ts:3
 presentation/routes/activityRoutes.ts:9
-presentation/routes/adminRoutes.ts:15
+presentation/routes/adminRoutes.ts:11
 presentation/routes/agentHostRoutes.ts:3
 presentation/routes/boardWebhookRoutes.ts:1
 presentation/routes/ceremonyRoutes.ts:2

@@ -37,9 +37,68 @@ const POSIX_ONLY = [
   /(^|\n)\s*export\s+\w+=/,      // `export VAR=…`
 ];
 
+/**
+ * Coreutils that DO NOT EXIST as `cmd.exe` commands, so invoking one there fails with
+ * `'head' is not recognized as an internal or external command` — a real reported
+ * failure from `git log --oneline | head -5`.
+ *
+ * The control-form list above catches scripts the git tools BUILD; this catches the
+ * one-liners a model WRITES, which are ordinary unix pipelines with no `set -e` or
+ * `$(…)` anywhere in them. Both routes end at the same bash.
+ *
+ * Deliberately excludes every name cmd.exe also has — `sort`, `find`, `more`, `mkdir`,
+ * `echo`, `type`, `del` — even where the flags differ: routing those would change the
+ * behaviour of commands that work today, and the {@link cmdCannotRun} retry below
+ * covers them if they ever do fail.
+ */
+const POSIX_UTILITIES: ReadonlySet<string> = new Set([
+  "head", "tail", "grep", "egrep", "fgrep", "sed", "awk", "gawk", "wc", "cut", "tr",
+  "uniq", "xargs", "basename", "dirname", "cat", "ls", "rm", "cp", "mv", "touch",
+  "which", "pwd", "chmod", "ln", "du", "df", "tee", "sleep", "test", "seq", "diff",
+]);
+
+/** Split a command into its pipeline/chain segments — the positions a COMMAND WORD can
+ *  start at (`|`, `||`, `&&`, `;`, and newlines). Quotes are not parsed: a separator
+ *  inside a string can only ever cause an extra (harmless) bash route, never a miss. */
+function commandWords(command: string): string[] {
+  return command
+    .split(/\|\||&&|[|;\n]/)
+    .map((seg) => seg.trim().replace(/^\(+\s*/, ""))
+    // Skip `VAR=value cmd` prefixes and redirections to reach the real verb.
+    .map((seg) => seg.replace(/^(?:\w+=\S*\s+)+/, ""))
+    .map((seg) => (/^[\w./-]+/.exec(seg)?.[0] ?? ""))
+    // A path-qualified invocation (`./scripts/x.sh`, `node_modules/.bin/tsc`) is not a
+    // bare utility name — take the basename so `/usr/bin/head` still matches.
+    .map((word) => word.slice(word.lastIndexOf("/") + 1))
+    .filter(Boolean);
+}
+
 /** Does this command require a POSIX shell to run correctly? */
 export function needsPosixShell(command: string): boolean {
-  return POSIX_ONLY.some((re) => re.test(command));
+  if (POSIX_ONLY.some((re) => re.test(command))) return true;
+  return commandWords(command).some((w) => POSIX_UTILITIES.has(w));
+}
+
+/**
+ * `cmd.exe`'s own way of saying "I cannot run this" — the signatures that mean the
+ * command was never attempted, as opposed to a real non-zero exit from a program that
+ * DID run (a failing test suite, a type error). Only the former is worth re-running
+ * under bash; re-running the latter would double every failing build.
+ *
+ * This is the backstop behind {@link needsPosixShell}: that predicate is a whitelist and
+ * will always be incomplete (an unlisted utility, a single-quoted argument, a `$VAR`),
+ * so the shell capability retries once under bash when cmd.exe reports one of these.
+ */
+const CMD_CANNOT_RUN = [
+  /is not recognized as an internal or external command/i,
+  /is not recognized as the name of a cmdlet/i,
+  /The syntax of the command is incorrect/i,
+  /was unexpected at this time/i,
+  /Environment variable .* not defined/i,
+];
+
+export function cmdCannotRun(output: string): boolean {
+  return !!output && CMD_CANNOT_RUN.some((re) => re.test(output));
 }
 
 /** Cached bash lookup — resolving it walks the filesystem, and the shell capability

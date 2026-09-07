@@ -8,8 +8,9 @@
  * mint a tenant token — those cross this typed postMessage bridge to the host:
  *
  *   webview → host : 'ready', 'token.refresh'{id}, 'signin', 'chats.changed', 'platform.write'{name},
- *                    'run.start'{run} / 'run.stop' / 'run.confirm' / 'run.clearError' / 'run.autoApprove'
- *                    (the host-owned agent loop — see hostRunDriver.ts),
+ *                    'run.start'{run} / 'run.stop' / 'run.confirm' / 'run.clearError' /
+ *                    'run.autoApprove'{chatId,on} (the host-owned agent loop — see
+ *                    hostRunDriver.ts; every verb names its CHAT, because several run at once),
  *                    'open.artifact'{kind,ref,projectId},
  *                    'changes.open'{changePath,changeStatus}, 'changes.review'
  *   host → webview : 'init'{…}, 'token'{token}, 'response'{id,ok,result|error}, 'intent'{intent},

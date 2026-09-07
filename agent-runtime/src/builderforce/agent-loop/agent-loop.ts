@@ -21,6 +21,7 @@ import type { StreamFn } from "./stream.js";
 import {
   shouldRecoverStalledTurn,
   isExhaustedStall,
+  stallShape,
   stallRecoveryNudge,
   stallExhaustedNotice,
   MAX_ANNOUNCEMENT_RECOVERIES,
@@ -267,6 +268,15 @@ async function runLoop(
   // Budget for the announced-but-untaken tool call recovery below, shared with the
   // Brain run loop via `@builderforce/agent-stall`.
   let announcementRecoveries = 0;
+  // The run's own tool NAMES and the request it was given — the two facts the HANDOFF
+  // shape needs. Captured once, before the loop starts pushing its own recovery
+  // messages in as `user` turns: reading the newest user message later would ask
+  // "did the user ask for a change?" of a nudge this loop wrote itself.
+  const toolNames = (currentContext.tools ?? []).map((t) => t.name);
+  const userRequest = [...currentContext.messages]
+    .reverse()
+    .find((m): m is Extract<AgentMessage, { role: "user" }> => m.role === "user")
+    ?.content ?? "";
 
   while (true) {
     let hasMoreToolCalls = true;
@@ -336,13 +346,19 @@ async function runLoop(
         toolCallCount: toolCalls.length,
         availableToolCount: currentContext.tools?.length ?? 0,
         recoveriesUsed: announcementRecoveries,
+        availableToolNames: toolNames,
+        requestText: typeof userRequest === "string" ? userRequest : "",
       };
+      // An autonomous run has NOBODY to hand commands to — a turn that ends "now run
+      // the tests and commit" is a no-op dressed as a completed step, and the ticket
+      // ledger records it as done. Same budget, different correction; see `stallShape`.
+      const shape = stallShape(stallInput);
       if (!hasMoreToolCalls && pendingMessages.length === 0 && shouldRecoverStalledTurn(stallInput)) {
         announcementRecoveries += 1;
         pendingMessages = [
           {
             role: "user",
-            content: stallRecoveryNudge(announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES),
+            content: stallRecoveryNudge(announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES, shape),
             timestamp: Date.now(),
           },
         ];
@@ -354,7 +370,7 @@ async function runLoop(
         // WHY it produced nothing, instead of inferring success from a clean exit.
         const notice: AgentMessage = {
           role: "user",
-          content: stallExhaustedNotice(config.model?.id),
+          content: stallExhaustedNotice(config.model?.id, undefined, shape),
           timestamp: Date.now(),
         };
         currentContext.messages.push(notice);

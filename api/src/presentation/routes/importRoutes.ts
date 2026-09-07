@@ -21,41 +21,38 @@
 import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import {
-  IMPORT_REGISTRY_FINGERPRINT, importBoardRows, isImportDataset, listImportKinds,
-} from '../../application/insights/boardImport';
+import { importBoardRows, isImportDataset, readImportKinds } from '../../application/insights/boardImport';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { scope } from './segmentTrackerRoutes';
+import { parseBody, z } from './requestBody';
 
-/** The registry cannot change without a deploy, and the key carries its
- *  fingerprint, so a long TTL is honest. */
-const KINDS_TTL = { kvTtlSeconds: 86_400, l1TtlMs: 3_600_000 };
-
-interface ImportBody {
-  rows?: Array<Record<string, unknown>>;
-  dryRun?: boolean;
-  rowOffset?: number;
-}
+/**
+ * A row is whatever the kind's columns admit — the registry, not this schema,
+ * decides which cells are valid, and `importBoardRows` reports per-row errors
+ * against it. What the body must guarantee HERE is its own shape: an array of
+ * objects, so `rows.length` and the per-row walk cannot meet a string.
+ */
+const ImportBody = z.object({
+  rows: z.array(z.record(z.string(), z.unknown())).default([]),
+  dryRun: z.boolean().default(false),
+  rowOffset: z.number().int().min(0).default(0),
+});
 
 export function createImportRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
-  router.get('/kinds', async (c) => {
-    const key = `import:kinds:v:${IMPORT_REGISTRY_FINGERPRINT}`;
-    return c.json(await getOrSetCached(c.env as Env | undefined, key, async () => ({ kinds: listImportKinds() }), KINDS_TTL));
-  });
+  router.get('/kinds', async (c) => c.json(await readImportKinds(c.env as Env | undefined)));
 
   router.post('/:kind', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
     const kind = c.req.param('kind');
     if (!isImportDataset(kind)) return c.json({ error: `unknown kind "${kind}"` }, 400);
-    const body = await c.req.json<ImportBody>().catch(() => ({}) as ImportBody);
-    const result = await importBoardRows(db, c.env as Env, tenantId, kind, body.rows ?? [], {
-      dryRun: body.dryRun === true,
-      rowOffset: typeof body.rowOffset === 'number' ? body.rowOffset : 0,
+    const body = await parseBody(c, ImportBody);
+    const result = await importBoardRows(db, c.env as Env, tenantId, kind, body.rows, {
+      dryRun: body.dryRun,
+      rowOffset: body.rowOffset,
     });
     if (result.dryRun) return c.json(result, 200);
     return c.json(result, result.inserted > 0 ? 201 : 400);

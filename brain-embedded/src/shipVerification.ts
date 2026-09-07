@@ -104,6 +104,25 @@ function succeeded(ev: BrainTraceEvent): boolean {
 }
 
 /**
+ * Did this step push?
+ *
+ * TWO forms, because there are two ways to push and only one of them used to count.
+ * The raw form is a shell step whose command contains `git push` — which is what an
+ * agent does when it hand-rolls publishing. The DECLARED form is the `git_push` tool,
+ * whose args are `{ allowBaseBranch, repo }` and carry no command string at all, so
+ * reading commands alone made the SAFE, intended route invisible: a run that shipped
+ * through the tool never satisfied condition (1), and every delta ticket it had opened
+ * stayed at 50% on the board forever — the exact bug this module exists to fix, left
+ * open for the path we tell the agent to take.
+ *
+ * `open_pull_request` is deliberately NOT a push for this purpose: it puts the branch
+ * on the remote, but a pull request is a request, and the merge is someone else's act.
+ */
+function isPush(ev: BrainTraceEvent): boolean {
+  return ev.label === 'git_push' || GIT_PUSH.test(commandOf(ev));
+}
+
+/**
  * Did this run push its work to a base branch and verify it landed?
  *
  * Requires a successful push, and then a status — recorded AFTER it — showing a base
@@ -115,7 +134,7 @@ export function shippedToBaseBranch(events: BrainTraceEvent[]): boolean {
 
   let pushedAt = -1;
   for (let i = 0; i < steps.length; i += 1) {
-    if (succeeded(steps[i]) && GIT_PUSH.test(commandOf(steps[i]))) pushedAt = i;
+    if (succeeded(steps[i]) && isPush(steps[i])) pushedAt = i;
   }
   if (pushedAt < 0) return false;
 

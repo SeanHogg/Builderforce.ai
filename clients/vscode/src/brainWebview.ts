@@ -34,7 +34,8 @@ interface BrainInbound extends WebviewInbound {
   run?: WebviewRunStart;
   /** For `run.confirm`: the human's answer to the paused tool call. */
   ok?: boolean;
-  /** For `run.autoApprove`: the panel's Auto-mode switch. */
+  /** For `run.autoApprove`: the panel's Auto-mode switch (with `chatId`, the chat it
+   *  was flipped in — it applies to that conversation's run and no other). */
   on?: boolean;
   /** For `session.meta`: the chat this panel is showing (id + current title), so a
    *  per-session tab can name itself and bind to the chat it was opened for. */
@@ -433,8 +434,10 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
       case "run.clearError":
         if (typeof msg.chatId === "number") BrainWebview.hooks.runHost?.clearError(msg.chatId);
         break;
+      // Scoped to the chat the panel is showing: several chats run at once out in the
+      // host, and a switch flipped in one must not answer a confirm parked in another.
       case "run.autoApprove":
-        BrainWebview.hooks.runHost?.setAutoApprove(msg.on === true);
+        if (typeof msg.chatId === "number") BrainWebview.hooks.runHost?.setAutoApprove(msg.chatId, msg.on === true);
         break;
       case "chats.changed":
         BrainWebview.hooks.onChatsChanged?.();

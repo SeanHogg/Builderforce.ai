@@ -61,6 +61,12 @@ export const LOCAL_WORKSPACE_TOOLS: ReadonlySet<string> = new Set([
   'git_commit',
   'git_push',
   'open_pull_request',
+  // Cleanup after a merge is the LAST step of shipping and the one most easily trimmed:
+  // by the time the agent reaches it, the turn's text is about the change, not about
+  // branches, so "cleanup" shares no stem with anything the user said. Unpinned, the
+  // agent falls back to hand-rolled `run_command` git — which is exactly how
+  // `git push origin --delete <branch>` → `remote ref does not exist` happened.
+  'git_cleanup_merged',
 ]);
 
 /**
@@ -92,6 +98,10 @@ export const UNSCOPED_MUTATION_TOOLS: ReadonlySet<string> = new Set([
   'git_sync_latest',
   'git_undo',
   'git_redo',
+  // Cleanup checks out the base branch and fast-forwards it, so every file in the
+  // checkout can differ from what a read before it returned — the same reason the
+  // three above are here.
+  'git_cleanup_merged',
 ]);
 
 export function isLocalWorkspaceTool(name: string): boolean {

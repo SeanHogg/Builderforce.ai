@@ -28,9 +28,11 @@
 
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { chatTicketLinks, executions, tasks } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { ExecutionStatus } from '../../domain/shared/types';
 import { isTerminalExecutionStatus, parseCloudAgentRef } from '../runtime/cloudDispatch';
 import { isLifecycleManagedTask } from '../kanban/managedExecutionGuard';
+import { advertisedName } from '../llm/toolNaming';
 import { replayRoute, type BuiltinCtx } from '../llm/builtinToolContext';
 
 /** Ticket kinds that can be RUN (the same set `chats.dispatch_agent` accepts). */
@@ -86,9 +88,9 @@ export function pickTaskToStart(
   const chosen = only(mine) ?? (mine.length === 0 ? only(linked) : undefined);
   if (chosen) return { taskId: chosen.id };
   if (linked.length === 0) {
-    return { error: 'this chat has no runnable ticket linked to it and you have no run on it — link the ticket first (chats.link_ticket), or pass taskId.' };
+    return { error: `this chat has no runnable ticket linked to it and you have no run on it — link the ticket first (${advertisedName('chats.link_ticket')}), or pass taskId.` };
   }
-  return { error: `this chat links ${linked.length} runnable tickets and none is unambiguously yours — pass the taskId the instruction is about (chats.list_tickets shows them).` };
+  return { error: `this chat links ${linked.length} runnable tickets and none is unambiguously yours — pass the taskId the instruction is about (${advertisedName('chats.list_tickets')} shows them).` };
 }
 
 export type ExecuteAsAgentResult =
@@ -119,7 +121,7 @@ export function addressedAgentRunDeps(ctx: BuiltinCtx): AddressedAgentRunDeps {
       return ctx.db
         .select({ id: tasks.id, assignedAgentRef: tasks.assignedAgentRef })
         .from(tasks)
-        .where(inArray(tasks.id, ids));
+        .where(scopedToTenant(tasks, ctx.tenantId, inArray(tasks.id, ids)));
     },
     async runsForTasks(taskIds) {
       if (taskIds.length === 0) return [];

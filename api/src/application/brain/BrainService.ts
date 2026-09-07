@@ -32,7 +32,7 @@ import { recordActionRating } from '../llm/actionRatings';
 import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
 import { listBuiltinTools, callBuiltinTool, CLOUD_AGENT_PLATFORM_TOOLS, CHAT_SCOPED_AGENT_TOOLS } from '../llm/builtinMcpService';
-import { shouldRecoverStalledTurn, isExhaustedStall, isEmptyTurn, stallRecoveryNudge, stallExhaustedNotice, modelFailoverNotice, chooseStallFailover, MAX_ANNOUNCEMENT_RECOVERIES, MAX_MODEL_FAILOVERS, type ModelFallbackSurface } from '@builderforce/agent-stall';
+import { shouldRecoverStalledTurn, isExhaustedStall, stallShape, stallRecoveryNudge, stallExhaustedNotice, modelFailoverNotice, chooseStallFailover, MAX_ANNOUNCEMENT_RECOVERIES, MAX_MODEL_FAILOVERS, type ModelFallbackSurface } from '@builderforce/agent-stall';
 import {
   BRAIN_ORIGIN, TEAM_ORIGIN, MANAGER_ORIGIN, ACCESSIBLE_ORIGINS,
   resolveChatAccess, syncPendingMemberships as syncPendingMembershipsShared,
@@ -1195,6 +1195,12 @@ export class BrainService {
       .map((m) => `${m.role === 'user' ? 'User' : authorName(m.metadata)}: ${m.content}`)
       .join('\n\n');
 
+    // The request this reply is answering — the newest USER turn, not the whole
+    // transcript and not a nudge this loop injected. The stall gate needs it to tell a
+    // change request (where handing the work back is a stall) from a question (where
+    // naming the commands IS the answer).
+    const userRequest = [...msgs].reverse().find((m) => m.role === 'user')?.content ?? '';
+
     const projectHint = (chat as unknown as { projectId?: number | null }).projectId ?? null;
     const isManagerChat = (chat as unknown as { origin?: string | null }).origin === MANAGER_ORIGIN;
     // Conversation or execution (0409). Team + manager chats resolve to 'work' by origin
@@ -1422,17 +1428,22 @@ export class BrainService {
           toolCallCount: 0,
           availableToolCount: tools.length,
           recoveriesUsed: announcementRecoveries,
+          availableToolNames: tools.map((t) => t.function.name),
+          requestText: userRequest,
         };
         // Which SHAPE, so the notices describe what actually happened. A blank turn told
         // the operator its model had "described tool calls instead of making them" —
         // narration they could not find anywhere in the transcript, because there was none.
-        const blank = isEmptyTurn(stallInput);
+        // A HANDED-OFF turn is the same misdescription in the other direction: this
+        // reply holds `chats.execute_as_agent`, so "you should run the build and push"
+        // is work it could have handed to its own runtime, not a limit it reported.
+        const shape = stallShape(stallInput);
         if (shouldRecoverStalledTurn(stallInput)) {
           announcementRecoveries += 1;
           convo.push({ role: 'assistant', content });
           convo.push({
             role: 'user',
-            content: stallRecoveryNudge(announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES),
+            content: stallRecoveryNudge(announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES, shape),
           });
           continue;
         }
@@ -1462,7 +1473,7 @@ export class BrainService {
               kind: 'failover',
               label: next,
               args: { from: lastModel || activeModel || null, to: next, attempt: modelFailovers, of: MAX_MODEL_FAILOVERS },
-              result: { notice: modelFailoverNotice(lastModel || activeModel, next, blank) },
+              result: { notice: modelFailoverNotice(lastModel || activeModel, next, shape) },
               turnSeq: iterations,
             });
             activeModel = next;
@@ -1470,12 +1481,12 @@ export class BrainService {
             // nothing about this one, and carrying the count over would give it no chance.
             announcementRecoveries = 0;
             convo.push({ role: 'assistant', content });
-            convo.push({ role: 'user', content: stallRecoveryNudge(false) });
+            convo.push({ role: 'user', content: stallRecoveryNudge(false, shape) });
             continue;
           }
           // A blank turn leaves no `content` to lead with, so the notice IS the reply —
           // and it is a far better one than the 400 this used to fall through to.
-          const notice = stallExhaustedNotice(lastModel, triedModels, blank);
+          const notice = stallExhaustedNotice(lastModel, triedModels, shape);
           text = content ? `${content}\n\n${notice}` : notice;
           break;
         }

@@ -919,12 +919,15 @@ function Chat({ init }: { init: InitData }) {
     (tried: readonly string[]) => nextFallbackModel(modelSurface, tried),
     [modelSurface],
   );
-  // The host runs the loop, so it needs the two things only this panel knows: the
-  // Auto-mode switch (its confirm gate follows it live) and the picker's surface
-  // (its stall failover keeps ONE ordering function, `nextFallbackModel`).
+  // The host runs the loop, so it needs the three things only this panel knows: WHICH
+  // chat it is showing (runs for other chats carry on out there, and both the Auto
+  // switch and the host's tool-count announcement are matched against this), the
+  // Auto-mode switch (its confirm gate follows it live, for that chat alone) and the
+  // picker's surface (its stall failover keeps ONE ordering function,
+  // `nextFallbackModel`).
   useEffect(() => {
-    setHostRunContext({ autoApprove, modelSurface });
-  }, [autoApprove, modelSurface]);
+    setHostRunContext({ chatId, autoApprove, modelSurface });
+  }, [chatId, autoApprove, modelSurface]);
 
   // Project-Evermind memory hooks: recall the chat's project learnings before
   // answering (grounding the reply + surfacing recall/learn/reconcile steps in the

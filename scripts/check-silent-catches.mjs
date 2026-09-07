@@ -55,7 +55,13 @@ const TARGETS = selectedTargets(process.argv.slice(2));
  * left to report to, so its console line is the contract rather than a bypass.
  */
 const EXEMPTIONS = {
-  'console-only': ['api/src/application/observability/caughtErrorReporter.ts'],
+  'console-only': [
+    'api/src/application/observability/caughtErrorReporter.ts',
+    // The worker's own durable sink, for the same reason: when the insert that
+    // records a caught error is itself what failed, a console line is the only
+    // thing left. Every OTHER worker catch reports through it.
+    'worker/src/lib/reportWorkerError.ts',
+  ],
 };
 
 const isExempt = (rule, relativePath) => EXEMPTIONS[rule]?.includes(relativePath) === true;

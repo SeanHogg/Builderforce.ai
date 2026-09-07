@@ -211,6 +211,62 @@ describe("tools", () => {
   });
 });
 
+/**
+ * The reason runs live in the host at all: the user switches chats, and the work behind
+ * the tab they left carries on. Two conversations in flight at once must not be able to
+ * touch each other's transcript, tools or gate.
+ */
+describe("two chats at once", () => {
+  it("runs them in parallel — neither waits for the other, and neither sees the other's turns", async () => {
+    const refactor = freshChatId();
+    const question = freshChatId();
+    // The refactor's tool parks until we release it; the question's answers at once.
+    let release = (): void => undefined;
+    const blocked = new Promise<void>((r) => { release = r; });
+    const slow = toolDef("edit_file", { mutating: true });
+    slow.execute = async (args) => { slow.calls.push(args); await blocked; return JSON.stringify({ ok: true }); };
+    const fast = toolDef("read_file");
+    const host = createBrainRunHost(
+      ports({
+        tools: [slow, fast],
+        // One gateway serving both chats, deciding from the transcript it is handed —
+        // which is also the assertion that the two transcripts never merged.
+        script: (ctx) => {
+          const mine = ctx.messages.some((m) => m.role === "user" && String(m.content).includes("refactor"));
+          if (ctx.messages.some((m) => m.role === "tool")) return { text: mine ? "Refactored." : "Explained." };
+          return { toolCalls: [{ name: mine ? "edit_file" : "read_file", args: { path: "a.ts" } }] };
+        },
+      }),
+    );
+    const slowRun = start(refactor, host, { userTurn: "refactor the parser" });
+    await vi.waitFor(() => expect(slow.calls).toHaveLength(1));
+    // The second chat starts and FINISHES while the first is still inside its tool.
+    await start(question, host, { userTurn: "explain the parser" });
+    expect(isRunning(question)).toBe(false);
+    expect(isRunning(refactor)).toBe(true);
+    expect(getRunSnapshot(question).appended.at(-1)?.content).toBe("Explained.");
+    release();
+    await slowRun;
+    expect(getRunSnapshot(refactor).appended.at(-1)?.content).toBe("Refactored.");
+    // Each conversation kept its own tool call; nothing crossed over.
+    expect(slow.calls).toHaveLength(1);
+    expect(fast.calls).toHaveLength(1);
+  });
+
+  it("relays each chat's frames under its own id, so a panel can tell them apart", async () => {
+    const a = freshChatId();
+    const b = freshChatId();
+    const host = createBrainRunHost(ports({ script: [{ text: "A." }, { text: "B." }] }));
+    const s = sink();
+    host.attach(s);
+    await Promise.all([start(a, host), start(b, host)]);
+    for (const id of [a, b]) {
+      expect(s.frames.some((f) => f.type === "run.settled" && f.chatId === id)).toBe(true);
+      expect(s.frames.some((f) => f.type === "run.tools" && f.chatId === id)).toBe(true);
+    }
+  });
+});
+
 describe("the confirm gate", () => {
   it("pauses a mutating call while Auto mode is off, and the panel's switch answers it live", async () => {
     const chatId = freshChatId();
@@ -228,10 +284,45 @@ describe("the confirm gate", () => {
     await vi.waitFor(() => expect(getRunSnapshot(chatId).pendingConfirm?.name).toBe("edit_file"));
     expect(edit.calls).toHaveLength(0);
     // Flipping Auto mode ON approves the paused call and every later one.
-    host.setAutoApprove(true);
+    host.setAutoApprove(chatId, true);
     await done;
     expect(edit.calls).toHaveLength(1);
     expect(getRunSnapshot(chatId).appended.at(-1)?.content).toBe("Edited.");
+  });
+
+  /**
+   * The reason the switch is per-chat. Runs live in the host precisely so several can
+   * be in flight while the user reads, edits or talks in another tab — and while Auto
+   * applied to all of them, "turn Auto on so THIS refactor stops asking me" also said
+   * yes to whatever a different conversation was parked on: a delete, a push, a
+   * base-branch commit, in a tab the user was not looking at.
+   */
+  it("keeps one chat's Auto switch out of another chat's paused call", async () => {
+    const busy = freshChatId();
+    const quiet = freshChatId();
+    const edit = toolDef("edit_file", { mutating: true });
+    const host = createBrainRunHost(
+      ports({
+        tools: [edit],
+        script: [{ toolCalls: [{ name: "edit_file", args: { path: "a.ts" } }] }, { text: "Edited." }],
+      }),
+    );
+    const done = start(busy, host, { autoApprove: false });
+    await vi.waitFor(() => expect(getRunSnapshot(busy).pendingConfirm?.name).toBe("edit_file"));
+    // The user flips Auto in a DIFFERENT chat's panel. The paused call must stay paused.
+    host.setAutoApprove(quiet, true);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(getRunSnapshot(busy).pendingConfirm?.name).toBe("edit_file");
+    expect(edit.calls).toHaveLength(0);
+    // Flipping it in the chat that IS asking answers it.
+    host.setAutoApprove(busy, true);
+    await done;
+    expect(edit.calls).toHaveLength(1);
+  });
+
+  it("ignores a switch for a chat with no run in flight", () => {
+    const host = createBrainRunHost(ports({ script: [{ text: "idle" }] }));
+    expect(() => host.setAutoApprove(freshChatId(), true)).not.toThrow();
   });
 
   it("answers a paused call through confirm()", async () => {

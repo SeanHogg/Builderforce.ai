@@ -16,6 +16,12 @@
 -- Fixed id so the migration is safe to replay, and `emailed_at` left NULL so the
 -- product-updates digest announces it exactly once. `version` is the frontend
 -- release the page is live in.
+--
+-- The body names NO tool id. Persisted text is never rewritten by a deploy, so a
+-- tool name written here is wrong forever the moment the catalog moves — the same
+-- defect 0376 shipped into every tenant's Manager persona and 0379 had to repair.
+-- `check-prompt-tool-names.mjs` enforces it; the note says WHAT the Brain can now
+-- do and lets the prompt builder name the tool at reply time.
 INSERT INTO release_notes (
   id,
   version,
@@ -29,7 +35,7 @@ INSERT INTO release_notes (
     'a1b2c301-0005-4000-8000-000000000002',
     '2026.9.13',
     'Import a quarter of records at once, and watch the board lenses move',
-    'The People, R&D, Quality and AI lenses on Insights always drew from real tables — and for the datasets with no connector, the only way to fill them was one row at a time. Import is now a tab of Insights. Pick a dataset, download its template or drop the file you already have, and your columns are matched onto the server''s own registry — required ones starred, examples in every placeholder. Every cell is checked against its column type before anything is written, and the server runs the same file as a dry run and tells you which rows it would write. Then the valid rows go up in batches, with a progress bar that moves when the server acknowledges each one, and a receipt that says exactly what landed. The guided path still takes a single record with each field checked as you go; it now posts through the same door and shows the server''s answer. The Brain''s board_data.import tool speaks the same contract, dry run included.',
+    'The People, R&D, Quality and AI lenses on Insights always drew from real tables — and for the datasets with no connector, the only way to fill them was one row at a time. Import is now a tab of Insights. Pick a dataset, download its template or drop the file you already have, and your columns are matched onto the server''s own registry — required ones starred, examples in every placeholder. Every cell is checked against its column type before anything is written, and the server runs the same file as a dry run and tells you which rows it would write. Then the valid rows go up in batches, with a progress bar that moves when the server acknowledges each one, and a receipt that says exactly what landed. The guided path still takes a single record with each field checked as you go; it now posts through the same door and shows the server''s answer. The Brain imports through the same door, dry run included.',
     'new',
     'live',
     '2026-09-06 18:00:00'

@@ -142,8 +142,23 @@ export interface BrainRunHost {
   stop(chatId: number): void;
   confirm(chatId: number, ok: boolean): void;
   clearError(chatId: number): void;
-  /** The panel's Auto-mode switch moved. Panel-global, so it applies to every live run. */
-  setAutoApprove(on: boolean): void;
+  /**
+   * The Auto-mode switch moved for ONE chat — the one whose panel it was flipped in.
+   *
+   * Deliberately per-chat, and the reason is the whole point of runs living out here:
+   * several chats execute AT ONCE, and closing or switching away from a tab no longer
+   * stops the work behind it. While this applied to every live run, "turn Auto on so
+   * this refactor stops asking me" also silently answered YES to whatever a DIFFERENT
+   * chat happened to be parked on — a delete, a push, a base-branch commit — in a tab
+   * the user was not even looking at. A switch in one conversation must not approve an
+   * action in another.
+   *
+   * Also called when a panel BINDS to a chat, not only when the switch is toggled: in
+   * reuse mode one panel moves between chats, so a chat parked on a confirm must be
+   * answered the moment the user comes back to it with Auto already on — otherwise the
+   * per-chat scoping would strand exactly the run the user returned to unblock.
+   */
+  setAutoApprove(chatId: number, on: boolean): void;
   /** Watch the runs from a panel. The panel is brought up to date immediately. */
   attach(sink: RunSink): () => void;
   dispose(): void;
@@ -298,11 +313,15 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     stop: (chatId) => stopRun(chatId),
     confirm: (chatId, ok) => resolveRunConfirm(chatId, ok),
     clearError: (chatId) => clearRunError(chatId),
-    setAutoApprove(on) {
-      for (const flag of flags.values()) flag.autoApprove = on;
-      // Flipping it ON answers the question the loop is currently paused on — the
-      // same shortcut the panel's switch always took.
-      if (on) for (const chatId of flags.keys()) resolveRunConfirm(chatId, true);
+    setAutoApprove(chatId, on) {
+      const flag = flags.get(chatId);
+      // No live run for this chat: nothing to move. The NEXT run starts from the
+      // panel's own switch, which rides in on `WebviewRunStart.autoApprove`.
+      if (!flag) return;
+      flag.autoApprove = on;
+      // Flipping it ON answers the question THIS chat's loop is paused on — the same
+      // shortcut the panel's switch always took, now aimed at one conversation.
+      if (on) resolveRunConfirm(chatId, true);
     },
     attach(sink) {
       const entry: SinkEntry = { sink, sent: new Map() };

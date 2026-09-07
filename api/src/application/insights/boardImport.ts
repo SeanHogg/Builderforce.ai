@@ -16,7 +16,7 @@
 
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
+import { bumpCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import {
   prodIncidents, supportTickets, uptimeSamples, headcountEvents, openPositions,
   aiToolAdoption, aiProgramInitiatives, rdFinancialsQuarterly, rdRevenueQuarterly, rdFteAllocationQuarterly,
@@ -212,6 +212,28 @@ function fingerprint(text: string): string {
 
 /** Changes whenever a column, its type, requiredness or example changes. */
 export const IMPORT_REGISTRY_FINGERPRINT: string = fingerprint(JSON.stringify(listImportKinds()));
+
+/** The registry cannot change without a deploy and the key carries its
+ *  fingerprint, so a long TTL is honest. */
+const KINDS_TTL = { kvTtlSeconds: 86_400, l1TtlMs: 3_600_000 };
+
+/**
+ * `GET /api/import/kinds`, cached.
+ *
+ * The read lives HERE rather than in the route because the cache key is the
+ * fingerprint declared two lines up: a route holding the key would be a second
+ * place to remember that the registry is what varies, and a presentation module
+ * reaching into `infrastructure/cache` is the layering the guard refuses. The
+ * handler now calls one application function and renders what it returns.
+ */
+export function readImportKinds(env: Env | undefined): Promise<{ kinds: ImportKind[] }> {
+  return getOrSetCached(
+    env,
+    `import:kinds:v:${IMPORT_REGISTRY_FINGERPRINT}`,
+    async () => ({ kinds: listImportKinds() }),
+    KINDS_TTL,
+  );
+}
 
 /** Coerce a raw CSV/JSON cell to the column's type; undefined skips the column. */
 function coerceCell(type: ImportColumnType, raw: unknown): unknown {
