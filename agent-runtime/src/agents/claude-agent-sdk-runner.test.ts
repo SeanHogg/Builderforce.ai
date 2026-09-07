@@ -42,7 +42,21 @@ describe("allowedToolsAfterGates", () => {
       "Bash",
       "Glob",
       "Grep",
+      "Task",
     ]);
+  });
+
+  // `allowedTools` is passed verbatim to the SDK, so this list is what the agent CAN
+  // call, not merely what a gate can remove. Delegation is a V1 capability
+  // (`sessions_spawn`); dropping the name here reduced V2 below parity.
+  it("advertises the subagent tool so V2 can delegate", () => {
+    expect(allowedToolsAfterGates(undefined)).toContain("Task");
+  });
+
+  it("lets a block gate withhold delegation", () => {
+    expect(
+      allowedToolsAfterGates([{ id: "g", effect: "block", tool: "task" } as never]),
+    ).not.toContain("Task");
   });
 
   it("removes a blocked tool (case-insensitive)", () => {

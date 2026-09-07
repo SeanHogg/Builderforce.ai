@@ -69,6 +69,7 @@ import {
   type PrdWriteCapability, type PrdUpdateResult,
 } from '@builderforce/agent-tools';
 import { runAgentLoop, openAiChatCodec, readOpenAiToolCalls, type LoopHooks, type LoopPorts, type LoopResult } from '@builderforce/agent-loop';
+import { buildOrchestrationCapability } from './cloudSubagent';
 import { renderRunContext, summarizeBlocks, type RunContextBlock } from '@builderforce/run-context';
 import { RUN_CONTEXT_ORDER } from './runContextSource';
 import { buildRunContext } from './runContextService';
@@ -2509,7 +2510,57 @@ async function runCloudToolLoop(
   });
   // Rehearsal wraps the provider here (see CloudLoopOpts.decorateProvider). A live run
   // passes nothing and uses the provider as built.
-  const provider = opts?.decorateProvider ? opts.decorateProvider(builtProvider) : builtProvider;
+  const decoratedProvider = opts?.decorateProvider ? opts.decorateProvider(builtProvider) : builtProvider;
+  // Delegation (`orchestrate`). Attached AFTER decoration and built from the DECORATED
+  // provider, so a rehearsal's shadow wrapper covers a child's tool calls too — a
+  // sub-agent that wrote straight through the raw backing would be the one hole in a
+  // dry run. The child loop itself lives in `cloudSubagent.ts`; all this supplies is
+  // the surface's concretions (one metered model turn, the registry, the timeline).
+  const provider: CapabilityProvider = {
+    ...decoratedProvider,
+    orchestration: buildOrchestrationCapability({
+      parentCaps: surfaceCaps,
+      provider: decoratedProvider,
+      registry: cloudToolRegistry,
+      signal: abortController.signal,
+      complete: async ({ messages: childMessages, tools, step }) => {
+        const tGen0 = Date.now();
+        // The child rides the model the parent LOCKED onto, with no cascade of its
+        // own: a delegation is a bounded side quest, so a model failure inside it ends
+        // the child and is reported to the parent as a failed tool call rather than
+        // spending the run's one pin-drop on a sub-task.
+        const result = await proxy.complete(
+          {
+            messages: childMessages as unknown as ChatMessage[],
+            tools,
+            tool_choice: 'auto',
+            ...(activeModel ? { model: activeModel } : {}),
+            ...(genParams.temperature != null ? { temperature: genParams.temperature } : {}),
+            useCase: 'task_execution',
+          },
+          undefined,
+          undefined,
+          abortController.signal,
+        );
+        // Metered and attributed exactly like a parent turn — a sub-agent's tokens are
+        // the tenant's tokens, and a delegation that quietly billed to nobody would
+        // make the per-execution cost figure wrong.
+        const turn = await recordCloudLlmTurn(result, {
+          env, db, tenantId, cloudAgentRef, executionId, taskId: taskRow.id, projectId,
+          requestedModel: pick.model, fallbackModel: activeModel,
+          effectivePlan: routing.effectivePlan, premiumOverride: routing.premiumOverride,
+        }, { tGen0, step, notify: false });
+        if (!turn.ok) return { failed: turn.error };
+        return { content: turn.content, toolCalls: readOpenAiToolCalls({ tool_calls: turn.toolCalls }) };
+      },
+      record: async (event) => {
+        await recordCloudToolEvent(db, {
+          tenantId, cloudAgentRef, executionId,
+          toolName: 'agent.subagent', category: 'tool', detail: event.detail, result: event.result,
+        });
+      },
+    }),
+  };
   const toolCtx: ToolContext = { caps: provider, signal: abortController.signal };
 
   // ── THE loop ────────────────────────────────────────────────────────────────

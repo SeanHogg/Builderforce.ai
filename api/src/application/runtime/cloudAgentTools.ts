@@ -13,7 +13,7 @@
  *   • the step budgets and the finish-honesty matcher (loop policy).
  */
 
-import { buildCoreToolRegistry, type Capability, SKILL_TOOLS } from '@builderforce/agent-tools';
+import { buildCoreToolRegistry, type Capability, SKILL_TOOLS, SUBAGENT_TOOLS } from '@builderforce/agent-tools';
 import { classifyDeliverablePaths } from '../delivery/deliverableEvidence';
 
 /** Shape of one tool call in an OpenAI-compatible completion response. */
@@ -102,6 +102,11 @@ export const cloudToolRegistry = buildCoreToolRegistry();
 // catalogue, not into the ticket), so it is registered here rather than baked into
 // every surface's core set — a surface gets it only by advertising `skill.author`.
 for (const tool of SKILL_TOOLS) cloudToolRegistry.register(tool);
+// Delegation, registered on the same terms and for the same reason: a run
+// commissioning another run is not a core task tool, and a surface gets it only by
+// advertising `orchestrate` — which it may do only where it can afford to run a
+// nested loop inside one tool call.
+for (const tool of SUBAGENT_TOOLS) cloudToolRegistry.register(tool);
 
 /**
  * The durable/Worker surface: provider-API-backed, no shell. It can list/read/search
@@ -139,6 +144,16 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   // Safe to advertise because the proposal lands as a DRAFT: the tool cannot make
   // anything binding, and the backing service is the only writer that can.
   'skill.author',
+  // Delegation to a sub-agent. Backed here because this surface CAN run a nested loop
+  // inside one tool call: the child's turns are gateway I/O, not CPU, and its budget
+  // (SUBAGENT_MAX_STEPS) is small and absolute. The durable surface takes one parent
+  // step per alarm tick, so a delegation is at most one long tick, and it heartbeats
+  // `executions.updated_at` on the step that contains it — the orphan reaper measures
+  // liveness from that heartbeat, so a tick spent inside a child is not mistaken for a
+  // dead run. Deliberately NOT in CONTAINER_SURFACE_CAPS: the container image runs its
+  // OWN loop and has no `spawn_agent` handler, so advertising it there would surface a
+  // tool that 400s mid-run — the same rule that kept `skill.author` out of that set.
+  'orchestrate',
 ]);
 
 /**

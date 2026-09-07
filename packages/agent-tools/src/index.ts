@@ -21,4 +21,5 @@ export * from "./psychometrics.js";
 export * from "./knowledge-notes.js";
 export * from "./hybrid-rank.js";
 export * from "./skill-tools.js";
+export * from "./subagent-tools.js";
 export * from "./git-tools.js";

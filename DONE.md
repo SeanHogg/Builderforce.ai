@@ -1,3 +1,32 @@
+## ✅ RESOLVED 2026-09-07 — The `Publish VS Code extension` failure the register could not name: a CSS-module `composes` that pointed forward
+
+The register bullet for this named its blocker as "the full CI log for that run", and it was right that
+the four local commands (`type-check`, `test`, `vsce package`) all passed — none of them is the step that
+died. The log, once read, put the failure in `vscode:prepublish` → `build:webview` → `build:canvas`:
+
+    [vite:css] [postcss] postcss-modules-scope:
+    CreationCanvas.module.css:394:3: referenced class name "chromeHeading" in composes not found
+
+`.barGroupCaption` composed `.chromeHeading`, and `.chromeHeading` was declared 148 lines LOWER in the
+file, next to `.moreMenuHeading` — the other of its two consumers — because that is where the ONE canvas
+chrome heading was written when the ••• sheet was its only caller. `postcss-modules-scope` resolves
+`composes` in source order, so a class composed before its declaration is not "not found" in the sense of
+missing; it is not yet defined at the point of use. The declaration (with the comment arguing why the two
+headings are one declaration) now sits above `.barGroup`, ahead of both consumers. The other four
+`composes` in the file — `agentWorkbench`, `workbenchHeading`, `filesPanel`, `anchoredHint` — were checked
+and every target already precedes its use.
+
+Why only this job saw it: Next's css-loader tolerates the forward reference, so `frontend`'s own build and
+every local page render were green; the VS Code canvas webview is the one consumer that compiles this
+stylesheet through Vite, and it is the last step of the publish. `vite build --config
+webview/vite.canvas.config.ts` now completes (1m34s), and the canvas bundle under `clients/vscode/media/`
+was rebuilt from it.
+
+The same run's `Deploy frontend` failure was a SEPARATE cause and is already closed: `check:root-closure`
+at 310 files / 90,120 lines against a 310 / 90,106 baseline — no new edge, the same 310 files carrying
+fourteen lines of comment added inside `lib/rbac.ts` — re-baselined with that argument recorded in
+`check-root-closure.mjs`.
+
 ## ✅ RESOLVED 2026-09-07 — The frontend deploy's guard chain, red for two passes on files nobody would edit, and the six type errors waiting behind it
 
 Two register bullets described this and both named the same blocker: the failing files belonged to

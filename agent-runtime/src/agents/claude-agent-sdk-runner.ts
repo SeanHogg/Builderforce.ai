@@ -4,8 +4,20 @@ import { logDebug, logWarn } from "../logger.js";
 import { mapSdkMessage } from "./claude-agent-v2-events.js";
 import { createSteeringChannel, type SteeringChannel } from "../infra/relay-steering.js";
 
-/** The on-prem SDK tool vocabulary — the names a `block` gate can remove. */
-const SDK_TOOLS = ["Read", "Write", "Edit", "Bash", "Glob", "Grep"] as const;
+/**
+ * The on-prem SDK tool vocabulary — the names a `block` gate can remove.
+ *
+ * This list is not only the gate vocabulary: it is passed verbatim as the SDK's
+ * `allowedTools`, so a name missing here is a tool the V2 agent cannot call at all.
+ *
+ * `Task` is the SDK's SUBAGENT tool — it runs a child agent with its own isolated
+ * transcript and reports back only that child's answer, which is how a long
+ * exploration stops evicting the parent's working context. The V1 runtime has had
+ * this since `sessions_spawn`; omitting the name here silently withheld it from V2
+ * and broke the "V2 is FULL parity, never reduced" rule. A `block` gate on `Task`
+ * still removes it, so governance can withhold delegation per tenant.
+ */
+const SDK_TOOLS = ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "Task"] as const;
 
 /**
  * BuilderForce-V2 engine: runs a task with the Claude Agent SDK

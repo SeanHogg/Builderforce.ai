@@ -114,6 +114,30 @@ const nextConfig = {
     // declared path's parents — which are inside frontend/node_modules
     // where both packages exist together.
     config.resolve.symlinks = false;
+    // NodeNext source packages: `./x.js` on disk is `./x.ts`.
+    //
+    // The source-only packages under `packages/` are consumed as TypeScript (their
+    // `exports` point at `src/`, they have no `dist`), and a package written for
+    // NodeNext spells its own relative imports with the `.js` extension it WILL have
+    // once emitted. No bundler maps that back on its own, so `@builderforce/agent-loop`
+    // reached this build resolving its own `./loop.js`, `./parseToolCall.js` and
+    // `./openaiCodec.js` to nothing — three `Module not found`s from a package whose
+    // files are all present and correct, and the deploy died at the Next build with
+    // the failure looking like a missing file.
+    //
+    // `esbuild.mjs` and both `vitest.config.ts` already solve this with a resolver
+    // scoped by importer to `sourcePackageRoots()`; this build cannot import that ESM
+    // registry (this config is CommonJS) and does not need to. Webpack's
+    // `extensionAlias` states the same rule declaratively, and listing `.js` FIRST
+    // makes it purely additive: anything that resolves today still resolves the same
+    // way, and only a `.js` specifier that would otherwise FAIL falls through to the
+    // TypeScript source. That also means the next source package is covered without a
+    // list to update here — the same property deriving the roots buys the others.
+    config.resolve.extensionAlias = {
+      ...config.resolve.extensionAlias,
+      '.js': ['.js', '.ts', '.tsx'],
+      '.mjs': ['.mjs', '.mts'],
+    };
     // @huggingface/transformers (pulled in transitively by the linked
     // @seanhogg/builderforce-studio voice/video engine) ships a Node build that
     // imports the native `onnxruntime-node` binding and `sharp`. Neither is

@@ -94,7 +94,12 @@ export type Capability =
   | "web"
   /** Search the public web (needs a search backend; separate from plain fetch). */
   | "web.search"
-  /** Spawn sub-agents, run orchestration workflows, dispatch to the fleet. */
+  /** Delegate part of the task to a SUB-AGENT: a child run with its own isolated
+   *  transcript that reports back only its answer. Backed by
+   *  {@link OrchestrationCapability}; the surface decides whether it can afford a
+   *  nested run at all (a per-tick durable surface and a long-lived container do
+   *  not answer that the same way), which is why this is a capability and not a
+   *  tool everyone gets. */
   | "orchestrate"
   /** Send messages on a docked channel (Slack/Discord/Telegram/…). */
   | "message"
@@ -239,6 +244,47 @@ export interface SkillListResult {
   error?: string;
 }
 
+/**
+ * Delegate a slice of the task to a SUB-AGENT (capability `orchestrate`).
+ *
+ * The child runs the same kernel against the same surface backing, but on its OWN
+ * transcript: the parent sends one instruction and receives one answer, so a long
+ * search that would otherwise fill the parent's window with dead ends costs it a
+ * paragraph. That context isolation is the whole point — a child that shared the
+ * parent's messages would be a more expensive way to take another turn.
+ *
+ * Depth is the surface's business, not the tool's: an implementation withholds
+ * `orchestrate` from the capability set it hands the child, so a child cannot spawn
+ * and recursion is impossible by construction rather than by a counter.
+ */
+export interface OrchestrationCapability {
+  spawn(input: SubagentRequest): Promise<SubagentResult>;
+}
+
+/** What the parent asks a sub-agent to do. */
+export interface SubagentRequest {
+  /** Short label for the timeline, e.g. "find the auth middleware". */
+  label: string;
+  /** The child's ENTIRE brief. It sees none of the parent's conversation, so this
+   *  must carry every fact the child needs. */
+  task: string;
+  /** When true (the default) the child is given read/search capabilities only, so a
+   *  delegated investigation cannot change the working tree behind the parent. */
+  readOnly?: boolean;
+}
+
+export interface SubagentResult {
+  ok: boolean;
+  /** The child's final answer — what the parent asked for, and all it receives. */
+  output?: string;
+  /** Turns the child spent, so the parent can see what the delegation cost. */
+  steps?: number;
+  /** True when the child hit its step budget before answering: `output` is then its
+   *  last word rather than a conclusion, and the parent should treat it as partial. */
+  truncated?: boolean;
+  error?: string;
+}
+
 /** Result of a {@link PrdWriteCapability} write. */
 export interface PrdUpdateResult {
   ok: boolean;
@@ -349,6 +395,7 @@ export interface CapabilityProvider {
   readonly memory?: MemoryCapability;
   readonly coordination?: CoordinationCapability;
   readonly skillAuthor?: SkillAuthoringCapability;
+  readonly orchestration?: OrchestrationCapability;
 }
 
 // Surfaces declare their capability set EXPLICITLY (it is the source of truth for
