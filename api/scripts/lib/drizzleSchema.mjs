@@ -72,10 +72,31 @@ export function parseDrizzleTables(srcDir) {
   // and does not bleed into the next declaration. (Nested inline config objects are
   // always indented, so their closing braces never sit at column 0.)
   const tableRe = /pgTable\(\s*'([^']+)'\s*,\s*\{([\s\S]*?)\n\}\s*[,)]/g;
+  // NAMED `customType` builders — `export const vector = customType<…>({…})`, used
+  // for the pgvector and tsvector columns Drizzle has no builder for. Discovered
+  // from the source rather than listed, because a hardcoded list is a list that
+  // goes stale silently: an unrecognised builder makes its column INVISIBLE to
+  // this parser, and an invisible column is one both guards then swear is fine.
+  // `agent_memory.embedding` and `project_facts.embedding` were exactly that —
+  // migrated, declared, and reported as missing from schema.ts.
+  const customBuilders = [...schemaText.matchAll(/export const (\w+)\s*=\s*customType/g)]
+    .map((m) => m[1]);
+
   // The SQL column name is always the first string literal inside the builder call:
-  // `varchar('foo_bar', …)`. The trailing `\w*Enum` alternative matches NAMED pgEnum
-  // builders (`taskStatusEnum('status')`), which were otherwise invisible.
-  const colRe = /(integer|varchar|text|boolean|timestamp|serial|bigserial|bigint|smallint|uuid|json|jsonb|real|doublePrecision|numeric|decimal|date|time|char|customType|pgEnum|\w*Enum)\s*\(\s*'([^']+)'/g;
+  // `varchar('foo_bar', …)`. The builtin builders come from BUILDER_TYPES rather
+  // than a second hand-kept list, `\\w*Enum` matches NAMED pgEnum builders
+  // (`taskStatusEnum('status')`), and the discovered custom builders close the last
+  // hole.
+  const colRe = new RegExp(
+    '(' + [
+      ...Object.keys(BUILDER_TYPES),
+      'customType',
+      'pgEnum',
+      String.raw`\w*Enum`,
+      ...customBuilders,
+    ].join('|') + String.raw`)\s*\(\s*'([^']+)'`,
+    'g',
+  );
 
   const tables = new Map();
   for (const match of schemaText.matchAll(tableRe)) {
