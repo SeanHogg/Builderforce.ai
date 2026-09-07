@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { learnFromPersistedTurns } from './brainEvermindLearning';
+import { invalidateProjectEvermindHead } from '../llm/projectEvermind';
 import type { Env } from '../../env';
 
 // No AUTH_CACHE_KV → getProjectEvermindHead's read-through cache falls through to the loader.
@@ -113,7 +114,12 @@ describe('learnFromPersistedTurns (consolidated learn-on-persist path)', () => {
     // brainChats.projectId → children (none) → head(42) at v0; after seeding the gate
     // re-resolves: children (none) → head(42) at v1.
     const db = gateDb([[{ projectId: 42 }], [], [head({ version: 0 })], [], [head({ version: 1 })]]);
-    const ensureSeeded = vi.fn(async () => true);
+    // The real seeder writes the row AND invalidates the head cache; the mock does the
+    // second half so the gate's re-read sees v1 rather than the cached v0.
+    const ensureSeeded = vi.fn(async (e: Env, _db: unknown, tenantId: number, projectId: number) => {
+      await invalidateProjectEvermindHead(e, tenantId, projectId);
+      return true;
+    });
     const scheduled: Promise<unknown>[] = [];
     const outcome = await learnFromPersistedTurns(env, db, 55, 7, [
       { role: 'user', content: 'Add the % complete to the chat list.' },

@@ -101,6 +101,17 @@ function versionKey(tenantId: number, projectId: number): string {
   return `project_evermind:${tenantId}:${projectId}`;
 }
 
+/**
+ * Drop every cached read of a project's Evermind head (L1 + KV, all isolates) — the ONE
+ * invalidation every writer calls after a seed, merge, mode change or inference toggle,
+ * so a head read that follows a write sees the write. Exported so a caller that seeds
+ * through an injected port (the Brain learn gate's test) can invalidate exactly as the
+ * real seeder does.
+ */
+export async function invalidateProjectEvermindHead(env: Env, tenantId: number, projectId: number): Promise<void> {
+  await bumpCacheVersion(env, versionKey(tenantId, projectId));
+}
+
 function toMode(raw: string | null | undefined): ProjectEvermindMode {
   return raw === 'offline-frozen' ? 'offline-frozen' : 'connected';
 }
@@ -345,7 +356,7 @@ export async function seedProjectEvermind(
       .onConflictDoNothing({ target: [projectEvermind.tenantId, projectEvermind.projectId] });
   }
 
-  await bumpCacheVersion(env, versionKey(tenantId, projectId));
+  await invalidateProjectEvermindHead(env, tenantId, projectId);
   return getProjectEvermindHead(env, db, tenantId, projectId);
 }
 
@@ -410,7 +421,7 @@ export async function reseedProjectEvermind(
       sql`${projectEvermind.version} < ${nextVersion}`,
     ));
 
-  await bumpCacheVersion(env, versionKey(tenantId, projectId));
+  await invalidateProjectEvermindHead(env, tenantId, projectId);
   return getProjectEvermindHead(env, db, tenantId, projectId);
 }
 
@@ -530,7 +541,7 @@ export async function recordProjectEvermindMerge(
       // forward-only: ignore a stale merge that races behind a newer head
       sql`${projectEvermind.version} < ${newVersion}`,
     ));
-  await bumpCacheVersion(env, versionKey(tenantId, projectId));
+  await invalidateProjectEvermindHead(env, tenantId, projectId);
 }
 
 /**
@@ -638,7 +649,7 @@ export async function setProjectEvermindInference(
         : { inferenceEnabled: false, serveFailureStreak: 0, quarantinedAt: null, quarantineReason: null, updatedAt: new Date() },
     )
     .where(and(eq(projectEvermind.tenantId, tenantId), eq(projectEvermind.projectId, projectId)));
-  await bumpCacheVersion(env, versionKey(tenantId, projectId));
+  await invalidateProjectEvermindHead(env, tenantId, projectId);
   return { ok: true, inferenceEnabled: enabled };
 }
 
@@ -669,7 +680,7 @@ export async function recordEvermindServeOutcome(
       .where(and(where, sql`${projectEvermind.serveFailureStreak} <> 0`))
       .returning({ id: projectEvermind.id })
       .catch(() => [] as Array<{ id: string }>);
-    if (updated.length > 0) await bumpCacheVersion(env, versionKey(tenantId, projectId));
+    if (updated.length > 0) await invalidateProjectEvermindHead(env, tenantId, projectId);
     return;
   }
 
@@ -688,7 +699,7 @@ export async function recordEvermindServeOutcome(
       `Auto-quarantined after ${row.streak} consecutive incoherent replies — the model is producing gibberish. Retrain/re-seed and re-enable, or set a frontier teacher.`,
     );
   }
-  await bumpCacheVersion(env, versionKey(tenantId, projectId));
+  await invalidateProjectEvermindHead(env, tenantId, projectId);
 }
 
 /**
@@ -741,7 +752,7 @@ export async function setProjectEvermindTeacher(
     .update(projectEvermind)
     .set({ teacherModel, updatedAt: new Date() })
     .where(and(eq(projectEvermind.tenantId, tenantId), eq(projectEvermind.projectId, projectId)));
-  await bumpCacheVersion(env, versionKey(tenantId, projectId));
+  await invalidateProjectEvermindHead(env, tenantId, projectId);
 }
 
 /** Durable Object instance name for a project's coordinator (single writer). */
@@ -1550,5 +1561,5 @@ export async function setProjectEvermindMode(
     .update(projectEvermind)
     .set({ mode, updatedAt: new Date() })
     .where(and(eq(projectEvermind.tenantId, tenantId), eq(projectEvermind.projectId, projectId)));
-  await bumpCacheVersion(env, versionKey(tenantId, projectId));
+  await invalidateProjectEvermindHead(env, tenantId, projectId);
 }
