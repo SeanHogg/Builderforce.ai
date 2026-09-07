@@ -1793,7 +1793,12 @@ var EXECUTION_TOOLS = /* @__PURE__ */ new Set([
   "git_commit",
   "git_push",
   "git_sync_latest",
-  "open_pull_request"
+  "open_pull_request",
+  // The SERVER addressed-agent reply has no shell of its own — its shell lives in the
+  // agent's runtime, and this tool is the door to it. Its own system prompt already
+  // says "NEVER reply that you lack a git or file tool"; without this entry the gate
+  // that enforces that sentence could never fire on the one surface it was written for.
+  "builtin_chats_execute_as_agent"
 ]);
 function canExecuteCommands(toolNames) {
   return (toolNames ?? []).some((n) => EXECUTION_TOOLS.has(n.toLowerCase()));
@@ -3161,10 +3166,6 @@ var ReadCoverage = class _ReadCoverage {
       if (!isLocalWorkspaceTool(read.tool)) this.exact.delete(key);
     }
   }
-  /** Targets read more than once, most-revisited first — for the run's own reporting. */
-  repeated() {
-    return [...this.visits.entries()].filter(([, v]) => v.count > 1).map(([target, v]) => ({ target, count: v.count })).sort((a, b) => b.count - a.count);
-  }
 };
 function revisitAdvisory(tool, target, visit) {
   if (visit.count < REVISIT_NUDGE_AT) return null;
@@ -3206,10 +3207,6 @@ var FailureTally = class _FailureTally {
    *  are no longer evidence of anything — a later failure starts counting from one. */
   clear(tool, args) {
     this.failures.delete(_FailureTally.key(tool, args));
-  }
-  /** Calls that failed more than once, most-repeated first — for the run's own reporting. */
-  repeated() {
-    return [...this.failures.entries()].filter(([, attempts]) => attempts > 1).map(([call, attempts]) => ({ call, attempts })).sort((a, b) => b.attempts - a.attempts);
   }
 };
 function failureReason(result) {
@@ -3394,6 +3391,8 @@ function makeCell() {
     codeChanged: false,
     ticketRecorded: false,
     touchedFiles: [],
+    deltaTicketId: null,
+    deltaRecordedFiles: [],
     compactMemo: null,
     snapshot: EMPTY_SNAPSHOT
   };
@@ -3507,6 +3506,12 @@ function parseArgs(raw) {
   } catch {
     return {};
   }
+}
+function attachDeltaToRunTicket(toolName, args, deltaTicketId) {
+  if (toolName !== "builtin_tickets_from_delta" || deltaTicketId == null) return;
+  if (!args || typeof args !== "object" || Array.isArray(args)) return;
+  const bag = args;
+  if (bag.taskId == null) bag.taskId = deltaTicketId;
 }
 function latestUserText(convo) {
   for (let i = convo.length - 1; i >= 0; i--) {
@@ -3734,6 +3739,8 @@ async function startRun(chatId, req) {
   c.codeChanged = false;
   c.ticketRecorded = false;
   c.touchedFiles = [];
+  c.deltaTicketId = null;
+  c.deltaRecordedFiles = [];
   c.abort = new AbortController();
   c.activity = { phase: "starting", startedAt: Date.now(), step: 0 };
   if (req.seed && c.transcript.length === 0) c.transcript = req.seed.slice();
@@ -3755,8 +3762,8 @@ async function startRun(chatId, req) {
       c.activity = { phase: "finishing", startedAt: Date.now(), step: 0 };
       emit(c);
     }
-    if (!aborted && c.codeChanged && !c.ticketRecorded && req.projectId != null && req.runTool) {
-      await recordCodeChangeTicket(chatId, c, req).catch(() => {
+    if (!aborted && c.codeChanged && req.projectId != null && req.runTool && (!c.ticketRecorded || c.deltaTicketId != null)) {
+      await recordCodeChangeTicket(chatId, c, req, "settle").catch(() => {
       });
     }
     if (!aborted && c.codeChanged && req.projectId != null && req.runTool) {
@@ -3771,31 +3778,42 @@ async function startRun(chatId, req) {
     emit(c);
   }
 }
-async function recordCodeChangeTicket(chatId, c, req) {
+async function recordCodeChangeTicket(chatId, c, req, phase) {
   if (!req.runTool || req.projectId == null) return;
-  const files = c.touchedFiles.slice(0, 50);
+  const known = new Set(c.deltaRecordedFiles);
+  const files = c.touchedFiles.filter((f) => !known.has(f)).slice(0, 50);
+  if (phase === "settle" && c.deltaTicketId != null && files.length === 0) return;
+  const attachTo = c.deltaTicketId;
   const summary = files.length ? `Code change (${files.length} file${files.length === 1 ? "" : "s"}) from Brain chat #${chatId}` : `Code change from Brain chat #${chatId}`;
   const toolStart = nowMs2();
+  const args = {
+    projectId: req.projectId,
+    summary,
+    detail: attachTo != null ? "Auto-captured: further files changed by the same chat, attached to the ticket this run opened." : "Auto-captured: this chat changed code without recording a ticket, so the platform minted one to keep the work visible on the board and linked to the conversation.",
+    files,
+    kind: "improvement",
+    modality: "ide",
+    chatId,
+    ...attachTo != null ? { taskId: attachTo } : {}
+  };
   let out;
   try {
-    out = await req.runTool("builtin_tickets_from_delta", {
-      projectId: req.projectId,
-      summary,
-      detail: "Auto-captured: this chat changed code without recording a ticket, so the platform minted one to keep the work visible on the board and linked to the conversation.",
-      files,
-      kind: "improvement",
-      modality: "ide",
-      chatId
-    });
+    out = await req.runTool("builtin_tickets_from_delta", args);
   } catch (e) {
     out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  if (!isFailedToolResult(out)) {
+    c.deltaRecordedFiles = [...c.deltaRecordedFiles, ...files];
+    const id = out?.id;
+    if (c.deltaTicketId == null && typeof id === "number") c.deltaTicketId = id;
+    c.ticketRecorded = true;
   }
   pushDurableStep(c, chatId, req.persistence, {
     ts: nowIso(),
     category: "tool",
     label: "builtin_tickets_from_delta",
     durationMs: nowMs2() - toolStart,
-    args: { projectId: req.projectId, summary, files, auto: true, chatId },
+    args: { ...args, auto: true, phase },
     result: out ?? null,
     isError: isFailedToolResult(out)
   });
@@ -4223,6 +4241,7 @@ ${continuationDirective()}`;
           });
         }
         const args = parseArgs(tc.args);
+        attachDeltaToRunTicket(tc.name, args, c.deltaTicketId);
         if (needsConfirm && needsConfirm({ name: tc.name, args })) {
           const ok = await new Promise((resolve) => {
             c.pendingConfirm = { name: tc.name, args };
@@ -4263,9 +4282,14 @@ ${continuationDirective()}`;
           continue;
         }
         if (isCodeChangeTool(tc.name)) {
+          const first = !c.codeChanged;
           c.codeChanged = true;
           const f = codeChangeFile(args);
           if (f && !c.touchedFiles.includes(f)) c.touchedFiles.push(f);
+          if (first && !c.ticketRecorded && req.projectId != null && req.runTool) {
+            await recordCodeChangeTicket(chatId, c, req, "open").catch(() => {
+            });
+          }
         }
         if (isTicketRecordingTool(tc.name)) c.ticketRecorded = true;
         if (runTool) await autoLinkCreatedItem(chatId, c, persistence, runTool, tc.name, out);

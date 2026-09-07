@@ -34,7 +34,7 @@
  * while the on-prem + cloud agent loop imports it into Node and the Worker.
  */
 
-import { delegatesExecutableWork, handoffRecoveryNudge, type HandoffContext } from './handoff';
+import { delegatesExecutableWork, handoffRecoveryNudge, type HandoffContext } from './handoff.js';
 
 /**
  * First-person commitment to act. REQUIRED — this is the discriminator that makes a
@@ -625,7 +625,7 @@ export {
   promisesUnfinishedWork,
   isContinuationDirective,
   continuationDirective,
-} from './requestIntent';
+} from './requestIntent.js';
 
 // The HANDOFF shape — the turn that ends by assigning the user the commands it holds
 // the tools to run. Its own module (this file is already large) and re-exported so
@@ -637,4 +637,4 @@ export {
   handoffRecoveryNudge,
   EXECUTION_TOOLS,
   type HandoffContext,
-} from './handoff';
+} from './handoff.js';

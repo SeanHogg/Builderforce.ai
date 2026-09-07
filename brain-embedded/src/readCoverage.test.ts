@@ -13,7 +13,6 @@ describe('ReadCoverage', () => {
     // The exact-repeat guard sees seven DIFFERENT calls here and stays silent; this
     // is the whole reason the target tally exists.
     expect(last.count).toBe(7);
-    expect(cov.repeated()).toEqual([{ target: `read_file:${CSS}`, count: 7 }]);
   });
 
   it('keeps different files apart', () => {
@@ -21,7 +20,6 @@ describe('ReadCoverage', () => {
     cov.record('read_file', { path: 'a.css' });
     const b = cov.record('read_file', { path: 'b.css' })!;
     expect(b.count).toBe(1);
-    expect(cov.repeated()).toEqual([]);
   });
 
   it('keeps different TOOLS on the same file apart', () => {

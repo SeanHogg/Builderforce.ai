@@ -37,7 +37,7 @@
  * (VS Code webview / Next.js client), one Worker, one Node runtime.
  */
 
-import { asksForChange } from './requestIntent';
+import { asksForChange } from './requestIntent.js';
 
 /**
  * Tools that can run a command. Both spellings that exist in this codebase — the IDE

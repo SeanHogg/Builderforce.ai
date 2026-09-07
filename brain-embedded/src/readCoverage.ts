@@ -194,13 +194,6 @@ export class ReadCoverage {
     }
   }
 
-  /** Targets read more than once, most-revisited first — for the run's own reporting. */
-  repeated(): { target: string; count: number }[] {
-    return [...this.visits.entries()]
-      .filter(([, v]) => v.count > 1)
-      .map(([target, v]) => ({ target, count: v.count }))
-      .sort((a, b) => b.count - a.count);
-  }
 }
 
 /**

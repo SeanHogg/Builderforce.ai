@@ -48,19 +48,13 @@ describe('FailureTally', () => {
     expect(tally.record('builtin_tasks_list', { projectId: 11 })).toBe(1);
   });
 
-  it('reports the repeated calls for the run\'s own triage, worst first', () => {
+  it('counts each call independently, so one tool\'s loop is not another\'s', () => {
     const tally = new FailureTally();
     tally.record('git_status', {});
     tally.record('git_status', {});
-    tally.record('git_status', {});
     tally.record('builtin_errors_summary', {});
-    tally.record('builtin_errors_summary', {});
-    tally.record('read_file', { path: 'once.ts' });
-    const repeated = tally.repeated();
-    expect(repeated.map((r) => r.attempts)).toEqual([3, 2]);
-    expect(repeated[0].call).toContain('git_status');
-    // A single failure is a fact, not a pattern.
-    expect(repeated.some((r) => r.call.includes('read_file'))).toBe(false);
+    expect(tally.record('git_status', {})).toBe(3);
+    expect(tally.record('builtin_errors_summary', {})).toBe(2);
   });
 });
 

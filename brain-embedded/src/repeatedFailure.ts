@@ -68,14 +68,6 @@ export class FailureTally {
   clear(tool: string, args: unknown): void {
     this.failures.delete(FailureTally.key(tool, args));
   }
-
-  /** Calls that failed more than once, most-repeated first — for the run's own reporting. */
-  repeated(): { call: string; attempts: number }[] {
-    return [...this.failures.entries()]
-      .filter(([, attempts]) => attempts > 1)
-      .map(([call, attempts]) => ({ call, attempts }))
-      .sort((a, b) => b.attempts - a.attempts);
-  }
 }
 
 /** The error text a failed tool result carries, if it names one — quoted back to the

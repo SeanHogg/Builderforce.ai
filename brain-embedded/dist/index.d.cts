@@ -2784,11 +2784,6 @@ declare class ReadCoverage {
      *   are forgotten; file reads are not, because a ticket write does not edit source.
      */
     invalidate(tool: string, args: unknown): void;
-    /** Targets read more than once, most-revisited first — for the run's own reporting. */
-    repeated(): {
-        target: string;
-        count: number;
-    }[];
 }
 /**
  * The advisory to attach to a read result once a target has been visited enough
@@ -2865,11 +2860,6 @@ declare class FailureTally {
     /** This exact call SUCCEEDED. Its earlier failures were transient after all, so they
      *  are no longer evidence of anything — a later failure starts counting from one. */
     clear(tool: string, args: unknown): void;
-    /** Calls that failed more than once, most-repeated first — for the run's own reporting. */
-    repeated(): {
-        call: string;
-        attempts: number;
-    }[];
 }
 /** The error text a failed tool result carries, if it names one — quoted back to the
  *  model so the advisory argues from the answer it already got rather than in the

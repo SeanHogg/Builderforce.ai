@@ -690,6 +690,28 @@ function parseArgs(raw: string): unknown {
 }
 
 /**
+ * ONE ticket per run: point the model's own `from_delta` call at the ticket this run
+ * already opened, by filling in the `taskId` it left out.
+ *
+ * The run opens a delta ticket on its first edit; the model, following the same
+ * directive from the other end, frequently records the delta as well. Left alone that
+ * is TWO tickets for one change — worse on the board than the missing ticket the whole
+ * mechanism exists to prevent. `from_delta` already takes `taskId` to attach instead of
+ * mint, and the directive already tells the model to pass it; this is the deterministic
+ * form of that advice. An explicit `taskId` from the model always wins — it may know a
+ * better ticket than the one we minted.
+ *
+ * Mutates in place because that is where the dispatcher reads its arguments from.
+ * Exported for the unit test; a no-op for every other tool.
+ */
+export function attachDeltaToRunTicket(toolName: string, args: unknown, deltaTicketId: number | null): void {
+  if (toolName !== 'builtin_tickets_from_delta' || deltaTicketId == null) return;
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return;
+  const bag = args as Record<string, unknown>;
+  if (bag.taskId == null) bag.taskId = deltaTicketId;
+}
+
+/**
  * The text of the most recent user turn in a transcript — the query the Evermind
  * recall runs against. A vision turn is `ContentPart[]`; we pull its text parts
  * (the image bytes aren't a recall query). Returns '' when there is no text.
@@ -2021,7 +2043,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           // Stop skips and a closed/reloaded surface never reaches. One call per run,
           // and from here on the work is on the board and linked to this chat whatever
           // becomes of the rest of the turn.
-          if (first && !c.ticketRecorded && req.projectId != null && runTool) {
+          if (first && !c.ticketRecorded && req.projectId != null && req.runTool) {
             await recordCodeChangeTicket(chatId, c, req, 'open').catch(() => { /* never fail the run on the backstop */ });
           }
         }

@@ -53,6 +53,25 @@ describe('shippedToBaseBranch', () => {
     ])).toBe(true);
   });
 
+  it('accepts a push made through the git_push TOOL, not just a raw shell push', () => {
+    // The tool's args are `{ allowBaseBranch, repo }` and carry no command string, so
+    // reading commands alone made the SAFE, declared route invisible: a run that shipped
+    // the way we tell it to never counted as having pushed, and every delta ticket it
+    // opened stayed at 50% on the board forever.
+    const toolPush = step('git_push', { allowBaseBranch: true }, { ok: true, action: 'push', output: 'Pushed main to origin' });
+    expect(shippedToBaseBranch([toolPush, status('## main...origin/main')])).toBe(true);
+  });
+
+  it('does not treat a FAILED git_push tool call as a push', () => {
+    const failed = step('git_push', { allowBaseBranch: true }, { ok: false, action: 'push', error: 'rejected' }, true);
+    expect(shippedToBaseBranch([failed, status('## main...origin/main')])).toBe(false);
+  });
+
+  it('does not treat opening a pull request as shipping — the merge is another person\'s act', () => {
+    const pr = step('open_pull_request', { title: 't' }, { ok: true, action: 'pull_request', output: 'https://github.com/x/y/pull/1' });
+    expect(shippedToBaseBranch([pr, status('## main...origin/main')])).toBe(false);
+  });
+
   it('refuses when the push FAILED', () => {
     expect(shippedToBaseBranch([push(false), status('## main...origin/main')])).toBe(false);
   });
