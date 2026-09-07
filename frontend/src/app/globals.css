@@ -2662,6 +2662,39 @@ html[data-theme='light'] .nebula {
   justify-self: end;
 }
 
+/* The dismiss control (`PanelCloseButton`) — one look for every slide-out in
+   the app, so a reader learns the way out of a panel exactly once. Declared
+   here rather than inline at each call site because a button needs states
+   (hover, focus) that a style object cannot express. Colours are tokens, so it
+   reads in both themes; 36px keeps it a comfortable tap target on a phone. */
+.panel-close-button {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.panel-close-button:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+.panel-close-button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.panel-close-button svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+}
+
 /* Below this, the centered switcher drops to its own full-width row under the
    close button/title/actions instead of sharing their row — sharing it here
    means the switcher's pill rail fights them for space on the same line. It
@@ -5856,3 +5889,4 @@ select.input option {
   border-radius: var(--radius-sm);
   padding: 0 2px;
 }
+                      

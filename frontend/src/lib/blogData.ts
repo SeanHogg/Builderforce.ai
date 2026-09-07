@@ -84,6 +84,7 @@ import salesProgrammeForEveryone from '@/content/blog/every-account-gets-a-sales
 import sendTheLink from '@/content/blog/send-the-link-join-without-an-account.md';
 import gradeTheProof from '@/content/blog/grade-the-proof-and-close-the-loop.md';
 import runYourAppOnTheCanvas from '@/content/blog/run-your-app-on-the-canvas.md';
+import oneCanvasInsideAnother from '@/content/blog/one-canvas-inside-another.md';
 import delegateTheSearch from '@/content/blog/delegate-the-search-not-the-decision.md';
 import walkMeThroughWhatYouMade from '@/content/blog/walk-me-through-what-you-made.md';
 import importYourRecords from '@/content/blog/import-your-records.md';
@@ -237,6 +238,7 @@ export const BLOG_POSTS: BlogPost[] = [
   buildPost('import-your-records', importYourRecords),
   buildPost('delegate-the-search-not-the-decision', delegateTheSearch),
   buildPost('run-your-app-on-the-canvas', runYourAppOnTheCanvas),
+  buildPost('one-canvas-inside-another', oneCanvasInsideAnother),
   buildPost('walk-me-through-what-you-made', walkMeThroughWhatYouMade),
   buildPost('the-canvas-gave-the-screen-back-to-the-board', canvasChromeRedesign),
   buildPost('build-a-3d-world-in-the-browser', build3dWorld),

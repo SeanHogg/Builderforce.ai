@@ -127,6 +127,30 @@ export function mergeLivePresence<T extends PresenceMember>(
 }
 
 /**
+ * Everyone whose BODY is currently somewhere, excluding you.
+ *
+ * A selector rather than a second map: the relay carries one presence record
+ * per person and a surface reads the component it understands, so the room
+ * cannot believe somebody is present after the board has already expired them.
+ * Peers with no spatial component — everyone on the flat board — are simply not
+ * in the room, which is the correct answer rather than a filtered-out one.
+ *
+ * Returns a stable-ordered array (by user id) so a re-render does not reshuffle
+ * the avatars for no reason.
+ */
+export function spatialPeers(
+  live: LivePresenceMap,
+  currentUserId: string | null,
+): Array<{ userId: string; spatial: NonNullable<CanvasPresenceState['spatial']> }> {
+  const peers: Array<{ userId: string; spatial: NonNullable<CanvasPresenceState['spatial']> }> = [];
+  for (const [userId, entry] of Object.entries(live)) {
+    if (userId === currentUserId || !entry.spatial) continue;
+    peers.push({ userId, spatial: entry.spatial });
+  }
+  return peers.sort((a, b) => (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0));
+}
+
+/**
  * The smallest interval between outbound pointer frames.
  *
  * 20 frames a second reads as continuous motion and leaves the server's 30/s

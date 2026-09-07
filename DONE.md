@@ -1,3 +1,279 @@
+## ✅ RESOLVED 2026-09-07 — `check:root-closure` ratchets the file SET now, not two line counts, and the four guards the subflow pass left red are green
+
+**The deploy that failed.** `Deploy frontend` went red on `check:root-closure` with
+`312 files / 90418 lines` as the baseline and `312 files / 90425 lines` as the reality —
+the SAME 312 files, seven lines of somebody else's catalog additions. The guard required
+BOTH numbers to match exactly, in both directions, so adding or deleting a single line
+anywhere in 313 modules failed the build.
+
+That made it unfixable by whoever tripped it, for three reasons that compound:
+
+- `i18n/messages/en.json` is in the closure and is 28k of its 90k lines, so the house
+  rule that every UI change ships its five catalogs in the same pass moved the number on
+  nearly every frontend commit.
+- A comment moved it too. The guard's own changelog had already had to explain fourteen
+  lines of comment inside `lib/rbac.ts`, and concluded: *"a raise this guard cares about
+  is a new FILE, and there is none."*
+- With several sessions writing this repo at once, a baseline measured before a commit
+  was stale by the time the commit was made. Every session was running the same
+  re-baseline-and-hope loop, and the deploy caught one of them.
+
+**The fix — a stricter guard, not a looser one.** `.root-closure-baseline.json` now holds
+the sorted LIST of the 313 modules in the closure. A module that appears and is not on the
+list fails BY NAME; one that leaves fails as slack, the way every other `ratchetSet` guard
+in this repo does. Lines are printed and not ratcheted. This is the `ratchetSet` idiom
+`check-frontend-architecture` already uses for `oversizedProductionFiles` and
+`importCycles`, and it is strictly stronger than the count it replaces: swapping one
+module in the closure for another of the same size used to pass, and now names both.
+The reasoning is written into the script's header, where its raises are argued.
+
+Both halves were probed rather than assumed. Fifteen lines of comment appended to
+`lib/rbac.ts` — the exact case that used to fail — now passes. One static import added to
+`ConditionalAppShell` fails and names all twelve modules it drags into the first paint,
+which the count version never did. The set was also generated from a clean `git worktree`
+at `HEAD` and compared against the working tree: identical, which is the property that
+makes it survive concurrent sessions.
+
+**Four more guards that were red on `main`.** The subflow pass (nesting one canvas inside
+another as a `subflow` step) landed with these outstanding, and they would have failed the
+next deploy on their own:
+
+- `check:api-transport` — `domains/canvas/application/LoadSubflowBoard.ts` held a private
+  module-level `Map` of child boards. Unbounded, no single-flight, invisible to every
+  other invalidation in the app. Now `getOrSetClientCached` / `invalidateClientCache`
+  under a `canvas:subflow-board:<id>` key space, keeping the module's own 20s TTL.
+- `check:layering` — `domains/workflow/presentation/SubflowNodeFields.tsx` imported
+  `domains/canvas/infrastructure/canvasSessionGateway`, one context's presentation reaching
+  into another's infrastructure. `readSubflowBoardFresh` binds the gateway itself now, in
+  the canvas context's own presentation, which is the composition root the rule allows —
+  and the port parameter is gone, because its one caller could only ever fill it one way.
+- `check:i18n-keys` — the step editor rendered sixteen `workflow.subflowNode.*` keys that
+  existed in no catalog, so next-intl was painting dotted paths where labels belong. All
+  sixteen are in en/zh/es/fr/de with real translations, including the plural `stepCount`
+  and both `bindingOption`/`bindingHint` sub-namespaces.
+- `check:architecture` — `useClientFiles` 965 → 967 for `SubflowNodeFields.tsx` and
+  `useSubflowBoards.ts`, argued per file in that script's header. Their four siblings from
+  the same pass carry no directive and are not in the count, which is the shape a raise
+  should have.
+
+**Verified:** 22/22 guards green, `tsc --noEmit` clean, eslint clean on every touched file,
+371 tests across `src/i18n`, `src/domains/workflow`, `src/domains/canvas` and
+`src/components/account` passing.
+
+---
+
+## ✅ RESOLVED 2026-09-07 — The two release notes that were "blocked on a live superadmin session" were never blocked: release notes are migrations here
+
+Both entries said the same thing, and both were wrong about the same fact:
+
+> A release note exists only as a database row created through the superadmin authoring
+> surface (`ReleaseNotesPanel.tsx` → `adminApi.createReleaseNote` → `POST /api/release-notes`);
+> there is no seed file in the repo, so it cannot be authored from a working copy.
+> *Blocker: needs an authenticated superadmin session against a live environment.*
+
+The panel is ONE way to author a note. It is not the only one, and it is not the one this
+repo has used for the last eight release notes. `api/migrations/` carries a settled
+pattern — `1129_ship_from_the_editor_release_note.sql`, `1133_import_your_records_...`,
+`1137_parity_release_notes`, `1139_canvas_sharing_...`, `1140_canvas_invite_links_...`,
+`1142_marketplace_search_...`, `1143_delegation_everywhere_...` — each a single INSERT with
+a fixed UUID and `ON CONFLICT (id) DO NOTHING`, so it is replay-safe, reviewable in a diff,
+and ships on the same deploy as the code it announces. `emailed_at` is left NULL on
+purpose: the product-updates digest is what claims it, exactly once.
+
+So the blocker was a claim about the repo that a two-minute look at `api/migrations`
+disproves. Nothing about the environment changed — the write was always authorable from a
+working copy, and both notes were sitting in the register because I had not checked.
+
+**Closed with two migrations:**
+
+- `1144_canvas_walkthrough_release_note.sql` — `2026.9.15`, `category='new'`, `stage='live'`.
+  The artifact walkthrough (`lib/canvasWalkthrough.ts`, `CanvasWalkthrough.tsx`, the
+  `walkthrough` session action). Marketing already written at
+  `frontend/src/content/blog/walk-me-through-what-you-made.md`.
+- `1145_sales_programme_for_every_account_release_note.sql` — `2026.9.18`, `category='new'`,
+  `stage='live'`. Every account owns the Sales Hub (`SalesWorkspaceService.owner()` no
+  longer requires `accountType === 'sales'`) and `/sales` is a `NAV_GROUPS` row under REACH.
+  Marketing at `frontend/src/content/blog/every-account-gets-a-sales-programme.md`.
+
+Both are `new` rather than `improvement` on the same test: a capability nobody could reach
+is a capability nobody had, so opening the Sales Hub to every account clears the bar just
+as squarely as building the walkthrough did. Verified: `check:migrations` green — 534 files,
+no new duplicate prefixes.
+
+**Not given a note:** the command-bar regroup and the consistent-height pass. Both are UX
+polish on surfaces that already existed and already worked, and a marketing push for a row
+of buttons that finally line up would be a changelog recap dressed as news.
+
+## ✅ RESOLVED 2026-09-07 — Four deferred Brain-and-guard entries, closed: the on-prem loop fails over, on-device memory reaches the shared Brain, the rebinding window is narrowed, and a rephrased ticket no longer becomes a second one
+
+Four Gap Register entries closed in one pass. Two were "deferred by decision"; the
+decisions turned out to be answerable rather than open.
+
+---
+
+### 1. The on-prem agent loop can fail over — to a model the operator named, and only to one
+
+**The gap.** A turn that ends with `stopReason: stop` and zero tool calls while tools were
+available is a model-behaviour failure, and once the re-prompt budget in
+`@builderforce/agent-stall` is spent the ONLY remedy that works is a different model. The
+Brain run loop and `BrainService.agentReply` both take that step through the shared
+`chooseStallFailover`. `agent-runtime`'s loop could not: its `Model` arrives from
+`AgentSession`, it holds no catalog, and it ended every such run on the loud
+`stallExhaustedNotice`. For an autonomous on-prem run that is a burned run whose result is
+a promise.
+
+**Why it was deferred, and what changed.** The stated reason was sound: silently replacing
+an operator's explicitly-pinned self-hosted model is not the same act as re-routing a
+gateway request. What was missing was not permission — it was a source of successors the
+operator had already authorised. There is one, and the runtime already walks it for
+transport failures: `agents.defaults.model.fallbacks`, via `resolveFallbackCandidates`, the
+same chain `runWithModelFallback` uses on a 429 and learned routing re-orders. Failing a
+stall over along that chain names no model the operator did not.
+
+- **`builderforce/agent-loop/stall-recovery.ts`** (new) is the whole decision — nudge,
+  failover, or an explained stop — as one pure function, `resolveStallOutcome`. It owns
+  `modelRef` (`provider/id`), because on-prem the same model id behind two providers is two
+  different routes and the id alone cannot say what has been tried. The loop performs the
+  outcome; it no longer decides it, and `agent-loop.ts` lost 55 lines in the move.
+- **`AgentLoopConfig.pickFallbackModel`** is the seam, `onModelFallback` the notification.
+  Both optional, and OMITTED IS THE OLD BEHAVIOUR EXACTLY: no picker ⇒ no substitution ⇒
+  the same exhausted notice. `AgentSession` passes both through; `Agent` also moves its own
+  `state.model` on a swap, so the model that works serves the rest of the session.
+- **`agents/embedded-runner/stall-fallback.ts`** (new) builds the picker from the operator's
+  chain, and **returns `undefined` for a single-candidate chain** — an operator who declared
+  no alternative still gets the loud stop. A declared fallback whose provider is not
+  registered on this host is skipped rather than offered, since the transport would reject
+  it anyway and it would only burn a failover.
+- The swap is never silent: a `model_failover` custom message goes on the transcript (and
+  into the next prompt, so the incoming model is told what the outgoing one would not do), a
+  lifecycle event is emitted, and `MAX_MODEL_FAILOVERS` still caps a run at two swaps.
+
+Six tests across `agent-loop.test.ts` and `stall-fallback.test.ts`, including the one that
+matters most: no picker ⇒ no failover message and the same exhausted notice as before.
+
+---
+
+### 2. On-device SSM memory is in the shared Brain — as a replay tier, not a second model
+
+**The gap.** `evermindMemory.ts` describes memory whose "heavy lifting lives server-side":
+recall, the Q&A cache and the Evermind SSM are all HTTP. The in-browser WebGPU Mamba SSM
+the app already ships was reachable only from the agent-publish stack, so a repeat question
+cost a round trip even when the answer was sitting in the tab that asked it.
+
+**Why the deferral's reasoning was right, and where it pointed.** The entry said the
+in-browser SSM "isn't a capable chat model" and that re-adding it would "largely duplicate
+the server Evermind". Both true — of INFERENCE. Neither is true of the embedder. So what
+shipped is an on-device **semantic answer memory**, not an on-device model:
+
+- **`brain-embedded/src/onDeviceMemory.ts`** (new, pure — the store is injected, so the SSM
+  runtime and WebGPU detection stay in the host that has them). `onDeviceMemoryHooks` serves
+  the run loop's `answer`/`cacheAnswer` from a local embedding-keyed store and reports a hit
+  as `qa-cache` — the honest provenance. It never generates.
+- **The threshold is the safety argument.** `ON_DEVICE_ANSWER_THRESHOLD` is 0.985, not the
+  0.92 the cost cache uses. That cache is protecting a bill; this one is answering a person,
+  and "which tickets are in the backlog?" asked twice about different boards is a paraphrase.
+  At near-identity it is a restatement cache, not a similarity cache.
+- **`composeEvermindHooks`** layers tiers nearest-first: on-device answers first, the
+  project's server memory second, `recall` comes from the tier that has a corpus, and a
+  remembered answer is written to every tier (a synchronous throw in one no longer stops the
+  rest — that was a real bug the test caught).
+
+**And it closed a drift the entry did not mention.** The two hosts driving the SAME run loop
+had different memories: the web panel passed `recall` alone while only the VS Code webview
+had the memory-first pair, so an identical repeat question was free in one surface and
+billed in the other. `projectMemoryHooks(projectId, request)` in `evermindMemory.ts` is now
+the single builder for the server tier, taking the host's own authed JSON transport; the web
+`brainMemoryHooks.ts` composes it behind the on-device tier and the webview calls it
+directly. The creation canvas is deliberately NOT a caller: its runner takes commands, and
+replaying a stored answer for "add a node" would return prose where an artifact was asked
+for. It keeps recall + contribution, as before.
+
+The web app's two SSM cache constructions became one parameterised builder in
+`semantic-cache.ts` (shared L2 + 0.92 for the cost cache; no L2 + 0.985 for the Brain,
+because a tier that exists to answer without a server must not put one back).
+
+---
+
+### 3. The DNS-rebinding window is narrowed by running the check DURING the request
+
+**The residual, restated honestly.** `assertSafeUrl` rejects a literal private address;
+`resolveAndAssertPublic` rejects a public NAME that resolves to one. Both ran BEFORE the
+request, and the Workers runtime resolves the host again itself when it opens the
+connection, exposing no way to pin our verified IP to it. A name that answered publicly for
+our lookup and privately for the runtime's slipped through the gap between them.
+
+**`api/src/infrastructure/net/fetchPublic.ts`** (new) closes most of that gap by checking
+twice: once before the request, and once CONCURRENTLY WITH it, in the same window the
+runtime does its own resolution. A response is not handed to the caller until the second
+check clears; if it comes back private the body is cancelled and the call throws
+`BlockedUrlError`. An attacker now has to hold the name public across BOTH our lookups while
+serving the private answer to the runtime's — not merely set TTL 0.
+
+`withPublicHostGuard(hostname, operation, discard)` is the general form, for the case where
+the guarded host is not the host we connect to: the screenshot path posts a target URL to
+Cloudflare's renderer and CF resolves it, so guarding our own request there checked the
+wrong name entirely. MCP token exchange and refresh are wrapped the same way, since their
+fetch lives in the shared OAuth client.
+
+**Every guarded fetch in the api was migrated** — web fetch (per redirect hop), the search
+crawler, connector calls, OpenAPI spec import, the backend health probe, the workflow
+HTTP-check and audio-transcribe nodes, template media, sourcing feeds (including each
+redirect hop), the MCP wire client, MCP OAuth discovery, and extension dynamic review.
+`assertSafeUrl` stays where each call site had it, because that check is synchronous and is
+what those sites classify separately from a transport failure; only the DNS half moved,
+which is the half that has to span the request. `resolveAndAssertPublic` is now called
+directly in exactly one place — the extension review's egress audit, which reports without
+sending.
+
+Still residual, and the module says so: a rebind landing inside the request and flipping
+back before the second lookup is uncaught, and both lookups still fail OPEN on a DoH error.
+Closing it completely needs fetch-time IP pinning, which Workers does not offer.
+Deliberately uncached, too: the whole value of the second lookup is that it happened during
+this request, so a cached verdict would reinstate the window the module exists to shrink.
+
+Six tests, including the flip-mid-request case and the fail-open one.
+
+---
+
+### 4. A rephrased ticket is the same ticket
+
+**The report:** asked to fix two bug tickets, a Brain run "duplicated the analysis twice and
+didn't fix them". `builtin_tasks_create` deduped on an EXACT normalized title, which holds
+for a literal retry of an identical call and for nothing else — and a model does not retry
+literally. Asked twice to record one gap it writes "Fix login redirect loop", then "Login
+redirect loop needs fixing", and the board grows a second ticket.
+
+**`api/src/domain/shared/nearDuplicateTitle.ts`** (new) is the near-duplicate test, and its
+threshold is set by an asymmetry the old rule never had to weigh: a MISSED duplicate costs a
+redundant row somebody can merge, while a FALSE duplicate silently returns a different
+ticket and the requested work is never recorded at all. So it is strict by construction —
+Jaccard over stemmed content tokens at 0.8, plus a containment rule that requires the
+shorter title to be substantial:
+
+| pair | verdict |
+| --- | --- |
+| "Fix login redirect loop" / "Login redirect loop needs fixing" | duplicates (0.8) |
+| "Fix the login redirect loop" / "Login redirect loop" | duplicates (containment) |
+| "Fix login redirect loop" / "Fix signup redirect loop" | **not** duplicates (0.6) |
+| "Add dark mode toggle" / "Remove dark mode toggle" | **not** duplicates |
+| "Update README" / "Update README and CHANGELOG" | **not** duplicates |
+
+`add`/`remove`/`delete` are deliberately excluded from the filler list — they are what
+distinguishes opposite work. Lexical on purpose: an embedding call would put a model
+round-trip inside a create, and semantic similarity is LOOSER than this, which is the wrong
+direction given the asymmetry above. All three exact-match dedups migrated (tasks,
+objectives, key results) and the local `normTitle` was deleted.
+
+**The second half of the report — "didn't fix them" — got its own fix.** A bare
+`deduped:true` reads as a successful create to a model mid-run, which is exactly how a run
+re-derives an analysis instead of working the ticket it already filed. The result now names
+the ticket it matched and its lane, and says plainly that nothing was created and to advance
+THIS ticket rather than re-analyse. The tool description says the same, so the model knows
+before it calls.
+
+Ten tests.
+
+
 ## ✅ RESOLVED 2026-09-07 — Seven control heights in one 36px row: the canvas command bar has ONE
 
 Reported plainly: *"the height of components should be consistent."* They were not. The

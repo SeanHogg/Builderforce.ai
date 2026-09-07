@@ -25,7 +25,7 @@ import type { CompileDeps, Modality, Need } from './types';
 const REGISTRY: { [M in Modality]: (need: Extract<Need, { modality: M }>, deps: CompileDeps) => AgentSpec | Promise<AgentSpec> } = {
   prose: (need, deps) => compileFromProse(need, deps),
   dataset: (need) => compileFromDataset(need),
-  'process-chart': (need) => compileFromGraph(need),
+  'process-chart': (need, deps) => compileFromGraph(need, deps),
   persona: (need) => compileFromPersona(need),
   diagnostic: (need, deps) => compileFromDiagnostic(need, deps),
   policy: (need) => compileFromPolicy(need),

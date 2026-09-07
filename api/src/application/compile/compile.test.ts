@@ -51,6 +51,36 @@ describe('compile() registry', () => {
     expect(spec.surfaces).toContain('workflow-node');
   });
 
+  it('process-chart: resolves a nested canvas through the injected loader', async () => {
+    const def: WorkflowDefinition = {
+      nodes: [{ id: 'nest', kind: 'subflow', label: 'Offboard', position: { x: 0, y: 0 }, config: { definitionId: 'child', canvas: 'Offboarding' } }],
+      edges: [],
+    };
+    const child: WorkflowDefinition = {
+      nodes: [{ id: 'revoke', kind: 'llm', label: 'Revoke', position: { x: 0, y: 0 }, config: { prompt: 'Revoke' } }],
+      edges: [],
+    };
+    const spec = await compile(
+      { modality: 'process-chart', definition: def },
+      { loadWorkflowDefinition: async (id) => (id === 'child' ? { name: 'Offboarding', definition: child } : null) },
+    );
+    // The child's own step is in the compiled steps, not a `subflow` step standing
+    // in for it — the executor has no handler for one.
+    const kinds = (spec.steps ?? []).map((step) => (step as { kind: string }).kind);
+    expect(kinds).toContain('llm');
+    expect(kinds).not.toContain('subflow');
+  });
+
+  it('process-chart: refuses a nested canvas it has no way to resolve', async () => {
+    const def: WorkflowDefinition = {
+      nodes: [{ id: 'nest', kind: 'subflow', label: 'Offboard', position: { x: 0, y: 0 }, config: { definitionId: 'child' } }],
+      edges: [],
+    };
+    // Refusing here is the point: lowering it would emit a step that reports
+    // success for a whole canvas nobody ran.
+    await expect(compile({ modality: 'process-chart', definition: def })).rejects.toThrow(/another canvas/);
+  });
+
   it('diagnostic: turns recommendations into a chained improvement process', async () => {
     const findings: ToolResult = {
       headline: 'Maturity: developing',

@@ -28,6 +28,28 @@ export interface CanvasPresencePoint { x: number; y: number }
 
 export interface CanvasPresenceViewport { x: number; y: number; zoom: number }
 
+/**
+ * Where a peer's BODY is, when the surface they are on has one.
+ *
+ * ── WHY THIS IS A FIELD AND NOT A SECOND FRAME ──────────────────────────────
+ * A cursor and a walker are the same question — "where is this person right
+ * now" — asked by two surfaces. Giving the spatial answer its own frame type
+ * would mean a second relay allow-list entry, a second sanitizer, a second
+ * client map and a second TTL, all of which could disagree about whether
+ * somebody is still here. The room and the board therefore share ONE ephemeral
+ * channel, and a surface reads the component it understands.
+ *
+ * `position` is in world units (metres), `yaw` in radians about the Y axis —
+ * the same units `CanvasWorldTransform` uses, so a walker's transform and a
+ * relayed one need no conversion. `seat` is the ring index a person is sitting
+ * in when they have not walked away from the table; absent means standing.
+ */
+export interface CanvasPresenceSpatial {
+  position: [number, number, number];
+  yaw: number;
+  seat?: number;
+}
+
 /** What one peer is doing right now. Every field is optional and short-lived. */
 export interface CanvasPresenceState {
   /** Pointer position, or null when the pointer left the board. */
@@ -36,6 +58,8 @@ export interface CanvasPresenceState {
   viewport?: CanvasPresenceViewport;
   /** Composing a prompt. */
   typing?: boolean;
+  /** Body position on a spatial surface, or null when they left it. */
+  spatial?: CanvasPresenceSpatial | null;
 }
 
 /** A relayed frame: the sender's state, plus the identity the SERVER stamped. */
@@ -60,6 +84,28 @@ function point(value: unknown): CanvasPresencePoint | null {
   const x = finite((value as CanvasPresencePoint).x);
   const y = finite((value as CanvasPresencePoint).y);
   return x === null || y === null ? null : { x, y };
+}
+
+/**
+ * Narrow a body position. A room is metres across, not kilometres, so an
+ * out-of-range coordinate is a bug or an attack rather than a far-away peer —
+ * either way it is dropped, and the caller treats that as "left the surface".
+ */
+const WORLD_LIMIT = 10_000;
+
+function spatial(value: unknown): CanvasPresenceSpatial | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  if (!Array.isArray(raw.position) || raw.position.length !== 3) return null;
+  const x = finite(raw.position[0], WORLD_LIMIT);
+  const y = finite(raw.position[1], WORLD_LIMIT);
+  const z = finite(raw.position[2], WORLD_LIMIT);
+  const yaw = finite(raw.yaw, Math.PI * 4);
+  if (x === null || y === null || z === null || yaw === null) return null;
+  // A seat is a ring index, so it is a small non-negative integer or nothing.
+  const seat = finite(raw.seat, 1_000);
+  const seated = seat !== null && Number.isInteger(seat) && seat >= 0;
+  return { position: [x, y, z], yaw, ...(seated ? { seat } : {}) };
 }
 
 /**
@@ -89,6 +135,11 @@ export function canvasPresenceFrame(input: unknown): CanvasPresenceState | null 
   }
 
   if (typeof raw.typing === 'boolean') state.typing = raw.typing;
+
+  // Same rule the cursor follows: an unparseable body is "left the surface"
+  // rather than a dropped field, so a malformed frame retracts a stale avatar
+  // instead of leaving it standing in the room forever.
+  if ('spatial' in raw) state.spatial = spatial(raw.spatial);
 
   return Object.keys(state).length ? state : null;
 }

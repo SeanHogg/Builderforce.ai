@@ -32,6 +32,7 @@
  * no serial latency.
  */
 
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { resolveAndAssertPublic } from './ssrfGuard';
 
 /** Normalised host of a URL: de-bracketed (IPv6) and lower-cased, as the guard's range
@@ -72,7 +73,16 @@ export async function withPublicHostGuard<T>(
     return value;
   } catch (error) {
     if (discard) {
-      await Promise.resolve(running.then(discard)).catch(() => { /* already failed */ });
+      await Promise.resolve(running.then(discard)).catch((cleanupError) => {
+        // The operation itself already failed, or the recheck rejected it — either way
+        // the caller gets `error` below. A failure to CLEAN UP after that is still worth
+        // a line, because a body left uncancelled is a leaked connection.
+        reportCaughtError(cleanupError, {
+          source: 'infrastructure/net/fetchPublic.ts',
+          operation: 'discardGuardedResult',
+          level: 'warning',
+        });
+      });
     }
     throw error;
   }

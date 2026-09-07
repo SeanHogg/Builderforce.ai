@@ -20,9 +20,11 @@
  * engine/GameState wrapper (this canvas already discriminates on the object's
  * own `kind`), challenges/scoring, multiplayer peers, the bespoke AI-agent
  * authoring panel (Brain already edits any object's mutable fields through
- * the canvas's own generic mechanism), textures/tags, and the click-to-shoot
- * weapon mechanic — all game-specific engagement features, not "authoring a
- * 3D space".
+ * the canvas's own generic mechanism), tags, and the click-to-shoot weapon
+ * mechanic — all game-specific engagement features, not "authoring a 3D
+ * space". Textures were dropped with them and have since come BACK, as
+ * `CanvasWorldProp.surface` in v2, because "put this picture on that wall" is
+ * authoring rather than engagement — see the version note below.
  *
  * Every mutation below is TOTAL, same rule `website.ts` states: an unknown
  * prop id returns the scene unchanged rather than throwing. The caller is a
@@ -30,7 +32,17 @@
  * exception.
  */
 
-export const CANVAS_WORLD_SCHEMA_VERSION = 1;
+/**
+ * ── VERSION 2 ────────────────────────────────────────────────────────────
+ * A prop could say what COLOUR it was and nothing else, which is why nothing
+ * could be put ON one: a photograph of a whiteboard, a live chart, a card from
+ * the board this world belongs to. Two additive fields close that — `surface`
+ * (what is painted on its face) and `objectId` (which board object it stands
+ * for) — and both are optional, so every v1 scene reads back unchanged and no
+ * migration runs. The version moves anyway, because a reader that cannot tell
+ * which fields it may expect is a reader that guesses.
+ */
+export const CANVAS_WORLD_SCHEMA_VERSION = 2;
 
 /** Position + Euler rotation (radians, XYZ order) + non-uniform scale. One
  *  transform shape for the spawn point and every prop — no per-kind fork. */
@@ -85,12 +97,45 @@ export type CanvasWorldPropKind =
  *   - `none`      — no collider. Decorative, or a light. */
 export type CanvasWorldPhysicsKind = 'static' | 'dynamic' | 'kinematic' | 'sensor' | 'none';
 
+/**
+ * What is PAINTED on a prop's face, as opposed to what the prop is made of.
+ *
+ * Deliberately not a replacement for `color`: a wall is grey AND has a
+ * photograph pinned to it, and collapsing those into one field would mean the
+ * untextured faces of a textured prop had no colour to fall back to. Absent
+ * means the prop is plain — which is every prop that existed before v2.
+ *
+ * Only an image today. A video stream is the obvious second member and is
+ * deliberately NOT declared until something produces one: a union arm nothing
+ * emits is a promise, and the renderer would have to branch on a case it can
+ * never be handed.
+ */
+export type CanvasWorldPropSurface = {
+  kind: 'image';
+  /** Absolute or same-origin URL. The renderer loads it as a texture. */
+  url: string;
+  /** How the image sits in the face's aspect ratio. Defaults to `cover`. */
+  fit?: 'cover' | 'contain';
+};
+
 export interface CanvasWorldProp extends CanvasWorldTransform {
   id: string;
   kind: CanvasWorldPropKind;
-  /** Display color (CSS hex). */
+  /** Display color (CSS hex). The material; see {@link CanvasWorldPropSurface}. */
   color: string;
   physics: CanvasWorldPhysicsKind;
+  /** What is painted on the prop's face. Absent = plain colour. */
+  surface?: CanvasWorldPropSurface;
+  /**
+   * The board object this prop STANDS FOR, by id.
+   *
+   * This is identity, not decoration: a prop carrying one is a card you can
+   * walk up to, so the renderer paints that object's preview on it and a click
+   * selects the card rather than the prop. A prop whose object has since been
+   * deleted keeps rendering as a plain prop — the id is a reference across a
+   * boundary, and dangling references are a fact of life, not a crash.
+   */
+  objectId?: string;
 }
 
 export interface CanvasWorldScene {
@@ -167,6 +212,8 @@ export function addProp(
     scale?: [number, number, number];
     color?: string;
     physics?: CanvasWorldPhysicsKind;
+    surface?: CanvasWorldPropSurface;
+    objectId?: string;
   },
 ): { scene: CanvasWorldScene; prop: CanvasWorldProp } {
   const defaults = PROP_KIND_DEFAULTS[opts.kind];
@@ -178,6 +225,11 @@ export function addProp(
     scale: opts.scale ?? defaults.scale,
     color: opts.color ?? defaults.color,
     physics: opts.physics ?? defaults.physics,
+    // Spread rather than assigned so a plain prop carries no `surface: undefined`
+    // key into the jsonb column — an absent field and a null one read the same
+    // here, and only one of them survives a round-trip looking like the original.
+    ...(opts.surface ? { surface: opts.surface } : {}),
+    ...(opts.objectId ? { objectId: opts.objectId } : {}),
   };
   return { scene: { ...scene, props: [...scene.props, prop] }, prop };
 }
@@ -231,6 +283,25 @@ function hexColor(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.length > 0 ? value : fallback;
 }
 
+/** Largest texture URL accepted, so a data: URI cannot make one prop the size
+ *  of the whole scene document. Real images live behind a URL; a base64 blob
+ *  belongs in the attachment store the canvas already has. */
+const MAX_SURFACE_URL = 2_048;
+
+/** Read a prop's painted face back, or undefined when there is nothing usable.
+ *  Undefined rather than a `{kind:'image', url:''}` placeholder: an empty
+ *  texture is a grey square the author cannot explain, and a plain prop is
+ *  exactly what they had before. */
+function propSurface(value: unknown): CanvasWorldPropSurface | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  if (raw.kind !== 'image') return undefined;
+  const url = typeof raw.url === 'string' ? raw.url.trim() : '';
+  if (!url || url.length > MAX_SURFACE_URL) return undefined;
+  const fit = raw.fit === 'contain' ? 'contain' : undefined;
+  return { kind: 'image', url, ...(fit ? { fit } : {}) };
+}
+
 /** Read a `CanvasWorldScene` back from whatever a canvas object's `world`
  *  field actually holds — untrusted at the type level (jsonb round-trip, or
  *  a Brain-authored patch), same reason `canvasVideoTimelineFrom` exists for
@@ -253,6 +324,8 @@ export function canvasWorldSceneFrom(value: unknown): CanvasWorldScene {
     const kind = PROP_KINDS.includes(prop.kind as CanvasWorldPropKind) ? prop.kind as CanvasWorldPropKind : null;
     if (!kind) return [];
     const defaults = PROP_KIND_DEFAULTS[kind];
+    const surface = propSurface(prop.surface);
+    const objectId = typeof prop.objectId === 'string' && prop.objectId ? prop.objectId : undefined;
     return [{
       id: typeof prop.id === 'string' && prop.id ? prop.id : `${kind}-${index}`,
       kind,
@@ -261,6 +334,8 @@ export function canvasWorldSceneFrom(value: unknown): CanvasWorldScene {
       scale: vec3(prop.scale, defaults.scale),
       color: hexColor(prop.color, defaults.color),
       physics: PHYSICS_KINDS.includes(prop.physics as CanvasWorldPhysicsKind) ? prop.physics as CanvasWorldPhysicsKind : defaults.physics,
+      ...(surface ? { surface } : {}),
+      ...(objectId ? { objectId } : {}),
     }];
   }) : [];
 

@@ -23,6 +23,7 @@ import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
+import { subflowDefinitionLoader } from '../../application/workflow/subflowDefinitionGateway';
 import { compile, type LlmComplete, type Need } from '../../application/compile';
 import type { RecallKnowledge } from '../../application/compile';
 import { recallSops } from '../../application/knowledge/recallSops';
@@ -98,6 +99,7 @@ export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hon
       spec = await compile(needs, {
         llm: compileExtractor(c.env),
         recallKnowledge: knowledgeRecaller(db, c.get('tenantId') as number),
+        loadWorkflowDefinition: subflowDefinitionLoader(db, c.get('tenantId') as number),
       });
     } catch (error) {
       return failResponse(c, error, { source: SOURCE, operation: 'compile-needs' });
@@ -150,6 +152,7 @@ export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hon
       spec = await compile(needs, {
         llm: compileExtractor(c.env),
         recallKnowledge: knowledgeRecaller(db, tenantId),
+        loadWorkflowDefinition: subflowDefinitionLoader(db, tenantId),
       });
     } catch (error) {
       return failResponse(c, error, { source: SOURCE, operation: 'compile-needs' });

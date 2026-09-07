@@ -18,6 +18,7 @@
 import type { AgentExecParams, AgentSpec, AgentSurface, PolicyGate } from '@builderforce/agent-tools';
 import type { CompiledStep, WorkflowDefinition } from '../../domain/workflowGraph';
 import type { ToolResult } from '../tools/toolTypes';
+import type { SubflowDefinitionLoader } from '../workflow/expandSubflows';
 
 /** The input modalities `compile()` knows how to lower. */
 export type Modality = 'prose' | 'dataset' | 'process-chart' | 'persona' | 'diagnostic' | 'policy';
@@ -98,6 +99,15 @@ export type RecallKnowledge = (query: string, topK?: number) => Promise<Knowledg
 export interface CompileDeps {
   llm?: LlmComplete;
   recallKnowledge?: RecallKnowledge;
+  /**
+   * An injected, tenant-scoped read of a nested canvas's definition. A process
+   * chart may hold a `subflow` step — another canvas, run as one step — and that
+   * child has to be resolved before the chart becomes runnable steps. Absent, the
+   * graph adapter REFUSES such a chart rather than emitting a step the executor
+   * cannot run. The route wires the real read
+   * (`application/workflow/subflowDefinitionGateway.ts`).
+   */
+  loadWorkflowDefinition?: SubflowDefinitionLoader;
 }
 
 export type { AgentSpec, AgentSurface, CompiledStep };
