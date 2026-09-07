@@ -727,6 +727,16 @@
 .selectionToolbar span { padding:0 7px; color:var(--canvas-muted); font-size:10px; white-space:nowrap; }
 .selectionToolbar button { border:0; border-radius:var(--radius-sm); padding:6px 8px; background:transparent; color:var(--canvas-ink); font:600 10px var(--font-sans); cursor:pointer; }
 .selectionToolbar button:hover { background:var(--canvas-panel-muted); }.selectionToolbar button:disabled { opacity:.4; cursor:not-allowed; }
+/* Set apart from the four beside it, which all only change a VIEW of the objects. The
+   rule is scoped under `.selectionToolbar` so it beats the generic hover above it
+   without an `!important`, and both colours are the canonical danger tokens, so it
+   reads correctly in either theme. */
+.selectionToolbar .selectionDelete { color:var(--danger-text); }
+.selectionToolbar .selectionDelete:hover:not(:disabled) { background:var(--danger-bg); color:var(--danger-text); }
+/* Dark keeps its own toolbar-button hover further down the sheet, at a specificity this
+   rule has to match or the destructive button would hover the same slate blue as the
+   four beside it. */
+:global(html:not([data-theme='light'])) .selectionToolbar .selectionDelete:hover:not(:disabled) { background:var(--danger-bg); }
 /* ── `.flowWrap :global(...)`, WITH THE SPACE ──────────────────────────────────────
    Thirteen rules in this file were written `.flowWrap:global(.react-flow__…)`, which
    compiles to a COMPOUND selector — one element carrying both classes. React Flow puts
@@ -823,6 +833,9 @@
 .nodeIcon { display:grid; place-items:center; width:20px; height:20px; border-radius:var(--radius-sm); color:var(--canvas-widget-icon); background:var(--canvas-widget-icon-bg); }
 .status { margin-left:auto; padding:3px 7px; border-radius:var(--radius-full); color:#16835a; background:#eaf8f2; font-size:9px; }
 .moreButton { margin-left:auto; border:0; background:transparent; color:var(--canvas-muted); cursor:pointer; letter-spacing:1px; }
+/* It opens the wide inspector now rather than being decoration with an accessible name,
+   so it answers a hover and a keyboard focus the way every other control in the row does. */
+.moreButton:hover, .moreButton:focus-visible { color:var(--canvas-ink); outline:none; }
 .status + .moreButton { margin-left:0; }
 .workflowRunButton { margin-left:auto; padding:5px 9px; border:1px solid var(--canvas-accent); border-radius:var(--radius-sm); background:var(--canvas-accent); color:var(--text-on-accent); font:650 9px var(--font-sans); cursor:pointer; white-space:nowrap; }
 .workflowRunButton:hover,.workflowRunButton:focus-visible { outline:none; filter:brightness(1.08); box-shadow:0 0 0 2px color-mix(in srgb,var(--canvas-accent) 24%,transparent); }

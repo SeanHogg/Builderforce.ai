@@ -29,7 +29,8 @@
  * into a typed {@link McpAuthChallenge} rather than being retried with anything.
  */
 
-import { assertSafeUrl, resolveAndAssertPublic } from '../../../infrastructure/net/ssrfGuard';
+import { assertSafeUrl } from '../../../infrastructure/net/ssrfGuard';
+import { fetchPublic } from '../../../infrastructure/net/fetchPublic';
 
 /** How a server is addressed. `auto` = probe, then remember what answered. */
 export type McpProtocol = 'auto' | 'mcp' | 'legacy';
@@ -85,11 +86,11 @@ export interface McpListResult {
 
 const trimUrl = (url: string): string => url.replace(/\/+$/, '');
 
-/** Re-validate + resolve immediately before an authed fetch (DNS rebinding). */
-async function assertLiveSafe(url: string): Promise<URL> {
-  const parsed = assertSafeUrl(url, { allowHttp: false });
-  await resolveAndAssertPublic(parsed.hostname);
-  return parsed;
+/** Re-validate the URL immediately before an authed call. The DNS-rebinding half is
+ *  `fetchPublic`'s, which re-resolves the host during the request too — this stays a
+ *  separate step because the call sites validate before building the request body. */
+function assertLiveSafe(url: string): URL {
+  return assertSafeUrl(url, { allowHttp: false });
 }
 
 function headersFor(conn: McpServerConnection, accept: string): Record<string, string> {
@@ -141,8 +142,7 @@ async function rpc(
   params: Record<string, unknown>,
   options: RpcOptions = {},
 ): Promise<{ result: Record<string, unknown> | null; sessionId: string | null }> {
-  await assertLiveSafe(conn.serverUrl);
-  const doFetch = conn.fetchImpl ?? fetch;
+  assertLiveSafe(conn.serverUrl);
   const headers = headersFor(conn, 'application/json, text/event-stream');
   headers['MCP-Protocol-Version'] = CLIENT_PROTOCOL_VERSION;
   if (options.sessionId) headers['Mcp-Session-Id'] = options.sessionId;
@@ -151,13 +151,13 @@ async function rpc(
     ? { jsonrpc: '2.0', method, params }
     : { jsonrpc: '2.0', id: `bf-${method}`, method, params };
 
-  const res = await doFetch(trimUrl(conn.serverUrl), {
+  const res = await fetchPublic(trimUrl(conn.serverUrl), {
     method: 'POST',
     headers,
     redirect: 'manual',
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
+  }, conn.fetchImpl ? { fetchImpl: conn.fetchImpl } : {});
 
   if (res.status === 401 || res.status === 403) {
     throw new McpAuthChallenge(res.status, res.headers.get('www-authenticate'));
@@ -251,13 +251,12 @@ async function callToolOverMcp(
 // ---------------------------------------------------------------------------
 
 async function listToolsOverLegacy(conn: McpServerConnection): Promise<RemoteToolDescriptor[]> {
-  await assertLiveSafe(conn.serverUrl);
-  const doFetch = conn.fetchImpl ?? fetch;
-  const res = await doFetch(`${trimUrl(conn.serverUrl)}/tools`, {
+  assertLiveSafe(conn.serverUrl);
+  const res = await fetchPublic(`${trimUrl(conn.serverUrl)}/tools`, {
     headers: headersFor(conn, 'application/json'),
     redirect: 'manual',
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
+  }, conn.fetchImpl ? { fetchImpl: conn.fetchImpl } : {});
   if (res.status === 401 || res.status === 403) {
     throw new McpAuthChallenge(res.status, res.headers.get('www-authenticate'));
   }
@@ -267,15 +266,14 @@ async function listToolsOverLegacy(conn: McpServerConnection): Promise<RemoteToo
 }
 
 async function callToolOverLegacy(conn: McpServerConnection, tool: string, args: unknown): Promise<unknown> {
-  await assertLiveSafe(conn.serverUrl);
-  const doFetch = conn.fetchImpl ?? fetch;
-  const res = await doFetch(`${trimUrl(conn.serverUrl)}/call`, {
+  assertLiveSafe(conn.serverUrl);
+  const res = await fetchPublic(`${trimUrl(conn.serverUrl)}/call`, {
     method: 'POST',
     headers: headersFor(conn, 'application/json'),
     redirect: 'manual',
     body: JSON.stringify({ tool, arguments: args ?? {} }),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
+  }, conn.fetchImpl ? { fetchImpl: conn.fetchImpl } : {});
   if (res.status === 401 || res.status === 403) {
     throw new McpAuthChallenge(res.status, res.headers.get('www-authenticate'));
   }

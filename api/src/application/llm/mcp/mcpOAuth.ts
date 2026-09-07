@@ -34,7 +34,8 @@ import {
   refreshAccessToken,
   type TokenResponse,
 } from '../../../infrastructure/auth/oauthState';
-import { assertSafeUrl, resolveAndAssertPublic } from '../../../infrastructure/net/ssrfGuard';
+import { assertSafeUrl } from '../../../infrastructure/net/ssrfGuard';
+import { fetchPublic, withPublicHostGuard } from '../../../infrastructure/net/fetchPublic';
 import { createPkcePair } from '../../../infrastructure/crypto/pkce';
 
 /** How this deployment identifies itself when registering with an unknown AS. */
@@ -61,8 +62,7 @@ export interface McpOAuthPendingConsent extends McpOAuthRegistration {
 
 async function safeFetchJson(url: string, init?: RequestInit): Promise<Record<string, unknown> | null> {
   const parsed = assertSafeUrl(url, { allowHttp: false });
-  await resolveAndAssertPublic(parsed.hostname);
-  const res = await fetch(parsed.toString(), {
+  const res = await fetchPublic(parsed, {
     ...init,
     redirect: 'manual',
     signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
@@ -213,13 +213,15 @@ export async function exchangeMcpCode(
   redirectUri: string,
 ): Promise<TokenResponse> {
   const token = assertSafeUrl(consent.tokenEndpoint, { allowHttp: false });
-  await resolveAndAssertPublic(token.hostname);
-  return exchangeCodeForTokens(
+  // The exchange's own fetch lives in the shared OAuth client, so the DNS guard wraps
+  // the CALL rather than the request — same before-and-during check, applied to the
+  // window in which the token endpoint is actually dereferenced.
+  return withPublicHostGuard(token.hostname, () => exchangeCodeForTokens(
     { tokenUrl: consent.tokenEndpoint, clientId: consent.clientId, ...(consent.clientSecret ? { clientSecret: consent.clientSecret } : {}) },
     code,
     redirectUri,
     { code_verifier: consent.codeVerifier, resource: consent.resource },
-  );
+  ));
 }
 
 /** Re-mint an access token from a stored refresh token. */
@@ -228,10 +230,9 @@ export async function refreshMcpToken(
   refreshToken: string,
 ): Promise<TokenResponse> {
   const token = assertSafeUrl(registration.tokenEndpoint, { allowHttp: false });
-  await resolveAndAssertPublic(token.hostname);
-  return refreshAccessToken(
+  return withPublicHostGuard(token.hostname, () => refreshAccessToken(
     { tokenUrl: registration.tokenEndpoint, clientId: registration.clientId, ...(registration.clientSecret ? { clientSecret: registration.clientSecret } : {}) },
     refreshToken,
     { resource: registration.resource },
-  );
+  ));
 }

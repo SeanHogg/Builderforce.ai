@@ -1,4 +1,5 @@
-import { assertSafeUrl, resolveAndAssertPublic } from '../net/ssrfGuard';
+import { assertSafeUrl } from '../net/ssrfGuard';
+import { fetchPublic } from '../net/fetchPublic';
 import type { CrawledResponse, CrawlerHttpPort } from '../../application/webSearch/ports';
 
 const TIMEOUT_MS = 15_000;
@@ -28,12 +29,11 @@ export class CrawlerHttpClient implements CrawlerHttpPort {
     try {
       let current = startUrl;
       for (let hop = 0; hop <= 5; hop++) {
-        const safe = assertSafeUrl(current, { allowHttp: true });
-        await resolveAndAssertPublic(safe.hostname);
-        const response = await this.fetchImpl(current, { redirect: 'manual', signal: controller.signal, headers: {
+        assertSafeUrl(current, { allowHttp: true });
+        const response = await fetchPublic(current, { redirect: 'manual', signal: controller.signal, headers: {
           'User-Agent': 'BuilderforceSearchBot/1.0 (+https://builderforce.ai; search crawler)',
           Accept: options.accept ?? 'text/html,application/xhtml+xml;q=0.9,text/plain;q=0.5',
-        } });
+        } }, { fetchImpl: this.fetchImpl });
         if (REDIRECTS.has(response.status) && response.headers.has('location')) {
           if (hop === 5) throw new Error('Too many redirects.');
           await response.body?.cancel(); current = new URL(response.headers.get('location')!, current).toString(); continue;

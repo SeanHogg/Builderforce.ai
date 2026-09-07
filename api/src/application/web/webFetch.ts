@@ -10,7 +10,8 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * model's context window.
  */
 
-import { assertSafeUrl, resolveAndAssertPublic, BlockedUrlError } from '../../infrastructure/net/ssrfGuard';
+import { assertSafeUrl, BlockedUrlError } from '../../infrastructure/net/ssrfGuard';
+import { fetchPublic } from '../../infrastructure/net/fetchPublic';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
 
@@ -156,7 +157,8 @@ function collapse(s: string): string {
  * every hop. `redirect: 'follow'` would let a permitted public origin 302 us to
  * `169.254.169.254`/localhost with the guard never re-checking; instead we take
  * one hop at a time, re-validating each `Location` through {@link assertSafeUrl}
- * + {@link resolveAndAssertPublic} BEFORE the next fetch. Bounded at
+ * BEFORE the next fetch and running the hop itself through {@link fetchPublic}, which
+ * re-resolves the host DURING the request as well as before it. Bounded at
  * {@link MAX_REDIRECTS} hops. Throws on a blocked hop; returns the final response
  * plus the URL actually fetched.
  */
@@ -166,12 +168,12 @@ async function fetchFollowingRedirects(
 ): Promise<{ res: Response; finalUrl: string }> {
   let current = startUrl;
   for (let hop = 0; ; hop++) {
-    // SSRF guard (http + https). Throws on internal/loopback/metadata hosts, then
-    // best-effort DNS-rebinding check (resolves the name and rejects private IPs).
-    const parsed = assertSafeUrl(current, { allowHttp: true });
-    await resolveAndAssertPublic(parsed.hostname);
+    // SSRF guard (http + https): throws on internal/loopback/metadata hosts. The
+    // DNS-rebinding half belongs to `fetchPublic`, which runs it before AND during the
+    // request rather than only in front of it.
+    assertSafeUrl(current, { allowHttp: true });
 
-    const res = await fetch(current, {
+    const res = await fetchPublic(current, {
       method: 'GET',
       redirect: 'manual',
       signal,

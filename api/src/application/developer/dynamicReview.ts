@@ -51,6 +51,7 @@
  */
 
 import { assertSafeUrl, resolveAndAssertPublic } from '../../infrastructure/net/ssrfGuard';
+import { fetchPublic } from '../../infrastructure/net/fetchPublic';
 import {
   authFieldsFor,
   fillTemplate,
@@ -275,6 +276,9 @@ async function exerciseConnector(
     // ── The SSRF guard, on the resolved URL, for every action ────────────
     try {
       assertSafeUrl(url.toString(), { allowHttp: false });
+      // Kept in FRONT of the request (rather than left to `fetchPublic`'s own check
+      // below) because a blocked destination must be reported as an `egress_guard`
+      // finding, not as an action that failed to answer.
       if (!templatedBase) await resolveAndAssertPublic(url.hostname);
     } catch (error) {
       findings.push(finding(
@@ -303,12 +307,12 @@ async function exerciseConnector(
     sent += 1;
     const started = Date.now();
     try {
-      const res = await fetchImpl(url.toString(), {
+      const res = await fetchPublic(url, {
         method: 'GET',
         headers: { Accept: 'application/json', 'User-Agent': 'BuilderForce-ExtensionReview/1' },
         redirect: 'manual',
         signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-      });
+      }, { fetchImpl });
       const graded = gradeStatus(res.status);
       evidence.push({
         subject: action.key,
@@ -376,7 +380,6 @@ async function exerciseMcpServer(
   let url: URL;
   try {
     url = assertSafeUrl(serverUrl, { allowHttp: false });
-    await resolveAndAssertPublic(url.hostname);
   } catch (error) {
     findings.push(finding('egress_guard', 'fail', `serverUrl is a blocked destination: ${error instanceof Error ? error.message : 'blocked'}`));
     evidence.push({ subject: 'serverUrl', outcome: 'fail', detail: error instanceof Error ? error.message : 'blocked destination', url: serverUrl });
@@ -386,13 +389,13 @@ async function exerciseMcpServer(
   const started = Date.now();
   let advertised: string[];
   try {
-    const res = await fetchImpl(url.toString(), {
+    const res = await fetchPublic(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
       redirect: 'manual',
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-    });
+    }, { fetchImpl });
     const text = await res.text();
     if (!res.ok) {
       findings.push(finding('tools_list', 'fail', `the server answered ${res.status} to tools/list — an MCP package whose server does not list its tools cannot be installed`));

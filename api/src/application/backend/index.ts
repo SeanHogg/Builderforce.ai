@@ -23,7 +23,8 @@ import { resolveApiOrigin } from '../../env';
 import { projectBackendRequests, projectBackends, projects } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { assertSafeUrl, resolveAndAssertPublic } from '../../infrastructure/net/ssrfGuard';
+import { assertSafeUrl } from '../../infrastructure/net/ssrfGuard';
+import { fetchPublic } from '../../infrastructure/net/fetchPublic';
 import { deleteWorkspaceFile, listWorkspaceFiles, readWorkspaceFile, writeWorkspaceFile } from '../ide/workspaceStore';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { MonitoringService } from '../monitoring/MonitoringService';
@@ -656,13 +657,12 @@ export async function probeWorkerHealth(env: Env, deployedUrl: string | null): P
       let target: URL;
       try {
         target = assertSafeUrl(new URL(BACKEND_HEALTH_PATH, deployedUrl).toString(), { allowHttp: false });
-        await resolveAndAssertPublic(target.hostname);
       } catch (error) {
         return { reachable: false, secrets: {}, handlers: [], reason: error instanceof Error ? error.message : 'Blocked URL' };
       }
 
       try {
-        const res = await fetch(target.toString(), {
+        const res = await fetchPublic(target, {
           headers: { Accept: 'application/json' },
           redirect: 'manual',
           signal: AbortSignal.timeout(8_000),

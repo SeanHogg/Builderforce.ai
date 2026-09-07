@@ -39,7 +39,8 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { catalogItems, connections, syncStates } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { assertSafeUrl, resolveAndAssertPublic } from '../../infrastructure/net/ssrfGuard';
+import { assertSafeUrl } from '../../infrastructure/net/ssrfGuard';
+import { fetchPublic } from '../../infrastructure/net/fetchPublic';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { recordActivity, SYSTEM_ACTOR } from '../activity/activityLog';
 import { listingSlug, parseJsonFeed, parseRssFeed, type SourcedListing } from './sourcingFeed';
@@ -141,7 +142,6 @@ async function fetchListings(
   // repointed at link-local metadata today. This is the check that makes a
   // scheduled fetch of an operator-supplied URL safe to run at all.
   const url = assertSafeUrl(source.config.url);
-  await resolveAndAssertPublic(url.hostname);
 
   const apiKey = await sourceApiKey(db, env, source.tenantId, source.id);
 
@@ -201,7 +201,7 @@ async function fetchFollowingSafely(
   let sent = headers;
 
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
-    const response = await fetch(target.toString(), {
+    const response = await fetchPublic(target, {
       headers: sent,
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       redirect: 'manual',
@@ -214,7 +214,6 @@ async function fetchFollowingSafely(
 
     // Resolved against the CURRENT url, because a Location may be relative.
     const next = assertSafeUrl(new URL(location, target).toString());
-    await resolveAndAssertPublic(next.hostname);
 
     if (next.origin !== target.origin && sent.Authorization) {
       const { Authorization: _dropped, ...rest } = sent;

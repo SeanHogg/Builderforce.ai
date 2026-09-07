@@ -30,7 +30,8 @@ import { marketingAssets, marketingTemplates } from '../../infrastructure/databa
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { newChallengeToken } from '../shared/dnsVerification';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { assertSafeUrl, BlockedUrlError, resolveAndAssertPublic } from '../../infrastructure/net/ssrfGuard';
+import { assertSafeUrl, BlockedUrlError } from '../../infrastructure/net/ssrfGuard';
+import { fetchPublic } from '../../infrastructure/net/fetchPublic';
 import { excluded } from '../../infrastructure/database/upsert';
 
 // ---------------------------------------------------------------------------
@@ -745,18 +746,15 @@ export async function readMediaSource(source: string): Promise<MediaSourceResult
   } catch (error) {
     return { ok: false, status: 400, error: error instanceof Error ? error.message : 'That image URL cannot be read.' };
   }
+  let res: Response;
   try {
-    await resolveAndAssertPublic(url.hostname);
+    // Public before AND during the download: a name that only turns private once the
+    // request is in flight is what the pre-fetch check alone could not see.
+    res = await fetchPublic(url);
   } catch (error) {
     if (error instanceof BlockedUrlError) {
       return { ok: false, status: 400, error: 'That image URL resolves to a private address and will not be fetched.' };
     }
-  }
-
-  let res: Response;
-  try {
-    res = await fetch(url.toString());
-  } catch (error) {
     reportCaughtError(error, { source: 'application/marketing/templateLibrary.ts', operation: 'readMediaSource' });
     return { ok: false, status: 502, error: 'That image could not be downloaded.' };
   }

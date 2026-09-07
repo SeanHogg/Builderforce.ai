@@ -31,7 +31,7 @@ import { isCreationObjectKind } from '@builderforce/creation-canvas-contract';
 import { edgeVisuals, readConnectionStyle } from '@/lib/canvasConnectionStyle';
 import { CANVAS_BOARD_INVARIANTS_BY_KEY, type CanvasBoardInvariantKey } from '@/lib/canvas/boundedContexts';
 import { specRefKey } from '@/lib/specObjects';
-import type { CanvasObject, CanvasObjectData, CreationObjectKind } from './canvasObject';
+import { canvasPlacementFlags, type CanvasObject, type CanvasObjectData, type CreationObjectKind } from './canvasObject';
 import { parseResourceRef } from './resourceRef';
 
 /**
@@ -104,7 +104,7 @@ function objectFromPersisted(object: PersistedCanvasObject): CanvasObject {
     id: object.id,
     type: 'creation',
     position: { x: Number(canvasData.x ?? 0), y: Number(canvasData.y ?? 0) },
-    draggable: content.placementLocked !== true,
+    ...canvasPlacementFlags(content.placementLocked === true),
     hidden: content.placementHidden === true,
     ...((width > 0 || height > 0) ? { style: { width: width || undefined, height: height || undefined } } : {}),
     data: {

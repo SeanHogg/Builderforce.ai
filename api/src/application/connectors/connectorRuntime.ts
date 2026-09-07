@@ -25,7 +25,8 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { connectorConnections, connectorCallLogs } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { assertSafeUrl, resolveAndAssertPublic } from '../../infrastructure/net/ssrfGuard';
+import { assertSafeUrl } from '../../infrastructure/net/ssrfGuard';
+import { fetchPublic } from '../../infrastructure/net/fetchPublic';
 import { credentialSecret, decryptCredentials } from '../integrations/credentialCrypto';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import {
@@ -459,12 +460,12 @@ export async function executeConnectorAction(args: {
     baseUrlOverride: connection.baseUrlOverride,
   });
 
-  // Guard the RESOLVED url (templates filled, override applied) and re-resolve its
-  // hostname — see the security note at the top of this file.
+  // Guard the RESOLVED url (templates filled, override applied) — see the security
+  // note at the top of this file. The DNS half runs in `fetchPublic` below, which
+  // re-resolves the host during the call as well as before it.
   let safeUrl: URL;
   try {
     safeUrl = assertSafeUrl(url, { allowHttp: false });
-    await resolveAndAssertPublic(safeUrl.hostname);
   } catch (e) {
     throw new ConnectorCallError(
       redactSecrets(e instanceof Error ? e.message : 'Blocked URL', secrets),
@@ -481,10 +482,10 @@ export async function executeConnectorAction(args: {
   let captured: Record<string, string> | undefined;
 
   try {
-    const res = await fetchImpl(safeUrl.toString(), {
+    const res = await fetchPublic(safeUrl, {
       ...init,
       signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
-    });
+    }, { fetchImpl });
     status = res.status;
 
     if (args.captureHeaders?.length) {

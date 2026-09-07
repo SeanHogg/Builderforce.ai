@@ -125,6 +125,7 @@ import {
 import { CanvasProposalStage } from '@/domains/canvas/application/CanvasProposalStage';
 import { CARD_ACTS } from '@/domains/canvas/application/cardActs';
 import { parseResourceRef } from '@/domains/canvas/domain/resourceRef';
+import { canvasPlacementFlags } from '@/domains/canvas/domain/canvasObject';
 import { CardActProvider, useCardActRunnerFor, type CardActBoardBinding } from './cardActRunner';
 import { KindDetailsActions } from './KindDetailsActions';
 import { syncSocialCampaign as syncCampaignUseCase } from '@/domains/marketing/application/SyncSocialCampaign';
@@ -3168,7 +3169,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const togglePlacementLock = useCallback(() => {
     const ids = new Set(selectionIds()); if (!canEdit || !ids.size) return;
     const shouldLock = nodes.some((node) => ids.has(node.id) && canvasPlacementUnlocked(node));
-    setNodes((current) => current.map((node) => ids.has(node.id) ? { ...node, draggable: !shouldLock, data: { ...node.data, placementLocked: shouldLock } } : node));
+    setNodes((current) => current.map((node) => ids.has(node.id) ? { ...node, ...canvasPlacementFlags(shouldLock), data: { ...node.data, placementLocked: shouldLock } } : node));
     setNotice(shouldLock ? 'Object placement locked' : t('noticePlacementUnlocked'));
   }, [canEdit, nodes, selectionIds, setNodes]);
 
@@ -9831,7 +9832,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             ...value,
             ...(change.position ? { position: change.position } : {}),
             ...(change.hidden != null ? { hidden: change.hidden } : {}),
-            draggable: !locked,
+            ...canvasPlacementFlags(locked),
             style: { ...value.style, ...(change.width != null ? { width: change.width } : {}), ...(change.height != null ? { height: change.height } : {}) },
             data: { ...value.data, ...(change.hidden != null ? { placementHidden: change.hidden } : {}), ...(change.locked != null ? { placementLocked: change.locked } : {}) },
           };
@@ -11453,13 +11454,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // a per-token dependency here would hand React Flow a new nodeTypes object and
   // remount every Object on the board on every streamed word.
   const canvasNodeTypes = useMemo<NodeTypes>(() => ({
-    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} onOpenBuiltinAgent={openBuiltinAgentSurfaceFromNode} onOpenPanel={openNodePanel} onInsertFrom={openInsertPicker} onOpenSurface={(nodeId, surface) => setSurface(surface, nodeId)} onOpenFrame={openFrame} onRevealObject={revealObject} {...(cardsEditable ? { onEditData: updateNodeData, onMoveDeal: moveDealFromNode } : {})} onOpenDetails={(nodeId, focus) => {
+    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} onOpenBuiltinAgent={openBuiltinAgentSurfaceFromNode} onOpenPanel={openNodePanel} onInsertFrom={openInsertPicker} onOpenSurface={(nodeId, surface) => setSurface(surface, nodeId)} onOpenFrame={openFrame} onRevealObject={revealObject} {...(cardsEditable ? { onEditData: updateNodeData, onMoveDeal: moveDealFromNode, onDeleteNode: deleteNodeFromCard } : {})} onOpenDetails={(nodeId, focus) => {
       setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
       // Asking for a specific section (knowledge, test, evaluation, delivery) is asking
       // for the WIDE panel directly — the short one has no such section to scroll to.
       setSelectedId(nodeId); setSelectedIds([nodeId]); openNodeInspector(nodeId, focus || null);
     }} />,
-  }), [canRun, cardsEditable, exportFromNode, moveDealFromNode, openBuiltinAgentSurfaceFromNode, openFrame, openInsertPicker, openNodeInspector, openNodePanel, runWorkflowFromNode, setSurface, updateNodeData]);
+  }), [canRun, cardsEditable, deleteNodeFromCard, exportFromNode, moveDealFromNode, openBuiltinAgentSurfaceFromNode, openFrame, openInsertPicker, openNodeInspector, openNodePanel, runWorkflowFromNode, setSurface, updateNodeData]);
   const buildDiagnostics = useCallback(async () => buildCreationCanvasDiagnosticsReport({
     sessionId, title, persistence, role: sessionRole, revision: revision.current, realtimeState,
     // Objects are passed WHOLE: the report decides which fields explain whether
@@ -12527,6 +12528,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           {effectiveSelectedIds.length > 1 && <button onClick={frameSelection} disabled={!canEdit}>{t('frame')}</button>}
           <button onClick={togglePlacementLock} disabled={!canEdit}>{effectiveSelectedIds.some((id) => nodes.find((node) => node.id === id)?.data.placementLocked !== true) ? t('lock') : t('unlock')}</button>
           <button onClick={toggleHidden} disabled={!canEdit}>{t('hide')}</button>
+          {/* The one action a person reaches for that this bar did not offer. It has to
+              be HERE and not only on the card, because the kinds with no header row of
+              their own — a sticky, an annotation, a docked conversation — have nowhere
+              to draw a trash, and a selection of twelve objects has no single card to
+              press it on. Last in the row and styled apart: the destructive one should
+              not be adjacent to Duplicate by accident. */}
+          <button className={styles.selectionDelete} onClick={deleteSelection} disabled={!canEdit} data-testid="canvas-selection-delete">{t('delete')}</button>
         </div>}
         {/* You are inside a section, and here is the way out. A bar rather than a
             dialog on purpose: the board is still the board, and every control that

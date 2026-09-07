@@ -44,7 +44,8 @@ import {
   CANVAS_VIEWPORT_WIDTHS,
   type CanvasViewport,
 } from '@builderforce/creation-canvas-contract';
-import { assertSafeUrl, resolveAndAssertPublic } from '../../infrastructure/net/ssrfGuard';
+import { assertSafeUrl, BlockedUrlError } from '../../infrastructure/net/ssrfGuard';
+import { withPublicHostGuard } from '../../infrastructure/net/fetchPublic';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
 
@@ -269,30 +270,40 @@ export async function captureWebScreenshot(
   // have, and a small business's current site is exactly the kind that is still on
   // plain http. The host checks below are what actually matter.
   const target = assertSafeUrl(rawUrl.trim(), { allowHttp: true });
-  await resolveAndAssertPublic(target.hostname);
 
   const { accountId, token } = renderCredentials(env);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), RENDER_TIMEOUT_MS);
   let response: Response;
   try {
-    response = await fetch(
-      `https://api.cloudflare.com/client/v4/accounts/${accountId}/browser-rendering/screenshot`,
-      {
-        method: 'POST',
-        signal: controller.signal,
-        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-        body: JSON.stringify({
-          url: target.toString(),
-          viewport: { width: size.width, height: size.height },
-          // `networkidle0` is what makes a JS-rendered marketing page capture as its
-          // visitors see it rather than as an empty app shell.
-          gotoOptions: { waitUntil: 'networkidle0', timeout: 30_000 },
-          screenshotOptions: { type: 'jpeg', quality: 78, fullPage },
-        }),
-      },
+    // The host to guard is the RENDER TARGET, not the peer we call: Cloudflare's
+    // renderer resolves `target` itself, inside the request below. So the DNS check
+    // wraps the whole render call — before it AND concurrently with it — rather than
+    // sitting in front of a fetch that never touches the target's DNS at all.
+    response = await withPublicHostGuard(
+      target.hostname,
+      () => fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${accountId}/browser-rendering/screenshot`,
+        {
+          method: 'POST',
+          signal: controller.signal,
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+          body: JSON.stringify({
+            url: target.toString(),
+            viewport: { width: size.width, height: size.height },
+            // `networkidle0` is what makes a JS-rendered marketing page capture as its
+            // visitors see it rather than as an empty app shell.
+            gotoOptions: { waitUntil: 'networkidle0', timeout: 30_000 },
+            screenshotOptions: { type: 'jpeg', quality: 78, fullPage },
+          }),
+        },
+      ),
+      (res) => res.body?.cancel(),
     );
   } catch (error) {
+    // A blocked host is the CALLER's problem, not the renderer's — it propagates as
+    // itself, the way it did when the check sat outside this try.
+    if (error instanceof BlockedUrlError) throw error;
     throw new ScreenshotUnavailableError(
       'provider',
       controller.signal.aborted

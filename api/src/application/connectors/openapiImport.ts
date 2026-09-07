@@ -18,7 +18,8 @@
  * can call it.
  */
 
-import { assertSafeUrl, resolveAndAssertPublic } from '../../infrastructure/net/ssrfGuard';
+import { assertSafeUrl } from '../../infrastructure/net/ssrfGuard';
+import { fetchPublic } from '../../infrastructure/net/fetchPublic';
 import {
   MAX_ACTIONS_PER_CONNECTOR,
   parseConnectorManifest,
@@ -69,14 +70,13 @@ export async function fetchOpenApiSpec(specUrl: string): Promise<{ spec: unknown
   let safe: URL;
   try {
     safe = assertSafeUrl(specUrl, { allowHttp: false });
-    await resolveAndAssertPublic(safe.hostname);
   } catch (e) {
     throw new SpecFetchError(e instanceof Error ? e.message : 'Blocked spec URL');
   }
 
   let text: string;
   try {
-    const res = await fetch(safe.toString(), {
+    const res = await fetchPublic(safe, {
       headers: { Accept: 'application/json' },
       redirect: 'manual',
       signal: AbortSignal.timeout(15_000),

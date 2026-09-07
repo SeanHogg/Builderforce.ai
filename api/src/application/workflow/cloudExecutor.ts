@@ -95,7 +95,8 @@ import { credentialSecret } from '../integrations/credentialCrypto';
 import { executeMcpNode, type McpNodeConfig } from './mcpNode';
 import { executeConnectorNode, type ConnectorNodeConfig } from './connectorNode';
 import { getWorkflowVariable, setWorkflowVariable, incrementWorkflowVariable } from './workflowVariables';
-import { assertSafeUrl, resolveAndAssertPublic, BlockedUrlError } from '../../infrastructure/net/ssrfGuard';
+import { assertSafeUrl, BlockedUrlError } from '../../infrastructure/net/ssrfGuard';
+import { fetchPublic } from '../../infrastructure/net/fetchPublic';
 import { platformWebSearchBacking } from '../runtime/webSearchCredential';
 import { searchWeb } from '../runtime/cloudWeb';
 import { searchOwnedThenDiscover } from '../webSearch/demandSearch';
@@ -657,13 +658,12 @@ export async function executeCloudNode(
       let errorMsg: string | null = null;
       try {
         // Same SSRF guard `webFetch.ts` applies: reject internal/loopback/metadata
-        // hosts up front, then a best-effort DNS-rebinding check. `redirect:
-        // 'manual'` deliberately does NOT follow redirects (a 3xx is itself a
-        // reportable status) rather than re-implementing per-hop re-validation
-        // for a node whose whole job is "what status did this URL return".
+        // hosts up front, then `fetchPublic`'s DNS-rebinding check around the request.
+        // `redirect: 'manual'` deliberately does NOT follow redirects (a 3xx is itself
+        // a reportable status) rather than re-implementing per-hop re-validation for a
+        // node whose whole job is "what status did this URL return".
         const parsed = assertSafeUrl(url, { allowHttp: true });
-        await resolveAndAssertPublic(parsed.hostname);
-        const res = await fetch(parsed.toString(), { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(8000) });
+        const res = await fetchPublic(parsed, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(8000) });
         status = res.status;
         up = status === expectedStatus;
       } catch (e) {
@@ -732,8 +732,7 @@ export async function executeCloudNode(
       if (!apiKey) throw new Error('Transcribe Audio needs an operator-configured OPENAI_API_KEY');
 
       const parsed = assertSafeUrl(url, { allowHttp: true });
-      await resolveAndAssertPublic(parsed.hostname);
-      const audioRes = await fetch(parsed.toString(), { method: 'GET', signal: AbortSignal.timeout(20_000) });
+      const audioRes = await fetchPublic(parsed, { method: 'GET', signal: AbortSignal.timeout(20_000) });
       if (!audioRes.ok) throw new Error(`Could not fetch the audio file (${audioRes.status})`);
       const audioBlob = await audioRes.blob();
 
