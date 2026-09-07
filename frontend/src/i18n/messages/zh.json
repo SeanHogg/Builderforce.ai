@@ -23596,7 +23596,11 @@
       "stopBodyMany": "这 {count} 项是一并调研的，从 {title} 开始。请将它们作为一组来看——重点在于相互比较，而非单张卡片。",
       "stopOverflow": "画布上的其余部分（另有 {count} 类对象）分布在这些内容周围；大纲面板中列出了全部对象。"
     },
-    "teammateAlreadySeated": "{name} 已在此画布上——正在将其带入视图。"
+    "teammateAlreadySeated": "{name} 已在此画布上——正在将其带入视图。",
+    "selectSession": "选择{title}",
+    "filterByFolder": "仅显示此文件夹",
+    "clearFolderFilter": "显示全部文件夹",
+    "unfiledFolder": "未归入文件夹"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
@@ -24316,7 +24320,22 @@
     "mergeConfirmMessageLocal": "“{source}”中的画布和对话将添加到“{target}”。之后源草稿将从此浏览器中移除。",
     "deleteConfirmTitle": "删除会话？",
     "deleteConfirmMessageSaved": "删除“{title}”吗？此会话在保留期内仍可恢复。",
-    "deleteConfirmMessageLocal": "删除“{title}”吗？此仅存于浏览器的草稿无法恢复。"
+    "deleteConfirmMessageLocal": "删除“{title}”吗？此仅存于浏览器的草稿无法恢复。",
+    "folderNone": "不归入文件夹",
+    "folderNew": "新建文件夹…",
+    "folderNewLabel": "新文件夹名称",
+    "bulkLabel": "对所选会话的操作",
+    "bulkSelected": "已选择 {count} 个",
+    "bulkArchive": "归档",
+    "bulkRestore": "恢复",
+    "bulkClear": "取消选择",
+    "bulkMergeTitle": "合并所选会话",
+    "bulkMergeDescription": "其他所选画布上的全部内容都会并入你保留的那一个，内容转移后它们将被归档。",
+    "bulkMergeTarget": "要保留的会话",
+    "bulkMergeConfirmTitle": "合并这些会话？",
+    "bulkMergeConfirmMessage": "{count} 个会话将并入“{target}”，随后被归档。",
+    "bulkDeleteConfirmTitle": "删除这些会话？",
+    "bulkDeleteConfirmMessage": "删除 {count} 个会话？在保留期内仍可恢复。"
   },
   "canvasLibrary": {
     "pendingTitle": "等待保存",

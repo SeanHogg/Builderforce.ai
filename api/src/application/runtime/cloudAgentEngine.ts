@@ -1668,6 +1668,13 @@ export async function handleContainerOp(
       provider,
       registry: cloudToolRegistry,
       complete: async ({ messages: childMessages, tools }) => {
+        // Cancel BEFORE the paid call, on every child turn. The image polls cancel from
+        // its own loop, but it is blocked on this op for the whole delegation — so
+        // without this, stopping a run would leave its sub-agent spending to the end of
+        // its budget. The kernel reads a failed turn as the end of the child.
+        if (await isExecutionCancelled(db, executionId)) {
+          return { failed: 'the run was cancelled while this sub-agent was working' };
+        }
         const childTurn = await imageRunTurn(
           { env, db, ctx, executionId, tenantId, projectId, taskId, cloudAgentRef, model },
           // `notify: false` — a child's turns are an implementation detail of one

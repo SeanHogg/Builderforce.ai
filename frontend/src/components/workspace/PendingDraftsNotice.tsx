@@ -1,7 +1,7 @@
 'use client';
 
 import { Icon } from '@/components/ui/Icon';
-import { SessionManagementControls } from '@/components/creation-sessions/SessionManagementControls';
+import { SessionActionBar } from '@/components/creation-sessions/SessionActionBar';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
@@ -43,6 +43,10 @@ export function PendingDraftsNotice() {
 
   if (drafts.length === 0) return null;
 
+  // The folders these drafts already sit in — the move picker offers the list
+  // rather than a blank box, exactly as the saved library does.
+  const folderNames = [...new Set(drafts.map((draft) => draft.folder).filter((folder): folder is string => !!folder))].sort((a, b) => a.localeCompare(b));
+
   return (
     <section
       aria-label={t('pendingTitle')}
@@ -75,8 +79,9 @@ export function PendingDraftsNotice() {
               <span aria-hidden="true"><Icon source="✦" size="1em" /></span>
               {draft.title || t('untitled')}
             </Link>
-            <SessionManagementControls
+            <SessionActionBar
               session={{ id: draft.sessionId, title: draft.title, folder: draft.folder }}
+              folders={folderNames}
               mergeCandidates={drafts.filter((candidate) => candidate.sessionId !== draft.sessionId).map((candidate) => ({ id: candidate.sessionId, title: candidate.title, folder: candidate.folder }))}
               onRename={(title) => rename(draft, title)}
               onMove={(folderName) => move(draft, folderName)}

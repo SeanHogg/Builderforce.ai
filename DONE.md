@@ -1,3 +1,63 @@
+## ✅ RESOLVED 2026-09-07 — One dispatch table for every image surface; delegation everywhere; sub-agents that write
+
+Three Gap Register entries, closed together because they had one root cause: the two
+IMAGE-run surfaces each carried their own hand-written copy of the tool dispatch table.
+
+**The real problem, stated plainly.** There was never more than one agent LOOP — `runAgentLoop`
+in `@builderforce/agent-loop` is the kernel every surface drives. What was duplicated was the
+Worker-relay dispatch: memory, PRD, coordination, search, the platform catalog and the human
+pause were transcribed by hand into `api/container/server.mjs` AND into the runner template in
+`githubActionsRunner.ts`, because neither artifact can import TypeScript (the container image has
+no build step; the runner is downloaded into a bare checkout with no `npm install`). That was a
+build decision, not an architectural necessity, and it cost exactly what duplication costs: a new
+tool was a three-file change, and a capability could only be advertised once the LEAST recently
+deployed image implemented it.
+
+**The consolidation.** `api/container/agentRelay.mjs` is now that table, once — plain ESM with no
+imports, which is what lets the container import it directly and the Actions runner inline it
+verbatim from a generated copy (`gen-agent-relay-source.mjs`, with `check:agent-relay` in the api
+check chain failing the build the moment the copy drifts). Both images now dispatch every relayed
+tool through one implementation; what stayed per-image is only what genuinely differs — the local
+filesystem and shell tools, because the container clones and Actions gets a checkout.
+
+**The deployed-image ordering rule is retired, not worked around.** Each image now sends the tool
+names it can actually dispatch on every `llm` op, and the Worker advertises the intersection
+(`imageToolHandshake.ts`). A capability can be added the moment its op exists: a current image
+names the tool and gets it, an older one does not name it and is never offered it. This is what
+made the first entry's blocker — "a live container build + deploy, to verify the arm before the
+capability is advertised" — stop being a blocker rather than stop being true.
+
+**1. Sub-agents reach the two IMAGE-run surfaces.** `orchestrate` is in `CONTAINER_SURFACE_CAPS`.
+The `spawn` container-op runs the CHILD in the Worker — an image has no gateway credential, no
+meter and no registry, so a nested loop there would have been a third copy of all three — on the
+same `runSubagent` kernel and through the same metered-turn primitive as a parent turn, so a
+child's tokens are the tenant's tokens and land in the ledger indistinguishably. Its ceiling is
+`imageHostedChildCeiling`: the parent's set narrowed to what a Worker can back (no `shell`), with
+`repo.search` added as the Worker's form of the read authority the parent exercises through its
+shell — otherwise a delegated investigation could not search at all.
+
+**2. A sub-agent on the machine can write.** The blocker was a product decision and the owner made
+it. `requestRunConfirm` (brain-embedded) exposes the run cell's pending-confirm channel, so a
+nested loop raises the SAME prompt the parent raises; the tool loop's own inline publisher was
+refactored onto it, so there is one publisher rather than two. `createChildWriteGate` decides in
+the parent's order — a `block` gate refuses outright, `require-approval` prompts even with Auto on
+(a preference cannot waive a compiled policy), otherwise the live Auto switch decides — and is
+shared by the native participant and the webview run so a gate cannot hold in one and not the
+other. Read-only stays the DEFAULT; a writable child needs both an explicit `read_only: false` and
+a host that can prompt, and a host that cannot still says so rather than silently narrowing.
+
+**3. The release note is authored.** The recorded blocker ("a live superadmin session — there is no
+seed or migration path") was simply wrong: `api/migrations/` already contains a dozen release-note
+inserts. `1143_delegation_everywhere_release_note.sql` follows that path (fixed id, replay-safe,
+`emailed_at` NULL so the digest announces it once). The marketing piece
+(`delegate-the-search-not-the-decision.md`) was updated in the same pass, because it described the
+read-only limitation as permanent and the two-surface reach as complete — marketing that
+misdescribes the product is worse than none.
+
+**Verified.** api typecheck clean; `src/application/runtime` 652 tests pass; VSIX typecheck clean
+and 345 tests pass; brain-embedded 520 tests pass; `check:agent-relay` and `check-migrations` pass;
+the rendered Actions runner still parses as valid ESM with the relay inlined.
+
 ## ✅ RESOLVED 2026-09-07 — Sub-agents: one delegation contract, live in the cloud AND on the machine
 
 **The gap.** Isolated-context sub-agents are rubric 4.1 and every competitor has them. The V1

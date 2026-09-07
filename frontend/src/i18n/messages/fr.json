@@ -23596,7 +23596,11 @@
       "stopBodyMany": "Ces {count} éléments ont été étudiés ensemble, en commençant par {title}. Lisez-les comme un ensemble : c’est la comparaison qui compte, pas une carte isolée.",
       "stopOverflow": "Le reste du canevas — {count} autres types d’objet — se trouve autour de ceux-ci ; le panneau de plan les répertorie tous."
     },
-    "teammateAlreadySeated": "{name} est déjà sur ce canevas — affichage en cours."
+    "teammateAlreadySeated": "{name} est déjà sur ce canevas — affichage en cours.",
+    "selectSession": "Sélectionner {title}",
+    "filterByFolder": "Afficher uniquement ce dossier",
+    "clearFolderFilter": "Afficher tous les dossiers",
+    "unfiledFolder": "Aucun dossier"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",
@@ -24316,7 +24320,22 @@
     "mergeConfirmMessageLocal": "Le canevas et la conversation de « {source} » seront ajoutés à « {target} ». Le brouillon source sera ensuite supprimé de ce navigateur.",
     "deleteConfirmTitle": "Supprimer la session ?",
     "deleteConfirmMessageSaved": "Supprimer « {title} » ? Cette session reste récupérable pendant la période de rétention.",
-    "deleteConfirmMessageLocal": "Supprimer « {title} » ? Ce brouillon enregistré uniquement dans le navigateur ne peut pas être récupéré."
+    "deleteConfirmMessageLocal": "Supprimer « {title} » ? Ce brouillon enregistré uniquement dans le navigateur ne peut pas être récupéré.",
+    "folderNone": "Aucun dossier",
+    "folderNew": "Créer un dossier…",
+    "folderNewLabel": "Nom du nouveau dossier",
+    "bulkLabel": "Actions sur les sessions sélectionnées",
+    "bulkSelected": "{count} sélectionnées",
+    "bulkArchive": "Archiver",
+    "bulkRestore": "Restaurer",
+    "bulkClear": "Annuler la sélection",
+    "bulkMergeTitle": "Fusionner les sessions sélectionnées",
+    "bulkMergeDescription": "Tout ce que contiennent les autres canevas sélectionnés rejoint celui que vous gardez. Ils sont archivés une fois leur contenu déplacé.",
+    "bulkMergeTarget": "Session à conserver",
+    "bulkMergeConfirmTitle": "Fusionner ces sessions ?",
+    "bulkMergeConfirmMessage": "{count} sessions seront ajoutées à « {target} », puis archivées.",
+    "bulkDeleteConfirmTitle": "Supprimer ces sessions ?",
+    "bulkDeleteConfirmMessage": "Supprimer {count} sessions ? Elles restent récupérables pendant la période de rétention."
   },
   "canvasLibrary": {
     "pendingTitle": "En attente d’enregistrement",

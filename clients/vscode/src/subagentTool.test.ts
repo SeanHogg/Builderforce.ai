@@ -109,13 +109,16 @@ describe("subagentToolDef", () => {
     expect(out.output).toBe("x is exported from src/x.ts");
   });
 
-  it("says so when a writable child was asked for, rather than silently investigating", async () => {
+  it("falls back to read-only, and SAYS so, when the host cannot ask a human", async () => {
+    // The honesty rule: a parent that believes a child made an edit will not make it,
+    // and the change would be lost. A host with no `confirmWrite` is exactly that case.
     const stream = streamOf({ text: "here is what I found" });
     const tool = subagentToolDef({ stream: async () => stream as never, catalog: () => CATALOG });
     const out = JSON.parse(
       await tool.execute({ label: "edit", task: "rename the symbol", read_only: false }, "/repo"),
     );
     expect(out.readOnly).toBe(true);
+    expect(out.writeDeclined).toContain("cannot raise an approval prompt");
     expect(out.writeDeclined).toContain("make any change yourself");
   });
 
@@ -134,7 +137,6 @@ describe("subagentToolDef", () => {
     const out = JSON.parse(await tool.execute({ label: "look", task: "look" }, "/repo"));
     expect(out).toMatchObject({ ok: false, error: "not signed in" });
   });
-});
 
   it("runs a WRITABLE child when the host can ask, and asks before each write", async () => {
     const confirmWrite = vi.fn(async () => ({ ok: true }) as const);
@@ -187,17 +189,5 @@ describe("subagentToolDef", () => {
     });
     await tool.execute({ label: "look", task: "find it", read_only: false }, "/repo");
     expect(confirmWrite).not.toHaveBeenCalled();
-  });
-
-  it("falls back to read-only, and SAYS so, when the host cannot ask a human", async () => {
-    // The honesty rule: a parent that believes a child made an edit will not make it,
-    // and the change would be lost.
-    const tool = subagentToolDef({
-      stream: async () => streamOf({ text: "here is what I found" }) as never,
-      catalog: () => CATALOG,
-    });
-    const out = JSON.parse(await tool.execute({ label: "edit", task: "rename it", read_only: false }, "/repo"));
-    expect(out).toMatchObject({ readOnly: true });
-    expect(out.writeDeclined).toContain("cannot raise an approval prompt");
   });
 });

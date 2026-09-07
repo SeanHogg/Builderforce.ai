@@ -11,6 +11,7 @@
    would only ever see the browser viewport, not either of those. */
 .sessionsRoot {
   min-width: 0;
+  margin-bottom: 40px;
   container-type: inline-size;
   container-name: creation-sessions;
 }
@@ -305,4 +306,238 @@
   .launcherHeader h2 { font-size: 19px; }
   .creationPath { padding: 14px; }
   .typePath { height: 300px; }
+}
+
+/* ---------------------------------------------------------------------------
+   The library — header, folder grouping, and the two views.
+   Everything below was inline `style={{…}}` on the component until the tiles
+   moved into `components/creation-sessions`; a stylesheet is what lets the
+   card and list layouts differ by one `data-view` attribute instead of by a
+   ternary on every property.
+   ------------------------------------------------------------------------ */
+.libraryHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.libraryIntro {
+  min-width: 0;
+}
+
+.libraryIntro h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.libraryIntro p {
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.libraryControls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.librarySelect,
+.librarySearch {
+  min-height: var(--control-md);
+  padding: 9px 11px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.librarySearch {
+  flex: 1 1 160px;
+  min-width: 140px;
+  max-width: 310px;
+}
+
+.quotaNotice {
+  margin: -7px 0 14px;
+  color: var(--warning);
+  font-size: 12px;
+}
+
+/* The active folder, said once above the library and clearable from there —
+   the group heading and the chip on each card toggle the same one filter. */
+.folderFilterChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-sm);
+  margin-bottom: var(--space-3);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-small);
+  cursor: pointer;
+}
+
+.folderFilterClear {
+  color: var(--text-secondary);
+}
+
+.libraryState {
+  padding: 36px;
+  color: var(--text-secondary);
+}
+
+.emptyLibrary {
+  display: block;
+  width: 100%;
+  min-height: 220px;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-xl);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.emptyLibrary strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-primary);
+  font-size: 18px;
+}
+
+.libraryGrid {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.libraryGrid[data-view='card'] {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-4);
+}
+
+.libraryGrid[data-view='table'] {
+  grid-template-columns: 1fr;
+}
+
+/* The group is a heading plus its tiles laid out by the grid ABOVE it, so it
+   contributes no box of its own. */
+.folderGroup {
+  display: contents;
+}
+
+.folderHeading {
+  grid-column: 1 / -1;
+  margin: var(--space-2) 0 0;
+}
+
+.folderHeadingButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-sm);
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.folderHeadingButton:hover,
+.folderHeadingButton:focus-visible {
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.folderHeadingButton[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+/* Says what the click does — a folder heading that filters has to admit it,
+   which is the whole reason the folders read as decoration before. */
+.folderHint {
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+  font-weight: 400;
+}
+
+.resourceItem {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 70px;
+  padding: 12px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.libraryGrid[data-view='card'] .resourceItem {
+  grid-template-columns: 1fr;
+  min-height: 132px;
+  padding: 15px;
+}
+
+.resourceIcon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+
+.libraryGrid[data-view='card'] .resourceIcon {
+  width: auto;
+  height: auto;
+  background: transparent;
+}
+
+.resourceCopy {
+  min-width: 0;
+}
+
+.resourceCopy strong,
+.resourceCopy span {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.resourceCopy span {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.resourceChevron {
+  color: var(--text-muted);
+}
+
+.libraryGrid[data-view='card'] .resourceChevron {
+  display: none;
+}
+
+.loadMore {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-4);
 }

@@ -23596,7 +23596,11 @@
       "stopBodyMany": "These {count} were researched together, starting with {title}. Read them as one set — the comparison is the point, not any single card.",
       "stopOverflow": "The rest of the board — {count} more kinds of object — sits around these; the outline panel lists every one of them."
     },
-    "teammateAlreadySeated": "{name} is already on this board — bringing them into view."
+    "teammateAlreadySeated": "{name} is already on this board — bringing them into view.",
+    "selectSession": "Select {title}",
+    "filterByFolder": "Show only this folder",
+    "clearFolderFilter": "Show every folder",
+    "unfiledFolder": "No folder"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
@@ -24316,7 +24320,22 @@
     "mergeConfirmMessageLocal": "The canvas and conversation from “{source}” will be added to “{target}”. The source draft will then be removed from this browser.",
     "deleteConfirmTitle": "Delete session?",
     "deleteConfirmMessageSaved": "Delete “{title}”? This session remains recoverable during the retention period.",
-    "deleteConfirmMessageLocal": "Delete “{title}”? This browser-only draft cannot be recovered."
+    "deleteConfirmMessageLocal": "Delete “{title}”? This browser-only draft cannot be recovered.",
+    "folderNone": "No folder",
+    "folderNew": "Create a new folder…",
+    "folderNewLabel": "New folder name",
+    "bulkLabel": "Actions for the selected sessions",
+    "bulkSelected": "{count} selected",
+    "bulkArchive": "Archive",
+    "bulkRestore": "Restore",
+    "bulkClear": "Clear selection",
+    "bulkMergeTitle": "Merge selected sessions",
+    "bulkMergeDescription": "Everything on the other selected canvases is added to the one you keep. They are archived once their contents have moved.",
+    "bulkMergeTarget": "Session to keep",
+    "bulkMergeConfirmTitle": "Merge these sessions?",
+    "bulkMergeConfirmMessage": "{count} sessions will be added to “{target}” and then archived.",
+    "bulkDeleteConfirmTitle": "Delete these sessions?",
+    "bulkDeleteConfirmMessage": "Delete {count} sessions? They remain recoverable during the retention period."
   },
   "canvasLibrary": {
     "pendingTitle": "Waiting to be saved",

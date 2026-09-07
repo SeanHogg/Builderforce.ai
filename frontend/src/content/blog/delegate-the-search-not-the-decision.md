@@ -1,7 +1,7 @@
 ---
 title: Delegate the search, not the decision
 date: 2026-09-07
-description: An agent that spends twenty turns finding one file has no room left to think about it. Sub-agents send that search to a second agent with its own context and bring back one paragraph — now in the cloud and on your own machine.
+description: An agent that spends twenty turns finding one file has no room left to think about it. Sub-agents send that search to a second agent with its own context and bring back one paragraph — on every surface an agent runs on, and now they can make the change too.
 tags: [agents, sub-agents, context, cloud-agents, vscode, product]
 author: Sean Hogg
 ---
@@ -45,23 +45,25 @@ The isolation is the whole point. A child that shared the parent's conversation 
 }
 ```
 
-## Read-only by default, and it says so
+## Read-only by default — and writable when you say so
 
-A delegation defaults to read-only, because an unspecified one is nearly always an investigation. The child gets to read, search and reason; it does not get to change anything.
+A delegation defaults to read-only, because an unspecified one is nearly always an investigation. The child gets to read, search and reason, and a read-only child cannot cost you anything but time.
 
-On your own machine that default is absolute. The approval prompt — the thing that stands between "an agent wants to write to your disk" and it happening — is raised by the chat that owns the run, and a nested agent has no way to reach it. So rather than run a writable child past a prompt it cannot raise, we do not run one at all. If the parent asks for a writable child, the answer it gets back says exactly that, so it makes the change itself instead of assuming the change was made.
+It is a default, not a ceiling. An agent that has found the fourteen files needing the same mechanical change can ask for a child that makes it — and then every write that child attempts asks **you** first, by name, on the same prompt your agent's own writes use. Auto covers a sub-agent's writes exactly as it covers the parent's. A governance gate that blocks a tool blocks it for the child too, and one that demands approval still demands it even with Auto on, because a preference cannot waive a compiled policy. Decline, and the refusal comes back to the child as something to work around rather than a dead end.
 
-A child also cannot spawn a child. That is not a depth counter someone has to remember to decrement — the delegation capability is simply absent from what a child is handed, so there is nothing to recurse with.
+That is what changed most recently. Until this shipped, a sub-agent in your editor could only read — the approval prompt is raised by the chat that owns the run, and a nested agent had no way to reach it, so the honest thing was to run children read-only and say so. The prompt is now reachable from inside a delegation, so the child asks the question instead of being denied the chance to.
+
+A child still cannot spawn a child. That is not a depth counter someone has to remember to decrement — the delegation capability is simply absent from what a child is handed, so there is nothing to recurse with.
 
 ```bf-figure
 {
   "kind": "compare",
-  "title": "What a delegation costs, and what it is allowed to touch",
+  "title": "What a delegation is allowed to touch",
   "columns": [
-    { "title": "The child can", "hue": "prove", "items": ["Read and list files", "Search the tree", "Recall project memory", "Search the web", "Answer, once, in prose"] },
-    { "title": "The child cannot", "hue": "bad", "items": ["Write, edit or delete", "Run a shell command", "Pause the run for a human", "Propose a skill", "Spawn another sub-agent"] }
+    { "title": "The child can", "hue": "prove", "items": ["Read and list files", "Search the tree", "Recall project memory", "Search the web", "Write — with your approval, per file", "Answer, once, in prose"] },
+    { "title": "The child cannot", "hue": "bad", "items": ["Write anything you did not approve", "Get past a governance gate", "Pause the run for a human", "Propose a skill", "Spawn another sub-agent"] }
   ],
-  "caption": "The accountable actor is the parent. It keeps every write, every approval, and every decision — it just stops paying for the search."
+  "caption": "The accountable actor is still the parent. It keeps every decision and you keep every approval — it just stops paying for the search."
 }
 ```
 
@@ -76,5 +78,6 @@ Delegation makes Read cost what it is worth again. The search happens somewhere 
 ## What you can do with it today
 
 - **Ask an agent to find something without spending its context on the finding.** "Where is the auth middleware", "is this pattern used anywhere else", "what does this six-hundred-line file actually export" — one brief, one paragraph.
-- **Get it on both surfaces.** Cloud runs and the agent in your editor delegate the same way, with the same tool, the same brief and the same budget, so a habit learned in one holds in the other.
+- **Get it wherever the agent runs.** The editor, a cloud run, a long-lived container and a GitHub Actions job all delegate the same way — the same tool, the same brief, the same budget — so a habit learned in one holds in every other. The two long-lived surfaces are where it pays most: they have the shell and the checkout, which is exactly where an inline search costs the most to carry.
+- **Send a mechanical edit, not just a question.** "Rename this symbol everywhere it appears" is a delegation now, not a report you then act on yourself. You approve each file as it happens.
 - **See what it cost.** Every delegation lands on the run timeline with its label, its turns and whether it ran out of them — a child that was cut off says so rather than passing off its last word as a conclusion.

@@ -23596,7 +23596,11 @@
       "stopBodyMany": "Diese {count} wurden gemeinsam recherchiert, beginnend mit {title}. Lesen Sie sie als einen Satz — es kommt auf den Vergleich an, nicht auf eine einzelne Karte.",
       "stopOverflow": "Der Rest des Boards — {count} weitere Objektarten — liegt rundherum; das Gliederungs-Panel listet jedes einzelne auf."
     },
-    "teammateAlreadySeated": "{name} ist bereits auf diesem Board — wird angezeigt."
+    "teammateAlreadySeated": "{name} ist bereits auf diesem Board — wird angezeigt.",
+    "selectSession": "{title} auswählen",
+    "filterByFolder": "Nur diesen Ordner zeigen",
+    "clearFolderFilter": "Alle Ordner zeigen",
+    "unfiledFolder": "Kein Ordner"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",
@@ -24316,7 +24320,22 @@
     "mergeConfirmMessageLocal": "Canvas und Unterhaltung aus „{source}“ werden zu „{target}“ hinzugefügt. Danach wird der Quellentwurf aus diesem Browser entfernt.",
     "deleteConfirmTitle": "Sitzung löschen?",
     "deleteConfirmMessageSaved": "„{title}“ löschen? Diese Sitzung bleibt während der Aufbewahrungsfrist wiederherstellbar.",
-    "deleteConfirmMessageLocal": "„{title}“ löschen? Dieser reine Browserentwurf kann nicht wiederhergestellt werden."
+    "deleteConfirmMessageLocal": "„{title}“ löschen? Dieser reine Browserentwurf kann nicht wiederhergestellt werden.",
+    "folderNone": "Kein Ordner",
+    "folderNew": "Neuen Ordner anlegen…",
+    "folderNewLabel": "Name des neuen Ordners",
+    "bulkLabel": "Aktionen für die ausgewählten Sitzungen",
+    "bulkSelected": "{count} ausgewählt",
+    "bulkArchive": "Archivieren",
+    "bulkRestore": "Wiederherstellen",
+    "bulkClear": "Auswahl aufheben",
+    "bulkMergeTitle": "Ausgewählte Sitzungen zusammenführen",
+    "bulkMergeDescription": "Alles von den anderen ausgewählten Canvas kommt zu der Sitzung, die du behältst. Sie werden archiviert, sobald ihr Inhalt übertragen ist.",
+    "bulkMergeTarget": "Sitzung, die bleibt",
+    "bulkMergeConfirmTitle": "Diese Sitzungen zusammenführen?",
+    "bulkMergeConfirmMessage": "{count} Sitzungen werden zu „{target}“ hinzugefügt und danach archiviert.",
+    "bulkDeleteConfirmTitle": "Diese Sitzungen löschen?",
+    "bulkDeleteConfirmMessage": "{count} Sitzungen löschen? Sie bleiben während der Aufbewahrungsfrist wiederherstellbar."
   },
   "canvasLibrary": {
     "pendingTitle": "Warten auf Speicherung",

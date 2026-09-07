@@ -23596,7 +23596,11 @@
       "stopBodyMany": "Estos {count} se investigaron juntos, empezando por {title}. Léelos como un conjunto: lo importante es la comparación, no una tarjeta suelta.",
       "stopOverflow": "El resto del lienzo — {count} tipos de objeto más — se encuentra alrededor de estos; el panel de esquema los enumera todos."
     },
-    "teammateAlreadySeated": "{name} ya está en este lienzo: mostrándolo en pantalla."
+    "teammateAlreadySeated": "{name} ya está en este lienzo: mostrándolo en pantalla.",
+    "selectSession": "Seleccionar {title}",
+    "filterByFolder": "Mostrar solo esta carpeta",
+    "clearFolderFilter": "Mostrar todas las carpetas",
+    "unfiledFolder": "Sin carpeta"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",
@@ -24316,7 +24320,22 @@
     "mergeConfirmMessageLocal": "El lienzo y la conversación de «{source}» se añadirán a «{target}». Después, el borrador de origen se eliminará de este navegador.",
     "deleteConfirmTitle": "¿Eliminar la sesión?",
     "deleteConfirmMessageSaved": "¿Eliminar «{title}»? Esta sesión puede recuperarse durante el periodo de retención.",
-    "deleteConfirmMessageLocal": "¿Eliminar «{title}»? Este borrador del navegador no se puede recuperar."
+    "deleteConfirmMessageLocal": "¿Eliminar «{title}»? Este borrador del navegador no se puede recuperar.",
+    "folderNone": "Sin carpeta",
+    "folderNew": "Crear una carpeta nueva…",
+    "folderNewLabel": "Nombre de la carpeta nueva",
+    "bulkLabel": "Acciones para las sesiones seleccionadas",
+    "bulkSelected": "{count} seleccionadas",
+    "bulkArchive": "Archivar",
+    "bulkRestore": "Restaurar",
+    "bulkClear": "Quitar la selección",
+    "bulkMergeTitle": "Combinar las sesiones seleccionadas",
+    "bulkMergeDescription": "Todo lo que hay en los demás lienzos seleccionados se añade al que conservas. Se archivan cuando su contenido ha pasado.",
+    "bulkMergeTarget": "Sesión que se conserva",
+    "bulkMergeConfirmTitle": "¿Combinar estas sesiones?",
+    "bulkMergeConfirmMessage": "Se añadirán {count} sesiones a «{target}» y después se archivarán.",
+    "bulkDeleteConfirmTitle": "¿Eliminar estas sesiones?",
+    "bulkDeleteConfirmMessage": "¿Eliminar {count} sesiones? Se pueden recuperar durante el periodo de retención."
   },
   "canvasLibrary": {
     "pendingTitle": "Pendientes de guardar",

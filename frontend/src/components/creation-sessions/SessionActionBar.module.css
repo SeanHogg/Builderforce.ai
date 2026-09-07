@@ -1,0 +1,45 @@
+/* Its OWN container, so the labels answer to the width the bar was given
+   rather than to the viewport: the same component sits in a ~260px card column
+   and across a full-width list row. The query below targets `.label`, a
+   DESCENDANT of this element — a container cannot style itself. */
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  container-type: inline-size;
+  container-name: session-action-bar;
+}
+
+.action {
+  gap: var(--space-1);
+  padding-inline: var(--space-2);
+  color: var(--text-secondary);
+}
+
+.action:hover:not(:disabled),
+.action:focus-visible {
+  color: var(--text-primary);
+}
+
+.danger {
+  color: var(--danger-text);
+}
+
+.label {
+  display: none;
+  white-space: nowrap;
+}
+
+@container session-action-bar (min-width: 560px) {
+  .label {
+    display: inline;
+  }
+}
+
+@media (pointer: coarse) {
+  .action {
+    min-height: var(--control-lg);
+  }
+}
