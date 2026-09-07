@@ -53,7 +53,7 @@ describe('CreationSessionTile', () => {
   it('offers selection without opening the session', () => {
     const { props } = renderTile();
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'creationCanvas.selectSession' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'creationCanvas.selectSession Launch plan' }));
 
     expect(props.onSelectedChange).toHaveBeenCalledWith(true);
     expect(props.onOpen).not.toHaveBeenCalled();

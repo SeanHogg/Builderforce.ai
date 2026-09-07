@@ -11889,6 +11889,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       //
       // A section that has never been compiled is built first; `runWorkflow` owns that.
       run: act(() => runWorkflow()),
+      // PRESENT sits in the RUN group beside it: running the board and showing it
+      // running are the two things "run it" means. It was a ••• row under "Create and
+      // view", a heading that filed starting something with showing what you started.
+      present: act(() => setPresentMode((value) => !value), presentMode),
+      // DRAW leads IDEA — the other way to put a mark on a board, beside the palette.
+      // It was a ••• row filed with "export the session", which is a once-a-month
+      // errand; this is one of the first things anybody does on a canvas.
+      draw: act(() => setDrawing((current) => current ? null : readDrawingPreferences()), drawingMode),
       share: act(() => setShareOpen((value) => !value), shareOpen),
       // The whole board, not a card: an application is the session, and this is the
       // door that was previously reachable only from a selected object's inspector
