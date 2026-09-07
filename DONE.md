@@ -1,3 +1,68 @@
+## ✅ RESOLVED 2026-09-07 — VSIX: the agent files its own ticket, has a verb for cleaning up after a merge, and stops fighting cmd.exe
+
+**Symptom (reported).** Three things the editor agent "should have done automatically" and did not,
+against a measured run (56 turns, 54 tool calls, 817 minutes wall clock, 4 errors): (1) no tracking
+ticket was created for the work or assigned to the chat; (2) nothing cleaned up once the branch was
+merged into main; (3) "a fair amount of `run_command` failures" — `'head' is not recognized as an
+internal or external command`, `git push origin --delete <branch>` → `remote ref does not exist`,
+and a `git_commit` that warned about `api/api/src/presentation/routes/` and staged nothing.
+
+**Root causes — five, and every one of them is "the safe route had no verb, so the agent invented one".**
+
+1. *Traceability only happened in a `finally` block.* `brainRunStore`'s from_delta backstop minted the
+   chat-linked ticket in the run's teardown. That step is skipped on a user Stop and is never reached
+   at all if the panel is closed or reloaded — so the one run shape that most needs a record (a long
+   one the user gives up on) is exactly the one that got none.
+2. *Nothing put the checkout back.* Commit, push and pull-request all move work FORWARD; the tool set
+   had no post-merge verb, so the agent hand-rolled one through `run_command` and reported a failure
+   for a branch GitHub had already deleted on merge.
+3. *`shippedToBaseBranch` read only shell commands.* `git_push`'s args are `{ allowBaseBranch, repo }`
+   and carry no command string, so a run that pushed through the TOOL — the route the persona tells it
+   to take — never counted as having pushed, and its delta ticket sat at 50% on the board forever.
+4. *`needsPosixShell` matched only shell CONTROL forms.* `set -e`, `$(…)`, `[ … ]` were routed to bash;
+   an ordinary unix pipeline (`git log --oneline | head -5`) was not, and cmd.exe has no `head`.
+5. *`git_commit` paths are repo-relative, the file tools' are workspace-relative.* With `repo` set, the
+   two differ, and the mismatch surfaced as git's `NOTHING_STAGED` — an empty-diff message for a
+   wrong-path failure.
+
+**Fixes.**
+
+- **`packages/agent-tools`** (2026.8.1 → 2026.9.1). The whole git subsystem is extracted from
+  `core-tools.ts` (1,129 lines, well past the size limit) into `git-tools.ts`, exporting `GIT_TOOLS`
+  that `CORE_TOOLS` splices in — the advertised catalog is byte-identical. New **`git_cleanup_merged`**
+  (`git.write`, so it reaches the editor and no cloud surface): returns to the base branch,
+  fast-forwards it, deletes the merged branch locally and on origin, and prunes. IDEMPOTENT — the
+  remote delete runs only if the branch is still there, so the "already deleted on merge" case is the
+  success it is. Refuses `DIRTY` and `NOT_MERGED`, and detects the squash-merge case (had an upstream,
+  remote branch now gone) automatically; `force` covers the rest. `git_commit` now resolves each path
+  through a `pick` helper over `commitPathCandidates()` (as-given first, then the repo prefix and the
+  repo's last segment stripped) and fails with `MISSING_PATHS` naming what it could not find, instead
+  of staging nothing. New `git-cleanup.test.ts`; 96 tests pass.
+- **`brain-embedded`** (2026.9.5 → 2026.9.6). The delta ticket is opened on the run's FIRST successful
+  code-change call and linked to the chat there and then (`RunCell.deltaTicketId`); the post-run pass
+  attaches whatever was touched afterwards to that same id via `taskId`, and only mints if the opening
+  call failed. `attachDeltaToRunTicket()` fills in the `taskId` the model leaves off its own
+  `from_delta` call, so the run and the model cannot produce two tickets for one change (an explicit
+  `taskId` from the model still wins). `shippedToBaseBranch` counts the `git_push` TOOL as a push;
+  `open_pull_request` deliberately still does not. `git_cleanup_merged` joins `LOCAL_WORKSPACE_TOOLS`
+  (pinned past the relevance trim — "cleanup" shares no stem with the turn's own words) and
+  `UNSCOPED_MUTATION_TOOLS` (it checks out the base branch, so every read is invalidated). 496 tests pass.
+- **`clients/vscode`** (2026.9.21 → 2026.9.22). `needsPosixShell` also recognises a POSIX-only UTILITY
+  as a command word (`head`, `grep`, `sed`, `awk`, `wc`, `cut`, `tr`, `xargs`, `cat`, `ls`, `rm`, …),
+  parsed per pipeline/chain segment; names cmd.exe also has (`sort`, `find`, `mkdir`, `echo`) are
+  deliberately excluded. Behind that, `cmdCannotRun()` matches cmd.exe's four "I could not attempt
+  this" signatures and the shell capability re-runs the command once under bash — a genuine non-zero
+  exit from a program that DID run never matches, so no failing build is run twice. Persona gains
+  `SHELL_USE_DIRECTIVE` (run_command is for build/check, never for git) and `SHIP_CLEANUP_DIRECTIVE`
+  (call `git_cleanup_merged`; here is what its refusals mean), with the overlapping clause trimmed
+  from the base persona. `describeTool` names the branch a cleanup is about to delete. 294 tests pass.
+
+**Not shipped as a .vsix.** `vsce package` cannot run: the working tree is mid-`git stash pop` with 20
+unresolved files, including all five i18n catalogs (which no longer parse, so the canvas webview build
+fails). See the Gap Register entry — 32 of 43 hunks carry stashed work absent upstream, so resolving
+them is a per-hunk decision about the user's own changes. Version bumps, changelog and `brain-embedded`
+dist rebuild are done, so packaging is one clean tree away.
+
 ## ✅ RESOLVED 2026-09-07 — VSIX: parallel chats stopped leaking into each other, and the agent's loop guards stopped being switched off by its own verification
 
 **Symptom (reported).** "In the VSIX you should be able to switch between chats and have them

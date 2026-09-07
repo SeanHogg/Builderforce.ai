@@ -9,7 +9,7 @@
 import * as vscode from "vscode";
 import { attachEvermindLearn, type BrainMessage } from "@seanhogg/builderforce-brain-embedded";
 import { getApiKey } from "./gateway";
-import { postBrainMessages, projectEvermindHooks } from "./bfApi";
+import { fetchRunContextSection, postBrainMessages, projectEvermindHooks } from "./bfApi";
 import { brainToolCatalog } from "./brainToolCatalog";
 import { resolveModelRoute, routeStream } from "./modelRouting";
 import { refreshPendingChanges } from "./gitChanges";
@@ -49,6 +49,11 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
       },
     },
     evermind: (projectId) => projectEvermindHooks(secrets, projectId),
+    // The ONE api `ContextSource` the native participant and the cloud engine read.
+    // Continuity-scoped to the chat (a real server chat only — an unlinked run has a
+    // negative id and no history to measure a delta against).
+    runContext: (projectId, chatId, query) =>
+      fetchRunContextSection(secrets, projectId, { ...(chatId > 0 ? { scope: `chat:${chatId}` } : {}), query }),
     labels: {
       blockedByPolicy: (reason: string) => vscode.l10n.t("Blocked by a governance gate: {0}", reason),
     },

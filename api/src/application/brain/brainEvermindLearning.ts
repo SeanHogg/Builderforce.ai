@@ -19,7 +19,7 @@ import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { brainChats, brainChatMessages } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { resolveEvermindTargets, isLiveLearnTarget, dispatchProjectEvermindLearnText } from '../llm/projectEvermind';
+import { resolveEvermindTargets, isLiveLearnTarget, dispatchProjectEvermindLearnText, provisionDefaultProjectEvermind } from '../llm/projectEvermind';
 
 /** A one-line assistant turn is not a teaching signal; require some substance. */
 const MIN_TEACH_CHARS = 40;
@@ -90,6 +90,32 @@ export interface BrainLearnGate {
 }
 
 /**
+ * What the gate needs from outside to make an UNSEEDED project learnable.
+ *
+ * A project created before starter Everminds were provisioned on creation has no base
+ * model (version 0), and until it does the gate answers `not-seeded` on every turn —
+ * the run reports "Evermind did not learn this turn" forever while the switch that is
+ * meant to make runs train the model reads "connected". Measured on chat #101: 26
+ * turns on a connected Evermind at v0, learned 0. The gate now seeds the starter base
+ * itself the first time a teachable turn meets an unseeded project head, so THAT turn
+ * teaches it and every later one keeps going. Injected so the gate's tests can prove
+ * the seeding decision without an artifact store.
+ */
+export interface BrainLearnGateDeps {
+  /** Seed a starter base for the surface project when it has none; true once a head exists. */
+  ensureSeeded(env: Env, db: Db, tenantId: number, projectId: number): Promise<boolean>;
+}
+
+const DEFAULT_GATE_DEPS: BrainLearnGateDeps = {
+  async ensureSeeded(env, db, tenantId, projectId) {
+    // No artifact storage → nothing can hold the model bytes; stay honest with not-seeded.
+    if (!env.UPLOADS) return false;
+    await provisionDefaultProjectEvermind(env, db, tenantId, projectId);
+    return true;
+  },
+};
+
+/**
  * Evaluate the learn gate for the newest teachable assistant turn in `inserted`:
  * project-scoped chat + seeded, connected Evermind head (the same "Learn from every
  * run" switch that gates agent runs). Cheap enough to AWAIT before responding — the
@@ -102,6 +128,7 @@ export async function evaluateBrainLearnGate(
   chatId: number,
   tenantId: number,
   inserted: ReadonlyArray<TurnMessage>,
+  deps: BrainLearnGateDeps = DEFAULT_GATE_DEPS,
 ): Promise<BrainLearnGate> {
   const assistant = [...inserted].reverse().find(
     (m) => m.role === 'assistant' && typeof m.content === 'string' && m.content.trim().length >= MIN_TEACH_CHARS,
@@ -122,7 +149,20 @@ export async function evaluateBrainLearnGate(
   // Resolve ALL Everminds this surface targets (the project itself + the IDE builds
   // grouped under it), and evaluate each. A project can fan out to 0, 1, or many
   // Everminds — contribute to every seeded + connected one, and report the rest BY ID.
-  const heads = await resolveEvermindTargets(env, db, tenantId, projectId);
+  let heads = await resolveEvermindTargets(env, db, tenantId, projectId);
+  // The surface project's OWN head is unseeded: give it its starter base now, so this
+  // teachable turn — and every one after it — trains the model instead of being
+  // reported as skipped. Sibling build heads are left as they are (a build's Evermind
+  // is that build's to seed); `resolveEvermindTargets` re-reads through the version-
+  // bumped cache so the fresh head is what gets evaluated.
+  const own = heads.find((h) => h.projectId === projectId);
+  if (own && own.version < 1) {
+    const seeded = await deps.ensureSeeded(env, db, tenantId, projectId).catch((error) => {
+      reportCaughtError(error, { source: 'application/brain/brainEvermindLearning.ts', operation: 'ensureSeeded' });
+      return false;
+    });
+    if (seeded) heads = await resolveEvermindTargets(env, db, tenantId, projectId);
+  }
   const targets: EvermindTargetOutcome[] = heads.map((h) => {
     // `isLiveLearnTarget` is the shared predicate; `reason` is its explained negation.
     const reason: BrainLearnSkipReason | null = h.version < 1 ? 'not-seeded' : h.mode !== 'connected' ? 'frozen' : null;
@@ -209,8 +249,9 @@ export async function learnFromPersistedTurns(
   tenantId: number,
   inserted: ReadonlyArray<TurnMessage>,
   schedule: (p: Promise<unknown>) => void,
+  deps: BrainLearnGateDeps = DEFAULT_GATE_DEPS,
 ): Promise<BrainLearnOutcome> {
-  const gate: BrainLearnGate = await evaluateBrainLearnGate(env, db, chatId, tenantId, inserted).catch(
+  const gate: BrainLearnGate = await evaluateBrainLearnGate(env, db, chatId, tenantId, inserted, deps).catch(
     () => ({ outcome: { learned: false, version: 0, reason: null }, projectId: null, contributedProjectIds: [], assistant: null }),
   );
   schedule(dispatchBrainLearn(env, db, chatId, tenantId, inserted, gate).catch((error) => { /* never fail the write */ 

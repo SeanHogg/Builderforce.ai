@@ -80,6 +80,35 @@ beforeEach(() => {
   resetBrainRunStore();
 });
 
+describe("project memory in a host-owned run", () => {
+  it("appends the api run context (facts, PRD, governance) to the system prompt, recalled with the user's request", async () => {
+    const chatId = freshChatId();
+    let systemSeen = "";
+    const runContext = vi.fn(async () => "## Platform context\nProject memory: the chat list is served by GET /api/brain/chats.");
+    const host = createBrainRunHost(
+      ports({
+        script: (ctx) => {
+          systemSeen = String(ctx.messages[0]?.content ?? "");
+          return { text: "It comes from /api/brain/chats." };
+        },
+        runContext,
+      }),
+    );
+    await start(chatId, host, { projectId: 11, userTurn: "where does the chat list get its data?" });
+    expect(runContext).toHaveBeenCalledWith(11, chatId, "where does the chat list get its data?");
+    expect(systemSeen).toContain("You are the BuilderForce IDE agent.");
+    expect(systemSeen).toContain("GET /api/brain/chats");
+  });
+
+  it("asks for no context on a run with no project — there is no memory to recall", async () => {
+    const chatId = freshChatId();
+    const runContext = vi.fn(async () => "never");
+    const host = createBrainRunHost(ports({ script: [{ text: "ok" }], runContext }));
+    await start(chatId, host);
+    expect(runContext).not.toHaveBeenCalled();
+  });
+});
+
 describe("a run with no panel attached", () => {
   it("runs to completion in the host and settles", async () => {
     const chatId = freshChatId();

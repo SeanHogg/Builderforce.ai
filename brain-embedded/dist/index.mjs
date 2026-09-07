@@ -1838,8 +1838,12 @@ var UNSCOPED_MUTATION_TOOLS = /* @__PURE__ */ new Set([
   // three above are here.
   "git_cleanup_merged"
 ]);
+var PROJECT_MEMORY_TOOLS = /* @__PURE__ */ new Set(["recall_facts", "remember_fact"]);
 function isLocalWorkspaceTool(name) {
   return LOCAL_WORKSPACE_TOOLS.has(name);
+}
+function isProjectMemoryTool(name) {
+  return PROJECT_MEMORY_TOOLS.has(name);
 }
 function isCodeChangeTool(name) {
   return CODE_CHANGE_TOOLS.has(name);
@@ -1852,6 +1856,9 @@ function canChangeCodeHere(toolNames) {
 }
 function localToolsIn(toolNames) {
   return toolNames.filter(isLocalWorkspaceTool);
+}
+function memoryToolsIn(toolNames) {
+  return toolNames.filter(isProjectMemoryTool);
 }
 
 // src/runActivity.ts
@@ -2800,6 +2807,19 @@ var ReadCoverage = class _ReadCoverage {
     return this.exact.has(_ReadCoverage.exactKey(tool, args));
   }
   /**
+   * Keep what a SUCCESSFUL read returned, with the transcript message that carried it,
+   * so an exact repeat can be replayed once that message has left the working context.
+   * A no-op for a read that was never recorded (a failure has nothing to replay).
+   */
+  cacheResult(tool, args, cached2) {
+    const read = this.exact.get(_ReadCoverage.exactKey(tool, args));
+    if (read) read.cached = cached2;
+  }
+  /** The cached result of an exact earlier read, or null when none is held. */
+  cachedResult(tool, args) {
+    return this.exact.get(_ReadCoverage.exactKey(tool, args))?.cached ?? null;
+  }
+  /**
    * Record a SUCCESSFUL read. Arms the exact-repeat guard for it, and returns the
    * resulting target visit — or null when the call names no target (nothing to be
    * circling around; the exact guard still applies).
@@ -3268,6 +3288,13 @@ function tokenBounded(w) {
   let trimmed = w.slice(start);
   while (trimmed.length > 1 && trimmed[0].role !== "user") trimmed = trimmed.slice(1);
   return trimmed;
+}
+function stillInWorkingContext(c, anchor) {
+  const convo = c.transcript;
+  const idx = convo.indexOf(anchor);
+  if (idx < 0) return false;
+  if (c.compactMemo) return idx >= compactTailStart(convo, COMPACT_TAIL_TURNS);
+  return windowed(convo).includes(convo[idx]);
 }
 var COMPACT_TAIL_TURNS = 8;
 function compactTailStart(convo, tailTurns) {
@@ -3751,7 +3778,10 @@ ${continuationDirective()}`;
   const requestQuery = routingQueryForTurn(convo);
   const alwaysAdvertised = [
     ...toolNamesMentionedIn(systemPrompt),
-    ...localToolsIn(catalogToolNames)
+    ...localToolsIn(catalogToolNames),
+    // The project-memory pair (recall before re-reading; remember what was learned) is
+    // the cheapest tool in the catalog and the first one relevance would drop.
+    ...memoryToolsIn(catalogToolNames)
   ];
   const emitEvermindLearnReconcile = (assistantMsg, finalText) => {
     const learn = assistantMsg?.evermindLearn;
@@ -3974,6 +4004,29 @@ ${continuationDirective()}`;
         const isReadTool = isDedupableRead(tc.name);
         if (isReadTool) {
           if (readCoverage.isRepeat(tc.name, args)) {
+            const cached2 = readCoverage.cachedResult(tc.name, args);
+            if (cached2 && !stillInWorkingContext(c, cached2.anchor)) {
+              const replayNote = `Replayed from this run's read cache: this exact ${tc.name} call succeeded earlier in the run, but its result was compressed out of the working context, so here it is again \u2014 served from memory, not re-read. Act on it now; do not request it again.`;
+              const visit = readCoverage.record(tc.name, args);
+              const target = visit ? activityTarget(args) : void 0;
+              const revisit = visit && target ? revisitAdvisory(tc.name, target, visit) : null;
+              const replayed = trimToolResult(tc.name, cached2.result ?? null, { advisory: revisit ? `${replayNote}
+
+${revisit}` : replayNote });
+              const message = { role: "tool", tool_call_id: tc.id, content: replayed.content };
+              convo.push(message);
+              readCoverage.cacheResult(tc.name, args, { result: cached2.result, anchor: message });
+              pushTrace(c, {
+                ts: nowIso(),
+                category: "tool",
+                label: tc.name,
+                args,
+                result: { replayed: true, note: replayNote },
+                resultBytes: replayed.bytes,
+                truncated: replayed.truncated
+              });
+              continue;
+            }
             const stub = {
               note: `Duplicate ${tc.name} call \u2014 identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping).`
             };
@@ -4030,7 +4083,9 @@ ${continuationDirective()}`;
           }
         }
         const trimmedOut = trimToolResult(tc.name, out ?? null, { advisory });
-        convo.push({ role: "tool", tool_call_id: tc.id, content: trimmedOut.content });
+        const toolMessage = { role: "tool", tool_call_id: tc.id, content: trimmedOut.content };
+        convo.push(toolMessage);
+        if (isReadTool && !isFailedToolResult(out)) readCoverage.cacheResult(tc.name, args, { result: out ?? null, anchor: toolMessage });
         pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
           category: "tool",

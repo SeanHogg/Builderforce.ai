@@ -35,6 +35,7 @@ import type {
 } from "@builderforce/agent-tools";
 
 import { needsPosixShell, findBash, posixShellOption, cmdCannotRun } from "./posixShell";
+import { SKIP_DIRS, searchWorkspace } from "./workspaceSearch";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -54,12 +55,8 @@ const LIST_MAX_FILES = 5_000;
 // listing). Over this many files we collapse the result to a deduped directory summary
 // + truncated flag, so the model narrows with a subdir or search_code instead.
 const LIST_RETURN_MAX = 400;
-const SEARCH_MAX_MATCHES = 100;
-const SEARCH_MAX_FILES = 4_000;
-const SEARCH_MAX_FILE_BYTES = 2 * 1024 * 1024;
-const SKIP_DIRS = new Set([
-  "node_modules", ".git", "dist", "build", ".next", "out", "coverage", ".turbo", ".vercel", ".cache",
-]);
+// search_code lives in `workspaceSearch.ts` (ripgrep first, in-process walk as the
+// fallback); the skip list is shared from there so listing and searching agree.
 
 /** The capabilities the editor surface can physically back: read/search/write/edit/
  *  delete the open folder, plus a real shell (so `run_command` + the `git_*` tools
@@ -75,18 +72,6 @@ export const LOCAL_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   // a surface may push to a remote is a different question from whether it has a shell.
   "git.write",
 ]);
-
-/**
- * The pattern `search_code` scans with: the query as a regex when it is one, else the
- * same text escaped and matched literally. Exported for the guard test.
- */
-export function compileSearchPattern(query: string): RegExp {
-  try {
-    return new RegExp(query, "i");
-  } catch {
-    return new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-  }
-}
 
 function clamp(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max)}\n…(${text.length - max} more chars truncated)`;
@@ -148,8 +133,18 @@ async function walkFiles(start: string, root: string): Promise<{ paths: string[]
   return { paths: out.sort((a, b) => a.localeCompare(b)), truncated };
 }
 
+/** What the host can lend the provider beyond the folder itself. */
+export interface LocalProviderOptions {
+  /**
+   * Resolve the ripgrep binary `search_code` should run (see `ripgrep.ts`), or null to
+   * walk the tree in-process. Injected rather than imported so the provider stays a
+   * pure Node module and a test can pin either backend.
+   */
+  ripgrep?: () => Promise<string | null>;
+}
+
 /** Build the editor's local-disk capability provider rooted at the open folder. */
-export function buildLocalCapabilityProvider(root: string): CapabilityProvider {
+export function buildLocalCapabilityProvider(root: string, options: LocalProviderOptions = {}): CapabilityProvider {
   const rootResolved = path.resolve(root);
 
   const repoRead = {
@@ -189,13 +184,9 @@ export function buildLocalCapabilityProvider(root: string): CapabilityProvider {
       }
     },
     async searchCode(query: string, scope?: string): Promise<RepoSearchResult> {
-      // A query that is not a valid regex is searched LITERALLY rather than refused. The
-      // model reaches for this tool with text it just read — `?task=`, `foo(bar`,
-      // `a[0]` — and "invalid regex: Nothing to repeat" made it retry with the same
-      // words for a whole turn instead of getting its answer.
-      const re = compileSearchPattern(query);
-      // Optional subdirectory scope: on a big monorepo an unscoped walk can hit the
-      // file cap before it reaches the relevant subtree, so the model can narrow here.
+      // Optional scope: a subdirectory OR a single file inside the workspace. Resolved
+      // here (the containment guard is the provider's job); the search itself — ripgrep
+      // when the editor has one, the bounded walk otherwise — lives in workspaceSearch.
       let start = rootResolved;
       const scopeDir = normalizeScopeDir(scope);
       if (scopeDir) {
@@ -205,46 +196,8 @@ export function buildLocalCapabilityProvider(root: string): CapabilityProvider {
           return { ok: false, query, error: e instanceof Error ? e.message : String(e) };
         }
       }
-      const matches: Array<{ path: string; line: number; text: string }> = [];
-      let filesScanned = 0;
-      let truncated = false;
-      // BREADTH-FIRST (a directory queue), NOT depth-first recursion — the same fix
-      // `walkFiles` (list_files) already carries. Depth-first plunged into the first
-      // large subtree and exhausted SEARCH_MAX_FILES before reaching later packages,
-      // so a symbol that lived deeper (e.g. under packages/) came back `total:0,
-      // truncated:true` — a false "not found" that sent the agent into read_file
-      // spirals. BFS scans shallow files across the whole tree first, so the cap (if
-      // hit at all) truncates evenly instead of skipping entire subtrees.
-      const queue: string[] = [start];
-      while (queue.length > 0) {
-        if (matches.length >= SEARCH_MAX_MATCHES || filesScanned >= SEARCH_MAX_FILES) { truncated = true; break; }
-        const dir = queue.shift()!;
-        let entries: import("fs").Dirent[];
-        try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch { continue; }
-        for (const entry of entries) {
-          if (matches.length >= SEARCH_MAX_MATCHES || filesScanned >= SEARCH_MAX_FILES) { truncated = true; break; }
-          const abs = path.join(dir, entry.name);
-          if (entry.isDirectory()) {
-            if (SKIP_DIRS.has(entry.name) || entry.name.startsWith(".")) continue;
-            queue.push(abs);
-          } else if (entry.isFile()) {
-            const stat = await fs.stat(abs).catch(() => null);
-            if (!stat || stat.size > SEARCH_MAX_FILE_BYTES) continue;
-            filesScanned++;
-            const content = await fs.readFile(abs, "utf-8").catch(() => "");
-            if (content.includes("\0")) continue; // binary — skip
-            const rel = path.relative(rootResolved, abs).split(path.sep).join("/");
-            const lines = content.split("\n");
-            for (let i = 0; i < lines.length; i++) {
-              if (re.test(lines[i])) {
-                matches.push({ path: rel, line: i + 1, text: lines[i].trim().slice(0, 200) });
-                if (matches.length >= SEARCH_MAX_MATCHES) { truncated = true; break; }
-              }
-            }
-          }
-        }
-      }
-      return { ok: true, query, total: matches.length, truncated, matches };
+      const ripgrep = options.ripgrep ? await options.ripgrep().catch(() => null) : null;
+      return searchWorkspace({ root: rootResolved, start, query, ripgrep });
     },
   };
 

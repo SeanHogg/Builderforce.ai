@@ -177,9 +177,21 @@ export function activeProjectDirective(project?: ActiveProject | null): string |
     `The current project is "${project.name}" (projectId ${project.id}). ` +
     `When the user asks to review, create, list, or operate on pull requests, tasks, specs, or other ` +
     `project-scoped items without naming a project, use projectId ${project.id} by default — ` +
-    `do NOT ask the user for the project id.`
+    `do NOT ask the user for the project id.\n\n` +
+    PROJECT_MEMORY_DIRECTIVE
   );
 }
+
+/**
+ * How the agent uses the project's shared memory — stated only where the memory tools
+ * exist (they need an active project, which is exactly when this directive rides along
+ * with {@link activeProjectDirective}). The order matters: recall FIRST, so a fact a
+ * prior run wrote replaces a search-and-read this run would otherwise pay for; remember
+ * LAST, so the next run gets the same saving. Both surfaces (webview + native
+ * participant) share it, so neither can forget it has a memory.
+ */
+export const PROJECT_MEMORY_DIRECTIVE =
+  "Project memory: BEFORE searching or reading files to rediscover how something works, call `recall_facts` with the topic — a prior run may already have recorded the answer (a root cause, the file that owns a behaviour, a convention), and a recalled fact costs no disk read and no re-reading. When you LEARN a durable fact in this run, call `remember_fact` with a stable key (e.g. `chat-list-data-source`) so the next run recalls it instead of re-deriving it. Facts are project-scoped and shared with every agent on the project.";
 
 /**
  * Repo facts for the open workspace folder — "where the code is". Pure data (no

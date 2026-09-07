@@ -11,6 +11,7 @@
 import type { Capability } from "@builderforce/agent-tools";
 import { buildCoreToolRegistry } from "@builderforce/agent-tools";
 import { buildLocalCapabilityProvider, LOCAL_SURFACE_CAPS } from "./localCapabilities";
+import { findRipgrep } from "./ripgrep";
 
 /**
  * One definition per tool: name, JSON-schema params, whether it mutates the
@@ -66,7 +67,9 @@ export const TOOL_DEFS: ToolDef[] = registry
     mutating: isMutating(def.name, def.requires),
     execute: async (args, root) => {
       const result = await registry.dispatch(def.name, args, {
-        caps: buildLocalCapabilityProvider(root),
+        // The ripgrep VS Code ships (or one on PATH) backs `search_code`, so a repo-wide
+        // symbol search covers the whole workspace instead of the first 4,000 files.
+        caps: buildLocalCapabilityProvider(root, { ripgrep: () => findRipgrep() }),
         workspaceRoot: root,
       });
       return JSON.stringify(result.data);
@@ -91,6 +94,12 @@ export function describeTool(name: string, args: Record<string, unknown>): strin
       return `run: ${typeof args.command === "string" ? args.command.slice(0, 80) : ""}`;
     case "search_code":
       return `search ${typeof args.query === "string" ? `"${args.query.slice(0, 60)}"` : ""}`;
+    // The project-memory pair (cognition.ts): named by what is being recalled/kept, so
+    // an activity row reads "recall auth flow" rather than a bare tool name.
+    case "recall_facts":
+      return `recall ${typeof args.query === "string" ? `"${args.query.slice(0, 60)}"` : ""}`;
+    case "remember_fact":
+      return `remember ${typeof args.key === "string" ? args.key.slice(0, 60) : ""}`;
     // The publish actions name what LEAVES the machine. A prompt reading "git_push" tells
     // the approver nothing about the one thing they need to weigh — whether this is a
     // ticket branch or the base branch — so the base-branch case says so outright.

@@ -125,6 +125,15 @@ export interface BrainRunHostPorts {
   persistence: BrainRunPersistence;
   /** Project-Evermind hooks for a project (recall, memory-first answer, cache). */
   evermind(projectId: number): EvermindRunHooks | undefined;
+  /**
+   * The api-assembled platform context for this turn — strategy / PRD / governance /
+   * the project's durable memory (facts) / prior Evermind lessons — rendered as a
+   * system-prompt section, or '' when there is none. Fetched once per run at loop
+   * start with the user's request as the recall query. This is the block the native
+   * participant already carried and the webview run did not: without it a run in the
+   * panel started every task with no memory of what earlier runs had learned.
+   */
+  runContext?(projectId: number, chatId: number, query: string): Promise<string>;
   labels: Pick<NativeRunLabels, "blockedByPolicy">;
   /** A chat gained a turn — refresh the Sessions tree. */
   onChatsChanged?(): void;
@@ -287,6 +296,12 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
         persistence: ports.persistence,
         onActivity: () => ports.onChatsChanged?.(),
         ...(p.evermind && projectId != null ? { evermind: ports.evermind(projectId) } : {}),
+        // Project memory + platform context, appended to the system prompt by the loop
+        // (the same seam the limbic block uses) so the webview run starts from what the
+        // project already knows instead of rediscovering it with tool calls.
+        ...(projectId != null && ports.runContext
+          ? { augmentSystemPrompt: (text: string) => ports.runContext!(projectId, chatId, text) }
+          : {}),
         ...(p.seed ? { seed: p.seed } : {}),
         ...(p.userTurn != null ? { userTurn: p.userTurn } : {}),
         projectId: p.projectId ?? null,

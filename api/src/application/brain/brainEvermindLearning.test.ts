@@ -109,6 +109,45 @@ describe('learnFromPersistedTurns (consolidated learn-on-persist path)', () => {
     ]);
   });
 
+  it('seeds an UNSEEDED project head on its first teachable turn, then learns from that turn (chat #101)', async () => {
+    // brainChats.projectId → children (none) → head(42) at v0; after seeding the gate
+    // re-resolves: children (none) → head(42) at v1.
+    const db = gateDb([[{ projectId: 42 }], [], [head({ version: 0 })], [], [head({ version: 1 })]]);
+    const ensureSeeded = vi.fn(async () => true);
+    const scheduled: Promise<unknown>[] = [];
+    const outcome = await learnFromPersistedTurns(env, db, 55, 7, [
+      { role: 'user', content: 'Add the % complete to the chat list.' },
+      { role: 'assistant', content: teachable },
+    ], (p) => scheduled.push(p), { ensureSeeded });
+    expect(ensureSeeded).toHaveBeenCalledWith(env, db, 7, 42);
+    expect(outcome).toMatchObject({ learned: true, version: 1, reason: null });
+    expect(outcome.targets).toEqual([
+      { projectId: 42, ref: expect.stringContaining('/42/v1'), version: 1, name: 'Project Evermind', learned: true, reason: null },
+    ]);
+    await Promise.allSettled(scheduled);
+  });
+
+  it('stays not-seeded when nothing can hold a model (no artifact store), and does not re-read the head', async () => {
+    const db = gateDb([[{ projectId: 42 }], [], [head({ version: 0 })]]);
+    const ensureSeeded = vi.fn(async () => false);
+    const outcome = await learnFromPersistedTurns(env, db, 55, 7, [
+      { role: 'assistant', content: teachable },
+    ], () => {}, { ensureSeeded });
+    expect(ensureSeeded).toHaveBeenCalledTimes(1);
+    expect(outcome).toMatchObject({ learned: false, reason: 'not-seeded', version: 0 });
+  });
+
+  it('leaves a sibling build head alone — only the surface project is seeded', async () => {
+    // proj 42 seeded v5; child build 200 unseeded. No seeding call: 42 has its head.
+    const db = gateDb([[{ projectId: 42 }], [{ sid: 200 }], [head({ version: 5 })], [head({ version: 0 })]]);
+    const ensureSeeded = vi.fn(async () => true);
+    const outcome = await learnFromPersistedTurns(env, db, 55, 7, [
+      { role: 'assistant', content: teachable },
+    ], () => {}, { ensureSeeded });
+    expect(ensureSeeded).not.toHaveBeenCalled();
+    expect(outcome.targets?.map((t) => [t.projectId, t.reason])).toEqual([[42, null], [200, 'not-seeded']]);
+  });
+
   it('reports too-short when no assistant turn meets the teach threshold', async () => {
     const db = gateDb([]);
     const outcome = await learnFromPersistedTurns(env, db, 55, 7, [
