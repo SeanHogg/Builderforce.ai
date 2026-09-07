@@ -35,10 +35,10 @@ export interface OtelExporterInput {
 }
 
 const BASE = '/api/observability/exporters';
-const json = (payload: unknown): RequestInit => ({
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(payload),
-});
+// See the note on the twin helper in `mcpExtensionsApi`: `apiRequest` adds the
+// JSON Content-Type itself, and `RequestOptions` — not `RequestInit` — is what
+// it accepts.
+const json = (payload: unknown): RequestOptions => ({ body: JSON.stringify(payload) });
 
 export const observabilityExportApi = {
   list: (): Promise<OtelExporter[]> =>

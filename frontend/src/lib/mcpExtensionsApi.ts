@@ -54,10 +54,11 @@ export interface UpdateMcpExtensionInput {
 }
 
 const base = (tenantId: number): string => `/api/tenants/${tenantId}/mcp-extensions`;
-const body = (payload: unknown): RequestInit => ({
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(payload),
-});
+// No Content-Type here: `apiRequest` sets `application/json` for any request
+// with a non-self-typed body (see `isSelfTypedBody`), and typing this as a
+// `RequestInit` — whose `headers` is `HeadersInit`, not the `Record<string,
+// string>` `RequestOptions` takes — is what made every call site a type error.
+const body = (payload: unknown): RequestOptions => ({ body: JSON.stringify(payload) });
 
 export const mcpExtensionsApi = {
   list: (tenantId: number): Promise<McpExtension[]> =>
