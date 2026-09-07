@@ -38,6 +38,7 @@
  */
 
 import type { WorkflowNodeKind } from '@/lib/builderforceApi';
+import { FLOW_STEP_KIND, stepConfigOf, stepKindOf } from './flowStepObject';
 
 /** The step kind a nested canvas is placed as. */
 export const SUBFLOW_STEP_KIND = 'subflow' satisfies WorkflowNodeKind;
@@ -105,4 +106,23 @@ export function subflowCanvasTitle(config: Record<string, unknown>): string {
 /** Whether a step of this kind nests a canvas. */
 export function isSubflowKind(kind: WorkflowNodeKind): boolean {
   return kind === SUBFLOW_STEP_KIND;
+}
+
+/**
+ * Which canvases a board reaches for, deduplicated.
+ *
+ * The surface has to have those boards IN MEMORY before the compiler runs, because
+ * the compiler is synchronous on purpose. This is the one question it asks to know
+ * what to load, and it is asked of the same plain objects the compiler takes, so
+ * nothing has to mount to answer it.
+ */
+export function subflowSessionIdsOn(objects: ReadonlyArray<{ data: Record<string, unknown> }>): string[] {
+  const ids = new Set<string>();
+  for (const object of objects) {
+    if (object.data.kind !== FLOW_STEP_KIND) continue;
+    if (stepKindOf(object.data) !== SUBFLOW_STEP_KIND) continue;
+    const id = subflowSessionId(stepConfigOf(object.data));
+    if (id) ids.add(id);
+  }
+  return [...ids];
 }

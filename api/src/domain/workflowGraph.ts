@@ -32,6 +32,9 @@ export type WorkflowNodeKind =
   | 'switch'     // Flow Control: N-way fan-out by literal value match, tags $route
   | 'iterator'   // Flow Control: fork the downstream processor once per array item (dynamic)
   | 'merge'      // Flow Control: join multiple upstream branches into one payload
+  | 'subflow'    // Composition: another canvas's definition, run as one step.
+                 // Never reaches the executor: expanded into this graph when a run
+                 // is instantiated (application/workflow/expandSubflows.ts).
   | 'numeric-aggregator' // Tools: reduce multiple upstream branches to one number
   | 'table-aggregator'   // Tools: collect multiple upstream branches into one row array
   | 'text-aggregator'    // Tools: join multiple upstream branches into one string
@@ -80,6 +83,7 @@ export const NODE_HANDLER_ROLES: Record<Exclude<WorkflowNodeKind, 'agent'>, stri
   switch:    'node:switch',
   iterator:  'node:iterator',
   merge:     'node:merge',
+  subflow:   'node:subflow',
   'numeric-aggregator': 'node:numeric-aggregator',
   'table-aggregator':   'node:table-aggregator',
   'text-aggregator':    'node:text-aggregator',
@@ -283,6 +287,8 @@ export function taskTextForNode(node: WorkflowDefNode): string {
       return 'Iterator (forks per array item)';
     case 'merge':
       return `Merge (${String(c.strategy ?? 'array')})`;
+    case 'subflow':
+      return `Run canvas "${String(c.canvas ?? c.canvasSessionId ?? node.label)}"`;
     case 'numeric-aggregator':
       return `Numeric aggregator (${String(c.op ?? 'sum')})`;
     case 'table-aggregator':

@@ -1,12 +1,15 @@
 /**
  * The Brain's memory hooks, built once for every web surface that mounts it.
  *
- * Both web Brains — the side panel and the canvas — used to hand-build this object,
- * and they had drifted: the panel passed `recall` alone, the canvas passed `recall`
- * plus a `learn` callback the run loop has no field for (so it was never called), and
- * NEITHER passed the memory-first `answer`/`cacheAnswer` pair that the VS Code Brain
- * has had all along. Same loop, three different memories. One factory, so a tier added
- * here reaches every surface.
+ * The web side panel and the VS Code webview drive the SAME run loop and had drifted:
+ * the panel passed `recall` alone while only the webview had the memory-first
+ * `answer`/`cacheAnswer` pair, so the same question was free in one surface and billed
+ * in the other. The server tier now comes from one shared builder
+ * (`projectMemoryHooks`) and this composes the on-device tier in front of it.
+ *
+ * The creation canvas is deliberately NOT a caller: its runner takes commands, not
+ * questions, and replaying a stored answer for "add a node" would return prose where
+ * an artifact was asked for. It keeps recall + contribution only.
  *
  * The tiers, nearest first:
  *   1. **On-device** — an SSM-embedded answer memory in this browser. No server in the

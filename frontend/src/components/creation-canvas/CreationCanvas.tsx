@@ -190,8 +190,7 @@ import type { BrainAction, BrainMessage, BrainTraceEvent } from '@seanhogg/build
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import { ProjectEvermindPanel } from '@/components/builder/ProjectEvermindPanel';
 import { EvermindValidationProvider } from '@/components/builder/EvermindValidationContext';
-import { getProjectEvermindContributions, getProjectEvermindHead, type ProjectEvermindContributions, type ProjectEvermindHead } from '@/lib/projectEvermindApi';
-import { projectBrainMemoryHooks } from '@/lib/brainMemoryHooks';
+import { getProjectEvermindContributions, getProjectEvermindHead, recallProjectEvermind, teachProjectEvermindFromText, type ProjectEvermindContributions, type ProjectEvermindHead } from '@/lib/projectEvermindApi';
 import { isAwaitingApprovalExecution, type WorkflowApprovalMode, type WorkflowDefinitionGraph } from '@/lib/builderforceApi';
 import { hiringApi } from '@/lib/hiringApi';
 import { screenCandidates } from '@/lib/canvasResumeScreening';
@@ -314,6 +313,9 @@ import { appendImageToDrawioCanvas, createDrawioImageCanvas } from '@/lib/drawio
 import { convertGraphSource, diagramConvertSource, diagramConvertTargets } from '@/lib/canvasDiagramConvert';
 import { DIAGRAM_TARGETS, diagramNotation } from '@/lib/diagramNotations';
 import { compileBoardFlow } from '@/domains/workflow/domain/compileBoardFlow';
+import { subflowSessionIdsOn } from '@/domains/workflow/domain/subflow';
+import { flowDefinitionIdOf, flowDefinitionRef } from '@/domains/workflow/domain/flowDefinitionRef';
+import { useSubflowBoards } from '@/domains/canvas/presentation/useSubflowBoards';
 import { boardFlowFromDefinition, type UnpackedFlow } from '@/domains/workflow/domain/boardFlowFromDefinition';
 import { flowStepsFromCanvasSteps } from '@/domains/workflow/domain/flowStepsFromCanvasSteps';
 import { loadTemplateGraph } from '@/lib/evermindBuild';
@@ -2733,10 +2735,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     }
     return null;
   }, [nodes, scopedNodeIds, scopedNodes]);
-  // The Brain's memory tiers (on-device answer memory, then the project's server
-  // memory). Built by the SAME factory the side-panel Brain uses, so the two surfaces
-  // cannot drift apart on what the Brain remembers.
-  const brainMemory = useMemo(() => projectBrainMemoryHooks(evermindProjectId), [evermindProjectId]);
 
   /** One writer for an object's content, wherever the edit was made — the
    * inspector, a cell edited on the card itself, or the Files library. */
@@ -9544,7 +9542,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel,
           onModelFallback: (model) => setModelSelection({ mode: 'model', model }),
           onUnanswered: (outcome) => { turnUnanswered.current = outcome; },
-          ...(persistence === 'server' && memoryEnabled && brainMemory ? { evermind: brainMemory } : {}),
+          // The canvas runner takes recall + learn only, and deliberately NOT the
+          // memory-first answer tier the conversational Brain uses: a canvas turn is a
+          // COMMAND ("add a node", "lay these out"), and replaying a stored answer for
+          // one would return prose where an artifact was asked for. Recall still
+          // grounds it; contribution still happens.
+          ...(persistence === 'server' && memoryEnabled && evermindProjectId != null ? { evermind: {
+            recall: (query: string) => recallProjectEvermind(evermindProjectId, query).catch(() => null),
+            learn: (answer: string, question: string) => teachProjectEvermindFromText(evermindProjectId, answer, question),
+          } } : {}),
           onTrace: (event) => {
             // Every tool and MCP call, as it happens. The trace already existed
             // for display; journalling it is what puts the CALLS beside the
@@ -9695,7 +9701,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       clearComposer();
       setNotice(t('noticeEvaluationAdded'));
     }, 850);
-  }, [appendTimeline, brainMemory, canvasActions, canvasNotices, confirm, currentUserId, describeTurnError, disableBrainModel, effectiveSelectedIds, edges, evermindProjectId, lastTurnProvenance, members, memoryEnabled, modelSelection, nodes, openNodeInspector, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, setNotice, stage, t, thinking, timeline, title]);
+  }, [appendTimeline, canvasActions, canvasNotices, confirm, currentUserId, describeTurnError, disableBrainModel, effectiveSelectedIds, edges, evermindProjectId, lastTurnProvenance, members, memoryEnabled, modelSelection, nodes, openNodeInspector, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, setNotice, stage, t, thinking, timeline, title]);
 
   useEffect(() => {
     if (!hydrated.current || modelComparisonStarted.current || comparisonModelIds.length < 2) return;
@@ -9928,6 +9934,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * asked for is worse than one that will not build. Each unbuildable step SAYS what
    * it needs, on the card, so the board is the error report too.
    */
+  /**
+   * THE CHILD CANVASES THIS BOARD RUNS.
+   *
+   * A `subflow` step nests another canvas, and the compiler is synchronous — so the
+   * boards it may need have to be in memory before a build starts. The hook watches
+   * which canvases the board references and loads them; an unresolved one becomes a
+   * refusal naming the canvas, never a step left silently out of the graph.
+   */
+  const subflowSessionIds = useMemo(
+    () => subflowSessionIdsOn(nodes.map((node) => ({ data: node.data as unknown as Record<string, unknown> }))),
+    [nodes],
+  );
+  const resolveSubflow = useSubflowBoards(subflowSessionIds, canvasSessionGateway);
+
   const buildFlowFromFrame = useCallback(async (frameId: string): Promise<string | null> => {
     if (persistence === 'local') {
       requireAccount('workflow', t('buildWorkflowGateTitle'), t('buildWorkflowGate'));
@@ -9944,7 +9964,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       .filter((edge) => memberIds.has(edge.source) && memberIds.has(edge.target))
       .map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, sourceHandle: edge.sourceHandle ?? null }));
 
-    const { definition, issues, compiledCount } = compileBoardFlow(objects, connections);
+    // `stack` starts at THIS canvas so a board nesting itself is refused as the
+    // cycle it is, rather than recursing once before noticing.
+    const { definition, issues, compiledCount } = compileBoardFlow(objects, connections, { resolveSubflow, stack: [sessionId] });
     if (issues.length > 0) {
       const explain = (issue: (typeof issues)[number]) => t(`flowIssue.${issue.messageKey}` as 'flowIssue.noSteps', issue.values ?? {});
       const blocked = new Map(issues.filter((issue) => issue.objectId).map((issue) => [issue.objectId, explain(issue)]));
@@ -9963,9 +9985,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
     const projectId = canvasProjectNodes(board).map((node) => canvasProjectId(node.data))[0] ?? null;
     const name = frame.data.title || t('flowStep.untitledFlow');
-    const linked = typeof frame.data.resourceId === 'string' && frame.data.resourceId.startsWith('workflow:')
-      ? frame.data.resourceId.slice('workflow:'.length)
-      : '';
+    const linked = flowDefinitionIdOf(frame.data as unknown as Record<string, unknown>) ?? '';
     try {
       // The section's own two controls travel WITH the graph, exactly as the legacy
       // card's did: a section reading "Approval required" that compiled to a definition
@@ -9981,7 +10001,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ? await workflowDefinitions.update(linked, { name, definition, runTarget, ...(approvalMode ? { approvalMode } : {}) })
         : await workflowDefinitions.create({ name, definition, runTarget, ...(approvalMode ? { approvalMode } : {}), ...(projectId != null ? { projectId } : {}) });
       updateNodeData(frameId, {
-        resourceId: `workflow:${saved.id}`,
+        resourceId: flowDefinitionRef(saved.id),
         resourceSubtype: 'definition',
         workflowExecutable: true,
         workflowStepCount: compiledCount,
@@ -9995,7 +10015,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNotice(message);
       return null;
     }
-  }, [persistence, requireAccount, setNodes, setNotice, t, updateNodeData]);
+  }, [persistence, requireAccount, resolveSubflow, sessionId, setNodes, setNotice, t, updateNodeData]);
 
   /**
    * Build the flow the person is looking at, drawing the section first if there is none.
@@ -10045,13 +10065,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       edgesRef.current
         .filter((edge) => memberIds.has(edge.source) && memberIds.has(edge.target))
         .map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, sourceHandle: edge.sourceHandle ?? null })),
+      { resolveSubflow, stack: [sessionId] },
     );
     // The in-browser runner compiles the graph itself, so an unbuildable step has to be
     // reported the same way the cloud path reports it rather than reaching the engine.
     if (issues.length > 0) { setNotice(t(`flowIssue.${issues[0]!.messageKey}` as 'flowIssue.noSteps', issues[0]!.values ?? {})); return; }
     const projectId = canvasProjectNodes(board).map((node) => canvasProjectId(node.data))[0] ?? null;
     setEvermindBuild({ name: frame.data.title || t('flowStep.untitledFlow'), projectId, graph: definition });
-  }, [setNotice, t]);
+  }, [resolveSubflow, sessionId, setNotice, t]);
 
   /**
    * Lay a starting Evermind pipeline out inside a frame.

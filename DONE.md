@@ -1,3 +1,136 @@
+## ✅ RESOLVED 2026-09-07 — Seven control heights in one 36px row: the canvas command bar has ONE
+
+Reported plainly: *"the height of components should be consistent."* They were not. The
+bar draws controls contributed from six independent places — the session-action registry,
+the host's own additions (Add, the prompt toggle, the green Run, the ••• trigger), the live
+roster, `TeamBar`, `CanvasHostActions`, and whatever a vendor panel puts in `extras` — and
+every one of them stated a size of its own. The census across a strip 36px tall:
+
+| control | was |
+| --- | --- |
+| the drag grip | 24px |
+| `TeamBar` chips, the invite circle | 26px |
+| glyph buttons, roster avatars, the collapse toggle | 28px |
+| the Twilio setup chip in `extras` | 32px |
+| the green Run | ~33px |
+| the ••• trigger (`.iconAction`) | 34px |
+| the editor's capture strip | 36px |
+
+**There is one height now, and it is declared once.** `--canvas-bar-control` (28px) and
+`--canvas-bar-row` (that plus the trough's 3px padding and 1px border) live on
+`.commandBar`, and everything the bar draws takes it from there. Custom properties rather
+than a shared class, because `TeamBar.module.css` and `TwilioCanvasSetup.module.css` cannot
+compose from the canvas module — a property inherits into them, and each states the size it
+used to be as its own fallback for the surfaces where it renders outside this bar. A phone
+raises the TOKEN rather than one class, so the roster, Run and the ••• trigger all reach the
+40px touch target instead of one class growing and its neighbours staying desktop-sized.
+
+Three distinct causes sat underneath, not one:
+
+- **Run set its own box.** `padding:6px 12px` plus an inherited 1.5 line-height made it the
+  tallest thing on the bar, so the Run trough stood ~5px prouder than the four beside it.
+  It takes the token with `line-height:1`, which centres the word in a box the token sets
+  rather than letting the word set the box.
+- **A bare group's row was 8px shorter than a trough's.** The bar is `align-items:flex-end`,
+  so a bare row bottomed out against its neighbours' PADDING and put its own controls 4px
+  lower than theirs — one row of buttons drawn on two baselines, which is the exact thing
+  that flex-end was chosen to prevent. The bare shell carries the trough's padding and a
+  transparent border now: invisible box, identical box. The phone gives both back together.
+- **Foreign contributors were never asked.** The roster's circles, the team chips and the
+  invite chip were three sizes of circle in one row of faces; `.hostActions` and the Twilio
+  chip were two more heights in the Board group alone. All five read the token.
+
+**Two dead rules went with the layout they described.** `.iconAction` sized a 34px bordered
+square and had exactly ONE consumer left — the ••• trigger — which sat at 34px beside a 28px
+full-screen glyph and drew its own border inside a shell that already has one; it wears
+`.sessionActionButton` now, so its height, hover and lit state come from where every other
+glyph's do. `.commandBarDivider` drew the hairlines the bar separated its sets with before
+they were captioned groups, and had no consumer at all.
+
+**One bug found on the way.** The view trough in the ••• sheet was collapsing each button
+onto its 15px glyph: those buttons ARE `.sessionActionButton`s, `.moreMenu button` outranks
+that class on `width`, and the override that undoes the sheet's row chrome released the
+width to `auto`. They take the token on both axes, so a set reads as a set.
+
+Touched `CreationCanvas.module.css`, `CreationCanvas.tsx` (the ••• trigger's class),
+`TeamBar.module.css` and `TwilioCanvasSetup.module.css`. Verified: `tsgo --noEmit` clean,
+22/22 frontend guards green (`check:design-tokens` resolves both new properties), and the
+canvas suites passing — including nine `CreationCanvas.test.tsx` tests re-pointed at the
+sheet, whose `openBoardMenu` helper now ENSURES OPEN rather than toggling (one button with
+two meanings meant a test that reached in twice closed it and asserted against a sheet that
+was not on screen).
+
+**Adjacent, not mine, fixed anyway.** Six `creationCanvas.*` keys a concurrent session's
+card-delete work renders were missing from the catalogs, which next-intl paints as raw
+dotted paths where a tooltip belongs. Real copy written in all five. That grew `en.json`,
+which is in the root-layout closure, so `check:root-closure` was re-baselined to
+313 files / 90,549 lines — +6 lines from those keys, +1 file / +125 lines from that
+session's `CanvasNodeDeleteButton.tsx`.
+
+## ✅ RESOLVED 2026-09-07 — The canvas had no visible way to delete an object; the trash is on the card, in the toolbar, and the placement lock finally means it
+
+Reported plainly: *"users don't know how to delete (trash) components on the canvas."* They
+did not, because nothing said they could. Removing an object was reachable ONLY by
+selecting it and pressing Delete or Backspace — a keyboard shortcut with no counterpart
+anywhere on the board. Every other thing a card can do was a control in its own header
+row: schedule it (the clock), read its messages (the badge), open its settings (the gear),
+minimise it, open it at full size, add what comes next. The one action that takes it away
+was the one with no affordance at all, and the selection toolbar — `Focus · Duplicate ·
+Align · Frame · Lock · Hide` — offered every verb except that one.
+
+**Three places now, and ONE path behind them.**
+
+- **`CanvasNodeDeleteButton`** — the trash in the card header, drawn in the same 22px icon
+  slot as the density toggle beside it and carrying the canonical `--danger-*` tokens on
+  hover, so the control that REMOVES something does not look identical to the four that
+  only change a view. It takes the auto margin that used to sit on `•••`, which puts the
+  pair at the right end of the row instead of burying the trash in the left-hand badges.
+  It is drawn on the minimised **orb** too: a folded board is exactly where someone reaches
+  for "get rid of this", and an affordance that only exists at full size is one you have to
+  unfold a card to find.
+- **Delete in the selection toolbar** — required, not a duplicate. The kinds that draw no
+  header row at all (a sticky, an annotation, a docked conversation) have nowhere to put a
+  trash, and a selection of twelve objects has no single card to press one on.
+- **`deleteObjects(ids)` in `CreationCanvas`** — the Delete key, the card's trash and the
+  toolbar are three ways of asking one question. Written three times they would have been
+  three answers to "what happens to the edges", "does a locked object go too" and "what is
+  the selection afterwards" — and the keyboard path already answered the second one
+  differently from `arrange`, `align` and the nudge keys, every one of which honours the
+  lock. It reads `nodesRef` rather than `nodes` deliberately: the callback is handed to
+  every card through `canvasNodeTypes`, and a dependency on the board itself would give
+  React Flow a new `nodeTypes` object on every edit and remount the whole board.
+
+**The delete no longer clears a selection it did not touch.** The old keyboard path reset
+`selectedId`/`selectedIds` to empty whatever went; deleting one card out of a gathered
+group therefore dropped the other eleven, which is a second, unasked-for edit. Only what
+actually went is removed from the selection now.
+
+**A locked object could be erased outright — that is fixed, and it was a real hole.**
+`placementLocked` had three writers (the hydrator in `canvasBoard.ts`, `togglePlacementLock`,
+and the Brain's layout applier), each spelling `draggable: !locked` by hand, and every one
+of them left React Flow's `deletable` alone. React Flow deletes on the Delete key ITSELF,
+without passing through the board's handler — so a locked object could not be nudged a
+single pixel and could still be wiped with one keystroke, which is the opposite of what a
+person locking a finished board is asking for. `canvasPlacementFlags(locked)` in
+`domains/canvas/domain/canvasObject.ts` is now the one answer to what a lock forbids, and
+all three writers spread it. On the card the trash renders DISABLED and says why, rather
+than vanishing: "you cannot do this yet" and "this object is not deletable" are different
+statements and only one of them is true.
+
+**And `•••` does something.** It carried `aria-label="More options for {title}"` and no
+handler for as long as it has existed — a control that announces itself to a screen reader
+and then does nothing when pressed. It opens the wide inspector now, which is what its
+label promises; the gear beside it still opens the SHORT settings list, which is the
+narrower reading and not the same one.
+
+No confirmation modal, deliberately: a delete here is one entry deep in the canvas history
+and comes straight back with undo, the board raises a notice saying how many objects went,
+and a modal on the trash but not on the Delete key would be two answers to one question.
+
+`canvasNodeDelete.test.tsx` covers the trash's label and its effect, the locked object's
+disabled trash and refused delete, the toolbar's Delete, and the two halves of the lock.
+Localized in all five catalogs.
+
 ## ✅ RESOLVED 2026-09-07 — The canvas command bar is the arc: eight captions that named the codebase became the five the product already teaches
 
 The bar's group headers were `Workflow · History · Tools · Live · Share · View · Add ·

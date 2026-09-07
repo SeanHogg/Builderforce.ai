@@ -137,9 +137,14 @@ export function composeEvermindHooks(
       ? {
           cacheAnswer: (query: string, answer: string) => {
             for (const layer of caching) {
-              void Promise.resolve(layer.cacheAnswer?.(query, answer)).catch(() => {
-                /* best-effort per layer; one tier failing must not stop the others */
-              });
+              // try/catch AND .catch: a tier can fail synchronously (a store that
+              // throws on construction) or asynchronously, and either way the tiers
+              // after it must still be written.
+              try {
+                void Promise.resolve(layer.cacheAnswer?.(query, answer)).catch(() => { /* best-effort */ });
+              } catch {
+                /* best-effort per layer */
+              }
             }
           },
         }

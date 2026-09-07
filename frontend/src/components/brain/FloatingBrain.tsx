@@ -112,8 +112,11 @@ export function FloatingBrain() {
           <button
             type="button"
             onClick={() => setOpen(true)}
-            aria-label={tLauncher('open')}
-            title={tLauncher('title')}
+            // A turn in flight is the MARK's animation now, not a badge, so it survives
+            // the count chain below — a Brain that is both awaiting an answer and running
+            // used to show only the amber count and look idle.
+            aria-label={counts.running > 0 ? tAttn('runningCount', { count: counts.running }) : tLauncher('open')}
+            title={counts.running > 0 ? tAttn('runningCount', { count: counts.running }) : tLauncher('title')}
             className="brain-launcher"
           >
             <BrainMark running={counts.running > 0} />
@@ -129,7 +132,7 @@ export function FloatingBrain() {
             ) : counts.unread > 0 ? (
               // New messages (execution milestones / teammate turns) landed in a
               // chat you're not viewing — indigo count, distinct from the amber
-              // "needs an answer" badge and the coral "running" dot.
+              // "needs an answer" badge. Running is not a badge at all — see the mark.
               <span
                 className="brain-launcher-badge brain-launcher-badge-unread"
                 role="status"
@@ -138,13 +141,6 @@ export function FloatingBrain() {
               >
                 {counts.unread > 99 ? '99+' : counts.unread}
               </span>
-            ) : counts.running > 0 ? (
-              <span
-                className="brain-launcher-dot"
-                role="status"
-                aria-label={tAttn('runningCount', { count: counts.running })}
-                title={tAttn('runningCount', { count: counts.running })}
-              />
             ) : null}
           </button>
           <style>{`
@@ -191,21 +187,8 @@ export function FloatingBrain() {
               background: var(--badge-unread);
               animation: none;
             }
-            /* Background activity (something running, nothing blocked) — a quiet
-               coral dot, no count. */
-            .brain-launcher-dot {
-              position: absolute;
-              top: 2px;
-              right: 2px;
-              width: 12px;
-              height: 12px;
-              border-radius: 50%;
-              background: var(--coral-bright);
-              box-shadow: 0 0 0 2px var(--bg-base);
-              animation: agentPulse 1.4s ease-in-out infinite;
-            }
             @media (prefers-reduced-motion: reduce) {
-              .brain-launcher-badge, .brain-launcher-dot { animation: none; }
+              .brain-launcher-badge { animation: none; }
             }
             /* The mobile bottom nav is a fixed 56px bar (shown <768px). Lift the
                launcher above it so it never covers the menu, and clear the iOS

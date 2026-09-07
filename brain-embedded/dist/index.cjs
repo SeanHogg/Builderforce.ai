@@ -1001,8 +1001,11 @@ function composeEvermindHooks(...layers) {
     ...caching.length ? {
       cacheAnswer: (query, answer) => {
         for (const layer of caching) {
-          void Promise.resolve(layer.cacheAnswer?.(query, answer)).catch(() => {
-          });
+          try {
+            void Promise.resolve(layer.cacheAnswer?.(query, answer)).catch(() => {
+            });
+          } catch {
+          }
         }
       }
     } : {}

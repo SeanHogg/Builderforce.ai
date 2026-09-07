@@ -5,6 +5,9 @@ import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { connectorsApi, type CatalogAction, type CatalogConnector } from '@/lib/connectorsApi';
 import { faultMessage } from '@/lib/apiClient';
+// The four styles every live-catalog step editor is drawn with, shared so this one
+// and the canvas-composition one cannot drift apart inside the same form.
+import { hintStyle, inputStyle, labelStyle, optionStyle } from './stepFieldStyles';
 /**
  * The `connector` node's editor — two pickers and an input template.
  *
@@ -23,39 +26,6 @@ import { faultMessage } from '@/lib/apiClient';
  * and a wrong key fails at run time with a vendor error. With it, the shape is
  * already right and only the values are the author's problem.
  */
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '7px 9px',
-  fontSize: 12.5,
-  border: '1px solid var(--border-subtle)',
-  borderRadius: 'var(--radius-sm)',
-  background: 'var(--bg-deep)',
-  color: 'var(--text-primary)',
-  boxSizing: 'border-box',
-  marginTop: 3,
-};
-
-/** Native `<option>` needs its own opaque colours — the popup does not inherit
- *  the control's theme on every platform. */
-const optionStyle: React.CSSProperties = {
-  background: 'var(--bg-deep)',
-  color: 'var(--text-primary)',
-};
-
-const labelStyle: React.CSSProperties = {
-  fontSize: 11.5,
-  fontWeight: 600,
-  color: 'var(--text-secondary)',
-  display: 'block',
-};
-
-const hintStyle: React.CSSProperties = {
-  fontSize: 11,
-  color: 'var(--text-muted)',
-  marginTop: 4,
-  lineHeight: 1.5,
-};
 
 interface Props {
   config: Record<string, unknown>;

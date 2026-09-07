@@ -255,6 +255,11 @@ export function configSummary(kind: WorkflowNodeKind, config: Record<string, unk
       return String(config.triggerType ?? 'manual');
     case 'output':
       return String(config.target ?? 'artifact');
+    case 'subflow':
+      // The canvas is the whole identity of this step. The stored title is what the
+      // author last saw it called; the id is the fallback for a card whose canvas
+      // was chosen before names were recorded.
+      return String(config.canvasTitle || config.canvasSessionId || 'canvas');
     case 'router':
       return String(config.fallback ? `→ ${config.fallback}` : 'routes');
     case 'switch':

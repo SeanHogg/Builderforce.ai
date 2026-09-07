@@ -10,7 +10,7 @@ import { integrationForConfig, integrationIcon } from '../domain/stepIntegration
 import {
   configFieldLabel, configFieldPlaceholder, integrationDescription, integrationOperationLabel,
 } from '../domain/stepCatalogI18n';
-import { ConnectorNodeFields } from './ConnectorNodeFields';
+import { STEP_FIELD_EDITORS } from './stepFieldEditors';
 import styles from './StepConfigForm.module.css';
 
 /**
@@ -62,6 +62,7 @@ export function StepConfigForm({ kind, config, label, onLabelChange, onConfigCha
   const wb = useTranslations('workflowBuilder');
   const meta = NODE_KIND_MAP[kind];
   const integ = integrationForConfig(config);
+  const LiveEditor = STEP_FIELD_EDITORS[kind];
 
   const setConfig = (key: string, value: unknown) => onConfigChange({ [key]: value });
 
@@ -133,10 +134,13 @@ export function StepConfigForm({ kind, config, label, onLabelChange, onConfigCha
         </label>
       )}
 
-      {/* The connector step's options come from the tenant's live catalog rather
-          than a static field list, so it brings its own editor. */}
-      {kind === 'connector' && (
-        <ConnectorNodeFields
+      {/* A kind whose options are not knowable at build time brings its own editor
+          — the connector's actions come from the tenant's live catalog, a nested
+          canvas's choices are the canvases they have. Which kinds those are is
+          registry DATA (`stepFieldEditors.ts`), so this form never grows a branch
+          when another one arrives. */}
+      {LiveEditor && (
+        <LiveEditor
           config={config}
           setConfig={setConfig}
           patchConfig={(patch) => onConfigChange(patch)}

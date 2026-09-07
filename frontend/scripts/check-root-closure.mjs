@@ -8,16 +8,43 @@
  * and `import()` cut an edge out of that closure; this guard makes sure nobody
  * quietly wires one back in.
  *
- * Counts files and lines reachable through `import … from '…'` and
- * `export … from '…'` statements (type-only imports excluded — they never
- * bundle) starting at the root layout, resolving `@/` and relative specifiers
- * inside `src/`. Package imports are leaves. Compared against
- * `.root-closure-baseline.json`; either number growing fails.
+ * Walks `import … from '…'` and `export … from '…'` statements (type-only
+ * imports excluded — they never bundle) starting at the root layout, resolving
+ * `@/` and relative specifiers inside `src/`. Package imports are leaves.
  *
  *   node scripts/check-root-closure.mjs            # verify
  *   node scripts/check-root-closure.mjs --update   # re-baseline after cutting edges
  *
- * Deliberate raises, so a number in the baseline always has an argument:
+ * ── WHAT IS RATCHETED: THE FILE SET, BY NAME ─────────────────────────────────
+ * `.root-closure-baseline.json` holds the sorted list of modules in the closure.
+ * A module that appears in the closure and not in that list fails, by name; a
+ * module that leaves fails as slack, the way every other `ratchetSet` guard in
+ * this repo does. LINES are printed and not ratcheted.
+ *
+ * It used to ratchet two COUNTS, `{files, lines}`, both required to match
+ * EXACTLY. That made the guard fire on things it does not care about and cannot
+ * be fixed by the person who tripped it:
+ *
+ *   - `i18n/messages/en.json` is in the closure and is 28k of its 90k lines, so
+ *     the house rule that every UI change ships its five catalogs in the same
+ *     pass moved the line count on nearly every frontend commit.
+ *   - Adding or deleting a COMMENT in any of 313 modules moved it too — see the
+ *     "487 → 310" entry below, which had to explain fourteen lines of comment
+ *     inside `lib/rbac.ts` and concluded, correctly, that "a raise this guard
+ *     cares about is a new FILE, and there is none".
+ *   - With several sessions writing this repo at once, a baseline measured
+ *     before a commit was stale by the time the commit was made. That is not
+ *     hypothetical: the 2026-09-07 `Deploy frontend` run failed on
+ *     `312/90418` vs `312/90425` — the SAME 312 files, seven lines of somebody
+ *     else's catalog additions — and the deploy was red for a change no part of
+ *     which touched the import graph.
+ *
+ * A set is also STRICTER than the count it replaces, which is the point: swapping
+ * one module in the closure for another of the same size used to pass, and now
+ * names both. Nothing about "don't wire a new module into every first paint"
+ * got easier; only the noise around it went away.
+ *
+ * Deliberate raises, so a name in the baseline always has an argument:
  *
  *   487 → 310 files / 121640 → 90106 lines (2026-09-07) — a CUT, recorded here
  *   because it is the largest this guard has taken and the next raise should be
@@ -34,9 +61,10 @@
  *   pre-Brain purpose belonged. The three files that pushed this guard red
  *   (`AgentBenchmarkPanel`, `agentBenchmarkApi`, `canvasGridFit`) left the
  *   closure with it, as leaves of the registry rather than as a special case.
- *   The recorded line count is 90120 rather than 90106: the same 310 files, with
+ *   The recorded line count was 90120 rather than 90106: the same 310 files, with
  *   the fourteen lines of comment the same pass added inside `lib/rbac.ts`. No
  *   edge moved — a raise this guard cares about is a new FILE, and there is none.
+ *   That sentence is why the guard now ratchets the file set and not the lines.
  *
  *   482 → 483 files (2026-09-06) — `domains/guest/application/guestWall.ts`,
  *   the transport's record of "a read on this route was refused for want of a
@@ -47,7 +75,7 @@
  *   out with `dynamic()` from both `AppShell` and `ui/SectionState`.
  */
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, resolve, relative } from 'node:path';
+import { dirname, resolve, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -89,30 +117,64 @@ while (queue.length) {
   }
 }
 
-const files = seen.size;
+const closure = [...seen.keys()].map((f) => relative(src, f).split(sep).join('/')).sort();
 const lines = [...seen.values()].reduce((a, b) => a + b, 0);
 const heaviest = [...seen.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8)
-  .map(([f, n]) => `      ${String(n).padStart(6)}  ${relative(src, f).replace(/\\/g, '/')}`).join('\n');
+  .map(([f, n]) => `      ${String(n).padStart(6)}  ${relative(src, f).split(sep).join('/')}`).join('\n');
 
 if (UPDATE) {
-  writeFileSync(baselineFile, JSON.stringify({ files, lines }, null, 2) + '\n');
-  console.log(`✅ root closure baseline rewritten: ${files} files / ${lines} lines`);
+  writeFileSync(baselineFile, JSON.stringify({ files: closure }, null, 2) + '\n');
+  console.log(`✅ root closure baseline rewritten: ${closure.length} files / ${lines} lines`);
   process.exit(0);
 }
 
-const baseline = existsSync(baselineFile) ? JSON.parse(readFileSync(baselineFile, 'utf8')) : { files: Infinity, lines: Infinity };
-if (files > baseline.files || lines > baseline.lines) {
-  console.error(`❌  The root layout's static closure grew: ${files} files / ${lines} lines (baseline ${baseline.files} / ${baseline.lines}).\n`);
-  console.error('   Something newly imported from app/layout.tsx (through ConditionalAppShell and its\n' +
-    '   providers) is now parsed on every first paint. Load it with next/dynamic (or an\n' +
-    '   import() inside the handler that needs it) instead of a static import, or — if the\n' +
-    '   edge is genuinely load-bearing for the shell — re-baseline deliberately:\n' +
-    '   node scripts/check-root-closure.mjs --update\n');
-  console.error('   Heaviest modules in the closure:\n' + heaviest + '\n');
+const stored = existsSync(baselineFile) ? JSON.parse(readFileSync(baselineFile, 'utf8')) : null;
+if (!Array.isArray(stored?.files)) {
+  console.error([
+    '❌  The root-closure baseline is missing, or still holds the old {files,lines} COUNTS.',
+    '',
+    "   It records the file SET now — see this file's header for why. Write it once:",
+    '   node scripts/check-root-closure.mjs --update',
+    '',
+  ].join('\n'));
   process.exit(1);
 }
-if (files < baseline.files || lines < baseline.lines) {
-  console.error(`✅→❌  The root closure shrank to ${files} files / ${lines} lines (baseline ${baseline.files} / ${baseline.lines}) — lower the baseline so the ratchet holds:\n   node scripts/check-root-closure.mjs --update\n`);
+
+const baseline = new Set(stored.files);
+const current = new Set(closure);
+const added = closure.filter((f) => !baseline.has(f));
+const removed = stored.files.filter((f) => !current.has(f));
+
+const list = (paths) => paths.slice(0, 20).map((f) => `     • ${f}`).join('\n')
+  + (paths.length > 20 ? `\n     … and ${paths.length - 20} more` : '');
+
+if (added.length) {
+  console.error([
+    `❌  ${added.length} module(s) are newly reachable from app/layout.tsx through STATIC imports:`,
+    '',
+    list(added),
+    '',
+    '   Every one of them is parsed on the first paint of every route. Load it with',
+    '   next/dynamic (or an import() inside the handler that needs it) instead of a static',
+    '   import, or — if the edge is genuinely load-bearing for the shell — re-baseline',
+    "   deliberately AND argue the raise in this file's header:",
+    '   node scripts/check-root-closure.mjs --update',
+    '',
+    `   The closure is now ${closure.length} files / ${lines} lines. Heaviest modules:`,
+    heaviest,
+    '',
+  ].join('\n'));
   process.exit(1);
 }
-console.log(`✅ root closure: ${files} files / ${lines} lines (at baseline)`);
+if (removed.length) {
+  console.error([
+    `✅→❌  ${removed.length} module(s) left the root closure — lower the baseline so the ratchet holds:`,
+    '',
+    list(removed),
+    '',
+    '   node scripts/check-root-closure.mjs --update',
+    '',
+  ].join('\n'));
+  process.exit(1);
+}
+console.log(`✅ root closure: ${closure.length} files / ${lines} lines (at baseline)`);

@@ -1,4 +1,5 @@
 import { frameMemberIds } from '@/domains/canvas/domain/canvasFrame';
+import { flowDefinitionIdOf } from '@/domains/workflow/domain/flowDefinitionRef';
 import { toFrameBox } from './useFramedBoard';
 import type { CreationFlowNode } from './CreationNode';
 
@@ -33,7 +34,7 @@ function framesAFlow(node: CreationFlowNode, nodes: readonly CreationFlowNode[])
   if (node.data.kind !== 'frame') return false;
   // A compiled section stays runnable even if its steps were moved out from under it:
   // the definition exists on the server and this object is what points at it.
-  if (typeof node.data.resourceId === 'string' && node.data.resourceId.startsWith('workflow:')) return true;
+  if (flowDefinitionIdOf(node.data as unknown as Record<string, unknown>)) return true;
   const boxes = nodes.map(toFrameBox);
   const members = new Set(frameMemberIds(node.id, boxes));
   return nodes.some((candidate) => members.has(candidate.id) && candidate.data.kind === 'flowStep');
