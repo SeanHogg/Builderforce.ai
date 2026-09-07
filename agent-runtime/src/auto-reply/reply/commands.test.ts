@@ -101,6 +101,11 @@ vi.mock("./session-updates.js", () => ({
 const callGatewayMock = vi.fn();
 vi.mock("../../gateway/call.js", () => ({
   callGateway: (opts: unknown) => callGatewayMock(opts),
+  // `/ptt` stamps every dispatch with an idempotency key so a retried capture
+  // does not start a second one. Mocked to a constant rather than left out: an
+  // absent export surfaces as the command's own "PTT failed" reply, which reads
+  // like a routing bug rather than a missing mock.
+  randomIdempotencyKey: () => "test-idempotency-key",
 }));
 
 import type { HandleCommandsParams } from "./commands-types.js";
@@ -194,6 +199,76 @@ describe("handleCommands gating", () => {
     const result = await handleCommands(params);
     expect(result.shouldContinue).toBe(false);
     expect(result.reply?.text).toContain("/debug is disabled");
+  });
+});
+
+describe("/ptt command", () => {
+  const cfg = {
+    commands: { text: true },
+    channels: { whatsapp: { allowFrom: ["*"] } },
+  } as BuilderForceAgentsConfig;
+
+  beforeEach(() => {
+    callGatewayMock.mockReset();
+  });
+
+  it("refuses unauthorized senders", async () => {
+    const params = buildParams("/ptt once", cfg, { CommandAuthorized: false });
+    params.command.isAuthorizedSender = false;
+    const result = await handleCommands(params);
+    expect(result.shouldContinue).toBe(false);
+    expect(result.reply?.text).toContain("PTT requires an authorized sender");
+    expect(callGatewayMock).not.toHaveBeenCalled();
+  });
+
+  it("returns usage when no action is given", async () => {
+    const result = await handleCommands(buildParams("/ptt", cfg));
+    expect(result.shouldContinue).toBe(false);
+    expect(result.reply?.text).toContain("Usage: /ptt <start|stop|once|cancel>");
+    expect(callGatewayMock).not.toHaveBeenCalled();
+  });
+
+  it("invokes the resolved node through the gateway", async () => {
+    callGatewayMock.mockImplementation(async (opts: { method: string; params?: unknown }) => {
+      if (opts.method === "node.list") {
+        return {
+          nodes: [
+            { nodeId: "node-mac", displayName: "Mac", platform: "macos", connected: true },
+            { nodeId: "node-ios", displayName: "iPhone", platform: "ios", connected: true },
+          ],
+        };
+      }
+      if (opts.method === "node.invoke") {
+        return { ok: true, payload: { status: "captured", transcript: "hello" } };
+      }
+      throw new Error(`unexpected gateway method: ${opts.method}`);
+    });
+
+    const result = await handleCommands(buildParams("/ptt once node=iphone", cfg));
+    expect(result.shouldContinue).toBe(false);
+    expect(result.reply?.text).toContain("PTT once → node-ios");
+    expect(result.reply?.text).toContain("transcript: hello");
+    const invoke = callGatewayMock.mock.calls
+      .map((call) => call[0] as { method: string; params: Record<string, unknown> })
+      .find((call) => call.method === "node.invoke");
+    expect(invoke?.params.nodeId).toBe("node-ios");
+    expect(invoke?.params.command).toBe("talk.ptt.once");
+  });
+
+  it("accepts a positional node from native command surfaces", async () => {
+    callGatewayMock.mockImplementation(async (opts: { method: string }) => {
+      if (opts.method === "node.list") {
+        return {
+          nodes: [
+            { nodeId: "node-mac", displayName: "Mac", platform: "macos", connected: true },
+            { nodeId: "node-ios", displayName: "iPhone", platform: "ios", connected: true },
+          ],
+        };
+      }
+      return { ok: true, payload: {} };
+    });
+    const result = await handleCommands(buildParams("/ptt start mac", cfg));
+    expect(result.reply?.text).toContain("PTT start → node-mac");
   });
 });
 

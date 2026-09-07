@@ -256,6 +256,41 @@ function buildChatCommands(): ChatCommandDefinition[] {
       },
     }),
     defineChatCommand({
+      key: "ptt",
+      nativeName: "ptt",
+      description: "Push-to-talk on a paired node (defaults to the connected iOS node).",
+      textAlias: "/ptt",
+      category: "media",
+      args: [
+        {
+          name: "action",
+          description: "PTT action",
+          type: "string",
+          choices: [
+            { value: "start", label: "Start" },
+            { value: "stop", label: "Stop" },
+            { value: "once", label: "Once" },
+            { value: "cancel", label: "Cancel" },
+          ],
+        },
+        {
+          name: "node",
+          description: "Node id, name, or IP (optional)",
+          type: "string",
+          required: false,
+        },
+      ],
+      argsMenu: {
+        arg: "action",
+        title:
+          "PTT Actions:\n" +
+          "• Start – Begin a push-to-talk capture\n" +
+          "• Stop – End the capture and transcribe\n" +
+          "• Once – Capture a single utterance\n" +
+          "• Cancel – Discard the current capture",
+      },
+    }),
+    defineChatCommand({
       key: "whoami",
       nativeName: "whoami",
       description: "Show your sender id.",

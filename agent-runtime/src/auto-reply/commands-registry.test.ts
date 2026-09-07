@@ -40,6 +40,24 @@ describe("commands registry", () => {
     expect(specs.find((spec) => spec.name === "skill")).toBeTruthy();
     expect(specs.find((spec) => spec.name === "whoami")).toBeTruthy();
     expect(specs.find((spec) => spec.name === "compact")).toBeTruthy();
+    expect(specs.find((spec) => spec.name === "ptt")).toBeTruthy();
+  });
+
+  it("registers /ptt alongside /tts as a media command", () => {
+    const ptt = listChatCommands().find((command) => command.key === "ptt");
+    expect(ptt?.category).toBe("media");
+    expect(ptt?.textAliases).toEqual(["/ptt"]);
+    expect(ptt?.acceptsArgs).toBe(true);
+    expect(ptt?.args?.[0]?.choices).toEqual(
+      expect.arrayContaining([expect.objectContaining({ value: "once" })]),
+    );
+    expect(findCommandByNativeName("ptt")?.key).toBe("ptt");
+    // The definition, not the key — `buildCommandTextFromArgs` reads
+    // `nativeName ?? key` off the object, so a string argument builds
+    // "/undefined". Values go under `values`, as the /model case below does.
+    expect(ptt && buildCommandTextFromArgs(ptt, { values: { action: "once", node: "iphone" } })).toBe(
+      "/ptt once iphone",
+    );
   });
 
   it("filters commands based on config flags", () => {
@@ -102,6 +120,8 @@ describe("commands registry", () => {
     expect(detection.exact.has("/compact")).toBe(true);
     expect(detection.exact.has("/whoami")).toBe(true);
     expect(detection.exact.has("/id")).toBe(true);
+    expect(detection.exact.has("/ptt")).toBe(true);
+    expect(detection.regex.test("/ptt once node=iphone")).toBe(true);
     for (const command of listChatCommands()) {
       for (const alias of command.textAliases) {
         expect(detection.exact.has(alias.toLowerCase())).toBe(true);

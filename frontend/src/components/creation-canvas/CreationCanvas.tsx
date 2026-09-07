@@ -1878,11 +1878,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * Called inside the `setNodes` updater at every append site, which is the only
    * place that can see the board five queued updaters deep. Appending straight
    * onto `current` is what put six @-mentioned agents on one coordinate.
+   *
+   * A REF, not a `useCallback`, for the same reason `nodesRef` is one: it is read
+   * by 27 append sites across this component, and as a value it would have to be
+   * named in 27 dependency arrays — 22 of which the hooks ratchet then reports,
+   * for a helper that is provably stable (it closes over refs only). The ref is
+   * reassigned every render, so it always measures today's board.
    */
-  const placeAppended = useCallback(
-    (current: readonly CreationFlowNode[], additions: readonly CreationFlowNode[]) => placeAppendedCanvasNodes(current, additions, layoutViewport()),
-    [layoutViewport],
-  );
+  const placeAppendedRef = useRef<(current: readonly CreationFlowNode[], additions: readonly CreationFlowNode[]) => CreationFlowNode[]>(() => []);
+  placeAppendedRef.current = (current, additions) => placeAppendedCanvasNodes(current, additions, layoutViewport());
   // The prompt's real height, published to the board as `--composer-space` — the
   // band every bottom-anchored panel and the phone command rail sit above. It
   // was a hardcoded 112px, which the execution chip alone overran.
@@ -2709,7 +2713,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   useEffect(() => {
     publishProjectIds?.(sessionId, boardProjectIds);
   }, [boardProjectIds, publishProjectIds, sessionId]);
-  const scopedEdges = useMemo(() => edges.filter((edge) => scopedNodeIds.has(edge.source) && scopedNodeIds.has(edge.target)), [edges, scopedNodeIds]);
   const evermindProjectId = useMemo(() => {
     const candidates = [...scopedNodes, ...nodes.filter((node) => !scopedNodeIds.has(node.id))];
     for (const node of candidates) {
@@ -3045,7 +3048,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       return { ...node, id, position: { x: node.position.x + 36, y: node.position.y + 36 }, selected: true, data: { ...node.data, title: `${node.data.title} copy`, resourceId: undefined } };
     });
     const copiedEdges = edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target)).map((edge) => ({ ...edge, id: crypto.randomUUID(), source: idMap.get(edge.source)!, target: idMap.get(edge.target)! }));
-    setNodes((current) => { const base = current.map((node) => ({ ...node, selected: false })); return [...base, ...placeAppended(base, copies)]; });
+    setNodes((current) => { const base = current.map((node) => ({ ...node, selected: false })); return [...base, ...placeAppendedRef.current(base, copies)]; });
     setEdges((current) => [...current, ...copiedEdges]);
     const nextIds = copies.map((node) => node.id); setSelectedIds(nextIds); setSelectedId(nextIds.length === 1 ? nextIds[0] : null);
     setNotice(t('noticeObjectsDuplicated', { count: copies.length }));
@@ -3069,7 +3072,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       return { ...node, id, position: { x: node.position.x + 48, y: node.position.y + 48 }, selected: true, data: { ...node.data, resourceId: undefined } };
     });
     const pastedEdges = canvasClipboard.current.edges.map((edge) => ({ ...edge, id: crypto.randomUUID(), source: idMap.get(edge.source)!, target: idMap.get(edge.target)! }));
-    setNodes((current) => { const base = current.map((node) => ({ ...node, selected: false })); return [...base, ...placeAppended(base, pasted)]; }); setEdges((current) => [...current, ...pastedEdges]);
+    setNodes((current) => { const base = current.map((node) => ({ ...node, selected: false })); return [...base, ...placeAppendedRef.current(base, pasted)]; }); setEdges((current) => [...current, ...pastedEdges]);
     const ids = pasted.map((node) => node.id); setSelectedIds(ids); setSelectedId(ids.length === 1 ? ids[0] : null); setNotice(t('noticeObjectsPasted', { count: ids.length }));
   }, [canEdit, setEdges, setNodes]);
 
@@ -3256,7 +3259,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    */
   const applyMaterialization = useCallback((result: MaterializeResult) => {
     if (!result.ok) { setNotice(result.notice); return; }
-    setNodes((current) => [...current, ...placeAppended(current, [result.object])]);
+    setNodes((current) => [...current, ...placeAppendedRef.current(current, [result.object])]);
     setEdges((current) => [...current, result.edge]);
     setSelectedId(result.object.id);
     openNodeInspector(result.object.id);
@@ -3526,7 +3529,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       ...(target ? { annotatesId: target.id, status: '' } : {}),
     };
     if (target) node.zIndex = 6;
-    setNodes((current) => [...current, ...placeAppended(current, [node])]);
+    setNodes((current) => [...current, ...placeAppendedRef.current(current, [node])]);
     setSelectedId(node.id);
     setNotice(target ? t('noticeAnnotationAdded', { title: target.data.title }) : t('noticeSketchAdded'));
   }, [drawing, drawingMode, nodes, setNodes, t]);
@@ -3554,7 +3557,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // where the board already keeps an authored size and where the resizer writes, so
     // there is not a second place a card's width lives.
     if (size) node.style = { ...node.style, width: size.width, height: size.height };
-    setNodes((current) => [...current, ...placeAppended(current, [node])]);
+    setNodes((current) => [...current, ...placeAppendedRef.current(current, [node])]);
     setSelectedId(node.id); setSelectedIds([node.id]);
     // A deliberate "add a Project/Task/Website" from the palette is a request to
     // configure it, not a glance at an existing card — so the panel opens WIDE here,
@@ -3606,7 +3609,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const node = newNode(kind, { x: source.position.x + (canvasNodeDimensions(source).width || 300) + 90, y: source.position.y });
     if (seed) node.data = { ...node.data, ...seed };
     if (size) node.style = { ...node.style, width: size.width, height: size.height };
-    setNodes((current) => [...current, ...placeAppended(current, [node])]);
+    setNodes((current) => [...current, ...placeAppendedRef.current(current, [node])]);
     setEdges((current) => addEdge({ id: crypto.randomUUID(), source: fromNodeId, target: node.id, type: connectionKind }, current));
     setSelectedId(node.id); setSelectedIds([node.id]);
     if (node.data.kind !== 'chat') openNodeInspector(node.id);
@@ -3681,7 +3684,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
     const built = await buildSocialFeedNode(filter);
     if (!built.ok) { setNotice(built.error); return; }
-    setNodes((current) => [...current, ...placeAppended(current, [built.node])]);
+    setNodes((current) => [...current, ...placeAppendedRef.current(current, [built.node])]);
     setSelectedId(built.node.id); setSelectedIds([built.node.id]);
     setNotice(t('objectAdded', { title: built.node.data.title }));
   }, [buildSocialFeedNode, canEdit, setNodes, t]);
@@ -3705,7 +3708,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     }, 0);
     const offsetX = nodes.length ? rightEdge + IMPORT_COLUMN_GAP : 0;
     const placed = result.nodes.map((node) => ({ ...node, position: { x: node.position.x + offsetX, y: node.position.y } }));
-    setNodes((current) => [...current, ...placeAppended(current, placed)]);
+    setNodes((current) => [...current, ...placeAppendedRef.current(current, placed)]);
     setEdges((current) => [...current, ...result.edges]);
     setSelectedId(placed[0]!.id);
     setSelectedIds(placed.map((node) => node.id));
@@ -3815,14 +3818,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     else {
       const node = newNode('agent', point);
       node.data = { ...node.data, ...data };
-      setNodes((current) => [...current, ...placeAppended(current, [node])]);
+      setNodes((current) => [...current, ...placeAppendedRef.current(current, [node])]);
       setSelectedId(node.id); setSelectedIds([node.id]);
       setNotice(t('objectAdded', { title: teammate.name }));
     }
     // Addressable immediately: the composer is seeded with the mention rather
     // than leaving the person to retype a name they just dragged in.
     setPrompt((current) => (current.includes(`@${teammate.name}`) ? current : `${current ? `${current.trimEnd()} ` : ''}@${teammate.name} `));
-  }, [addAtCenter, canEdit, placeAppended, setNodes, t]);
+  }, [addAtCenter, canEdit, setNodes, t]);
 
   // The keyboard half of §3.3. Only the board actually on the stage answers —
   // hidden cached boards hear the same event and must not quietly seat someone
@@ -3878,7 +3881,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       } as CreationNodeData;
       return node;
     });
-    setNodes((current) => [...current, ...placeAppended(current, stubs)]);
+    setNodes((current) => [...current, ...placeAppendedRef.current(current, stubs)]);
     setSelectedId(stubs[0]!.id);
     setSelectedIds(stubs.map((node) => node.id));
     openBrainDock();
@@ -3968,7 +3971,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!title || !target || !creationObjectMutableFields(target.data.kind).includes(edge.ref)) continue;
       target.data = { ...target.data, [edge.ref]: title };
     }
-    setNodes((current) => [...current, ...placeAppended(current, created)]); setEdges((current) => [...current, ...createdEdges]); setTemplateOpen(false); setNotice(t('noticeTemplateAddedMarketplace', { name: templateText(template, 'name') }));
+    setNodes((current) => [...current, ...placeAppendedRef.current(current, created)]); setEdges((current) => [...current, ...createdEdges]); setTemplateOpen(false); setNotice(t('noticeTemplateAddedMarketplace', { name: templateText(template, 'name') }));
     trackActivity('creation_object_pack_added', { sessionId, metadata: { clientSurface: canvasSurface(), templateId: template.id, objectKinds: template.objects.map((item) => item.kind) } });
     window.setTimeout(() => void flowRef.current?.fitView({ nodes: created.map(({ id }) => ({ id })), padding: .2, duration: 400 }), 0);
   }, [canEdit, sessionId, setEdges, setNodes, t, templateText]);
@@ -3977,7 +3980,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!canEdit) return;
     const position = flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 260 };
     const node = newNode('frame', position); node.data = { ...preset.data, title: preset.name };
-    setNodes((current) => [...current, ...placeAppended(current, [node])]); setSelectedId(node.id); setTemplateOpen(false); setNotice(t('noticeFramePresetAdded', { name: preset.name }));
+    setNodes((current) => [...current, ...placeAppendedRef.current(current, [node])]); setSelectedId(node.id); setTemplateOpen(false); setNotice(t('noticeFramePresetAdded', { name: preset.name }));
   }, [canEdit, setNodes]);
 
   const saveFramePreset = useCallback(() => {
@@ -4094,7 +4097,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const knownResources = new Set(nodes.map((node) => node.data.resourceId).filter(Boolean));
         const knownNative = new Set(nodes.map((node) => String(node.data.expansionKey || `${node.data.kind}:${node.data.title}`)));
         const additions = related.filter((node) => node.data.resourceId ? !knownResources.has(node.data.resourceId) : !knownNative.has(String(node.data.expansionKey || `${node.data.kind}:${node.data.title}`)));
-        setNodes((current) => [...current, ...placeAppended(current, additions)]);
+        setNodes((current) => [...current, ...placeAppendedRef.current(current, additions)]);
         setEdges((current) => [...current, ...additions.map((node) => ({ id: crypto.randomUUID(), source: project.id, target: node.id, type: 'smoothstep', label: node.data.kind }))]);
         setNotice(additions.length ? `${additions.length} related project items added` : t('noticeLensAlreadyExpanded'));
         trackActivity('creation_project_expanded', { sessionId, metadata: { clientSurface: canvasSurface(), projectId } });
@@ -4118,7 +4121,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const deliveryTrigger: CreationFlowNode | null = deliveryFrame ? { id: crypto.randomUUID(), type: 'creation', position: { x: deliveryFramePosition.x + 30, y: deliveryFramePosition.y + 50 }, style: { width: 140, height: 150 }, data: createFlowStepData('trigger', 'Sprint cadence') as CreationNodeData } : null;
     const deliveryTask: CreationFlowNode | null = deliveryFrame ? { id: crypto.randomUUID(), type: 'creation', position: { x: deliveryFramePosition.x + 200, y: deliveryFramePosition.y + 50 }, style: { width: 140, height: 150 }, data: createFlowStepData('agent', 'Ship next task') as CreationNodeData } : null;
     const deliverySteps = [deliveryTrigger, deliveryTask].filter((step): step is CreationFlowNode => step !== null);
-    setNodes((current) => [...current, ...placeAppended(current, [...additions, ...deliverySteps])]);
+    setNodes((current) => [...current, ...placeAppendedRef.current(current, [...additions, ...deliverySteps])]);
     setEdges((current) => [
       ...current,
       ...additions.map((candidate) => ({ id: crypto.randomUUID(), source: project.id, target: candidate.id, type: 'smoothstep' })),
@@ -4246,7 +4249,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         id: taskId, type: 'creation', position: { x: selectedNode.position.x + 330, y: selectedNode.position.y + 40 },
         data: { kind: 'task', title: `Build ${selectedNode.data.title}`, status, role: agent?.data.title || 'Available agent', assignee: agent?.data.title, agentRef: agent?.data.resourceId?.replace(/^agent:/, ''), priority: 'high', content: selectedNode.data.subtitle || 'Implement the approved canvas mockup.', subtitle: project ? `Deliver to ${project.data.title}.` : 'Attach a project when ready.', ...detail, resourceId },
       };
-      setNodes((current) => { const base = current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, status } } : node); return [...base, ...placeAppended(base, [task])]; });
+      setNodes((current) => { const base = current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, status } } : node); return [...base, ...placeAppendedRef.current(base, [task])]; });
       setEdges((current) => [...current, { id: crypto.randomUUID(), source: selectedNode.id, target: taskId, type: 'smoothstep', animated: true }]);
       setSelectedId(taskId);
       openNodeInspector(taskId);
@@ -4320,7 +4323,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       ? selectedNode.data.items.map(String).slice(0, 10)
       : ['Smart onboarding','Team analytics','Approval inbox','Voice commands','Custom dashboards','Agent handoffs','Mobile review','Audit history','Templates','Live collaboration'];
     const additions = labels.map((label, index): CreationFlowNode => ({ id: crypto.randomUUID(), type: 'creation', position: { x: selectedNode.position.x + 440 + (index % 2) * 330, y: selectedNode.position.y - 180 + Math.floor(index / 2) * 220 }, data: { kind: 'mockup', title: label, status: 'Ready for review', subtitle: `High-fidelity concept ${index + 1} of ${labels.length}.` } }));
-    setNodes((current) => [...current, ...placeAppended(current, additions)]);
+    setNodes((current) => [...current, ...placeAppendedRef.current(current, additions)]);
     setEdges((current) => [...current, ...additions.map((node) => ({ id: crypto.randomUUID(), source: selectedNode.id, target: node.id, type: 'smoothstep', label: 'contains', animated: true }))]);
     setNotice(t('noticeMockupsExpanded', { count: additions.length }));
   }, [selectedNode, setEdges, setNodes]);
@@ -4382,7 +4385,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       { source: selectedNode.id, target: evaluation!.id, label: '4 · test' },
       { source: evaluation!.id, target: telemetry!.id, label: '5 · observe' },
     ];
-    setNodes((current) => { const base = current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, pipelineExpanded: true } } : node); return [...base, ...placeAppended(base, [...created, ...stageSteps])]; });
+    setNodes((current) => { const base = current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, pipelineExpanded: true } } : node); return [...base, ...placeAppendedRef.current(base, [...created, ...stageSteps])]; });
     setEdges((current) => [...current, ...sequence.map((edge) => ({ ...edge, id: crypto.randomUUID(), type: 'smoothstep', animated: true, markerEnd: { type: MarkerType.ArrowClosed } }))]);
     setSelectedId(dataset!.id); setSelectedIds([dataset!.id]); openNodeInspector(dataset!.id);
     window.setTimeout(() => void flowRef.current?.fitView({ nodes: [selectedNode, ...created, ...stageSteps].map((node) => ({ id: node.id })), padding: .16, duration: 400 }), 0);
@@ -4491,7 +4494,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (dropped) {
         const page = newNode('browser', point);
         page.data = { ...page.data, title: webPageHost(dropped), url: dropped, status: '' };
-        setNodes((current) => [...current, ...placeAppended(current, [page])]);
+        setNodes((current) => [...current, ...placeAppendedRef.current(current, [page])]);
         setSelectedId(page.id); setSelectedIds([page.id]); openNodeInspector(page.id);
         return;
       }
@@ -4502,7 +4505,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (kind === 'guidedTour') node.data = { ...node.data, ...localizedTourDefaults() };
     if (seed) node.data = { ...node.data, ...seed };
     if (size) node.style = { ...node.style, ...size };
-    setNodes((current) => [...current, ...placeAppended(current, [node])]);
+    setNodes((current) => [...current, ...placeAppendedRef.current(current, [node])]);
     setSelectedId(node.id); setSelectedIds([node.id]); openNodeInspector(node.id);
   }, [addFilesToCanvas, canEdit, choiceSeed, localizedTourDefaults, openNodeInspector, setNodes, t]);
 
@@ -4676,7 +4679,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const ide = await createCanvasBuild({ title: input.title, modality: input.modality });
     const patch = canvasBuildPatch(ide);
     node.data = { ...node.data, ...patch, title: input.title };
-    setNodes((current) => [...current, ...placeAppended(current, [node])]);
+    setNodes((current) => [...current, ...placeAppendedRef.current(current, [node])]);
     const binding = canvasBuildBinding(node.data);
     if (!binding) throw new Error('The workspace was created but could not be bound to the board.');
     return { objectId: node.id, title: input.title, binding };
@@ -9196,7 +9199,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       };
     },
   }, ...canvasBuildActionList, ...canvasFounderOpsActionList, ...canvasEquityActionList, ...canvasHiringPostingActionList, ...canvasDataRoomActionList, ...canvasDocumentTemplateActionList, ...canvasLegalDocumentActionList, ...canvasLegalRecordActionList, ...canvasSignatureActionList, ...canvasSellMotionActionList].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
-  [buildSocialFeedNode, canEdit, canvasBuildActionList, canvasDataRoomActionList, canvasDocumentTemplateActionList, canvasEquityActionList, canvasFounderOpsActionList, canvasHiringPostingActionList, canvasLegalDocumentActionList, canvasLegalRecordActionList, canvasSellMotionActionList, canvasSignatureActionList, convertObjectToDiagram, edges, effectiveSelectedIds, fmt, localizedTourDefaults, measurementGate, nodes, openAccountGate, persistence, recentJournalEvidence, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, stage, stageImageAsset, t, tSocial]);
+  [buildSocialFeedNode, canEdit, canvasBuildActionList, canvasDataRoomActionList, canvasDocumentTemplateActionList, canvasEquityActionList, canvasFounderOpsActionList, canvasHiringPostingActionList, canvasLegalDocumentActionList, canvasLegalRecordActionList, canvasSellMotionActionList, canvasSignatureActionList, convertObjectToDiagram, edges, effectiveSelectedIds, fmt, localizedTourDefaults, measurementGate, nodes, openAccountGate, persistence, recentJournalEvidence, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, stage, stageImageAsset, t, tSocial]);
 
   const addAgentKnowledge = useCallback((agentId: string, content: string) => {
     const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');
@@ -9204,7 +9207,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!agent || !authored || !canEdit) return;
     const knowledge = newNode('knowledge', { x: agent.position.x - 390, y: agent.position.y + 40 });
     knowledge.data = { ...knowledge.data, title: `${agent.data.title} knowledge`, status: 'Ready', markdown: authored, content: authored, sources: [{ label: 'Authored in Agent inspector', resource: `session:${agent.id}` }] };
-    setNodes((current) => [...current, ...placeAppended(current, [knowledge])]);
+    setNodes((current) => [...current, ...placeAppendedRef.current(current, [knowledge])]);
     setEdges((current) => [...current, { id: crypto.randomUUID(), source: knowledge.id, target: agent.id, type: 'smoothstep', label: 'grounds', animated: true, data: { connectionKind: 'reference' } }]);
     setNotice(t('noticeKnowledgeConnected'));
   }, [canEdit, nodes, persistence, setEdges, setNodes]);
@@ -9612,7 +9615,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const brain = nodes.find((node) => node.data.kind === 'chat');
         const course: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 420, y: 180 }, data: { kind: 'course', title: 'Build an LLM', status: 'Ready to learn', subtitle: 'From requirements and data to training, evaluation, and deployment.', course: buildLlmCourse() } };
         const lab: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1020, y: 230 }, data: { ...createDefaultCreationData('code'), title: 'LLM capstone lab', status: 'Practice workspace', language: 'python', code: '# Build your tokenizer, model, and training loop here\n' } };
-        setNodes((current) => [...current, ...placeAppended(current, [course, lab])]);
+        setNodes((current) => [...current, ...placeAppendedRef.current(current, [course, lab])]);
         setEdges((current) => associateBrainWithArtifacts([...current, { id: crypto.randomUUID(), source: course.id, target: lab.id, type: 'smoothstep', label: 'practice', animated: true, data: { connectionKind: 'reference' } }], brain?.id || '', [course.id], 'Created with Brain'));
         setSelectedId(course.id); openNodeInspector(course.id); setThinking(false); clearComposer(); setNotice(t('noticeLlmCourseAdded')); return;
       }
@@ -9621,7 +9624,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const brain = nodes.find((node) => node.data.kind === 'chat');
         const roadmap: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 560, y: 315 }, data: { kind: 'roadmap', title: request.includes('executive') ? 'Executive team roadmap' : 'Sales presentation roadmap', status: 'AI generated' } };
         const slides: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1040, y: 315 }, data: { kind: 'slides', title: request.includes('executive') ? 'Executive team presentation' : 'Sales presentation', status: 'AI generated' } };
-        setNodes((current) => [...current, ...placeAppended(current, [roadmap, slides])]);
+        setNodes((current) => [...current, ...placeAppendedRef.current(current, [roadmap, slides])]);
         setEdges((current) => associateBrainWithArtifacts([...current, ...(project ? [{ id: crypto.randomUUID(), source: project.id, target: roadmap.id, type: 'smoothstep' as const }] : []), { id: crypto.randomUUID(), source: roadmap.id, target: slides.id, type: 'smoothstep', label: 'presents', animated: true }], brain?.id || '', [roadmap.id], 'Created with Brain'));
         setSelectedId(roadmap.id); openNodeInspector(roadmap.id); setThinking(false); clearComposer(); setNotice(t('noticeRoadmapAdded')); return;
       }
@@ -9629,12 +9632,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const brain = nodes.find((node) => node.data.kind === 'chat');
         const summary: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 500, y: 260 }, data: { kind: 'featureSummary', title: 'Top 10 requested features', status: 'Synthesized' } };
         const mockups: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1040, y: 300 }, data: { kind: 'mockupSet', title: 'Top 10 feature mockups', status: 'Ready for review', subtitle: 'Ten linked high-fidelity concepts generated from user feedback.', items: ['Smart onboarding','Team analytics','Approval inbox','Voice commands','Custom dashboards','Agent handoffs','Mobile review','Audit history','Templates','Live collaboration'], sources: [{ label: 'Customer feedback evidence', resource: '/api/feedback' }] } };
-        setNodes((current) => [...current, ...placeAppended(current, [summary, mockups])]);
+        setNodes((current) => [...current, ...placeAppendedRef.current(current, [summary, mockups])]);
         setEdges((current) => associateBrainWithArtifacts([...current, { id: crypto.randomUUID(), source: summary.id, target: mockups.id, type: 'smoothstep', animated: true }], brain?.id || '', [summary.id], 'Created with Brain'));
         setSelectedId(mockups.id); openNodeInspector(mockups.id); setThinking(false); clearComposer(); setNotice(t('noticeFeatureSummaryAdded')); return;
       }
       const evaluationId = crypto.randomUUID();
-      setNodes((current) => [...current, ...placeAppended(current, [{ id: evaluationId, type: 'creation', position: { x: 560, y: 315 }, data: { kind: 'evaluation', title: 'Canvas evaluation', status: 'AI evaluation' } }])]);
+      setNodes((current) => [...current, ...placeAppendedRef.current(current, [{ id: evaluationId, type: 'creation', position: { x: 560, y: 315 }, data: { kind: 'evaluation', title: 'Canvas evaluation', status: 'AI evaluation' } }])]);
       const workflow = nodes.find((node) => node.data.kind === 'workflow');
       const website = nodes.find((node) => node.data.kind === 'website');
       const brain = nodes.find((node) => node.data.kind === 'chat');
@@ -9811,7 +9814,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (deletedObjectIds.size) setSelectedIds((current) => selectionWithinBoard(current, nodes.filter((node) => !deletedObjectIds.has(node.id))));
     if (materializedAdditions.length) setSelectedId(materializedAdditions[materializedAdditions.length - 1]!.node.id);
     else if (selectedId && deletedObjectIds.has(selectedId)) { setSelectedId(null); setSelectedIds([]); }
-    if (layoutViewport().narrow && materializedAdditions.length) {
+    if (layoutViewportRef.current().narrow && materializedAdditions.length) {
       const brainId = nodes.find((node) => node.data.kind === 'chat')?.id;
       const focusIds = [brainId, ...materializedAdditions.map((change) => change.node.id)].filter((id): id is string => !!id);
       window.setTimeout(() => {
@@ -10380,7 +10383,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // enough out that the two cards do not overlap on a fresh board.
     const node = newNode('project', source ? { x: source.position.x - 380, y: source.position.y } : { x: 200, y: 200 });
     node.data = { ...node.data, ...canvasProjectPatch(project) };
-    setNodes((current) => [...current, ...placeAppended(current, [node])]);
+    setNodes((current) => [...current, ...placeAppendedRef.current(current, [node])]);
     setEdges((current) => addEdge({ id: crypto.randomUUID(), source: node.id, target: sourceId, type: connectionKind }, current));
     return project.id;
   }, [connectionKind, edges, nodes, sessionId, setEdges, setNodes]);
@@ -10475,9 +10478,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const existing = nodes.find((node) => node.data.kind === 'build'
       && edges.some((edge) => (edge.source === websiteId && edge.target === node.id) || (edge.target === websiteId && edge.source === node.id)));
     if (existing) { openBuild(existing.id); return; }
-    const build = newNode('build', nextCanvasObjectPosition(nodes, { x: source.position.x + 520, y: source.position.y }, layoutViewport(), 'build'));
+    const build = newNode('build', nextCanvasObjectPosition(nodes, { x: source.position.x + 520, y: source.position.y }, layoutViewportRef.current(), 'build'));
     build.data = { ...build.data, title: source.data.title, modality: canvasBuildModality(source.data) };
-    setNodes((current) => [...current, ...placeAppended(current, [build])]);
+    setNodes((current) => [...current, ...placeAppendedRef.current(current, [build])]);
     setEdges((current) => [...current, { id: crypto.randomUUID(), source: websiteId, target: build.id, type: 'smoothstep', label: t('build.edgeLabel'), data: { connectionKind: 'delivery' } }]);
     setSelectedId(build.id);
     setSelectedIds([build.id]);

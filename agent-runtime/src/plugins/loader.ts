@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createJiti } from "jiti";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
+import { registerPluginHooksFromDir } from "../hooks/plugin-hooks.js";
 import type { GatewayRequestHandler } from "../gateway/server-methods/types.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { resolveUserPath } from "../utils.js";
@@ -22,6 +23,7 @@ import { setActivePluginRegistry } from "./runtime.js";
 import { createPluginRuntime } from "./runtime/index.js";
 import { validateJsonSchemaValue } from "./schema-validator.js";
 import type {
+  BuilderForceAgentsPluginApi,
   BuilderForceAgentsPluginDefinition,
   BuilderForceAgentsPluginModule,
   PluginDiagnostic,
@@ -175,6 +177,41 @@ function createPluginRecord(params: {
 
 function pushDiagnostics(diagnostics: PluginDiagnostic[], append: PluginDiagnostic[]) {
   diagnostics.push(...append);
+}
+
+/**
+ * Attach the plugin's manifest-declared hook directories (`hooks: ["./hooks"]`)
+ * to the internal-hook runner. Registration happens synchronously inside
+ * `registerPluginHooksFromDir`; only handler-load outcomes arrive later and are
+ * folded into the registry diagnostics.
+ */
+function registerManifestHookDirs(params: {
+  api: BuilderForceAgentsPluginApi;
+  record: PluginRecord;
+  rootDir: string;
+  hookDirs: string[];
+  diagnostics: PluginDiagnostic[];
+  logger: PluginLogger;
+}) {
+  for (const hookDir of params.hookDirs) {
+    const resolvedDir = path.resolve(params.rootDir, hookDir);
+    registerPluginHooksFromDir(params.api, resolvedDir)
+      .then((hookResult) => {
+        for (const message of hookResult.errors) {
+          params.diagnostics.push({
+            level: "warn",
+            pluginId: params.record.id,
+            source: params.record.source,
+            message,
+          });
+        }
+      })
+      .catch((err) => {
+        params.logger.warn(
+          `[plugins] ${params.record.id} failed loading hooks from ${resolvedDir}: ${String(err)}`,
+        );
+      });
+  }
 }
 
 export function loadBuilderForceAgentsPlugins(options: PluginLoadOptions = {}): PluginRegistry {
@@ -445,6 +482,14 @@ export function loadBuilderForceAgentsPlugins(options: PluginLoadOptions = {}): 
           message: "plugin register returned a promise; async registration is ignored",
         });
       }
+      registerManifestHookDirs({
+        api,
+        record,
+        rootDir: manifestRecord.rootDir,
+        hookDirs: manifestRecord.hooks,
+        diagnostics: registry.diagnostics,
+        logger,
+      });
       registry.plugins.push(record);
       seenIds.set(pluginId, candidate.origin);
     } catch (err) {

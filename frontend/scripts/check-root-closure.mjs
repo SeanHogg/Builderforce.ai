@@ -19,6 +19,22 @@
  *
  * Deliberate raises, so a number in the baseline always has an argument:
  *
+ *   487 → 310 files / 121640 → 90106 lines (2026-09-07) — a CUT, recorded here
+ *   because it is the largest this guard has taken and the next raise should be
+ *   argued against the shape it leaves. `ConditionalAppShell` imported
+ *   `WidgetBrainBridge` statically. That bridge renders null — it registers the
+ *   `list_widgets` / `pin_widget` / `show_widget` / `answer_with_widgets` Brain
+ *   actions and nothing else — but it calls `listComponents()`, so the edge
+ *   dragged `lib/components/registry` → `allComponents` → EVERY registered
+ *   surface (insights lenses, catalog, workforce, the canvas command set and
+ *   `lib/canvasGridFit` under it) into the first paint of every route. 180
+ *   modules and 32k lines to enumerate widget ids for a panel nobody had opened.
+ *   It is now `dynamic(…, { ssr: false })` beside `ResumeWorkBridge` and the
+ *   other render-null bridges, which is where a component with no markup and no
+ *   pre-Brain purpose belonged. The three files that pushed this guard red
+ *   (`AgentBenchmarkPanel`, `agentBenchmarkApi`, `canvasGridFit`) left the
+ *   closure with it, as leaves of the registry rather than as a special case.
+ *
  *   482 → 483 files (2026-09-06) — `domains/guest/application/guestWall.ts`,
  *   the transport's record of "a read on this route was refused for want of a
  *   credential". `lib/apiClient.ts` is already in the closure and is the ONE

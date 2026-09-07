@@ -134,6 +134,12 @@ function parsePTTArgs(commandBody: string) {
     }
     if (!action) {
       action = token;
+      continue;
+    }
+    // Native command surfaces serialize the optional node arg positionally
+    // (`/ptt once iphone`), so accept a bare second token as the node too.
+    if (!node) {
+      node = token;
     }
   }
   return { action, node };
@@ -143,6 +149,7 @@ function buildPTTHelpText() {
   return [
     "Usage: /ptt <start|stop|once|cancel> [node=<id>]",
     "Example: /ptt once node=iphone",
+    "Node defaults to the connected iOS node when only one is paired.",
   ].join("\n");
 }
 

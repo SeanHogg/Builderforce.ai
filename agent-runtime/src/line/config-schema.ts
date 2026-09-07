@@ -3,6 +3,53 @@ import { z } from "zod";
 const DmPolicySchema = z.enum(["open", "allowlist", "pairing", "disabled"]);
 const GroupPolicySchema = z.enum(["open", "allowlist", "disabled"]);
 
+const RichMenuBoundsSchema = z
+  .object({
+    x: z.number().int().min(0),
+    y: z.number().int().min(0),
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+  })
+  .strict();
+
+const RichMenuActionSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("message"), label: z.string(), text: z.string().optional() }).strict(),
+  z.object({ type: z.literal("uri"), label: z.string(), uri: z.string() }).strict(),
+  z
+    .object({
+      type: z.literal("postback"),
+      label: z.string(),
+      data: z.string(),
+      displayText: z.string().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("datetimepicker"),
+      label: z.string(),
+      data: z.string(),
+      mode: z.enum(["date", "time", "datetime"]),
+      initial: z.string().optional(),
+      min: z.string().optional(),
+      max: z.string().optional(),
+    })
+    .strict(),
+]);
+
+export const LineRichMenuConfigSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    name: z.string().optional(),
+    chatBarText: z.string().optional(),
+    height: z.union([z.literal(1686), z.literal(843)]).optional(),
+    selected: z.boolean().optional(),
+    imagePath: z.string().optional(),
+    areas: z
+      .array(z.object({ bounds: RichMenuBoundsSchema, action: RichMenuActionSchema }).strict())
+      .optional(),
+  })
+  .strict();
+
 const LineCommonConfigSchema = z.object({
   enabled: z.boolean().optional(),
   channelAccessToken: z.string().optional(),
@@ -17,6 +64,7 @@ const LineCommonConfigSchema = z.object({
   responsePrefix: z.string().optional(),
   mediaMaxMb: z.number().optional(),
   webhookPath: z.string().optional(),
+  richMenu: LineRichMenuConfigSchema.optional(),
 });
 
 const LineGroupConfigSchema = z

@@ -31,11 +31,16 @@ describe("models-config", () => {
 
         const raw = await fs.readFile(path.join(agentDir, "models.json"), "utf8");
         const parsed = JSON.parse(raw) as {
-          providers: Record<string, { baseUrl?: string; models?: unknown[] }>;
+          providers: Record<
+            string,
+            { baseUrl?: string; api?: string; models?: Array<{ id: string }> }
+          >;
         };
 
         expect(parsed.providers["github-copilot"]?.baseUrl).toBe("https://api.copilot.example");
-        expect(parsed.providers["github-copilot"]?.models?.length ?? 0).toBe(0);
+        // The native registry has no bundled catalog: Copilot must list its own models.
+        expect(parsed.providers["github-copilot"]?.api).toBe("openai-responses");
+        expect(parsed.providers["github-copilot"]?.models?.map((m) => m.id)).toContain("gpt-4o");
       } finally {
         envSnapshot.restore();
       }

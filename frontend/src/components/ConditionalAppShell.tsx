@@ -15,7 +15,6 @@ import { DeliveryPanelProvider } from './insights/DeliveryPanelProvider';
 import { DeliveryPanelBrainBridge } from './insights/DeliveryPanelBrainBridge';
 import { FinancePanelProvider } from './insights/finance/FinancePanelProvider';
 import { FinancePanelBrainBridge } from './insights/finance/FinancePanelBrainBridge';
-import { WidgetBrainBridge } from './widgets/WidgetBrainBridge';
 import { DestinationBrainBridge } from './workspace/DestinationBrainBridge';
 import { DevexPanelProvider } from './insights/DevexPanelProvider';
 import { DevexPanelBrainBridge } from './insights/DevexPanelBrainBridge';
@@ -56,6 +55,23 @@ const RouteMarketing = dynamic(() => import('./RouteMarketing'));
 const FloatingBrain = dynamic(() => import('./brain/FloatingBrain').then((m) => m.FloatingBrain), { ssr: false });
 const GuestBrainPanel = dynamic(() => import('./brain/GuestBrainPanel').then((m) => m.GuestBrainPanel), { ssr: false });
 const FeedbackTab = dynamic(() => import('./feedback/FeedbackTab').then((m) => m.FeedbackTab), { ssr: false });
+/**
+ * The widget Brain bridge is ASYNC on purpose, unlike its sibling panel bridges.
+ *
+ * It renders null — it exists only to register `list_widgets` / `pin_widget` /
+ * `show_widget` / `answer_with_widgets` — but it reads `listComponents()`, and
+ * that pulls the WHOLE app-wide component registry (`lib/components/registry` →
+ * `allComponents` → every insights, catalog, workforce and canvas surface behind
+ * it) in through a STATIC edge from this shell. That was 180 modules and ~32k
+ * lines parsed on the first paint of every route, marketing pages included, to
+ * enumerate widget ids for a panel the visitor has not opened. The four panel
+ * bridges above stay static because each reaches one provider; this one reaches
+ * the registry, so it belongs with `ResumeWorkBridge` and the other render-null
+ * bridges below. `ssr: false` costs nothing here: a component that returns null
+ * has no markup to server-render, and Brain actions only matter once the Brain
+ * is on screen.
+ */
+const WidgetBrainBridge = dynamic(() => import('./widgets/WidgetBrainBridge').then((m) => m.WidgetBrainBridge), { ssr: false });
 const ResumeWorkBridge = dynamic(() => import('./workspace/ResumeWorkBridge').then((m) => m.ResumeWorkBridge), { ssr: false });
 const LastBoardBridge = dynamic(() => import('./workspace/LastBoardBridge').then((m) => m.LastBoardBridge), { ssr: false });
 const PlatformAnnouncements = dynamic(() => import('./announcements/PlatformAnnouncements').then((m) => m.PlatformAnnouncements), { ssr: false });

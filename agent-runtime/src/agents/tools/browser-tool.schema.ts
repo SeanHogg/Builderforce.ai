@@ -1,5 +1,10 @@
 import { Type } from "@sinclair/typebox";
 import { optionalStringEnum, stringEnum } from "../schema/typebox.js";
+import {
+  BROWSER_COLOR_SCHEMES,
+  BROWSER_STATE_ACTIONS,
+  BROWSER_STORAGE_KINDS,
+} from "./browser-tool.state-actions.js";
 
 const BROWSER_ACT_KINDS = [
   "click",
@@ -32,6 +37,7 @@ const BROWSER_TOOL_ACTIONS = [
   "upload",
   "dialog",
   "act",
+  ...BROWSER_STATE_ACTIONS,
 ] as const;
 
 const BROWSER_TARGETS = ["sandbox", "host", "node"] as const;
@@ -109,4 +115,34 @@ export const BrowserToolSchema = Type.Object({
   accept: Type.Optional(Type.Boolean()),
   promptText: Type.Optional(Type.String()),
   request: Type.Optional(BrowserActSchema),
+  // State actions (cookies / storage / network + emulation). Flattened for the same
+  // reason as BrowserActSchema: the action discriminator picks the relevant fields.
+  // cookies_set
+  cookie: Type.Optional(Type.Object({}, { additionalProperties: true })),
+  // storage_get / storage_set / storage_clear
+  storageKind: optionalStringEnum(BROWSER_STORAGE_KINDS),
+  key: Type.Optional(Type.String()),
+  value: Type.Optional(Type.String()),
+  // set_offline
+  offline: Type.Optional(Type.Boolean()),
+  // set_headers
+  headers: Type.Optional(Type.Record(Type.String(), Type.String())),
+  // set_credentials
+  username: Type.Optional(Type.String()),
+  password: Type.Optional(Type.String()),
+  // set_credentials / set_geolocation
+  clear: Type.Optional(Type.Boolean()),
+  // set_geolocation
+  latitude: Type.Optional(Type.Number()),
+  longitude: Type.Optional(Type.Number()),
+  accuracy: Type.Optional(Type.Number()),
+  origin: Type.Optional(Type.String()),
+  // set_media
+  colorScheme: optionalStringEnum(BROWSER_COLOR_SCHEMES),
+  // set_timezone
+  timezoneId: Type.Optional(Type.String()),
+  // set_locale
+  locale: Type.Optional(Type.String()),
+  // set_device (Playwright device descriptor name, e.g. "iPhone 13")
+  device: Type.Optional(Type.String()),
 });

@@ -54,6 +54,7 @@ import { isTimeoutError } from "../../failover-error.js";
 import { resolveImageSanitizationLimits } from "../../image-sanitization.js";
 import { resolveModelAuthMode } from "../../model-auth.js";
 import { resolveDefaultModelForAgent } from "../../model-selection.js";
+import { createLlamaStreamFn } from "../../llama-stream.js";
 import { createOllamaStreamFn, OLLAMA_NATIVE_BASE_URL } from "../../ollama-stream.js";
 import {
   isCloudCodeAssistFormatError,
@@ -820,6 +821,22 @@ export async function runEmbeddedAttempt(
           typeof providerConfig?.baseUrl === "string" ? providerConfig.baseUrl.trim() : "";
         const ollamaBaseUrl = modelBaseUrl || providerBaseUrl || OLLAMA_NATIVE_BASE_URL;
         activeSession.agent.streamFn = createOllamaStreamFn(ollamaBaseUrl);
+      } else if (params.model.api === "llama") {
+        // In-process GGUF via node-llama-cpp (no server). `buildLlamaProvider` stores
+        // the model path in baseUrl — same resolution order as the Ollama branch.
+        const providerConfig = params.config?.models?.providers?.[params.model.provider];
+        const modelBaseUrl =
+          typeof params.model.baseUrl === "string" ? params.model.baseUrl.trim() : "";
+        const providerBaseUrl =
+          typeof providerConfig?.baseUrl === "string" ? providerConfig.baseUrl.trim() : "";
+        const llamaModelPath = modelBaseUrl || providerBaseUrl;
+        log.info(
+          `[brain-routing] run=${params.runId} api=llama model=${params.modelId} → node-llama-cpp (${llamaModelPath || "no model path"})`,
+        );
+        activeSession.agent.streamFn = createLlamaStreamFn(llamaModelPath, {
+          modelPath: llamaModelPath,
+          contextSize: params.model.contextWindow,
+        });
       } else {
         log.info(
           `[brain-routing] run=${params.runId} localBrain=off api=${params.model.api} model=${params.modelId} → cortex (SDK stream)`,

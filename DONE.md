@@ -1,3 +1,86 @@
+## ✅ RESOLVED 2026-09-07 — "Create app" on a signed-in canvas built the app twice, reported that nothing happened, and ran a free tenant on the funded Claude floor
+
+The report: a Creation Canvas diagnostic from a FREE-plan tenant (session `bf886fc1`, `ui`/`api`
+2026.9.13). Five things were wrong at once, and four of them had one turn as their common cause.
+
+**1. One message ran TWO full tool loops, and the second could not see what the first had built.**
+The user had seated built-in teammates (`@CMO @Manager …`, `agentRef: cmo-t14`, `builtinAgent: true`)
+and connected them to Brain. `evaluateCanvas` looked for a canonical agent only through a
+`resourceId` of `agent:<id>`, which a seated built-in carries as `agentRef` instead — so on a
+SIGNED-IN board the seats fell through to the "guest drafts" branch: a full eight-step browser loop
+per seat, with the whole canvas vocabulary, under "contribute a specialist perspective". The
+specialist provisioned the workspace and wrote five files. Brain's synthesis then ran against the
+`snapshot` string built when the turn began AND a `canvas_read_snapshot` tool whose `nodes`
+closure was captured at the same moment: "the COMPLETE board (24 objects)", no build on it. It
+provisioned a second one (`ideProject:19` and `:20`). The 15:50 turn had done the same to the
+company and competitor cards — every one twice — and both turns ran four minutes.
+Fixed four ways: `canonicalAgents` accepts a built-in seat's `agentRef`, so an @-addressed
+built-in executes in ITS runtime through `runCanonicalCanvasGroupTurn` (the design rule); the
+local-drafts branch is guests-only, as its own comment always said; the snapshot is a function
+(`turnSnapshot`) re-built from `stage.nodes()` for the synthesis and for each guest specialist, so a
+later loop sees the earlier loop's work; and `canvas_read_snapshot` / `canvas_read_object` read
+`stage.nodes()` (live board plus this turn's staged proposals) instead of the memo's `nodes`. The
+register's earlier "second turn could not see the first turn's objects" entry was this — the two
+"turns" were the two loops of one turn — and it is closed here.
+
+**2. Three `canvas_write_build_file` calls ran with no arguments and failed "A path is required."**
+Each was the last call of a response that ended `finishReason: "length"` at the 3,200-token
+ceiling; its JSON never closed, `parseToolArgs` handed it over as `args: {}` with `malformed: true`
+(the kernel's documented policy — never abort a run on bad JSON), and the canvas dispatch ran it
+anyway. `BrainService` and `cloudAgentEngine` already refused malformed calls; the canvas was the
+gap. Dispatch now refuses a `malformed` call with a result naming which of the two things
+happened — cut off (send less) or mis-encoded (encode correctly) — traces it as an error, and
+pushes one round directive after the complete calls have run. The register's "canvas_add_object
+arrived as args={} and was rejected as Unsupported canvas object kind" was the same defect.
+
+**3. The output ceiling and step budget were sized for authoring one card, not for writing code.**
+`CANVAS_BUILD_RESPONSE_TOKENS = 8_192` and `MAX_CANVAS_BUILD_TURNS = 16` apply from the moment a
+workspace write COMMITS (`CANVAS_BUILD_WORKSPACE_WRITE_TOOLS`); ordinary turns keep 3,200 and 8. A
+ceiling is a cap, not a spend. The register's `CANVAS_RESPONSE_TOKENS` entry asked for a measured
+number and a cost decision; the measurement is this session (a source file ≈ 1,500 tokens, two or
+three per response), and the decision is scoped to turns already building.
+
+**4. A turn that built a working app said "I couldn't prepare any canvas changes from that request."**
+The build tools commit rather than propose, so nothing they returned was `proposed: true` and the
+runner concluded nothing had happened — then the act-now ladder nagged a model that had acted, and
+the exhausted loop fell through to `noAnswer`. They now return `applied: true`, ONE predicate
+(`toolOutcomeChangedCanvas`) reads both words, and a loop that ran out of steps with work on the
+board says so with the new `creationCanvas.notice.stepsExhausted` (all five catalogs) instead of
+claiming completion or failure.
+
+**5. A FREE tenant ran 16 of 16 completions on `claude-sonnet-5`, account "shared".**
+Not a routing bug in the pool order — the free coders DO lead the chain — but the request could not
+fit them: 541 tool definitions (116 canvas + the tenant's entire MCP catalog) ≈ 120K tokens before
+the board or the conversation, so every 128K-and-under coder was dropped or 413'd and the cascade
+reached its designed last resort, the funded direct-Anthropic floor, on completion 1. The canvas then
+soft-pinned that model for the rest of the turn, and the gateway honoured the non-strict hint at the
+HEAD of the chain, so the free pool was never asked again. Two fixes: the canvas advertises at most
+`CANVAS_TOOL_LIMIT = 96` tools per completion through the SAME `selectToolsForTurn` the standalone
+Brain has used since its catalog passed ~300 (tools the system prompt names are always advertised,
+tools this turn has called are never dropped, the rest by relevance); and `fundedFloorHintDemoted`
+in `LlmProxyService.complete` places a free plan's non-strict hint on a `PAID_OVERFLOW_MODELS` id
+BEHIND the plan pool — still reachable as the fallback it is, never leading.
+
+**Also closed for its symptom:** one turn was refused 401 "Missing or malformed Authorization
+header" on a signed-in board because the tenant token store was empty for that minute. The turn
+now asks `getStoredTenantToken()` first and raises the localized account prompt
+(`gateBrainTurnTitle`/`gateBrainTurnBody`) instead of writing a raw auth error into the transcript.
+The cause of the empty store stays in the register with its blocker.
+
+Files: `frontend/src/lib/creationCanvasAi.ts`, `canvasBuildTools.ts`, `canvasTurnOutcome.ts`,
+`canvasNotices.ts`, `components/creation-canvas/CreationCanvas.tsx`, the five
+`i18n/messages/*.json`, `api/src/application/llm/LlmProxyService.ts`; tests in
+`creationCanvasAi.test.ts` (five new cases), `canvasBuildTools.test.ts`,
+`LlmProxyService.routing.test.ts`.
+
+Verify:
+```
+pnpm --filter builderforce-frontend exec vitest run src/lib/creationCanvasAi.test.ts src/lib/canvasBuildTools.test.ts
+pnpm --filter builderforce-frontend exec tsc --noEmit
+cd api && npx vitest run src/application/llm/LlmProxyService.routing.test.ts && npx tsgo --noEmit
+cd api && node scripts/check-canvas-tool-contract.mjs
+```
+
 ## ✅ RESOLVED 2026-09-07 — Three red CI jobs, one swallowed install failure behind two of them
 
 `Deploy API`, `Deploy frontend` and `Publish VS Code extension` all went red together. They were not

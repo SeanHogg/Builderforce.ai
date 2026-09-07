@@ -1,3 +1,12 @@
+/**
+ * llama — in-process GGUF inference via node-llama-cpp. No server required.
+ *
+ * NOT a duplicate of `ollama-stream.ts`: Ollama needs a running daemon and
+ * pulls models by tag; this loads a local `.gguf` path directly. It is the
+ * StreamFn behind the `llama` provider (`buildLlamaProvider` in
+ * models-config.providers.ts, api: "llama", baseUrl = model path) and is
+ * routed to in embedded-runner/run/attempt.ts alongside the Ollama branch.
+ */
 import { randomUUID } from "node:crypto";
 import type { StreamFn } from "../builderforce/agent-loop/index.js";
 import type {
@@ -9,6 +18,7 @@ import type {
   Usage,
 } from "../builderforce/model/types.js";
 import { createAssistantMessageEventStream } from "../builderforce/agent-loop/index.js";
+import { importNodeLlamaCpp } from "../memory/node-llama.js";
 
 export interface LlamaStreamOptions {
   modelPath: string;
@@ -25,7 +35,8 @@ type LlamaCppModule = any;
 
 async function loadLlamaCpp(): Promise<LlamaCppModule> {
   try {
-    return await import("node-llama-cpp");
+    // Shared lazy-import seam (also used by memory/embeddings.ts) so tests mock ONE place.
+    return await importNodeLlamaCpp();
   } catch {
     throw new Error(
       "[llama-stream] node-llama-cpp is not installed. " +
@@ -104,6 +115,8 @@ function convertToLlamaMessages(
 
 interface LlamaSessionCache {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  llama: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   model: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   context: any;
@@ -114,20 +127,29 @@ interface LlamaSessionCache {
 
 let _sessionCache: LlamaSessionCache | null = null;
 
+/** Test-only: drop the cached model/context so the next call reloads. */
+export function resetLlamaSessionCacheForTest(): void {
+  _sessionCache = null;
+}
+
 async function getOrCreateSession(
   llamaCpp: LlamaCppModule,
   modelPath: string,
   contextSize: number,
   gpuLayers: number | "auto",
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): Promise<{ model: any; context: any }> {
+): Promise<{ llama: any; model: any; context: any }> {
   if (
     _sessionCache &&
     _sessionCache.modelPath === modelPath &&
     _sessionCache.contextSize === contextSize &&
     _sessionCache.gpuLayers === gpuLayers
   ) {
-    return { model: _sessionCache.model, context: _sessionCache.context };
+    return {
+      llama: _sessionCache.llama,
+      model: _sessionCache.model,
+      context: _sessionCache.context,
+    };
   }
 
   const { getLlama } = llamaCpp;
@@ -136,8 +158,8 @@ async function getOrCreateSession(
   const model = await llama.loadModel({ modelPath, gpuLayers });
   const context = await model.createContext({ contextSize });
 
-  _sessionCache = { model, context, modelPath, contextSize, gpuLayers };
-  return { model, context };
+  _sessionCache = { llama, model, context, modelPath, contextSize, gpuLayers };
+  return { llama, model, context };
 }
 
 // ── Main StreamFn factory ──────────────────────────────────────────────────
@@ -156,7 +178,7 @@ export function createLlamaStreamFn(modelPath: string, options?: LlamaStreamOpti
         const llamaCpp = await loadLlamaCpp();
         const { LlamaChatSession } = llamaCpp;
 
-        const { context: llamaContext } = await getOrCreateSession(
+        const { llama, context: llamaContext } = await getOrCreateSession(
           llamaCpp,
           modelPath,
           resolvedContextSize,
@@ -211,7 +233,9 @@ export function createLlamaStreamFn(modelPath: string, options?: LlamaStreamOpti
                 content: { type: "string" },
               },
             };
-            grammar = new llamaCpp.LlamaJsonSchemaGrammar(llamaCpp.getLlama(), jsonSchema);
+            // Use the resolved Llama instance — `getLlama()` returns a Promise, which
+            // the grammar constructor rejects (tool grammar silently never applied).
+            grammar = new llamaCpp.LlamaJsonSchemaGrammar(llama, jsonSchema);
           } catch {
             // Grammar construction failed — fall back to plain generation
             grammar = undefined;

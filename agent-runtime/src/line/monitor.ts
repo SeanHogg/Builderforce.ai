@@ -11,6 +11,7 @@ import { deliverLineAutoReply } from "./auto-reply-delivery.js";
 import { createLineBot } from "./bot.js";
 import { processLineMessage } from "./markdown-to-line.js";
 import { sendLineReplyChunks } from "./reply-chunks.js";
+import { ensureDefaultRichMenu } from "./rich-menu-startup.js";
 import {
   replyMessageLine,
   showLoadingAnimation,
@@ -281,6 +282,16 @@ export async function monitorLineProvider(
         stopLoading?.();
       }
     },
+  });
+
+  // Apply the configured rich menu (idempotent; a menu failure never blocks the webhook).
+  await ensureDefaultRichMenu({
+    richMenu: bot.account.config.richMenu,
+    accountId: resolvedAccountId,
+    channelAccessToken: token,
+    verbose: true,
+  }).catch((err) => {
+    runtime.error?.(danger(`line: rich menu setup failed: ${String(err)}`));
   });
 
   // Register HTTP webhook handler

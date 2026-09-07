@@ -26,6 +26,7 @@ import { applyBrowserProxyPaths, persistBrowserProxyFiles } from "../../browser/
 import { loadConfig } from "../../config/config.js";
 import { wrapExternalContent } from "../../security/external-content.js";
 import { BrowserToolSchema } from "./browser-tool.schema.js";
+import { isBrowserStateAction, runBrowserStateAction } from "./browser-tool.state-actions.js";
 import { type AgentToolResult, type AnyAgentTool, imageResultFromFile, jsonResult, readStringParam } from "./common.js";
 import { callGatewayTool } from "./gateway.js";
 import { listNodes, resolveNodeIdFromList, type NodeListNode } from "./nodes-utils.js";
@@ -236,6 +237,7 @@ function browserToolDescription(opts?: BrowserDeps): string {
     "When using refs from snapshot (e.g. e12), keep the same tab: prefer passing targetId from the snapshot response into subsequent actions (act/click/type/etc).",
     'For stable, self-resolving refs across calls, use snapshot with refs="aria" (Playwright aria-ref ids). Default refs="role" are role+name-based.',
     "Use snapshot+act for UI automation. Avoid act:wait by default; use only in exceptional cases when no reliable UI state exists.",
+    "State actions: cookies / cookies_set (cookie={name,value,url|domain,...}) / cookies_clear; storage_get / storage_set / storage_clear (storageKind=local|session, key, value); set_offline (offline=true|false); set_headers (headers={} clears); set_credentials (username/password, or clear=true); set_geolocation (latitude/longitude[/accuracy/origin], or clear=true); clear_permissions; set_media (colorScheme=dark|light|no-preference|none); set_timezone (timezoneId); set_locale (locale); set_device (device=Playwright device name, e.g. \"iPhone 13\"). All accept targetId.",
     `target selects browser location (sandbox|host|node). Default: ${targetDefault}.`,
     hostHint,
   ].join(" ");
@@ -300,6 +302,10 @@ export async function runBrowser(
             return proxy.result;
           }
         : null;
+
+      if (isBrowserStateAction(action)) {
+        return await runBrowserStateAction(action, { params, profile, baseUrl, proxyRequest });
+      }
 
       switch (action) {
         case "status":

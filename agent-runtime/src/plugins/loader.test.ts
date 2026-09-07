@@ -3,6 +3,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
+import {
+  clearInternalHooks,
+  createInternalHookEvent,
+  getRegisteredEventKeys,
+  triggerInternalHook,
+} from "../hooks/internal-hooks.js";
 import { loadBuilderForceAgentsPlugins } from "./loader.js";
 
 type TempPlugin = { dir: string; file: string; id: string };
@@ -23,6 +29,7 @@ function writePlugin(params: {
   body: string;
   dir?: string;
   filename?: string;
+  manifest?: Record<string, unknown>;
 }): TempPlugin {
   const dir = params.dir ?? makeTempDir();
   const filename = params.filename ?? `${params.id}.js`;
@@ -34,6 +41,7 @@ function writePlugin(params: {
       {
         id: params.id,
         configSchema: EMPTY_PLUGIN_SCHEMA,
+        ...params.manifest,
       },
       null,
       2,
@@ -41,6 +49,30 @@ function writePlugin(params: {
     "utf-8",
   );
   return { dir, file, id: params.id };
+}
+
+function writePluginHook(params: {
+  pluginDir: string;
+  name: string;
+  events: string[];
+  handlerBody: string;
+}) {
+  const hookDir = path.join(params.pluginDir, "hooks", params.name);
+  fs.mkdirSync(hookDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(hookDir, "HOOK.md"),
+    [
+      "---",
+      `name: ${params.name}`,
+      `description: ${params.name} hook`,
+      `metadata: {"builderforce": {"events": ${JSON.stringify(params.events)}}}`,
+      "---",
+      "",
+    ].join("\n"),
+    "utf-8",
+  );
+  fs.writeFileSync(path.join(hookDir, "handler.js"), params.handlerBody, "utf-8");
+  return hookDir;
 }
 
 function loadBundledMemoryPluginRegistry(options?: {
@@ -239,6 +271,111 @@ describe("loadBuilderForceAgentsPlugins", () => {
     const loaded = registry.plugins.find((entry) => entry.id === "allowed");
     expect(loaded?.status).toBe("loaded");
     expect(Object.keys(registry.gatewayHandlers)).toContain("allowed.ping");
+  });
+
+  it("registers manifest-declared hook dirs on the internal hook runner", async () => {
+    process.env.BUILDERFORCE_AGENTS_BUNDLED_PLUGINS_DIR = "/nonexistent/bundled/plugins";
+    const pluginDir = makeTempDir();
+    const marker = path.join(pluginDir, "hook-fired.json");
+    writePluginHook({
+      pluginDir,
+      name: "demo-hook",
+      events: ["gateway:startup"],
+      handlerBody: [
+        'import fs from "node:fs";',
+        "export default async function handler(event) {",
+        `  fs.writeFileSync(${JSON.stringify(marker)}, JSON.stringify({ type: event.type, action: event.action }));`,
+        "}",
+        "",
+      ].join("\n"),
+    });
+    writePluginHook({
+      pluginDir,
+      name: "eventless-hook",
+      events: [],
+      handlerBody: "export default async () => {};\n",
+    });
+    const plugin = writePlugin({
+      id: "hooked",
+      body: `export default { id: "hooked", register() {} };`,
+      dir: pluginDir,
+      manifest: { hooks: ["./hooks"] },
+    });
+
+    clearInternalHooks();
+    try {
+      const registry = loadBuilderForceAgentsPlugins({
+        cache: false,
+        workspaceDir: plugin.dir,
+        config: {
+          hooks: { internal: { enabled: true } },
+          plugins: {
+            load: { paths: [plugin.file] },
+            allow: ["hooked"],
+          },
+        },
+      });
+
+      const loaded = registry.plugins.find((entry) => entry.id === "hooked");
+      expect(loaded?.status).toBe("loaded");
+      // Registration is synchronous: the hook is on the record before the loader returns.
+      expect(loaded?.hookNames).toContain("demo-hook");
+      expect(loaded?.hookNames).toContain("eventless-hook");
+      const registered = registry.hooks.find(
+        (hook) => hook.pluginId === "hooked" && hook.entry.hook.name === "demo-hook",
+      );
+      expect(registered?.events).toEqual(["gateway:startup"]);
+      expect(registered?.entry.hook.source).toBe("builderforce-plugin");
+      expect(registered?.entry.metadata?.hookKey).toBe("hooked:demo-hook");
+      expect(getRegisteredEventKeys()).toContain("gateway:startup");
+
+      // The plugin hook runs at the same point a bundled/workspace hook would.
+      await triggerInternalHook(createInternalHookEvent("gateway", "startup", "test"));
+      expect(JSON.parse(fs.readFileSync(marker, "utf-8"))).toEqual({
+        type: "gateway",
+        action: "startup",
+      });
+    } finally {
+      clearInternalHooks();
+    }
+  });
+
+  it("does not attach manifest hook dirs when the hook system is disabled", () => {
+    process.env.BUILDERFORCE_AGENTS_BUNDLED_PLUGINS_DIR = "/nonexistent/bundled/plugins";
+    const pluginDir = makeTempDir();
+    writePluginHook({
+      pluginDir,
+      name: "quiet-hook",
+      events: ["gateway:startup"],
+      handlerBody: "export default async () => {};\n",
+    });
+    const plugin = writePlugin({
+      id: "hooked-off",
+      body: `export default { id: "hooked-off", register() {} };`,
+      dir: pluginDir,
+      manifest: { hooks: ["./hooks"] },
+    });
+
+    clearInternalHooks();
+    try {
+      const registry = loadBuilderForceAgentsPlugins({
+        cache: false,
+        workspaceDir: plugin.dir,
+        config: {
+          plugins: {
+            load: { paths: [plugin.file] },
+            allow: ["hooked-off"],
+          },
+        },
+      });
+      const loaded = registry.plugins.find((entry) => entry.id === "hooked-off");
+      expect(loaded?.status).toBe("loaded");
+      // Discovered and recorded, but not attached to the runner (hooks.internal.enabled unset).
+      expect(loaded?.hookNames).toContain("quiet-hook");
+      expect(getRegisteredEventKeys()).not.toContain("gateway:startup");
+    } finally {
+      clearInternalHooks();
+    }
   });
 
   it("denylist disables plugins even if allowed", () => {

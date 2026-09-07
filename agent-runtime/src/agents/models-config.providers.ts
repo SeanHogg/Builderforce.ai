@@ -14,6 +14,10 @@ import {
   buildHuggingfaceModelDefinition,
 } from "./huggingface-models.js";
 import { resolveAwsSdkEnvVarName, resolveEnvApiKey } from "./model-auth.js";
+import {
+  buildCopilotModelDefinition,
+  getDefaultCopilotModelIds,
+} from "../providers/github-copilot-models.js";
 import { OLLAMA_NATIVE_BASE_URL } from "./ollama-stream.js";
 import {
   buildSyntheticModelDefinition,
@@ -993,12 +997,15 @@ export async function resolveImplicitCopilotProvider(params: {
   // BuilderForceAgents uses its own auth store and exchanges tokens at runtime.
   // `models list` uses BuilderForceAgents's auth heuristics for availability.
 
-  // We intentionally do NOT define custom models for Copilot in models.json.
-  // pi-coding-agent treats providers with models as replacements requiring apiKey.
-  // We only override baseUrl; the model list comes from pi-ai built-ins.
+  // The native ModelRegistry (model-discovery.ts) bundles NO catalog — every
+  // listable model comes from models.json. Copilot therefore ships its own
+  // default catalog (providers/github-copilot-models.ts); users prune ids their
+  // plan lacks via models.providers["github-copilot"].models. The provider-level
+  // `api` is what the registry applies to every model in this block.
   return {
     baseUrl,
-    models: [],
+    api: "openai-responses",
+    models: getDefaultCopilotModelIds().map(buildCopilotModelDefinition),
   } satisfies ProviderConfig;
 }
 

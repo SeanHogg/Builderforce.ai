@@ -26,7 +26,45 @@ interface LineAccountBaseConfig {
   responsePrefix?: string;
   mediaMaxMb?: number;
   webhookPath?: string;
+  /** Rich menu created + set as the channel default on startup. */
+  richMenu?: LineRichMenuConfig;
   groups?: Record<string, LineGroupConfig>;
+}
+
+export type LineRichMenuActionConfig =
+  | { type: "message"; label: string; text?: string }
+  | { type: "uri"; label: string; uri: string }
+  | { type: "postback"; label: string; data: string; displayText?: string }
+  | {
+      type: "datetimepicker";
+      label: string;
+      data: string;
+      mode: "date" | "time" | "datetime";
+      initial?: string;
+      min?: string;
+      max?: string;
+    };
+
+export interface LineRichMenuAreaConfig {
+  bounds: { x: number; y: number; width: number; height: number };
+  action: LineRichMenuActionConfig;
+}
+
+export interface LineRichMenuConfig {
+  /** Set false to keep a configured menu without applying it on startup. */
+  enabled?: boolean;
+  /** Menu name; also the idempotency key used to find an existing menu. */
+  name?: string;
+  /** Chat bar label (max 14 chars). */
+  chatBarText?: string;
+  /** Menu height; width is always 2500. */
+  height?: 1686 | 843;
+  /** Whether the menu opens expanded by default. */
+  selected?: boolean;
+  /** Local JPEG/PNG (2500 x height, <= 1MB) uploaded when the menu is created. */
+  imagePath?: string;
+  /** Tap areas; omit to use the 2x3 default grid (help/status/settings/...). */
+  areas?: LineRichMenuAreaConfig[];
 }
 
 export interface LineConfig extends LineAccountBaseConfig {

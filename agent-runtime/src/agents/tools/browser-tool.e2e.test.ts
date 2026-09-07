@@ -47,6 +47,22 @@ const browserActionsMocks = vi.hoisted(() => ({
   browserNavigate: vi.fn(async () => ({ ok: true })),
   browserPdfSave: vi.fn(async () => ({ ok: true, path: "/tmp/test.pdf" })),
   browserScreenshotAction: vi.fn(async () => ({ ok: true, path: "/tmp/test.png" })),
+  // State actions (client-actions-state.ts)
+  browserClearPermissions: vi.fn(async () => ({ ok: true })),
+  browserCookies: vi.fn(async () => ({ ok: true, targetId: "t1", cookies: [] })),
+  browserCookiesClear: vi.fn(async () => ({ ok: true, targetId: "t1" })),
+  browserCookiesSet: vi.fn(async () => ({ ok: true, targetId: "t1" })),
+  browserSetDevice: vi.fn(async () => ({ ok: true, targetId: "t1" })),
+  browserSetGeolocation: vi.fn(async () => ({ ok: true, targetId: "t1" })),
+  browserSetHeaders: vi.fn(async () => ({ ok: true, targetId: "t1" })),
+  browserSetHttpCredentials: vi.fn(async () => ({ ok: true, targetId: "t1" })),
+  browserSetLocale: vi.fn(async () => ({ ok: true, targetId: "t1" })),
+  browserSetMedia: vi.fn(async () => ({ ok: true, targetId: "t1" })),
+  browserSetOffline: vi.fn(async () => ({ ok: true, targetId: "t1" })),
+  browserSetTimezone: vi.fn(async () => ({ ok: true, targetId: "t1" })),
+  browserStorageClear: vi.fn(async () => ({ ok: true, targetId: "t1" })),
+  browserStorageGet: vi.fn(async () => ({ ok: true, targetId: "t1", values: {} })),
+  browserStorageSet: vi.fn(async () => ({ ok: true, targetId: "t1" })),
 }));
 vi.mock("../../browser/client-actions.js", () => browserActionsMocks);
 
@@ -95,6 +111,103 @@ vi.mock("./common.js", async () => {
 
 import { DEFAULT_AI_SNAPSHOT_MAX_CHARS } from "../../browser/constants.js";
 import { createBrowserTool } from "./browser-tool.js";
+import { BrowserToolSchema } from "./browser-tool.schema.js";
+import { BROWSER_STATE_ACTIONS } from "./browser-tool.state-actions.js";
+
+describe("browser tool state actions", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    configMocks.loadConfig.mockReturnValue({ browser: {} });
+    nodesUtilsMocks.listNodes.mockResolvedValue([]);
+  });
+
+  it("declares every state action in the tool schema", () => {
+    const actionEnum = (BrowserToolSchema.properties.action as { enum?: string[] }).enum ?? [];
+    for (const action of BROWSER_STATE_ACTIONS) {
+      expect(actionEnum).toContain(action);
+    }
+    for (const field of ["cookie", "storageKind", "key", "value", "offline", "headers", "device"]) {
+      expect(BrowserToolSchema.properties).toHaveProperty(field);
+    }
+  });
+
+  it("mentions the state actions in the tool description", () => {
+    const tool = createBrowserTool();
+    for (const action of BROWSER_STATE_ACTIONS) {
+      expect(tool.description).toContain(action);
+    }
+  });
+
+  it("routes cookies to the host client wrapper", async () => {
+    const tool = createBrowserTool();
+    const result = await tool.execute?.("call-1", {
+      action: "cookies",
+      targetId: "t1",
+      profile: "builderforce",
+    });
+
+    expect(browserActionsMocks.browserCookies).toHaveBeenCalledWith(undefined, {
+      targetId: "t1",
+      profile: "builderforce",
+    });
+    expect(result?.details).toMatchObject({ ok: true, targetId: "t1" });
+  });
+
+  it("routes storage_set with kind/key/value to the host client wrapper", async () => {
+    const tool = createBrowserTool();
+    await tool.execute?.("call-1", {
+      action: "storage_set",
+      storageKind: "local",
+      key: "token",
+      value: "abc",
+    });
+
+    expect(browserActionsMocks.browserStorageSet).toHaveBeenCalledWith(undefined, {
+      kind: "local",
+      key: "token",
+      value: "abc",
+      targetId: undefined,
+      profile: undefined,
+    });
+  });
+
+  it("rejects invalid state params before calling the browser", async () => {
+    const tool = createBrowserTool();
+    await expect(
+      tool.execute?.("call-1", { action: "storage_get", storageKind: "cookie" }),
+    ).rejects.toThrow("storageKind must be local|session");
+    expect(browserActionsMocks.browserStorageGet).not.toHaveBeenCalled();
+  });
+
+  it("routes set_device to the node proxy when target=node", async () => {
+    nodesUtilsMocks.listNodes.mockResolvedValue([
+      {
+        nodeId: "node-1",
+        displayName: "Browser Node",
+        connected: true,
+        caps: ["browser"],
+        commands: ["browser.proxy"],
+      },
+    ]);
+    const tool = createBrowserTool();
+    await tool.execute?.("call-1", { action: "set_device", target: "node", device: "iPhone 13" });
+
+    expect(gatewayMocks.callGatewayTool).toHaveBeenCalledWith(
+      "node.invoke",
+      { timeoutMs: 20000 },
+      expect.objectContaining({
+        nodeId: "node-1",
+        command: "browser.proxy",
+        params: expect.objectContaining({
+          method: "POST",
+          path: "/set/device",
+          body: { targetId: undefined, name: "iPhone 13" },
+        }),
+      }),
+    );
+    expect(browserActionsMocks.browserSetDevice).not.toHaveBeenCalled();
+  });
+});
 
 describe("browser tool snapshot maxChars", () => {
   afterEach(() => {

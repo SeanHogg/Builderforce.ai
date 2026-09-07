@@ -36,11 +36,6 @@ export {
   type StartLineWebhookOptions,
 } from "./webhook.js";
 export {
-  handleLineHttpRequest,
-  registerLineHttpHandler,
-  normalizeLineWebhookPath,
-} from "./http-registry.js";
-export {
   resolveLineAccount,
   listLineAccountIds,
   resolveDefaultLineAccountId,
@@ -118,6 +113,11 @@ export {
   type RichMenuSize,
   type RichMenuAreaRequest,
 } from "./rich-menu.js";
+export {
+  buildRichMenuParamsFromConfig,
+  ensureDefaultRichMenu,
+  type EnsureDefaultRichMenuResult,
+} from "./rich-menu-startup.js";
 
 // Template messages (Button, Confirm, Carousel)
 export {
@@ -146,6 +146,9 @@ export type {
   LineConfig,
   LineAccountConfig,
   LineGroupConfig,
+  LineRichMenuConfig,
+  LineRichMenuAreaConfig,
+  LineRichMenuActionConfig,
   ResolvedLineAccount,
   LineTokenSource,
   LineMessageType,

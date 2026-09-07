@@ -14,6 +14,8 @@ export type PluginManifest = {
   channels?: string[];
   providers?: string[];
   skills?: string[];
+  /** Directories (relative to the plugin root) scanned for HOOK.md hook packages. */
+  hooks?: string[];
   name?: string;
   description?: string;
   version?: string;
@@ -75,6 +77,7 @@ export function loadPluginManifest(rootDir: string): PluginManifestLoadResult {
   const channels = normalizeStringList(raw.channels);
   const providers = normalizeStringList(raw.providers);
   const skills = normalizeStringList(raw.skills);
+  const hooks = normalizeStringList(raw.hooks);
 
   let uiHints: Record<string, PluginConfigUiHint> | undefined;
   if (isRecord(raw.uiHints)) {
@@ -90,6 +93,7 @@ export function loadPluginManifest(rootDir: string): PluginManifestLoadResult {
       channels,
       providers,
       skills,
+      hooks,
       name,
       description,
       version,

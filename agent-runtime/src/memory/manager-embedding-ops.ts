@@ -9,6 +9,7 @@ import {
 import { type VoyageBatchRequest, runVoyageEmbeddingBatches } from "./batch-voyage.js";
 import { enforceEmbeddingMaxInputTokens } from "./embedding-chunk-limits.js";
 import { estimateUtf8Bytes } from "./embedding-input-limits.js";
+import { fingerprintHeaderNames } from "./headers-fingerprint.js";
 import {
   chunkMarkdown,
   hashText,
@@ -240,7 +241,17 @@ export abstract class MemoryManagerEmbeddingOps extends MemoryManagerSyncOps {
         }),
       );
     }
-    return hashText(JSON.stringify({ provider: this.provider.id, model: this.provider.model }));
+    // Generic (voyage / local / future) branch: no per-provider client to inspect,
+    // so fingerprint the CONFIGURED remote header names (never values). Omitted
+    // when no headers are configured so pre-existing index keys stay valid.
+    const headerNames = fingerprintHeaderNames(this.settings.remote?.headers);
+    return hashText(
+      JSON.stringify({
+        provider: this.provider.id,
+        model: this.provider.model,
+        ...(headerNames.length > 0 ? { headerNames } : {}),
+      }),
+    );
   }
 
   private async embedChunksWithBatch(

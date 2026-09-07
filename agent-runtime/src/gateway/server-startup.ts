@@ -9,6 +9,7 @@ import { resolveFreetokenApiBase, resolveOllamaApiBase } from "../agents/models-
 import { resolveAgentSessionDirs } from "../agents/session-dirs.js";
 import { cleanStaleLockFiles } from "../agents/session-write-lock.js";
 import { registerPlatformPersonasAsRoles } from "../builderforce/agent-roles.js";
+import { globalPersonaRegistry } from "../builderforce/personas.js";
 import { globalOrchestrator } from "../builderforce/orchestrator.js";
 import { loadProjectContext } from "../builderforce/project-context.js";
 import type { CliDeps } from "../cli/deps.js";
@@ -39,6 +40,7 @@ import {
   SsmMemoryAdapter,
   WorkflowTelemetryAdapter,
 } from "../infra/orchestrator-ports-adapter.js";
+import { syncPersonasToBuilderforce, toPersonaDefinitions } from "../infra/persona-export-sync.js";
 import { fetchPlatformPersonas } from "../infra/platform-persona-sync.js";
 import { pushProjectContextToBuilderforce } from "../infra/project-context-push.js";
 import { checkAndWarnQuota } from "../infra/quota-monitor.js";
@@ -408,6 +410,19 @@ async function startBuilderforceServices(
           }
         },
       );
+
+      // Outbound twin of the fetch above: publish this host's custom personas
+      // (user-global + project-local, bootstrapped in server.impl.ts) so the
+      // portal can display the agentNode's available roles. Best-effort.
+      const exportedPersonas = toPersonaDefinitions(globalPersonaRegistry.listAll());
+      void syncPersonasToBuilderforce(
+        { baseUrl, agentNodeId: String(agentNodeId), apiKey },
+        exportedPersonas,
+      ).then((ok) => {
+        if (ok && exportedPersonas.length > 0) {
+          params.log.warn(`[persona-sync] pushed ${exportedPersonas.length} custom persona(s)`);
+        }
+      });
 
       // Hired/purchased agents become callable orchestrate roles. Read-through
       // cached + registered here; degrades to built-ins only on an older API.
