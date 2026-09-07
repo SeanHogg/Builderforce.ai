@@ -9,10 +9,10 @@
  * Consumed by the tenant MCP extension guard (https-only) and the Brain web
  * fetch tool (http+https), so the host-blocking lives here once.
  *
- * Residual: a PUBLIC hostname that DNS-resolves to a private IP (DNS rebinding)
- * is not caught here — that needs fetch-time IP pinning, which the Workers
- * runtime doesn't expose pre-fetch. The literal-IP + internal-name checks cover
- * the realistic owner-probing case.
+ * A PUBLIC hostname that DNS-resolves to a private IP (DNS rebinding) is not caught
+ * by the literal checks here — that is {@link resolveAndAssertPublic}'s job, and the
+ * window between resolving and connecting is narrowed by `./fetchPublic`, which runs
+ * the same check again DURING the request. Read that module before changing this one.
  */
 
 /** Reject an IPv4 literal in a loopback / private / link-local / reserved range
@@ -98,12 +98,19 @@ export function assertSafeUrl(rawUrl: string, opts: { allowHttp?: boolean } = {}
 }
 
 /**
- * DNS-rebinding guard (best-effort). Closes the residual documented above: a
- * PUBLIC hostname that DNS-resolves to a PRIVATE IP passes {@link assertSafeUrl}
- * (which only sees the literal name) but must never be fetched. The Workers
- * runtime doesn't expose fetch-time IP pinning, so we resolve the name OURSELVES
- * over DNS-over-HTTPS (Cloudflare `dns-query`, JSON), then run the same
- * {@link isBlockedIpv4}/{@link isBlockedIpv6} range checks on every answer.
+ * DNS-rebinding guard (best-effort). A PUBLIC hostname that DNS-resolves to a
+ * PRIVATE IP passes {@link assertSafeUrl} (which only sees the literal name) but
+ * must never be fetched. The Workers runtime doesn't expose fetch-time IP pinning,
+ * so we resolve the name OURSELVES over DNS-over-HTTPS (Cloudflare `dns-query`,
+ * JSON), then run the same {@link isBlockedIpv4}/{@link isBlockedIpv6} range checks
+ * on every answer.
+ *
+ * ONE call is a point-in-time check, and the runtime resolves the name again when it
+ * opens the connection — so callers should not invoke this directly in front of a
+ * fetch. `./fetchPublic` runs it twice, once before the request and once concurrently
+ * with it, which is what makes the check span the window the connection is made in.
+ * Direct use is for the cases with NO request to span (an egress audit that only
+ * reports).
  *
  * FAILS OPEN by design: a DoH lookup that errors/times out does NOT block the
  * request — {@link assertSafeUrl} already rejects literal private IPs and internal

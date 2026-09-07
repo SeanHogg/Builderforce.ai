@@ -33,7 +33,7 @@ describe('deleting an object from its card', () => {
     // `canvasNodeDensity.test.tsx`: React Flow's node subtree computes as hidden under
     // jsdom, so the accessible name comes back empty for every card control.
     const trash = screen.getByTestId(`canvas-node-delete-${nodeId}`);
-    expect(trash).toHaveAttribute('aria-label', 'Delete Code workspace');
+    expect(trash).toHaveAttribute('aria-label', 'Remove Code workspace from the board');
     expect(trash).not.toBeDisabled();
 
     fireEvent.click(trash);
@@ -51,7 +51,7 @@ describe('deleting an object from its card', () => {
 
     const trash = screen.getByTestId(`canvas-node-delete-${nodeId}`);
     expect(trash).toBeDisabled();
-    expect(trash).toHaveAttribute('aria-label', 'Code workspace is locked — unlock it to delete');
+    expect(trash).toHaveAttribute('aria-label', 'Code workspace is locked in place — unlock it to remove it');
 
     fireEvent.click(trash);
     expect(screen.getByTestId('canvas-node-code')).toBeInTheDocument();

@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import styles from './CreationCanvas.module.css';
+import { BrainMark } from '@/components/brain/BrainMark';
 import { BrainSurfaceActions, BrainSurfaceBody, type BrainSurfaceBodyProps } from './BrainDock';
 import { memberAvatarClass, memberInitials } from './rosterAvatar';
 import type { CanvasRosterMember } from './types';
@@ -69,7 +70,7 @@ export function CanvasChatSurface({
   return (
     <section className={styles.chatSurface} aria-label={t('surface.chat.label')} data-testid="canvas-chat-surface">
       <header className={styles.chatSurfaceHeader}>
-        <span className={styles.brainDockMark} aria-hidden><Icon source="✦" size="1em" /></span>
+        <span className={styles.brainDockMark} aria-hidden><BrainMark running={body.running} /></span>
         <strong>{t('brain')}</strong>
         {/* The same roster the command bar's collapsed cluster draws — participants
             are part of the conversation, not a fact the bar alone reports. */}

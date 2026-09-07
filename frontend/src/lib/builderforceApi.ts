@@ -1008,6 +1008,8 @@ export type WorkflowNodeKind =
   // Flow Control (0), Tools, Text Parser, AI Agents (reuses 'llm'), Diagnostics —
   // see api/src/domain/workflowGraph.ts, kept in sync manually (no shared package).
   | 'router' | 'switch' | 'iterator' | 'merge'
+  /** COMPOSITION: another canvas, run as one step. See domains/workflow/domain/subflow.ts. */
+  | 'subflow'
   | 'numeric-aggregator' | 'table-aggregator' | 'text-aggregator'
   | 'set-variable' | 'get-variable' | 'set-variables' | 'get-variables' | 'increment' | 'sleep'
   | 'compose-string' | 'convert-encoding'

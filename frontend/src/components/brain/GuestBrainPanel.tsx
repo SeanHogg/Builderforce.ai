@@ -24,6 +24,7 @@
  */
 
 import { Icon } from '@/components/ui/Icon';
+import { BrainMark } from './BrainMark';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePolledResource } from '@/hooks/usePolledResource';
 import Link from 'next/link';
@@ -278,7 +279,7 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
     <div className={`gb-root ${isPage ? 'gb-page' : 'gb-docked'}`}>
       {/* Header */}
       <div className="gb-header">
-        <span className="gb-brand"><Icon source="🧠" size="1em" /> {t('brand')}</span>
+        <span className="gb-brand"><BrainMark /> {t('brand')}</span>
         <div className="gb-header-right">
           <Link href="/register" className="gb-signup-link">{t('signUpFree')}</Link>
           {onClose && (
@@ -492,7 +493,7 @@ function GuestCapWall({
 function GuestDisabledCTA({ t }: { t: ReturnType<typeof useTranslations> }) {
   return (
     <div className="gb-disabled">
-      <div className="gb-empty-emoji"><Icon source="🧠" size="1em" /></div>
+      <div className="gb-empty-emoji"><BrainMark /></div>
       <div className="gb-empty-title">{t('meetTitle')}</div>
       <div className="gb-empty-body">{t('meetBody')}</div>
       <GuestSignupCta prompt={{ next: '/brainstorm' }} layout="actions" />

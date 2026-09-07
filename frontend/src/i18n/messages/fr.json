@@ -19495,6 +19495,7 @@
     "brain": "Brain",
     "brainDock": "Chat Brain",
     "openBrainDock": "Afficher le chat Brain",
+    "openBrainDockBusy": "Brain travaille — afficher le chat Brain",
     "closeBrain": "Fermer le chat Brain",
     "dockBrainLeft": "Ancrer Brain à gauche",
     "dockBrainRight": "Ancrer Brain à droite",

@@ -111,7 +111,13 @@ vi.mock('@xyflow/react', async () => {
  * caption them, and a second floating pill in the corner is what deleting the left-hand
  * rail fixed. Every test that used to reach for them on the bar opens the sheet first.
  */
-const openBoardMenu = () => fireEvent.click(screen.getByRole('button', { name: 'More session actions' }));
+const openBoardMenu = () => {
+  // ENSURE OPEN, not toggle. The trigger is one button with two meanings, so a test that
+  // reaches into the sheet twice closed it the second time and then asserted against a
+  // sheet that was not on screen. It reports its own state, so ask before pressing.
+  const trigger = screen.getByRole('button', { name: 'More session actions' });
+  if (trigger.getAttribute('aria-expanded') !== 'true') fireEvent.click(trigger);
+};
 
 describe('CreationCanvas', { timeout: 120_000 }, () => {
   it('scores explicit agent-test criteria and preserves unscored review runs', () => {

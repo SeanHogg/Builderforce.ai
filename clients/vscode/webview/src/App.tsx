@@ -26,6 +26,7 @@ import {
   NEW_CHAT_MODE,
   normalizeChatMode,
   mergeRecoveredTrace,
+  projectMemoryHooks,
   type ChatMode,
   type Effort,
   type BrainConfig,
@@ -35,7 +36,6 @@ import {
   type DirectedRecipient,
   type RecipientChoice,
   type GlobalRunState,
-  type EvermindRecallResult,
   type BrainTraceEvent,
   type BrainMessage,
 } from '@seanhogg/builderforce-brain-embedded';
@@ -968,33 +968,14 @@ function Chat({ init }: { init: InitData }) {
     });
   }, [chatId, init.project?.id, persistence, reloadChats]);
 
+  // The project's server memory (recall → memory-first answer → write-through). Built
+  // by the SHARED factory the web Brain uses, so the two hosts cannot drift apart on
+  // what the Brain remembers — which is exactly how the web surfaces ended up without
+  // the memory-first pair this webview had.
   const evermind = useMemo(() => {
     if (evermindProjectId == null) return undefined;
     const req = authedFetch(init.baseUrl, getToken, () => void refreshToken());
-    return {
-      recall: (query: string) =>
-        req<EvermindRecallResult>(`/api/projects/${evermindProjectId}/evermind/recall`, {
-          method: 'POST',
-          body: JSON.stringify({ query }),
-        }).catch(() => null),
-      // Memory-first: BEFORE the paid model, ask the project's own memory (exact-repeat
-      // Q&A cache, then — only for a TOOL-LESS run — its Evermind SSM). A substantive hit
-      // short-circuits the LLM. `tools=0` is what unlocks the SSM leg: it has no
-      // tool-calling, so on a run that CAN call tools the server serves cache hits only,
-      // rather than answering a live question ("which tickets are in the backlog?") from
-      // stale weights while the tools that could answer it go uncalled.
-      answer: (query: string, opts: { toolsAvailable: boolean }) =>
-        req<{ answer: { text: string; source: 'qa-cache' | 'evermind'; evermindVersion?: number; evermindProjectId?: number } | null }>(
-          `/api/projects/${evermindProjectId}/answer?query=${encodeURIComponent(query)}&tools=${opts.toolsAvailable ? '1' : '0'}`,
-        ).then((r) => r?.answer ?? null).catch(() => null),
-      // Remember a fresh (question → answer) so the next exact repeat is free.
-      cacheAnswer: (query: string, answer: string) => {
-        void req(`/api/projects/${evermindProjectId}/answer`, {
-          method: 'POST',
-          body: JSON.stringify({ question: query, answer }),
-        }).catch(() => { /* best-effort */ });
-      },
-    };
+    return projectMemoryHooks(evermindProjectId, req);
   }, [evermindProjectId, init.baseUrl]);
 
   // Per-chat memory switch: whether THIS chat passes the project-Evermind hooks

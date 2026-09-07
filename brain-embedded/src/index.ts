@@ -74,6 +74,7 @@ export type { PreparedImage } from './imagePrep';
 export {
   formatEvermindMemoryBlock,
   countReconciledMemories,
+  projectMemoryHooks,
   EVERMIND_LEARN_MIN_CHARS,
 } from './evermindMemory';
 export type {
@@ -81,7 +82,12 @@ export type {
   EvermindRecallResult,
   EvermindRecallItem,
   MemoryFirstAnswer,
+  ProjectMemoryRequest,
 } from './evermindMemory';
+
+// The ON-DEVICE memory tier + the layering that puts it in front of the server one.
+export { onDeviceMemoryHooks, composeEvermindHooks, ON_DEVICE_ANSWER_THRESHOLD } from './onDeviceMemory';
+export type { OnDeviceAnswerStore } from './onDeviceMemory';
 
 // MCP-style client action registry (the extension contract)
 export {

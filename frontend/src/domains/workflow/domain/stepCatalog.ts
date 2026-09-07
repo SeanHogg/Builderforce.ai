@@ -1,4 +1,5 @@
 import type { WorkflowNodeKind } from '@/lib/builderforceApi';
+import { COMPOSITION_STEP_KINDS } from './stepKinds/composition';
 import { CONNECT_STEP_KINDS } from './stepKinds/connect';
 import { EVERMIND_STEP_KINDS } from './stepKinds/evermind';
 import { FLOW_CONTROL_STEP_KINDS } from './stepKinds/flowControl';
@@ -81,6 +82,7 @@ export interface NodeKindMeta {
  */
 export const NODE_KINDS: NodeKindMeta[] = [
   ...CONNECT_STEP_KINDS,
+  ...COMPOSITION_STEP_KINDS,
   ...EVERMIND_STEP_KINDS,
   ...FLOW_CONTROL_STEP_KINDS,
   ...TEXT_PARSER_STEP_KINDS,

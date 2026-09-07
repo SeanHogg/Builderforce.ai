@@ -20,6 +20,7 @@ import { CanvasClockBody } from './CanvasClockBody';
 import { CanvasTransclusionBody } from './CanvasTransclusionBody';
 import { CanvasComponentBody } from './CanvasComponentBody';
 import styles from './CreationCanvas.module.css';
+import { BrainMark } from '@/components/brain/BrainMark';
 import { creationObjectDefinition, emptyShellProblem } from './creationObjectRegistry';
 import {
   canvasNodeMessages,
@@ -2463,7 +2464,7 @@ function useBrainNodeActivity(data: CreationNodeData) {
  * The mark: Brain reduced to a single object on the board while the conversation
  * lives in the edge dock.
  *
- * It carries the SAME `✦` as the dock header, so the mark on the board and the panel
+ * It carries the SAME brain mark as the dock header, so the mark on the board and the panel
  * it opens are visibly one Brain rather than two things that both say "Brain". It
  * animates from the same activity state every other surface narrates from, so a
  * working Brain is legible on the board without repeating the dock's words next to
@@ -2486,8 +2487,7 @@ function BrainMarkerBody({ data, onOpen }: { data: CreationNodeData; onOpen: () 
     title={label}
     onClick={onOpen}
   >
-    <span className={styles.brainMarkerPulse} aria-hidden />
-    <span className={styles.brainMarkerMark} aria-hidden><Icon source="✦" size="1em" /></span>
+    <BrainMark running={!!activity.live} size={26} />
   </button>;
 }
 

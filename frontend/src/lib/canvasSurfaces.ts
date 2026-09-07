@@ -19,7 +19,8 @@
  * a board?" from an id comparison — it reads the flag.
  *
  * ── WHY THE 3D BOOLEAN MOVED IN HERE ─────────────────────────────────────────────
- * `useCanvasThreeD` keeps a flat-or-3D boolean for the four OTHER spatial canvases, and
+ * `useCanvasThreeD` keeps a flat-or-3D boolean for the three OTHER spatial canvases
+ * (`WorkspaceCanvas`, `pm/DependencyGraph`, `insights/ValueStreamGraph`), and
  * still does. On the creation canvas that boolean was a second answer to the question
  * this registry now owns: two states, two controls, and a `threeD.active ? '3d' : 'flat'`
  * ternary that a third surface could not extend. The creation canvas therefore derives

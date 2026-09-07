@@ -19495,6 +19495,7 @@
     "brain": "Brain",
     "brainDock": "Brain 聊天",
     "openBrainDock": "显示 Brain 聊天",
+    "openBrainDockBusy": "Brain 正在处理 — 显示 Brain 聊天",
     "closeBrain": "关闭 Brain 聊天",
     "dockBrainLeft": "将 Brain 停靠到左侧",
     "dockBrainRight": "将 Brain 停靠到右侧",

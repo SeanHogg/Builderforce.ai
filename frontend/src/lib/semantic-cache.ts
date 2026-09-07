@@ -13,8 +13,9 @@
  */
 
 import type { SemanticCache } from '@seanhogg/builderforce-memory';
+import { ON_DEVICE_ANSWER_THRESHOLD } from '@seanhogg/builderforce-brain-embedded';
 import { AUTH_API_URL, getStoredTenantToken } from './auth';
-import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
+import { getOrSetClientCached } from '@/infrastructure/http/readThrough';
 
 /** True only where an on-device WebGPU SSM embedder can exist. Shared with
  *  `MambaModelProvider` so the WebGPU gate lives in exactly one place (DRY). */
@@ -26,6 +27,7 @@ export function hasWebGPU(): boolean {
 const DEFAULT_THRESHOLD = 0.92;
 
 const CACHE_KEY = 'semantic-response-cache:runtime';
+const BRAIN_CACHE_KEY = 'semantic-response-cache:brain-on-device';
 
 /**
  * Lazily build (once) the semantic response cache backed by an on-device SSM embedder.
@@ -33,26 +35,49 @@ const CACHE_KEY = 'semantic-response-cache:runtime';
  * degrade to a direct network call.
  */
 export function getSemanticResponseCache(): Promise<SemanticCache | null> {
-  return getOrSetClientCached(CACHE_KEY, () => buildSemanticResponseCache());
+  return getOrSetClientCached(CACHE_KEY, () => buildSsmSemanticCache({ shared: true, threshold: DEFAULT_THRESHOLD }));
 }
 
-async function buildSemanticResponseCache(): Promise<SemanticCache | null> {
+/**
+ * The SHARED BRAIN's on-device answer memory — the same SSM embedder, with the two
+ * differences that make it a memory tier rather than a cost cache:
+ *
+ *   • **No L2.** This tier exists to answer WITHOUT a server in the path; a shared
+ *     backend would put one back and would also duplicate the server-side Q&A cache
+ *     the Brain already consults on the next tier down.
+ *   • **A near-identity threshold** ({@link ON_DEVICE_ANSWER_THRESHOLD}) instead of the
+ *     paraphrase-tolerant one above — see that constant for why a memory answering a
+ *     person is held to a stricter bar than one avoiding a bill.
+ *
+ * Null whenever the runtime cannot provide it, so the Brain simply falls through to
+ * its server tier.
+ */
+export function getOnDeviceAnswerMemory(): Promise<SemanticCache | null> {
+  return getOrSetClientCached(BRAIN_CACHE_KEY, () => buildSsmSemanticCache({ shared: false, threshold: ON_DEVICE_ANSWER_THRESHOLD }));
+}
+
+/**
+ * The ONE construction of an SSM-backed semantic cache in the web app. Both callers
+ * above differ only in their threshold and whether the shared L2 tier is attached, so
+ * the WebGPU gate, the lazy runtime import and the failure handling live here once.
+ */
+async function buildSsmSemanticCache(opts: { shared: boolean; threshold: number }): Promise<SemanticCache | null> {
   if (!hasWebGPU()) return null;
   try {
     const mod = await import('@seanhogg/builderforce-memory');
     // Browser uses the global WebGPU/IndexedDB automatically; modelSize keeps the
     // embedding model light. Asset/WebGPU failures throw → caught → null (no cache).
     const runtime = await mod.SSM.create({ session: { modelSize: 'small' } });
-    const token = getStoredTenantToken();
+    const token = opts.shared ? getStoredTenantToken() : null;
     const l2 = token ? new mod.FetchSemanticCacheBackend({ baseUrl: AUTH_API_URL, apiKey: token, namespace: 'web-model-provider-v1' }) : undefined;
     return new mod.SemanticCache({
       embed: (text: string) => runtime.embed(text),
-      threshold: DEFAULT_THRESHOLD,
+      threshold: opts.threshold,
       l2,
       ttlMs: 24 * 60 * 60 * 1_000,
     });
   } catch (err) {
-    console.warn('[semantic-cache] unavailable — cloud responses uncached:', err);
+    console.warn('[semantic-cache] unavailable — on-device memory off:', err);
     return null;
   }
 }

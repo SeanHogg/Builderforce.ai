@@ -862,6 +862,31 @@ interface EvermindRunHooks {
     cacheAnswer?(query: string, answer: string): void | Promise<void>;
 }
 /**
+ * The host's authenticated JSON transport, as a port. Both Brain hosts already have
+ * one (`apiRequest` on the web, the webview's `authedFetch`); this is the intersection
+ * the memory hooks need, so neither has to hand it a bespoke wrapper.
+ */
+type ProjectMemoryRequest = <T>(path: string, init?: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string;
+}) => Promise<T>;
+/**
+ * The project's SERVER-side memory hooks, built once for every host.
+ *
+ * The three calls — recall, memory-first answer, write-through — are the same routes
+ * with the same query parameters and the same "a failure is not an error, it is just
+ * no memory" contract wherever the Brain runs. They were hand-written per host, and
+ * the copies had drifted: the web surfaces passed only `recall` (one of them plus a
+ * `learn` callback this interface has never had, so it was dead), while only the VS
+ * Code webview had the memory-first pair at all. Same loop, three different memories.
+ *
+ * `toolsAvailable` is threaded through honestly, because the server uses it to decide
+ * whether the Evermind SSM leg may run: it cannot call a tool, so on a run that could
+ * fetch the real answer it must never pre-empt the model from stale weights.
+ */
+declare function projectMemoryHooks(projectId: number, request: ProjectMemoryRequest): EvermindRunHooks;
+/**
  * Assistant text shorter than this isn't a teaching signal, so the server won't
  * contribute it. Mirrors `MIN_TEACH_CHARS` in the api's `brainEvermindLearning.ts`
  * so the "contributed to Evermind" step appears exactly when the server actually
@@ -881,6 +906,85 @@ declare function formatEvermindMemoryBlock(items: EvermindRecallItem[]): string;
  * only to surface the reconcile step, never to gate learning.
  */
 declare function countReconciledMemories(items: EvermindRecallItem[], answer: string): number;
+
+/**
+ * ON-DEVICE memory for the shared Brain — a memory tier that answers from the user's
+ * own machine, with no server in the path at all.
+ *
+ * WHAT WAS MISSING. `evermindMemory.ts` describes memory hooks whose "heavy lifting
+ * lives server-side": recall, the Q&A cache and the Evermind SSM are all HTTP calls
+ * bound to a project. The in-browser SSM — the WebGPU Mamba runtime the app already
+ * ships for the agent-publish stack — was never reachable from the Brain, so a repeat
+ * question always cost a round trip even when the answer was already sitting in the
+ * tab that asked it. That is the "on-device inference isn't in the shared Brain" gap.
+ *
+ * WHAT THIS IS, AND WHAT IT IS NOT. It is a SEMANTIC ANSWER CACHE keyed by an
+ * on-device embedding: a question close enough to one this browser already answered
+ * replays that answer, locally. It is NOT a second Evermind and it does not generate:
+ * the in-browser SSM is an embedder here, not a chat model, and a tier that invented
+ * answers from small local weights would be strictly worse than the model it pre-empts.
+ * So a hit is reported as `qa-cache` — the honest provenance, the same one the server's
+ * exact-repeat cache reports — and the timeline says a cached answer served, never that
+ * a local model wrote one.
+ *
+ * WHY IT IS SAFE TO PUT IN FRONT. The threshold is the whole argument. The server's
+ * Q&A cache replays on an EXACT repeat; a semantic cache at its usual 0.92 would replay
+ * on a paraphrase, and "which tickets are in the backlog?" asked twice about different
+ * boards is a paraphrase. {@link ON_DEVICE_ANSWER_THRESHOLD} is therefore set at
+ * near-identity, making this a restatement cache rather than a similarity cache.
+ *
+ * Pure and transport-agnostic, like the rest of this package: the STORE is injected, so
+ * the SSM runtime, WebGPU detection and any shared L2 stay in the host that has them,
+ * and this module is safe in every bundle including ones with no GPU story at all.
+ */
+
+/**
+ * The on-device answer store, as a port. Structurally satisfied by the
+ * `SemanticCache` in `@seanhogg/builderforce-memory`, which is what the web host
+ * injects — declared here as a shape so this package takes no dependency on it.
+ */
+interface OnDeviceAnswerStore {
+    /** Best stored answer for a semantically-similar prior question, or undefined. */
+    lookup(query: string): Promise<{
+        response: string;
+        score: number;
+    } | undefined>;
+    /** Remember a (question → answer) pair. */
+    store(query: string, response: string): Promise<void>;
+}
+/**
+ * Cosine similarity at/above which a stored local answer is replayed.
+ *
+ * Deliberately far above the 0.92 the response cache uses for cloud completions. That
+ * cache is protecting a bill; this one is answering a person, and the cost of being
+ * wrong is not a wasted call but a confidently stale answer to a question nobody
+ * re-asked. At this threshold a hit means "you asked this again", not "you asked
+ * something like this".
+ */
+declare const ON_DEVICE_ANSWER_THRESHOLD = 0.985;
+/**
+ * Build the on-device half of the Brain's memory hooks from a lazily-loaded store.
+ *
+ * `load` is called at most once per turn and may return null forever (no WebGPU, no
+ * SSM assets, a runtime that cannot spawn a worker) — every hook then answers "I have
+ * nothing", which is exactly what makes this safe to place in front of the server tier.
+ * Nothing here throws: a memory tier that can fail a turn is worse than no memory tier.
+ */
+declare function onDeviceMemoryHooks(load: () => Promise<OnDeviceAnswerStore | null>): Pick<EvermindRunHooks, 'answer' | 'cacheAnswer'>;
+/**
+ * Layer memory hooks into one set, nearest-first.
+ *
+ * The layers are tiers, and the order IS the policy: ask the cheapest, most local
+ * source first and fall through. `recall` comes from the first layer that has one
+ * (grounding is the project corpus's job — a local answer cache has no corpus to
+ * ground with). `answer` walks the layers until one answers. `cacheAnswer` writes to
+ * ALL of them, because a turn the server remembers should also be the turn this
+ * browser can replay offline, and vice versa.
+ *
+ * Returns undefined when no layer supplies anything, so a host can pass the result
+ * straight through to the run loop's optional `evermind` prop.
+ */
+declare function composeEvermindHooks(...layers: (Partial<EvermindRunHooks> | null | undefined)[]): EvermindRunHooks | undefined;
 
 /** A capability a consumer exposes to the Brain (the MCP extension unit). */
 interface BrainAction<A = unknown, R = unknown> {
@@ -4647,4 +4751,4 @@ declare function pmoFocusDomId(kind: string, id: string): string;
  */
 declare function artifactRoutePath(kind: string, ref: string | null | undefined, projectId?: number | null): string;
 
-export { ADDRESSED_TO_META_KEY, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArtifactKind, type AssembledToolCall, BASE_BRANCHES, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunActivity, type BrainRunDriver, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type CachedRead, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type CompletionMetadata, type ComposerDirectiveOptions, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, FAILURE_HARD_AT, FAILURE_NUDGE_AT, FailureTally, type GitShortStatus, type GlobalRunState, type ImageUrlContentPart, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, MAX_TOOL_RESULT_CHARS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MentionToken, type MessageProvenance, type ModelCategory, type ModelChoiceLabels, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, PMO_FOCUS_PARAM, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PersistedStep, type PreparedImage, type ProvenanceAccount, READ_FILE_RESULT_CHARS, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RepeatedTarget, type RoutedProduct, type RunMilestoneActivity, type RunMilestonePhase, type RunProgress, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNSCOPED_MUTATION_TOOLS, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, activeModelKey, activityIcon, activityTarget, activityTone, allowanceState, announcesUntakenAction, applyRemoteRun, artifactRoutePath, attachEvermindLearn, buildBrainTriageReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, canChangeCodeHere, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, computeRunProgress, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, createPayloadBudget, deriveChatTitle, describeLiveStep, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, displayModelName, effortProfile, extractXmlToolCalls, failureReason, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, findTools, forgetResolvedModels, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, formatRunProgress, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, installRunDriver, isActivityMessage, isChatMode, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isLocalWorkspaceTool, isMalformedToolCall, isMutationTool, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, isTruncatedTurn, isUnscopedMutationTool, isUserConfiguredModelRef, lastConsolidationIndex, linkedTicketsToAdvance, linkedTicketsToComplete, localStorageConfirmationPersistence, localToolsIn, mcpActionsFrom, mentionRecipient, mergeRecoveredTrace, midRunNotice, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, parseByoUnresolved, parseChatActivity, parseDirectedRecipient, parseGitShortStatus, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, perMillionUsd, pmoFocusDomId, pmoFocusValue, premiumCostLabel, prepareImageDataUrl, productForPlan, productModelName, progressDuration, ratedTurnContext, ratedTurnTool, reasoningForRun, repeatedFailureAdvisory, requestRunConfirm, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, revealsModelId, revisitAdvisory, routerToolSpecs, routingQueryForTurn, startRun as runBrainLoop, runProgressVerdict, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, shortenTarget, stableStringify, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolActivity, toolExposureInTrace, toolNamesMentionedIn, toolSpecsFor, traceWithPersistedSteps, trimToolResult, turnInterruption, turnOptimizationDirective, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, useToolConfirmationGate, withAdvisory, withDirectedMetadata, withObservedModel, withProvenanceMetadata, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArtifactKind, type AssembledToolCall, BASE_BRANCHES, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunActivity, type BrainRunDriver, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type CachedRead, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type CompletionMetadata, type ComposerDirectiveOptions, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, FAILURE_HARD_AT, FAILURE_NUDGE_AT, FailureTally, type GitShortStatus, type GlobalRunState, type ImageUrlContentPart, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, MAX_TOOL_RESULT_CHARS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MentionToken, type MessageProvenance, type ModelCategory, type ModelChoiceLabels, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, ON_DEVICE_ANSWER_THRESHOLD, type OnDeviceAnswerStore, PMO_FOCUS_PARAM, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PersistedStep, type PreparedImage, type ProjectMemoryRequest, type ProvenanceAccount, READ_FILE_RESULT_CHARS, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RepeatedTarget, type RoutedProduct, type RunMilestoneActivity, type RunMilestonePhase, type RunProgress, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNSCOPED_MUTATION_TOOLS, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, activeModelKey, activityIcon, activityTarget, activityTone, allowanceState, announcesUntakenAction, applyRemoteRun, artifactRoutePath, attachEvermindLearn, buildBrainTriageReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, canChangeCodeHere, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, composeEvermindHooks, computeBrainDiagnostics, computeRunProgress, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, createPayloadBudget, deriveChatTitle, describeLiveStep, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, displayModelName, effortProfile, extractXmlToolCalls, failureReason, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, findTools, forgetResolvedModels, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, formatRunProgress, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, installRunDriver, isActivityMessage, isChatMode, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isLocalWorkspaceTool, isMalformedToolCall, isMutationTool, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, isTruncatedTurn, isUnscopedMutationTool, isUserConfiguredModelRef, lastConsolidationIndex, linkedTicketsToAdvance, linkedTicketsToComplete, localStorageConfirmationPersistence, localToolsIn, mcpActionsFrom, mentionRecipient, mergeRecoveredTrace, midRunNotice, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, onDeviceMemoryHooks, parseByoUnresolved, parseChatActivity, parseDirectedRecipient, parseGitShortStatus, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, perMillionUsd, pmoFocusDomId, pmoFocusValue, premiumCostLabel, prepareImageDataUrl, productForPlan, productModelName, progressDuration, projectMemoryHooks, ratedTurnContext, ratedTurnTool, reasoningForRun, repeatedFailureAdvisory, requestRunConfirm, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, revealsModelId, revisitAdvisory, routerToolSpecs, routingQueryForTurn, startRun as runBrainLoop, runProgressVerdict, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, shortenTarget, stableStringify, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolActivity, toolExposureInTrace, toolNamesMentionedIn, toolSpecsFor, traceWithPersistedSteps, trimToolResult, turnInterruption, turnOptimizationDirective, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, useToolConfirmationGate, withAdvisory, withDirectedMetadata, withObservedModel, withProvenanceMetadata, workItemLinkFromCreate };

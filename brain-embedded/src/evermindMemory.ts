@@ -91,6 +91,53 @@ export interface EvermindRunHooks {
 }
 
 /**
+ * The host's authenticated JSON transport, as a port. Both Brain hosts already have
+ * one (`apiRequest` on the web, the webview's `authedFetch`); this is the intersection
+ * the memory hooks need, so neither has to hand it a bespoke wrapper.
+ */
+export type ProjectMemoryRequest = <T>(
+  path: string,
+  init?: { method?: string; headers?: Record<string, string>; body?: string },
+) => Promise<T>;
+
+/**
+ * The project's SERVER-side memory hooks, built once for every host.
+ *
+ * The three calls — recall, memory-first answer, write-through — are the same routes
+ * with the same query parameters and the same "a failure is not an error, it is just
+ * no memory" contract wherever the Brain runs. They were hand-written per host, and
+ * the copies had drifted: the web surfaces passed only `recall` (one of them plus a
+ * `learn` callback this interface has never had, so it was dead), while only the VS
+ * Code webview had the memory-first pair at all. Same loop, three different memories.
+ *
+ * `toolsAvailable` is threaded through honestly, because the server uses it to decide
+ * whether the Evermind SSM leg may run: it cannot call a tool, so on a run that could
+ * fetch the real answer it must never pre-empt the model from stale weights.
+ */
+export function projectMemoryHooks(projectId: number, request: ProjectMemoryRequest): EvermindRunHooks {
+  const json = { 'Content-Type': 'application/json' };
+  return {
+    recall: (query: string) =>
+      request<EvermindRecallResult>(`/api/projects/${projectId}/evermind/recall`, {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ query }),
+      }).catch(() => null),
+    answer: (query: string, opts: { toolsAvailable: boolean }) =>
+      request<{ answer: MemoryFirstAnswer | null }>(
+        `/api/projects/${projectId}/answer?query=${encodeURIComponent(query)}&tools=${opts.toolsAvailable ? '1' : '0'}`,
+      ).then((r) => r?.answer ?? null).catch(() => null),
+    cacheAnswer: (query: string, answer: string) => {
+      void request(`/api/projects/${projectId}/answer`, {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ question: query, answer }),
+      }).catch(() => { /* best-effort: never fail a reply to remember it */ });
+    },
+  };
+}
+
+/**
  * Assistant text shorter than this isn't a teaching signal, so the server won't
  * contribute it. Mirrors `MIN_TEACH_CHARS` in the api's `brainEvermindLearning.ts`
  * so the "contributed to Evermind" step appears exactly when the server actually

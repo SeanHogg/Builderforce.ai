@@ -548,6 +548,27 @@ async function prepareImageDataUrl(file) {
 }
 
 // src/evermindMemory.ts
+function projectMemoryHooks(projectId, request) {
+  const json = { "Content-Type": "application/json" };
+  return {
+    recall: (query) => request(`/api/projects/${projectId}/evermind/recall`, {
+      method: "POST",
+      headers: json,
+      body: JSON.stringify({ query })
+    }).catch(() => null),
+    answer: (query, opts) => request(
+      `/api/projects/${projectId}/answer?query=${encodeURIComponent(query)}&tools=${opts.toolsAvailable ? "1" : "0"}`
+    ).then((r) => r?.answer ?? null).catch(() => null),
+    cacheAnswer: (query, answer) => {
+      void request(`/api/projects/${projectId}/answer`, {
+        method: "POST",
+        headers: json,
+        body: JSON.stringify({ question: query, answer })
+      }).catch(() => {
+      });
+    }
+  };
+}
 var EVERMIND_LEARN_MIN_CHARS = 40;
 var RECONCILE_OVERLAP = 0.6;
 var STOP = /* @__PURE__ */ new Set([
@@ -624,6 +645,66 @@ function countReconciledMemories(items, answer) {
     if (hit / mem.size >= RECONCILE_OVERLAP) n++;
   }
   return n;
+}
+
+// src/onDeviceMemory.ts
+var ON_DEVICE_ANSWER_THRESHOLD = 0.985;
+function onDeviceMemoryHooks(load) {
+  const store = async () => {
+    try {
+      return await load();
+    } catch {
+      return null;
+    }
+  };
+  return {
+    answer: async (query) => {
+      const cache = await store();
+      if (!cache) return null;
+      try {
+        const hit = await cache.lookup(query);
+        if (!hit || hit.score < ON_DEVICE_ANSWER_THRESHOLD || !hit.response.trim()) return null;
+        return { text: hit.response, source: "qa-cache" };
+      } catch {
+        return null;
+      }
+    },
+    cacheAnswer: async (query, answer) => {
+      const cache = await store();
+      if (!cache) return;
+      try {
+        await cache.store(query, answer);
+      } catch {
+      }
+    }
+  };
+}
+function composeEvermindHooks(...layers) {
+  const present = layers.filter((l) => !!l);
+  const recall = present.find((l) => l.recall)?.recall;
+  const answering = present.filter((l) => l.answer);
+  const caching = present.filter((l) => l.cacheAnswer);
+  if (!recall && answering.length === 0 && caching.length === 0) return void 0;
+  return {
+    recall: recall ?? (async () => null),
+    ...answering.length ? {
+      answer: async (query, opts) => {
+        for (const layer of answering) {
+          const hit = await layer.answer?.(query, opts);
+          if (hit) return hit;
+        }
+        return null;
+      }
+    } : {},
+    ...caching.length ? {
+      cacheAnswer: (query, answer) => {
+        for (const layer of caching) {
+          void Promise.resolve(layer.cacheAnswer?.(query, answer)).catch(() => {
+          });
+        }
+      }
+    } : {}
+  };
 }
 
 // src/BrainActionsContext.tsx
@@ -5602,6 +5683,7 @@ export {
   MODEL_CATEGORIES,
   NEW_CHAT_MODE,
   NOT_STARTED_TASK_STATUSES,
+  ON_DEVICE_ANSWER_THRESHOLD,
   PMO_FOCUS_PARAM,
   PROJECT_EVERMIND_MODEL_PREFIX,
   PROVENANCE_META_KEY,
@@ -5649,6 +5731,7 @@ export {
   classifyModelFunding,
   clearRunError,
   codeChangeFile,
+  composeEvermindHooks,
   computeBrainDiagnostics,
   computeRunProgress,
   consolidationMarkerContent,
@@ -5722,6 +5805,7 @@ export {
   narratedUnadvertisedInTrace,
   nextFallbackModel,
   normalizeChatMode,
+  onDeviceMemoryHooks,
   parseByoUnresolved,
   parseChatActivity,
   parseDirectedRecipient,
@@ -5738,6 +5822,7 @@ export {
   productForPlan,
   productModelName,
   progressDuration,
+  projectMemoryHooks,
   ratedTurnContext,
   ratedTurnTool,
   reasoningForRun,

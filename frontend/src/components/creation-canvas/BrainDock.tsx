@@ -14,6 +14,7 @@ import { useModelIdentity } from '@/lib/useLlmModels';
 import { Icon } from '@/components/ui/Icon';
 import type { Edge } from '@xyflow/react';
 import styles from './CreationCanvas.module.css';
+import { BrainMark } from '@/components/brain/BrainMark';
 import { creationObjectDefinition, creationObjectName } from './creationObjectRegistry';
 import type { CreationFlowNode } from './CreationNode';
 import { BrainActivityBar, brainActivityLine, useBrainActivity } from './BrainActivityView';
@@ -363,7 +364,7 @@ export function BrainDock({
       aria-label={t('brainDock')}
     >
       <header className={styles.brainDockHeader}>
-        <span className={styles.brainDockMark} aria-hidden><Icon source="✦" size="1em" /></span>
+        <span className={styles.brainDockMark} aria-hidden><BrainMark running={running} /></span>
         <strong>{t('brain')}</strong>
         <BrainSurfaceActions
           mode={mode}

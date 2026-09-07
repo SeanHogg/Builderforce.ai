@@ -10,10 +10,10 @@
  * without prop-drilling.
  */
 
-import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { BrainMark } from './BrainMark';
 import { BrainPanel } from './BrainPanel';
 import { GuestBrainPanel } from './GuestBrainPanel';
 import { MigrationPanelHost } from '@/components/integrations/MigrationPanelHost';
@@ -116,8 +116,7 @@ export function FloatingBrain() {
             title={tLauncher('title')}
             className="brain-launcher"
           >
-            
-            <Icon source="🧠" size="1em" />
+            <BrainMark running={counts.running > 0} />
             {counts.awaiting > 0 ? (
               <span
                 className="brain-launcher-badge"

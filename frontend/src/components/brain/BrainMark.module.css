@@ -1,0 +1,34 @@
+/* The mark is a positioning context for its own pulse rings and nothing more — the
+   host owns the chip, the disc or the pill it sits in. */
+.mark { position:relative; display:inline-grid; place-items:center; line-height:1; color:inherit; }
+.glyph { position:relative; z-index:1; display:grid; place-items:center; line-height:1; }
+.mark[data-state='running'] .glyph { animation:brainMarkBreathe 1.5s ease-in-out infinite; }
+
+/* A ring expanding out of the mark: legible from across a board at 26px and inside a
+   22px header chip alike, because it is sized off the mark rather than in pixels. */
+.pulse {
+  position:absolute; inset:-30%; z-index:0;
+  border-radius:50%; border:0.08em solid currentColor;
+  opacity:0;
+  animation:brainMarkPulse 1.8s ease-out infinite;
+}
+/* A second, later ring so the signal reads as continuous work rather than a blink. */
+.pulseTrail { animation-delay:.9s; }
+
+@keyframes brainMarkPulse {
+  0% { opacity:.65; transform:scale(.85); }
+  70% { opacity:0; transform:scale(1.5); }
+  100% { opacity:0; transform:scale(1.5); }
+}
+@keyframes brainMarkBreathe {
+  0%,100% { opacity:.65; transform:scale(.94); }
+  50% { opacity:1; transform:scale(1.06); }
+}
+
+/* Reduced motion still needs to say "working": the ring holds steady instead of
+   expanding, and the glyph simply stops moving. */
+@media (prefers-reduced-motion:reduce) {
+  .mark[data-state='running'] .glyph { animation:none; opacity:1; }
+  .pulse { animation:none; opacity:.4; transform:scale(1.15); }
+  .pulseTrail { display:none; }
+}

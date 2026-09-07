@@ -9,6 +9,7 @@
  */
 
 import { Icon } from '@/components/ui/Icon';
+import { BrainMark } from './BrainMark';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 
@@ -38,7 +39,8 @@ import {
 import { useConfirm } from '@/components/ConfirmProvider';
 import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
 import { EvermindStatusBadge } from '@/components/builder/EvermindStatusBadge';
-import { recallProjectEvermind, getProjectEvermindContributions } from '@/lib/projectEvermindApi';
+import { getProjectEvermindContributions } from '@/lib/projectEvermindApi';
+import { projectBrainMemoryHooks } from '@/lib/brainMemoryHooks';
 import { APP_VERSION, fetchApiVersion } from '@/lib/appVersions';
 import { getStoredTenant, getStoredUser } from '@/lib/auth';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
@@ -560,12 +562,7 @@ export function BrainPanel({
   // steps). Bound to the chat's project (falling back to the pinned/viewing one a
   // new chat will be created under, so learning + recall stay on the same model).
   const evermindProjectId = chats.activeChat?.projectId ?? pinnedProjectId ?? viewingProjectId ?? null;
-  const evermind = useMemo(
-    () => (evermindProjectId == null
-      ? undefined
-      : { recall: (query: string) => recallProjectEvermind(evermindProjectId, query).catch(() => null) }),
-    [evermindProjectId],
-  );
+  const evermind = useMemo(() => projectBrainMemoryHooks(evermindProjectId), [evermindProjectId]);
 
   // Self-heal Evermind learning scope (web parity with the VS Code webview). The server's
   // chat→Evermind learn gate keys on `brain_chats.projectId`: a project-less chat NEVER
@@ -1520,7 +1517,7 @@ export function BrainPanel({
       )}
       {chats.activeChatId == null ? (
         <div className={isPage ? 'bs-empty' : undefined} style={isPage ? undefined : { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--text-muted)', padding: 24, textAlign: 'center' }}>
-          <div style={{ fontSize: 'var(--font-size-page-title)' }}><Icon source="🧠" size="1em" /></div>
+          <div style={{ fontSize: 'var(--font-size-page-title)' }}><BrainMark /></div>
           <div style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 500, color: 'var(--text-primary)' }}>{tBrain('brainTitle')}</div>
           <div style={{ fontSize: 'var(--font-size-small)' }}>{tBrain(chatMode === 'work' ? 'emptyHintWork' : 'emptyHint')}</div>
           {/* The mode goes ABOVE the composer, at full size: it decides what the very
@@ -1722,7 +1719,7 @@ export function BrainPanel({
     <AssigneeProfilesProvider>
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-base)' }}>
       <div style={{ flexShrink: 0, padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-        <span style={{ fontWeight: 600, fontSize: 'var(--font-size-body)', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}><Icon source="🧠" size="1em" /> {tBrain('brainTitle')}</span>
+        <span style={{ fontWeight: 600, fontSize: 'var(--font-size-body)', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}><BrainMark /> {tBrain('brainTitle')}</span>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
           {/* Plan + remaining allowance (see the page header). */}
           <PlanBadge />

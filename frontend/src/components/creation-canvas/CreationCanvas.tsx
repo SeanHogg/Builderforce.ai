@@ -83,6 +83,7 @@ import { CanvasHostActions } from './CanvasHostActions';
 import { canvasNavigate, canvasSurface, canvasWebOrigin, type CanvasHostCapture } from '@/lib/canvasHost';
 import { BrainDock } from './BrainDock';
 import { BrainActivityIndicator } from './BrainActivityView';
+import { BrainMark } from '@/components/brain/BrainMark';
 import { brainDockReservedWidth, brainDockWidth, DEFAULT_BRAIN_DOCK_PREFERENCES, readBrainDockPreferences, writeBrainDockPreferences, type BrainDockMode, type BrainDockPreferences } from './brainDockPreferences';
 import { BrainSurfaceProvider, type BrainSurfaceContextValue } from './brainSurfaceContext';
 import { useToast } from '@/components/ToastProvider';
@@ -189,7 +190,8 @@ import type { BrainAction, BrainMessage, BrainTraceEvent } from '@seanhogg/build
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import { ProjectEvermindPanel } from '@/components/builder/ProjectEvermindPanel';
 import { EvermindValidationProvider } from '@/components/builder/EvermindValidationContext';
-import { getProjectEvermindContributions, getProjectEvermindHead, recallProjectEvermind, teachProjectEvermindFromText, type ProjectEvermindContributions, type ProjectEvermindHead } from '@/lib/projectEvermindApi';
+import { getProjectEvermindContributions, getProjectEvermindHead, type ProjectEvermindContributions, type ProjectEvermindHead } from '@/lib/projectEvermindApi';
+import { projectBrainMemoryHooks } from '@/lib/brainMemoryHooks';
 import { isAwaitingApprovalExecution, type WorkflowApprovalMode, type WorkflowDefinitionGraph } from '@/lib/builderforceApi';
 import { hiringApi } from '@/lib/hiringApi';
 import { screenCandidates } from '@/lib/canvasResumeScreening';
@@ -1108,7 +1110,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * pointer, and the point of a surface is to read the work one way without distraction.
    *
    * ONE state, because it is one question. 3D used to keep its own boolean beside this
-   * (`useCanvasThreeD`, which the four other spatial canvases still use), and a second
+   * (`useCanvasThreeD`, which the three other spatial canvases still use), and a second
    * answer to "what am I looking at?" is a second control that can disagree with the
    * first. The rail and the phone stack both drive THIS, and `data-view` publishes it to
    * the stylesheet — see `lib/canvasSurfaces.ts`.
@@ -2731,6 +2733,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     }
     return null;
   }, [nodes, scopedNodeIds, scopedNodes]);
+  // The Brain's memory tiers (on-device answer memory, then the project's server
+  // memory). Built by the SAME factory the side-panel Brain uses, so the two surfaces
+  // cannot drift apart on what the Brain remembers.
+  const brainMemory = useMemo(() => projectBrainMemoryHooks(evermindProjectId), [evermindProjectId]);
 
   /** One writer for an object's content, wherever the edit was made — the
    * inspector, a cell edited on the card itself, or the Files library. */
@@ -9538,10 +9544,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel,
           onModelFallback: (model) => setModelSelection({ mode: 'model', model }),
           onUnanswered: (outcome) => { turnUnanswered.current = outcome; },
-          ...(persistence === 'server' && memoryEnabled && evermindProjectId != null ? { evermind: {
-            recall: (query: string) => recallProjectEvermind(evermindProjectId, query).catch(() => null),
-            learn: (answer: string, question: string) => teachProjectEvermindFromText(evermindProjectId, answer, question),
-          } } : {}),
+          ...(persistence === 'server' && memoryEnabled && brainMemory ? { evermind: brainMemory } : {}),
           onTrace: (event) => {
             // Every tool and MCP call, as it happens. The trace already existed
             // for display; journalling it is what puts the CALLS beside the
@@ -9692,7 +9695,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       clearComposer();
       setNotice(t('noticeEvaluationAdded'));
     }, 850);
-  }, [appendTimeline, canvasActions, canvasNotices, confirm, currentUserId, describeTurnError, disableBrainModel, effectiveSelectedIds, edges, evermindProjectId, lastTurnProvenance, members, memoryEnabled, modelSelection, nodes, openNodeInspector, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, setNotice, stage, t, thinking, timeline, title]);
+  }, [appendTimeline, brainMemory, canvasActions, canvasNotices, confirm, currentUserId, describeTurnError, disableBrainModel, effectiveSelectedIds, edges, evermindProjectId, lastTurnProvenance, members, memoryEnabled, modelSelection, nodes, openNodeInspector, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, setNotice, stage, t, thinking, timeline, title]);
 
   useEffect(() => {
     if (!hydrated.current || modelComparisonStarted.current || comparisonModelIds.length < 2) return;
@@ -13016,10 +13019,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           type="button"
           className={styles.brainDockLauncher}
           data-side={brainDock.side}
-          aria-label={t('openBrainDock')}
-          title={t('openBrainDock')}
+          data-state={thinking ? 'running' : 'idle'}
+          aria-label={thinking ? t('openBrainDockBusy') : t('openBrainDock')}
+          title={thinking ? t('openBrainDockBusy') : t('openBrainDock')}
           onClick={() => updateBrainDock({ open: true })}
-        ><span aria-hidden><Icon source="✦" size="1em" /></span>{t('brain')}</button>}
+        ><BrainMark running={thinking} />{t('brain')}</button>}
       </div>
       {/* TWO TOURS, TWO SUBJECTS. The one below teaches the CANVAS — dock, palette,
           Share — and is offered on somebody's first board. This one walks what the
