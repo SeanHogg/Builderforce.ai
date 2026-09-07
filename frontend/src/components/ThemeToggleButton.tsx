@@ -1,27 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { applyTheme, currentTheme, THEME_EVENT, type Theme } from '@/lib/theme';
+import { useTheme } from '@/lib/useTheme';
 
 /**
  * ThemeToggleButton — drop into any nav/header. Mounted only inside client
- * boundaries (the marketing header, the top bar, the auth pages).
+ * boundaries (the marketing header, the auth pages). The signed-in top bar
+ * offers the same switch as a row in the account menu instead; both read the
+ * one `useTheme()` hook, so neither can drift out of sync with the document.
  */
 export function ThemeToggleButton({ className }: { className?: string }) {
   const t = useTranslations('marketingNav');
-  const [theme, setTheme] = useState<Theme>('dark');
-
-  useEffect(() => {
-    const sync = (event?: Event) => {
-      setTheme(event instanceof CustomEvent ? (event.detail as Theme) : currentTheme());
-    };
-    sync();
-    window.addEventListener(THEME_EVENT, sync);
-    return () => window.removeEventListener(THEME_EVENT, sync);
-  }, []);
-
-  const toggle = useCallback(() => {
-    applyTheme(currentTheme() === 'light' ? 'dark' : 'light');
-  }, []);
+  const { theme, toggle } = useTheme();
 
   const label = theme === 'dark' ? t('switchToLight') : t('switchToDark');
 

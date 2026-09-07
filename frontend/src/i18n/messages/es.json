@@ -774,8 +774,7 @@
       "lockHint": "Inicia sesión para usarlo"
     },
     "journey": {
-      "label": "El viaje del fundador",
-      "openDashboard": "Abrir panel"
+      "label": "El viaje del fundador"
     }
   },
   "alerts": {
@@ -10853,10 +10852,23 @@
     "exitPreview": "Salir de la vista previa de rol",
     "previewSelectTitle": "Vista previa como rol (solo frontend)",
     "previewPlaceholder": "Vista previa de rol…",
-    "signOut": "Cerrar sesión",
     "brandAlt": "Builderforce",
     "brandName": "Builderforce.ai",
     "betaBadge": "BETA"
+  },
+  "accountMenu": {
+    "open": "Menú de cuenta de {name}",
+    "openWithCount": "Menú de cuenta de {name}, {count} pendientes",
+    "menuLabel": "Cuenta",
+    "alerts": "Alertas",
+    "messages": "Mensajes",
+    "cart": "Carrito",
+    "personalSettings": "Ajustes personales",
+    "workspaceSettings": "Ajustes del espacio de trabajo",
+    "theme": "Apariencia",
+    "themeDark": "Oscuro",
+    "themeLight": "Claro",
+    "signOut": "Cerrar sesión"
   },
   "managerStatus": {
     "active": "Gestor activo",

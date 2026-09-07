@@ -30,6 +30,29 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   964 → 965 (`useClientFiles`, 2026-09-07) — the signed-in top bar's right
+ *   corner became ONE control. Alerts, chat, the cart, the theme switch, the way
+ *   out and a Settings link that lived down the rail were six separate buttons
+ *   there; they are rows in an account menu behind the person's own avatar now.
+ *   Five client modules landed and two were deleted (`NotificationBell`, whose
+ *   feed the provider below absorbed, and `JourneyPill`, whose one word the
+ *   canvas's phase stepper and the shell panel's stage switcher already say), so
+ *   the count is a NET +1 — and two of the five carry no directive at all,
+ *   because a hook module inherits the boundary of whoever calls it
+ *   (`components/account/useAccountMenu.ts`, `lib/useTheme.ts`, both following
+ *   `lib/useFounderJourney.ts`). The three that do are argued on the
+ *   "808 → 868" terms:
+ *
+ *     - `components/account/AccountMenu.tsx` — the trigger and its popover. It
+ *       owns its open state, its outside-click and Escape handling, and it
+ *       self-gates to nothing signed out. None of that survives on a server.
+ *     - `components/account/NotificationFeedContext.tsx` — the alert feed's
+ *       state, mounted once in the shell so the avatar's badge and the panel
+ *       behind its row read ONE count. A provider is client by construction, and
+ *       this one polls.
+ *     - `components/account/NotificationsPanel.tsx` — the feed itself, as the
+ *       slide-out the dropdown used to be. It routes on click and marks read.
+ *
  *   959 → 964 (`useClientFiles`, 2026-09-07) — the Creations library stopped
  *   hiding its actions behind a `⋯` menu, and the two surfaces that managed
  *   sessions and folders became one. Nine client modules landed and four were

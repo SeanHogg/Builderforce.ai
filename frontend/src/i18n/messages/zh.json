@@ -774,8 +774,7 @@
       "lockHint": "登录后即可使用"
     },
     "journey": {
-      "label": "创始人之旅",
-      "openDashboard": "打开仪表盘"
+      "label": "创始人之旅"
     }
   },
   "alerts": {
@@ -10853,10 +10852,23 @@
     "exitPreview": "退出角色预览",
     "previewSelectTitle": "以角色身份预览（仅前端）",
     "previewPlaceholder": "预览角色…",
-    "signOut": "退出登录",
     "brandAlt": "Builderforce",
     "brandName": "Builderforce.ai",
     "betaBadge": "BETA"
+  },
+  "accountMenu": {
+    "open": "{name} 的账户菜单",
+    "openWithCount": "{name} 的账户菜单，{count} 项待处理",
+    "menuLabel": "账户",
+    "alerts": "提醒",
+    "messages": "消息",
+    "cart": "购物车",
+    "personalSettings": "个人设置",
+    "workspaceSettings": "工作区设置",
+    "theme": "外观",
+    "themeDark": "深色",
+    "themeLight": "浅色",
+    "signOut": "退出登录"
   },
   "managerStatus": {
     "active": "管理器活跃",

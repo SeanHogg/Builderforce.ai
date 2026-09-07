@@ -260,6 +260,17 @@ export function useAccountType(): AuthUser['accountType'] {
   return auth?.user?.accountType;
 }
 
+/**
+ * True when this person ADMINISTERS the active workspace — the owner, or a
+ * manager they delegated to. The ONE place that branch is decided, so the
+ * account menu, the rail and any future admin affordance can never disagree
+ * about who "the admin of the account" is. Mirrors the server's
+ * `requireRole(MANAGER)` on every workspace-configuration route.
+ */
+export function useIsWorkspaceAdmin(): boolean {
+  return hasMinRole(useRole(), 'manager');
+}
+
 /** True for referral / sales-associate accounts. */
 export function useIsSalesAssociate(): boolean {
   return useAccountType() === 'sales';

@@ -102,6 +102,17 @@ vi.mock('@xyflow/react', async () => {
  * this file in the pass that raised this number, and each one had been paying a
  * full canvas mount to assert something with no DOM in it.
  */
+/**
+ * Open the ••• sheet.
+ *
+ * The view commands — zoom, fit, arrange, mini map, outline, and whatever the 3D scene
+ * contributes — are a section IN HERE now rather than a group on the bar. They move the
+ * viewport; they do not advance the work, so none of the arc's five stages can honestly
+ * caption them, and a second floating pill in the corner is what deleting the left-hand
+ * rail fixed. Every test that used to reach for them on the bar opens the sheet first.
+ */
+const openBoardMenu = () => fireEvent.click(screen.getByRole('button', { name: 'More session actions' }));
+
 describe('CreationCanvas', { timeout: 120_000 }, () => {
   it('scores explicit agent-test criteria and preserves unscored review runs', () => {
     expect(scoreAgentTestResponse('I understand the duplicate charge. Please share your order number; I will investigate before discussing a refund.', 'duplicate charge, order number, investigate')).toMatchObject({ passed: true, missing: [] });
@@ -111,9 +122,10 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
   it('keeps the mini map action visible while the mini map is opened, closed, and reopened', () => {
     render(<CreationCanvas sessionId="minimap-controls-test" persistence="local" />);
 
-    // The flat-board rail stood down into the one command bar; this is that
-    // button's new name and home, not the React-Flow-native rail's own copy
-    // (hidden on the flat board via `hideOnFlatBoard`).
+    // The flat-board rail stood down into the one command bar, and then out of the bar
+    // into its ••• sheet — this is that button's new home, not the React-Flow-native
+    // rail's own copy (hidden on the flat board via `hideOnFlatBoard`).
+    openBoardMenu();
     expect(screen.getByRole('button', { name: 'Arrange canvas objects' })).toBeInTheDocument();
     // The toggle lives in the command bar and reports its state IN its own
     // name — "Hide mini map" while open, "Show mini map" once closed — not a
@@ -232,11 +244,13 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
     expect(scene).toBeInTheDocument();
     // The mini map is a map of the flat board, so it — and its button — stand
-    // down in 3D. The toggle lives in the command bar now and reports its
+    // down in 3D. The toggle lives in the board sheet now and reports its
     // state IN its own name ("Hide"/"Show"), not a static "Toggle" label.
+    openBoardMenu();
     expect(namedButtons('Close mini map')).toHaveLength(0);
     expect(namedButtons('Hide mini map')).toHaveLength(0);
     expect(namedButtons('Show mini map')).toHaveLength(0);
+    openBoardMenu();
     // The command bar owns every 3D command, so the scene carries no toolbar at all —
     // no exit, no depth control, no zoom. A second header stacked over the board
     // is what this replaced.
@@ -245,8 +259,9 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(within(scene).queryAllByRole('button', { name: 'Zoom in' })).toHaveLength(0);
     expect(toggle).toHaveAttribute('title', 'Exit 3D');
 
-    // The scene's own commands ride the ONE command bar — the corner rail that used to
+    // The scene's own commands ride the ONE board sheet — the corner rail that used to
     // carry a second copy of every one of them is gone, so each is offered exactly once.
+    openBoardMenu();
     expect(namedButtons('Zoom in')).toHaveLength(1);
     expect(namedButtons('Zoom out')).toHaveLength(1);
     expect(namedButtons('Reset view')).toHaveLength(1);
@@ -263,6 +278,7 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     // Leaving swaps the bar's contents back: the 3D commands go, the flat ones return.
     // The mini map was never toggled in this test, so it is still open — the
     // command bar's own control reports that as "Hide mini map".
+    openBoardMenu();
     expect(namedButtons('Stack layers by object group')).toHaveLength(0);
     expect(namedButtons('Hide mini map')).toHaveLength(1);
   });
@@ -299,7 +315,8 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
   it('lifts an object off its layer with shift, and settles it back on request', async () => {
     render(<CreationCanvas sessionId="three-d-depth-test" persistence="local" />);
     const card = (await enterThreeD()).querySelector<HTMLElement>('[data-movable="true"]')!;
-    // Nothing is floating yet, so the rail does not offer to tidy anything up.
+    // Nothing is floating yet, so the sheet does not offer to tidy anything up.
+    openBoardMenu();
     expect(screen.queryAllByRole('button', { name: 'Settle objects back onto their layers' })).toHaveLength(0);
 
     fireEvent.pointerDown(card, { clientX: 40, clientY: 200, button: 0, shiftKey: true });
@@ -320,7 +337,9 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(scene.textContent).toContain('Layer 1');
 
     // The guides are a reading aid over the space, so putting them away is a
-    // question about the view and never about where anything sits.
+    // question about the view and never about where anything sits — which is why they
+    // are in the board sheet with zoom rather than under a stage on the bar.
+    openBoardMenu();
     const guides = screen.getAllByRole('button', { name: 'Layer guides' });
     expect(guides.map((button) => button.getAttribute('aria-pressed'))).toEqual(['true']);
     fireEvent.click(guides[0]!);
@@ -353,15 +372,20 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     await waitFor(() => expect(screen.getAllByText('Sales presentation roadmap').length).toBeGreaterThan(0));
   });
 
-  it('groups canvas history controls without changing their accessible actions', () => {
+  it('files undo and redo under Make, with the composer that leads it', () => {
     render(<CreationCanvas sessionId="history-controls-test" persistence="local" />);
-    const group = screen.getByRole('group', { name: 'Canvas history' });
+    // `History` was a caption naming the implementation. Taking a change back is how you
+    // SHAPE what is on the board, which is what Make means — and the prompt, the other
+    // way you shape it, leads the same group instead of sitting among nine zoom glyphs.
+    const group = screen.getByRole('group', { name: 'Make — shape what is on the board' });
     expect(group).toContainElement(screen.getByRole('button', { name: 'Undo canvas change' }));
     expect(group).toContainElement(screen.getByRole('button', { name: 'Redo canvas change' }));
+    expect(group).toContainElement(screen.getByTestId('canvas-prompt-toggle'));
   });
 
-  it('keeps the mobile canvas view action rail available when the object picker is closed', () => {
+  it('keeps the canvas view controls reachable from the board sheet', () => {
     render(<CreationCanvas sessionId="mobile-canvas-actions-test" persistence="local" />);
+    openBoardMenu();
     const controls = screen.getByRole('group', { name: 'Canvas view controls' });
     expect(controls).toContainElement(screen.getByRole('button', { name: 'Zoom in' }));
     expect(controls).toContainElement(screen.getByRole('button', { name: 'Zoom out' }));
@@ -1161,13 +1185,19 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     // actions that genuinely need a saved session.
     expect(screen.queryByRole('button', { name: 'Save & collaborate' })).toBeNull();
 
-    // MAKE IT REAL WITHDRAWS TOO, for the identical reason. It used to open its own
-    // copy of the same "create an account" gate the header CTA already offers the
-    // moment this browser holds a local board ("Keep your work") — the same offer
-    // twice at the top of the screen. It comes back once the session has a server
-    // to name (`persistence !== 'local'`), where it opens the proof picker instead
-    // of a gate.
-    expect(screen.queryByRole('button', { name: 'Make it real' })).toBeNull();
+    // MAKE IT REAL IS A MENU, and what is IN it is what withdraws. The button used to
+    // BE the proof picker and stood down entirely on a local board, because opening its
+    // own "create an account" gate was the same offer the header CTA already makes
+    // ("Keep your work"). It is the one worded control on the bar now, holding every
+    // door out — so it stays, and `Prove it` is the row that withdraws until the session
+    // has a server to name. Export needs no server at all, which is the point: a guest
+    // can take their board with them without taking an account first.
+    fireEvent.click(screen.getByTestId('canvas-make-it-real'));
+    const doors = screen.getByTestId('canvas-make-it-real-menu');
+    expect(within(doors).queryByRole('button', { name: 'Prove it' })).toBeNull();
+    expect(within(doors).getByRole('button', { name: 'Export' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /Create an account/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('canvas-make-it-real'));
 
     // Sharing is deliberately NOT gated: a guest invites by link into a shared
     // free session, and signing up is offered as the way to KEEP that board, not
@@ -1544,8 +1574,12 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
 
   it('puts the pen, its colour and its width in reach before the stroke, not after it', () => {
     render(<CreationCanvas sessionId="pen-tray-test" persistence="local" />);
-    fireEvent.click(screen.getByRole('button', { name: 'More session actions' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
+    // Draw LEADS IDEA on the bar now — putting a mark on a board is one of the first
+    // things anybody does, and it was a ••• row filed beside "export the session". The
+    // sheet keeps a phone-only copy (the breakpoint stands the glyph down), so this
+    // reaches for the one in the group rather than by name across the whole document.
+    const idea = screen.getByRole('group', { name: 'Idea — put something on the board' });
+    fireEvent.click(within(idea).getByRole('button', { name: 'Draw' }));
     const tray = screen.getByRole('toolbar', { name: 'Drawing tools' });
     for (const tool of ['Pen', 'Highlighter', 'Line', 'Box', 'Circle', 'Text', 'Eraser']) {
       expect(within(tray).getByRole('button', { name: tool })).toBeInTheDocument();
@@ -1585,9 +1619,11 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
   it('opens and closes the accessible outline from the canvas command rail', () => {
     render(<CreationCanvas sessionId="accessible-graph-test" persistence="local" />);
 
-    // The outline is off the board until asked for, and reachable from the same
-    // rail as zoom/fit rather than floating permanently over the canvas.
+    // The outline is off the board until asked for, and reachable from the same place as
+    // zoom/fit rather than floating permanently over the canvas — which is the board
+    // sheet now, since reading the board differently is not a stage of the arc.
     expect(screen.queryByRole('complementary', { name: 'Accessible canvas outline' })).not.toBeInTheDocument();
+    openBoardMenu();
     fireEvent.click(screen.getAllByRole('button', { name: 'Accessible canvas outline' })[0]!);
 
     expect(screen.getByRole('complementary', { name: 'Accessible canvas outline' })).toBeInTheDocument();

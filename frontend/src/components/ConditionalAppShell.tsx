@@ -25,6 +25,7 @@ import { PlatformActionsBridge } from './brain/PlatformActionsBridge';
 import { ProjectScopeProvider } from '@/lib/ProjectScopeContext';
 import { CartProvider } from '@/lib/CartContext';
 import { MessageHubProvider } from '@/components/messages/MessageHubContext';
+import { NotificationFeedProvider } from '@/components/account/NotificationFeedContext';
 import { EmulationProvider } from '@/lib/EmulationContext';
 import { RolePreviewProvider } from '@/lib/RolePreviewContext';
 import { PermissionDebuggerProvider } from '@/lib/PermissionDebuggerContext';
@@ -420,9 +421,12 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
     // than the whole document.
     //
     // Order preserved from the root layout: cart → message hub → emulation →
-    // role preview → permission debugger.
+    // role preview → permission debugger. The alert feed joins the first two for
+    // the same reason they are here: the account menu's badge and the panel
+    // behind its row both read one count, and it has to survive a navigation.
     <CartProvider>
     <MessageHubProvider>
+    <NotificationFeedProvider>
     <EmulationProvider>
     <RolePreviewProvider>
     <PermissionDebuggerProvider>
@@ -536,6 +540,7 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
     </PermissionDebuggerProvider>
     </RolePreviewProvider>
     </EmulationProvider>
+    </NotificationFeedProvider>
     </MessageHubProvider>
     </CartProvider>
   );

@@ -8,7 +8,7 @@ export type IconName =
   | 'download' | 'drag-handle' | 'flag' | 'folder' | 'growth' | 'heart' | 'home' | 'image' | 'info' | 'insights' | 'key' | 'knowledge'
   | 'link' | 'lock' | 'mail' | 'megaphone' | 'menu' | 'message' | 'mic' | 'mobile'
   | 'monitor' | 'more-horizontal' | 'pause' | 'people' | 'person' | 'pin' | 'play' | 'plus' | 'project' | 'quality' | 'search'
-  | 'settings' | 'shield' | 'sparkles' | 'target' | 'template' | 'tools' | 'trash' | 'archive'
+  | 'settings' | 'shield' | 'sign-out' | 'sparkles' | 'sun' | 'moon' | 'cart' | 'target' | 'template' | 'tools' | 'trash' | 'archive'
   | 'video' | 'volume' | 'warning' | 'workflow' | 'workspace';
 
 /**
@@ -26,7 +26,7 @@ const LEGACY_ICON: Record<string, IconName> = {
   '★': 'sparkles', '↑': 'arrow-up-right', '📥': 'document',
   '⚡': 'automation', '👀': 'search', '👁': 'search', '👁️': 'search', '📦': 'apps',
   '🔬': 'search', '🧬': 'brain', '🤖': 'brain', '🐍': 'code', '🎓': 'knowledge',
-  '🏪': 'apps', '▶': 'play', '⭐': 'sparkles',
+  '🏪': 'apps', '▶': 'play', '⭐': 'sparkles', '🛒': 'cart',
   '♥': 'heart', '❤️': 'heart', '🤍': 'heart', '♡': 'heart', '👍': 'check', '👎': 'close',
   '📎': 'attachment', '🎤': 'mic', '📷': 'camera', '🖥': 'monitor', '🗑': 'trash',
   '💡': 'info', '🚫': 'close', '⛔': 'close', '❌': 'close', '⏳': 'clock',
@@ -78,6 +78,7 @@ const PATHS: Record<IconName, ReactNode> = {
   'arrow-up-right': <><path d="M7 17 17 7M9 7h8v8"/></>,
   automation: <><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 11 15.5 7M8.5 13l7 4"/></>,
   billing: <><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h3"/></>,
+  cart: <><circle cx="9" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/><path d="M2.5 3.5h3l2.4 11.2a1.8 1.8 0 0 0 1.8 1.4h7.6a1.8 1.8 0 0 0 1.8-1.4L21 7.5H6.2"/></>,
   brain: <><path d="M12 5.5A4 4 0 0 0 5.5 9a4 4 0 0 0 2 7.5A4 4 0 0 0 12 19M12 5.5A4 4 0 0 1 18.5 9a4 4 0 0 1-2 7.5A4 4 0 0 1 12 19M12 5.5V19M8 9.5h4M12 14.5h4"/></>,
   briefcase: <><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V4h8v3M3 12h18M10 12v2h4v-2"/></>,
   calendar: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></>,
@@ -134,6 +135,9 @@ const PATHS: Record<IconName, ReactNode> = {
   search: <><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></>,
   settings: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3A1.7 1.7 0 0 0 14 21v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14h-.2v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9A1.7 1.7 0 0 0 21 10h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></>,
   shield: <><path d="M12 3 4.5 6v5c0 4.7 3.2 8.2 7.5 10 4.3-1.8 7.5-5.3 7.5-10V6L12 3Z"/><path d="M9.5 12 11 13.5l3.5-3.5"/></>,
+  'sign-out': <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></>,
+  sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></>,
+  moon: <><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z"/></>,
   sparkles: <><path d="M12 3 9.8 9.8 3 12l6.8 2.2L12 21l2.2-6.8L21 12l-6.8-2.2L12 3Z"/></>,
   target: <><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><path d="m15.2 8.8 4-4M16.8 4.8h2.4v2.4"/></>,
   template: <><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></>,

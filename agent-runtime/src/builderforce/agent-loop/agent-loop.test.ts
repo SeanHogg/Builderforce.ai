@@ -1,5 +1,5 @@
 import { Type } from "@sinclair/typebox";
-import { MAX_ANNOUNCEMENT_RECOVERIES } from "@builderforce/agent-stall";
+import { MAX_ANNOUNCEMENT_RECOVERIES, MAX_MODEL_FAILOVERS } from "@builderforce/agent-stall";
 import { describe, expect, it } from "vitest";
 import type { AgentEvent, AgentTool } from "../model/agent-types.js";
 import type { AssistantMessage, ToolCall } from "../model/types.js";
@@ -214,6 +214,104 @@ describe("native Agent loop", () => {
 
       expect(produced.filter(isNudge)).toHaveLength(1);
       expect(produced.filter((m) => m.role === "toolResult")).toHaveLength(1);
+    });
+
+    /**
+     * MODEL FAILOVER — the on-prem half of the decision the gateway loops already took.
+     * A model that burns its whole re-prompt budget still narrating cannot be nudged
+     * out of it; only a different model finishes the request. The loop never picks one
+     * itself (a self-hosted model is an operator's explicit pin) — it asks the host's
+     * `pickFallbackModel`, which on-prem is built from the operator's own declared
+     * fallback chain.
+     */
+    describe("model failover", () => {
+      /** Narrates forever on every model EXCEPT `answersOn` (null ⇒ all of them stall). */
+      function failoverStreamFn(answersOn: string | null, seen: string[]): StreamFn {
+        return (m) => {
+          seen.push(m.id);
+          const stream = new AssistantMessageEventStream();
+          const msg = m.id === answersOn
+            ? assistant([{ type: "text", text: "The handler is in agent-loop.ts." }], "stop")
+            : assistant([{ type: "text", text: "Let me search for that now." }], "stop");
+          queueMicrotask(() => {
+            stream.push({ type: "done", reason: "stop", message: msg });
+            stream.end();
+          });
+          return stream;
+        };
+      }
+
+      it("switches to the host's successor once the re-prompt budget is spent, and says so", async () => {
+        const seen: string[] = [];
+        const successor = { ...model, id: "m2", name: "m2" };
+        const fallbacks: string[][] = [];
+        const swaps: string[] = [];
+        const agent = new Agent({
+          model,
+          tools: [echoTool],
+          systemPrompt: "sys",
+          pickFallbackModel: (tried) => {
+            fallbacks.push([...tried]);
+            return tried.includes("p/m2") ? undefined : successor;
+          },
+          onModelFallback: (from, to) => swaps.push(`${from.id}->${to.id}`),
+        });
+        agent.streamFn = failoverStreamFn("m2", seen);
+
+        const produced = await agent.prompt([{ role: "user", content: "go", timestamp: 0 }]);
+
+        // The pinned model burned its whole budget, then the successor answered.
+        expect(seen.filter((id) => id === "m")).toHaveLength(1 + MAX_ANNOUNCEMENT_RECOVERIES);
+        expect(seen.at(-1)).toBe("m2");
+        expect(swaps).toEqual(["m->m2"]);
+        // The picker is told what has already been burned, PROVIDER-QUALIFIED — the same
+        // model id behind two providers is two different routes.
+        expect(fallbacks[0]).toContain("p/m");
+        // The swap is announced on the transcript, never silent.
+        const notice = produced.find((m) => m.role === "custom" && m.customType === "model_failover");
+        expect(notice).toBeTruthy();
+        expect(String((notice as { content: string }).content)).toContain("`p/m2`");
+        // ...and the session now runs on the model that actually works.
+        expect(agent.state.model.id).toBe("m2");
+      });
+
+      it("ends on the exhausted notice when the host offers no successor", async () => {
+        const seen: string[] = [];
+        const agent = new Agent({ model, tools: [echoTool], systemPrompt: "sys" });
+        agent.streamFn = failoverStreamFn("m2", seen);
+
+        const produced = await agent.prompt([{ role: "user", content: "go", timestamp: 0 }]);
+
+        expect(seen).toHaveLength(1 + MAX_ANNOUNCEMENT_RECOVERIES);
+        expect(produced.some((m) => m.role === "custom" && m.customType === "model_failover")).toBe(false);
+        const tailMessage = produced.at(-1);
+        const tail = tailMessage && "content" in tailMessage ? String(tailMessage.content ?? "") : "";
+        expect(tail).toContain("nothing was actually run");
+      });
+
+      it("stops after MAX_MODEL_FAILOVERS rather than walking the operator's whole chain", async () => {
+        const seen: string[] = [];
+        const chain = ["m2", "m3", "m4", "m5"].map((id) => ({ ...model, id, name: id }));
+        const agent = new Agent({
+          model,
+          tools: [echoTool],
+          systemPrompt: "sys",
+          // Every model narrates, so each one burns its budget and asks for the next.
+          pickFallbackModel: (tried) => chain.find((c) => !tried.includes(`p/${c.id}`)),
+        });
+        agent.streamFn = failoverStreamFn(null, seen); // nothing answers → every model stalls
+
+        const produced = await agent.prompt([{ role: "user", content: "go", timestamp: 0 }]);
+
+        const swapped = produced.filter((m) => m.role === "custom" && m.customType === "model_failover");
+        expect(swapped).toHaveLength(MAX_MODEL_FAILOVERS);
+        // Distinct models tried: the pin plus one per failover — never the whole chain.
+        expect(new Set(seen).size).toBe(1 + MAX_MODEL_FAILOVERS);
+        const tailMessage = produced.at(-1);
+        const tail = tailMessage && "content" in tailMessage ? String(tailMessage.content ?? "") : "";
+        // The notice names every model burned, so "it didn't work" is actionable.
+        expect(tail).toContain("This run already failed over from");
+      });
     });
 
     it("leaves a genuine final answer alone even with tools available", async () => {

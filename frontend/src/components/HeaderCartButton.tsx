@@ -1,8 +1,14 @@
 import { useTranslations } from 'next-intl';
 import { useCart } from '@/lib/CartContext';
+import { Icon } from '@/components/ui/Icon';
 import ShoppingCart from './ShoppingCart';
 
-/** One cart trigger for both the signed-in top bar and the public header. */
+/**
+ * The cart trigger for the PUBLIC header. The signed-in top bar carries the same
+ * cart as a row in the account menu instead, and mounts `<ShoppingCart />`
+ * itself — the two shells never render together, so the drawer is still mounted
+ * exactly once.
+ */
 export function HeaderCartButton({ className }: { className?: string }) {
   const { count, openCart } = useCart();
   const t = useTranslations('topbar');
@@ -27,10 +33,7 @@ export function HeaderCartButton({ className }: { className?: string }) {
           justifyContent: 'center',
         }}
       >
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
-          <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-        </svg>
+        <Icon name="cart" size={19} />
         {count > 0 && (
           <span style={{
             position: 'absolute', top: -1, right: -2, minWidth: 16, height: 16,

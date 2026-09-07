@@ -34,6 +34,7 @@ import { normalizeMessageChannel } from "../../../utils/message-channel.js";
 import { isReasoningTagProvider } from "../../../utils/provider-utils.js";
 import { resolveBuilderForceAgentsAgentDir } from "../../agent-paths.js";
 import { resolveSessionAgentIds } from "../../agent-scope.js";
+import { createStallFallbackPicker } from "../stall-fallback.js";
 import { createAnthropicPayloadLogger } from "../../anthropic-payload-log.js";
 import {
   buildActiveLimbicPrompt,
@@ -732,6 +733,33 @@ export async function runEmbeddedAttempt(
         authStorage: params.authStorage,
         modelRegistry: params.modelRegistry,
         model: params.model,
+        // A model that burns its whole stall budget without emitting a single tool call
+        // cannot be re-prompted out of it — only a different model finishes the request.
+        // The successor comes from the operator's OWN declared fallback chain, so this is
+        // undefined (and the run keeps ending on the loud notice) unless they named one.
+        ...(() => {
+          const pickFallbackModel = createStallFallbackPicker({
+            cfg: params.config,
+            provider: params.provider,
+            modelId: params.modelId,
+            agentDir,
+          });
+          return pickFallbackModel ? { pickFallbackModel } : {};
+        })(),
+        onModelFallback: (from, to, notice) => {
+          log.warn(`[model-failover] ${notice}`);
+          emitAgentEvent({
+            runId: params.runId,
+            stream: "lifecycle",
+            sessionKey: params.sessionKey ?? params.sessionId,
+            data: {
+              phase: "model_failover",
+              from: `${from.provider}/${from.id}`,
+              to: `${to.provider}/${to.id}`,
+              notice,
+            },
+          });
+        },
         thinkingLevel: mapThinkingLevel(effectiveThinkLevel),
         // transitional bridge: pi-built coding tools are structurally native AgentTools
         // (same execute shape); coding-tools.ts migrates to native AgentTool next, making this identity.

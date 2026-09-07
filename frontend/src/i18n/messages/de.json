@@ -774,8 +774,7 @@
       "lockHint": "Zum Nutzen anmelden"
     },
     "journey": {
-      "label": "Der Weg des Gründers",
-      "openDashboard": "Dashboard öffnen"
+      "label": "Der Weg des Gründers"
     }
   },
   "alerts": {
@@ -10853,10 +10852,23 @@
     "exitPreview": "Rollenvorschau beenden",
     "previewSelectTitle": "Vorschau als Rolle (nur Frontend)",
     "previewPlaceholder": "Rollenvorschau…",
-    "signOut": "Abmelden",
     "brandAlt": "Builderforce",
     "brandName": "Builderforce.ai",
     "betaBadge": "BETA"
+  },
+  "accountMenu": {
+    "open": "Kontomenü von {name}",
+    "openWithCount": "Kontomenü von {name}, {count} offen",
+    "menuLabel": "Konto",
+    "alerts": "Benachrichtigungen",
+    "messages": "Nachrichten",
+    "cart": "Warenkorb",
+    "personalSettings": "Persönliche Einstellungen",
+    "workspaceSettings": "Workspace-Einstellungen",
+    "theme": "Darstellung",
+    "themeDark": "Dunkel",
+    "themeLight": "Hell",
+    "signOut": "Abmelden"
   },
   "managerStatus": {
     "active": "Manager aktiv",

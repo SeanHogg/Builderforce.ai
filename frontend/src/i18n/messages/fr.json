@@ -774,8 +774,7 @@
       "lockHint": "Connectez-vous pour y accéder"
     },
     "journey": {
-      "label": "Le parcours du fondateur",
-      "openDashboard": "Ouvrir le tableau de bord"
+      "label": "Le parcours du fondateur"
     }
   },
   "alerts": {
@@ -10853,10 +10852,23 @@
     "exitPreview": "Quitter l’aperçu de rôle",
     "previewSelectTitle": "Aperçu en tant que rôle (frontend uniquement)",
     "previewPlaceholder": "Aperçu de rôle…",
-    "signOut": "Se déconnecter",
     "brandAlt": "Builderforce",
     "brandName": "Builderforce.ai",
     "betaBadge": "BETA"
+  },
+  "accountMenu": {
+    "open": "Menu du compte de {name}",
+    "openWithCount": "Menu du compte de {name}, {count} en attente",
+    "menuLabel": "Compte",
+    "alerts": "Alertes",
+    "messages": "Messages",
+    "cart": "Panier",
+    "personalSettings": "Paramètres personnels",
+    "workspaceSettings": "Paramètres de l’espace de travail",
+    "theme": "Apparence",
+    "themeDark": "Sombre",
+    "themeLight": "Clair",
+    "signOut": "Se déconnecter"
   },
   "managerStatus": {
     "active": "Gestionnaire actif",

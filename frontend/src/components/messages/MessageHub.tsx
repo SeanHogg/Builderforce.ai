@@ -1,13 +1,18 @@
 'use client';
 
 /**
- * The message hub — the trigger beside the cart, and the conversation behind it.
+ * The message hub — the conversation behind the account menu's Messages row.
  *
  * ── WHAT IT IS FOR ───────────────────────────────────────────────────────────
  * A sales associate needs to reach the person who runs the programme, and the
  * person who runs the programme needs to reach every associate who signed up.
  * Notifications are one-way and email is not real-time, so this is the two-way
  * channel: one or many conversations, live, from any page.
+ *
+ * The TRIGGER is no longer here. Alerts, chat, the cart, the theme and the way
+ * out were five buttons in the top bar's right corner; they are rows in one
+ * account menu now (`components/account/useAccountMenu.ts`), which owns the
+ * self-gating this file's button used to do.
  *
  * ── WHY A PANEL AND NOT A WIDGET ─────────────────────────────────────────────
  * The app's convention reserves a centered modal for destructive approvals and
@@ -44,44 +49,6 @@ function otherNames(thread: MessageThread, meId: string | null): string {
   const others = thread.participants.filter((participant) => participant.userId !== meId);
   const list = others.length ? others : thread.participants;
   return list.map((participant) => participant.name || participant.email).join(', ');
-}
-
-export function MessageHubButton({ className }: { className?: string }) {
-  const hub = useOptionalMessageHub();
-  const t = useTranslations('messages');
-  // Self-gating (the shared-component rule): a builder account with nobody to
-  // message and no conversation gets no icon, rather than a caller having to
-  // compute `isSales || isSuperadmin` at every mount point.
-  if (!hub?.available) return null;
-
-  return (
-    <button
-      type="button"
-      className={className}
-      onClick={hub.openHub}
-      title={t('open')}
-      aria-label={hub.unread > 0 ? t('openWithCount', { count: hub.unread }) : t('open')}
-      style={{
-        position: 'relative', background: 'none', border: 'none', color: 'var(--text-muted)',
-        cursor: 'pointer', padding: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-      }}
-    >
-      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-      </svg>
-      {hub.unread > 0 && (
-        <span style={{
-          position: 'absolute', top: -1, right: -2, minWidth: 16, height: 16,
-          borderRadius: 'var(--radius-full)', background: 'var(--coral-bright)',
-          color: 'var(--text-on-accent)', fontSize: 'var(--font-size-field-label)',
-          fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '0 3px', lineHeight: 1,
-        }}>
-          {hub.unread > 99 ? '99+' : hub.unread}
-        </span>
-      )}
-    </button>
-  );
 }
 
 export function MessageHubPanel({ meId }: { meId: string | null }) {

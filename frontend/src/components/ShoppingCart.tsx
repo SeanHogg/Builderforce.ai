@@ -220,10 +220,7 @@ export default function ShoppingCart() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
-              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-            </svg>
+            <Icon name="cart" size={20} />
             <span style={{ fontWeight: 700, fontSize: 'var(--font-size-card-title)' }}>{t('title')}</span>
             {count > 0 && (
               <span style={{ background: 'var(--accent)', color: 'var(--text-on-accent)', borderRadius: 'var(--radius-lg)', padding: '1px 8px', fontSize: 'var(--font-size-small)', fontWeight: 700 }}>
@@ -247,10 +244,7 @@ export default function ShoppingCart() {
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
           {items.length === 0 ? (
             <div style={{ textAlign: 'center', color: 'var(--text-muted)', paddingTop: 48 }}>
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.3, marginBottom: 12 }}>
-                <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
-                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-              </svg>
+              <Icon name="cart" size={48} style={{ opacity: 0.3, marginBottom: 12 }} />
               <p style={{ fontSize: 'var(--font-size-body)' }}>{t('empty')}</p>
               <Link
                 href="/marketplace"

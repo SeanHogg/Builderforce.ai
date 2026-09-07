@@ -31,6 +31,18 @@ export interface CreateAgentSessionOptions {
     signal?: AbortSignal,
   ) => AgentMessage[] | Promise<AgentMessage[]>;
   getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined;
+  /**
+   * Where a successor model comes from when the pinned one burns its whole stall
+   * budget without emitting a tool call. On-prem this is built from the OPERATOR'S OWN
+   * `agents.defaults.model.fallbacks` chain (`createStallFallbackPicker`) — the loop
+   * has no catalog and never invents one, so an operator who declared no alternative
+   * still gets the loud `stallExhaustedNotice` rather than a substituted model.
+   * See {@link AgentLoopConfig.pickFallbackModel}.
+   */
+  pickFallbackModel?: (tried: readonly string[]) => Model | undefined;
+  /** Notified when the session swaps models mid-run (the agent's own `state.model` is
+   *  updated for you; this is the seam for logging/telemetry). */
+  onModelFallback?: (from: Model, to: Model, notice: string) => void;
   /** Default stream fn; the embedded runner overrides `session.agent.streamFn` per route. */
   streamFn?: StreamFn;
   /** Accepted for call-site compatibility with pi's `createAgentSession`, but unused —
@@ -69,6 +81,8 @@ export class AgentSession {
       convertToLlm: opts.convertToLlm,
       transformContext: opts.transformContext,
       getApiKey: opts.getApiKey,
+      ...(opts.pickFallbackModel ? { pickFallbackModel: opts.pickFallbackModel } : {}),
+      ...(opts.onModelFallback ? { onModelFallback: opts.onModelFallback } : {}),
     });
     this.agent.sessionId = this.sessionManager.getSessionId();
     if (opts.streamFn) this.agent.streamFn = opts.streamFn;

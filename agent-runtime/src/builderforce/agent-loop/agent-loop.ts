@@ -20,17 +20,35 @@ import type { AssistantMessage, Message, Model, ToolResultMessage } from "../mod
 import { runAgentLoop, type LoopCodec, type LoopHooks, type LoopPorts } from "@builderforce/agent-loop";
 import { EventStream } from "./event-stream.js";
 import type { StreamFn } from "./stream.js";
-import {
-  shouldRecoverStalledTurn,
-  isExhaustedStall,
-  stallShape,
-  stallRecoveryNudge,
-  stallExhaustedNotice,
-  MAX_ANNOUNCEMENT_RECOVERIES,
-} from "@builderforce/agent-stall";
+import { modelRef, resolveStallOutcome } from "./stall-recovery.js";
 
 export interface AgentLoopConfig {
   model: Model;
+  /**
+   * The next model to try once the current one has burned its whole stall budget
+   * without emitting a single tool call — i.e. re-prompting it is spent and only a
+   * DIFFERENT model can finish the request. `tried` holds every {@link modelRef}
+   * already attempted this run, the run's original pin included.
+   *
+   * OMITTED — or returning undefined — keeps the previous behaviour exactly: the run
+   * ends on {@link stallExhaustedNotice} rather than switching. That default is the
+   * point. An on-prem model is an operator's explicit pin, not a gateway auto-select,
+   * so this loop never reaches for a catalog of its own: the HOST decides whether a
+   * successor exists and what it may be (on-prem that is the operator's own configured
+   * `agents.defaults.model.fallbacks` chain — see `createStallFallbackPicker`), and a
+   * host that wired nothing up gets no substitution.
+   *
+   * The swap is never silent: it is announced on the transcript through
+   * {@link AgentLoopConfig.onModelFallback} and bounded by `MAX_MODEL_FAILOVERS`.
+   */
+  pickFallbackModel?: (tried: readonly string[]) => Model | undefined;
+  /**
+   * Called when the loop switches models mid-run, with the user-facing notice that
+   * says which model gave up and why. The loop also appends the notice to the
+   * transcript; this is the seam a host uses to update its own "current model" state
+   * and persist the swap (see {@link Agent}).
+   */
+  onModelFallback?: (from: Model, to: Model, notice: string) => void;
   /** Converts AgentMessage[] to LLM-compatible Message[] before each LLM call. */
   convertToLlm: (messages: AgentMessage[]) => Message[] | Promise<Message[]>;
   /** Optional AgentMessage[] → AgentMessage[] transform applied before conversion. */
@@ -107,6 +125,10 @@ function createAgentStream(): EventStream<AgentEvent, AgentMessage[]> {
 async function streamAssistantResponse(
   context: AgentContext,
   config: AgentLoopConfig,
+  /** The model THIS turn runs on — `config.model` for most runs, a successor after a
+   *  stall failover. Passed explicitly rather than read off `config` so the loop never
+   *  mutates a caller-owned config object to change who is answering. */
+  model: Model,
   signal: AbortSignal | undefined,
   stream: EventStream<AgentEvent, AgentMessage[]>,
   streamFn: StreamFn,
@@ -121,8 +143,8 @@ async function streamAssistantResponse(
   };
 
   const resolvedApiKey =
-    (config.getApiKey ? await config.getApiKey(config.model.provider) : undefined) || config.apiKey;
-  const response = await streamFn(config.model, llmContext, {
+    (config.getApiKey ? await config.getApiKey(model.provider) : undefined) || config.apiKey;
+  const response = await streamFn(model, llmContext, {
     apiKey: resolvedApiKey,
     temperature: config.temperature,
     maxTokens: config.maxTokens,
@@ -160,6 +182,13 @@ async function runLoop(
   // Budget for the announced-but-untaken tool call recovery below, shared with the
   // Brain run loop via `@builderforce/agent-stall`.
   let announcementRecoveries = 0;
+  // MODEL FAILOVER state, the on-prem half of the same shared decision the Brain run
+  // loop and the server addressed-reply loop take (`chooseStallFailover`). `activeModel`
+  // is what the NEXT turn runs on; `triedModels` is every ref burned this run, which is
+  // both what the picker must avoid and what the exhausted notice names.
+  let activeModel: Model = config.model;
+  const triedModels: string[] = [];
+  let modelFailovers = 0;
   // The run's own tool NAMES and the request it was given — the two facts the HANDOFF
   // shape needs. Captured once, before the loop starts pushing its own recovery
   // messages in as `user` turns: reading the newest user message later would ask
@@ -210,7 +239,7 @@ async function runLoop(
 
   const ports: LoopPorts<AgentMessage> = {
     complete: async () => {
-      const message = await streamAssistantResponse(currentContext, config, signal, stream, streamFn);
+      const message = await streamAssistantResponse(currentContext, config, activeModel, signal, stream, streamFn);
       // An errored / aborted turn never executes its calls: it is handed to the
       // no-tool-calls path, which records it and ends the run.
       const toolCalls = isTerminal(message)
@@ -272,40 +301,57 @@ async function runLoop(
       // ("I'll search the codebase for the handler." → stopReason: stop, 0 tool
       // calls). Treating that as "no tool calls, therefore done" ends the run with a
       // promise as its result — for an autonomous run that is a silent no-op that
-      // still burns the run. Re-prompt instead, bounded per run so a model that keeps
-      // narrating can't spin. Nothing to do when steering already queued work.
-      const stallInput = {
-        text: assistantText(message),
-        toolCallCount: 0,
-        availableToolCount: currentContext.tools?.length ?? 0,
-        recoveriesUsed: announcementRecoveries,
-        availableToolNames: toolNames,
-        requestText: typeof userRequest === "string" ? userRequest : "",
-      };
-      // An autonomous run has NOBODY to hand commands to — a turn that ends "now run
-      // the tests and commit" is a no-op dressed as a completed step, and the ticket
-      // ledger records it as done. Same budget, different correction; see `stallShape`.
-      const shape = stallShape(stallInput);
-      if (pendingMessages.length === 0 && shouldRecoverStalledTurn(stallInput)) {
-        announcementRecoveries += 1;
-        pendingMessages = [
-          {
-            role: "user",
-            content: stallRecoveryNudge(announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES, shape),
-            timestamp: Date.now(),
+      // still burns the run. WHAT that earns — another re-prompt, a different model,
+      // or an explained stop — is `resolveStallOutcome`; this only performs it.
+      // Nothing to do when steering already queued work.
+      if (pendingMessages.length === 0) {
+        const outcome = resolveStallOutcome({
+          facts: {
+            text: assistantText(message),
+            availableToolCount: currentContext.tools?.length ?? 0,
+            availableToolNames: toolNames,
+            requestText: typeof userRequest === "string" ? userRequest : "",
           },
-        ];
-      } else if (pendingMessages.length === 0 && isExhaustedStall(stallInput)) {
-        // Every recovery spent and the model is STILL only describing calls. Ending
-        // here silently leaves a promise as the run's result — for an autonomous run
-        // that reads as a completed step that did nothing. Append the reason to the
-        // transcript so the run output, the ticket ledger and any human reviewer see
-        // WHY it produced nothing, instead of inferring success from a clean exit.
-        pushBoth({
-          role: "user",
-          content: stallExhaustedNotice(config.model?.id, undefined, shape),
-          timestamp: Date.now(),
+          activeModel,
+          triedModels,
+          recoveriesUsed: announcementRecoveries,
+          failoversUsed: modelFailovers,
+          pickFallbackModel: config.pickFallbackModel,
         });
+        if (outcome.kind === "nudge") {
+          announcementRecoveries = outcome.recoveriesUsed;
+          pendingMessages = [{ role: "user", content: outcome.nudge, timestamp: Date.now() }];
+        } else if (outcome.kind === "failover") {
+          const previous = activeModel;
+          activeModel = outcome.model;
+          modelFailovers = outcome.failoversUsed;
+          announcementRecoveries = 0;
+          config.onModelFallback?.(previous, outcome.model, outcome.notice);
+          // Visible, never silent: a run that quietly changes who is answering is its
+          // own support ticket. `display: true` also folds it into the next prompt, so
+          // the incoming model is told what the previous one failed to do.
+          pushBoth({
+            role: "custom",
+            customType: "model_failover",
+            content: outcome.notice,
+            display: true,
+            details: {
+              from: modelRef(previous),
+              to: modelRef(outcome.model),
+              attempt: modelFailovers,
+              shape: outcome.shape,
+            },
+            timestamp: Date.now(),
+          });
+          pendingMessages = [{ role: "user", content: outcome.nudge, timestamp: Date.now() }];
+        } else if (outcome.kind === "exhausted") {
+          // Nothing left to try. Ending here silently leaves a promise as the run's
+          // result — for an autonomous run that reads as a completed step that did
+          // nothing. Append the reason to the transcript so the run output, the ticket
+          // ledger and any human reviewer see WHY it produced nothing, instead of
+          // inferring success from a clean exit.
+          pushBoth({ role: "user", content: outcome.notice, timestamp: Date.now() });
+        }
       }
       return pendingMessages.length > 0 ? { action: "continue" } : { action: "stop", ok: true };
     },
@@ -428,6 +474,11 @@ export interface AgentOptions {
     signal?: AbortSignal,
   ) => AgentMessage[] | Promise<AgentMessage[]>;
   getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined;
+  /** See {@link AgentLoopConfig.pickFallbackModel}. Omitted ⇒ no model substitution. */
+  pickFallbackModel?: (tried: readonly string[]) => Model | undefined;
+  /** See {@link AgentLoopConfig.onModelFallback}. The agent updates its own
+   *  `state.model` on a swap regardless, so a host only needs this to persist it. */
+  onModelFallback?: (from: Model, to: Model, notice: string) => void;
 }
 
 /**
@@ -448,6 +499,8 @@ export class Agent {
   private followUpQueue: AgentMessage[] = [];
   getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined;
   sessionId?: string;
+  private pickFallbackModel?: (tried: readonly string[]) => Model | undefined;
+  private onModelFallback?: (from: Model, to: Model, notice: string) => void;
 
   constructor(opts: AgentOptions) {
     this._state = {
@@ -461,6 +514,8 @@ export class Agent {
     this.convertToLlm = opts.convertToLlm ?? defaultConvertToLlm;
     this.transformContext = opts.transformContext;
     this.getApiKey = opts.getApiKey;
+    this.pickFallbackModel = opts.pickFallbackModel;
+    this.onModelFallback = opts.onModelFallback;
   }
 
   get state(): AgentState {
@@ -529,6 +584,14 @@ export class Agent {
         const q = this.followUpQueue;
         this.followUpQueue = [];
         return q;
+      },
+      ...(this.pickFallbackModel ? { pickFallbackModel: this.pickFallbackModel } : {}),
+      // A stall failover changes who is answering for the REST of the session, not just
+      // the rest of the turn: `setModel` here is what makes the next `prompt()` (and any
+      // surface reading `state.model`) start from the model that actually works.
+      onModelFallback: (from: Model, to: Model, notice: string) => {
+        this.setModel(to);
+        this.onModelFallback?.(from, to, notice);
       },
     };
     const context: AgentContext = {

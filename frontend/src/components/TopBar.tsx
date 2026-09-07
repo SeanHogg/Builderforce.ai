@@ -13,14 +13,14 @@ import { ButtonLink } from '@/components/ui';
 import { ThemeToggleButton } from '@/components/ThemeToggleButton';
 import { useRolePreview, type PreviewRole } from '@/lib/RolePreviewContext';
 import { useEmulation } from '@/lib/EmulationContext';
-import { HeaderCartButton } from './HeaderCartButton';
-import { MessageHubButton, MessageHubPanel } from './messages/MessageHub';
-import NotificationBell from './NotificationBell';
+import ShoppingCart from './ShoppingCart';
+import { MessageHubPanel } from './messages/MessageHub';
+import { AccountMenu } from './account/AccountMenu';
+import { NotificationsPanel } from './account/NotificationsPanel';
 import { ManagerStatusIndicator } from './ManagerStatusIndicator';
 import { TenantProjectSwitcher } from './TenantProjectSwitcher';
 import { CommandPalette } from './workspace/CommandPalette';
 import { OnboardingProgressPill } from './OnboardingProgressPill';
-import { JourneyPill } from './JourneyPill';
 import { useOnboardingPrompt } from '@/lib/onboarding';
 
 const PREVIEW_ROLES: PreviewRole[] = ['owner', 'manager', 'developer', 'viewer'];
@@ -29,16 +29,10 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
   const t = useTranslations('topbar');
   const tc = useTranslations('common');
   const pathname = usePathname() || '';
-  const { logout, user, isAuthenticated, hasTenant } = useAuth();
+  const { user, isAuthenticated, hasTenant } = useAuth();
   const { previewRole, startPreview, exitPreview } = useRolePreview();
   const { emulation } = useEmulation();
   const { show: showOnboarding } = useOnboardingPrompt();
-
-  const handleSignOut = () => {
-    logout();
-    // Full page navigation so middleware and app see cleared cookies/tokens
-    window.location.href = '/login';
-  };
 
   return (
     <header className={`topbar${previewRole ? ' topbar--role-preview' : ''}`}>
@@ -76,10 +70,7 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
           </span>
         ) : (
           <Link href="/marketplace" className="tenant-chip topbar-center-link" style={{ textDecoration: 'none' }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
-              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-            </svg>
+            <Icon name="cart" size={16} />
             {t('marketplace')}
           </Link>
         )}
@@ -98,11 +89,12 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
         <CommandPalette />
 
         {/* New-account setup progress — self-gates to nothing once onboarding is
-            complete/dismissed or for non-owner members. Once setup is done, the
-            same slot carries the founder's-journey pill instead — mutually
-            exclusive, never both, so the header never shows two chips fighting
-            for the same corner. */}
-        {isAuthenticated && (showOnboarding ? <OnboardingProgressPill /> : <JourneyPill />)}
+            complete/dismissed or for non-owner members. Nothing replaces it once
+            setup is done: the founder's-journey chip that used to take this slot
+            said the same word ("Idea") that the canvas's own phase stepper and
+            the shell panel's stage switcher already say, on the surface where the
+            chrome has to be quietest. One fact, one place. */}
+        {isAuthenticated && showOnboarding && <OnboardingProgressPill />}
 
         {/* Role preview — superadmin only, not during emulation */}
         {isAuthenticated && user?.isSuperadmin && !emulation && (
@@ -141,48 +133,28 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
             sufficient while onboarding or before a workspace is selected. */}
         {hasTenant && <ManagerStatusIndicator />}
 
-        {isAuthenticated && <NotificationBell />}
+        {/* ONE control for the signed-in person, in the corner their eye already
+            goes to. Alerts, chat, the cart, the theme, Settings and the way out
+            were six buttons here; the badge on the avatar carries their combined
+            count and the menu breaks it back down. See `AccountMenu`. */}
+        <AccountMenu />
 
-        {/* Beside the cart, as asked: the two-way channel between an associate
-            and the person who runs the programme. Self-gates to nothing when
-            there is nobody this account may message. */}
-        {isAuthenticated && <MessageHubButton />}
+        {/* The surfaces those rows open. They are mounted by the SHELL rather
+            than by the rows, because an open conversation or an open cart has to
+            survive the menu closing — and, in the cart's case, a navigation. */}
         {isAuthenticated && <MessageHubPanel meId={user?.id ?? null} />}
+        {isAuthenticated && <NotificationsPanel />}
+        <ShoppingCart />
 
-        <HeaderCartButton />
-
-        <ThemeToggleButton />
         {/* The shell is the same surface signed in or out (PRD 21 §0), so the way
             IN has to live in it — the marketing header used to carry this pair,
             and a guest on a canvas no longer sees that header. */}
         {!isAuthenticated && (
           <>
+            <ThemeToggleButton />
             <ButtonLink href={signInHref(pathname)} variant="ghost" size="sm">{tc('signIn')}</ButtonLink>
             <ButtonLink href="/register" variant="primary" size="sm">{tc('getStarted')}</ButtonLink>
           </>
-        )}
-        {isAuthenticated && (
-          <button
-            type="button"
-            onClick={handleSignOut}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              padding: 6,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-            title={t('signOut')}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
-          </button>
         )}
       </div>
     </header>

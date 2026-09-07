@@ -146,7 +146,11 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
   // question, and the local one silently disagreed (no `/settings` exact-match
   // carve-out, so `/settings/api-keys` resolved differently in each).
   const activeGroupId = findActiveGroup(pathname, allGroups)?.id;
-  const groups = allGroups.filter((g) => !g.superadminOnly || user?.isSuperadmin);
+  // `railHidden` rows (Settings, Platform Admin) are still destinations — the
+  // palette finds them and `findActiveGroup` above resolves their routes — they
+  // just are not rail rows any more. They live in the account menu, beside the
+  // rest of what belongs to the person rather than to the work.
+  const groups = allGroups.filter((g) => !g.railHidden && (!g.superadminOnly || user?.isSuperadmin));
 
   // Progressive disclosure through the ONE helper (§11.4.4): a row is always
   // listed, and the rung decides whether it is live. A local canvas is the

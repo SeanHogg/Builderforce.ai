@@ -1,3 +1,76 @@
+## ✅ RESOLVED 2026-09-07 — The canvas command bar is the arc: eight captions that named the codebase became the five the product already teaches
+
+The bar's group headers were `Workflow · History · Tools · Live · Share · View · Add ·
+People` — eight names, every one describing how the controls are implemented rather than
+what a person is doing, and the two worst of them plain shelves. `Tools` held the outcome
+scorecard, the diagnostics report and full screen. `Live` held a call and a screen
+recording. `Workflow` was a euphemism invented so the bar's Run would not read as an
+object's Run. Meanwhile the product teaches five words everywhere else — `STAGES` in
+`navGroups.ts`, the left rail's `--stage-*` dots, the session's own phase in
+`canvasPhases.ts` — and the bar was the one surface not using them.
+
+**The clusters ARE the stages now.** `CanvasSessionActionCluster` is
+`idea | make | run | measure | reach | board`, every action declares which stage it serves,
+and `CanvasBarGroupId` is that union with nothing added. The bar reads
+`Idea · Make · Run · Measure · Reach` left to right, in the rail's own hues.
+
+- **Idea** — Add (the palette's one door, contributed by the bar because the picker opens
+  above the button's own screen rect) and **Draw**, promoted out of a ••• sheet that filed
+  "make a mark" beside "export the session".
+- **Make** — the prompt toggle leading, then Undo/Redo. The prompt used to be the last of
+  nine `View` glyphs, which said it was chrome; it is the main input to the canvas.
+- **Run** — Run the flow, the App-surface Run, and **Present**, promoted out of the sheet.
+- **Measure** — outcomes, diagnostics, walkthrough. All three answer *is it working?*
+- **Reach** — the roster, Share, talktrack, call, and **Make it real**.
+- **Board** — the one group that names no stage, deliberately: full screen and the •••
+  sheet act on the board, not on the work. A control that answers no stage's question must
+  not be given a stage's caption, which is how `Tools` formed in the first place.
+
+**A stage group does not own its caption copy.** It names a `Stage`, and the caption is
+`nav.stage.<id>` — the same five strings the rail draws over the same-coloured dot. The
+`sessionActionCluster.*` namespace is deleted: a group had been carrying two strings, one
+for the caption and one for its accessible name, which is how a vocabulary drifts.
+
+**Publish folded into Make it real.** The bar carried two worded buttons side by side that
+both meant "ship it", which reads as a fork. `chrome: 'labelled'` is gone; `chrome: 'door'`
+files an action as a ROW under the one worded trigger, and the menu now holds Prove it,
+Publish, Make this a project and Export. The doors are deliberately excluded from the •••
+overflow sheet — *Make it real* is a worded button that survives the phone breakpoint, so
+listing Publish there too would be one decision with two homes on the one screen size where
+that costs most.
+
+**The view commands left the bar and did NOT become a second floating panel.** Zoom, fit,
+arrange, mini map and outline move the viewport; they do not advance the work, so no stage
+can honestly caption them, and inventing a sixth caption is what this regroup undid. A
+corner pill was built in the prototype and rejected by the operator — two toolbars over one
+canvas is what deleting the left-hand rail fixed. They are a `View` trough at the top of
+the ••• sheet, drawn as glyphs rather than rows, and pressing one does not dismiss the
+sheet, because zoom is a control you press repeatedly.
+
+**Dead code removed with the layout it described.** `CanvasChromePlace`, `SLOT_PLACE` and
+`canvasChromeSlotsIn()` said which region each slot floats in and in what order the bar
+draws them. The bar has no linear slot order any more — the arc owns it — so the table had
+no production consumer and was deleted rather than left to drift; `SLOT_KIND` and
+`canvasChromeShows` stay, because "does this survive a collapse" is still one question with
+one answer. The `handoff` render variant went with the labelled chrome it drew.
+
+**One phone bug found and fixed on the way.** The rule standing an emptied group down was
+`.barGroup:has([data-phone]):not(:has([data-phone='bar']))` — correct while a group held
+nothing but registry actions, and wrong the moment the groups became the arc: Idea is the
+Add button (no placement of its own) beside a menu-only `draw`, and Reach is the ROSTER
+beside two menu-only actions. Both would have vanished from a phone — the palette's one
+door, and the avatars the whole collapse rule exists to protect. It now asks the only
+question that matters: `:not(:has(.barGroupRow > :not([data-phone='menu'])))`.
+
+Touched `lib/canvasSessionActions.ts`, `lib/canvasBarGroups.ts`, `lib/canvasChrome.ts`,
+`CanvasBarGroup.tsx`, `CanvasSessionActions.tsx`, `CanvasCommandBar.tsx`,
+`CreationCanvas.tsx` (the handoff chrome split into `makeItRealChrome` + `boardMenuChrome`),
+`CanvasCommands.tsx` (two new icons), `CreationCanvas.module.css`, and the
+`creationCanvas.barGroup.*` copy in all five catalogs. Verified: `tsgo` clean,
+`check:i18n-keys` and `check:design-tokens` green, and the three registry suites
+(`canvasBarGroup`, `canvasSessionActions`, `canvasChrome`) rewritten to the new taxonomy
+and passing.
+
 ## ✅ RESOLVED 2026-09-07 — The `Deploy API` failure whose own remedy did nothing: a drift guard that measured the author's line endings
 
 `check:agent-relay` failed the API deploy at `ed2d3d2d6` with a message naming its own

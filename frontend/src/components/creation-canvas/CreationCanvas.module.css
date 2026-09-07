@@ -312,21 +312,7 @@
 /* A folded bar keeps only STATUS (`canvasChrome.ts`), so what is left is the roster and
    whatever the runtime is reporting — one row of faces that names itself. A caption over
    it would be the fold spending the height it was pressed to reclaim. */
-.commandBar[data-collapsed='true'] /* THE CAPTION IS A STAGE, so it wears that stage's dot in that stage's hue — the same
-   `--stage-*` tokens the left rail's `.nav-stage__dot` uses. Five rules rather than one
-   because a custom property cannot be built from an attribute value; the alternative was
-   an inline style per group, which puts the palette back into the component. */
-.barGroup[data-stage] .barGroupCaption::before {
-  content:''; width:5px; height:5px; flex:none; border-radius:50%;
-  background:var(--bar-stage-hue,var(--text-muted));
-}
-.barGroup[data-stage='idea'] { --bar-stage-hue:var(--stage-idea); }
-.barGroup[data-stage='make'] { --bar-stage-hue:var(--stage-make); }
-.barGroup[data-stage='run'] { --bar-stage-hue:var(--stage-run); }
-.barGroup[data-stage='measure'] { --bar-stage-hue:var(--stage-measure); }
-.barGroup[data-stage='reach'] { --bar-stage-hue:var(--stage-reach); }
-.barGroupCaption {
-  display:flex; align-items:center; gap:5px; display:none; }
+.commandBar[data-collapsed='true'] .barGroupCaption { display:none; }
 
 /* Run is the only control on this bar that STARTS something, so it is the only one with
    a fill. Positive rather than brand: the accent is already spent on "which surface am I
@@ -410,7 +396,24 @@
    for every group on the bar, so the sets cannot end up half captioned. See that file,
    and `lib/canvasBarGroups.ts` for the names themselves. */
 .barGroup { display:inline-flex; flex:none; flex-direction:column; align-items:center; gap:1px; min-width:0; }
+/* THE CAPTION IS A STAGE, so it wears that stage's dot in that stage's hue — the same
+   `--stage-*` tokens the left rail's `.nav-stage__dot` uses. Five rules rather than one
+   because a custom property cannot be built from an attribute value; the alternative was
+   an inline style per group, which puts the palette back into the component. */
+.barGroup[data-stage] .barGroupCaption::before {
+  /* INLINE, not a flex child: the caption keeps `text-overflow:ellipsis`, and a flex
+     container would make the text an anonymous item that ellipsis cannot reach. */
+  content:''; display:inline-block; width:5px; height:5px; margin-right:5px;
+  border-radius:50%; vertical-align:middle;
+  background:var(--bar-stage-hue,var(--canvas-muted));
+}
+.barGroup[data-stage='idea'] { --bar-stage-hue:var(--stage-idea); }
+.barGroup[data-stage='make'] { --bar-stage-hue:var(--stage-make); }
+.barGroup[data-stage='run'] { --bar-stage-hue:var(--stage-run); }
+.barGroup[data-stage='measure'] { --bar-stage-hue:var(--stage-measure); }
+.barGroup[data-stage='reach'] { --bar-stage-hue:var(--stage-reach); }
 .barGroupCaption {
+  /* `composes` MUST be the first declaration in a CSS-module rule. */
   composes: chromeHeading;
   /* Capped so a long word in a long language cannot set the width of the group beneath
      it — a German "Hinzufügen" over a single 30px button would otherwise stretch the bar
@@ -465,13 +468,22 @@
    chromed buttons inside a chromed shell draws three borders and stands 6px taller than
    the icon troughs next to it. Same trade the surface tabs make: the trough carries the
    shell, the segment carries only the word and its lit state. */
-.barGroupRow[data-shell='trough'] > .sessionActionLabelled {
+/* Matched THROUGH `.handoffGroup` as well as directly. `Make it real` has to be wrapped
+   in a positioned anchor — its menu opens `right:0` against whatever box renders it — and
+   that wrapper was enough to miss this rule, so the one worded control on the bar drew
+   its own full border and read as a group of its own sitting beside Reach rather than as
+   the last segment IN it. */
+.barGroupRow[data-shell='trough'] > .sessionActionLabelled,
+.barGroupRow[data-shell='trough'] > .handoffGroup > .sessionActionLabelled {
   min-height:28px; padding:5px 9px; border:0; border-radius:var(--radius-sm);
   background:transparent; color:var(--canvas-muted);
 }
 .barGroupRow[data-shell='trough'] > .sessionActionLabelled:hover,
-.barGroupRow[data-shell='trough'] > .sessionActionLabelled:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); }
-.barGroupRow[data-shell='trough'] > .sessionActionLabelled[aria-expanded='true'] {
+.barGroupRow[data-shell='trough'] > .sessionActionLabelled:focus-visible,
+.barGroupRow[data-shell='trough'] > .handoffGroup > .sessionActionLabelled:hover,
+.barGroupRow[data-shell='trough'] > .handoffGroup > .sessionActionLabelled:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); }
+.barGroupRow[data-shell='trough'] > .sessionActionLabelled[aria-expanded='true'],
+.barGroupRow[data-shell='trough'] > .handoffGroup > .sessionActionLabelled[aria-expanded='true'] {
   background:var(--canvas-panel); color:var(--canvas-accent); box-shadow:0 1px 2px var(--canvas-shadow);
 }
 /* The same actions inside the ••• sheet, where a phone reaches the ones the bar had no

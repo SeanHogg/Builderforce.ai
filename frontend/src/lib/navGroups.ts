@@ -115,6 +115,21 @@ export interface NavGroup {
   tabs?: NavTab[];
   /** Only shown to superadmins (Platform Admin). */
   superadminOnly?: boolean;
+  /**
+   * Kept OUT of the left rail, while staying a first-class destination
+   * everywhere else — the ⌘K palette, the shell panel's crumb and tab bar, the
+   * Brain's `show_panel`, and `findActiveGroup`'s route resolution all still see
+   * it.
+   *
+   * It is not "hidden". Settings and Platform Admin are reached from the account
+   * menu in the top-right corner, which is where every product this one is
+   * compared to puts them, and where a person looks for their own account
+   * without being taught. Listing them a second time down the rail gave the arc
+   * (Idea → Make → Run → Measure → Reach) a sixth heading that is not a stage of
+   * anything — the rail says where you are in the work, and your own account is
+   * not a step in the work.
+   */
+  railHidden?: boolean;
 }
 
 export const NAV_GROUPS: NavGroup[] = [
@@ -451,7 +466,7 @@ export const NAV_GROUPS: NavGroup[] = [
   // ── ADMIN ────────────────────────────────────────────────────────────────
   {
     id: 'settings', labelKey: 'group.settings', icon: '⚙', href: '/settings',
-    seat: 'platform', stage: 'admin',
+    seat: 'platform', stage: 'admin', railHidden: true,
     match: ['/settings', '/security', '/billing', '/tenants'],
     tabKind: 'route',
     tabs: [
@@ -482,7 +497,7 @@ export const NAV_GROUPS: NavGroup[] = [
     // (?sub=…) on the page. The default group (Overview) uses id '' so a bare
     // /admin highlights it.
     id: 'admin', labelKey: 'group.admin', icon: '⚙', href: '/admin', match: ['/admin'], superadminOnly: true,
-    seat: 'platform', stage: 'admin',
+    seat: 'platform', stage: 'admin', railHidden: true,
     tabKind: 'query', basePath: '/admin',
     tabs: ADMIN_GROUP_META.map((g) => ({ id: g.id, labelKey: g.labelKey, icon: g.icon })),
   },
@@ -615,7 +630,7 @@ export const FREELANCER_NAV_GROUPS: NavGroup[] = [
     // Workspace sub-tab self-hides without a tenant, and the tenant-only sub-routes
     // (integrations / api-keys) are never linked here.
     id: 'settings', labelKey: 'group.settings', icon: '⚙', href: '/settings',
-    seat: 'platform', stage: 'admin',
+    seat: 'platform', stage: 'admin', railHidden: true,
     match: ['/settings'],
     tabKind: 'route',
     tabs: [
@@ -642,7 +657,7 @@ export const SALES_NAV_GROUPS: NavGroup[] = [
   // operations, and RUN is where the operational rows live. Same row, same stage
   // as the one every other account now gets in `NAV_GROUPS`.
   { id: 'sales', labelKey: 'group.sales', icon: '📈', href: '/sales', match: ['/sales'], seat: 'CRO', stage: 'reach' },
-  { id: 'settings', labelKey: 'group.settings', icon: '⚙', href: '/settings', match: ['/settings'], seat: 'platform', stage: 'admin' },
+  { id: 'settings', labelKey: 'group.settings', icon: '⚙', href: '/settings', match: ['/settings'], seat: 'platform', stage: 'admin', railHidden: true },
 ];
 
 /** The nav destinations for the current account type — the ONE place the
