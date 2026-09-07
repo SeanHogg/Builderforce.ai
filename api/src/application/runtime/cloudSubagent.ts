@@ -81,9 +81,14 @@ export interface SubagentDeps {
 /**
  * Build the `orchestrate` backing. Every failure inside a child is returned as
  * `{ok:false}` for the PARENT's model to read and route around — a delegation that went
- * wrong is information, not a reason to end the parent's run. The one exception is
- * cancellation, which is rethrown so the parent's kernel reports the run cancelled
- * instead of treating a killed child as a failed tool call.
+ * wrong is information, not a reason to end the parent's run.
+ *
+ * Cancellation is named as cancellation rather than as a child that could not answer.
+ * The kernel absorbs an aborted fetch into `cancelled`, so it arrives as a result, and
+ * the parent's own cancel check ends the run at the next step boundary; what matters
+ * here is that the timeline does not report a failed sub-agent when someone pressed
+ * stop. A throw from OUTSIDE the kernel while the run is aborting is not the child's
+ * failure to report, so it goes back up.
  */
 export function buildOrchestrationCapability(deps: SubagentDeps): OrchestrationCapability {
   return {

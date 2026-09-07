@@ -24,9 +24,25 @@ describe('CLOUD_SURFACE_CAPS → durable/Worker toolset', () => {
     expect(names(CLOUD_AGENT_TOOLS)).toEqual([
       'ask_human', 'claim_resource', 'delete_file', 'edit_file', 'finish', 'list_files',
       'memory_forget', 'memory_recall', 'memory_remember', 'read_file', 'release_resource',
-      'run_checks', 'search_code', 'skill_list', 'skill_propose', 'update_prd', 'web_fetch',
-      'web_search', 'workspace_note', 'workspace_read', 'write_file',
+      'run_checks', 'search_code', 'skill_list', 'skill_propose', 'spawn_agent', 'update_prd',
+      'web_fetch', 'web_search', 'workspace_note', 'workspace_read', 'write_file',
     ]);
+  });
+
+  it('backs `orchestrate` — this surface can run a nested loop inside one tool call', () => {
+    // A child's turns are gateway I/O, not CPU, and its budget is small and absolute,
+    // so a delegation is at most one long durable tick — which heartbeats, so the
+    // orphan reaper does not read it as a dead run.
+    expect(CLOUD_SURFACE_CAPS.has('orchestrate')).toBe(true);
+    expect(names(CLOUD_AGENT_TOOLS)).toContain('spawn_agent');
+  });
+
+  it('withholds `orchestrate` from the container — its image has no spawn handler', () => {
+    // Same rule that keeps `skill.author` out: the container runs its OWN loop, and a
+    // tool the image cannot dispatch 400s mid-run. It follows the deployed image, not
+    // this source.
+    expect(CONTAINER_SURFACE_CAPS.has('orchestrate')).toBe(false);
+    expect(names(CONTAINER_AGENT_TOOLS)).not.toContain('spawn_agent');
   });
 
   it('backs `coordinate` — several agents can be staffed onto one ticket at once', () => {

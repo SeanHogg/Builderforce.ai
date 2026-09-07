@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { childToolDefs, subagentToolDef } from "./subagentTool";
 import type { ToolDef } from "./fileTools";
+import type { BrainToolSpec } from "@seanhogg/builderforce-brain-embedded";
 
 /**
  * Delegation on the MACHINE. The child's tool set is the security boundary here — a
@@ -50,7 +51,8 @@ describe("childToolDefs", () => {
 describe("subagentToolDef", () => {
   const streamOf = (...turns: Array<{ text: string; toolCalls?: Array<{ id: string; name: string; args: string }> }>) => {
     let i = 0;
-    return vi.fn(async () => {
+    // The opts parameter is spelled out so a recorded call has a type to read.
+    return vi.fn(async (_opts: { tools?: BrainToolSpec[] }) => {
       const t = turns[Math.min(i++, turns.length - 1)]!;
       return { text: t.text, toolCalls: t.toolCalls ?? [], finishReason: "stop" } as never;
     });
@@ -66,14 +68,15 @@ describe("subagentToolDef", () => {
     const stream = streamOf({ text: "the middleware is in src/auth.ts" });
     const tool = subagentToolDef({ stream: async () => stream as never, catalog: () => CATALOG });
     const out = JSON.parse(await tool.execute({ label: "find auth", task: "find the auth middleware" }, "/repo"));
-    expect(out).toMatchObject({ ok: true, output: "the middleware is in src/auth.ts", steps: 1, readOnly: true });
+    // `steps` is the turn the child stopped on — it answered on its first.
+    expect(out).toMatchObject({ ok: true, output: "the middleware is in src/auth.ts", steps: 0, readOnly: true });
   });
 
   it("advertises only the read-only local tools to the child", async () => {
     const stream = streamOf({ text: "done" });
     const tool = subagentToolDef({ stream: async () => stream as never, catalog: () => CATALOG });
     await tool.execute({ label: "look", task: "look" }, "/repo");
-    const advertised = (stream.mock.calls[0]![0] as { tools?: Array<{ function: { name: string } }> }).tools ?? [];
+    const advertised = stream.mock.calls[0]![0].tools ?? [];
     expect(advertised.map((t) => t.function.name)).toEqual(["read_file", "search_code"]);
   });
 

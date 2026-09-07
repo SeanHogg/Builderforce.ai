@@ -1,3 +1,79 @@
+## ✅ RESOLVED 2026-09-07 — Sub-agents: one delegation contract, live in the cloud AND on the machine
+
+**The gap.** Isolated-context sub-agents are rubric 4.1 and every competitor has them. The V1
+on-prem runtime has had `sessions_spawn` for as long as it has existed (depth limits, allowlist,
+per-child model, announce chain). Nothing else did: `CLOUD_AGENT_TOOLS` advertised no spawn tool,
+`packages/agent-tools` had none to advertise, and the V2 SDK runner passed an `allowedTools` list
+of six names that silently omitted the SDK's own `Task` tool — so the surface documented as "FULL
+parity, never reduced" had quietly dropped delegation.
+
+**The capability already existed and had never been wired.** `Capability` has carried
+`'orchestrate'` — "spawn sub-agents" — since the tool contract was written, with no tool requiring
+it and no provider member backing it. It is now the real thing rather than a declared intention.
+
+**One child-run contract, three surfaces.**
+
+- `packages/agent-loop/src/subagent.ts` — `runSubagent`: the same kernel one level down. It owns
+  the brief (`subagentSystemPrompt`), the budget (`SUBAGENT_MAX_STEPS = 8`), the output cap
+  (`SUBAGENT_OUTPUT_CHARS = 4000` — a child that rambles must not spend the context delegating was
+  meant to save), and the meaning of a truncated answer. Tools and dispatch arrive injected, so it
+  has no idea which surface it is on. Deliberately hook-free: a child does not gate its own finish,
+  pause for a human or compact — those belong to the parent that stays accountable.
+- `packages/agent-tools/src/subagent-tools.ts` — `spawn_agent`, requiring `orchestrate`. One schema
+  both surfaces advertise, so a model that learns to delegate in one delegates identically in the
+  other. `read_only` defaults TRUE: an unspecified delegation is the investigative case.
+- `api/src/application/runtime/cloudSubagent.ts` — the cloud backing. Its whole job is deciding
+  what a child may TOUCH: `childCapabilities()` subtracts `orchestrate` (recursion is impossible by
+  CONSTRUCTION, not by a depth counter), `human` (a child that could pause the execution would
+  strand the parent mid-turn) and `skill.author`, plus the nine mutating capabilities for a
+  read-only child. Built from the DECORATED provider, so a rehearsal's shadow wrapper covers a
+  child's writes too — otherwise a dry run had exactly one hole.
+- `clients/vscode/src/subagentTool.ts` — the machine. Child gets the read-only, local half of the
+  parent's own catalog (derived from it, never a second list that could drift), on the same model
+  route the parent resolved. Always read-only, and it SAYS so when a writable child was asked for:
+  a parent that believes a child made an edit will not make it, and the change would be lost.
+
+**Wired, not just written.** `CLOUD_SURFACE_CAPS` gains `orchestrate` (the durable surface can
+afford a nested loop: a child's turns are gateway I/O, its budget is small and absolute, and the
+tick heartbeats so the orphan reaper does not read a delegation as a dead run). Child turns are
+metered through `recordCloudLlmTurn` exactly like parent turns — a delegation that billed to nobody
+would make the per-execution cost figure wrong — and each one writes an `agent.subagent` timeline
+row, so delegation is visible rather than an unexplained gap between turns. On the machine,
+`brainToolCatalog` builds the tool last so it can hand the child the catalog assembled above, and
+`spawn_agent` joins `LOCAL_WORKSPACE_TOOLS`: the per-turn relevance selector would otherwise drop
+it on exactly the turns it exists for ("where does the auth middleware live?" shares no stem with
+"delegate"), which is the failure that set already documents for `run_command`.
+
+**And the V2 runner's missing name.** `SDK_TOOLS` in `claude-agent-sdk-runner.ts` is passed verbatim
+as `allowedTools`, so it is not merely the vocabulary a gate can remove — it is what the agent can
+call. `Task` is now in it, restoring V2 to V1's delegation parity, and a `block` gate on `Task`
+still withholds it so governance keeps the last word.
+
+**Tests.** `subagent.test.ts` (the contract the parent depends on: brief-only start, capped answer,
+truncation reported rather than disguised, cancel propagates, shared default budget);
+`cloudSubagent.test.ts` (the capability boundary directly — it is a security boundary and a
+set-difference bug there is silent — plus: a failed child is information, a cancelled one is not,
+and the child holds no spawner of its own); `subagentTool.test.ts` (the local child's tool set,
+the honest refusal of a writable child, a broken route reported rather than thrown);
+`cloudSurfaceCaps.test.ts` (advertised on the durable surface, withheld from the container);
+`claude-agent-sdk-runner.test.ts` (`Task` advertised, and blockable).
+
+**Still open (register).** The two image-run surfaces (container / Actions) — blocked on a live
+image build; a writable child on the machine — blocked on a product decision; the release-notes row
+— blocked on a live superadmin session.
+
+**Also fixed on the way.** `persona-export-sync.test.ts` had a fixture missing `AgentOutputFormat`'s
+required `structure`, which broke `agent-runtime`'s whole type-check — unrelated drift, one line.
+The new marketing post needed its Open Graph card (`node scripts/gen-blog-og.mjs`), which
+`blogOgCards.test.ts` enforces per published post.
+
+**Verified (all run, all green).** `node scripts/check-source-package-graph.mjs` (16 packages, alias
+sets closed) · `packages/agent-loop`: 33 tests · `api`: `pnpm tsgo` clean, `vitest run
+src/application/runtime` 636 tests / 60 files · `clients/vscode`: `tsc --noEmit` clean, full suite
+334 tests / 28 files · `agent-runtime`: `tsc --noEmit` clean, SDK-runner + steering + persona-export
+17 tests · `brain-embedded`: `tsc --noEmit` clean, tool-pinning 20 tests · `frontend`: blog data /
+OG / topics 18 tests.
+
 ## ✅ RESOLVED 2026-09-07 — The `Publish VS Code extension` failure the register could not name: a CSS-module `composes` that pointed forward
 
 The register bullet for this named its blocker as "the full CI log for that run", and it was right that
@@ -22,10 +98,33 @@ stylesheet through Vite, and it is the last step of the publish. `vite build --c
 webview/vite.canvas.config.ts` now completes (1m34s), and the canvas bundle under `clients/vscode/media/`
 was rebuilt from it.
 
-The same run's `Deploy frontend` failure was a SEPARATE cause and is already closed: `check:root-closure`
-at 310 files / 90,120 lines against a 310 / 90,106 baseline — no new edge, the same 310 files carrying
-fourteen lines of comment added inside `lib/rbac.ts` — re-baselined with that argument recorded in
-`check-root-closure.mjs`.
+`Deploy frontend` went red in the same run for TWO unrelated reasons, both now closed.
+
+**`check:root-closure`** — 310 files / 90,120 lines against a 310 / 90,106 baseline. No new edge: the same
+310 files carrying fourteen lines of comment added inside `lib/rbac.ts`. Re-baselined with that argument
+recorded in `check-root-closure.mjs`.
+
+**Webpack could not resolve a NodeNext source package's own relative imports.** Behind the guard chain, the
+Next build failed with three `Module not found`s — `./loop.js`, `./parseToolCall.js`, `./openaiCodec.js`
+from `packages/agent-loop/src/index.ts` — for files that are all present and tracked. The source-only
+packages under `packages/` are consumed as TypeScript, and a NodeNext package spells its relative imports
+with the `.js` extension it will have once emitted; no bundler maps that back on its own. `esbuild.mjs` and
+`clients/vscode/vitest.config.ts` each carry a resolver scoped by importer to `sourcePackageRoots()` for
+exactly this, and the Next build — the third toolchain that compiles these sources — never had one. It went
+unnoticed because it needs a source package with INTERNAL relative imports: `agent-loop` is the first one
+the frontend imports (`creationCanvasAi.ts` → `runAgentLoop`), and the eight source packages already in the
+frontend's graph are all single-module.
+
+The fix is `resolve.extensionAlias` in `next.config.js`, with `.js` listed FIRST: purely additive, since
+anything that resolves today resolves identically and only a specifier that would otherwise FAIL falls
+through to `.ts`. It is declarative rather than a fourth copy of the scoped resolver because this config is
+CommonJS and cannot import the ESM registry — and it needs no list, so the next source package is covered
+without an edit here, which is the property deriving the roots buys the other three.
+
+Checked and NOT affected: `frontend/vitest.config.ts` has the aliases but no such resolver, and needs none
+— Vite performs the `.js` → `.ts` remap itself for TypeScript importers, which is why
+`creationCanvasAi.test.ts` (48 tests) passed throughout while the webpack build could not compile the same
+import. Verified with a full `next build`: no module errors, 51/51 static pages, and `pnpm run check` 22/22.
 
 ## ✅ RESOLVED 2026-09-07 — The frontend deploy's guard chain, red for two passes on files nobody would edit, and the six type errors waiting behind it
 

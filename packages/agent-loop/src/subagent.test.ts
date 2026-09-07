@@ -66,7 +66,9 @@ describe("runSubagent", () => {
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(dispatch.mock.calls[0]![0].name).toBe("list_files");
     expect(run.output).toBe("found it");
-    expect(run.steps).toBe(2);
+    // `steps` is the index of the turn the child stopped on: one tool turn, then the
+    // answer. It is what the delegation cost, not a count of completed iterations.
+    expect(run.steps).toBe(1);
   });
 
   it("reports a child that ran out of budget as truncated rather than as an answer", async () => {

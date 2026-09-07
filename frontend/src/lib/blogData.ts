@@ -83,6 +83,7 @@ import creationCanvasFunctionalityGuide from '@/content/blog/creation-canvas-fun
 import sendTheLink from '@/content/blog/send-the-link-join-without-an-account.md';
 import gradeTheProof from '@/content/blog/grade-the-proof-and-close-the-loop.md';
 import runYourAppOnTheCanvas from '@/content/blog/run-your-app-on-the-canvas.md';
+import delegateTheSearch from '@/content/blog/delegate-the-search-not-the-decision.md';
 import walkMeThroughWhatYouMade from '@/content/blog/walk-me-through-what-you-made.md';
 import importYourRecords from '@/content/blog/import-your-records.md';
 import shipFromTheEditor from '@/content/blog/ship-from-the-editor-commit-branch-pull-request.md';
@@ -232,6 +233,7 @@ export const BLOG_POSTS: BlogPost[] = [
   buildPost('see-what-the-agent-changed-before-you-commit', seeWhatTheAgentChanged),
   buildPost('grade-the-proof-and-close-the-loop', gradeTheProof),
   buildPost('import-your-records', importYourRecords),
+  buildPost('delegate-the-search-not-the-decision', delegateTheSearch),
   buildPost('run-your-app-on-the-canvas', runYourAppOnTheCanvas),
   buildPost('walk-me-through-what-you-made', walkMeThroughWhatYouMade),
   buildPost('the-canvas-gave-the-screen-back-to-the-board', canvasChromeRedesign),

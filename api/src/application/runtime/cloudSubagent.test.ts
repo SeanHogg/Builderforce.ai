@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ToolRegistry, type Capability, type CapabilityProvider, type ToolDefinition } from '@builderforce/agent-tools';
+import { ToolRegistry, type Capability, type CapabilityProvider, type ToolDefinition, type ToolSchema } from '@builderforce/agent-tools';
 import type { LoopTurnResult } from '@builderforce/agent-loop';
 import { buildOrchestrationCapability, childCapabilities, MUTATING_CAPABILITIES, NON_DELEGABLE_CAPABILITIES } from './cloudSubagent';
 
@@ -18,6 +18,11 @@ const ALL_CAPS: ReadonlySet<Capability> = new Set<Capability>([
 ]);
 
 const answer = (content: string): LoopTurnResult => ({ content, toolCalls: [] });
+
+/** The shape the child's model port is called with — spelled out so a mock's
+ *  recorded call has a type to read. */
+type CompleteArgs = { messages: Record<string, unknown>[]; tools: ToolSchema[]; step: number };
+type RecordArgs = { label: string; detail: Record<string, unknown>; result: string };
 
 function registryWith(...defs: ToolDefinition[]): ToolRegistry {
   return new ToolRegistry(defs);
@@ -81,7 +86,7 @@ describe('buildOrchestrationCapability', () => {
     });
 
   it('advertises only the tools the child\'s narrowed capabilities back', async () => {
-    const complete = vi.fn(async () => answer('found'));
+    const complete = vi.fn(async (_args: CompleteArgs) => answer('found'));
     await deps({ complete }).spawn({ label: 'look', task: 'find it' });
     const advertised = complete.mock.calls[0]![0].tools.map((t) => t.function.name);
     expect(advertised).toContain('read_file');
@@ -89,14 +94,16 @@ describe('buildOrchestrationCapability', () => {
   });
 
   it('gives a writable child the write tool', async () => {
-    const complete = vi.fn(async () => answer('changed'));
+    const complete = vi.fn(async (_args: CompleteArgs) => answer('changed'));
     await deps({ complete }).spawn({ label: 'edit', task: 'change it', readOnly: false });
     expect(complete.mock.calls[0]![0].tools.map((t) => t.function.name)).toContain('write_file');
   });
 
   it('returns the child\'s answer with what it cost', async () => {
     const result = await deps().spawn({ label: 'look', task: 'find it' });
-    expect(result).toMatchObject({ ok: true, output: 'done', steps: 1 });
+    // A child that answers on its first turn stopped at step 0 — `steps` is the turn it
+    // stopped on, which is what the delegation cost.
+    expect(result).toMatchObject({ ok: true, output: 'done', steps: 0 });
   });
 
   it('reports a failed child to the parent instead of ending its run', async () => {
@@ -106,21 +113,39 @@ describe('buildOrchestrationCapability', () => {
     expect(result).toMatchObject({ ok: false, error: 'gateway exploded' });
   });
 
-  it('rethrows when the parent run was cancelled — a killed child is not a failed tool', async () => {
+  it('names cancellation as cancellation, not as a child that failed', async () => {
+    // The kernel absorbs an aborted fetch into `cancelled` rather than letting it
+    // escape, so this returns rather than throws. It must still be distinguishable
+    // from a child that genuinely could not answer — the parent's own cancel check
+    // ends the run at the next step boundary either way, but the timeline should not
+    // read "the sub-agent failed" when the user pressed stop.
     const controller = new AbortController();
-    const capability = deps({
+    const result = await deps({
       signal: controller.signal,
       complete: async () => { controller.abort(); throw new Error('aborted'); },
+    }).spawn({ label: 'look', task: 'find it' });
+    expect(result).toMatchObject({ ok: false, error: 'the run was cancelled while this sub-agent was working' });
+  });
+
+  it('rethrows a failure that escapes the kernel while the run is aborting', async () => {
+    // Everything the kernel catches becomes `cancelled` above. A throw from OUTSIDE it
+    // — resolving the tool schemas, the registry itself — is not the child's failure to
+    // report, so it goes back to the parent's kernel rather than becoming a tool result.
+    const controller = new AbortController();
+    controller.abort();
+    const capability = deps({
+      signal: controller.signal,
+      registry: { schemasForCapabilities: () => { throw new Error('registry gone'); } } as never,
     });
-    await expect(capability.spawn({ label: 'look', task: 'find it' })).rejects.toThrow('aborted');
+    await expect(capability.spawn({ label: 'look', task: 'find it' })).rejects.toThrow('registry gone');
   });
 
   it('records the delegation on the timeline so it is not an unexplained gap', async () => {
-    const record = vi.fn(async () => {});
+    const record = vi.fn(async (_event: RecordArgs) => {});
     await deps({ record }).spawn({ label: 'find the middleware', task: 'find it' });
     expect(record).toHaveBeenCalledTimes(1);
     expect(record.mock.calls[0]![0]).toMatchObject({ label: 'find the middleware' });
-    expect(record.mock.calls[0]![0].detail).toMatchObject({ readOnly: true, steps: 1 });
+    expect(record.mock.calls[0]![0].detail).toMatchObject({ readOnly: true, steps: 0 });
   });
 
   it('hands the child no spawner of its own', async () => {

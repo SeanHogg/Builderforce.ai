@@ -36,7 +36,9 @@ describe("toPersonaDefinitions", () => {
         description: "Reviews PRs",
         capabilities: ["review", "security"],
         persona: { voice: "terse", perspective: "maintainer", decisionStyle: "cautious" },
-        outputFormat: { outputPrefix: "REVIEW:" },
+        // `structure` is required on AgentOutputFormat; the exporter reads only
+        // `outputPrefix`, so the value here just has to be a real one.
+        outputFormat: { structure: "markdown", outputPrefix: "REVIEW:" },
       }),
       plugin({ name: "writer", source: "user-global" }),
     ]);
