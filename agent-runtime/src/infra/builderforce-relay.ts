@@ -1226,16 +1226,27 @@ export class BuilderforceRelayService implements IRelayService {
             ? msg.executionId
             : undefined;
         const channel = executionId != null ? this.v2Steering.get(executionId) : undefined;
-        if (!channel) {
-          logWarn(
-            `[builderforce] steering message for execution ${executionId ?? "?"} dropped: no live V2 run`,
-          );
-          break;
-        }
-        const accepted = channel.push(msg.text);
+        const accepted = channel ? channel.push(msg.text) : false;
+        if (accepted) break;
+        // Not delivered — no live run, or the run's last turn had already returned and
+        // its input stream was closed. The API marked the steer consumed when it sent
+        // it, so without this row the message would vanish with no trace anywhere: say
+        // so on the timeline (the same durable audit `steer.applied` writes), and log it.
+        const reason = channel ? "run_finishing" : "no_live_run";
         logWarn(
-          `[builderforce] steering message for execution ${executionId} ${accepted ? "queued" : "refused (run finishing)"}`,
+          `[builderforce] steering message for execution ${executionId ?? "?"} dropped: ${reason === "run_finishing" ? "the run was finishing" : "no live V2 run"}`,
         );
+        if (executionId != null) {
+          void this.persistToolAudit({
+            executionId,
+            toolName: "steer.dropped",
+            category: "message",
+            args: { text: msg.text, reason },
+            result: reason === "run_finishing"
+              ? "The run had already finished its last turn when this message arrived; send it as a follow-up."
+              : "No live run was found for this execution; send it as a follow-up.",
+          });
+        }
         break;
       }
 

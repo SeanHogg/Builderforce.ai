@@ -1,5 +1,5 @@
 export { runAgentLoop } from "./loop.js";
-export { parseToolArgs, parseToolCall } from "./parseToolCall.js";
+export { asToolArgs, parseToolArgs, parseToolCall } from "./parseToolCall.js";
 export { defaultToolRowSerializer, openAiChatCodec, readOpenAiToolCalls, toOpenAiToolCall } from "./openaiCodec.js";
 export type { OpenAiAssistantRow, OpenAiToolCallRow, OpenAiToolRow, ToolRowSerializer } from "./openaiCodec.js";
 export type {

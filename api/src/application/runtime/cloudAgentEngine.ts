@@ -1220,11 +1220,14 @@ async function recordCloudLlmTurn(
   await emitCodingModelDegraded(rc.db, { ...evtBase, resolvedModel, requestedModel: rc.requestedModel ?? '' });
   if (reasoning) {
     // The reasoning path, as its own timeline row — the `thinking` category the
-    // schema documented and no writer emitted. Rendered by the run drawer and the
-    // Observability timeline as a thought step ahead of the message/tool calls.
+    // schema documented and no writer emitted. The Observability timeline renders it
+    // as a thought track ahead of the message/tool calls; the run drawer's Tools tab
+    // excludes it from the tool count. It spans the turn's generation time: without
+    // a duration the timeline drew it zero-width, i.e. invisible.
     await recordCloudToolEvent(rc.db, {
       ...evtBase, toolName: 'agent.thinking', category: 'thinking',
       detail: { step: opts.step, model: resolvedModel, content: reasoning }, result: reasoning.slice(0, 280),
+      durationMs,
     });
   }
   if (content) {

@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MeterSnapshot } from '@/lib/builderforceApi';
 
 /**
@@ -25,7 +25,10 @@ vi.mock('next/link', () => ({
   },
 }));
 
-import { ConsumptionMeterCard } from './UsageMeter';
+const consumption = vi.hoisted(() => ({ snapshot: null as unknown }));
+vi.mock('@/lib/useConsumption', () => ({ useConsumption: () => consumption.snapshot }));
+
+import UsageMeter, { ConsumptionMeterCard } from './UsageMeter';
 
 function meter(overrides: Partial<MeterSnapshot> = {}): MeterSnapshot {
   return {
@@ -67,5 +70,30 @@ describe('ConsumptionMeterCard', () => {
     const hrefs = [...container.querySelectorAll('a')].map((a) => a.getAttribute('href'));
     expect(hrefs).toEqual(['/pricing']);
     expect(container.textContent).toContain('unknown_future_meter');
+  });
+});
+
+/**
+ * Usage sits below the destinations in the left menu, so expanding it by default
+ * pushed navigation off-screen on short viewports. The section now starts folded
+ * and only a member's own expand — the stored '0' — reopens it.
+ */
+describe('UsageMeter section default', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    consumption.snapshot = { plan: { effective: 'free' }, meters: [meter()] };
+  });
+
+  it('starts collapsed with no stored preference', () => {
+    const { container } = render(<UsageMeter />);
+    expect(container.querySelector('.usage-meter-head')?.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelectorAll('a')).toHaveLength(0);
+  });
+
+  it('reopens for a member who expanded it before', () => {
+    window.localStorage.setItem('bf.usageMeter.collapsed', '0');
+    const { container } = render(<UsageMeter />);
+    expect(container.querySelector('.usage-meter-head')?.getAttribute('aria-expanded')).toBe('true');
+    expect(container.querySelectorAll('a').length).toBeGreaterThan(0);
   });
 });

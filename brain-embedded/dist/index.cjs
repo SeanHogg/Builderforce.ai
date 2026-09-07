@@ -2887,6 +2887,170 @@ function selectToolsForTurn(tools, options) {
   return { tools: chosen, trimmed: true, available };
 }
 
+// ../packages/agent-loop/src/parseToolCall.ts
+function asToolArgs(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  return null;
+}
+function parseToolArgs(raw) {
+  const text = typeof raw === "string" ? raw.trim() : "";
+  if (!text) return { args: {}, malformed: false };
+  try {
+    const bag = asToolArgs(JSON.parse(text));
+    return bag ? { args: bag, malformed: false } : { args: {}, malformed: true };
+  } catch {
+    return { args: {}, malformed: true };
+  }
+}
+function parseToolCall(raw) {
+  const { args, malformed } = parseToolArgs(raw.arguments);
+  return { id: raw.id, name: raw.name, args, raw, malformed };
+}
+
+// ../packages/agent-loop/src/loop.ts
+var Ctx = class {
+  constructor(messages, signal) {
+    this.messages = messages;
+    this.signal = signal;
+  }
+  messages;
+  signal;
+  step = 0;
+  stepInCall = 0;
+  output = "";
+};
+async function runAgentLoop(args) {
+  const { codec, ports, budget, signal } = args;
+  const hooks = args.hooks ?? {};
+  const ctx = new Ctx(args.messages, signal);
+  const startStep = Math.max(0, budget.startStep ?? 0);
+  const maxThisCall = budget.maxSteps ?? Number.POSITIVE_INFINITY;
+  ctx.step = startStep;
+  ctx.output = args.initialOutput ?? "";
+  let ok = true;
+  let finished = false;
+  let cancelled = false;
+  let awaitingInput;
+  const isCancelled = async () => Boolean(signal?.aborted) || Boolean(await hooks.isCancelled?.(ctx));
+  for (; ctx.step < budget.stepCap && !finished && ctx.stepInCall < maxThisCall; ctx.step++, ctx.stepInCall++) {
+    if (await isCancelled()) {
+      cancelled = true;
+      break;
+    }
+    const before = await hooks.beforeTurn?.(ctx);
+    if (before?.action === "stop") {
+      ok = before.ok ?? false;
+      if (before.output !== void 0) ctx.output = before.output;
+      finished = before.finished ?? true;
+      break;
+    }
+    let turnResult;
+    try {
+      turnResult = await ports.complete(ctx);
+    } catch (err) {
+      if (signal?.aborted) {
+        cancelled = true;
+        break;
+      }
+      throw err;
+    }
+    if ("skip" in turnResult) continue;
+    if ("failed" in turnResult) {
+      ok = false;
+      ctx.output = turnResult.failed;
+      finished = true;
+      break;
+    }
+    const turn = turnResult;
+    if (turn.content) ctx.output = turn.content;
+    await hooks.afterTurn?.(ctx, turn);
+    if (turn.toolCalls.length === 0) {
+      const decision = await hooks.onNoToolCalls?.(ctx, turn) ?? { action: "finish" };
+      if (decision.action === "continue") continue;
+      if (decision.action === "stop") {
+        ok = decision.ok ?? false;
+        if (decision.output !== void 0) ctx.output = decision.output;
+        finished = decision.finished ?? true;
+        break;
+      }
+      if (decision.output !== void 0) ctx.output = decision.output;
+      finished = true;
+      break;
+    }
+    const calls = turn.toolCalls.map(parseToolCall);
+    const gate = await hooks.beforeToolCalls?.(ctx, turn, calls);
+    if (gate?.action === "stop") {
+      ok = gate.ok ?? true;
+      if (gate.output !== void 0) ctx.output = gate.output;
+      finished = gate.finished ?? true;
+      break;
+    }
+    ctx.messages.push(codec.assistant(turn));
+    for (let i = 0; i < calls.length; i++) {
+      let call = calls[i];
+      let result;
+      const pre = await hooks.beforeDispatch?.(call, ctx);
+      if (pre && "result" in pre) result = pre.result;
+      else if (pre && "rewrite" in pre) call = pre.rewrite;
+      if (!result) result = await ports.dispatch(call, ctx);
+      if (result.control?.kind === "finish") {
+        const block = await hooks.onFinish?.(ctx, result.control.summary, call);
+        if (block) {
+          result = { data: { ok: false, error: block }, isError: true };
+        } else {
+          finished = true;
+          if (result.control.summary) ctx.output = result.control.summary;
+        }
+      } else if (result.control?.kind === "ask_human") {
+        await hooks.onAskHuman?.(ctx, result.control, call);
+        awaitingInput = { approvalId: result.control.approvalId, question: result.control.question, callId: call.id };
+      }
+      const row = codec.tool(call, result);
+      ctx.messages.push(row);
+      const post = await hooks.afterDispatch?.(call, result, row, ctx);
+      if (post?.skipRemaining) {
+        const skipped = { data: post.skipRemaining.data, isError: post.skipRemaining.isError ?? true };
+        for (const rest of calls.slice(i + 1)) ctx.messages.push(codec.tool(rest, skipped));
+        break;
+      }
+    }
+    const after = await hooks.afterToolCalls?.(ctx, finished);
+    if (after && after.finished !== void 0) finished = after.finished;
+    if (awaitingInput) break;
+  }
+  return {
+    ok,
+    output: ctx.output,
+    finished,
+    cancelled,
+    step: ctx.step,
+    exhausted: !finished && !cancelled && !awaitingInput && ctx.step >= budget.stepCap,
+    ...awaitingInput ? { awaitingInput } : {}
+  };
+}
+
+// ../packages/agent-loop/src/openaiCodec.ts
+function toOpenAiToolCall(call) {
+  return { id: call.id, type: "function", function: { name: call.name, arguments: call.arguments?.trim() ? call.arguments : "{}" } };
+}
+var defaultToolRowSerializer = (result) => JSON.stringify(result.data ?? null);
+function openAiChatCodec(serialize = defaultToolRowSerializer) {
+  return {
+    assistant(turn) {
+      const row = {
+        role: "assistant",
+        content: turn.content ?? "",
+        tool_calls: turn.toolCalls.map(toOpenAiToolCall)
+      };
+      return row;
+    },
+    tool(call, result) {
+      const row = { role: "tool", tool_call_id: call.id, content: serialize(result, call) };
+      return row;
+    }
+  };
+}
+
 // src/toolRouter.ts
 var TOOL_ROUTER_FIND = "builtin_tools_find";
 var TOOL_ROUTER_DESCRIBE = "builtin_tools_describe";
@@ -2992,7 +3156,7 @@ function handleRouterCall(catalog, name, args) {
   if (!describeTool(catalog, target)) {
     return { result: { error: `Unknown tool "${target}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` } };
   }
-  return { dispatch: { name: target, args: a.args ?? {} } };
+  return { dispatch: { name: target, args: asToolArgs(a.args) ?? {} } };
 }
 
 // src/lastResolvedModel.ts
@@ -3345,169 +3509,6 @@ function turnOptimizationDirective() {
     "\u2022 Route work to the available model and tools transparently. Use a scheduling tool when the user expresses recurrence; do not ask them to repeat a routine manually.",
     "\u2022 Keep the response no longer than the task requires. Do not expose token windows, usage-reset timing, context cleanup, model-size folklore, or other platform limitations as work the user must manage."
   ].join("\n");
-}
-
-// ../packages/agent-loop/src/parseToolCall.ts
-function parseToolArgs(raw) {
-  const text = typeof raw === "string" ? raw.trim() : "";
-  if (!text) return { args: {}, malformed: false };
-  try {
-    const parsed = JSON.parse(text);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return { args: parsed, malformed: false };
-    }
-    return { args: {}, malformed: true };
-  } catch {
-    return { args: {}, malformed: true };
-  }
-}
-function parseToolCall(raw) {
-  const { args, malformed } = parseToolArgs(raw.arguments);
-  return { id: raw.id, name: raw.name, args, raw, malformed };
-}
-
-// ../packages/agent-loop/src/loop.ts
-var Ctx = class {
-  constructor(messages, signal) {
-    this.messages = messages;
-    this.signal = signal;
-  }
-  messages;
-  signal;
-  step = 0;
-  stepInCall = 0;
-  output = "";
-};
-async function runAgentLoop(args) {
-  const { codec, ports, budget, signal } = args;
-  const hooks = args.hooks ?? {};
-  const ctx = new Ctx(args.messages, signal);
-  const startStep = Math.max(0, budget.startStep ?? 0);
-  const maxThisCall = budget.maxSteps ?? Number.POSITIVE_INFINITY;
-  ctx.step = startStep;
-  ctx.output = args.initialOutput ?? "";
-  let ok = true;
-  let finished = false;
-  let cancelled = false;
-  let awaitingInput;
-  const isCancelled = async () => Boolean(signal?.aborted) || Boolean(await hooks.isCancelled?.(ctx));
-  for (; ctx.step < budget.stepCap && !finished && ctx.stepInCall < maxThisCall; ctx.step++, ctx.stepInCall++) {
-    if (await isCancelled()) {
-      cancelled = true;
-      break;
-    }
-    const before = await hooks.beforeTurn?.(ctx);
-    if (before?.action === "stop") {
-      ok = before.ok ?? false;
-      if (before.output !== void 0) ctx.output = before.output;
-      finished = before.finished ?? true;
-      break;
-    }
-    let turnResult;
-    try {
-      turnResult = await ports.complete(ctx);
-    } catch (err) {
-      if (signal?.aborted) {
-        cancelled = true;
-        break;
-      }
-      throw err;
-    }
-    if ("skip" in turnResult) continue;
-    if ("failed" in turnResult) {
-      ok = false;
-      ctx.output = turnResult.failed;
-      finished = true;
-      break;
-    }
-    const turn = turnResult;
-    if (turn.content) ctx.output = turn.content;
-    await hooks.afterTurn?.(ctx, turn);
-    if (turn.toolCalls.length === 0) {
-      const decision = await hooks.onNoToolCalls?.(ctx, turn) ?? { action: "finish" };
-      if (decision.action === "continue") continue;
-      if (decision.action === "stop") {
-        ok = decision.ok ?? false;
-        if (decision.output !== void 0) ctx.output = decision.output;
-        finished = decision.finished ?? true;
-        break;
-      }
-      if (decision.output !== void 0) ctx.output = decision.output;
-      finished = true;
-      break;
-    }
-    const calls = turn.toolCalls.map(parseToolCall);
-    const gate = await hooks.beforeToolCalls?.(ctx, turn, calls);
-    if (gate?.action === "stop") {
-      ok = gate.ok ?? true;
-      if (gate.output !== void 0) ctx.output = gate.output;
-      finished = gate.finished ?? true;
-      break;
-    }
-    ctx.messages.push(codec.assistant(turn));
-    for (let i = 0; i < calls.length; i++) {
-      let call = calls[i];
-      let result;
-      const pre = await hooks.beforeDispatch?.(call, ctx);
-      if (pre && "result" in pre) result = pre.result;
-      else if (pre && "rewrite" in pre) call = pre.rewrite;
-      if (!result) result = await ports.dispatch(call, ctx);
-      if (result.control?.kind === "finish") {
-        const block = await hooks.onFinish?.(ctx, result.control.summary, call);
-        if (block) {
-          result = { data: { ok: false, error: block }, isError: true };
-        } else {
-          finished = true;
-          if (result.control.summary) ctx.output = result.control.summary;
-        }
-      } else if (result.control?.kind === "ask_human") {
-        await hooks.onAskHuman?.(ctx, result.control, call);
-        awaitingInput = { approvalId: result.control.approvalId, question: result.control.question, callId: call.id };
-      }
-      const row = codec.tool(call, result);
-      ctx.messages.push(row);
-      const post = await hooks.afterDispatch?.(call, result, row, ctx);
-      if (post?.skipRemaining) {
-        const skipped = { data: post.skipRemaining.data, isError: post.skipRemaining.isError ?? true };
-        for (const rest of calls.slice(i + 1)) ctx.messages.push(codec.tool(rest, skipped));
-        break;
-      }
-    }
-    const after = await hooks.afterToolCalls?.(ctx, finished);
-    if (after && after.finished !== void 0) finished = after.finished;
-    if (awaitingInput) break;
-  }
-  return {
-    ok,
-    output: ctx.output,
-    finished,
-    cancelled,
-    step: ctx.step,
-    exhausted: !finished && !cancelled && !awaitingInput && ctx.step >= budget.stepCap,
-    ...awaitingInput ? { awaitingInput } : {}
-  };
-}
-
-// ../packages/agent-loop/src/openaiCodec.ts
-function toOpenAiToolCall(call) {
-  return { id: call.id, type: "function", function: { name: call.name, arguments: call.arguments?.trim() ? call.arguments : "{}" } };
-}
-var defaultToolRowSerializer = (result) => JSON.stringify(result.data ?? null);
-function openAiChatCodec(serialize = defaultToolRowSerializer) {
-  return {
-    assistant(turn) {
-      const row = {
-        role: "assistant",
-        content: turn.content ?? "",
-        tool_calls: turn.toolCalls.map(toOpenAiToolCall)
-      };
-      return row;
-    },
-    tool(call, result) {
-      const row = { role: "tool", tool_call_id: call.id, content: serialize(result, call) };
-      return row;
-    }
-  };
 }
 
 // src/brainRunStore.ts

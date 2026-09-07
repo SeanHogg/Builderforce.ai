@@ -10,18 +10,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { Edge } from '@xyflow/react';
-import {
-  assertBoardInvariants,
-  associateBrainWithArtifacts,
-  boardFromPersistedGraph,
-  boardInvariantViolations,
-  edgesWithinBoard,
-  mergeCollaboratorBoards,
-  objectAtPoint,
-  persistedGraphFromBoard,
-  type CanvasBoard,
-  type PersistedCanvasGraph,
-} from './canvasBoard';
+import { assertBoardInvariants, associateBrainWithArtifacts, boardFromPersistedGraph, boardInvariantViolations, canvasObjectTwin, edgesWithinBoard, mergeCollaboratorBoards, objectAtPoint, persistedGraphFromBoard, type CanvasBoard, type PersistedCanvasGraph } from './canvasBoard';
 import type { CanvasObject, CreationObjectKind } from './canvasObject';
 
 function object(id: string, kind: string, position = { x: 0, y: 0 }, extra: Partial<CanvasObject> = {}): CanvasObject {
@@ -241,5 +230,36 @@ describe('persistedGraphFromBoard', () => {
     });
 
     expect(graph.objects[0]?.canvasData).toMatchObject({ x: 10, y: 20, w: 460, h: 315 });
+  });
+});
+
+describe('canvasObjectTwin', () => {
+  const titleIsContent = (kind: string) => kind === 'sticky';
+  const object = (id: string, kind: string, title: string) => ({
+    id, type: 'creation', position: { x: 0, y: 0 }, data: { kind, title },
+  }) as unknown as Parameters<typeof canvasObjectTwin>[2][number];
+
+  it('finds the object a re-authoring turn is about to duplicate', () => {
+    // The real failure: two completions ended at the output limit and the model,
+    // no longer able to see its own transcript, made `NutriPlan` a second time.
+    const board = [object('a', 'company', 'NutriPlan'), object('b', 'competitor', 'Yuka')];
+    expect(canvasObjectTwin('company', 'NutriPlan', board, titleIsContent)?.id).toBe('a');
+    expect(canvasObjectTwin('company', '  nutriplan ', board, titleIsContent)?.id).toBe('a');
+  });
+
+  it('does not confuse two kinds that happen to share a name', () => {
+    const board = [object('a', 'company', 'Yuka')];
+    expect(canvasObjectTwin('competitor', 'Yuka', board, titleIsContent)).toBeUndefined();
+  });
+
+  it('leaves alone the kinds whose title IS their content', () => {
+    const board = [object('a', 'sticky', 'Pricing')];
+    expect(canvasObjectTwin('sticky', 'Pricing', board, titleIsContent)).toBeUndefined();
+  });
+
+  it('treats an unnamed object as having no identity to collide with', () => {
+    const board = [object('a', 'note', '')];
+    expect(canvasObjectTwin('note', '', board, titleIsContent)).toBeUndefined();
+    expect(canvasObjectTwin('note', '   ', board, titleIsContent)).toBeUndefined();
   });
 });

@@ -22,8 +22,9 @@ import { Sparkline } from '@/components/charts/Sparkline';
  * that resource (see METER_PRESENTATION) — tokens → API keys, cloud runs → the IDE,
  * data → integrations, errors → the quality collectors, outbound fetches → the finance
  * report — while its trend chart drills into the matching Insights report and "See plans"
- * routes to billing. The whole section collapses via the header toggle, persisted so
- * a member who folds it away keeps it folded.
+ * routes to billing. The whole section is COLLAPSED by default so the meters stay out
+ * of the way of navigation; the header toggle expands it, persisted so a member who
+ * opens it keeps it open.
  */
 
 const COLLAPSE_STORAGE_KEY = 'bf.usageMeter.collapsed';
@@ -239,14 +240,16 @@ export default function UsageMeter() {
   const t = useTranslations('usageMeter');
   const snapshot = useConsumption();
 
-  // Collapse state persists across sessions — a member who folds Usage away keeps it
-  // folded. Initialise expanded (SSR-safe), then hydrate from localStorage on mount.
-  const [collapsed, setCollapsed] = useState(false);
+  // Collapsed by default so the meters don't crowd the navigation; a member who
+  // opens the section keeps it open across sessions. Initialise collapsed
+  // (SSR-safe), then hydrate from localStorage on mount — only an explicit '0'
+  // (the member expanded it) overrides the default.
+  const [collapsed, setCollapsed] = useState(true);
   useEffect(() => {
     try {
-      setCollapsed(window.localStorage.getItem(COLLAPSE_STORAGE_KEY) === '1');
+      setCollapsed(window.localStorage.getItem(COLLAPSE_STORAGE_KEY) !== '0');
     } catch {
-      /* storage unavailable — stay expanded */
+      /* storage unavailable — stay collapsed */
     }
   }, []);
 

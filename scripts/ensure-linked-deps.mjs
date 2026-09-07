@@ -71,9 +71,15 @@ const visited = new Set((process.env[VISITED_ENV] ?? '').split('|').filter(Boole
 function install(dir) {
   const frozen = existsSync(join(dir, 'pnpm-lock.yaml'));
   const env = { ...process.env, [VISITED_ENV]: [...visited].join('|') };
-  const args = frozen ? ['install', '--frozen-lockfile'] : ['install'];
   const run = (a) => spawnSync('pnpm', a, { cwd: dir, stdio: 'inherit', shell: true, env }).status === 0;
-  return run(args) || (frozen && run(['install']));
+  if (!frozen) return run(['install']);
+  // The retry has to say `--no-frozen-lockfile` OUT LOUD. pnpm turns frozen-lockfile
+  // ON by default whenever CI is set, so a bare `install` fallback re-runs the exact
+  // command that just failed — which made this rescue a no-op in the only environment
+  // it exists for: a lockfile that drifted from its package.json failed twice, was
+  // downgraded to a warning, and resurfaced two jobs later as an unresolved bare
+  // import from the package that never installed.
+  return run(['install', '--frozen-lockfile']) || run(['install', '--no-frozen-lockfile']);
 }
 
 const installed = [];

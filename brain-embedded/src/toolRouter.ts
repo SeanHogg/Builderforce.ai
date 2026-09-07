@@ -25,6 +25,7 @@
  * and `describe` cost no network at all.
  */
 
+import { asToolArgs } from '@builderforce/agent-loop';
 import type { BrainToolSpec } from './streamChatCompletion';
 
 /** Advertised names of the three router tools. Stable — the model learns them. */
@@ -161,7 +162,7 @@ export function handleRouterCall(
   catalog: BrainToolSpec[],
   name: string,
   args: unknown,
-): { result: unknown } | { dispatch: { name: string; args: unknown } } {
+): { result: unknown } | { dispatch: { name: string; args: Record<string, unknown> } } {
   const a = (args ?? {}) as { query?: unknown; name?: unknown; args?: unknown };
   if (name === TOOL_ROUTER_FIND) {
     const query = typeof a.query === 'string' ? a.query : '';
@@ -190,5 +191,8 @@ export function handleRouterCall(
   if (!describeTool(catalog, target)) {
     return { result: { error: `Unknown tool "${target}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` } };
   }
-  return { dispatch: { name: target, args: a.args ?? {} } };
+  // The nested `args` came from model JSON, so it can be anything. The kernel's own
+  // rule decides what counts as a bag — a routed call must not reach a tool with a
+  // scalar or an array where every direct call would have had `{}`.
+  return { dispatch: { name: target, args: asToolArgs(a.args) ?? {} } };
 }

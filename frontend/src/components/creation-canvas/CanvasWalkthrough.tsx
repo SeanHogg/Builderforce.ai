@@ -6,6 +6,13 @@ import { SectionTour, type SectionTourStep } from '@/components/onboarding/Secti
 import { useSectionTour } from '@/components/onboarding/useSectionTour';
 import type { CanvasWalkthroughStop } from '@/lib/canvasWalkthrough';
 
+/** `CSS.escape`, or a conservative stand-in where the environment has none. */
+function escapeSelectorValue(value: string): string {
+  return typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+    ? CSS.escape(value)
+    : value.replace(/["\]/g, '\$&');
+}
+
 /**
  * "SHOW ME WHAT I JUST GOT."
  *
@@ -52,6 +59,19 @@ export interface CanvasWalkthroughProps {
   audienceId: string | null;
   /** Derived by `canvasWalkthroughStops`. Empty means there is nothing worth walking. */
   stops: readonly CanvasWalkthroughStop[];
+  /**
+   * A turn is still writing to this board.
+   *
+   * Objects arrive one tool call at a time, so a big generation crosses the
+   * "enough to be lost in" threshold long before it finishes — and an offer to
+   * walk somebody round a board that is still growing under them would be the
+   * product interrupting its own work. Host state by nature: nothing the
+   * component can see tells it whether more is coming.
+   *
+   * It only gates the OFFER. Pressing the action opens it whatever is happening,
+   * because that is somebody asking.
+   */
+  busy?: boolean;
   /** Bring an object into view and select it. The board owns its viewport. */
   onReveal: (objectId: string) => void;
 }
@@ -63,7 +83,7 @@ export interface CanvasWalkthroughProps {
 const WALKTHROUGH_VERSION = 1;
 
 export const CanvasWalkthrough = forwardRef<CanvasWalkthroughHandle, CanvasWalkthroughProps>(
-  function CanvasWalkthrough({ boardId, audienceId, stops, onReveal }, ref) {
+  function CanvasWalkthrough({ boardId, audienceId, stops, onReveal, busy = false }, ref) {
     const t = useTranslations('creationCanvas.walkthrough');
     const tCanvas = useTranslations('creationCanvas');
     const objectT = useTranslations('creationCanvas.object');
@@ -86,8 +106,12 @@ export const CanvasWalkthrough = forwardRef<CanvasWalkthroughHandle, CanvasWalkt
           stop.overflowKinds > 0 ? t('stopOverflow', { count: stop.overflowKinds }) : '',
         ].filter(Boolean).join(' '),
         // React Flow's own node attribute — see the header for why this is the
-        // whole integration rather than a bespoke highlighter.
-        target: `.react-flow__node[data-id="${CSS.escape(stop.focusObjectId)}"]`,
+        // whole integration rather than a bespoke highlighter. Object ids are
+        // UUIDs and need no escaping, but they are not guaranteed to be, and a
+        // selector built from unescaped data is how a tour silently points at
+        // nothing; `CSS.escape` is absent in some test environments, so the
+        // fallback keeps the id usable rather than throwing on render.
+        target: `.react-flow__node[data-id="${escapeSelectorValue(stop.focusObjectId)}"]`,
       };
     }), [objectT, stops, t]);
 
@@ -95,9 +119,11 @@ export const CanvasWalkthrough = forwardRef<CanvasWalkthroughHandle, CanvasWalkt
       sectionId: `creation-canvas-artifacts:${boardId}`,
       version: WALKTHROUGH_VERSION,
       audienceId,
-      // Withheld entirely on a board with nothing to walk, so the offer cannot
-      // appear over an empty canvas while the first objects are still arriving.
-      enabled: steps.length > 0,
+      // Withheld while there is nothing to walk AND while the board is still
+      // being written — see `busy`. Withholding rather than hiding matters: the
+      // hook records the visit that spends the once-per-board offer, so enabling
+      // it early would burn the offer on a board half of which did not exist yet.
+      enabled: steps.length > 0 && !busy,
       activity: { boardId, stops: steps.length, objects: objectCount },
     });
 

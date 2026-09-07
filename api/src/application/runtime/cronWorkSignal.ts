@@ -29,7 +29,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 import type { Env } from '../../env';
 import { buildDatabase } from '../../infrastructure/database/connection';
-import { ceremonySchedules, cronJobs, qaSchedules, reportSchedules, workflowTriggers } from '../../infrastructure/database/schema';
+import { ceremonySchedules, qaSchedules, reportSchedules, workflowTriggers } from '../../infrastructure/database/schema';
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 
 /** KV key: presence => a write signalled possibly-pending backstop work. */
@@ -339,14 +339,18 @@ export async function openCronTick(env: Env, nowMs: number, floorDue: boolean): 
  * schedule must not hold the gate open — it would wake Neon on a due time nothing
  * will ever act on.
  *
- * This is a registry rather than five branches so adding a scheduled surface is a
+ * This is a registry rather than four branches so adding a scheduled surface is a
  * DATA change here (and a test that fails until it is made), not a new `UNION`
  * arm someone has to remember to write. Keep it in step with the sweeps in
- * `CRON_SWEEPS` that read a `next_run_at`.
+ * `CRON_SWEEPS` that read a `next_run_at` — and ONLY those. `cron_jobs` is not
+ * here on purpose: its rows belong to a self-hosted agent host whose own poller
+ * executes them and re-arms `next_run_at` through the agent-host cron routes; no
+ * server sweep ever reads the table. Listing it held the gate open (waking Neon on
+ * a due time this tick would never act on) and raised a "schedule stall" for work
+ * the server was never going to clear.
  */
 const SCHEDULE_SOURCES = [
   { name: 'workflow_triggers', table: workflowTriggers, nextRunAt: workflowTriggers.nextRunAt, enabled: workflowTriggers.enabled },
-  { name: 'cron_jobs',         table: cronJobs,         nextRunAt: cronJobs.nextRunAt,         enabled: cronJobs.enabled },
   { name: 'ceremony_schedules',table: ceremonySchedules,nextRunAt: ceremonySchedules.nextRunAt,enabled: ceremonySchedules.enabled },
   { name: 'report_schedules',  table: reportSchedules,  nextRunAt: reportSchedules.nextRunAt,  enabled: reportSchedules.isEnabled },
   { name: 'qa_schedules',      table: qaSchedules,      nextRunAt: qaSchedules.nextRunAt,      enabled: qaSchedules.enabled },
@@ -362,7 +366,7 @@ const SCHEDULE_SOURCES = [
  * an active tick the endpoint is already awake and the sweeps have just re-armed their
  * `next_run_at` values, so this reads the freshest possible answer for free.
  *
- * One statement, five indexed `MIN()` scans, no rows returned beyond a single
+ * One statement, four indexed `MIN()` scans, no rows returned beyond a single
  * timestamp. Best-effort throughout: a failure leaves the previous stamp (or none) in
  * place and the floor sweep still backstops every schedule, so this can never strand
  * work — it can only fail to make it prompt.

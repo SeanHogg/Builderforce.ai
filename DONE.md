@@ -1,3 +1,295 @@
+## ✅ RESOLVED 2026-09-07 — Three red CI jobs, one swallowed install failure behind two of them
+
+`Deploy API`, `Deploy frontend` and `Publish VS Code extension` all went red together. They were not
+one bug, and the two that looked alike were the interesting pair.
+
+**1. `Deploy API` — already fixed, never pushed.** Every reported error (the `otelExporter` /
+`memorySemanticRecall` narrowings, the `!` assertions in three test files, and `agent-loop`'s TS7022
+on `const after`) was closed in commits that were sitting unpushed while CI kept building the commit
+before them. The current tree passes both guards, 2/2. Nothing to fix; worth recording so the next
+reader does not re-fix it from the log.
+
+**2. `brain-embedded/pnpm-lock.yaml` had drifted from its `package.json`.** The manifest declares
+`@builderforce/agent-loop` (`brainRunStore.ts` imports `runAgentLoop` from it); the lockfile had no
+trace of it, so `--frozen-lockfile` refused and the package never installed. Regenerated — a 3-line
+diff. A repo-wide scan of every `link:`/`file:`/`workspace:` dependency against its own lockfile
+found no other drift.
+
+**3. The guard that exists to rescue exactly this could never fire in CI.** `ensure-linked-deps.mjs`
+fell back from `--frozen-lockfile` to a bare `pnpm install` — but pnpm turns `frozen-lockfile` ON by
+default whenever `CI` is set, so the retry re-ran the command that had just failed. Both attempts
+died identically, the failure was downgraded to a warning by design, and the install that never
+happened resurfaced two jobs later as `Failed to resolve import "react" from
+brain-embedded/dist/index.mjs` — which is why the frontend and VSIX jobs read as a React problem and
+not as a lockfile problem. The retry now says `--no-frozen-lockfile` out loud. Verified against a
+deliberately re-drifted lockfile: bare `pnpm install` under `CI=true` fails, the explicit flag
+rescues it. The degrade-not-break policy in the file header is unchanged — the rescue it describes
+simply works now.
+
+**4. A real type error the drift had been hiding.** With `agent-loop`'s types finally resolvable, the
+`brain-embedded` dts build failed: `toolRouter`'s `dispatch.args` was `unknown`, while the kernel's
+`call.args` is a `Record<string, unknown>` bag. Rather than cast at the call site, the rule for what
+counts as an args bag — a plain object, never an array, a scalar or null — is now `asToolArgs`,
+exported once from `@builderforce/agent-loop` and used both by `parseToolArgs` (which had the
+predicate inline) and by the router's nested unwrap. A routed call can no longer reach a tool with a
+scalar where a direct call would have had `{}`.
+
+Green after: api type-check 2/2 · VSIX type-check 8/8 projects · agent-loop 23 · brain-embedded 520 ·
+brain-ui 100 (both of its suites had been failing on the unresolved import).
+
+## ✅ RESOLVED 2026-09-07 — A generated board arrived as one vertical ribbon of cards, with nothing to explain it
+
+The report, from a session diagnostic (`ui 2026.9.13`, session `bf886fc1`): 24 objects on a very wide
+screen, laid out down the page instead of across it, and — in the reporter's words — no idea "what to
+do or where to start". Three separate defects were producing that one experience, and all three are
+closed.
+
+**1. The placer could only ever grow DOWNWARD.** `freeCanvasSlot` kept the anchor's column and moved
+only the depth, on the reasoning that depth is the axis a board can always grow along. True, and the
+wrong axis to prefer: a generated board is a BATCH — ten objects authored in one turn, none carrying
+coordinates, each placed against the nine before it — so every batch became a single column running
+off the bottom of the window. On a 3440px screen that is one narrow ribbon with two thirds of the
+board empty beside it. It now fills a row to the measured board width and only then starts a new row.
+
+**2. Nothing measured the board.** Three places asked `window.innerWidth <= 760` and threw the width
+away, and two more picked a column count from `ceil(sqrt(n))` — a number that depends on how many
+objects there are and not at all on how much room they have, so twelve objects were four columns on a
+phone and four columns on an ultrawide. `lib/canvasGridFit.ts` is now the one answer to "how wide is
+this board" (in FLOW coordinates — the zoom divides out) and "how many of these fit across";
+`useCanvasLayoutViewport` measures it, and `creationCanvasLayout.ts`, `CanvasCommands.cleanCanvasLayout`
+and `CanvasProposalStage` all read it. The stage's factory takes a `viewport()` where it took a
+`narrow()` boolean, because "is this a phone" and "how much room is there" are two questions.
+
+**3. Objects added in one tick landed on ONE POINT.** `newNode(kind, position)` takes its position
+verbatim, and 28 call sites in the canvas host appended straight onto `current` with whatever point
+they had computed — usually the same one, the viewport centre. Five `setNodes` updaters queued in a
+single tick each saw the board as it was before any of them applied. The diagnostic showed it exactly:
+six `agent` cards at `{ x: 312.57, y: 182.01 }`, to the pixel. `placeAppendedCanvasNodes` now places a
+batch against the board PLUS the rest of its own batch, inside the updater, and all 28 sites go
+through it. It only ever moves a collision, so a template that laid its own steps out keeps them.
+
+**And the duplicates.** The same board held `CMO` three times and `NutriPlan`, `Yuka`, `MyFitnessPal`
+and `Fooducate` twice each. Two causes, both closed:
+
+- `seatTeammate` treated seating as an event rather than an identity, so a second `@CMO` seated a
+  second card. It now brings the existing one forward.
+- A turn whose completion ends at the output limit (`finishReason: "length"` — twice in this session)
+  re-authors what it can no longer see it already made. The board can still see it, so
+  `canvasObjectTwin` in the board aggregate is the rule, and `canvas_add_object` refuses a same-kind
+  same-name object with the id of the one that already exists. A kind whose title IS its content
+  (stickies) is exempt, and `allowDuplicateTitle` is the deliberate escape.
+
+**What answers "where do I start".** A walkthrough of the ARTIFACTS — `lib/canvasWalkthrough.ts` plus
+`CanvasWalkthrough`. The canvas already had a tour and it toured the CHROME (Brain dock, palette,
+Share), which teaches the tool and says nothing about the work. The new one groups the board by kind
+— six competitors are one answer, not six steps — orders the groups by the board's own connections,
+and pans to each in turn. Offered once per board that has at least four artifacts on it, and
+re-openable from the command bar. `SectionTour`'s spotlight now re-measures until its target stops
+moving, which is what lets a coach mark sit on a card the canvas is still flying towards.
+
+Covered by `creationCanvasLayout.test.ts`, `canvasWalkthrough.test.ts`, `canvasBoard.test.ts` and
+`CanvasCommands.test.ts`; copy in all five catalogs.
+
+## ✅ RESOLVED 2026-09-07 — A canvas invitee was told the workspace was out of seats, on a cap that has nothing to do with canvas sharing
+
+The support ticket: `POST /api/tenants/creation-invitations/<token>/accept` → `409 TENANT_SEAT_LIMIT`,
+"The invited workspace cannot add another member yet", for somebody who had just clicked an emailed
+invitation to a board and signed in as exactly the address it was sent to. The invitation was valid,
+the token was pending, the email matched — and the answer was still no.
+
+**Why it happened.** The accept route did not seat anybody. It ran `acceptPendingInvitations`, then
+asked whether the caller had *become* a workspace member, and answered 409 if not. So the whole
+redemption rested on a companion `kind: 'tenant'` invitation — written alongside the board one by
+`POST /api/creation-sessions/:id/invite` — being found, still pending, still carrying
+`seat_kind = 'collaborator'`, and landing successfully. Each of those is a way to fail, and the
+failure was reported as a seat shortage: `maxSeats` is **1** on Free *and* Pro and is already spent
+on the owner, so a `seat_kind` that had drifted to `'seat'` produced an invitation nobody could ever
+accept on the two plans that advertise 3 and 25 canvas collaborators.
+
+Three defects sat underneath it, and all three are closed:
+
+1. **The aggregate could not persist a re-admission** (`domain/tenant/Tenant.ts`). `removeMember`
+   deactivates in place — `is_active` is how a membership is suspended without losing its history or
+   its per-seat spend bookkeeping — so a removed person still holds a roster entry, while
+   `getMember`, which only sees active rows, correctly reports none. `addMember` and
+   `admitCollaborator` then **appended a second entry for the same user**, and `TenantRepository`
+   persists the roster with one `INSERT … ON CONFLICT DO UPDATE`, which Postgres refuses outright
+   when two values target the same conflicting row. The whole membership write failed, so nobody who
+   had ever been removed could be added back — and inside `acceptPendingInvitations` that failure is
+   caught per-tenant and the invite left pending, which is precisely the state the 409 described.
+   Both paths now go through one private `rosterWith`, which reactivates the existing row.
+   `joinedAt` is deliberately preserved: the repository's upsert never writes it, so re-stamping it
+   would leave the aggregate disagreeing with the row it just saved.
+2. **A canvas share could demote a pending workspace invitation** (`application/kernel/
+   InvitationService.ts`). `invite()` is idempotent on `(tenant, kind, email)`, and refreshed
+   `seat_kind` in both directions. Guest → seat is a genuine upgrade and must move. Seat → guest is
+   not a decision about the workspace at all: the companion invitation exists only so a shared board
+   resolves, so somebody invited as a manager who was then shared one canvas became a viewer-level
+   guest and stopped counting against `maxSeats` — and, on the next accept, hit the 409 above. The
+   rule now lives in a pure, tested `resolveReinvite`: a seat is given up by revoking and
+   re-inviting, never as a side effect of sharing a board.
+3. **The accept route depended on all of that being right.** It no longer does.
+
+**What shipped.** `application/creation/boardAdmission.ts` — `admitToBoard`, the floor underneath the
+companion invitation rather than a replacement for it. The redeemed token *is* the authorization: it
+is unguessable, single-use, and addressed to the email the redeemer signed in with. So if the caller
+holds no workspace membership by the time the route looks, the route seats them itself, through the
+same two primitives the anonymous invite-LINK claim already uses — `collaboratorCapacity` for the cap
+and `seatAsCollaborator` for the row — at the board role's ceiling via `tenantRoleForSessionRole`.
+The two doors onto a board now agree on what admits somebody and what refuses them: the governing cap
+is `maxCreationSessionCollaborators`, never `maxSeats`, and the only remaining refusal is a genuine
+`403 CREATION_COLLABORATOR_QUOTA` — which leaves the invitation pending, so it still works once a
+slot frees. `TENANT_SEAT_LIMIT` is gone; nothing referenced it.
+
+Also removed: `tenantRoutes.ts` carried its own copy of the active-membership query. It delegates to
+`tenantRoleOf` — the one membership read, which already answers null for an inactive row.
+
+**Tests.** `Tenant.collaborator.test.ts` covers readmission (one row, reactivated, `joinedAt`
+preserved, guest re-admitted as a collaborator); `InvitationService.test.ts` covers the seat-kind
+asymmetry in both directions. 30/30 API guards and `tsgo --noEmit` clean.
+
+**Not fixed here, and why:** the same report described a `403` from `api.builderforce.ai` when the
+invitee presses *Continue with Google* inside the installed PWA, which succeeds on Reload. That is
+the Cloudflare zone challenge already tracked in ROADMAP → Infrastructure — no worker code path
+answers 403 to that GET — and it is blocked on a zone-scoped API token. The roadmap entry and
+`scripts/cloudflare-bot-exception.mjs` now both carry the browser-side symptom, which is new evidence
+that the blocker is hitting end users and not only CI.
+
+## ✅ RESOLVED 2026-09-07 — The api tree was red in fourteen places, and three of them were live defects the guards could not see
+
+**Symptom.** `npx tsgo --noEmit` failed, `npm run check` failed four guards, and `vitest run` had seven
+failing tests — all of it in the wake of migrations 1134–1136 (memory semantic recall, OTEL exporters,
+agent benchmarks). `pnpm --filter builderforce-api test` and the api deploy job gate on all three.
+
+**The one that mattered: a guard with a blind spot, and what was hiding in it.**
+
+`scripts/lib/drizzleSchema.mjs` recognised only Drizzle's BUILT-IN column builders. `vector` and
+`tsvector` are named `customType` helpers, so **every column declared with one was invisible to the
+schema-drift guard** — it reported `agent_memory.embedding` and `project_facts.embedding` as missing
+from schema.ts when both were declared, and, far worse, could not see the columns it should have been
+complaining about. The parser now DISCOVERS custom builder names from the source rather than carrying
+a list that goes stale silently, and the built-in list comes from `BUILDER_TYPES` instead of a second
+hand-kept copy. Two real defects surfaced the moment it could see:
+
+1. *Marketplace keyword search had never worked.* `marketplace_skills.search_vector` was declared in
+   schema.ts and created by no migration, while BOTH catalogue surfaces queried it —
+   `GET /api/marketplace/skills?q=` and the public `GET /api/v1/skills?q=` — so every keyword search
+   failed with `column "search_vector" does not exist`. Browsing without a query was fine, which is
+   why nobody noticed. Migration 1141 creates it as a GENERATED tsvector over name/description/
+   category/tags with a GIN index (generated, so there is no second writer to forget it), and the
+   predicate both routes were spelling out separately is now one `skillSearchMatches()` that pins the
+   `english` configuration on the query side to match the column — a mismatch there makes the index
+   useless and the match wrong, both silently.
+2. *Every OTLP exporter with auth headers was broken.* `otel_exporters.headers_iv` was declared as
+   `varchar('iv')` — the TS property was right, the SQL column name was not, and migration 1136
+   created `headers_iv`. Every read and write of the AES-GCM initialisation vector targeted a column
+   that does not exist.
+
+**The third live defect: two tools the container cannot run.** `CONTAINER_SURFACE_CAPS` advertised
+`skill.author`, and `api/container/server.mjs` has no handler for `skill_propose` or `skill_list` —
+its loop ends unknown tools in `unknown tool '<name>'`. The image is a separate artifact, so a handler
+added in source changes nothing until it is rebuilt and deployed; the capability has to follow the
+deployed image. Removed with the same note `repo.edit` carries, naming the three steps to add it
+properly. The reflection directive was worse than the schema: it told EVERY run with a repository to
+call `skill_propose`, regardless of surface, so a container run was being instructed to fail. It is
+now gated on the surface's own capability set, resolved once so the identity a run issues and the
+prompt it reads cannot disagree about which tools exist.
+
+**The rest, in one line each.**
+
+- *`unexpired()` was typed against ONE table's column* (`typeof agentMemory.expiresAt`) and used for
+  both stores — now `PgColumn`, since the predicate is the same sentence about either.
+- *The embedding backfill's four cross-tenant statements* are declared with
+  `acrossTenants(…, 'scheduled_sweep', …)` rather than added to the frozen tenant-scope baseline. Its
+  claim also ordered `desc(updatedAt)` while its own docstring said oldest-first — newest-first
+  re-serves the same recent slice every pass and the pre-1134 backlog it exists to drain never moves.
+- *Two empty `.catch(() => {})`* (`cloudAgentEngine` reflection telemetry, `otelExecutionSink`) now
+  report at `level: 'warning'`. The sink's comment claimed `exportAgentSpans` records its own
+  failures — true, but the tenant lookup ahead of it can fail too, and that one had nowhere to land.
+- *`decryptCredentials` reports failure as `null`, not by throwing*, so `otelExporter`'s try/catch was
+  reaching `Object.entries(null)` and handling the refusal via the TypeError that raised: right
+  outcome, reached by accident. Narrowed. An unchecked `.returning()` row was the other type error.
+- *`normalizeHybridWeights` clamped each weight to [0,1] BEFORE normalising*, so `(3, 1)` — "three
+  parts semantic to one part lexical" — came back as an even 0.5/0.5 with nothing to say the request
+  had been discarded. The pair is a ratio; only the lower bound is clamped now.
+- *`agent_memory = project_facts`* is adjudicated, not baselined: the payload columns match because
+  one service applies one governed-recall contract to both, and the scopes cannot merge —
+  `project_facts.project_id` is a NOT NULL FK with ON DELETE CASCADE, `agent_memory` addresses its
+  scope as a discriminator plus a plain integer with no FK, and folding them orphans a deleted
+  project's facts forever.
+- *Four tables joined the entity catalog* rather than raising its ceiling: `tenant_skills` (read-only —
+  `status` is a review decision, and a generic write is an approval nobody gave), `otel_exporters`
+  (read-only — the sealed credential pair must be written together), `agent_benchmark_cases`
+  (writable — authoring cases is what a person is meant to do) and `agent_benchmark_results`
+  (read-only — a hand-written score moves a trend nobody measured).
+- *`agent-benchmark` is now named in the billable-sweep list* it already declared itself part of, and
+  the `afterToolCalls` hook's inline return type is named (`AfterToolCallsDecision`), which is what
+  the loop's `const after = …` had nothing to infer from (TS7022).
+- *Two build-blocking parse errors* — a raw newline inside a string literal in
+  `llm/vendors/anthropic.ts` and an unescaped apostrophe in a `memoryScope.test.ts` title — plus a
+  handful of strict-null index accesses in four test files.
+
+**Verified.** `npx tsgo --noEmit` clean; `npm run check` 30/30 guards; `vitest run` 802 files,
+9600 passed, 1 skipped, 0 failed. Release note for the marketplace-search fix shipped as migration
+1142, `category = 'fix'`.
+
+## ✅ RESOLVED 2026-09-07 — Parity re-verification: seven of eight closures hold in code, three drift items closed, and six defects the re-read found are fixed
+
+**Why a second pass.** The 2026-09-07 assessment logged eight capability gaps and seven smaller
+drift items; a concurrent pass closed the eight the same day. A ledger entry is not evidence, so
+every closure was re-verified against the code by three read-only sweeps, adversarially (a
+function with no production caller counts as unreachable, not closed).
+
+**Closures that verify end-to-end (file:line evidence in the sweep reports).** On-prem steering
+(`createSteeringChannel` → `query({ prompt: steering.messages() })`, relay keys one channel per
+execution, `steer.applied` on the timeline); VSIX governance gates (`policyGates.ts` resolver,
+both callers, fail-closed); BYO MCP registration (typed client, self-gating gallery mounted on
+Settings › Integrations, localized in all five catalogs, `builderforce.registerMcpServer`
+registered); reasoning traces (`splitReasoning` over four vendor shapes, `agent.thinking` rows,
+timeline track); per-execution cost (`usageCostSummary`, both routes, Model tab); OpenTelemetry
+export (sink subscribed in `wireExecutionEventSinks`, whole-run sampling, settings UI) and the
+benchmark sweep (registered in `CRON_SWEEPS`, chart in the AI hub); agent-authored skills
+(`skill_propose` in the cloud registry, `reviewSkill` the only `approved` writer, approved-only
+injection, Skills tab). Semantic recall verified with one overstated sub-claim, closed below.
+
+**Drift items that closed in the same window.** Milestone/dispatch chat messages now render as
+activity lines on both surfaces (`chatActivity.ts`, `BrainTimeline.tsx:828-841`, labels via
+`useChatActivityLabels`); `activity_log.object_id` has writers and a reader (the coverage
+residual stays in the register).
+
+**Fixed in this pass.**
+
+1. *The four unused VSIX runtime dependencies are gone.* `@anthropic-ai/claude-agent-sdk`,
+   `@anthropic-ai/sdk`, `@modelcontextprotocol/sdk` and `zod` had zero imports in `src/`,
+   `webview/src/` and `harness/`; `dependencies` is empty and the pnpm lockfile shed 662 lines.
+2. *`cron_jobs` no longer holds the cron gate open.* Its rows belong to a self-hosted agent host
+   whose poller executes them and re-arms `next_run_at` through the agent-host cron routes; no
+   server sweep reads the table, so listing it in `SCHEDULE_SOURCES` woke Neon on due times the
+   tick would never act on and raised "schedule stall" for work the server would never clear.
+   Retired from the registry (the feature is untouched); the stall test feeds four probes.
+3. *A steer arriving after the run's last turn is no longer silent.* The relay writes a durable
+   `steer.dropped` row with the reason (`run_finishing` / `no_live_run`). What to DO with it is a
+   product decision, logged.
+4. *VSIX gates are cached.* The resolver re-fetched over the network on every turn, so a transient
+   blip refused a turn the last successful read already governed. One-minute fresh window,
+   ten-minute stale-on-error window, per project; a never-read project still fails closed. Five
+   tests.
+5. *`agent.thinking` rows carry the turn's duration.* Without it the Observability timeline drew
+   the thought track zero-width, i.e. invisible. The comment that claimed the run drawer rendered
+   it (it only excludes it from the tool count) now says what is true.
+6. *On-prem hybrid weights use the shared normaliser.* `memory-search.ts` re-implemented
+   `normalizeHybridWeights` with a per-weight cap at 1 that turned `(3, 1)` into an even split;
+   the fusion itself (`memory/hybrid.ts`) already called the shared `hybridScore`, so the
+   "same helper on both surfaces" claim now holds for the whole path.
+
+**Still open (register).** Cloud subagent spawn (sized, not blocked); the two plain-Node runner
+loops (blocked on a live container build); object-activity coverage (104 call sites); the
+steer-after-finish decision (product call); the drawer's reasoning tab (sized).
+
+**Verify.** `cd clients/vscode && npx vitest run src/policyGates.test.ts` · `cd api && npx vitest run
+src/application/runtime/cronWorkSignal.stall.test.ts && pnpm tsgo` · `cd agent-runtime && pnpm tsgo &&
+npx vitest run src/infra src/agents/memory-search` · `cd clients/vscode && pnpm install --frozen-lockfile`.
+
 ## ✅ RESOLVED 2026-09-07 — Sharing a canvas got WORSE the moment you signed up, and an invitee could not join without an account
 
 A logged-out visitor could share a board the way people actually share things: start a session, copy

@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   DEFAULT_HYBRID_TEXT_WEIGHT as SHARED_TEXT_WEIGHT,
   DEFAULT_HYBRID_VECTOR_WEIGHT as SHARED_VECTOR_WEIGHT,
+  normalizeHybridWeights,
 } from "@builderforce/agent-tools";
 import type { BuilderForceAgentsConfig, MemorySearchConfig } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
@@ -283,11 +284,12 @@ function mergeConfig(
 
   const overlap = clampNumber(chunking.overlap, 0, Math.max(0, chunking.tokens - 1));
   const minScore = clampNumber(query.minScore, 0, 1);
-  const vectorWeight = clampNumber(hybrid.vectorWeight, 0, 1);
-  const textWeight = clampNumber(hybrid.textWeight, 0, 1);
-  const sum = vectorWeight + textWeight;
-  const normalizedVectorWeight = sum > 0 ? vectorWeight / sum : DEFAULT_HYBRID_VECTOR_WEIGHT;
-  const normalizedTextWeight = sum > 0 ? textWeight / sum : DEFAULT_HYBRID_TEXT_WEIGHT;
+  // The SHARED normalisation (`@builderforce/agent-tools`): the pair is a ratio, so
+  // only a negative/non-finite weight is rejected and `(3, 1)` keeps meaning three
+  // parts semantic to one part lexical. The local copy this replaced capped each
+  // weight at 1 first, which silently turned that into an even split.
+  const { vectorWeight: normalizedVectorWeight, textWeight: normalizedTextWeight } =
+    normalizeHybridWeights(hybrid.vectorWeight, hybrid.textWeight);
   const candidateMultiplier = clampInt(hybrid.candidateMultiplier, 1, 20);
   const temporalDecayHalfLifeDays = Math.max(
     1,

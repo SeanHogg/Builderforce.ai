@@ -6,15 +6,23 @@
 
 import type { LoopToolCall, ParsedToolCall } from "./types.js";
 
+/**
+ * THE rule for what counts as a tool-argument bag: a plain object, never an array,
+ * a scalar or null. Owned here because every surface that hands args to a dispatcher
+ * — the kernel below, and any router that unwraps a nested `args` — must agree on it.
+ * Anything else collapses to `{}` rather than reaching a tool as a non-bag.
+ */
+export function asToolArgs(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
+  return null;
+}
+
 export function parseToolArgs(raw: string | undefined | null): { args: Record<string, unknown>; malformed: boolean } {
   const text = typeof raw === "string" ? raw.trim() : "";
   if (!text) return { args: {}, malformed: false };
   try {
-    const parsed: unknown = JSON.parse(text);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return { args: parsed as Record<string, unknown>, malformed: false };
-    }
-    return { args: {}, malformed: true };
+    const bag = asToolArgs(JSON.parse(text) as unknown);
+    return bag ? { args: bag, malformed: false } : { args: {}, malformed: true };
   } catch {
     return { args: {}, malformed: true };
   }

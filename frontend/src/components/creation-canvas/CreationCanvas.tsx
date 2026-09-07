@@ -1864,6 +1864,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const layoutViewportRef = useRef(layoutViewport);
   layoutViewportRef.current = layoutViewport;
   /**
+   * "Bring that object forward", reachable from the callbacks declared ABOVE the one
+   * that implements it. `revealObject` needs the surface switcher and React Flow and
+   * so is defined late; `seatTeammate` needs it and is defined early. A ref rather
+   * than reordering two thousand lines of callbacks, and rather than a second
+   * hand-rolled select-and-fit that would drift from the real one.
+   */
+  const revealObjectRef = useRef<(objectId: string) => void>(() => undefined);
+  /**
    * Objects about to join the board, each placed against everything already on
    * it INCLUDING the rest of this batch.
    *
@@ -3801,7 +3809,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // in the same words, so the two cannot disagree about what a duplicate is.
     const seated = canvasObjectTwin('agent', teammate.name, nodesRef.current, (kind) => TITLE_IS_CONTENT_KINDS.has(kind));
     if (seated) {
-      revealObject(seated.id);
+      revealObjectRef.current(seated.id);
       setNotice(t('teammateAlreadySeated', { name: teammate.name }));
     } else if (!point) { addAtCenter('agent', data); }
     else {
@@ -3814,7 +3822,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // Addressable immediately: the composer is seeded with the mention rather
     // than leaving the person to retype a name they just dragged in.
     setPrompt((current) => (current.includes(`@${teammate.name}`) ? current : `${current ? `${current.trimEnd()} ` : ''}@${teammate.name} `));
-  }, [addAtCenter, canEdit, placeAppended, revealObject, setNodes, t]);
+  }, [addAtCenter, canEdit, placeAppended, setNodes, t]);
 
   // The keyboard half of §3.3. Only the board actually on the stage answers —
   // hidden cached boards hear the same event and must not quietly seat someone
@@ -10762,6 +10770,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setSelectedIds([nodeId]);
     void flowRef.current?.fitView({ nodes: [{ id: nodeId }], padding: .35, maxZoom: 1.1, duration: 320 });
   }, [setSurface]);
+  revealObjectRef.current = revealObject;
 
   /**
    * WHAT THIS BOARD IS, as a walk. Derived from the board's own objects and
@@ -12857,6 +12866,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         boardId={sessionId}
         audienceId={currentUserId || (persistence === 'local' ? 'guest' : null)}
         stops={walkthroughStops}
+        busy={thinking}
         onReveal={revealObject}
       />
       <SectionTour

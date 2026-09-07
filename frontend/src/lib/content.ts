@@ -1873,6 +1873,7 @@ export const INTEGRATION_SLUG_MAP: Record<string, IntegrationSeo> = Object.fromE
  */
 export const RELATED_ARTICLES: Record<string, string[]> = {
   'creation-canvas': [
+    'walk-me-through-what-you-made',
     'send-the-link-join-without-an-account',
     'run-your-app-on-the-canvas',
     'the-canvas-gave-the-screen-back-to-the-board',

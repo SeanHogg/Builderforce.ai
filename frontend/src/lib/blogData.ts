@@ -83,6 +83,7 @@ import creationCanvasFunctionalityGuide from '@/content/blog/creation-canvas-fun
 import sendTheLink from '@/content/blog/send-the-link-join-without-an-account.md';
 import gradeTheProof from '@/content/blog/grade-the-proof-and-close-the-loop.md';
 import runYourAppOnTheCanvas from '@/content/blog/run-your-app-on-the-canvas.md';
+import walkMeThroughWhatYouMade from '@/content/blog/walk-me-through-what-you-made.md';
 import importYourRecords from '@/content/blog/import-your-records.md';
 import shipFromTheEditor from '@/content/blog/ship-from-the-editor-commit-branch-pull-request.md';
 import seeWhatTheAgentChanged from '@/content/blog/see-what-the-agent-changed-before-you-commit.md';
@@ -232,6 +233,7 @@ export const BLOG_POSTS: BlogPost[] = [
   buildPost('grade-the-proof-and-close-the-loop', gradeTheProof),
   buildPost('import-your-records', importYourRecords),
   buildPost('run-your-app-on-the-canvas', runYourAppOnTheCanvas),
+  buildPost('walk-me-through-what-you-made', walkMeThroughWhatYouMade),
   buildPost('the-canvas-gave-the-screen-back-to-the-board', canvasChromeRedesign),
   buildPost('build-a-3d-world-in-the-browser', build3dWorld),
   buildPost('read-any-pdf-even-the-scanned-ones', readAnyPdf),
