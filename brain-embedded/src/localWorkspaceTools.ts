@@ -67,6 +67,12 @@ export const LOCAL_WORKSPACE_TOOLS: ReadonlySet<string> = new Set([
   // agent falls back to hand-rolled `run_command` git — which is exactly how
   // `git push origin --delete <branch>` → `remote ref does not exist` happened.
   'git_cleanup_merged',
+  // Delegation to a sub-agent. It belongs here for the same reason and fails the same
+  // way: a turn phrased "where does the auth middleware live?" shares no stem with
+  // "delegate", so relevance drops the one tool that would answer it cheaply, and the
+  // agent burns the turns delegation exists to save. Nothing is pinned that the host
+  // did not advertise — the web Brain offers no `spawn_agent`, so this is inert there.
+  'spawn_agent',
 ]);
 
 /**

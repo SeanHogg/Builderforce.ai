@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CORE_TOOLS } from "@builderforce/agent-tools";
+import { CORE_TOOLS, SUBAGENT_TOOLS } from "@builderforce/agent-tools";
 import { LOCAL_WORKSPACE_TOOLS, localToolsIn } from "@seanhogg/builderforce-brain-embedded";
 import { ideSystemPromptBase } from "./idePersona";
 

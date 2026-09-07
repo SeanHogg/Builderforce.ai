@@ -7,7 +7,7 @@
  */
 
 import * as vscode from "vscode";
-import { attachEvermindLearn, type BrainMessage } from "@seanhogg/builderforce-brain-embedded";
+import { attachEvermindLearn, type BrainMessage, type BrainStreamFn } from "@seanhogg/builderforce-brain-embedded";
 import { getApiKey } from "./gateway";
 import { fetchRunContextSection, postBrainMessages, projectEvermindHooks } from "./bfApi";
 import { brainToolCatalog } from "./brainToolCatalog";
@@ -34,12 +34,17 @@ function workspaceRoot(): string {
 
 export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeRunHostHooks): BrainRunHost {
   const { secrets } = ctx;
+  // ONE model route for this host: the run's own turns and any sub-agent it delegates
+  // to resolve it the same way, so a child can never end up on a different model (or a
+  // stale credential) than the parent that spawned it.
+  const streamForRoute = async (): Promise<BrainStreamFn> =>
+    routeStream(await resolveModelRoute(secrets), await getApiKey(secrets));
   return createBrainRunHost({
-    tools: (projectId) => brainToolCatalog(secrets, workspaceRoot() || undefined, projectId),
+    tools: (projectId) => brainToolCatalog(secrets, workspaceRoot() || undefined, projectId, streamForRoute),
     workspaceRoot,
     // Resolved per run, not once: an explicit pick, the project's Evermind pin or an
     // on-device route can all change between turns, and a local credential can expire.
-    stream: async () => routeStream(await resolveModelRoute(secrets), await getApiKey(secrets)),
+    stream: streamForRoute,
     persistence: {
       async sendMessages(chatId, messages): Promise<BrainMessage[]> {
         const r = await postBrainMessages(secrets, chatId, messages);

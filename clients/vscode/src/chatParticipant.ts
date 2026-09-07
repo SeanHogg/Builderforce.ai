@@ -176,7 +176,11 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
     // (projects, tasks, OKRs, specs, …) fetched from the gateway MCP relay. File tools
     // need a workspace; `remember_fact` needs only a project (works chat-only). Gate
     // each on what it actually requires.
-    const tools: ToolDef[] = await brainToolCatalog(ctx.secrets, root, activeProject?.id);
+    // A delegated child runs on THIS turn's resolved route, so it can never land on a
+    // different model (or a stale credential) than the participant that spawned it.
+    const tools: ToolDef[] = await brainToolCatalog(ctx.secrets, root, activeProject?.id, async () =>
+      routeStream(modelChoice, key),
+    );
 
     // The tenant's effective governance gates — the SAME compiled rows the cloud and
     // on-prem loops enforce — so a block/approval gate holds in this editor too.
