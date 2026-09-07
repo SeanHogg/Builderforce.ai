@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { formatUsdSpend } from '@/lib/formatSpend';
 import { llmApi, type ModelAnalyticsResponse } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
@@ -26,12 +27,7 @@ function fmtScore(n: number): string {
 function fmtPct(n: number): string {
   return `${Math.round(n * 100)}%`;
 }
-function fmtUsd(millicents: number): string {
-  const usd = millicents / 100_000;
-  if (usd === 0) return '$0';
-  if (usd < 0.01) return '<$0.01';
-  return `$${usd.toFixed(2)}`;
-}
+const fmtUsd = (millicents: number): string => formatUsdSpend(millicents / 100_000);
 
 export function ModelRoutingAnalytics() {
   const fmt = useFormat();

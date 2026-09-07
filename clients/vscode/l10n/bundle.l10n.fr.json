@@ -156,6 +156,7 @@
   "Frozen": "Gelé",
   "Generating…": "Génération…",
   "Good response": "Bonne réponse",
+  "Governance gates could not be loaded, so this turn was not started. Check your connection and try again.": "Les contrôles de gouvernance n'ont pas pu être chargés, ce tour n'a donc pas démarré. Vérifiez votre connexion et réessayez.",
   "Governance: approve \"{0}\"? {1}": "Gouvernance : approuver « {0} » ? {1}",
   "Group tasks by": "Grouper les tâches par",
   "Here is my project's Project 360 health check. Help me work through these gaps, highest impact first.": "Voici le bilan de santé Projet 360 de mon projet. Aide-moi à combler ces lacunes, en commençant par les plus importantes.",

@@ -9,6 +9,7 @@ import { ProviderKeysSettings } from '@/components/ProviderKeysSettings';
 import { IntegrationsGallery } from '@/components/integrations/IntegrationsGallery';
 import { MailboxIntegrations } from '@/components/integrations/MailboxIntegrations';
 import { ConnectorsGallery } from '@/components/connectors/ConnectorsGallery';
+import { McpServersGallery } from '@/components/mcp/McpServersGallery';
 import { ApiKeysContent } from '@/components/settings/ApiKeysContent';
 import { PayoutConnections } from '@/components/payouts/PayoutConnections';
 import { getStoredTenant } from '@/lib/auth';
@@ -80,7 +81,9 @@ export default function SettingsIntegrationsPage() {
       </CatalogToolbar>
 
       {show('models') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.models')}</h2><ProviderKeysSettings search={search} viewMode={viewMode} priorityOpen={priorityOpen} onPriorityClose={() => setPriorityOpen(false)} onLeaderChange={setPriorityLeader} /></section>}
-      {show('connectors') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.connectors')}</h2><ConnectorsGallery search={search} viewMode={viewMode} /></section>}
+      {show('connectors') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.connectors')}</h2><ConnectorsGallery search={search} viewMode={viewMode} />{/* Bring-your-own MCP servers sit with connectors: both are "an external
+          system this workspace may call". The gallery gates itself to owners. */}
+        <McpServersGallery search={search} viewMode={viewMode} /></section>}
       {show('apps') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.apps')}</h2><MailboxIntegrations search={search} viewMode={viewMode} /><IntegrationsGallery search={search} viewMode={viewMode} /></section>}
       {/* The SAME component `/billing/payouts` and the Sales Hub render — one
           surface for "where does my money go", reached from three doors. */}

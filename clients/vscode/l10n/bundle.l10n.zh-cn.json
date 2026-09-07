@@ -156,6 +156,7 @@
   "Frozen": "已冻结",
   "Generating…": "正在生成…",
   "Good response": "回答不错",
+  "Governance gates could not be loaded, so this turn was not started. Check your connection and try again.": "无法加载治理关卡，因此本轮未启动。请检查网络连接后重试。",
   "Governance: approve \"{0}\"? {1}": "治理：是否批准“{0}”？{1}",
   "Group tasks by": "任务分组方式",
   "Here is my project's Project 360 health check. Help me work through these gaps, highest impact first.": "这是我项目的“项目 360”健康检查。请帮我逐一解决这些缺口，从影响最大的开始。",

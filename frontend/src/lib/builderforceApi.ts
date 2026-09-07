@@ -3060,6 +3060,8 @@ export interface ExecutionTrace {
     messages?: ExecutionMessage[];
     /** Structured per-turn model + token detail for this run, oldest first. */
     llmTurns?: ExecutionLlmTurn[];
+    /** This run's own spend off the usage ledger (every row stamped with its execution id). */
+    cost?: { estimatedCostUsd: number; totalTokens: number; requests: number };
   };
 }
 

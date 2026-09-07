@@ -51,7 +51,7 @@ import {
   RelayPresencePoller,
 } from "./builderforce-relay-helpers.js";
 import { resolveCodingSession } from "./coding-session-broker.js";
-import { buildSteeringInjection } from "./relay-steering.js";
+import { createSteeringChannel, type SteeringChannel } from "./relay-steering.js";
 import { resolveRemoteResult } from "./remote-result-broker.js";
 import { dispatchResultToRemoteAgentNode, type RemoteDispatchOptions } from "./remote-subagent.js";
 import { createGitRepoSync } from "./repo-sync.js";
@@ -146,6 +146,10 @@ export class BuilderforceRelayService implements IRelayService {
   /** Abort handles for in-flight V2 (Claude Agent SDK) runs, keyed by executionId,
    *  so an `execution.cancel` frame from the portal can actually halt the run. */
   private readonly v2Aborts = new Map<number, AbortController>();
+  /** Steering channels for in-flight V2 runs, keyed by executionId, so an
+   *  `execution.message` frame from the portal reaches the live SDK run as its
+   *  next user turn instead of a chat session the run never reads. */
+  private readonly v2Steering = new Map<number, SteeringChannel>();
   /** Tracks pending remote task correlations so results can be sent back. */
   private pendingRemoteCorrelations = new Map<
     string,
@@ -408,6 +412,28 @@ export class BuilderforceRelayService implements IRelayService {
       onResult: () => {
         /* terminal state is reported below from the runner's return value */
       },
+      onSteerApplied: (text) => {
+        // Acknowledge on the timeline exactly as the cloud loop does
+        // (`steer.applied`, category `message`, args.text) — live + durable. The
+        // relay DO already echoed the user's turn to browsers, so only the
+        // acknowledgement is emitted here.
+        const detail = { text };
+        this.sendToRelay({
+          type: "tool.audit",
+          sessionKey: "main",
+          toolName: "steer.applied",
+          category: "message",
+          args: detail,
+          ts: new Date().toISOString(),
+        });
+        void this.persistToolAudit({
+          executionId: payload.executionId,
+          toolName: "steer.applied",
+          category: "message",
+          args: detail,
+          result: text.slice(0, 280),
+        });
+      },
     };
 
     // One shared ephemeral workspace per ticket — every agent on the task works
@@ -420,8 +446,11 @@ export class BuilderforceRelayService implements IRelayService {
 
     // Register an abort handle so an `execution.cancel` frame can stop this run.
     const abortController = new AbortController();
+    // …and a steering channel so an `execution.message` frame can reach the run.
+    const steering = createSteeringChannel();
     if (payload.executionId != null) {
       this.v2Aborts.set(payload.executionId, abortController);
+      this.v2Steering.set(payload.executionId, steering);
     }
 
     // Drive the on-prem loop through the SHARED `AgentEngine` contract (the same
@@ -440,6 +469,7 @@ export class BuilderforceRelayService implements IRelayService {
       surface: "on_prem",
       ...(payload.executionId != null ? { executionId: payload.executionId } : {}),
       abortController,
+      steering,
       sinks,
     });
     // The terminal state this run ended in, or null when it completed normally (the
@@ -462,8 +492,10 @@ export class BuilderforceRelayService implements IRelayService {
         });
         result = { ok: run.ok, text: run.output };
       } finally {
+        steering.close();
         if (payload.executionId != null) {
           this.v2Aborts.delete(payload.executionId);
+          this.v2Steering.delete(payload.executionId);
         }
       }
 
@@ -1186,18 +1218,24 @@ export class BuilderforceRelayService implements IRelayService {
 
       case "execution.message": {
         // Steering: a user sent a follow-up direction to a running execution
-        // from the portal. Inject it into the live `main` session as the next
-        // turn so the agent picks it up mid-run.
+        // from the portal. Push it into the live V2 run's streaming input so the
+        // SDK applies it as the next user turn mid-run. The API already persisted
+        // the message (`execution_messages`); this is delivery only.
         const executionId =
           typeof msg.executionId === "number" && Number.isFinite(msg.executionId)
             ? msg.executionId
             : undefined;
-        const injection = buildSteeringInjection(executionId, msg.text, Date.now());
-        if (!injection) break;
-        logWarn(`[builderforce] steering message for execution ${executionId ?? "?"}`);
-        this.gatewayClient?.request("chat.send", injection).catch((err: unknown) => {
-          logWarn(`[builderforce] execution.message dispatch failed: ${String(err)}`);
-        });
+        const channel = executionId != null ? this.v2Steering.get(executionId) : undefined;
+        if (!channel) {
+          logWarn(
+            `[builderforce] steering message for execution ${executionId ?? "?"} dropped: no live V2 run`,
+          );
+          break;
+        }
+        const accepted = channel.push(msg.text);
+        logWarn(
+          `[builderforce] steering message for execution ${executionId} ${accepted ? "queued" : "refused (run finishing)"}`,
+        );
         break;
       }
 

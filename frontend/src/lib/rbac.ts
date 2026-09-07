@@ -61,6 +61,10 @@ export const CAPABILITIES = {
   // PATCH /api/tenants/:id/spend-limits (+ the per-seat variant).
   'billing.spendLimits':  'owner',
   'integrations.manage':  'manager',
+  // Bring-your-own MCP servers — registering an external tool server binds a
+  // workspace credential and widens what every agent here can call. Mirrors
+  // requireRole(OWNER) on /api/tenants/:tenantId/mcp-extensions.
+  'mcp.manage':           'owner',
   // Embedded app surfaces — enable embedding and pick which capability areas
   // (Product / Agile / Security) a host app may mount. Mirrors
   // requireRole(MANAGER) on PUT /api/embed/config and PUT /api/embed/features/:feature.

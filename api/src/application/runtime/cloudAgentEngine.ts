@@ -1,3 +1,4 @@
+import { splitReasoning, type ChoiceMessageLike } from '../llm/reasoningContent';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Cloud agent EXECUTION ENGINE — "run a cloud agent against a ticket", extracted
@@ -62,9 +63,10 @@ import {
   CURRENT_ENGINE_ID, evaluatePolicyGate, filterByGlob, applyStringEdit,
   appraiseTask, buildLimbicBlock, compileLimbicState, neutralState,
   applyDelta, appraiseAmygdala, homeostasis,
-  type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type ToolControl, type LimbicState, type LimbicEvent, type PolicyGate, type AgentExecParams, type Capability,
+  type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type LimbicState, type LimbicEvent, type PolicyGate, type AgentExecParams, type Capability,
   type PrdWriteCapability, type PrdUpdateResult,
 } from '@builderforce/agent-tools';
+import { runAgentLoop, openAiChatCodec, readOpenAiToolCalls, type LoopHooks, type LoopPorts, type LoopResult } from '@builderforce/agent-loop';
 import { renderRunContext, summarizeBlocks, type RunContextBlock } from '@builderforce/run-context';
 import { RUN_CONTEXT_ORDER } from './runContextSource';
 import { buildRunContext } from './runContextService';
@@ -1093,14 +1095,17 @@ async function isExecutionCancelled(db: Db, executionId: number): Promise<boolea
   }
 }
 
-/** Parse the assistant turn (content + tool calls) off a gateway chat-completion
- *  response body. One reader for both the in-Worker loop and the container `llm` op. */
-function parseLlmChoice(json: unknown): { content: string; toolCalls: RawToolCall[] } {
-  const j = json as { choices?: Array<{ message?: { content?: unknown; tool_calls?: unknown } }> } | null;
+/** Parse the assistant turn (content + reasoning + tool calls) off a gateway
+ *  chat-completion response body. One reader for both the in-Worker loop and the
+ *  container `llm` op. Reasoning comes through {@link splitReasoning} so every
+ *  vendor shape (Anthropic thinking, `reasoning_content`, OpenRouter `reasoning`,
+ *  inline `<think>`) lands on the same `thinking` timeline row. */
+export function parseLlmChoice(json: unknown): { content: string; reasoning: string; toolCalls: RawToolCall[] } {
+  const j = json as { choices?: Array<{ message?: ChoiceMessageLike & { tool_calls?: unknown } }> } | null;
   const choice = j?.choices?.[0]?.message;
-  const content = typeof choice?.content === 'string' ? choice.content : '';
+  const { content, reasoning } = splitReasoning(choice);
   const toolCalls = Array.isArray(choice?.tool_calls) ? (choice!.tool_calls as RawToolCall[]) : [];
-  return { content, toolCalls };
+  return { content, reasoning, toolCalls };
 }
 
 type CloudLlmTurn =
@@ -1204,13 +1209,22 @@ async function recordCloudLlmTurn(
   }
   const upstream = await result.response.json().catch(() => null);
   writeCloudTrace(upstream, null);
-  const { content, toolCalls } = parseLlmChoice(upstream);
+  const { content, reasoning, toolCalls } = parseLlmChoice(upstream);
   await recordCloudToolEvent(rc.db, {
     ...evtBase, toolName: 'llm.complete', category: 'llm',
-    detail: { model: resolvedModel, provider: result.resolvedVendor, byo: result.byoFunded ?? false, keySource: result.byoFunded ? 'byo' : 'builderforce-managed', traceId: result.traceId ?? null, step: opts.step, toolCalls: toolCalls.length },
+    detail: { model: resolvedModel, provider: result.resolvedVendor, byo: result.byoFunded ?? false, keySource: result.byoFunded ? 'byo' : 'builderforce-managed', traceId: result.traceId ?? null, step: opts.step, toolCalls: toolCalls.length, reasoningChars: reasoning.length },
     result: `${toolCalls.length} tool call(s)${content ? ` · ${content.length} chars` : ''}`, durationMs,
   });
   await emitCodingModelDegraded(rc.db, { ...evtBase, resolvedModel, requestedModel: rc.requestedModel ?? '' });
+  if (reasoning) {
+    // The reasoning path, as its own timeline row — the `thinking` category the
+    // schema documented and no writer emitted. Rendered by the run drawer and the
+    // Observability timeline as a thought step ahead of the message/tool calls.
+    await recordCloudToolEvent(rc.db, {
+      ...evtBase, toolName: 'agent.thinking', category: 'thinking',
+      detail: { step: opts.step, model: resolvedModel, content: reasoning }, result: reasoning.slice(0, 280),
+    });
+  }
   if (content) {
     await recordCloudToolEvent(rc.db, {
       ...evtBase, toolName: 'agent.message', category: 'message',
@@ -2215,7 +2229,7 @@ function buildCloudProvider(args: {
   };
 }
 
-export async function runCloudToolLoop(
+async function runCloudToolLoop(
   env: Env,
   db: Db,
   executionId: number,
@@ -2488,65 +2502,281 @@ export async function runCloudToolLoop(
   const provider = opts?.decorateProvider ? opts.decorateProvider(builtProvider) : builtProvider;
   const toolCtx: ToolContext = { caps: provider, signal: abortController.signal };
 
-  try {
-  for (; step < MAX_CLOUD_TOOL_STEPS && !finished && (step - startStep) < maxThisCall; step++) {
+  // ── THE loop ────────────────────────────────────────────────────────────────
+  // The model→tools→model skeleton (step budget, cancel poll, argument parsing, the
+  // assistant/tool rows, the finish / ask_human control signals) lives ONCE in
+  // `@builderforce/agent-loop` and is the same kernel the Brain, the canvas and the
+  // on-prem runtime drive. Everything cloud-specific below is a hook or a port that
+  // closes over this run's state — nothing here iterates.
+  type Row = Record<string, unknown>;
+  const codec = openAiChatCodec<Row>();
+  const evt = { tenantId, cloudAgentRef, executionId };
+  const dataOk = (data: unknown): boolean => !(data && typeof data === 'object' && (data as { ok?: unknown }).ok === false);
+  // Per-call timer. Calls within a turn are dispatched sequentially, so one slot is exact.
+  let tStart = 0;
+
+  const hooks: LoopHooks<Row> = {
     // Between-step guard: stop before issuing the next (paid) call if cancelled.
-    if (cancelled || await cancelChannel.check()) { cancelled = true; break; }
+    isCancelled: () => cancelChannel.check(),
 
-    if (declaredLimits) {
-      const [spend] = await db.select({ total: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}), 0)` })
-        .from(llmUsageLog)
-        .where(and(eq(llmUsageLog.tenantId, tenantId), eq(llmUsageLog.executionId, executionId)));
-      const limitReason = checkRunLimits(declaredLimits, {
-        files: writtenPaths.size, repositories: repoCtx ? 1 : 0, spendMillicents: Number(spend?.total ?? 0),
-      });
-      if (limitReason) {
-        await recordCloudToolEvent(db, { tenantId, cloudAgentRef, executionId, toolName: 'containment.limit', category: 'tool', detail: { step, limits: declaredLimits }, result: limitReason });
-        return { ok: false, output: `Run contained: ${limitReason}.`, cancelled: false, finished: true };
+    beforeTurn: async (ctx) => {
+      if (declaredLimits) {
+        const [spend] = await db.select({ total: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}), 0)` })
+          .from(llmUsageLog)
+          .where(and(eq(llmUsageLog.tenantId, tenantId), eq(llmUsageLog.executionId, executionId)));
+        const limitReason = checkRunLimits(declaredLimits, {
+          files: writtenPaths.size, repositories: repoCtx ? 1 : 0, spendMillicents: Number(spend?.total ?? 0),
+        });
+        if (limitReason) {
+          await recordCloudToolEvent(db, { ...evt, toolName: 'containment.limit', category: 'tool', detail: { step: ctx.step, limits: declaredLimits }, result: limitReason });
+          return { action: 'stop', ok: false, output: `Run contained: ${limitReason}.` };
+        }
       }
-    }
 
-    // Mid-run steering: drain any user follow-ups posted to this execution since the
-    // previous step and splice them in as user turns BEFORE the next paid call, so a
-    // cloud agent (V1 / V2-durable / V2-container fallback) actually changes course
-    // mid-run instead of the message being a no-op. Each steer is drained once
-    // (consumed_at is stamped by pullPendingSteering).
-    await applyPendingSteering(db, { tenantId, cloudAgentRef, executionId, messages, step });
+      // Mid-run steering: drain any user follow-ups posted to this execution since the
+      // previous step and splice them in as user turns BEFORE the next paid call, so a
+      // cloud agent (V1 / V2-durable / V2-container fallback) actually changes course
+      // mid-run instead of the message being a no-op. Each steer is drained once
+      // (consumed_at is stamped by pullPendingSteering).
+      await applyPendingSteering(db, { tenantId, cloudAgentRef, executionId, messages, step: ctx.step });
 
-    // Compress the conversation BEFORE the paid call so a long run never re-sends a
-    // ballooning history (the 97K-token turn that 413'd). Compacts only when over
-    // budget; summarizes the bulky middle into a builder-memory note (free pool),
-    // falling back to elision. Mutated IN PLACE so the compacted form persists into
-    // CloudLoopState — the DO surface won't re-summarize the same prefix next tick.
-    const compaction = await compactMessages(messages, CLOUD_COMPACT_DEFAULTS, buildGatewaySummarizer(env));
-    if (compaction.compacted) {
-      messages.length = 0;
-      messages.push(...compaction.messages);
+      // Compress the conversation BEFORE the paid call so a long run never re-sends a
+      // ballooning history (the 97K-token turn that 413'd). Compacts only when over
+      // budget; summarizes the bulky middle into a builder-memory note (free pool),
+      // falling back to elision. Mutated IN PLACE so the compacted form persists into
+      // CloudLoopState — the DO surface won't re-summarize the same prefix next tick.
+      const compaction = await compactMessages(messages, CLOUD_COMPACT_DEFAULTS, buildGatewaySummarizer(env));
+      if (compaction.compacted) {
+        messages.length = 0;
+        messages.push(...compaction.messages);
+        await recordCloudToolEvent(db, {
+          ...evt,
+          toolName: 'context.compacted', category: 'llm',
+          detail: { step: ctx.step, beforeTokens: compaction.beforeTokens, afterTokens: compaction.afterTokens, summarized: compaction.summarized, droppedMessages: compaction.droppedMessages },
+          result: `compressed ~${compaction.beforeTokens} → ~${compaction.afterTokens} tokens (${compaction.summarized ? 'builder-memory summary' : 'elided'})`,
+        });
+      }
+      return undefined;
+    },
+
+    onNoToolCalls: async (_ctx, turn) => {
+      if (requiredSignoff && !reviewVerdictRecorded) {
+        const error = missingReviewVerdictMessage(requiredSignoff);
+        messages.push({ role: 'assistant', content: turn.content });
+        messages.push({ role: 'user', content: error });
+        await recordCloudToolEvent(db, {
+          ...evt,
+          toolName: 'finish.blocked', category: 'tool',
+          detail: { reason: 'review_verdict_missing', ...requiredSignoff },
+          result: error,
+        });
+        return { action: 'continue' };
+      }
+      return { action: 'finish' };
+    },
+
+    beforeDispatch: async (call) => {
+      tStart = Date.now();
+      const name = call.name;
+      const parsed = call.args;
+      if (call.malformed) {
+        reportCaughtError(new Error('malformed tool arguments'), { source: "application/runtime/cloudAgentEngine.ts", operation: "runCloudToolLoop", level: 'warning', context: { logMessage: '[cloud-run] malformed tool arguments; invoking with empty object', details: {
+          tenantId,
+          executionId,
+          toolCallId: call.id,
+          toolName: name,
+          arguments: call.raw.arguments.slice(0, 200),
+        } } });
+      }
+
+      // Governance gate (compile-primitive policy modality): enforce BEFORE dispatch,
+      // so a gate authored on the spec applies identically on every surface (this loop
+      // runs on both the durable + Worker cloud surfaces). `block` refuses the tool —
+      // the agent sees the refusal and must take another path; `require-approval` parks
+      // the run on a human question (reusing the ask_human pause/resume path) the FIRST
+      // time it is reached, then proceeds once the human has answered (the run resumes).
+      const gate = evaluatePolicyGate(policyGates, name);
+      const candidatePath = typeof parsed.path === 'string' ? parsed.path : null;
+      const prospectiveFiles = candidatePath && /^(write_file|edit_file|delete_file)$/.test(name) && !writtenPaths.has(candidatePath)
+        ? writtenPaths.size + 1 : writtenPaths.size;
+      const containmentBlock = declaredLimits ? checkRunLimits(declaredLimits, {
+        files: prospectiveFiles, repositories: repoCtx ? 1 : 0, spendMillicents: 0,
+      }) : null;
+      const outboundInspection = isHumanOrExternalOutputTool(name)
+        ? await inspectOutboundContent(db, { tenantId, executionId, seam: 'tool_output', target: name, content: JSON.stringify(parsed) })
+        : { ok: true as const };
+      if (!outboundInspection.ok) {
+        return { result: { data: { ok: false, error: `Outbound content blocked: ${outboundInspection.reasons.join(', ')}. Remove credential material before contacting a human or external system.` }, isError: true } };
+      }
+      if (containmentBlock) {
+        await recordCloudToolEvent(db, { ...evt, toolName: 'containment.blocked', category: 'tool', toolCallId: call.id, detail: { tool: name, path: candidatePath, limits: declaredLimits }, result: containmentBlock });
+        return { result: { data: { ok: false, error: `Blocked by the run's declared containment policy: ${containmentBlock}.` }, isError: true } };
+      }
+      if (gate.action === 'block') {
+        await recordCloudToolEvent(db, {
+          ...evt,
+          toolName: 'policy.blocked', category: 'tool', toolCallId: call.id,
+          detail: { tool: name, gateId: gate.gateId, reason: gate.reason },
+          result: `Blocked ${name}: ${gate.reason}`,
+        });
+        return { result: { data: { ok: false, error: `Blocked by governance policy: ${gate.reason}. Do not retry this tool — accomplish the task another way, or finish and explain why it cannot proceed.` }, isError: true } };
+      }
+      if (gate.action === 'require-approval' && !policyAskedGates.has(policyGateCallKey(gate.gateId, name, parsed))) {
+        // First encounter OF THIS CALL — ask a human and park. The answer resumes the
+        // run; the call key is recorded (in resume state) so the re-reached identical
+        // call proceeds (below), while a DIFFERENT call through the same gate is asked
+        // on its own merits rather than riding the earlier approval.
+        const question = `Approve the agent's use of "${name}"? ${gate.reason}`;
+        const { approvalId } = await pauseExecutionForQuestion(env, db, {
+          tenantId, executionId, taskId: taskRow.id, projectId,
+          ...(cloudAgentRef ? { cloudAgentRef } : {}),
+          agentLabel,
+          question,
+          context: `Governance gate "${gate.gateId}" requires human approval before this tool may run with these arguments: ${JSON.stringify(parsed).slice(0, 500)}`,
+          // Same surface, same record: a governance park and an `ask_human` park are
+          // the same pause, so a gated run also lands in needs-attention and restores
+          // its lane on resume.
+          surface: 'durable',
+        });
+        policyAskedGates.add(policyGateCallKey(gate.gateId, name, parsed));
+        // A governance park IS an ask_human park: the same control signal parks the run.
+        return { result: {
+          data: { ok: false, error: `Paused for human approval of "${name}" (governance gate ${gate.gateId}).` },
+          control: { kind: 'ask_human', approvalId, question },
+        } };
+      }
+      // allow — or a require-approval gate already asked + answered.
+      return undefined;
+    },
+
+    onFinish: async (ctx, summary) => {
+      // Four finish gates, in order. Either yields a block message that forces the
+      // agent to call finish again once it has corrected the run; null = ship.
+      // Validation is AUTOMATIC here: `run_checks` remains useful for an early
+      // self-check, but forgetting to call it cannot bypass the quality policy.
+      const prefinishVerification = repoCtx && writtenPaths.size > 0
+        ? await verifyWrittenFiles({ ...repoCtx, ref: repoCtx.branch }, writtenPaths)
+        : null;
+      let finishBlock: string | null = null;
+      if (requiredSignoff && !reviewVerdictRecorded) {
+        finishBlock = missingReviewVerdictMessage(requiredSignoff);
+        await recordCloudToolEvent(db, {
+          ...evt,
+          toolName: 'finish.blocked', category: 'tool',
+          detail: { reason: 'review_verdict_missing', ...requiredSignoff },
+          result: finishBlock,
+        });
+      } else if (repoCtx && !noDeliverableBlocked && hasNoCodeDeliverable(writtenPaths)) {
+        // (0) Completeness self-review (ROADMAP #38): a code-bound run is finishing
+        // with NO code deliverable. Block ONCE and
+        // make the agent self-review the requirements — implement what's missing, or
+        // explicitly confirm no code change was required — before an empty finish is
+        // honored. A legitimate no-op run finishes on the retry.
+        noDeliverableBlocked = true;
+        finishBlock =
+          'Before finishing: you have not committed any code changes for this task — only the PRD (or nothing) is on the branch. Re-read the task requirements and verify EACH is actually implemented. If work remains, use search_code/read_file to find the right place and write_file to implement it, then finish. If — and only if — this task genuinely requires no code change, call finish again and state explicitly why no change was needed.';
+        await recordCloudToolEvent(db, {
+          ...evt,
+          toolName: 'finish.blocked', category: 'tool',
+          detail: { reason: 'no_deliverable' },
+          result: 'Blocked finish: no code deliverable — self-review required',
+        });
+      } else if (prefinishVerification && !prefinishVerification.ok) {
+        // (1) Mandatory changed-source/config policy. Unlike the optional tool call,
+        // this cannot be skipped by a model that rushes straight to `finish`.
+        finishBlock =
+          `Cannot finish — changed-file validation found ${prefinishVerification.errors.length} issue(s). `
+          + 'Repair every issue, then finish again. This is a shell-free source policy, not a claim that the full project type-check ran.\n'
+          + prefinishVerification.errors.map((e) =>
+            `- ${e.path}${e.line ? `:${e.line}` : ''}${e.ruleId ? ` [${e.ruleId}]` : ''}: ${e.message}`,
+          ).join('\n');
+        await recordCloudToolEvent(db, {
+          ...evt,
+          toolName: 'finish.blocked', category: 'tool',
+          detail: { reason: 'source_quality', errors: prefinishVerification.errors },
+          result: `Blocked finish: ${prefinishVerification.errors.length} source/config quality issue(s)`,
+        });
+      } else if (summary && !finishBlockedOnce && assertsUnrunVerification(summary)) {
+        // (2) Honesty: the summary claims a check passed, but nothing was (or
+        // could be) run. Block once and force an honest restatement.
+        finishBlockedOnce = true;
+        finishBlock =
+          'You stated that a build/type-check/lint/test passed or is resolved, but this executor cannot run any of those — CI on the pull request verifies them. Call finish again with a summary that does NOT claim a check passed (describe what you changed and that CI will verify), or call run_checks first.';
+      } else if (repoCtx && writtenPaths.size > 0 && placeholderBlocks < MAX_PLACEHOLDER_FINISH_BLOCKS) {
+        // (3) Anti-stub: refuse to ship placeholder/scaffold code. Read the
+        // committed files back and block if any still contain stub markers — the
+        // agent must implement them for real (using the existing infrastructure)
+        // or remove the dead file with delete_file.
+        const scan = await scanWrittenForPlaceholders({ ...repoCtx, ref: repoCtx.branch }, writtenPaths);
+        if (scan.flagged.length) {
+          placeholderBlocks += 1;
+          finishBlock =
+            `Cannot finish — ${scan.flagged.length} committed file(s) still contain placeholder/stub code instead of a real implementation. `
+            + 'Replace each stub with a working implementation that uses the existing infrastructure (search_code for it first), or if a file is dead code that should not ship in this PR, remove it with delete_file. Then call finish again.\n'
+            + scan.flagged.map((f) => `- ${f.path}: ${f.markers.join('; ')}`).join('\n');
+          await recordCloudToolEvent(db, {
+            ...evt,
+            toolName: 'finish.blocked', category: 'tool',
+            detail: { reason: 'placeholders', files: scan.flagged },
+            result: `Blocked finish: ${scan.flagged.map((f) => f.path).join(', ')}`,
+          });
+        }
+      }
+      if (!finishBlock && repoCtx && writtenPaths.size > 0) {
+        const claim = await recordCodeCompletionClaim(db, {
+          tenantId,
+          executionId,
+          statement: summary || ctx.output || `Completed changes to ${[...writtenPaths].join(', ')}`,
+        });
+        if (!claim.ok) {
+          finishBlock = `Cannot finish — no structural evidence record supports this completion claim (${claim.error}). Retry the successful write or verification, then finish again.`;
+        }
+      }
+      return finishBlock;
+    },
+
+    afterDispatch: async (call, result) => {
+      const name = call.name;
+      const parsed = call.args;
+      const succeeded = dataOk(result.data);
+      if (matchesRequiredReviewSignoff(requiredSignoff, name, parsed, succeeded)) {
+        reviewVerdictRecorded = true;
+      }
       await recordCloudToolEvent(db, {
-        tenantId, cloudAgentRef, executionId,
-        toolName: 'context.compacted', category: 'llm',
-        detail: { step, beforeTokens: compaction.beforeTokens, afterTokens: compaction.afterTokens, summarized: compaction.summarized, droppedMessages: compaction.droppedMessages },
-        result: `compressed ~${compaction.beforeTokens} → ~${compaction.afterTokens} tokens (${compaction.summarized ? 'builder-memory summary' : 'elided'})`,
+        ...evt,
+        toolName: name, category: 'tool', toolCallId: call.id,
+        detail: name === 'write_file' ? { path: parsed.path, summary: parsed.summary } : parsed,
+        result: JSON.stringify(result.data).slice(0, 300),
+        durationMs: Date.now() - tStart,
       });
-    }
+      if (succeeded && (name === 'run_checks' || name === 'run_command' || name === 'builtin_reviews_record')) {
+        const kind = name === 'builtin_reviews_record' ? 'review_verdict' : 'validation';
+        await recordTypedExecutionClaim(db, { tenantId, executionId, kind, statement: `${name} completed successfully` });
+      }
+      return undefined;
+    },
+  };
 
-    // Per-step dynamic directive seam: prepend an ephemeral system directive
-    // (e.g. the V3 limbic affect block) to THIS request only — `messages` (the
-    // persisted conversation the loop owns) is left untouched, so the directive
-    // can change every tick without mutating saved state. None → unchanged.
-    const requestMessages = opts?.dynamicSystem
-      ? [{ role: 'system', content: opts.dynamicSystem }, ...messages]
-      : messages;
+  const ports: LoopPorts<Row> = {
+    complete: async (ctx) => {
+      // Per-step dynamic directive seam: prepend an ephemeral system directive
+      // (e.g. the V3 limbic affect block) to THIS request only — `messages` (the
+      // persisted conversation the loop owns) is left untouched, so the directive
+      // can change every tick without mutating saved state. None → unchanged.
+      const requestMessages = opts?.dynamicSystem
+        ? [{ role: 'system', content: opts.dynamicSystem }, ...messages]
+        : messages;
 
-    const tGen0 = Date.now();
-    let result!: Awaited<ReturnType<typeof proxy.complete>>;
-    // Per-turn model cascade: a strict pin (or locked model) that the gateway
-    // rate-limits (429) would otherwise terminate the whole run. Instead, drop the
-    // strict pin ONCE and let the proxy walk its full chain (LlmProxyService already
-    // cascades); then lock onto whatever it resolves so later turns / DO ticks stay
-    // there. Benefits every surface (durable / Worker / container).
-    for (let attempt = 0; ; attempt++) {
-      try {
+      const tGen0 = Date.now();
+      let result!: Awaited<ReturnType<typeof proxy.complete>>;
+      // Per-turn model cascade: a strict pin (or locked model) that the gateway
+      // rate-limits (429) would otherwise terminate the whole run. Instead, drop the
+      // strict pin ONCE and let the proxy walk its full chain (LlmProxyService already
+      // cascades); then lock onto whatever it resolves so later turns / DO ticks stay
+      // there. Benefits every surface (durable / Worker / container). A fetch the
+      // cancel watcher aborted mid-call throws here; the kernel reports it as
+      // `cancelled` because the run's signal is the watcher's.
+      for (let attempt = 0; ; attempt++) {
         result = await proxy.complete(
           {
             messages: requestMessages as unknown as ChatMessage[],
@@ -2582,304 +2812,95 @@ export async function runCloudToolLoop(
           undefined,
           abortController.signal,
         );
-      } catch (e) {
-        // The watcher aborted the fetch (cancel mid-call) → stop cleanly.
-        if (abortController.signal.aborted) { cancelled = true; break; }
-        throw e;
-      }
-      // Retry a pinned/locked model that the gateway rate-limited (429), that the
-      // request overflowed (413 — context window too small), or that the gateway
-      // reported unavailable (503 — cooled / provider outage), and only once. All
-      // three need it because a pin gets NO in-proxy cascade: dropping the pin lets
-      // the proxy walk its chain — to a bigger-window model, or (for a BYO tenant,
-      // where the chain stays inside their own accounts) to another connected
-      // provider — instead of hard-failing the run on ONE unavailable model.
-      const retryStatus = result!.response.status;
-      // A project-Evermind pin additionally cascades on 400. That is the status the
-      // evermind vendor uses to DECLINE a turn it is not competent for — it ranked
-      // its tool choice no better than the alternatives, or its prose failed the
-      // coherence bar. Because the pin is strict (no in-proxy cascade), the run would
-      // otherwise die on the tenant's own under-trained head; dropping the pin here
-      // reproduces the graceful outcome the old blanket tool-capability gate gave by
-      // never pinning it at all. Scoped to `evermind/` so a genuine malformed-request
-      // 400 on a frontier model still fails fast instead of burning a second attempt.
-      const evermindDeclined = retryStatus === 400 && activeModel.startsWith('evermind/');
-      const retryable = retryStatus === 429 || retryStatus === 413 || retryStatus === 503 || evermindDeclined;
-      if (!retryable || attempt >= 1 || (!strictPin && !activeModel)) break;
-      await recordCloudToolEvent(db, {
-        tenantId, cloudAgentRef, executionId,
-        toolName: 'model.cascade', category: 'llm',
-        detail: { step, from: activeModel || null, reason: String(retryStatus) },
-        result: retryStatus === 413
-          ? 'pinned model context window too small — dropping pin, walking the cascade to a bigger-window model'
-          : retryStatus === 503
-            ? 'pinned model unavailable (cooldown / provider outage) — dropping pin, walking the cascade'
-            : evermindDeclined
-              ? 'project Evermind declined this turn (low tool-choice confidence or incoherent output) — dropping pin, walking the cascade'
-              : 'pinned model rate-limited — dropping pin, walking the cascade',
-      });
-      // Unlock for this turn AND the rest of the run: don't re-pin after a cascade.
-      strictPin = false;
-      activeModel = '';
-    }
-    if (cancelled) break;
-    // Lock the non-strict run onto the model the gateway actually used on the
-    // first turn, so every later turn (and DO tick) stays on it. Strict pins
-    // already resolve to `activeModel`, so this is a no-op for them.
-    if (!strictPin && result.resolvedModel) activeModel = result.resolvedModel;
-    // Shared post-`complete` processing (metering + `llm.complete`/degraded/agent.message
-    // telemetry) — identical to the container `llm` op. `notify: false`: the loop streams
-    // its own final turn. The degraded comparison is the seed/pin (`pick.model`), not the
-    // just-locked `activeModel`.
-    const turn = await recordCloudLlmTurn(result, {
-      env, db, tenantId, cloudAgentRef, executionId, taskId: taskRow.id, projectId,
-      requestedModel: pick.model, fallbackModel: activeModel,
-      effectivePlan: routing.effectivePlan, premiumOverride: routing.premiumOverride,
-    }, { tGen0, step, notify: false });
-    if (!turn.ok) return { ok: false, output: turn.error, cancelled, finished: true };
-    const { content, toolCalls } = turn;
-    if (content) finalOutput = content;
-
-    if (toolCalls.length === 0) {
-      if (requiredSignoff && !reviewVerdictRecorded) {
-        const error = missingReviewVerdictMessage(requiredSignoff);
-        messages.push({ role: 'assistant', content });
-        messages.push({ role: 'user', content: error });
+        // Retry a pinned/locked model that the gateway rate-limited (429), that the
+        // request overflowed (413 — context window too small), or that the gateway
+        // reported unavailable (503 — cooled / provider outage), and only once. All
+        // three need it because a pin gets NO in-proxy cascade: dropping the pin lets
+        // the proxy walk its chain — to a bigger-window model, or (for a BYO tenant,
+        // where the chain stays inside their own accounts) to another connected
+        // provider — instead of hard-failing the run on ONE unavailable model.
+        const retryStatus = result!.response.status;
+        // A project-Evermind pin additionally cascades on 400. That is the status the
+        // evermind vendor uses to DECLINE a turn it is not competent for — it ranked
+        // its tool choice no better than the alternatives, or its prose failed the
+        // coherence bar. Because the pin is strict (no in-proxy cascade), the run would
+        // otherwise die on the tenant's own under-trained head; dropping the pin here
+        // reproduces the graceful outcome the old blanket tool-capability gate gave by
+        // never pinning it at all. Scoped to `evermind/` so a genuine malformed-request
+        // 400 on a frontier model still fails fast instead of burning a second attempt.
+        const evermindDeclined = retryStatus === 400 && activeModel.startsWith('evermind/');
+        const retryable = retryStatus === 429 || retryStatus === 413 || retryStatus === 503 || evermindDeclined;
+        if (!retryable || attempt >= 1 || (!strictPin && !activeModel)) break;
         await recordCloudToolEvent(db, {
-          tenantId, cloudAgentRef, executionId,
-          toolName: 'finish.blocked', category: 'tool',
-          detail: { reason: 'review_verdict_missing', ...requiredSignoff },
-          result: error,
+          ...evt,
+          toolName: 'model.cascade', category: 'llm',
+          detail: { step: ctx.step, from: activeModel || null, reason: String(retryStatus) },
+          result: retryStatus === 413
+            ? 'pinned model context window too small — dropping pin, walking the cascade to a bigger-window model'
+            : retryStatus === 503
+              ? 'pinned model unavailable (cooldown / provider outage) — dropping pin, walking the cascade'
+              : evermindDeclined
+                ? 'project Evermind declined this turn (low tool-choice confidence or incoherent output) — dropping pin, walking the cascade'
+                : 'pinned model rate-limited — dropping pin, walking the cascade',
         });
-        continue;
+        // Unlock for this turn AND the rest of the run: don't re-pin after a cascade.
+        strictPin = false;
+        activeModel = '';
       }
-      finished = true;
-      break;
-    }
+      // Lock the non-strict run onto the model the gateway actually used on the
+      // first turn, so every later turn (and DO tick) stays on it. Strict pins
+      // already resolve to `activeModel`, so this is a no-op for them.
+      if (!strictPin && result.resolvedModel) activeModel = result.resolvedModel;
+      // Shared post-`complete` processing (metering + `llm.complete`/degraded/agent.message
+      // telemetry) — identical to the container `llm` op. `notify: false`: the loop streams
+      // its own final turn. The degraded comparison is the seed/pin (`pick.model`), not the
+      // just-locked `activeModel`.
+      const turn = await recordCloudLlmTurn(result, {
+        env, db, tenantId, cloudAgentRef, executionId, taskId: taskRow.id, projectId,
+        requestedModel: pick.model, fallbackModel: activeModel,
+        effectivePlan: routing.effectivePlan, premiumOverride: routing.premiumOverride,
+      }, { tGen0, step: ctx.step, notify: false });
+      if (!turn.ok) return { failed: turn.error };
+      return { content: turn.content, toolCalls: readOpenAiToolCalls({ tool_calls: turn.toolCalls }) };
+    },
 
-    // Echo the assistant turn (with its tool_calls) so tool results attach to it.
-    messages.push({ role: 'assistant', content, tool_calls: toolCalls });
-
-    for (const tc of toolCalls) {
-      const name = tc.function?.name ?? 'unknown';
-      let parsed: Record<string, unknown> = {};
-      try {
-        parsed = tc.function?.arguments ? (JSON.parse(tc.function.arguments) as Record<string, unknown>) : {};
-      } catch (error) {
-        reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "runCloudToolLoop", level: 'warning', context: { logMessage: '[cloud-run] malformed tool arguments; invoking with empty object', details: {
-          tenantId,
-          executionId,
-          toolCallId: tc.id,
-          toolName: name,
-          error,
-        } } });
-      }
-      const tStart = Date.now();
-
-      // Governance gate (compile-primitive policy modality): enforce BEFORE dispatch,
-      // so a gate authored on the spec applies identically on every surface (this loop
-      // runs on both the durable + Worker cloud surfaces). `block` refuses the tool —
-      // the agent sees the refusal and must take another path; `require-approval` parks
-      // the run on a human question (reusing the ask_human pause/resume path) the FIRST
-      // time it is reached, then proceeds once the human has answered (the run resumes).
-      const gate = evaluatePolicyGate(policyGates, name);
-      let toolResult: Record<string, unknown>;
-      let control: ToolControl | undefined;
-      const candidatePath = typeof parsed.path === 'string' ? parsed.path : null;
-      const prospectiveFiles = candidatePath && /^(write_file|edit_file|delete_file)$/.test(name) && !writtenPaths.has(candidatePath)
-        ? writtenPaths.size + 1 : writtenPaths.size;
-      const containmentBlock = declaredLimits ? checkRunLimits(declaredLimits, {
-        files: prospectiveFiles, repositories: repoCtx ? 1 : 0, spendMillicents: 0,
-      }) : null;
-      const outboundInspection = isHumanOrExternalOutputTool(name)
-        ? await inspectOutboundContent(db, { tenantId, executionId, seam: 'tool_output', target: name, content: JSON.stringify(parsed) })
-        : { ok: true as const };
-      if (!outboundInspection.ok) {
-        toolResult = { ok: false, error: `Outbound content blocked: ${outboundInspection.reasons.join(', ')}. Remove credential material before contacting a human or external system.` };
-      } else if (containmentBlock) {
-        toolResult = { ok: false, error: `Blocked by the run's declared containment policy: ${containmentBlock}.` };
-        await recordCloudToolEvent(db, { tenantId, cloudAgentRef, executionId, toolName: 'containment.blocked', category: 'tool', toolCallId: tc.id, detail: { tool: name, path: candidatePath, limits: declaredLimits }, result: containmentBlock });
-      } else if (gate.action === 'block') {
-        toolResult = { ok: false, error: `Blocked by governance policy: ${gate.reason}. Do not retry this tool — accomplish the task another way, or finish and explain why it cannot proceed.` };
-        await recordCloudToolEvent(db, {
-          tenantId, cloudAgentRef, executionId,
-          toolName: 'policy.blocked', category: 'tool', toolCallId: tc.id,
-          detail: { tool: name, gateId: gate.gateId, reason: gate.reason },
-          result: `Blocked ${name}: ${gate.reason}`,
-        });
-      } else if (gate.action === 'require-approval' && !policyAskedGates.has(policyGateCallKey(gate.gateId, name, parsed))) {
-        // First encounter OF THIS CALL — ask a human and park. The answer resumes the
-        // run; the call key is recorded (in resume state) so the re-reached identical
-        // call proceeds (below), while a DIFFERENT call through the same gate is asked
-        // on its own merits rather than riding the earlier approval.
-        const question = `Approve the agent's use of "${name}"? ${gate.reason}`;
-        const { approvalId } = await pauseExecutionForQuestion(env, db, {
-          tenantId, executionId, taskId: taskRow.id, projectId,
-          ...(cloudAgentRef ? { cloudAgentRef } : {}),
-          agentLabel,
-          question,
-          context: `Governance gate "${gate.gateId}" requires human approval before this tool may run with these arguments: ${JSON.stringify(parsed).slice(0, 500)}`,
-          // Same surface, same record: a governance park and an `ask_human` park are
-          // the same pause, so a gated run also lands in needs-attention and restores
-          // its lane on resume.
-          surface: 'durable',
-        });
-        policyAskedGates.add(policyGateCallKey(gate.gateId, name, parsed));
-        awaitingInput = { approvalId, question };
-        toolResult = { ok: false, error: `Paused for human approval of "${name}" (governance gate ${gate.gateId}).` };
-      } else {
-        // allow — or a require-approval gate already asked + answered.
-        const platformTool = resolveCloudAgentPlatformTool(name, opts?.originatingChatId);
-        if (platformTool) {
-          // Curated platform tool (create task / update OKR / read remaining work) —
-          // run in-process, tenant-scoped, defaulting the project to THIS run's so a
-          // follow-up task lands on the right project unless the model names another.
-          // MANAGER role so the OKR/task writes the user asked for are permitted; the
-          // subset is admin/destructive-free so this can't reach keys/security/etc.
-          try {
-            const data = await callBuiltinTool(db, {
-              tenantId, tool: platformTool,
-              arguments: { projectId, ...parsed, ...(opts?.originatingChatId != null ? { chatId: opts.originatingChatId } : {}) },
-              env, userId: cloudAgentRef ?? null, agentRef: cloudAgentRef ?? null,
-              role: TenantRole.MANAGER,
-            });
-            toolResult = data && typeof data === 'object' ? (data as Record<string, unknown>) : { ok: true, result: data };
-          } catch (e) {
-            toolResult = { ok: false, error: e instanceof Error ? e.message : String(e) };
-          }
-        } else {
-          // Repo/file/static-check/human tools. Dispatch through the ONE capability-gated
-          // registry — each reaches the repo / static-check / human ONLY via the injected
-          // provider (so the same definition runs on-prem against a disk/shell provider).
-          // `finish` and `ask_human` come back as CONTROL signals the loop interprets below.
-          const dispatched = await cloudToolRegistry.dispatch(name, parsed, toolCtx);
-          toolResult = dispatched.data;
-          control = dispatched.control;
+    dispatch: async (call) => {
+      const platformTool = resolveCloudAgentPlatformTool(call.name, opts?.originatingChatId);
+      if (platformTool) {
+        // Curated platform tool (create task / update OKR / read remaining work) —
+        // run in-process, tenant-scoped, defaulting the project to THIS run's so a
+        // follow-up task lands on the right project unless the model names another.
+        // MANAGER role so the OKR/task writes the user asked for are permitted; the
+        // subset is admin/destructive-free so this can't reach keys/security/etc.
+        try {
+          const data = await callBuiltinTool(db, {
+            tenantId, tool: platformTool,
+            arguments: { projectId, ...call.args, ...(opts?.originatingChatId != null ? { chatId: opts.originatingChatId } : {}) },
+            env, userId: cloudAgentRef ?? null, agentRef: cloudAgentRef ?? null,
+            role: TenantRole.MANAGER,
+          });
+          return { data: data && typeof data === 'object' ? (data as Record<string, unknown>) : { ok: true, result: data } };
+        } catch (e) {
+          return { data: { ok: false, error: e instanceof Error ? e.message : String(e) }, isError: true };
         }
       }
+      // Repo/file/static-check/human tools. Dispatch through the ONE capability-gated
+      // registry — each reaches the repo / static-check / human ONLY via the injected
+      // provider (so the same definition runs on-prem against a disk/shell provider).
+      // `finish` and `ask_human` come back as CONTROL signals the kernel interprets
+      // (through the `onFinish` gates above).
+      const dispatched = await cloudToolRegistry.dispatch(call.name, call.args, toolCtx);
+      return { data: dispatched.data, ...(dispatched.control ? { control: dispatched.control } : {}) };
+    },
+  };
 
-      if (matchesRequiredReviewSignoff(requiredSignoff, name, parsed, toolResult.ok !== false)) {
-        reviewVerdictRecorded = true;
-      }
-
-      if (control?.kind === 'finish') {
-        const summary = control.summary;
-        // Four finish gates, in order. Either yields a block message that forces the
-        // agent to call finish again once it has corrected the run; null = ship.
-        // Validation is AUTOMATIC here: `run_checks` remains useful for an early
-        // self-check, but forgetting to call it cannot bypass the quality policy.
-        const prefinishVerification = repoCtx && writtenPaths.size > 0
-          ? await verifyWrittenFiles({ ...repoCtx, ref: repoCtx.branch }, writtenPaths)
-          : null;
-        let finishBlock: string | null = null;
-        if (requiredSignoff && !reviewVerdictRecorded) {
-          finishBlock = missingReviewVerdictMessage(requiredSignoff);
-          await recordCloudToolEvent(db, {
-            tenantId, cloudAgentRef, executionId,
-            toolName: 'finish.blocked', category: 'tool',
-            detail: { reason: 'review_verdict_missing', ...requiredSignoff },
-            result: finishBlock,
-          });
-        } else if (repoCtx && !noDeliverableBlocked && hasNoCodeDeliverable(writtenPaths)) {
-          // (0) Completeness self-review (ROADMAP #38): a code-bound run is finishing
-          // with NO code deliverable. Block ONCE and
-          // make the agent self-review the requirements — implement what's missing, or
-          // explicitly confirm no code change was required — before an empty finish is
-          // honored. A legitimate no-op run finishes on the retry.
-          noDeliverableBlocked = true;
-          finishBlock =
-            'Before finishing: you have not committed any code changes for this task — only the PRD (or nothing) is on the branch. Re-read the task requirements and verify EACH is actually implemented. If work remains, use search_code/read_file to find the right place and write_file to implement it, then finish. If — and only if — this task genuinely requires no code change, call finish again and state explicitly why no change was needed.';
-          await recordCloudToolEvent(db, {
-            tenantId, cloudAgentRef, executionId,
-            toolName: 'finish.blocked', category: 'tool',
-            detail: { reason: 'no_deliverable' },
-            result: 'Blocked finish: no code deliverable — self-review required',
-          });
-        } else if (prefinishVerification && !prefinishVerification.ok) {
-          // (1) Mandatory changed-source/config policy. Unlike the optional tool call,
-          // this cannot be skipped by a model that rushes straight to `finish`.
-          finishBlock =
-            `Cannot finish — changed-file validation found ${prefinishVerification.errors.length} issue(s). `
-            + 'Repair every issue, then finish again. This is a shell-free source policy, not a claim that the full project type-check ran.\n'
-            + prefinishVerification.errors.map((e) =>
-              `- ${e.path}${e.line ? `:${e.line}` : ''}${e.ruleId ? ` [${e.ruleId}]` : ''}: ${e.message}`,
-            ).join('\n');
-          await recordCloudToolEvent(db, {
-            tenantId, cloudAgentRef, executionId,
-            toolName: 'finish.blocked', category: 'tool',
-            detail: { reason: 'source_quality', errors: prefinishVerification.errors },
-            result: `Blocked finish: ${prefinishVerification.errors.length} source/config quality issue(s)`,
-          });
-        } else if (summary && !finishBlockedOnce && assertsUnrunVerification(summary)) {
-          // (2) Honesty: the summary claims a check passed, but nothing was (or
-          // could be) run. Block once and force an honest restatement.
-          finishBlockedOnce = true;
-          finishBlock =
-            'You stated that a build/type-check/lint/test passed or is resolved, but this executor cannot run any of those — CI on the pull request verifies them. Call finish again with a summary that does NOT claim a check passed (describe what you changed and that CI will verify), or call run_checks first.';
-        } else if (repoCtx && writtenPaths.size > 0 && placeholderBlocks < MAX_PLACEHOLDER_FINISH_BLOCKS) {
-          // (3) Anti-stub: refuse to ship placeholder/scaffold code. Read the
-          // committed files back and block if any still contain stub markers — the
-          // agent must implement them for real (using the existing infrastructure)
-          // or remove the dead file with delete_file.
-          const scan = await scanWrittenForPlaceholders({ ...repoCtx, ref: repoCtx.branch }, writtenPaths);
-          if (scan.flagged.length) {
-            placeholderBlocks += 1;
-            finishBlock =
-              `Cannot finish — ${scan.flagged.length} committed file(s) still contain placeholder/stub code instead of a real implementation. `
-              + 'Replace each stub with a working implementation that uses the existing infrastructure (search_code for it first), or if a file is dead code that should not ship in this PR, remove it with delete_file. Then call finish again.\n'
-              + scan.flagged.map((f) => `- ${f.path}: ${f.markers.join('; ')}`).join('\n');
-            await recordCloudToolEvent(db, {
-              tenantId, cloudAgentRef, executionId,
-              toolName: 'finish.blocked', category: 'tool',
-              detail: { reason: 'placeholders', files: scan.flagged },
-              result: `Blocked finish: ${scan.flagged.map((f) => f.path).join(', ')}`,
-            });
-          }
-        }
-        if (!finishBlock && repoCtx && writtenPaths.size > 0) {
-          const claim = await recordCodeCompletionClaim(db, {
-            tenantId,
-            executionId,
-            statement: summary || finalOutput || `Completed changes to ${[...writtenPaths].join(', ')}`,
-          });
-          if (!claim.ok) {
-            finishBlock = `Cannot finish — no structural evidence record supports this completion claim (${claim.error}). Retry the successful write or verification, then finish again.`;
-          }
-        }
-        if (finishBlock) {
-          toolResult = { ok: false, error: finishBlock };
-        } else {
-          if (summary) finalOutput = summary;
-          finished = true;
-          toolResult = { ok: true };
-        }
-      } else if (control?.kind === 'ask_human') {
-        // The tool already created the human question via the provider; park the run.
-        // Echo the question turn so the answer (delivered as a user steer on resume)
-        // attaches to a complete conversation, then close out this turn's tool call.
-        awaitingInput = { approvalId: control.approvalId ?? '', question: control.question };
-      }
-
-      await recordCloudToolEvent(db, {
-        tenantId, cloudAgentRef, executionId,
-        toolName: name, category: 'tool', toolCallId: tc.id,
-        detail: name === 'write_file' ? { path: parsed.path, summary: parsed.summary } : parsed,
-        result: JSON.stringify(toolResult).slice(0, 300),
-        durationMs: Date.now() - tStart,
-      });
-      if (toolResult.ok !== false && (name === 'run_checks' || name === 'run_command' || name === 'builtin_reviews_record')) {
-        const kind = name === 'builtin_reviews_record' ? 'review_verdict' : 'validation';
-        await recordTypedExecutionClaim(db, { tenantId, executionId, kind, statement: `${name} completed successfully` });
-      }
-
-      messages.push({ role: 'tool', tool_call_id: tc.id ?? '', content: JSON.stringify(toolResult) });
-    }
-
-    // ask_human was called this turn — stop the loop and let the caller park the
-    // run in `paused`. The conversation (incl. the tool result above) is captured
-    // in `state` so the resume tick continues right where it left off.
-    if (awaitingInput) break;
-  }
+  let loop: LoopResult;
+  try {
+    loop = await runAgentLoop<Row>({
+      messages, codec, ports, hooks,
+      signal: abortController.signal,
+      budget: { startStep, maxSteps: maxThisCall, stepCap: MAX_CLOUD_TOOL_STEPS },
+    });
   } catch (error) {
     // A thrown tool/LLM path is terminal for this invocation. Hand leases back now;
     // otherwise peers remain blocked until the 15-minute TTL even though this run can
@@ -2897,6 +2918,17 @@ export async function runCloudToolLoop(
     cancelChannel.stop();
     abortController.abort();
   }
+  finalOutput = loop.output;
+  finished = loop.finished;
+  cancelled = loop.cancelled;
+  step = loop.step;
+  awaitingInput = loop.awaitingInput
+    ? { approvalId: loop.awaitingInput.approvalId ?? '', question: loop.awaitingInput.question }
+    : null;
+  // A hard stop inside the loop (containment limit, a recorded gateway failure) is
+  // terminal for the run WITHOUT finalize or lease release — exactly the two early
+  // returns the loop used to make itself.
+  if (!loop.ok) return { ok: false, output: finalOutput, cancelled, finished: true };
 
   // The ONE snapshot of everything the next durable tick must resume from. Both
   // non-terminal exits (paused-on-a-question, per-tick budget spent) hand back the
@@ -3020,11 +3052,31 @@ export interface CloudEngineContext {
   /** The agent's OWN psychometric JSON (ide_agents.psychometric). Folded into the
    *  limbic setpoints alongside the assigned personas. */
   agentPsychometric?: string | null;
+  /** Exact accountability slot a reviewer run must sign before it may finish. */
+  requiredSignoff?: RequiredReviewSignoff;
+  /** How this surface drives the engine. Absent ⇒ `worker` (whole loop, one call). */
+  surface?: CloudEngineSurface;
 }
 
 /**
+ * The surface a cloud run executes on — the ONE place a caller says how many steps
+ * an invocation may take and what happens at the end of it, so no call site needs
+ * to know the loop's option names.
+ *  - `worker`: the whole loop in one call, finalized (PR/merge) at the end.
+ *  - `durable`: `maxSteps` per alarm tick; the resume state is handed back instead of
+ *    finalizing, and the tick runs under the cursor-held affective state (the DO
+ *    evolves it between ticks). No state ⇒ a pre-affect cursor: no directive.
+ *  - `rehearsal`: the real loop with every effect shadowed by `decorateProvider`,
+ *    nothing finalized, reads optionally pinned to `frozenReadRef`.
+ */
+export type CloudEngineSurface =
+  | { kind: 'worker' }
+  | { kind: 'durable'; maxSteps: number; limbicState?: LimbicState }
+  | { kind: 'rehearsal'; maxSteps: number; decorateProvider: (provider: CapabilityProvider) => CapabilityProvider; frozenReadRef?: string };
+
+/**
  * The cloud agent engine behind the shared {@link AgentEngine} seam — THE current
- * engine (V3). It drives {@link runCloudToolLoop} (the Claude-Agent-SDK tool loop)
+ * engine (V3). It drives {@link runCloudToolLoop} (the shared `@builderforce/agent-loop` kernel + the cloud ports/hooks)
  * with the limbic affective layer ALWAYS composed on top: it derives a task-appropriate
  * affective state via the shared, Worker-safe limbic compiler (`@builderforce/agent-tools`)
  * and injects the affect block through the loop's per-step {@link CloudLoopOpts.dynamicSystem}
@@ -3039,20 +3091,45 @@ export class CloudLimbicEngine implements AgentEngine {
   constructor(private readonly rc: CloudEngineContext) {}
 
   async run(input: AgentRunInput): Promise<AgentRunResult> {
-    // Personality = setpoints (from the assigned personas' psychometric profiles);
-    // dynamics = the task-appraised affect around those setpoints.
-    const setpoints = await loadPersonaSetpoints(this.rc.env, this.rc.db, this.rc.artifacts?.personas ?? [], this.rc.agentPsychometric);
-    const state = initialCloudLimbicState(this.rc.taskRow, setpoints);
-    await recordLimbicState(this.rc.db, { tenantId: this.rc.tenantId, cloudAgentRef: this.rc.cloudAgentRef, executionId: this.rc.executionId }, state);
-    const directive = buildLimbicBlock(state);
-    // Drive the SAME unmodified V2 loop, injecting affect via the per-step seam.
+    const rc = this.rc;
+    const surface: CloudEngineSurface = rc.surface ?? { kind: 'worker' };
+    // Affect: a durable tick runs under the state its cursor carries (evolved tick to
+    // tick by the DO); every other surface seeds it here from the personas' setpoints
+    // appraised against the task. Injected through the loop's per-step seam — never
+    // into the persisted prompt/conversation.
+    const limbicState = surface.kind === 'durable' ? surface.limbicState : await this.seedLimbicState();
+    const directive = limbicState ? buildLimbicBlock(limbicState) : '';
     const r = await runCloudToolLoop(
-      this.rc.env, this.rc.db, this.rc.executionId, this.rc.tenantId, this.rc.taskRow,
-      this.rc.cloudAgentRef, this.rc.agentLabel, input.model, input.systemPrompt, input.userContent,
-      this.rc.isCancelled, this.rc.projectId,
-      { routingBias: this.rc.routingBias, ...(this.rc.originatingChatId != null ? { originatingChatId: this.rc.originatingChatId } : {}), ...(directive ? { dynamicSystem: directive } : {}), ...(input.policy?.gates ? { policyGates: [...input.policy.gates] } : {}), ...(this.rc.execParams ? { execParams: this.rc.execParams } : {}), ...(input.genParams ? { genParams: { ...input.genParams } } : {}) },
+      rc.env, rc.db, rc.executionId, rc.tenantId, rc.taskRow,
+      rc.cloudAgentRef, rc.agentLabel, input.model, input.systemPrompt, input.userContent,
+      rc.isCancelled, rc.projectId,
+      {
+        routingBias: rc.routingBias,
+        ...(rc.originatingChatId != null ? { originatingChatId: rc.originatingChatId } : {}),
+        ...(rc.requiredSignoff ? { requiredSignoff: rc.requiredSignoff } : {}),
+        ...(directive ? { dynamicSystem: directive } : {}),
+        ...(input.policy?.gates ? { policyGates: [...input.policy.gates] } : {}),
+        ...(rc.execParams ? { execParams: rc.execParams } : {}),
+        ...(input.genParams ? { genParams: { ...input.genParams } } : {}),
+        ...(input.resume ? { resume: input.resume as CloudLoopState } : {}),
+        ...(surface.kind === 'durable' ? { maxSteps: surface.maxSteps, deferFinalize: true } : {}),
+        ...(surface.kind === 'rehearsal'
+          ? { maxSteps: surface.maxSteps, suppressFinalize: true, decorateProvider: surface.decorateProvider, ...(surface.frozenReadRef ? { frozenReadRef: surface.frozenReadRef } : {}) }
+          : {}),
+      },
     );
     return { ok: r.ok, output: r.output, cancelled: r.cancelled, finished: r.finished, awaitingInput: r.awaitingInput, state: r.state };
+  }
+
+  /** Personality = setpoints (from the assigned personas' psychometric profiles);
+   *  dynamics = the task-appraised affect around those setpoints. Recorded on the
+   *  Observability timeline once per seed. */
+  private async seedLimbicState(): Promise<LimbicState> {
+    const rc = this.rc;
+    const setpoints = await loadPersonaSetpoints(rc.env, rc.db, rc.artifacts?.personas ?? [], rc.agentPsychometric);
+    const state = initialCloudLimbicState(rc.taskRow, setpoints);
+    await recordLimbicState(rc.db, { tenantId: rc.tenantId, cloudAgentRef: rc.cloudAgentRef, executionId: rc.executionId }, state);
+    return state;
   }
 }
 

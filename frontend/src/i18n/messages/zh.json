@@ -15011,6 +15011,8 @@
     "modelTurnsPromptTokens": "提示 {count}",
     "modelTurnsCompletionTokens": "补全 {count}",
     "modelTurnsTotalDuration": "模型耗时 {ms} 毫秒",
+    "spentOnRun": "本次运行约花费 {amount}",
+    "runSpendTooltip": "本次运行的花费：{requests} 次 LLM 调用共 {tokens} 个 token。计入上方工单总额。",
     "modelTurnUnknownModel": "未知模型",
     "modelTurnTokens": "输入 {prompt} / 输出 {completion}",
     "modelTurnDuration": "{ms} 毫秒",
@@ -28217,6 +28219,69 @@
       "deleteFailed": "删除失败。",
       "saveFailed": "保存失败（更改需要管理者角色）。",
       "required": "{field}为必填项"
+    }
+  },
+  "mcpServers": {
+    "sectionTitle": "MCP 服务器",
+    "sectionIntro": "注册外部 Model Context Protocol 服务器，让本工作区的智能体可以调用它的工具。",
+    "loading": "正在加载已注册的服务器…",
+    "empty": "尚未注册任何 MCP 服务器。",
+    "requiresRole": "需要 {role} 角色。请让工作区所有者注册 MCP 服务器。",
+    "confirmDisconnect": "断开 {name} 的连接？注册会保留，但授权会被撤销。",
+    "confirmRemove": "移除 {name}？此处的智能体将立即失去它的工具。",
+    "status": {
+      "ready": "就绪",
+      "needsConsent": "需要授权",
+      "disabled": "已停用"
+    },
+    "auth": {
+      "none": "无凭据",
+      "secret": "已保存密钥",
+      "oauth": "OAuth"
+    },
+    "tools": {
+      "all": "允许所有工具",
+      "none": "尚未允许任何工具",
+      "some": "已允许 {count} 个工具"
+    },
+    "actions": {
+      "register": "注册服务器",
+      "edit": "编辑",
+      "enable": "启用",
+      "disable": "停用",
+      "connect": "连接",
+      "disconnect": "断开连接",
+      "remove": "移除"
+    },
+    "panel": {
+      "registerTitle": "注册 MCP 服务器",
+      "editTitle": "编辑 MCP 服务器"
+    },
+    "form": {
+      "intro": "服务器由 BuilderForce 调用，而不是浏览器，因此凭据始终以加密方式存储。",
+      "nameLabel": "名称",
+      "namePlaceholder": "例如：设计系统工具",
+      "urlLabel": "服务器 URL",
+      "urlHint": "必须是公开的 HTTPS 地址。私有地址和回环地址会被拒绝。",
+      "urlMustBeHttps": "请输入 https:// 地址。",
+      "secretLabel": "密钥（可选）",
+      "secretPlaceholder": "如果服务器需要，请填写 Bearer 令牌",
+      "secretKeepPlaceholder": "留空则保留已保存的密钥",
+      "secretHint": "加密保存且不再显示。若服务器使用 OAuth 或无需凭据，请留空。",
+      "clearSecret": "清除已保存的密钥",
+      "toolsLabel": "允许的工具",
+      "toolsPlaceholder": "search_docs, create_ticket",
+      "toolsHint": "以逗号分隔。留空表示允许服务器提供的所有工具。",
+      "register": "注册",
+      "save": "保存更改",
+      "cancel": "取消"
+    },
+    "callback": {
+      "connected": "服务器已连接。本工作区的智能体现在可以使用它的工具。",
+      "declined": "授权被拒绝，因此未建立连接。",
+      "error": "连接未能完成。请重试。",
+      "invalid_state": "该连接链接已过期。请重新发起连接。",
+      "no_pending_consent": "没有待完成的连接。请重新发起连接。"
     }
   }
 }

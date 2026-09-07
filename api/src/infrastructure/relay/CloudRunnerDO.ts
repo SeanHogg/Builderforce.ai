@@ -17,9 +17,9 @@ import { eq } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../database/connection';
 import { executions } from '../database/schema';
 import { scopedToTenant } from '../database/tenantScope';
-import { prepareCloudRun, runCloudToolLoop, markCloudExecutionRunning, initialCloudLimbicState, evolveCloudLimbicState, recordLimbicState, type CloudLoopState } from '../../application/runtime/cloudAgentEngine';
+import { prepareCloudRun, resolveAgentEngine, markCloudExecutionRunning, initialCloudLimbicState, evolveCloudLimbicState, recordLimbicState, type CloudLoopState } from '../../application/runtime/cloudAgentEngine';
 import { loadPersonaSetpoints } from '../../application/artifact/capabilityContext';
-import { buildLimbicBlock, type LimbicState, type AgentExecParams } from '@builderforce/agent-tools';
+import type { LimbicState, AgentExecParams } from '@builderforce/agent-tools';
 import { parseRoutingBias, parsePolicyGates, parseModel, parseReviewRole, parseLaneKey, parseOriginatingChatId } from '../../application/runtime/cloudDispatch';
 import { scoreRunOutcome } from '../../application/runtime/scoreRunOutcome';
 import { isInfrastructureEviction } from '../../application/runtime/orphanReasons';
@@ -183,25 +183,34 @@ export class CloudRunnerDO implements DurableObject {
         return;
       }
 
-      // One LLM step per tick; resume from the saved conversation state. For V3,
-      // inject THIS tick's evolving affect as a per-step directive (the loop seam),
-      // leaving the persisted conversation untouched.
-      const dynamicSystem = cursor.limbic && cursor.limbicState ? buildLimbicBlock(cursor.limbicState) : undefined;
+      // One LLM step per tick; resume from the saved conversation state. The engine
+      // is resolved through the ONE seam (resolveAgentEngine) — this surface only says
+      // it is durable and hands over THIS tick's evolving affect; the engine owns the
+      // loop, the directive and the resume/deferral wiring.
       const reviewRole = parseReviewRole(cursor.payload);
       const reviewLane = parseLaneKey(cursor.payload);
       const requiredSignoff = reviewRole
         ? { roleKey: reviewRole, ...(reviewLane ? { laneKey: reviewLane } : {}) }
         : undefined;
       const originatingChatId = parseOriginatingChatId(cursor.payload);
-      const result = await runCloudToolLoop(
-        this.env, this.db, cursor.executionId, cursor.tenantId,
-        { id: cursor.taskId, title: cursor.taskTitle, description: cursor.taskDescription },
-        cursor.cloudAgentRef, cursor.agentLabel, cursor.model,
-        cursor.systemPrompt ?? '', cursor.userContent ?? '',
-        () => this.isAlreadyConcluded(cursor.executionId),
-        cursor.projectId,
-        { resume: cursor.loop, maxSteps: 1, deferFinalize: true, routingBias: parseRoutingBias(cursor.payload), policyGates: parsePolicyGates(cursor.payload), ...(originatingChatId != null ? { originatingChatId } : {}), ...(requiredSignoff ? { requiredSignoff } : {}), ...(dynamicSystem ? { dynamicSystem } : {}), ...(cursor.execParams ? { execParams: cursor.execParams } : {}) },
-      );
+      const routingBias = parseRoutingBias(cursor.payload);
+      const policyGates = parsePolicyGates(cursor.payload);
+      const engine = resolveAgentEngine({
+        env: this.env, db: this.db, executionId: cursor.executionId, tenantId: cursor.tenantId,
+        taskRow: { id: cursor.taskId, title: cursor.taskTitle, description: cursor.taskDescription },
+        projectId: cursor.projectId, agentLabel: cursor.agentLabel, cloudAgentRef: cursor.cloudAgentRef,
+        isCancelled: () => this.isAlreadyConcluded(cursor.executionId),
+        ...(routingBias ? { routingBias } : {}),
+        ...(originatingChatId != null ? { originatingChatId } : {}),
+        ...(requiredSignoff ? { requiredSignoff } : {}),
+        ...(cursor.execParams ? { execParams: cursor.execParams } : {}),
+        surface: { kind: 'durable', maxSteps: 1, ...(cursor.limbic && cursor.limbicState ? { limbicState: cursor.limbicState } : {}) },
+      });
+      const result = await engine.run({
+        systemPrompt: cursor.systemPrompt ?? '', userContent: cursor.userContent ?? '', model: cursor.model,
+        ...(cursor.loop ? { resume: cursor.loop } : {}),
+        ...(policyGates?.length ? { policy: { gates: policyGates } } : {}),
+      });
 
       // V3: evolve affect from this tick's outcome (amygdala) toward setpoints
       // (hypothalamus) so the next tick's directive reflects how the run is going.
@@ -215,7 +224,7 @@ export class CloudRunnerDO implements DurableObject {
       // alarm — the run sleeps (no token spend) until /resume wakes it after the
       // question is answered. The cursor is kept so /resume can continue from here.
       if (result.awaitingInput) {
-        cursor.loop = result.state;
+        cursor.loop = result.state as CloudLoopState | undefined;
         await this.state.storage.put(CURSOR_KEY, cursor);
         await this.db.update(executions)
           .set({ status: 'paused', updatedAt: new Date() })
@@ -237,7 +246,7 @@ export class CloudRunnerDO implements DurableObject {
       }
 
       if (!result.finished) {
-        cursor.loop = result.state;
+        cursor.loop = result.state as CloudLoopState | undefined;
         await this.persistAndArm(cursor);
         return;
       }

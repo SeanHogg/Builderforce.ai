@@ -15011,6 +15011,8 @@
     "modelTurnsPromptTokens": "{count} de entrada",
     "modelTurnsCompletionTokens": "{count} de salida",
     "modelTurnsTotalDuration": "{ms} ms en el modelo",
+    "spentOnRun": "~{amount} gastados en esta ejecución",
+    "runSpendTooltip": "Gasto de esta ejecución: {tokens} tokens en {requests} llamada(s) al LLM. Forma parte del total del ticket.",
     "modelTurnUnknownModel": "Modelo desconocido",
     "modelTurnTokens": "{prompt} de entrada / {completion} de salida",
     "modelTurnDuration": "{ms} ms",
@@ -28217,6 +28219,69 @@
       "deleteFailed": "Error al eliminar.",
       "saveFailed": "Error al guardar (se requiere el rol de gestor para hacer cambios).",
       "required": "{field} es obligatorio"
+    }
+  },
+  "mcpServers": {
+    "sectionTitle": "Servidores MCP",
+    "sectionIntro": "Registra un servidor externo de Model Context Protocol para que los agentes de este espacio puedan usar sus herramientas.",
+    "loading": "Cargando servidores registrados…",
+    "empty": "Aún no hay servidores MCP registrados.",
+    "requiresRole": "Requiere el rol {role}. Pide a un propietario del espacio que registre servidores MCP.",
+    "confirmDisconnect": "¿Desconectar {name}? El registro se mantiene, pero se revoca su autorización.",
+    "confirmRemove": "¿Eliminar {name}? Los agentes aquí perderán sus herramientas de inmediato.",
+    "status": {
+      "ready": "Listo",
+      "needsConsent": "Requiere autorización",
+      "disabled": "Desactivado"
+    },
+    "auth": {
+      "none": "Sin credencial",
+      "secret": "Secreto almacenado",
+      "oauth": "OAuth"
+    },
+    "tools": {
+      "all": "Todas las herramientas permitidas",
+      "none": "Aún no hay herramientas permitidas",
+      "some": "{count} herramientas permitidas"
+    },
+    "actions": {
+      "register": "Registrar servidor",
+      "edit": "Editar",
+      "enable": "Activar",
+      "disable": "Desactivar",
+      "connect": "Conectar",
+      "disconnect": "Desconectar",
+      "remove": "Eliminar"
+    },
+    "panel": {
+      "registerTitle": "Registrar un servidor MCP",
+      "editTitle": "Editar servidor MCP"
+    },
+    "form": {
+      "intro": "El servidor se llama desde BuilderForce, nunca desde el navegador, por lo que su credencial permanece cifrada en reposo.",
+      "nameLabel": "Nombre",
+      "namePlaceholder": "p. ej. Herramientas del sistema de diseño",
+      "urlLabel": "URL del servidor",
+      "urlHint": "Debe ser una dirección HTTPS pública. Se rechazan las direcciones privadas y de bucle invertido.",
+      "urlMustBeHttps": "Introduce una dirección https://.",
+      "secretLabel": "Secreto (opcional)",
+      "secretPlaceholder": "Token bearer, si el servidor lo necesita",
+      "secretKeepPlaceholder": "Déjalo en blanco para conservar el secreto guardado",
+      "secretHint": "Se guarda cifrado y no se vuelve a mostrar. Déjalo vacío si el servidor usa OAuth o no necesita credencial.",
+      "clearSecret": "Borrar el secreto guardado",
+      "toolsLabel": "Herramientas permitidas",
+      "toolsPlaceholder": "search_docs, create_ticket",
+      "toolsHint": "Separadas por comas. Déjalo vacío para permitir todas las herramientas del servidor.",
+      "register": "Registrar",
+      "save": "Guardar cambios",
+      "cancel": "Cancelar"
+    },
+    "callback": {
+      "connected": "Servidor conectado. Sus herramientas están disponibles para los agentes de este espacio.",
+      "declined": "Se rechazó la pantalla de autorización, así que no se conectó nada.",
+      "error": "No se pudo completar la conexión. Inténtalo de nuevo.",
+      "invalid_state": "Ese enlace de conexión caducó. Inicia la conexión de nuevo.",
+      "no_pending_consent": "No había ninguna conexión pendiente de finalizar. Inicia la conexión de nuevo."
     }
   }
 }

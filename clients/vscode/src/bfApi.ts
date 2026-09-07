@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import type { PolicyGate } from "./policy";
 import type {
   EvermindLearnOutcome,
   EvermindRecallResult,
@@ -1259,6 +1260,26 @@ export async function joinMeeting(secrets: vscode.SecretStorage, id: string): Pr
  * for a conversation that already has a Brain chat). Best-effort: `''` when signed out,
  * project-less, or the api is unreachable — the turn simply runs without it.
  */
+/**
+ * The tenant's EFFECTIVE governance gates for a run in this editor — the same
+ * resolver `RuntimeService.withPolicyGates` stamps onto every cloud/on-prem dispatch
+ * (`GET /api/governance/policy-gates/effective`), so a gate that holds in the cloud
+ * holds here on the same compiled row. `undefined` = signed out (no tenant, so no
+ * tenant policy applies). Throws when the tenant's policy could not be read — the
+ * caller decides fail-closed, exactly as the server does.
+ */
+export async function fetchPolicyGates(
+  secrets: vscode.SecretStorage,
+  projectId?: number,
+): Promise<PolicyGate[] | undefined> {
+  const qs = new URLSearchParams();
+  if (projectId != null) qs.set("project", String(projectId));
+  const suffix = qs.size ? `?${qs.toString()}` : "";
+  const r = await authed<{ gates?: PolicyGate[] }>(secrets, `/api/governance/policy-gates/effective${suffix}`);
+  if (r === undefined) return undefined;
+  return Array.isArray(r.gates) ? r.gates : [];
+}
+
 export async function fetchRunContextSection(
   secrets: vscode.SecretStorage,
   projectId: number,

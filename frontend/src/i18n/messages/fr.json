@@ -15011,6 +15011,8 @@
     "modelTurnsPromptTokens": "{count} en entrée",
     "modelTurnsCompletionTokens": "{count} en sortie",
     "modelTurnsTotalDuration": "{ms} ms dans le modèle",
+    "spentOnRun": "~{amount} dépensés pour cette exécution",
+    "runSpendTooltip": "Dépense de cette exécution : {tokens} jetons sur {requests} appel(s) LLM. Comprise dans le total du ticket ci-dessus.",
     "modelTurnUnknownModel": "Modèle inconnu",
     "modelTurnTokens": "{prompt} en entrée / {completion} en sortie",
     "modelTurnDuration": "{ms} ms",
@@ -28217,6 +28219,69 @@
       "deleteFailed": "Échec de la suppression.",
       "saveFailed": "Échec de l’enregistrement (rôle manager requis pour les modifications).",
       "required": "{field} est obligatoire"
+    }
+  },
+  "mcpServers": {
+    "sectionTitle": "Serveurs MCP",
+    "sectionIntro": "Enregistrez un serveur Model Context Protocol externe pour que les agents de cet espace puissent appeler ses outils.",
+    "loading": "Chargement des serveurs enregistrés…",
+    "empty": "Aucun serveur MCP enregistré pour le moment.",
+    "requiresRole": "Nécessite le rôle {role}. Demandez à un propriétaire de l'espace d'enregistrer des serveurs MCP.",
+    "confirmDisconnect": "Déconnecter {name} ? L'enregistrement est conservé, mais l'autorisation est révoquée.",
+    "confirmRemove": "Supprimer {name} ? Les agents d'ici perdront ses outils immédiatement.",
+    "status": {
+      "ready": "Prêt",
+      "needsConsent": "Autorisation requise",
+      "disabled": "Désactivé"
+    },
+    "auth": {
+      "none": "Aucune information d'identification",
+      "secret": "Secret enregistré",
+      "oauth": "OAuth"
+    },
+    "tools": {
+      "all": "Tous les outils autorisés",
+      "none": "Aucun outil autorisé pour l'instant",
+      "some": "{count} outils autorisés"
+    },
+    "actions": {
+      "register": "Enregistrer un serveur",
+      "edit": "Modifier",
+      "enable": "Activer",
+      "disable": "Désactiver",
+      "connect": "Connecter",
+      "disconnect": "Déconnecter",
+      "remove": "Supprimer"
+    },
+    "panel": {
+      "registerTitle": "Enregistrer un serveur MCP",
+      "editTitle": "Modifier le serveur MCP"
+    },
+    "form": {
+      "intro": "Le serveur est appelé depuis BuilderForce, jamais depuis le navigateur : ses informations d'identification restent chiffrées au repos.",
+      "nameLabel": "Nom",
+      "namePlaceholder": "p. ex. Outils du design system",
+      "urlLabel": "URL du serveur",
+      "urlHint": "Doit être une adresse HTTPS publique. Les adresses privées et de bouclage sont refusées.",
+      "urlMustBeHttps": "Saisissez une adresse https://.",
+      "secretLabel": "Secret (facultatif)",
+      "secretPlaceholder": "Jeton bearer, si le serveur en a besoin",
+      "secretKeepPlaceholder": "Laissez vide pour conserver le secret enregistré",
+      "secretHint": "Enregistré chiffré et jamais réaffiché. Laissez vide pour un serveur en OAuth ou sans information d'identification.",
+      "clearSecret": "Effacer le secret enregistré",
+      "toolsLabel": "Outils autorisés",
+      "toolsPlaceholder": "search_docs, create_ticket",
+      "toolsHint": "Séparés par des virgules. Laissez vide pour autoriser tous les outils du serveur.",
+      "register": "Enregistrer",
+      "save": "Enregistrer les modifications",
+      "cancel": "Annuler"
+    },
+    "callback": {
+      "connected": "Serveur connecté. Ses outils sont disponibles pour les agents de cet espace.",
+      "declined": "L'écran d'autorisation a été refusé, rien n'a donc été connecté.",
+      "error": "La connexion n'a pas pu aboutir. Réessayez.",
+      "invalid_state": "Ce lien de connexion a expiré. Relancez la connexion.",
+      "no_pending_consent": "Aucune connexion n'était en attente. Relancez la connexion."
     }
   }
 }

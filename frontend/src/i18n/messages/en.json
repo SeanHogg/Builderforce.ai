@@ -15011,6 +15011,8 @@
     "modelTurnsPromptTokens": "{count} prompt",
     "modelTurnsCompletionTokens": "{count} completion",
     "modelTurnsTotalDuration": "{ms} ms in the model",
+    "spentOnRun": "~{amount} spent on this run",
+    "runSpendTooltip": "This run's spend: {tokens} tokens over {requests} LLM call(s). Part of the ticket total above.",
     "modelTurnUnknownModel": "Unknown model",
     "modelTurnTokens": "{prompt} in / {completion} out",
     "modelTurnDuration": "{ms} ms",
@@ -28217,6 +28219,69 @@
       "deleteFailed": "Delete failed.",
       "saveFailed": "Save failed (manager role required for changes).",
       "required": "{field} is required"
+    }
+  },
+  "mcpServers": {
+    "sectionTitle": "MCP servers",
+    "sectionIntro": "Register an external Model Context Protocol server so this workspace's agents can call its tools.",
+    "loading": "Loading registered servers…",
+    "empty": "No MCP servers registered yet.",
+    "requiresRole": "Requires the {role} role. Ask a workspace owner to register MCP servers.",
+    "confirmDisconnect": "Disconnect {name}? The registration stays, but its access grant is revoked.",
+    "confirmRemove": "Remove {name}? Agents here will lose its tools immediately.",
+    "status": {
+      "ready": "Ready",
+      "needsConsent": "Needs consent",
+      "disabled": "Disabled"
+    },
+    "auth": {
+      "none": "No credential",
+      "secret": "Stored secret",
+      "oauth": "OAuth"
+    },
+    "tools": {
+      "all": "All tools allowed",
+      "none": "No tools allowed yet",
+      "some": "{count} tools allowed"
+    },
+    "actions": {
+      "register": "Register server",
+      "edit": "Edit",
+      "enable": "Enable",
+      "disable": "Disable",
+      "connect": "Connect",
+      "disconnect": "Disconnect",
+      "remove": "Remove"
+    },
+    "panel": {
+      "registerTitle": "Register an MCP server",
+      "editTitle": "Edit MCP server"
+    },
+    "form": {
+      "intro": "The server is called from BuilderForce, never from the browser, so its credential stays encrypted at rest.",
+      "nameLabel": "Name",
+      "namePlaceholder": "e.g. Design system tools",
+      "urlLabel": "Server URL",
+      "urlHint": "Must be a public HTTPS address. Private and loopback addresses are refused.",
+      "urlMustBeHttps": "Enter an https:// address.",
+      "secretLabel": "Secret (optional)",
+      "secretPlaceholder": "Bearer token, if the server needs one",
+      "secretKeepPlaceholder": "Leave blank to keep the stored secret",
+      "secretHint": "Stored encrypted and never shown again. Leave it empty for a server that uses OAuth or needs no credential.",
+      "clearSecret": "Clear the stored secret",
+      "toolsLabel": "Allowed tools",
+      "toolsPlaceholder": "search_docs, create_ticket",
+      "toolsHint": "Comma separated. Leave empty to allow every tool the server offers.",
+      "register": "Register",
+      "save": "Save changes",
+      "cancel": "Cancel"
+    },
+    "callback": {
+      "connected": "Server connected. Its tools are available to agents in this workspace.",
+      "declined": "The consent screen was declined, so nothing was connected.",
+      "error": "The connection could not be completed. Try connecting again.",
+      "invalid_state": "That connection link expired. Start the connection again.",
+      "no_pending_consent": "There was no connection waiting to finish. Start the connection again."
     }
   }
 }

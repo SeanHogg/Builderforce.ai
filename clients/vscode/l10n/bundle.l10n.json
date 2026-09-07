@@ -156,6 +156,7 @@
   "Frozen": "Frozen",
   "Generating…": "Generating…",
   "Good response": "Good response",
+  "Governance gates could not be loaded, so this turn was not started. Check your connection and try again.": "Governance gates could not be loaded, so this turn was not started. Check your connection and try again.",
   "Governance: approve \"{0}\"? {1}": "Governance: approve \"{0}\"? {1}",
   "Group tasks by": "Group tasks by",
   "Here is my project's Project 360 health check. Help me work through these gaps, highest impact first.": "Here is my project's Project 360 health check. Help me work through these gaps, highest impact first.",

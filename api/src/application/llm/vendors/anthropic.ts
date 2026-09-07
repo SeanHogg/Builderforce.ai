@@ -306,10 +306,17 @@ function toOpenAIResponse(raw: unknown, model: string): Record<string, unknown> 
   const r = raw as { id?: string; content?: unknown[]; stop_reason?: unknown; usage?: Record<string, unknown> } | null;
   const blocks = Array.isArray(r?.content) ? r!.content : [];
   let text = '';
+  // Extended-thinking blocks ride on the OpenAI-shape message as
+  // `reasoning_content` (the DeepSeek/OpenAI-compatible convention every loop
+  // reads through `splitReasoning`). Before this they were dropped here, which
+  // is why no cloud run ever showed a reasoning path. `redacted_thinking` carries
+  // no readable text and is skipped.
+  const reasoning: string[] = [];
   const toolCalls: Array<Record<string, unknown>> = [];
   for (const bRaw of blocks) {
-    const b = bRaw as { type?: string; text?: string; id?: string; name?: string; input?: unknown };
+    const b = bRaw as { type?: string; text?: string; thinking?: unknown; id?: string; name?: string; input?: unknown };
     if (b?.type === 'text' && typeof b.text === 'string') text += b.text;
+    else if (b?.type === 'thinking' && typeof b.thinking === 'string' && b.thinking.trim()) reasoning.push(b.thinking.trim());
     else if (b?.type === 'tool_use') {
       toolCalls.push({ id: b.id ?? '', type: 'function', function: { name: b.name ?? '', arguments: JSON.stringify(b.input ?? {}) } });
     }
@@ -319,6 +326,9 @@ function toOpenAIResponse(raw: unknown, model: string): Record<string, unknown> 
   const outTok = Number(u['output_tokens'] ?? 0) || 0;
   const message: Record<string, unknown> = { role: 'assistant', content: text || (toolCalls.length ? null : '') };
   if (toolCalls.length) message.tool_calls = toolCalls;
+  if (reasoning.length) message.reasoning_content = reasoning.join('
+
+');
   return {
     id: r?.id ?? 'anthropic-direct',
     object: 'chat.completion',

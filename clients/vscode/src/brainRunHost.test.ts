@@ -406,3 +406,94 @@ describe("failure before the loop starts", () => {
     expect(isRunning(chatId)).toBe(false);
   });
 });
+
+/**
+ * Governance in the panel run (GAP A2). The host resolves the tenant's effective
+ * gates once per run through the `policyGates` port and enforces them at the same
+ * three seams the native participant and the cloud loop use: the block path, the
+ * approval predicate and the system-prompt prepend. Before this the port did not
+ * exist, so every panel run was ungated while the same ticket in the cloud was not.
+ */
+describe("governance gates in a host-owned run", () => {
+  it("blocks a gated tool without executing it and keeps the run going", async () => {
+    const chatId = freshChatId();
+    const shell = toolDef("run_command", { mutating: true });
+    const host = createBrainRunHost(
+      ports({
+        tools: [shell],
+        policyGates: async () => [{ id: "no-shell", tool: "run_command", effect: "block", reason: "shell is off-limits" }],
+        script: [{ toolCalls: [{ name: "run_command", args: { command: "rm -rf /" } }] }, { text: "Skipped the shell." }],
+      }),
+    );
+    const s = sink();
+    host.attach(s);
+    await start(chatId, host);
+    expect(shell.calls).toHaveLength(0);
+    const announced = s.frames.filter((f): f is Extract<RunHostMessage, { type: "run.tool" }> => f.type === "run.tool");
+    expect(announced.map((f) => [f.name, f.ok])).toEqual([["run_command", false]]);
+    expect(getRunSnapshot(chatId).appended.map((m) => m.content)).toEqual(["Skipped the shell."]);
+  });
+
+  it("prepends the binding gate directives to the system prompt the model receives", async () => {
+    const chatId = freshChatId();
+    let systemSeen = "";
+    const host = createBrainRunHost(
+      ports({
+        policyGates: async () => [{ id: "no-shell", tool: "run_command", effect: "block", reason: "shell is off-limits" }],
+        script: (ctx) => {
+          systemSeen = String(ctx.messages[0]?.content ?? "");
+          return { text: "ok" };
+        },
+      }),
+    );
+    await start(chatId, host, { projectId: 11 });
+    expect(systemSeen).toContain("Governance (these gates are binding)");
+    expect(systemSeen).toContain("shell is off-limits");
+    expect(systemSeen).toContain("You are the BuilderForce IDE agent.");
+  });
+
+  it("resolves gates for the run's project, so project-scoped packs apply", async () => {
+    const chatId = freshChatId();
+    const policyGates = vi.fn(async () => []);
+    const host = createBrainRunHost(ports({ script: [{ text: "ok" }], policyGates }));
+    await start(chatId, host, { projectId: 42 });
+    expect(policyGates).toHaveBeenCalledWith(42);
+  });
+
+  it("pauses a require-approval gate even with Auto mode on", async () => {
+    const chatId = freshChatId();
+    const write = toolDef("write_file", { mutating: true });
+    const host = createBrainRunHost(
+      ports({
+        tools: [write],
+        policyGates: async () => [{ id: "review-writes", tool: "write_file", effect: "require-approval", reason: "writes need a reviewer" }],
+        script: [{ toolCalls: [{ name: "write_file", args: { path: "a.ts", content: "x" } }] }, { text: "Written." }],
+      }),
+    );
+    const s = sink();
+    host.attach(s);
+    const done = start(chatId, host, { autoApprove: true });
+    await vi.waitFor(() => expect(getRunSnapshot(chatId).pendingConfirm?.name).toBe("write_file"));
+    expect(write.calls).toHaveLength(0);
+    host.confirm(chatId, true);
+    await done;
+    expect(write.calls).toHaveLength(1);
+  });
+
+  it("refuses the run when the tenant's gates cannot be read — fail-closed like the server", async () => {
+    const chatId = freshChatId();
+    const host = createBrainRunHost(
+      ports({
+        script: [{ text: "never" }],
+        policyGates: async () => {
+          throw new Error("policy gates unavailable: HTTP 503");
+        },
+      }),
+    );
+    const s = sink();
+    host.attach(s);
+    await start(chatId, host);
+    expect(s.frames.at(-1)).toEqual({ type: "run.failed", chatId, error: "policy gates unavailable: HTTP 503" });
+    expect(isRunning(chatId)).toBe(false);
+  });
+});

@@ -16,6 +16,7 @@ import { refreshPendingChanges } from "./gitChanges";
 import { appendSessionNote } from "./sessionNotes";
 import { setLocalChatRuns } from "./attention";
 import { createBrainRunHost, type BrainRunHost } from "./brainRunHost";
+import { resolveRunPolicyGates } from "./policyGates";
 
 /** The Sessions-tree overlay source for host-owned runs (one bucket, not per panel). */
 const RUNS_SOURCE = "brain-host";
@@ -54,6 +55,9 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     // negative id and no history to measure a delta against).
     runContext: (projectId, chatId, query) =>
       fetchRunContextSection(secrets, projectId, { ...(chatId > 0 ? { scope: `chat:${chatId}` } : {}), query }),
+    // The tenant's effective governance gates — the one resolver both editor
+    // surfaces share, so a gate holds in the panel exactly as in the participant.
+    policyGates: (projectId) => resolveRunPolicyGates(secrets, projectId),
     labels: {
       blockedByPolicy: (reason: string) => vscode.l10n.t("Blocked by a governance gate: {0}", reason),
     },

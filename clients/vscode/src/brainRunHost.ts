@@ -48,6 +48,7 @@ import {
 } from "@seanhogg/builderforce-brain-embedded";
 import type { ToolDef } from "./fileTools";
 import { createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs, type NativeRunLabels } from "./nativeBrainRun";
+import { renderPolicyDirectives, type PolicyGate } from "./policy";
 import { SessionNotes, type RunActivity } from "./sessionNotes";
 
 /** The serializable half of a `BrainRunRequest`, as the webview posts it. */
@@ -134,6 +135,12 @@ export interface BrainRunHostPorts {
    * panel started every task with no memory of what earlier runs had learned.
    */
   runContext?(projectId: number, chatId: number, query: string): Promise<string>;
+  /**
+   * The tenant's effective governance gates for a run — the same compiled rows the
+   * cloud and on-prem loops enforce. Resolved once per run at loop start; a throw
+   * refuses the run (fail-closed, as the server is). Omitted ⇒ no gates.
+   */
+  policyGates?(projectId: number | undefined): Promise<readonly PolicyGate[]>;
   labels: Pick<NativeRunLabels, "blockedByPolicy">;
   /** A chat gained a turn — refresh the Sessions tree. */
   onChatsChanged?(): void;
@@ -252,10 +259,13 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     const root = ports.workspaceRoot();
     const projectId = p.projectId ?? undefined;
     const defs = await ports.tools(projectId);
+    // Governance first: an unreadable policy throws here and the run never starts.
+    const gates = (await ports.policyGates?.(projectId)) ?? [];
     broadcast({ type: "run.tools", chatId, count: defs.length });
     const native = createNativeRunTool({
       defs,
       root,
+      ...(gates.length ? { gates } : {}),
       events: { onToolStart: () => undefined, onToolResult: () => undefined },
       labels: ports.labels,
     });
@@ -277,12 +287,17 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     // The gate reads the LIVE flag: `nativeNeedsConfirm` is the one predicate every
     // host surface shares, re-bound per call so a mid-run switch is honoured.
     const needsConfirm = (req: { name: string; args: unknown }): boolean =>
-      nativeNeedsConfirm(defs, flag.autoApprove ? "acceptEdits" : "ask", undefined)(req);
+      nativeNeedsConfirm(defs, flag.autoApprove ? "acceptEdits" : "ask", gates)(req);
     const stream = await ports.stream();
     const surface = p.modelSurface ?? null;
     try {
+      // Gates render as binding directives ahead of the host prompt — the same
+      // prepend the native participant and the cloud lowering apply.
+      const governance = renderPolicyDirectives(gates);
       await startRun(chatId, {
-        resolvedSystemPrompt: p.systemPrompt,
+        resolvedSystemPrompt: governance ? `${governance}
+
+${p.systemPrompt}` : p.systemPrompt,
         tools: nativeToolSpecs(defs),
         ...(p.model ? { model: p.model } : {}),
         ...(p.modelStrict != null ? { modelStrict: p.modelStrict } : {}),

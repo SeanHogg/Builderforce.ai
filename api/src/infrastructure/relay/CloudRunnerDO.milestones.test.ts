@@ -36,7 +36,7 @@ vi.mock('../../buildRuntimeService', () => ({
 }));
 vi.mock('../../application/runtime/cloudAgentEngine', () => ({
   prepareCloudRun: vi.fn(),
-  runCloudToolLoop: vi.fn(async () => h.loopResult),
+  resolveAgentEngine: vi.fn(() => ({ id: 'builderforce-v3', run: vi.fn(async () => h.loopResult) })),
   markCloudExecutionRunning: vi.fn(async (_svc: unknown, id: number) => { h.markRunningCalls.push(id); }),
   initialCloudLimbicState: vi.fn(() => ({})),
   evolveCloudLimbicState: vi.fn((s: unknown) => s),

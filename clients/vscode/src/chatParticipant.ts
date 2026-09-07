@@ -16,8 +16,10 @@ import { getGroundingWithHistory } from "./grounding";
 import { getEditorContextLive } from "./editorContext";
 import { editorContextDirective } from "./idePersona";
 import { getSelectedProject } from "./projectState";
+import { PolicyGatesUnavailableError, resolveRunPolicyGates } from "./policyGates";
 import { buildSystemMessages } from "./prompt";
 import type { ToolDef } from "./fileTools";
+import type { PolicyGate } from "./policy";
 import { brainToolCatalog } from "./brainToolCatalog";
 import { runNativeBrain, unlinkedRunId, type NativeApprovalRequest } from "./nativeBrainRun";
 
@@ -176,6 +178,20 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
     // each on what it actually requires.
     const tools: ToolDef[] = await brainToolCatalog(ctx.secrets, root, activeProject?.id);
 
+    // The tenant's effective governance gates — the SAME compiled rows the cloud and
+    // on-prem loops enforce — so a block/approval gate holds in this editor too.
+    // Fail-closed like the server: an unreadable policy refuses the turn.
+    let policyGates: PolicyGate[];
+    try {
+      policyGates = await resolveRunPolicyGates(ctx.secrets, activeProject?.id);
+    } catch (e) {
+      if (!(e instanceof PolicyGatesUnavailableError)) throw e;
+      stream.markdown(
+        `**${vscode.l10n.t("Error:")}** ${vscode.l10n.t("Governance gates could not be loaded, so this turn was not started. Check your connection and try again.")}`,
+      );
+      return {};
+    }
+
     const { systemPrompt, seed } = splitSystemPrompt(messages);
 
     await runNativeBrain({
@@ -200,6 +216,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
       modelStrict: modelChoice.modelStrict,
       ...(modelChoice.routingMode ? { routingMode: modelChoice.routingMode } : {}),
       permissionMode,
+      ...(policyGates.length ? { policyGates } : {}),
       maxIterations: MAX_ITERATIONS,
       // The transport for this route — gateway or on-device — decided in `modelRouting`,
       // never here. The sign-in gate above guarantees a key on the gateway branch.

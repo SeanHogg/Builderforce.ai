@@ -2,6 +2,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { renderPolicyDirectives, type PolicyGate } from "@builderforce/agent-tools";
 import { logDebug, logWarn } from "../logger.js";
 import { mapSdkMessage } from "./claude-agent-v2-events.js";
+import { createSteeringChannel, type SteeringChannel } from "../infra/relay-steering.js";
 
 /** The on-prem SDK tool vocabulary — the names a `block` gate can remove. */
 const SDK_TOOLS = ["Read", "Write", "Edit", "Bash", "Glob", "Grep"] as const;
@@ -23,6 +24,8 @@ export interface V2RunnerSinks {
   onAssistantText(text: string): void;
   onToolUse(toolName: string, toolUseId: string, args: unknown): void;
   onResult(ok: boolean, text: string, usage: { inputTokens: number; outputTokens: number }): void;
+  /** A mid-run steer was handed to the SDK as the next user turn. */
+  onSteerApplied?(text: string): void;
 }
 
 export interface V2RunParams {
@@ -58,6 +61,13 @@ export interface V2RunParams {
    *  rendering the cloud lowering uses, so governance reads identically on-prem. */
   policyGates?: PolicyGate[];
   abortController?: AbortController;
+  /**
+   * Mid-run steering channel. The run consumes it as the SDK's streaming input:
+   * the task prompt is the first turn, every `push()` while the run is live is
+   * applied as the next turn. Omitted ⇒ a private channel that closes after the
+   * first result (plain single-turn behaviour).
+   */
+  steering?: SteeringChannel;
 }
 
 /** Tools the SDK may use after `block` gates are applied (case-insensitive match on
@@ -96,13 +106,21 @@ export async function runClaudeAgentSdkV2(
   const governance = renderPolicyDirectives(params.policyGates);
   const preamble = [governance, params.appendSystemPrompt?.trim()].filter(Boolean).join("\n\n");
 
+  const steering = params.steering ?? createSteeringChannel();
+  const initialPrompt = preamble ? `${preamble}
+
+---
+
+${params.prompt}` : params.prompt;
+
   try {
     const stream = query({
-      // Prepend the assigned Skills/Personas/Content (+ governance) as a guidance
-      // preamble. The SDK's default system prompt is empty, so injecting via the
-      // prompt (rather than switching to the claude_code preset) adds the
-      // capabilities without changing the V2 agent's base behavior.
-      prompt: preamble ? `${preamble}\n\n---\n\n${params.prompt}` : params.prompt,
+      // Streaming input: the first message carries the assigned Skills/Personas/
+      // Content (+ governance) as a guidance preamble ahead of the task. The SDK's
+      // default system prompt is empty, so injecting via the prompt (rather than
+      // switching to the claude_code preset) adds the capabilities without
+      // changing the V2 agent's base behavior. Later messages are steers.
+      prompt: steering.messages(initialPrompt, (text) => sinks.onSteerApplied?.(text)),
       options: {
         ...(params.model ? { model: params.model } : {}),
         cwd: params.cwd,
@@ -133,6 +151,9 @@ export async function runClaudeAgentSdkV2(
             inputTokens: ev.inputTokens,
             outputTokens: ev.outputTokens,
           });
+          // A turn finished. If a steer is already queued the SDK runs another
+          // turn for it; otherwise end the input stream so the run completes.
+          if (steering.pending() === 0) steering.close();
         }
       }
     }
@@ -149,6 +170,8 @@ export async function runClaudeAgentSdkV2(
     finalText = err instanceof Error ? err.message : String(err);
     logWarn(`[v2-runner] failed: ${finalText}`);
     sinks.onResult(false, finalText, { inputTokens: 0, outputTokens: 0 });
+  } finally {
+    steering.close();
   }
 
   return { ok, text: finalText };

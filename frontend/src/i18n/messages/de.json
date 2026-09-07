@@ -15011,6 +15011,8 @@
     "modelTurnsPromptTokens": "{count} Eingabe",
     "modelTurnsCompletionTokens": "{count} Ausgabe",
     "modelTurnsTotalDuration": "{ms} ms im Modell",
+    "spentOnRun": "~{amount} für diesen Lauf ausgegeben",
+    "runSpendTooltip": "Ausgaben dieses Laufs: {tokens} Tokens über {requests} LLM-Aufruf(e). Teil der Ticket-Summe oben.",
     "modelTurnUnknownModel": "Unbekanntes Modell",
     "modelTurnTokens": "{prompt} Eingabe / {completion} Ausgabe",
     "modelTurnDuration": "{ms} ms",
@@ -28217,6 +28219,69 @@
       "deleteFailed": "Löschen fehlgeschlagen.",
       "saveFailed": "Speichern fehlgeschlagen (Manager-Rolle für Änderungen erforderlich).",
       "required": "{field} ist erforderlich"
+    }
+  },
+  "mcpServers": {
+    "sectionTitle": "MCP-Server",
+    "sectionIntro": "Registrieren Sie einen externen Model-Context-Protocol-Server, damit die Agenten dieses Workspace seine Tools aufrufen können.",
+    "loading": "Registrierte Server werden geladen…",
+    "empty": "Noch keine MCP-Server registriert.",
+    "requiresRole": "Erfordert die Rolle {role}. Bitten Sie eine Workspace-Inhaberin oder einen Workspace-Inhaber, MCP-Server zu registrieren.",
+    "confirmDisconnect": "{name} trennen? Die Registrierung bleibt bestehen, die Zugriffsfreigabe wird widerrufen.",
+    "confirmRemove": "{name} entfernen? Die Agenten hier verlieren dessen Tools sofort.",
+    "status": {
+      "ready": "Bereit",
+      "needsConsent": "Freigabe erforderlich",
+      "disabled": "Deaktiviert"
+    },
+    "auth": {
+      "none": "Keine Zugangsdaten",
+      "secret": "Gespeichertes Geheimnis",
+      "oauth": "OAuth"
+    },
+    "tools": {
+      "all": "Alle Tools erlaubt",
+      "none": "Noch keine Tools erlaubt",
+      "some": "{count} Tools erlaubt"
+    },
+    "actions": {
+      "register": "Server registrieren",
+      "edit": "Bearbeiten",
+      "enable": "Aktivieren",
+      "disable": "Deaktivieren",
+      "connect": "Verbinden",
+      "disconnect": "Trennen",
+      "remove": "Entfernen"
+    },
+    "panel": {
+      "registerTitle": "MCP-Server registrieren",
+      "editTitle": "MCP-Server bearbeiten"
+    },
+    "form": {
+      "intro": "Der Server wird von BuilderForce aufgerufen, nie vom Browser, sodass seine Zugangsdaten verschlüsselt gespeichert bleiben.",
+      "nameLabel": "Name",
+      "namePlaceholder": "z. B. Design-System-Tools",
+      "urlLabel": "Server-URL",
+      "urlHint": "Muss eine öffentliche HTTPS-Adresse sein. Private und Loopback-Adressen werden abgelehnt.",
+      "urlMustBeHttps": "Geben Sie eine https://-Adresse ein.",
+      "secretLabel": "Geheimnis (optional)",
+      "secretPlaceholder": "Bearer-Token, falls der Server eines benötigt",
+      "secretKeepPlaceholder": "Leer lassen, um das gespeicherte Geheimnis zu behalten",
+      "secretHint": "Verschlüsselt gespeichert und nie wieder angezeigt. Leer lassen bei OAuth oder wenn keine Zugangsdaten nötig sind.",
+      "clearSecret": "Gespeichertes Geheimnis löschen",
+      "toolsLabel": "Erlaubte Tools",
+      "toolsPlaceholder": "search_docs, create_ticket",
+      "toolsHint": "Durch Kommas getrennt. Leer lassen, um alle Tools des Servers zu erlauben.",
+      "register": "Registrieren",
+      "save": "Änderungen speichern",
+      "cancel": "Abbrechen"
+    },
+    "callback": {
+      "connected": "Server verbunden. Seine Tools stehen den Agenten dieses Workspace zur Verfügung.",
+      "declined": "Die Freigabe wurde abgelehnt, daher wurde nichts verbunden.",
+      "error": "Die Verbindung konnte nicht abgeschlossen werden. Versuchen Sie es erneut.",
+      "invalid_state": "Dieser Verbindungslink ist abgelaufen. Starten Sie die Verbindung erneut.",
+      "no_pending_consent": "Es wartete keine Verbindung auf den Abschluss. Starten Sie die Verbindung erneut."
     }
   }
 }

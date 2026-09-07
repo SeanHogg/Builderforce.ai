@@ -3,7 +3,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * rehearsalService — start, run and read rehearsals.
  *
  * A rehearsal is NOT a second engine. It is the real loop
- * ({@link runCloudToolLoop}), the real prompt prep ({@link prepareCloudRun}), the real
+ * (through {@link resolveAgentEngine}), the real prompt prep ({@link prepareCloudRun}), the real
  * tool registry and the real model, with two options set:
  *
  *   decorateProvider: shadowProvider(...)   → every effect recorded, never performed
@@ -30,7 +30,7 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 import { agentDefinitionVersions, executions, ideAgents, projects, rehearsalSteps, rehearsals, tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { ShadowRecorder, shadowProvider } from './shadowProvider';
-import { prepareCloudRun, runCloudToolLoop } from '../runtime/cloudAgentEngine';
+import { prepareCloudRun, resolveAgentEngine } from '../runtime/cloudAgentEngine';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { freezeIdeAgentDefinition, type FrozenAgentDefinition } from '../agentIdentity/agentRunIdentity';
@@ -227,20 +227,25 @@ export async function runRehearsal(env: Env, db: Db, input: StartRehearsalInput)
       undefined, { readOnly: true, ...(frozenDefinition ? { agentDefinitionSnapshot: frozenDefinition.definition } : {}) },
     );
 
-    const result = await runCloudToolLoop(
-      env, db, executionId, tenantId, taskRow, agentRef ?? undefined, agentLabel, runModel,
-      `${prep.systemPrompt}\n\n${REHEARSAL_DIRECTIVE}`,
-      prep.userContent,
-      async () => false,
-      projectId,
-      {
+    // The real engine behind the ONE seam: this surface declares itself a rehearsal
+    // (shadowed provider, nothing finalized, reads pinned to the frozen ref) and the
+    // engine drives the same loop, gates and affect a live run gets.
+    const result = await resolveAgentEngine({
+      env, db, executionId, tenantId, taskRow, projectId, agentLabel,
+      ...(agentRef ? { cloudAgentRef: agentRef } : {}),
+      isCancelled: async () => false,
+      execParams: prep.execParams,
+      surface: {
+        kind: 'rehearsal',
         maxSteps: REHEARSAL_MAX_STEPS,
-        execParams: prep.execParams,
         decorateProvider: (p) => shadowProvider(p, recorder),
-        suppressFinalize: true,
         ...(frozenRef ? { frozenReadRef: frozenRef } : {}),
       },
-    );
+    }).run({
+      systemPrompt: `${prep.systemPrompt}\n\n${REHEARSAL_DIRECTIVE}`,
+      userContent: prep.userContent,
+      model: runModel,
+    });
 
     if (recorder.steps.length > 0) {
       await db.insert(rehearsalSteps).values(

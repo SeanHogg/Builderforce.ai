@@ -19,7 +19,7 @@ import { useFormat } from "@/i18n/useFormat";
 
 export interface ExecutionTrack {
   label: string;
-  kind: 'tool' | 'workflow-task';
+  kind: 'tool' | 'workflow-task' | 'thinking';
   startMs: number;
   endMs: number;
   status: string;
@@ -44,6 +44,7 @@ function statusColor(status: string): string {
     case 'completed': return 'var(--success, var(--success))';
     case 'failed': return 'var(--danger)';
     case 'running': return 'var(--info)';
+    case 'thinking': return 'var(--accent)';
     default: return 'var(--text-muted)';
   }
 }

@@ -27,6 +27,7 @@ import { agentHostOnlineCondition } from '../../infrastructure/database/agentHos
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { enqueueExecutionMessage, listExecutionMessages, releasePendingSteers } from '../../application/runtime/executionSteering';
 import { listExecutionLlmTurns } from '../../application/llm/executionTraces';
+import { executionUsageCost, taskUsageCost } from '../../application/llm/usageCostSummary';
 import { notifyExecutionSubscribers } from '../../application/runtime/executionEvents';
 import { broadcastExecutionEvent, executionRoomName } from '../../infrastructure/relay/broadcastRoom';
 import { relayToRoom } from './realtimeRelay';
@@ -45,7 +46,6 @@ import { unreadCountsForUser } from '../../application/brain/chatReadState';
 import { ExecutionStatus, TenantRole } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import { parseBody, z, zNonEmptyString, zPositiveInt } from './requestBody';
-import { millicentsToUsd } from '../../domain/shared/money';
 import { parseJsonArray } from '../../domain/shared/json';
 import type { Execution } from '../../domain/execution/Execution';
 import type { Env, HonoEnv } from '../../env';
@@ -55,7 +55,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { agentHosts, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, tenants, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { approvals, chatTicketLinks, projectManagerConfigs } from '../../infrastructure/database/schema';
-import { agentPurchases, ideAgents, llmUsageLog, taskFileChanges } from '../../infrastructure/database/schema';
+import { agentPurchases, ideAgents, taskFileChanges } from '../../infrastructure/database/schema';
 import { readDispatchFileChanges } from '../../application/task/taskFileChangeFeed';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { resolveProjectInferenceModel } from '../../application/llm/projectEvermind';
@@ -1960,6 +1960,9 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     // the only per-turn model evidence was a JSON `args` blob on the tool-audit
     // event, and the trace id it carried resolved to nothing.
     const llmTurns = await listExecutionLlmTurns(c.env as Env, plain.tenantId, id);
+    // The run's OWN spend (every usage row stamped with this execution_id) — the
+    // per-run figure beside the per-ticket and per-turn ones the drawer already shows.
+    const cost = await executionUsageCost(c.env as Env, db, plain.tenantId, id);
 
     return c.json({
       execution: plain,
@@ -1969,6 +1972,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         toolEvents,
         messages,
         llmTurns,
+        cost,
       },
     });
   });
@@ -2502,31 +2506,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   router.get('/tasks/:taskId/cost', async (c) => {
     const taskId = Number(c.req.param('taskId'));
     const tenantId = c.get('tenantId');
-    if (!Number.isFinite(taskId)) return c.json({ estimatedCostUsd: 0, totalTokens: 0, requests: 0 });
-    const payload = await getOrSetCached(
-      c.env as Env,
-      `task-cost:v1:${tenantId}:${taskId}`,
-      async () => {
-        // ::bigint comes back as a STRING from the driver, ::int as a number — the
-        // Number() coercions below are what normalise both.
-        const rows = await db
-          .select({
-            cost_mc: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}), 0)::bigint`,
-            tokens: sql<string>`coalesce(sum(${llmUsageLog.totalTokens}), 0)::bigint`,
-            requests: sql<number>`count(*)::int`,
-          })
-          .from(llmUsageLog)
-          .where(and(eq(llmUsageLog.tenantId, tenantId), eq(llmUsageLog.taskId, taskId)));
-        const r = rows[0];
-        return {
-          estimatedCostUsd: millicentsToUsd(Number(r?.cost_mc ?? 0)),
-          totalTokens: Number(r?.tokens ?? 0),
-          requests: Number(r?.requests ?? 0),
-        };
-      },
-      { kvTtlSeconds: 60, l1TtlMs: 30_000 },
-    );
-    return c.json(payload);
+    return c.json(await taskUsageCost(c.env as Env, db, tenantId, taskId));
   });
 
   // Per-agent file-change traceability for a task's shared ticket workspace.

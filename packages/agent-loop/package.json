@@ -1,0 +1,17 @@
+{
+  "name": "@builderforce/agent-loop",
+  "version": "2026.9.1",
+  "private": true,
+  "type": "module",
+  "description": "THE agent loop — the one model→tools→model iteration every BuilderForce surface drives. Owns the step budget, cancellation, argument parsing, assistant/tool message pushing and the finish / ask_human control signals; every surface supplies its model call, its tool dispatch and its hooks. Zero dependencies and no Node builtins: imported by the Worker (cloud), the browser (Brain + Canvas), Node (agent-runtime) and the VS Code extension host.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

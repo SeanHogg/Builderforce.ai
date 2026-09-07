@@ -22,6 +22,7 @@
 import type { AgentEngine, AgentRunInput, AgentRunResult } from "@builderforce/agent-tools";
 import { CURRENT_ENGINE_ID } from "@builderforce/agent-tools";
 import { runClaudeAgentSdkV2, type V2RunnerSinks } from "../agents/claude-agent-sdk-runner.js";
+import type { SteeringChannel } from "./relay-steering.js";
 
 /** Runtime collaborators an on-prem SDK run needs, supplied once at construction. */
 export interface ClaudeSdkEngineDeps {
@@ -40,6 +41,10 @@ export interface ClaudeSdkEngineDeps {
   surface?: string;
   /** The execution this loop is running, stamped onto gateway requests. */
   executionId?: number;
+  /** Mid-run steering channel: an `execution.message` frame pushes into it and the
+   *  SDK consumes it as the next user turn (the same portal steer the cloud loop
+   *  drains between steps). Omitted ⇒ single-turn run. */
+  steering?: SteeringChannel;
 }
 
 /** The on-prem Claude-Agent-SDK loop, behind the shared {@link AgentEngine} seam. */
@@ -67,6 +72,7 @@ export class ClaudeSdkAgentEngine implements AgentEngine {
         ...(this.deps.surface ? { surface: this.deps.surface } : {}),
         ...(this.deps.executionId != null ? { executionId: this.deps.executionId } : {}),
         abortController: this.deps.abortController,
+        ...(this.deps.steering ? { steering: this.deps.steering } : {}),
       },
       this.deps.sinks,
     );

@@ -1,36 +1,96 @@
 import { describe, expect, it } from "vitest";
-import { buildSteeringInjection } from "./relay-steering.js";
+import {
+  buildSteeringMessage,
+  createSteeringChannel,
+  normalizeSteeringText,
+} from "./relay-steering.js";
 
-describe("buildSteeringInjection", () => {
-  it("builds a chat.send against the main session with a unique idempotency key", () => {
-    const out = buildSteeringInjection(42, "tighten the error handling", 1000);
-    expect(out).toEqual({
-      sessionKey: "main",
-      message: "tighten the error handling",
-      idempotencyKey: "steer-42-1000",
+async function collect<T>(iterable: AsyncIterable<T>, max: number): Promise<T[]> {
+  const out: T[] = [];
+  for await (const item of iterable) {
+    out.push(item);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+describe("normalizeSteeringText", () => {
+  it("trims usable text and rejects empty / whitespace-only / non-string", () => {
+    expect(normalizeSteeringText("  do the thing  ")).toBe("do the thing");
+    expect(normalizeSteeringText("")).toBeNull();
+    expect(normalizeSteeringText("   ")).toBeNull();
+    expect(normalizeSteeringText(undefined)).toBeNull();
+    expect(normalizeSteeringText(123)).toBeNull();
+  });
+});
+
+describe("buildSteeringMessage", () => {
+  it("builds a top-level SDK user turn", () => {
+    expect(buildSteeringMessage("tighten the error handling")).toEqual({
+      type: "user",
+      message: { role: "user", content: "tighten the error handling" },
+      parent_tool_use_id: null,
     });
   });
+});
 
-  it("trims surrounding whitespace from the message", () => {
-    const out = buildSteeringInjection(7, "  do the thing  ", 5);
-    expect(out?.message).toBe("do the thing");
+describe("createSteeringChannel", () => {
+  it("yields the task prompt first, then steers in push order, and ends on close", async () => {
+    const ch = createSteeringChannel();
+    const applied: string[] = [];
+    const it = ch.messages("build the feature", (t) => applied.push(t))[Symbol.asyncIterator]();
+
+    expect((await it.next()).value.message.content).toBe("build the feature");
+    expect(applied).toEqual([]);
+
+    expect(ch.push("  add tests  ")).toBe(true);
+    expect(ch.push("then document it")).toBe(true);
+    expect(ch.pending()).toBe(2);
+
+    expect((await it.next()).value.message.content).toBe("add tests");
+    expect((await it.next()).value.message.content).toBe("then document it");
+    expect(applied).toEqual(["add tests", "then document it"]);
+    expect(ch.pending()).toBe(0);
+
+    ch.close();
+    expect((await it.next()).done).toBe(true);
   });
 
-  it("falls back to 'na' in the key when executionId is undefined", () => {
-    const out = buildSteeringInjection(undefined, "hello", 9);
-    expect(out?.idempotencyKey).toBe("steer-na-9");
+  it("wakes a consumer waiting on an empty queue when a steer arrives", async () => {
+    const ch = createSteeringChannel();
+    const it = ch.messages("start")[Symbol.asyncIterator]();
+    await it.next();
+
+    const pending = it.next();
+    ch.push("steer now");
+    expect((await pending).value.message.content).toBe("steer now");
   });
 
-  it("returns null for empty / whitespace-only / non-string text", () => {
-    expect(buildSteeringInjection(1, "", 1)).toBeNull();
-    expect(buildSteeringInjection(1, "   ", 1)).toBeNull();
-    expect(buildSteeringInjection(1, undefined, 1)).toBeNull();
-    expect(buildSteeringInjection(1, 123, 1)).toBeNull();
+  it("wakes a consumer waiting on an empty queue when the channel closes", async () => {
+    const ch = createSteeringChannel();
+    const it = ch.messages("start")[Symbol.asyncIterator]();
+    await it.next();
+
+    const pending = it.next();
+    ch.close();
+    expect((await pending).done).toBe(true);
   });
 
-  it("keeps the idempotency key distinct across two sends of identical text", () => {
-    const a = buildSteeringInjection(3, "again", 100);
-    const b = buildSteeringInjection(3, "again", 101);
-    expect(a?.idempotencyKey).not.toBe(b?.idempotencyKey);
+  it("refuses pushes after close and drains queued steers before ending", async () => {
+    const ch = createSteeringChannel();
+    ch.push("queued before close");
+    ch.close();
+    expect(ch.closed()).toBe(true);
+    expect(ch.push("too late")).toBe(false);
+
+    const msgs = await collect(ch.messages("start"), 10);
+    expect(msgs.map((m) => m.message.content)).toEqual(["start", "queued before close"]);
+  });
+
+  it("ignores unusable text without queueing", () => {
+    const ch = createSteeringChannel();
+    expect(ch.push("   ")).toBe(false);
+    expect(ch.push(undefined)).toBe(false);
+    expect(ch.pending()).toBe(0);
   });
 });

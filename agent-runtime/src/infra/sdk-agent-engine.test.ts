@@ -7,6 +7,7 @@ vi.mock("../agents/claude-agent-sdk-runner.js", () => ({
 }));
 
 import { CURRENT_ENGINE_ID } from "@builderforce/agent-tools";
+import { createSteeringChannel } from "./relay-steering.js";
 import { ClaudeSdkAgentEngine } from "./sdk-agent-engine.js";
 
 function makeEngine(over?: Partial<ConstructorParameters<typeof ClaudeSdkAgentEngine>[0]>) {
@@ -89,5 +90,27 @@ describe("gateway surface declaration", () => {
     const params = runMock.mock.calls.at(-1)![0] as Record<string, unknown>;
     expect("surface" in params).toBe(false);
     expect("executionId" in params).toBe(false);
+  });
+});
+
+/** GAP A3 — the steering channel is a construction collaborator like the abort handle. */
+describe("mid-run steering channel", () => {
+  it("passes the channel through to the SDK runner", async () => {
+    runMock.mockResolvedValueOnce({ ok: true, text: "done" });
+    const steering = createSteeringChannel();
+    const { engine } = makeEngine({ steering });
+
+    await engine.run({ systemPrompt: "", userContent: "x" });
+
+    expect(runMock.mock.calls.at(-1)![0]).toMatchObject({ steering });
+  });
+
+  it("omits it when the caller supplies none (single-turn run)", async () => {
+    runMock.mockResolvedValueOnce({ ok: true, text: "done" });
+    const { engine } = makeEngine();
+
+    await engine.run({ systemPrompt: "", userContent: "x" });
+
+    expect("steering" in (runMock.mock.calls.at(-1)![0] as object)).toBe(false);
   });
 });

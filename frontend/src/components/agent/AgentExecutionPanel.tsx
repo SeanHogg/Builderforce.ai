@@ -37,6 +37,7 @@ import { TaskChangesPanel } from './TaskChangesPanel';
 import { PullRequestPanel } from './PullRequestPanel';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { formatUsdSpend } from '@/lib/formatSpend';
 /**
  * Live execution view for a task. Queued runs stream their status, output
  * (rendered as markdown in a fixed-height scroll region), file changes, and tool
@@ -199,7 +200,7 @@ function runDispatchType(toolEvents: ExecutionTraceToolEvent[]): string | undefi
  *  calls (narration, model completions, dispatch, planning, context prep). The
  *  Tools tab counts/lists only genuine tool invocations, so these are excluded. */
 const NON_TOOL_NAMESPACES = new Set(['agent', 'llm', 'runtime', 'context', 'planning', 'capabilities']);
-const NON_TOOL_CATEGORIES = new Set(['message', 'llm', 'planning', 'context', 'capabilities', 'lifecycle']);
+const NON_TOOL_CATEGORIES = new Set(['message', 'llm', 'thinking', 'planning', 'context', 'capabilities', 'lifecycle']);
 
 /** True when a trace event is a real tool call (e.g. write_file, list_files), not
  *  a lifecycle/telemetry event (agent.message, llm.complete, context.prepare, …). */
@@ -323,6 +324,9 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   // Structured per-turn model + token facts for this run (0949) — real columns off
   // the run's own trace rows, not a JSON blob the UI has to re-parse.
   const llmTurns: ExecutionLlmTurn[] = trace?.trace.llmTurns ?? [];
+  // The run's own spend (B2): the same ledger the ticket chip sums, filtered to
+  // this execution_id — so a single run finally has a dollar figure of its own.
+  const runCost = trace?.trace.cost ?? null;
   const llmTurnTotals = useMemo(() => llmTurns.reduce(
     (acc, turn) => ({
       promptTokens: acc.promptTokens + turn.promptTokens,
@@ -730,7 +734,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
             style={{ fontSize: 12, color: 'var(--text-muted)' }}
             title={t('ticketSpendTooltip', { tokens: fmt.number(taskCost.totalTokens), requests: taskCost.requests })}
           >
-            {t('spentOnTicket', { amount: taskCost.estimatedCostUsd < 0.01 ? '<$0.01' : `$${taskCost.estimatedCostUsd.toFixed(2)}` })}
+            {t('spentOnTicket', { amount: formatUsdSpend(taskCost.estimatedCostUsd) })}
           </span>
         )}
       </div>
@@ -971,6 +975,14 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                     <span>{t('modelTurnsPromptTokens', { count: llmTurnTotals.promptTokens })}</span>
                     <span>{t('modelTurnsCompletionTokens', { count: llmTurnTotals.completionTokens })}</span>
                     <span>{t('modelTurnsTotalDuration', { ms: llmTurnTotals.durationMs })}</span>
+                    {runCost && runCost.requests > 0 && (
+                      <span
+                        style={{ color: 'var(--text-primary)', fontWeight: 600 }}
+                        title={t('runSpendTooltip', { tokens: fmt.number(runCost.totalTokens), requests: runCost.requests })}
+                      >
+                        {t('spentOnRun', { amount: formatUsdSpend(runCost.estimatedCostUsd) })}
+                      </span>
+                    )}
                   </div>
                   {llmTurns.map((turn) => (
                     <div

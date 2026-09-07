@@ -109,7 +109,7 @@ interface LogLine {
 
 interface TimelineTrack {
   label: string;
-  kind: 'tool' | 'workflow-task';
+  kind: 'tool' | 'workflow-task' | 'thinking';
   startMs: number;
   endMs: number;
   status: string;
@@ -490,12 +490,15 @@ export function ObservabilityContent({
   const pushToolEvent = (ev: ToolAuditEvent, agentKey: string, agentName: string) => {
     if (categoryFilter && !(ev.category ?? '').includes(categoryFilter)) return;
     const startMs = new Date(ev.ts).getTime();
+    // A `thinking` row is the model's reasoning path (B1) — its own track kind and
+    // status so the chart colours it as thought, not as a completed tool call.
+    const thinking = ev.category === 'thinking';
     tracks.push({
       label: ev.category ? `${ev.toolName} (${ev.category})` : ev.toolName,
-      kind: 'tool',
+      kind: thinking ? 'thinking' : 'tool',
       startMs,
       endMs: startMs + (ev.durationMs ?? 0),
-      status: isErrorEvent(ev) ? 'failed' : 'completed',
+      status: thinking ? 'thinking' : isErrorEvent(ev) ? 'failed' : 'completed',
       detail: ev.result ? truncate(ev.result, 120) : ev.args ? truncate(ev.args, 120) : undefined,
       agentKey,
       agentName,

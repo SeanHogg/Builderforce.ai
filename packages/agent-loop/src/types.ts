@@ -1,0 +1,169 @@
+/**
+ * Contract of THE agent loop.
+ *
+ * One iteration = ask the model → run every tool it called → ask again, until the
+ * model stops calling tools, a tool signals `finish`, a tool asks a human, the run is
+ * cancelled or the step budget is spent. The kernel owns exactly that skeleton — the
+ * budget, the cancel check, argument parsing, pushing the assistant / tool messages
+ * and interpreting the two control signals. Everything a surface does differently
+ * (steering, compaction, policy gates, stall recovery, tool selection, telemetry,
+ * confirm prompts, read de-duplication) arrives through the ports and hooks below,
+ * so the SAME kernel drives the Worker, the browser, Node and the extension host.
+ *
+ * `M` is the surface's own message type (OpenAI chat rows in most places, pi-style
+ * `AgentMessage` in agent-runtime). The kernel never inspects a message — it only
+ * asks the codec to build them and pushes them onto the transcript it was handed.
+ */
+
+/** A tool call as the model emitted it: arguments are the RAW JSON string. */
+export interface LoopToolCall {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+/** One successful model turn. `meta` is whatever the surface wants to carry through to its codec (usage, provider, raw message). */
+export interface LoopTurn {
+  content: string;
+  toolCalls: LoopToolCall[];
+  meta?: unknown;
+}
+
+/**
+ * What the model port hands back per step:
+ *  - a `LoopTurn` → normal iteration;
+ *  - `{ failed }` → clean stop; the run ends `ok:false` with that text (a recorded gateway error the surface has already logged);
+ *  - `{ skip: true }` → this step produced nothing usable (a stalled stream the surface already retried the model for); spend the step and loop again.
+ */
+export type LoopTurnResult = LoopTurn | { failed: string } | { skip: true };
+
+/**
+ * The control signals a tool may return alongside its data. Structurally identical to
+ * `ToolControl` in `@builderforce/agent-tools`, restated here so this package keeps zero
+ * inter-package edges (a surface that only consumes this kernel need not resolve the
+ * tool contract).
+ */
+export type LoopControl =
+  | { kind: "finish"; summary: string }
+  | { kind: "ask_human"; approvalId?: string; question: string };
+
+/** What tool dispatch hands back: the payload the model will see, an optional control signal, and whether the surface wants it flagged as an error message. */
+export interface LoopDispatchResult {
+  data: unknown;
+  control?: LoopControl;
+  isError?: boolean;
+}
+
+/** A tool call after the kernel parsed its arguments. `malformed` ⇒ the JSON was invalid and `args` is `{}`. */
+export interface ParsedToolCall {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+  raw: LoopToolCall;
+  malformed: boolean;
+}
+
+/** Builds the two message shapes the kernel pushes onto the transcript. */
+export interface LoopCodec<M> {
+  /** The assistant row for a turn that called tools (the kernel never pushes a tool-free final turn — `onNoToolCalls` decides that). */
+  assistant(turn: LoopTurn): M;
+  /** The tool-result row for one call. The codec owns serialisation and budgeting of the payload. */
+  tool(call: ParsedToolCall, result: LoopDispatchResult): M;
+}
+
+/** Read/write view of the run that every port and hook receives. */
+export interface TurnContext<M> {
+  /** The live transcript. The kernel pushes onto THIS array; surfaces persist it by reference. */
+  readonly messages: M[];
+  /** Absolute step index across the whole run (survives resume). */
+  readonly step: number;
+  /** Step index within this invocation (0 on the first iteration after resume). */
+  readonly stepInCall: number;
+  readonly signal: AbortSignal | undefined;
+  /** Best output so far: the latest non-empty assistant content, or a finish summary. */
+  readonly output: string;
+}
+
+export interface LoopPorts<M> {
+  /** Ask the model. Retries, cascades and streaming are the port's business; throw to abort the run, or return `{failed}` for a clean recorded stop. */
+  complete(ctx: TurnContext<M>): Promise<LoopTurnResult>;
+  /** Run one tool. Throw to abort the run; return `isError` + data to keep going with an error payload. */
+  dispatch(call: ParsedToolCall, ctx: TurnContext<M>): Promise<LoopDispatchResult>;
+}
+
+export type StopDecision = { action: "stop"; ok?: boolean; output?: string; finished?: boolean };
+
+export type NoToolCallsDecision =
+  | { action: "finish"; output?: string }
+  | { action: "continue" }
+  | StopDecision;
+
+export type DispatchDecision =
+  /** Skip the tool: push this result as if it had run (de-duplicated reads, declined confirms, unknown tools). */
+  | { result: LoopDispatchResult }
+  /** Run a different call instead (router tools rewriting themselves into the real target). */
+  | { rewrite: ParsedToolCall }
+  | undefined
+  | void;
+
+export interface AfterDispatchDecision {
+  /** Abandon the remaining calls of this turn; each gets `skipped` pushed as its result (steering arrived mid-turn). */
+  skipRemaining?: { data: unknown; isError?: boolean };
+}
+
+export interface LoopHooks<M> {
+  /** Polled before every step, in addition to `signal`. */
+  isCancelled?(ctx: TurnContext<M>): Promise<boolean> | boolean;
+  /** Runs before the model is asked (containment limits, compaction, budget checks). `stop` ends the run without a model call. */
+  beforeTurn?(ctx: TurnContext<M>): Promise<StopDecision | void> | StopDecision | void;
+  /** Runs after the model answered, before anything is pushed (telemetry, trace, output capture). */
+  afterTurn?(ctx: TurnContext<M>, turn: LoopTurn): Promise<void> | void;
+  /** A turn with NO tool calls. Default: finish with the turn's content. */
+  onNoToolCalls?(ctx: TurnContext<M>, turn: LoopTurn): Promise<NoToolCallsDecision> | NoToolCallsDecision;
+  /** A turn WITH tool calls, before the assistant row is pushed. `stop` ends the run and the row is NOT pushed (terminal tools such as `ask_user`). */
+  beforeToolCalls?(ctx: TurnContext<M>, turn: LoopTurn, calls: ParsedToolCall[]): Promise<StopDecision | void> | StopDecision | void;
+  /** Per call, before dispatch. May short-circuit with a result or rewrite the call. */
+  beforeDispatch?(call: ParsedToolCall, ctx: TurnContext<M>): Promise<DispatchDecision> | DispatchDecision;
+  /** A tool returned `finish`. Return a block reason to REFUSE the finish (the model sees `{ok:false,error}` and keeps going), or null to accept. */
+  onFinish?(ctx: TurnContext<M>, summary: string, call: ParsedToolCall): Promise<string | null> | string | null;
+  /** A tool returned `ask_human`. The run ends after this turn's remaining calls with `awaitingInput` set. */
+  onAskHuman?(ctx: TurnContext<M>, control: Extract<LoopControl, { kind: "ask_human" }>, call: ParsedToolCall): Promise<void> | void;
+  /** Per call, after its result row was pushed (`message` is that row). */
+  afterDispatch?(call: ParsedToolCall, result: LoopDispatchResult, message: M, ctx: TurnContext<M>): Promise<AfterDispatchDecision | void> | AfterDispatchDecision | void;
+  /** After every call of the turn ran. May override `finished` (queued steering re-opens a finished run). */
+  afterToolCalls?(ctx: TurnContext<M>, finished: boolean): Promise<{ finished?: boolean } | void> | { finished?: boolean } | void;
+}
+
+export interface LoopBudget {
+  /** Absolute step to resume from (0 for a fresh run). */
+  startStep?: number;
+  /** Steps this invocation may take before yielding (tick-driven runners pass 1). Unbounded when omitted. */
+  maxSteps?: number;
+  /** Absolute cap across the whole run. */
+  stepCap: number;
+}
+
+export interface LoopRunArgs<M> {
+  messages: M[];
+  codec: LoopCodec<M>;
+  ports: LoopPorts<M>;
+  hooks?: LoopHooks<M>;
+  budget: LoopBudget;
+  signal?: AbortSignal;
+  /** Output to start from when resuming (the run's last recorded output). */
+  initialOutput?: string;
+}
+
+export interface LoopResult {
+  ok: boolean;
+  output: string;
+  /** The run reached a terminal state (finish / final answer / stop). False when it yielded on budget or cancel. */
+  finished: boolean;
+  cancelled: boolean;
+  /** Absolute step index after this invocation — feed it back as `startStep` to resume. */
+  step: number;
+  /** The absolute cap was hit without finishing. */
+  exhausted: boolean;
+  /** A tool asked a human; the caller pauses and resumes once answered. */
+  awaitingInput?: { approvalId?: string; question: string; callId: string };
+}
