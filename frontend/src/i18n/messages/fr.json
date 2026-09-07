@@ -15554,6 +15554,10 @@
       "transcribeAudio": {
         "label": "Transcrire l'audio",
         "blurb": "Transcrit un fichier audio, ou le traduit directement en anglais — véritable appel à l'API Whisper (configuré par l'opérateur, pas encore de clé propre par locataire)."
+      },
+      "subflow": {
+        "label": "Exécuter un canevas",
+        "blurb": "Exécutez un autre canevas comme une seule étape : son flux, ses entrées, ses sorties."
       }
     },
     "statusRunPendingApproval": "Ce workflow doit être approuvé avant de pouvoir s'exécuter. Une demande d'approbation a été envoyée.",
@@ -23518,7 +23522,14 @@
       "llmNeedsPrompt": "Cette étape de modèle a besoin d’un prompt.",
       "connectorNeedsConnector": "Cette étape d’intégration a besoin d’un connecteur, par exemple Twilio.",
       "connectorNeedsAction": "Cette étape a besoin d’une action sur {connector}.",
-      "agentNeedsTask": "Cette étape d’agent a besoin d’une tâche à exécuter."
+      "agentNeedsTask": "Cette étape d’agent a besoin d’une tâche à exécuter.",
+      "subflowNeedsCanvas": "Cette étape a besoin d’un canevas pour s’exécuter.",
+      "subflowUnresolved": "Le canevas « {canvas} » n’a pas pu être lu. Il a peut-être été supprimé, ou il n’est pas partagé avec vous.",
+      "subflowCycle": "« {canvas} » s’exécuterait lui-même. Un canevas ne peut pas être imbriqué dans lui-même.",
+      "subflowTooDeep": "Les canevas imbriqués dépassent {depth} niveaux à « {canvas} ».",
+      "subflowEmpty": "Le canevas « {canvas} » n’a encore aucune étape à exécuter.",
+      "subflowNotBuildable": "Le canevas « {canvas} » ne peut pas encore être compilé : l’étape « {step} » n’est pas prête.",
+      "subflowNeedsBuild": "Compilez le canevas « {canvas} » une fois avant de l’exécuter en direct depuis ici."
     },
     "frameSection": {
       "holds": "{count, plural, =0 {Vide} one {# objet} other {# objets}}",
@@ -24124,6 +24135,30 @@
     "installIos": "Installez Builderforce : appuyez sur Partager, puis « Sur l’écran d’accueil »."
   },
   "workflow": {
+    "subflowNode": {
+    "loadFailed": "Impossible de charger vos canevas.",
+    "canvas": "Canevas à exécuter",
+    "choosePlaceholder": "Choisissez un canevas…",
+    "loading": "Chargement des canevas…",
+    "binding": "Mode de liaison",
+    "bindingOption": {
+      "snapshot": "Instantané — le figer dans ce flux",
+      "live": "En direct — suivre le canevas"
+    },
+    "bindingHint": {
+      "snapshot": "Les étapes du canevas enfant sont copiées dans ce flux à la compilation. Une exécution, une chronologie ; les modifications ultérieures de ce canevas n’arrivent ici qu’après une nouvelle compilation.",
+      "live": "Ce flux appelle le flux compilé du canevas enfant à l’exécution, donc les modifications arrivent sans recompiler ici. L’enfant doit avoir été compilé au moins une fois."
+    },
+    "unreadable": "Ce canevas est illisible — il a peut-être été supprimé, ou n’est pas partagé avec vous.",
+    "noSteps": "Ce canevas n’a encore aucune étape, il n’y a donc rien à exécuter.",
+    "stepCount": "{count, plural, one {# étape} other {# étapes}}",
+    "accepts": "Accepte",
+    "acceptsAnything": "Tout ce que vous lui transmettez",
+    "acceptsNothing": "Rien — il part de ses propres étapes",
+    "acceptsAlsoRaw": "Il accepte aussi tout ce que vous lui transmettez d’autre.",
+    "returns": "Renvoie",
+    "returnsNothing": "Rien que ce flux puisse lire"
+    },
     "connectorNode": {
       "integration": "Intégration",
       "action": "Action",
@@ -24136,6 +24171,30 @@
       "templateHint": "'{{'input'}}' insère la sortie du nœud précédent ; '{{'input.champ'}}' en lit un champ lorsque cette sortie est du JSON.",
       "mutatesWarning": "Cette action modifie quelque chose : elle envoie un message, passe un appel ou déplace de l'argent. Elle s'exécutera sans surveillance à chaque déclenchement du flux.",
       "connectionHint": "Nécessite une connexion {name} active dans Intégrations. Le nœud échoue en sécurité tant qu'il n'y en a pas."
+    },
+    "subflowNode": {
+      "canvas": "Canevas",
+      "binding": "Mode d’exécution",
+      "choosePlaceholder": "Choisissez un canevas…",
+      "loading": "Chargement des canevas…",
+      "loadFailed": "Impossible de charger vos canevas.",
+      "unreadable": "Ce canevas n’a pas pu être lu. Il a peut-être été supprimé, ou il n’est pas partagé avec vous.",
+      "noSteps": "Ce canevas n’a encore aucune étape, il n’y a donc rien à exécuter.",
+      "stepCount": "{count, plural, one {# étape} other {# étapes}} sur ce canevas.",
+      "accepts": "Accepte",
+      "acceptsAnything": "Ce que cette étape reçoit.",
+      "acceptsNothing": "Rien de nommé pour l’instant.",
+      "acceptsAlsoRaw": "Une étape d’entrée ne déclare rien : elle reçoit donc aussi la charge telle quelle.",
+      "returns": "Renvoie",
+      "returnsNothing": "Rien de publié pour les étapes suivantes.",
+      "bindingOption": {
+        "snapshot": "Instantané — le figer dans cette compilation",
+        "live": "En direct — le résoudre à chaque exécution"
+      },
+      "bindingHint": {
+        "snapshot": "Les étapes de ce canevas sont copiées dans ce flux à la compilation. Les modifications faites ensuite là-bas ne changent ce flux qu’après une nouvelle compilation.",
+        "live": "Ce canevas est relu à chaque exécution de ce flux, les modifications faites là-bas s’appliquent donc immédiatement. Il doit y avoir été compilé au moins une fois."
+      }
     }
   },
   "kernel": {

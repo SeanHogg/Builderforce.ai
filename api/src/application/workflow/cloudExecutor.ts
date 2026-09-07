@@ -469,6 +469,17 @@ export async function executeCloudNode(
       if (!items) throw new Error('Iterator needs an array (or {"items":[...]}) as its input');
       return { output: JSON.stringify(items) };
     }
+    // A nested canvas is EXPANDED when the run is instantiated
+    // (`expandSubflows.ts`), so a node of this kind reaching the executor means it
+    // was never expanded — a definition compiled by a path that does not know
+    // about composition (the `compile()` primitive's process-chart lowering is the
+    // one that exists today). Fail loudly: a pass-through here would be a step
+    // that reports success for a whole canvas nobody ran.
+    case 'subflow':
+      throw new Error(
+        `Nested canvas "${String(node.config.canvas ?? node.config.definitionId ?? '')}" was not resolved before the run started, so it cannot run.`,
+      );
+
     case 'merge': {
       // Reads the RAW per-dependency outputs (advanceCloudWorkflow populates
       // `node.depOutputs`), not the newline-joined `inputText` — a fan-in needs

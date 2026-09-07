@@ -19,13 +19,19 @@
  *
  * ── THE CACHE, AND WHY IT IS SHORT ───────────────────────────────────────────
  * The compiler is synchronous and runs on every build, so the boards it may nest
- * have to be in memory before it starts. They are cached module-wide (one fetch
- * however many canvases are open) and briefly: a child that somebody is actively
- * editing in the next tab should reach the next build, so the window is seconds,
- * not the session. Choosing a canvas in the picker invalidates its entry outright
- * — that is the one moment the author is entitled to see the truth immediately.
+ * have to be in memory before it starts. They are cached (one fetch however many
+ * canvases are open) and briefly: a child that somebody is actively editing in the
+ * next tab should reach the next build, so the window is seconds, not the session.
+ * Choosing a canvas in the picker invalidates its entry outright — that is the one
+ * moment the author is entitled to see the truth immediately.
+ *
+ * It is the SHARED read-through cache, not a `Map` of its own. A private map is
+ * unbounded, has no single-flight, and is invisible to every other invalidation
+ * in the app — which is why `check:api-transport` refuses one. This module still
+ * owns its key space and its TTL; the store underneath is the one store.
  */
 
+import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 import { boardFromPersistedGraph } from '../domain/canvasBoard';
 import { flowDefinitionIdOf } from '@/domains/workflow/domain/flowDefinitionRef';
 import type { SubflowBoard } from '@/domains/workflow/domain/subflow';
@@ -37,12 +43,10 @@ export type SubflowSourcePort = Pick<CanvasSessionPort, 'read'>;
 /** How long a child board may be reused before it is read again. */
 const CACHE_TTL_MS = 20_000;
 
-interface CacheEntry {
-  at: number;
-  board: Promise<SubflowBoard | null>;
-}
-
-const cache = new Map<string, CacheEntry>();
+/** This module's key space in the shared client store. (Named for the KEY, not the
+ *  store: `check:api-transport` reads a top-level `const …cache… =` as somebody
+ *  rolling their own, which is exactly the thing this module stopped doing.) */
+const subflowBoardKey = (sessionId: string): string => `canvas:subflow-board:${sessionId}`;
 
 /**
  * The definition a child canvas was built into, or null.
@@ -87,14 +91,14 @@ async function read(port: SubflowSourcePort, sessionId: string): Promise<Subflow
  * naming the canvas rather than as a step it silently leaves out.
  */
 export function loadSubflowBoard(port: SubflowSourcePort, sessionId: string): Promise<SubflowBoard | null> {
-  const cached = cache.get(sessionId);
-  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.board;
-  const board = read(port, sessionId).catch(() => null);
-  cache.set(sessionId, { at: Date.now(), board });
-  return board;
+  return getOrSetClientCached(
+    subflowBoardKey(sessionId),
+    () => read(port, sessionId).catch(() => null),
+    { ttlMs: CACHE_TTL_MS },
+  );
 }
 
 /** Drop a child canvas from the cache so the next read is a real one. */
 export function forgetSubflowBoard(sessionId: string): void {
-  cache.delete(sessionId);
+  invalidateClientCache(subflowBoardKey(sessionId));
 }

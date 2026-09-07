@@ -15554,6 +15554,10 @@
       "transcribeAudio": {
         "label": "Transcribir audio",
         "blurb": "Transcribe un archivo de audio, o tradúcelo directamente al inglés — llamada real a la API de Whisper (configurada por el operador, sin clave propia por inquilino todavía)."
+      },
+      "subflow": {
+        "label": "Ejecutar un lienzo",
+        "blurb": "Ejecuta otro lienzo como un solo paso: su flujo, sus entradas, sus salidas."
       }
     },
     "statusRunPendingApproval": "Este flujo de trabajo necesita aprobación antes de ejecutarse. Se envió una solicitud de aprobación.",
@@ -23518,7 +23522,14 @@
       "llmNeedsPrompt": "Este paso de modelo necesita un prompt.",
       "connectorNeedsConnector": "Este paso de integración necesita un conector, por ejemplo Twilio.",
       "connectorNeedsAction": "Este paso necesita una acción en {connector}.",
-      "agentNeedsTask": "Este paso de agente necesita una tarea que realizar."
+      "agentNeedsTask": "Este paso de agente necesita una tarea que realizar.",
+      "subflowNeedsCanvas": "Este paso necesita un lienzo para ejecutarse.",
+      "subflowUnresolved": "No se pudo leer el lienzo «{canvas}». Puede que se haya eliminado o que no esté compartido contigo.",
+      "subflowCycle": "«{canvas}» se ejecutaría a sí mismo. Un lienzo no puede anidarse dentro de sí mismo.",
+      "subflowTooDeep": "Los lienzos anidados superan los {depth} niveles en «{canvas}».",
+      "subflowEmpty": "El lienzo «{canvas}» todavía no tiene pasos que ejecutar.",
+      "subflowNotBuildable": "El lienzo «{canvas}» aún no se puede compilar: el paso «{step}» no está listo.",
+      "subflowNeedsBuild": "Compila el lienzo «{canvas}» una vez antes de ejecutarlo en vivo desde aquí."
     },
     "frameSection": {
       "holds": "{count, plural, =0 {Vacío} one {# objeto} other {# objetos}}",
@@ -24124,6 +24135,30 @@
     "installIos": "Instala Builderforce: toca Compartir y luego «Añadir a pantalla de inicio»."
   },
   "workflow": {
+    "subflowNode": {
+    "loadFailed": "No se pudieron cargar tus lienzos.",
+    "canvas": "Lienzo que se ejecutará",
+    "choosePlaceholder": "Elige un lienzo…",
+    "loading": "Cargando lienzos…",
+    "binding": "Cómo se vincula",
+    "bindingOption": {
+      "snapshot": "Instantánea: congelarlo en este flujo",
+      "live": "En vivo: seguir el lienzo"
+    },
+    "bindingHint": {
+      "snapshot": "Los pasos del lienzo hijo se copian en este flujo al compilarlo. Una ejecución, una cronología; los cambios posteriores en ese lienzo no llegan aquí hasta que vuelvas a compilar.",
+      "live": "Este flujo llama al flujo compilado del lienzo hijo en tiempo de ejecución, así que los cambios llegan sin recompilar aquí. El hijo debe haberse compilado al menos una vez."
+    },
+    "unreadable": "Ese lienzo no se puede leer: puede haberse eliminado o no estar compartido contigo.",
+    "noSteps": "Ese lienzo aún no tiene pasos, así que no hay nada que ejecutar.",
+    "stepCount": "{count, plural, one {# paso} other {# pasos}}",
+    "accepts": "Acepta",
+    "acceptsAnything": "Cualquier cosa que le pases",
+    "acceptsNothing": "Nada: empieza desde sus propios pasos",
+    "acceptsAlsoRaw": "También acepta cualquier otra cosa que le pases.",
+    "returns": "Devuelve",
+    "returnsNothing": "Nada que este flujo pueda leer"
+    },
     "connectorNode": {
       "integration": "Integración",
       "action": "Acción",
@@ -24136,6 +24171,30 @@
       "templateHint": "'{{'input'}}' inserta la salida del nodo anterior; '{{'input.campo'}}' lee un campo concreto cuando esa salida es JSON.",
       "mutatesWarning": "Esta acción cambia algo: envía un mensaje, hace una llamada o mueve dinero. Se ejecutará sin supervisión cada vez que se dispare este flujo.",
       "connectionHint": "Necesita una conexión activa de {name} en Integraciones. El nodo falla de forma segura hasta que exista."
+    },
+    "subflowNode": {
+      "canvas": "Lienzo",
+      "binding": "Cómo se ejecuta",
+      "choosePlaceholder": "Elige un lienzo…",
+      "loading": "Cargando lienzos…",
+      "loadFailed": "No se pudieron cargar tus lienzos.",
+      "unreadable": "No se pudo leer ese lienzo. Puede que se haya eliminado o que no esté compartido contigo.",
+      "noSteps": "Ese lienzo todavía no tiene pasos, así que no hay nada que ejecutar.",
+      "stepCount": "{count, plural, one {# paso} other {# pasos}} en ese lienzo.",
+      "accepts": "Acepta",
+      "acceptsAnything": "Lo que reciba este paso.",
+      "acceptsNothing": "Todavía no hay nada con nombre.",
+      "acceptsAlsoRaw": "Un paso de entrada no declara nada, así que también recibe la carga sin modificar.",
+      "returns": "Devuelve",
+      "returnsNothing": "No publica nada para los pasos posteriores.",
+      "bindingOption": {
+        "snapshot": "Instantánea: fijarlo en esta compilación",
+        "live": "En vivo: resolverlo en cada ejecución"
+      },
+      "bindingHint": {
+        "snapshot": "Los pasos de ese lienzo se copian en este flujo al compilar. Las ediciones posteriores allí no cambian este flujo hasta que vuelvas a compilarlo.",
+        "live": "Ese lienzo se lee de nuevo cada vez que se ejecuta este flujo, así que las ediciones allí se aplican de inmediato. Debe haberse compilado allí al menos una vez."
+      }
     }
   },
   "kernel": {

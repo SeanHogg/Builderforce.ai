@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { canvasSessionGateway } from '../infrastructure/canvasSessionGateway';
 import { forgetSubflowBoard, loadSubflowBoard, type SubflowSourcePort } from '../application/LoadSubflowBoard';
 import type { SubflowBoard, SubflowResolver } from '@/domains/workflow/domain/subflow';
 
@@ -60,8 +61,17 @@ export function useSubflowBoards(sessionIds: readonly string[], port: SubflowSou
  * For the moment an author picks a canvas in the step's editor: they have just
  * chosen it, so they are entitled to see its real interface rather than a copy
  * taken before they last edited it.
+ *
+ * ── WHY THIS ONE BINDS THE GATEWAY AND THE HOOK ABOVE DOES NOT ───────────────
+ * The hook takes a port because a second surface that COMPILES boards is a real
+ * possibility and would bring its own. This does not: its one caller is the
+ * workflow context's step editor, which has no business knowing that a canvas is
+ * read over HTTP — and a port parameter it could only ever fill one way made it
+ * import `domains/canvas/infrastructure` from `domains/workflow/presentation`,
+ * which `check:layering` refuses and is right to. Binding it HERE is the rule's
+ * other half: a context's own presentation IS its composition root.
  */
-export async function readSubflowBoardFresh(port: SubflowSourcePort, sessionId: string): Promise<SubflowBoard | null> {
+export async function readSubflowBoardFresh(sessionId: string): Promise<SubflowBoard | null> {
   forgetSubflowBoard(sessionId);
-  return loadSubflowBoard(port, sessionId);
+  return loadSubflowBoard(canvasSessionGateway, sessionId);
 }

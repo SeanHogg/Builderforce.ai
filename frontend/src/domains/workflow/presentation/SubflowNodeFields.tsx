@@ -5,7 +5,6 @@ import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { creationSessionsApi, type CreationSessionSummary } from '@/lib/builderforceApi';
 import { faultMessage } from '@/lib/apiClient';
-import { canvasSessionGateway } from '@/domains/canvas/infrastructure/canvasSessionGateway';
 import { readSubflowBoardFresh } from '@/domains/canvas/presentation/useSubflowBoards';
 import { SUBFLOW_BINDINGS, subflowBinding, subflowSessionId, type SubflowBinding } from '../domain/subflow';
 import { subflowInterface, type SubflowInterface } from '../domain/subflowInterface';
@@ -62,7 +61,7 @@ export function SubflowNodeFields({ config, setConfig, patchConfig }: Props) {
   useEffect(() => {
     let cancelled = false;
     if (!sessionId) { setShape(null); setUnreadable(false); return; }
-    void readSubflowBoardFresh(canvasSessionGateway, sessionId).then((board) => {
+    void readSubflowBoardFresh(sessionId).then((board) => {
       if (cancelled) return;
       setUnreadable(!board);
       setShape(board ? subflowInterface(board) : null);

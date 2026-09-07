@@ -111,7 +111,7 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'flowStep', label: 'Step', icon: '▸', group: 'Build', createData: () => ({ kind: 'flowStep', title: 'Step', stepKind: 'agent', stepConfig: { role: 'code-creator', task: '' }, stepInputs: [], stepOutputs: [] }) },
   { kind: 'website', label: 'Website', icon: '◎', group: 'Build', createData: () => ({ kind: 'website', title: 'Website concept', status: 'Draft' }) },
   { kind: 'build', label: 'Builder', icon: '▶', group: 'Build', createData: () => ({ kind: 'build', title: 'New build', status: 'Choose a type', modality: DEFAULT_MODALITY }) },
-  { kind: 'chat', label: 'Chat', icon: '●', group: 'Build', createData: () => ({ kind: 'chat', title: 'Brain' }) },
+  { kind: 'chat', label: 'Chat', icon: '🧠', group: 'Build', createData: () => ({ kind: 'chat', title: 'Brain' }) },
   // Data, not Build. Every object derived from a dataset — table, chart, map,
   // KPI — has always lived in the Data group; the one true ingestion object was
   // the only thing missing from the palette a data question starts in.

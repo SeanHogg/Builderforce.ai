@@ -13044,7 +13044,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           aria-label={thinking ? t('openBrainDockBusy') : t('openBrainDock')}
           title={thinking ? t('openBrainDockBusy') : t('openBrainDock')}
           onClick={() => updateBrainDock({ open: true })}
-        ><BrainMark running={thinking} />{t('brain')}</button>}
+        ><BrainMark running={thinking} size={14} />{t('brain')}</button>}
       </div>
       {/* TWO TOURS, TWO SUBJECTS. The one below teaches the CANVAS — dock, palette,
           Share — and is offered on somebody's first board. This one walks what the

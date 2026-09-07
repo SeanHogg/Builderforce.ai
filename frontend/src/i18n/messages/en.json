@@ -15554,6 +15554,10 @@
       "transcribeAudio": {
         "label": "Transcribe Audio",
         "blurb": "Transcribe an audio file, or translate it directly to English — real Whisper API call (operator-configured, no per-tenant BYO key yet)."
+      },
+      "subflow": {
+        "label": "Run a canvas",
+        "blurb": "Run another canvas as one step — its flow, its inputs, its outputs."
       }
     },
     "statusRunPendingApproval": "This workflow needs approval before it can run. An approval request has been sent.",
@@ -23518,7 +23522,14 @@
       "llmNeedsPrompt": "This model step needs a prompt.",
       "connectorNeedsConnector": "This integration step needs a connector, for example Twilio.",
       "connectorNeedsAction": "This step needs an action on {connector}.",
-      "agentNeedsTask": "This agent step needs a task to carry out."
+      "agentNeedsTask": "This agent step needs a task to carry out.",
+      "subflowNeedsCanvas": "This step needs a canvas to run.",
+      "subflowUnresolved": "The canvas “{canvas}” could not be read. It may have been deleted, or it may not be shared with you.",
+      "subflowCycle": "“{canvas}” would run itself. A canvas cannot be nested inside itself.",
+      "subflowTooDeep": "Nested canvases go more than {depth} deep at “{canvas}”.",
+      "subflowEmpty": "The canvas “{canvas}” has no steps to run yet.",
+      "subflowNotBuildable": "The canvas “{canvas}” cannot be built yet — the step “{step}” is not ready.",
+      "subflowNeedsBuild": "Build the canvas “{canvas}” once before running it live from here."
     },
     "frameSection": {
       "holds": "{count, plural, =0 {Empty} one {# object} other {# objects}}",
@@ -24124,6 +24135,30 @@
     "installIos": "Install Builderforce: tap Share, then “Add to Home Screen”."
   },
   "workflow": {
+    "subflowNode": {
+    "loadFailed": "Could not load your canvases.",
+    "canvas": "Canvas to run",
+    "choosePlaceholder": "Choose a canvas…",
+    "loading": "Loading canvases…",
+    "binding": "How it binds",
+    "bindingOption": {
+      "snapshot": "Snapshot — freeze it into this flow",
+      "live": "Live — follow the canvas"
+    },
+    "bindingHint": {
+      "snapshot": "The child's steps are copied into this flow when you build it. One run, one timeline; later edits to that canvas do not reach this flow until you build again.",
+      "live": "This flow calls the child's own built flow at run time, so edits reach it without a rebuild here. The child must have been built at least once."
+    },
+    "unreadable": "That canvas cannot be read — it may have been deleted, or not shared with you.",
+    "noSteps": "That canvas has no steps yet, so there is nothing to run.",
+    "stepCount": "{count, plural, one {# step} other {# steps}}",
+    "accepts": "Accepts",
+    "acceptsAnything": "Anything you pass it",
+    "acceptsNothing": "Nothing — it starts from its own steps",
+    "acceptsAlsoRaw": "It also accepts whatever else you pass it.",
+    "returns": "Returns",
+    "returnsNothing": "Nothing this flow can read"
+    },
     "connectorNode": {
       "integration": "Integration",
       "action": "Action",
@@ -24136,6 +24171,30 @@
       "templateHint": "'{{'input'}}' inserts the upstream node's output; '{{'input.field'}}' reads one field from it when that output is JSON.",
       "mutatesWarning": "This action changes something — it sends a message, places a call or moves money. It will run unattended every time this workflow fires.",
       "connectionHint": "Needs a live {name} connection under Integrations. The node fails closed until one exists."
+    },
+    "subflowNode": {
+      "canvas": "Canvas",
+      "binding": "How it runs",
+      "choosePlaceholder": "Choose a canvas…",
+      "loading": "Loading canvases…",
+      "loadFailed": "Could not load your canvases.",
+      "unreadable": "That canvas could not be read. It may have been deleted, or it may not be shared with you.",
+      "noSteps": "That canvas has no steps yet, so there is nothing to run.",
+      "stepCount": "{count, plural, one {# step} other {# steps}} on that canvas.",
+      "accepts": "Accepts",
+      "acceptsAnything": "Whatever this step is handed.",
+      "acceptsNothing": "Nothing named yet.",
+      "acceptsAlsoRaw": "One entry step declares nothing, so it also receives the payload untouched.",
+      "returns": "Returns",
+      "returnsNothing": "Nothing published for later steps.",
+      "bindingOption": {
+        "snapshot": "Snapshot — freeze it into this build",
+        "live": "Live — resolve it on every run"
+      },
+      "bindingHint": {
+        "snapshot": "The steps of that canvas are copied into this flow when you build. Later edits there do not change this flow until you build it again.",
+        "live": "That canvas is read again every time this flow runs, so edits there apply straight away. It has to have been built there at least once."
+      }
     }
   },
   "kernel": {

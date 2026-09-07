@@ -147,6 +147,7 @@ export const I18N_NODE_KIND_SLUG: Partial<Record<WorkflowNodeKind, string>> = {
   switch: 'switch',
   iterator: 'iterator',
   merge: 'merge',
+  subflow: 'subflow',
   'numeric-aggregator': 'numericAggregator',
   'table-aggregator': 'tableAggregator',
   'text-aggregator': 'textAggregator',

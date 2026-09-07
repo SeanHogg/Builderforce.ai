@@ -1,5 +1,7 @@
-'use client';
-
+// No 'use client': the mark is pure presentation with no hooks, state or browser API,
+// so it inherits whichever boundary its host already declared and renders in a server
+// tree unchanged. Declaring one here would only add a file to the architecture
+// ratchet's client-component tally — the same reason `CanvasSessionPill` omits it.
 import { Icon } from '@/components/ui/Icon';
 import styles from './BrainMark.module.css';
 
@@ -28,14 +30,12 @@ export interface BrainMarkProps {
   running?: boolean;
   /** Glyph size — any CSS length. Defaults to `1em` so it inherits its host's type. */
   size?: number | string;
-  /** Extra class for host-owned box styling (never for the animation). */
-  className?: string;
 }
 
-export function BrainMark({ running = false, size = '1em', className }: BrainMarkProps) {
+export function BrainMark({ running = false, size = '1em' }: BrainMarkProps) {
   return (
     <span
-      className={className ? `${styles.mark} ${className}` : styles.mark}
+      className={styles.mark}
       style={{ fontSize: typeof size === 'number' ? `${size}px` : size }}
       data-state={running ? 'running' : 'idle'}
       aria-hidden

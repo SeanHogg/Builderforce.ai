@@ -30,6 +30,29 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   965 → 967 (`useClientFiles`, 2026-09-07) — nesting one canvas inside another
+ *   as a `subflow` step. Two modules, both argued on the "808 → 868" terms:
+ *
+ *     - `domains/workflow/presentation/SubflowNodeFields.tsx` — the step's editor.
+ *       The options are the canvases this tenant has, so it loads its own list,
+ *       reads the chosen child board and holds the author's selection in
+ *       `useState`. There is no server render of a picker over data that does not
+ *       exist until somebody is signed in and looking at it.
+ *     - `domains/canvas/presentation/useSubflowBoards.ts` — the hook that holds
+ *       child boards in memory so the synchronous compiler can reach them, plus
+ *       the fresh read behind the picker. A hook is client by construction, and
+ *       this one is a shared reuse surface (the doc names a second board-compiling
+ *       surface as the reason it takes a port at all), so it carries its own
+ *       boundary rather than inheriting one from whoever mounts it. It is also the
+ *       canvas context's composition root now — it binds `canvasSessionGateway`
+ *       so the workflow context's editor stops importing another context's
+ *       infrastructure, which `check:layering` refuses.
+ *
+ *   Their four siblings from the same pass carry NO directive and are not in this
+ *   count — `stepFieldEditors.ts`, `stepFieldStyles.ts`, `flowDefinitionRef.ts`
+ *   and `application/LoadSubflowBoard.ts` — which is the shape a raise should
+ *   have: the two things that own browser state, and nothing else riding in.
+ *
  *   964 → 965 (`useClientFiles`, 2026-09-07) — the signed-in top bar's right
  *   corner became ONE control. Alerts, chat, the cart, the theme switch, the way
  *   out and a Settings link that lived down the rail were six separate buttons

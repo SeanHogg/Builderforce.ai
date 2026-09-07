@@ -10,13 +10,16 @@
  * (`runtime: 'cloud'`).
  */
 
-import { workflows, workflowTasks } from '../../infrastructure/database/schema';
+import { and, eq } from 'drizzle-orm';
+import { workflowDefinitions, workflows, workflowTasks } from '../../infrastructure/database/schema';
 import {
   compileDefinition,
+  parseDefinition,
   validateDefinition,
   type CompiledStep,
   type WorkflowDefinition,
 } from '../../domain/workflowGraph';
+import { expandSubflows, type SubflowDefinitionLoader } from './expandSubflows';
 import type { Db } from '../../infrastructure/database/connection';
 
 export type WorkflowRuntime = 'host' | 'cloud';
@@ -89,11 +92,40 @@ export async function instantiateWorkflowRun(
   const targetError = validateRunTarget(params.target);
   if (targetError) return { ok: false, error: targetError };
 
-  const invalid = validateDefinition(params.definition);
+  // NESTED CANVASES, RESOLVED NOW. A `subflow` node holds another canvas's own
+  // definition id, and this is the moment it is read — which is what makes the
+  // live binding live: a child rebuilt in its own canvas reaches every parent that
+  // calls it without any of them being rebuilt. A child that cannot be resolved
+  // stops the run being created rather than being quietly left out of it.
+  const expansion = await expandSubflows(params.definition, subflowLoader(db, params.tenantId));
+  if (!expansion.ok) return { ok: false, error: expansion.error };
+
+  const invalid = validateDefinition(expansion.definition);
   if (invalid) return { ok: false, error: invalid };
 
-  const steps = compileDefinition(params.definition);
+  const steps = compileDefinition(expansion.definition);
   return persistCompiledRun(db, steps, params);
+}
+
+/** A definition id, as the column actually stores them. Anything else cannot be a
+ *  row, and asking Postgres about it raises rather than returning nothing. */
+const DEFINITION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Reads the child definitions a nested canvas names — scoped to the tenant whose
+ * run this is, so composition can never reach a definition across the boundary
+ * however a `subflow` node's config came to name one.
+ */
+function subflowLoader(db: Db, tenantId: number): SubflowDefinitionLoader {
+  return async (definitionId) => {
+    if (!DEFINITION_ID.test(definitionId)) return null;
+    const [row] = await db
+      .select({ name: workflowDefinitions.name, definition: workflowDefinitions.definition })
+      .from(workflowDefinitions)
+      .where(and(eq(workflowDefinitions.id, definitionId), eq(workflowDefinitions.tenantId, tenantId)))
+      .limit(1);
+    return row ? { name: row.name, definition: parseDefinition(row.definition) } : null;
+  };
 }
 
 /**

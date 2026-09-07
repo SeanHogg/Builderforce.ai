@@ -125,11 +125,18 @@ export function lowerSubflow(
     stack: [...stack, sessionId],
     synthesizeTrigger: false,
   });
-  if (inner.definition.nodes.length === 0 || inner.issues.some((issue) => issue.messageKey === 'noSteps')) {
+  // ORDER MATTERS. A child holding one unbuildable step compiles to zero nodes AND
+  // an issue, and reading emptiness first would tell the author their canvas is
+  // empty when what it actually has is a step that still needs a prompt. Ask what
+  // the child SAID before asking what it produced.
+  if (inner.issues.some((issue) => issue.messageKey === 'noSteps')) {
     return { ok: false, messageKey: 'subflowEmpty', values: { canvas: named } };
   }
   if (inner.issues.length > 0) {
     return { ok: false, messageKey: 'subflowNotBuildable', values: { canvas: named, step: inner.issues[0]!.title } };
+  }
+  if (inner.definition.nodes.length === 0) {
+    return { ok: false, messageKey: 'subflowEmpty', values: { canvas: named } };
   }
 
   const { nodes: childNodes, edges: childEdges } = withoutTriggers(inner.definition);

@@ -15554,6 +15554,10 @@
       "transcribeAudio": {
         "label": "Audio transkribieren",
         "blurb": "Transkribiert eine Audiodatei oder übersetzt sie direkt ins Englische — echter Whisper-API-Aufruf (vom Betreiber konfiguriert, noch kein mandantenspezifischer eigener Schlüssel)."
+      },
+      "subflow": {
+        "label": "Einen Canvas ausführen",
+        "blurb": "Führe einen anderen Canvas als einen Schritt aus — seinen Ablauf, seine Eingaben, seine Ausgaben."
       }
     },
     "statusRunPendingApproval": "Dieser Workflow muss vor der Ausführung genehmigt werden. Eine Genehmigungsanfrage wurde gesendet.",
@@ -23518,7 +23522,14 @@
       "llmNeedsPrompt": "Dieser Modellschritt braucht einen Prompt.",
       "connectorNeedsConnector": "Dieser Integrationsschritt braucht einen Connector, zum Beispiel Twilio.",
       "connectorNeedsAction": "Dieser Schritt braucht eine Aktion auf {connector}.",
-      "agentNeedsTask": "Dieser Agentenschritt braucht eine auszuführende Aufgabe."
+      "agentNeedsTask": "Dieser Agentenschritt braucht eine auszuführende Aufgabe.",
+      "subflowNeedsCanvas": "Dieser Schritt braucht einen Canvas, um zu laufen.",
+      "subflowUnresolved": "Der Canvas „{canvas}“ konnte nicht gelesen werden. Möglicherweise wurde er gelöscht oder ist nicht für dich freigegeben.",
+      "subflowCycle": "„{canvas}“ würde sich selbst ausführen. Ein Canvas kann nicht in sich selbst verschachtelt werden.",
+      "subflowTooDeep": "Verschachtelte Canvas gehen bei „{canvas}“ mehr als {depth} Ebenen tief.",
+      "subflowEmpty": "Der Canvas „{canvas}“ hat noch keine Schritte zum Ausführen.",
+      "subflowNotBuildable": "Der Canvas „{canvas}“ kann noch nicht gebaut werden — der Schritt „{step}“ ist nicht bereit.",
+      "subflowNeedsBuild": "Baue den Canvas „{canvas}“ einmal, bevor du ihn von hier aus live ausführst."
     },
     "frameSection": {
       "holds": "{count, plural, =0 {Leer} one {# Objekt} other {# Objekte}}",
@@ -24124,6 +24135,30 @@
     "installIos": "Builderforce installieren: auf „Teilen“ tippen, dann „Zum Home-Bildschirm“."
   },
   "workflow": {
+    "subflowNode": {
+    "loadFailed": "Deine Canvases konnten nicht geladen werden.",
+    "canvas": "Auszuführendes Canvas",
+    "choosePlaceholder": "Canvas wählen…",
+    "loading": "Canvases werden geladen…",
+    "binding": "Art der Bindung",
+    "bindingOption": {
+      "snapshot": "Snapshot – in diesen Ablauf einfrieren",
+      "live": "Live – dem Canvas folgen"
+    },
+    "bindingHint": {
+      "snapshot": "Die Schritte des untergeordneten Canvas werden beim Bauen in diesen Ablauf kopiert. Ein Lauf, eine Zeitleiste; spätere Änderungen an jenem Canvas kommen erst nach einem erneuten Bauen hier an.",
+      "live": "Dieser Ablauf ruft zur Laufzeit den eigenen gebauten Ablauf des untergeordneten Canvas auf, Änderungen kommen also ohne erneutes Bauen an. Das untergeordnete Canvas muss mindestens einmal gebaut worden sein."
+    },
+    "unreadable": "Dieses Canvas kann nicht gelesen werden – es wurde vielleicht gelöscht oder ist nicht für dich freigegeben.",
+    "noSteps": "Dieses Canvas hat noch keine Schritte, es gibt also nichts auszuführen.",
+    "stepCount": "{count, plural, one {# Schritt} other {# Schritte}}",
+    "accepts": "Nimmt entgegen",
+    "acceptsAnything": "Alles, was du übergibst",
+    "acceptsNothing": "Nichts – es startet mit seinen eigenen Schritten",
+    "acceptsAlsoRaw": "Es nimmt außerdem alles Weitere entgegen, was du übergibst.",
+    "returns": "Gibt zurück",
+    "returnsNothing": "Nichts, was dieser Ablauf lesen kann"
+    },
     "connectorNode": {
       "integration": "Integration",
       "action": "Aktion",
@@ -24136,6 +24171,30 @@
       "templateHint": "'{{'input'}}' fügt die Ausgabe des vorherigen Knotens ein; '{{'input.feld'}}' liest daraus ein Feld, wenn die Ausgabe JSON ist.",
       "mutatesWarning": "Diese Aktion verändert etwas – sie sendet eine Nachricht, tätigt einen Anruf oder bewegt Geld. Sie läuft bei jedem Auslösen dieses Workflows unbeaufsichtigt.",
       "connectionHint": "Benötigt eine aktive {name}-Verbindung unter Integrationen. Bis dahin schlägt der Knoten bewusst fehl."
+    },
+    "subflowNode": {
+      "canvas": "Canvas",
+      "binding": "Wie er läuft",
+      "choosePlaceholder": "Einen Canvas wählen…",
+      "loading": "Canvas werden geladen…",
+      "loadFailed": "Deine Canvas konnten nicht geladen werden.",
+      "unreadable": "Dieser Canvas konnte nicht gelesen werden. Möglicherweise wurde er gelöscht oder ist nicht für dich freigegeben.",
+      "noSteps": "Dieser Canvas hat noch keine Schritte, es gibt also nichts auszuführen.",
+      "stepCount": "{count, plural, one {# Schritt} other {# Schritte}} auf diesem Canvas.",
+      "accepts": "Nimmt an",
+      "acceptsAnything": "Was auch immer dieser Schritt erhält.",
+      "acceptsNothing": "Noch nichts benannt.",
+      "acceptsAlsoRaw": "Ein Einstiegsschritt deklariert nichts und erhält die Nutzlast daher auch unverändert.",
+      "returns": "Gibt zurück",
+      "returnsNothing": "Nichts für spätere Schritte veröffentlicht.",
+      "bindingOption": {
+        "snapshot": "Momentaufnahme — in diesen Build einfrieren",
+        "live": "Live — bei jedem Lauf neu auflösen"
+      },
+      "bindingHint": {
+        "snapshot": "Die Schritte dieses Canvas werden beim Bauen in diesen Ablauf kopiert. Spätere Änderungen dort ändern diesen Ablauf erst nach einem erneuten Bauen.",
+        "live": "Dieser Canvas wird bei jedem Lauf dieses Ablaufs neu gelesen, Änderungen dort wirken also sofort. Er muss dort mindestens einmal gebaut worden sein."
+      }
     }
   },
   "kernel": {

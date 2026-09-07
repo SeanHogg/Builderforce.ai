@@ -15554,6 +15554,10 @@
       "transcribeAudio": {
         "label": "转录音频",
         "blurb": "转录一个音频文件，或将其直接翻译为英语——真实的 Whisper API 调用（由运营方配置，目前尚无租户自带密钥选项）。"
+      },
+      "subflow": {
+        "label": "运行画布",
+        "blurb": "把另一个画布作为一个步骤运行——它的流程、它的输入、它的输出。"
       }
     },
     "statusRunPendingApproval": "此工作流需要获得批准才能运行。审批请求已发送。",
@@ -23518,7 +23522,14 @@
       "llmNeedsPrompt": "该模型步骤需要一个提示词。",
       "connectorNeedsConnector": "该集成步骤需要选择一个连接器，例如 Twilio。",
       "connectorNeedsAction": "该步骤需要选择 {connector} 上的一个操作。",
-      "agentNeedsTask": "该智能体步骤需要一个要执行的任务。"
+      "agentNeedsTask": "该智能体步骤需要一个要执行的任务。",
+      "subflowNeedsCanvas": "此步骤需要指定一个画布才能运行。",
+      "subflowUnresolved": "无法读取画布“{canvas}”。它可能已被删除，或者未与你共享。",
+      "subflowCycle": "“{canvas}”会运行它自己。画布不能嵌套自身。",
+      "subflowTooDeep": "在“{canvas}”处，嵌套画布的层级超过了 {depth} 层。",
+      "subflowEmpty": "画布“{canvas}”还没有可运行的步骤。",
+      "subflowNotBuildable": "画布“{canvas}”暂时无法构建——步骤“{step}”尚未就绪。",
+      "subflowNeedsBuild": "请先在画布“{canvas}”中构建一次，然后才能在此实时运行它。"
     },
     "frameSection": {
       "holds": "{count, plural, =0 {空} other {# 个对象}}",
@@ -24124,6 +24135,30 @@
     "installIos": "安装 Builderforce：点按“分享”，然后选择“添加到主屏幕”。"
   },
   "workflow": {
+    "subflowNode": {
+    "loadFailed": "无法加载你的画布。",
+    "canvas": "要运行的画布",
+    "choosePlaceholder": "选择一个画布…",
+    "loading": "正在加载画布…",
+    "binding": "绑定方式",
+    "bindingOption": {
+      "snapshot": "快照 — 冻结到此流程中",
+      "live": "实时 — 跟随该画布"
+    },
+    "bindingHint": {
+      "snapshot": "构建时会把子画布的步骤复制到此流程中。一次运行、一条时间线；此后对该画布的修改要等到再次构建才会生效。",
+      "live": "运行时调用子画布自己已构建的流程，因此修改无需在此重新构建即可生效。该子画布必须至少构建过一次。"
+    },
+    "unreadable": "无法读取该画布 — 它可能已被删除，或未与你共享。",
+    "noSteps": "该画布还没有任何步骤，无内容可运行。",
+    "stepCount": "{count, plural, other {# 个步骤}}",
+    "accepts": "接收",
+    "acceptsAnything": "你传入的任何内容",
+    "acceptsNothing": "无 — 它从自己的步骤开始",
+    "acceptsAlsoRaw": "它也接收你传入的其他内容。",
+    "returns": "返回",
+    "returnsNothing": "此流程无法读取任何返回值"
+    },
     "connectorNode": {
       "integration": "集成",
       "action": "操作",
@@ -24136,6 +24171,30 @@
       "templateHint": "'{{'input'}}' 会插入上游节点的输出；当该输出为 JSON 时，'{{'input.字段'}}' 可读取其中的某个字段。",
       "mutatesWarning": "该操作会产生实际影响 —— 发送消息、拨打电话或划转资金。每次触发此工作流时，它都会在无人值守的情况下执行。",
       "connectionHint": "需要在「集成」中有一个可用的 {name} 连接。在此之前，该节点会安全地失败。"
+    },
+    "subflowNode": {
+      "canvas": "画布",
+      "binding": "运行方式",
+      "choosePlaceholder": "选择一个画布…",
+      "loading": "正在加载画布…",
+      "loadFailed": "无法加载你的画布。",
+      "unreadable": "无法读取该画布。它可能已被删除，或者未与你共享。",
+      "noSteps": "该画布还没有任何步骤，因此没有可运行的内容。",
+      "stepCount": "该画布上有 {count} 个步骤。",
+      "accepts": "接受",
+      "acceptsAnything": "此步骤收到的任何内容。",
+      "acceptsNothing": "尚未命名任何内容。",
+      "acceptsAlsoRaw": "有一个入口步骤未声明任何内容，因此它也会原样接收载荷。",
+      "returns": "返回",
+      "returnsNothing": "没有为后续步骤发布任何内容。",
+      "bindingOption": {
+        "snapshot": "快照——在本次构建中固定下来",
+        "live": "实时——每次运行时重新解析"
+      },
+      "bindingHint": {
+        "snapshot": "构建时会把该画布的步骤复制到此流程中。之后在那里的修改不会影响此流程，除非你再次构建。",
+        "live": "此流程每次运行都会重新读取该画布，因此那里的修改会立即生效。前提是该画布至少已构建过一次。"
+      }
     }
   },
   "kernel": {
