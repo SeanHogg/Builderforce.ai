@@ -26,7 +26,11 @@ const card: React.CSSProperties = {
   padding: 20,
 };
 const stat: React.CSSProperties = { minWidth: 120 };
-const statValue: React.CSSProperties = { fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' };
+// The `section` role, not `page-title`: these are four supporting figures inside
+// a panel that already has a title, which is the same reading `askWidget` and
+// `workforceHealthWidget` give their headline numbers. `WidgetStat` is the
+// page-title-sized variant for a widget whose whole body IS one number.
+const statValue: React.CSSProperties = { fontSize: 'var(--font-size-section)', fontWeight: 700, lineHeight: 1.1, color: 'var(--text-primary)' };
 const statLabel: React.CSSProperties = { fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' };
 
 /** Percent, as the panel shows it everywhere. */
