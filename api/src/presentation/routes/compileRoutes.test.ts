@@ -83,23 +83,31 @@ describe('POST /api/compile', () => {
   it('compiles a need into a spec without a deploy plan', async () => {
     const res = await post('/', { need: PERSONA });
     expect(res.status).toBe(200);
-    const body = await res.json() as { spec: { directives?: string[] }; plan?: unknown };
-    expect(body.spec.directives).toContain('Be terse.');
+    // The lowered directives land in the spec's `persona` SLOT, not at the root —
+    // that slot is what `mergeSpecs` accumulates, and it is how a persona threads
+    // onto the same spec as a model and its steps.
+    const body = await res.json() as { spec: { persona?: { directives?: string[] } }; plan?: unknown };
+    expect(body.spec.persona?.directives).toContain('Be terse.');
     expect(body.plan).toBeUndefined();
   });
 
   it('keeps the need payload the adapter reads (loose object, nothing stripped)', async () => {
     const res = await post('/', { need: { ...PERSONA, execParams: { temperature: 0.9 } } });
-    const body = await res.json() as { spec: { execParams?: { temperature?: number } } };
-    expect(body.spec.execParams?.temperature).toBe(0.9);
+    const body = await res.json() as { spec: { persona?: { execParams?: { temperature?: number } } } };
+    expect(body.spec.persona?.execParams?.temperature).toBe(0.9);
   });
 
-  it('answers a compile failure generically, never with the extractor text', async () => {
+  it('degrades a failed extraction to a usable spec, never leaking the extractor text', async () => {
+    // The prose adapter is documented as NEVER throwing: a gateway that is down
+    // must not cost the caller their compile, so extraction failure falls back to a
+    // spec built from the prose itself. The invariant under test is therefore what
+    // the caller GETS — a usable spec — and that nothing internal rides along.
     extractor = async () => { throw new Error('gateway 503 from 10.0.0.9'); };
     const res = await post('/', { need: { modality: 'prose', text: 'an agent that triages tickets' } });
-    expect(res.status).toBe(500);
-    const body = await res.json() as { error: string };
-    expect(body.error).not.toContain('10.0.0.9');
+    expect(res.status).toBe(200);
+    const body = await res.json() as { spec: { identity: { name: string; bio?: string } } };
+    expect(body.spec.identity.name).toBe('Custom Agent');
+    expect(JSON.stringify(body)).not.toContain('10.0.0.9');
     extractor = async () => '';
   });
 });

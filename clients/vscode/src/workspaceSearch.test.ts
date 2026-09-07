@@ -48,12 +48,18 @@ describe("parseRipgrepLine", () => {
 });
 
 describe("bundledRipgrepCandidates", () => {
-  it("names both layouts VS Code has shipped, under the app root", () => {
-    const c = bundledRipgrepCandidates("/app", "linux");
-    expect(c).toHaveLength(2);
-    expect(c[0]).toMatch(/node_modules[\\/]@vscode[\\/]ripgrep[\\/]bin[\\/]rg$/);
+  it("probes the ripgrep-universal layout current VS Code builds ship FIRST, then the two older ones", () => {
+    const c = bundledRipgrepCandidates("/app", "linux", "x64");
+    expect(c).toHaveLength(3);
+    expect(c[0]).toMatch(/node_modules\.asar\.unpacked[\\/]@vscode[\\/]ripgrep-universal[\\/]bin[\\/]linux-x64[\\/]rg$/);
     expect(c[1]).toMatch(/node_modules\.asar\.unpacked[\\/]@vscode[\\/]ripgrep[\\/]bin[\\/]rg$/);
-    expect(bundledRipgrepCandidates("C:\\app", "win32")[0]).toMatch(/rg\.exe$/);
+    expect(c[2]).toMatch(/node_modules[\\/]@vscode[\\/]ripgrep[\\/]bin[\\/]rg$/);
+  });
+
+  it("matches the Windows layout measured on a real install", () => {
+    // …\resources\app\node_modules.asar.unpacked\@vscode\ripgrep-universal\bin\win32-x64\rg.exe
+    const [first] = bundledRipgrepCandidates("C:\\app\\resources\\app", "win32", "x64");
+    expect(first).toMatch(/node_modules\.asar\.unpacked[\\/]@vscode[\\/]ripgrep-universal[\\/]bin[\\/]win32-x64[\\/]rg\.exe$/);
     expect(bundledRipgrepCandidates(undefined)).toEqual([]);
   });
 });

@@ -113,11 +113,16 @@ and a `git_commit` that warned about `api/api/src/presentation/routes/` and stag
   (call `git_cleanup_merged`; here is what its refusals mean), with the overlapping clause trimmed
   from the base persona. `describeTool` names the branch a cleanup is about to delete. 294 tests pass.
 
-**Not shipped as a .vsix.** `vsce package` cannot run: the working tree is mid-`git stash pop` with 20
-unresolved files, including all five i18n catalogs (which no longer parse, so the canvas webview build
-fails). See the Gap Register entry — 32 of 43 hunks carry stashed work absent upstream, so resolving
-them is a per-hunk decision about the user's own changes. Version bumps, changelog and `brain-embedded`
-dist rebuild are done, so packaging is one clean tree away.
+**Shipped in `builderforce-ai-2026.9.23.vsix`.** Packaging was briefly blocked by an unrelated,
+in-flight `git stash pop` (20 conflicted files, including all five i18n catalogs, which stopped
+parsing and broke the canvas webview build); a concurrent session resolved it and bumped past this
+pass's 2026.9.22 to 2026.9.23, so BOTH sets of changes ride that one build. Verified in the packaged
+bundle: `out/extension.js` carries `git_cleanup_merged`, the idempotent `REMOTE_EXISTS` remote-delete
+guard, `MISSING_PATHS`, and the cmd.exe "is not recognized as an internal" retry signature. The
+CHANGELOG keeps its own `[2026.9.22]` heading for this work; no separate 2026.9.22 artifact exists.
+One file of that stash pop was resolved here — `packages/creation-canvas-contract/src/triggers.ts`,
+whose single hunk was a strict subset (its stashed side was `DEADLINE_FIELD_NAMES` without
+`nextObligationAt`/`nextActionAt`), so taking upstream lost nothing.
 
 ## ✅ RESOLVED 2026-09-07 — VSIX: parallel chats stopped leaking into each other, and the agent's loop guards stopped being switched off by its own verification
 

@@ -23,16 +23,26 @@ const execFileAsync = promisify(execFile);
 
 /**
  * The candidate paths of the ripgrep VS Code bundles, under the editor's `appRoot`.
- * Two layouts exist: a plain `node_modules` tree (older builds) and the
- * `node_modules.asar.unpacked` layout (builds that pack the app into an asar and
- * unpack native binaries beside it). Exported for the unit test.
+ * Three layouts exist, newest first:
+ *   - `node_modules.asar.unpacked/@vscode/ripgrep-universal/bin/<platform>-<arch>/rg`
+ *     (current builds — measured on VS Code 1.10x on Windows: the ONLY `@vscode` ripgrep
+ *     present, so probing the older paths alone finds nothing and the search silently
+ *     falls back to the walk it was meant to replace);
+ *   - `node_modules.asar.unpacked/@vscode/ripgrep/bin/rg` (asar-packed builds);
+ *   - `node_modules/@vscode/ripgrep/bin/rg` (plain-tree builds).
+ * Exported for the unit test.
  */
-export function bundledRipgrepCandidates(appRoot: string | undefined, platform: NodeJS.Platform = process.platform): string[] {
+export function bundledRipgrepCandidates(
+  appRoot: string | undefined,
+  platform: NodeJS.Platform = process.platform,
+  arch: string = process.arch,
+): string[] {
   if (!appRoot) return [];
   const bin = platform === "win32" ? "rg.exe" : "rg";
   return [
-    path.join(appRoot, "node_modules", "@vscode", "ripgrep", "bin", bin),
+    path.join(appRoot, "node_modules.asar.unpacked", "@vscode", "ripgrep-universal", "bin", `${platform}-${arch}`, bin),
     path.join(appRoot, "node_modules.asar.unpacked", "@vscode", "ripgrep", "bin", bin),
+    path.join(appRoot, "node_modules", "@vscode", "ripgrep", "bin", bin),
   ];
 }
 
