@@ -2,12 +2,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const noop = () => {};
 
+// `registerSubagentRun` fires `waitForSubagentCompletion` as fire-and-forget, so a
+// mock that resolves a TERMINAL status marks every run ended as soon as the
+// microtask queue drains. The registry's reads used to be synchronous and won that
+// race by accident; they now await a snapshot, so a terminal default made
+// "how many children are active" answer 0 for runs registered a line earlier.
+//
+// `pending` is the honest default for a run nobody has said anything about — it hits
+// the non-terminal early return in `waitForSubagentCompletion`, leaving the entry
+// active exactly as a real gateway would while the child is still working. The tests
+// that assert COMPLETION opt into a terminal status themselves.
 vi.mock("../gateway/call.js", () => ({
-  callGateway: vi.fn(async () => ({
-    status: "ok",
-    startedAt: 111,
-    endedAt: 222,
-  })),
+  callGateway: vi.fn(async () => ({ status: "pending" })),
 }));
 
 vi.mock("../infra/agent-events.js", () => ({

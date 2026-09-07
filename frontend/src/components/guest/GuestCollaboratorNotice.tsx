@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useOptionalAuth } from '@/lib/AuthContext';
+import { useIsLinkGuest } from '@/lib/rbac';
 import { registerHref } from '@/lib/auth';
 
 /**
@@ -19,12 +19,13 @@ import { registerHref } from '@/lib/auth';
  * A link guest is `accountType === 'guest'` (the passwordless identity the claim minted),
  * and that is the only thing that puts this on screen. No caller passes a flag, so a
  * second surface that mounts it cannot show it to a signed-up member by mistake — and it
- * degrades to nothing outside an auth provider rather than crashing the tree.
+ * degrades to nothing outside an auth provider rather than crashing the tree. The branch
+ * itself is `useIsLinkGuest()` in `lib/rbac`, beside `useIsFreelancer` and
+ * `useIsSalesAssociate`, so no surface re-reads the field.
  */
 export function GuestCollaboratorNotice() {
   const t = useTranslations('creationCanvas');
-  const auth = useOptionalAuth();
-  if (auth?.user?.accountType !== 'guest') return null;
+  if (!useIsLinkGuest()) return null;
 
   return (
     <section className="gcn-root">

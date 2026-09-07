@@ -1,6 +1,7 @@
 'use client';
 
 import { useOptionalAuth } from './AuthContext';
+import type { AuthUser } from './types';
 
 /**
  * Frontend mirror of the API's tenant RBAC model
@@ -245,10 +246,16 @@ export function usePermission(cap: Capability): PermissionResult {
 /**
  * The current user's ACCOUNT TYPE. Distinct from workspace role: it's a GLOBAL
  * property (a freelancer works across many tenants). 'freelancer' = a restricted
- * gig/for-hire account that sees only the Profile / Find Work / Timecard shell.
+ * gig/for-hire account that sees only the Profile / Find Work / Timecard shell;
+ * 'guest' = the passwordless identity a canvas invite link mints.
  * Undefined outside an AuthProvider so callers never crash the tree.
+ *
+ * The union is READ from `AuthUser` rather than restated. Restating it is how
+ * 'guest' — added to the account when invite links landed — was missing here
+ * while the field itself carried it, which both failed the build and pushed
+ * `GuestCollaboratorNotice` into reading `auth.user.accountType` by hand.
  */
-export function useAccountType(): 'standard' | 'freelancer' | 'sales' | undefined {
+export function useAccountType(): AuthUser['accountType'] {
   const auth = useOptionalAuth();
   return auth?.user?.accountType;
 }
@@ -262,6 +269,13 @@ export function useIsSalesAssociate(): boolean {
  *  place this branch is decided, so nav/shell/route gating never drift. */
 export function useIsFreelancer(): boolean {
   return useAccountType() === 'freelancer';
+}
+
+/** True for a link guest — the passwordless account a canvas invite link mints.
+ *  Same rule as its two siblings: the branch is decided here, not re-read from
+ *  `auth.user` at each surface that cares. */
+export function useIsLinkGuest(): boolean {
+  return useAccountType() === 'guest';
 }
 
 /**

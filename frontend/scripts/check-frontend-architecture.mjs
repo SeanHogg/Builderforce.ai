@@ -30,6 +30,41 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   953 → 959 (`useClientFiles`, 2026-09-07) — the debt the entry below NAMED and
+ *   left open. It recorded that commit 448debcb1 had landed client modules without
+ *   raising the baseline and logged that to the Gap Register rather than blessing
+ *   it; the deploy has been red on this number ever since, which is the cost of
+ *   logging a gap instead of closing it. Closed here: every unargued file was read
+ *   and judged on the "808 → 868" terms, and the count is a NET +6 because one of
+ *   them was slack.
+ *
+ *     - `app/import/*` — the bulk/guided import surface, split into
+ *       `BulkDropzone`, `BulkDryRunReport`, `BulkMappingTable`, `GuidedFieldInput`,
+ *       `ImportResultSummary` and `ImportStatCard`, with `lib/useBulkImportSubmit`,
+ *       `lib/useGuidedImportSubmit` and `lib/useImportKinds` behind them. The
+ *       dropzone reads `DataTransfer`, the mapping table and field input hold the
+ *       user's choices in `useState`, and the three hooks own the upload's own
+ *       state. None could be a Server Component.
+ *     - `app/import/ImportProgressBar.tsx` is the TIGHTENING inside this raise: it
+ *       landed in the same pass with a directive and is props in, markup out. The
+ *       directive marked nothing and is gone, which is why six files below cost
+ *       only six points and not seven.
+ *     - `components/mcp/*` — `McpServerCard`, `McpServerForm`, `McpServersGallery`
+ *       and the `useMcpServers` hook they share. The hook is the typed client and
+ *       the mutation/error state for the whole surface; the form holds a draft; the
+ *       gallery opens a `SlideOutPanel` and gates deletes through `useConfirm`.
+ *     - `components/inbox/InboxClient.tsx` is a MOVE, not an addition — it is
+ *       `app/inbox/InboxClient.tsx` relocated out of the route folder, and that
+ *       file is in the same delta's removals.
+ *     - `components/governance/VulnerabilityFindingsPanel`,
+ *       `components/observability/OtelExporterSettings`,
+ *       `components/skills/WorkspaceSkillReview`,
+ *       `components/insights/finance/AuditReportRunsList`,
+ *       `components/insights/AgentBenchmarkPanel` and
+ *       `components/security/SetPasswordPanel` — each fetches on mount and holds
+ *       its own loading/error state, which is the shape the "808 → 868" entry says
+ *       carries its own boundary rather than inheriting one from a caller.
+ *
  *   949 -> 953 (`useClientFiles`, 2026-09-07) - the four client modules canvas
  *   invite links landed. Each is argued on the terms the "808 -> 868" entry set:
  *   a shared reuse surface carries its own boundary, and interactivity that is

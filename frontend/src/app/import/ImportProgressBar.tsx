@@ -1,9 +1,13 @@
-'use client';
-
 /**
  * A labelled progress bar. The wizard drives it with steps, the bulk import with
  * rows acknowledged by the server — the same bar, so progress looks like one
  * thing on both halves of the page.
+ *
+ * NO `'use client'`, unlike its siblings in this folder: it is props in, markup
+ * out — no state, no effect, no handler, no browser API. The directive it landed
+ * with marked nothing, and a directive marking nothing is the slack the
+ * architecture ratchet's "800 → 798" and "803 → 802" tightenings were about.
+ * `ImportStatCard` next door keeps its boundary because it calls `useFormat()`.
  */
 export function ImportProgressBar({ value, max, label }: { value: number; max: number; label: string }) {
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;

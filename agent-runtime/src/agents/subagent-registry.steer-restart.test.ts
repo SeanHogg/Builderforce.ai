@@ -5,11 +5,17 @@ let lifecycleHandler:
   | ((evt: { stream?: string; runId: string; data?: { phase?: string } }) => void)
   | undefined;
 
+// `agent.wait` answers `pending`, not a terminal status: `registerSubagentRun` fires
+// the wait as fire-and-forget, and a terminal answer ends every run as soon as the
+// microtask queue drains. These tests drive completion through `lifecycleHandler`
+// on purpose — a gateway that also completed the run raced that, and the registry's
+// reads now await a snapshot rather than reading the map synchronously, so the race
+// is one the assertions no longer win.
 vi.mock("../gateway/call.js", () => ({
   callGateway: vi.fn(async (opts: unknown) => {
     const request = opts as { method?: string };
     if (request.method === "agent.wait") {
-      return { status: "timeout" };
+      return { status: "pending" };
     }
     return {};
   }),
@@ -177,13 +183,13 @@ describe("subagent registry steer restarts", () => {
       cleanup: "keep",
     });
 
-    expect(mod.isSubagentSessionRunActive(childSessionKey)).toBe(true);
+    expect(await mod.isSubagentSessionRunActive(childSessionKey)).toBe(true);
     const updated = mod.markSubagentRunTerminated({
       childSessionKey,
       reason: "manual kill",
     });
     expect(updated).toBe(1);
-    expect(mod.isSubagentSessionRunActive(childSessionKey)).toBe(false);
+    expect(await mod.isSubagentSessionRunActive(childSessionKey)).toBe(false);
 
     const run = mod.listSubagentRunsForRequester("agent:main:main")[0];
     expect(run?.outcome).toEqual({ status: "error", error: "manual kill" });
