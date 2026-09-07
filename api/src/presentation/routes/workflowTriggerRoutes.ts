@@ -19,58 +19,11 @@ import { and, eq } from 'drizzle-orm';
 import { workflowDefinitions, workflowTriggers } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { parseDefinition } from '../../domain/workflowGraph';
-import { instantiateWorkflowRun, type RunTarget } from '../../application/workflow/instantiateRun';
+import { fireAddressedTrigger } from '../../application/workflow/fireAddressedTrigger';
 import { verifyHmacSignature } from '../../application/workflow/verifySignature';
 import { verifyTwilioSignature } from '../../application/backend/webhookVerification';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-
-/** Build the run target a trigger row fires onto. */
-function targetFromTrigger(row: typeof workflowTriggers.$inferSelect): RunTarget {
-  return row.runtime === 'cloud'
-    ? { runtime: 'cloud', cloudAgentRef: row.cloudAgentRef }
-    : { runtime: 'host', agentHostId: row.agentHostId };
-}
-
-/**
- * Fire the workflow behind an addressed (webhook / inbound-email) trigger.
- * Shared by the HTTP route and the inbound-email handler.
- */
-export async function fireAddressedTrigger(
-  db: Db,
-  row: typeof workflowTriggers.$inferSelect,
-  payload: unknown,
-  source: string,
-): Promise<{ ok: true; workflowId: string } | { ok: false; error: string }> {
-  const [defRow] = await db
-    .select({ name: workflowDefinitions.name, projectId: workflowDefinitions.projectId, definition: workflowDefinitions.definition })
-    .from(workflowDefinitions)
-    .where(and(eq(workflowDefinitions.id, row.definitionId), eq(workflowDefinitions.tenantId, row.tenantId)));
-  if (!defRow) return { ok: false, error: 'workflow definition not found' };
-
-  const result = await instantiateWorkflowRun(db, {
-    tenantId: row.tenantId,
-    segmentId: row.segmentId,
-    definition: parseDefinition(defRow.definition),
-    name: defRow.name,
-    projectId: defRow.projectId,
-    definitionId: row.definitionId,
-    target: targetFromTrigger(row),
-    triggerPayload: payload,
-    triggerSource: source,
-  });
-
-  await db
-    .update(workflowTriggers)
-    .set({
-      lastRunAt: new Date(),
-      lastStatus: (result.ok ? `ok: ${result.workflowId}` : `error: ${result.error}`).slice(0, 32),
-      updatedAt: new Date(),
-    })
-    .where(scopedToTenant(workflowTriggers, row.tenantId, eq(workflowTriggers.id, row.id)));
-
-  return result.ok ? { ok: true, workflowId: result.workflowId } : { ok: false, error: result.error };
-}
 
 /** A trigger's stored node config. Malformed JSON is an empty config rather than
  *  a 500 — a row written by an older builder must not break its own webhook. */

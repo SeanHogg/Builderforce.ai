@@ -89,6 +89,14 @@ export const PROVIDER_META: Record<IntegrationProvider, ProviderMeta> = {
     { key: 'refreshToken', label: 'OAuth refresh token' },
     { key: 'rootFolderId', label: 'Root folder ID (optional)', type: 'text', placeholder: 'blank = Drive root' },
   ] },
+  // Person-enrichment vendors. Same shape as the search keys above and for the
+  // same reason: they bill per lookup, so the key is yours. Every lookup is
+  // served through `enrichment_cache` (application/enrichment/enrichContact.ts),
+  // so asking for the same person twice costs nothing and /revenue-intel can
+  // report exactly how much that saved.
+  clearbit: { label: 'Clearbit', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key', placeholder: 'sk_…' }] },
+  people_data_labs: { label: 'People Data Labs', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key' }] },
+  apollo: { label: 'Apollo.io', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key' }] },
 };
 
 const cardStyle: React.CSSProperties = {

@@ -22,7 +22,7 @@ export const CANVAS_ENTITIES = defineDomainEntities('canvas', [
    * A folder a Creation Session is filed into (migration 1118) — readable
    * through the generic surface, never writable through it.
    *
-   * `creationSessionFolderRouteService.ts` owns invariants a generic PATCH
+   * `creationSessionFolderRoutes.ts` owns invariants a generic PATCH
    * cannot: the case-insensitive name uniqueness per (tenant, segment) that
    * decides create-vs-return-existing, and that a reassigned `projectId`
    * actually belongs to the same tenant and segment. A generic writer only

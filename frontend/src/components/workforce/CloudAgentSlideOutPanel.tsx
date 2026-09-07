@@ -21,6 +21,7 @@ import PersonalitySummary from '@/components/PersonalitySummary';
 import PersonalityUsagePanel from '@/components/PersonalityUsagePanel';
 import { useAssignedRoles } from '@/lib/useAssignedRoles';
 import { PanelWidthControl, resolvePanelWidth, usePanelWidth, type PanelWidth } from '@/components/panelWidthControl';
+import { PanelCloseButton } from '@/components/PanelCloseButton';
 import {
   CloudAgentDetailsFields,
   CloudAgentRuntimeFields,
@@ -239,12 +240,6 @@ export function CloudAgentSlideOutPanel({
       <div className="project-panel-drawer slide-panel-drawer" style={{ ...panelDrawerBaseStyle, width: resolvePanelWidth(effectiveWidth) }} role="dialog" aria-label={t('ariaPanel')}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0, flexWrap: 'wrap' }}>
-          <button type="button" onClick={onClose} aria-label={t('ariaClose')} style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-            <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: 'var(--font-size-card-title)', color: 'var(--text-strong)' }}>{agent.name}</div>
             {agent.title && agent.title !== agent.name && (
@@ -264,15 +259,22 @@ export function CloudAgentSlideOutPanel({
               )}
             </div>
           </div>
-          {agent.published
-            ? <span className="badge-green">{t('statusPublished')}</span>
-            : <span style={{ fontSize: 'var(--font-size-eyebrow)', padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', color: 'var(--muted)' }}>{t('statusDraft')}</span>}
-          {showWidthControl && (
-            <PanelWidthControl value={effectiveWidth as PanelWidth} onChange={chooseWidth} />
-          )}
-          {canDeleteAgent(agent) && (
-            <button type="button" onClick={remove} disabled={saving} style={{ ...btnSubtle, color: 'var(--error-text)' }}>{tc('delete')}</button>
-          )}
+          {/* The header's trailing group: badges, actions, then the panel's
+              way out. Its own wrapping row so a narrow drawer stacks the
+              actions while the close button stays in the top-right corner. */}
+          <div className="panel-header-trail">
+            {agent.published
+              ? <span className="badge-green">{t('statusPublished')}</span>
+              : <span style={{ fontSize: 'var(--font-size-eyebrow)', padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', color: 'var(--muted)' }}>{t('statusDraft')}</span>}
+            {showWidthControl && (
+              <PanelWidthControl value={effectiveWidth as PanelWidth} onChange={chooseWidth} />
+            )}
+            {canDeleteAgent(agent) && (
+              <button type="button" onClick={remove} disabled={saving} style={{ ...btnSubtle, color: 'var(--error-text)' }}>{tc('delete')}</button>
+            )}
+            {/* Top right, last in the row — the app-wide panel close corner. */}
+            <PanelCloseButton onClose={onClose} />
+          </div>
         </div>
 
         {/* Tabs */}

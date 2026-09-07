@@ -3,12 +3,14 @@
 import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslations } from 'next-intl';
 import { specsApi, taskSpecsApi, type Spec } from '@/lib/builderforceApi';
 import { ChatMessageContent } from '../ChatMessageContent';
 import { Select } from '@/components/Select';
 import { ViewToggle } from '@/components/ViewToggle';
 import { unwrapMarkdownFence } from '@/lib/utils';
 import { PrdCreateModal } from '../prd/PrdCreateModal';
+import { PanelCloseButton } from '@/components/PanelCloseButton';
 
 /**
  * "PRD" tab of the task details panel. Agents hand off between swimlanes via a
@@ -44,6 +46,8 @@ function ExpandIcon() {
 }
 
 export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: number }) {
+  const t = useTranslations('taskPrd');
+  const tCommon = useTranslations('common');
   const [specs, setSpecs] = useState<Spec[]>([]);
   const [projectSpecs, setProjectSpecs] = useState<Spec[]>([]); // attach candidates (task mode)
   const [selectedId, setSelectedId] = useState<string>('');
@@ -95,7 +99,7 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
     />
   ) : null;
 
-  if (loading) return <div style={{ padding: 20, fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>;
+  if (loading) return <div style={{ padding: 20, fontSize: 13, color: 'var(--text-muted)' }}>{tCommon('loading')}</div>;
 
   // Empty state — task mode offers Generate; project mode just informs.
   if (specs.length === 0) {
@@ -103,27 +107,25 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
       <div style={{ padding: 20, fontSize: 13, color: 'var(--text-muted)' }}>
         {taskId != null ? (
           <>
-            <p style={{ marginTop: 0 }}>This task has no PRD yet. Agents use the PRD to understand the goal and hand off
-              work between swimlanes.</p>
+            <p style={{ marginTop: 0 }}>{t('emptyTask')}</p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button type="button" style={{ ...textBtn, opacity: busy ? 0.6 : 1 }} disabled={busy}
                 onClick={() => run(() => taskSpecsApi.generate(taskId))}>
-                {busy ? 'Generating…' : 'Generate with AI'}
+                {busy ? t('generating') : t('generateWithAi')}
               </button>
               <button type="button" style={{ ...textBtn, opacity: busy ? 0.6 : 1 }} disabled={busy}
-                onClick={() => setShowCreate(true)}>Create PRD</button>
+                onClick={() => setShowCreate(true)}>{t('createPrd')}</button>
               {linkable.length > 0 && (
                 <Select style={selectStyle} defaultValue="" disabled={busy}
                   onChange={(e) => e.target.value && run(() => taskSpecsApi.attach(taskId, e.target.value, true))}>
-                  <option value="">Attach existing PRD…</option>
-                  {linkable.map((s) => <option key={s.id} value={s.id}>{s.goal || `PRD ${s.id.slice(0, 8)}`}</option>)}
+                  <option value="">{t('attachExisting')}</option>
+                  {linkable.map((s) => <option key={s.id} value={s.id}>{s.goal || t('prdFallback', { id: s.id.slice(0, 8) })}</option>)}
                 </Select>
               )}
             </div>
           </>
         ) : (
-          <>No PRD has been drafted for this project yet. Use Brain or the PRDs tab to draft one — agents use it to hand
-            off work between swimlanes.</>
+          <>{t('emptyProject')}</>
         )}
         {createModal}
       </div>
@@ -151,7 +153,7 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
     <ViewToggle
       value={view}
       onChange={setView}
-      options={[{ value: 'preview', label: 'Preview' }, { value: 'raw', label: 'RAW' }]}
+      options={[{ value: 'preview', label: t('viewPreview') }, { value: 'raw', label: t('viewRaw') }]}
     />
   );
 
@@ -162,18 +164,18 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
           <Select value={selectedId} onChange={(e) => setSelectedId(e.target.value)} style={{ ...selectStyle, flex: 1 }}>
             {specs.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.isPrimary ? <Icon source="★" size="1em" /> : ''}{s.goal || `PRD ${s.id.slice(0, 8)}`} ({s.status})
+                {s.isPrimary ? <Icon source="★" size="1em" /> : ''}{s.goal || t('prdFallback', { id: s.id.slice(0, 8) })} ({s.status})
               </option>
             ))}
           </Select>
         ) : (
           <div style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>
-            {selected?.isPrimary ? <Icon source="★" size="1em" /> : ''}{selected?.goal || 'PRD'}
+            {selected?.isPrimary ? <Icon source="★" size="1em" /> : ''}{selected?.goal || t('prdLabel')}
             <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 400 }}> · {selected?.status}</span>
           </div>
         )}
         {viewToggle}
-        <button type="button" style={iconBtn} title="Expand to full screen" aria-label="Expand to full screen" onClick={() => setFullscreen(true)}>
+        <button type="button" style={iconBtn} title={t('expandFullScreen')} aria-label={t('expandFullScreen')} onClick={() => setFullscreen(true)}>
           <ExpandIcon />
         </button>
       </div>
@@ -183,17 +185,17 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
           {!selected.isPrimary && (
             <button type="button" style={{ ...textBtn, opacity: busy ? 0.6 : 1 }} disabled={busy}
-              onClick={() => run(() => taskSpecsApi.setPrimary(taskId, selected.id))}>Set primary</button>
+              onClick={() => run(() => taskSpecsApi.setPrimary(taskId, selected.id))}>{t('setPrimary')}</button>
           )}
           <button type="button" style={{ ...textBtn, opacity: busy ? 0.6 : 1 }} disabled={busy}
-            onClick={() => run(() => taskSpecsApi.detach(taskId, selected.id))}>Detach</button>
+            onClick={() => run(() => taskSpecsApi.detach(taskId, selected.id))}>{t('detach')}</button>
           <button type="button" style={{ ...textBtn, opacity: busy ? 0.6 : 1 }} disabled={busy}
-            onClick={() => setShowCreate(true)}>Create PRD</button>
+            onClick={() => setShowCreate(true)}>{t('createPrd')}</button>
           {linkable.length > 0 && (
             <Select style={selectStyle} value="" disabled={busy}
               onChange={(e) => e.target.value && run(() => taskSpecsApi.attach(taskId, e.target.value))}>
-              <option value="">Attach existing PRD…</option>
-              {linkable.map((s) => <option key={s.id} value={s.id}>{s.goal || `PRD ${s.id.slice(0, 8)}`}</option>)}
+              <option value="">{t('attachExisting')}</option>
+              {linkable.map((s) => <option key={s.id} value={s.id}>{s.goal || t('prdFallback', { id: s.id.slice(0, 8) })}</option>)}
             </Select>
           )}
         </div>
@@ -209,14 +211,11 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
           style={{ position: 'fixed', inset: 0, zIndex: 10010, background: 'var(--bg-base)', display: 'flex', flexDirection: 'column' }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px', borderBottom: '1px solid var(--border-subtle)' }}>
-            <div style={{ fontWeight: 700, fontSize: 16 }}>{selected?.goal || 'PRD'}</div>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>{selected?.goal || t('prdLabel')}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {viewToggle}
-            <button type="button" style={iconBtn} aria-label="Close full screen" onClick={() => setFullscreen(false)}>
-              <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
+            {/* Top right — the app-wide panel close corner. */}
+            <PanelCloseButton onClose={() => setFullscreen(false)} label={t('exitFullScreen')} />
             </div>
           </div>
           <div style={{ flex: 1, overflow: 'auto', padding: '24px 32px', maxWidth: 900, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>

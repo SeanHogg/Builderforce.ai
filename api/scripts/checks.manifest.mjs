@@ -25,6 +25,10 @@ export default [
   ['check:table-adoption', 'check-table-adoption.mjs'],
   ['check:layering', 'check-layering.mjs'],
   ['check:application-layering', 'check-application-layering.mjs'],
+  // ONE wire format, declared twice on purpose (agent-runtime takes no runtime
+  // dependency on the Worker package). This fails the build the moment the two
+  // hand-written declarations disagree.
+  ['check:api-contract-mirror', 'check-api-contract-mirror.mjs'],
   ['check:project-ownership', 'check-project-ownership.mjs'],
   ['check:tenant-scope', 'check-tenant-scope.mjs'],
   ['check:source', 'check-source-text.mjs'],

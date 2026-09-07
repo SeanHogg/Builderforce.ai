@@ -35,6 +35,15 @@ export interface FakeDb {
   update: (...args: unknown[]) => unknown;
   delete: (...args: unknown[]) => unknown;
   execute: (...args: unknown[]) => unknown;
+  /**
+   * Runs `fn` against THIS SAME double, so a service that wraps its writes in a
+   * transaction (`setExperience` clears the other current roles before inserting
+   * one) is exercised rather than crashing on a missing method. The double does
+   * not roll back: it records the statements a transaction issued, which is what
+   * a unit test can meaningfully assert — atomicity is Postgres's job, and a
+   * fake that pretended to provide it would be testing the fake.
+   */
+  transaction: <T>(fn: (tx: FakeDb) => Promise<T>) => Promise<T>;
   /** Every statement issued, in order. */
   calls: FakeDbCall[];
   /** Results still queued — a non-empty tail means the test over-provisioned. */
@@ -104,15 +113,17 @@ export function fakeDb(results: Array<unknown[] | Error> = []): FakeDb {
     return makeChain(call);
   };
 
-  return {
+  const db: FakeDb = {
     select: head('select'),
     insert: head('insert'),
     update: head('update'),
     delete: head('delete'),
     execute: head('execute'),
+    transaction: (fn) => fn(db),
     calls,
     remaining: () => queue.length,
   };
+  return db;
 }
 
 /**

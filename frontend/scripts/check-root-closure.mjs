@@ -66,6 +66,15 @@
  *   edge moved — a raise this guard cares about is a new FILE, and there is none.
  *   That sentence is why the guard now ratchets the file set and not the lines.
  *
+ *   313 → 314 files (2026-09-07) — `components/PanelCloseButton.tsx`, the ONE
+ *   dismiss control every slide-out panel renders. It is in the closure for the
+ *   same reason `SlideOutPanel` already is (the shell's own panels import it), and
+ *   the edge is 35 lines that REPLACE the hand-rolled button `SlideOutPanel` used
+ *   to inline — the closure grew by one NAME, not by any first-paint work. A
+ *   `dynamic()` here would be worse than the edge it cuts: the close button is the
+ *   first thing in a panel's header, so deferring it hands the reader a header
+ *   with no way out of it until a second chunk lands.
+ *
  *   482 → 483 files (2026-09-06) — `domains/guest/application/guestWall.ts`,
  *   the transport's record of "a read on this route was refused for want of a
  *   credential". `lib/apiClient.ts` is already in the closure and is the ONE

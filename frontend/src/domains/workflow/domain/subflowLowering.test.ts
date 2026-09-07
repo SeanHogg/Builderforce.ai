@@ -210,6 +210,30 @@ describe('a nested canvas that cannot run', () => {
     expect(result.issues[0]).toMatchObject({ messageKey: 'subflowNotBuildable', values: { canvas: 'Canvas broken', step: 'draft' } });
   });
 
+  it('refuses a step that maps a handover but misses what the child needs', () => {
+    const needs = board('needs', [
+      step('revoke', { stepKind: 'llm', stepConfig: { prompt: 'Revoke' }, stepInputs: [{ key: 'employee', from: 'person' }] }),
+    ]);
+    const typo = {
+      ...subflow('nest', { canvasSessionId: 'needs' }),
+      // `employe` — the mistake that used to build green and hand the child a
+      // payload without the one field it reads.
+      data: { ...subflow('nest', { canvasSessionId: 'needs' }).data, stepInputs: [{ key: 'employe', from: 'person' }] },
+    };
+    const result = compileBoardFlow([typo], [], { resolveSubflow: resolver(needs) });
+    expect(result.issues[0]).toMatchObject({
+      messageKey: 'subflowMissingInput', values: { canvas: 'Canvas needs', key: 'employee' },
+    });
+  });
+
+  it('leaves a pass-through call alone — declaring nothing is how you hand it everything', () => {
+    const needs = board('needs', [
+      step('revoke', { stepKind: 'llm', stepConfig: { prompt: 'Revoke' }, stepInputs: [{ key: 'employee', from: 'person' }] }),
+    ]);
+    const result = compileBoardFlow([subflow('nest', { canvasSessionId: 'needs' })], [], { resolveSubflow: resolver(needs) });
+    expect(result.issues).toEqual([]);
+  });
+
   it('refuses composition deeper than the limit', () => {
     // Seven canvases, each nesting the next: the sixth lowering is the one that
     // runs with a full stack, which is one past MAX_SUBFLOW_DEPTH.

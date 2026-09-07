@@ -29,6 +29,8 @@
 import {
   MAX_SUBFLOW_DEPTH, subflowBinding, subflowCanvasTitle, subflowSessionId,
 } from './subflow';
+import { stepInputsOf } from './flowStepObject';
+import { subflowInterface } from './subflowInterface';
 import type {
   BoardFlowCompileOptions, BoardFlowCompiler, BoardFlowIssue, BoardFlowObject,
   CompiledFlowEdge, CompiledFlowNode,
@@ -98,6 +100,29 @@ export function lowerSubflow(
   const child = options.resolveSubflow?.(sessionId) ?? null;
   if (!child) return { ok: false, messageKey: 'subflowUnresolved', values: { canvas } };
   const named = child.title || canvas;
+
+  /**
+   * WHAT THE PARENT HANDS OVER, AGAINST WHAT THE CHILD ASKED FOR.
+   *
+   * A step that declares NOTHING passes the payload through untouched, which is a
+   * legitimate and common way to call a canvas — so the check only applies once the
+   * author has started describing the handover. From that moment the declaration IS
+   * the statement of what the child receives, and a parameter missing from it is
+   * missing at run time: `employe` where the child needs `employee` builds green,
+   * runs green, and hands the child a payload without the one field it reads.
+   *
+   * Blocking, like every other issue, because it is the same defect class the
+   * compiler already refuses — a step that succeeds at nothing — and not a matter of
+   * taste the author might mean.
+   */
+  const declared = stepInputsOf(step.data);
+  if (declared.length > 0) {
+    const handed = new Set(declared.map((binding) => binding.key));
+    const missing = subflowInterface(child).inputs.find((port) => !handed.has(port.key));
+    if (missing) {
+      return { ok: false, messageKey: 'subflowMissingInput', values: { canvas: named, key: missing.key } };
+    }
+  }
 
   if (subflowBinding(config) === 'live') {
     if (!child.definitionId) return { ok: false, messageKey: 'subflowNeedsBuild', values: { canvas: named } };

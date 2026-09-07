@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { requestRoleRun } from './requestRoleRun';
-import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
+import { dispatchCloudRunForTask } from '../runtime/dispatchCloudRun';
 import { recordActivity } from '../activity/activityLog';
 import type { TicketParticipantsService } from './ticketParticipants';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
 
-vi.mock('../../presentation/routes/runtimeRoutes', () => ({ dispatchCloudRunForTask: vi.fn() }));
+vi.mock('../runtime/dispatchCloudRun', () => ({ dispatchCloudRunForTask: vi.fn() }));
 vi.mock('../activity/activityLog', () => ({
   recordActivity: vi.fn().mockResolvedValue(undefined),
   cloudAgentActor: (ref: string, name: string) => ({ ref, name }),

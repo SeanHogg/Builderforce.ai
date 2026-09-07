@@ -556,6 +556,12 @@ export const invitations = pgTable('invitations', {
 }, (t) => [
   index('idx_invitations_email').on(t.tenantId, t.email, t.state),
   index('idx_invitations_object').on(t.objectId, t.state),
+  // The invite-landing lookup (`findPendingByEmail`) is DELIBERATELY unscoped —
+  // the caller has just proved control of an address and belongs to no tenant
+  // yet, so there is no tenant to lead with. The composite above starts with
+  // `tenant_id` and therefore cannot serve it, which left a full scan of this
+  // table on the sign-in path every client takes to discover its workspaces.
+  index('idx_invitations_address').on(t.email, t.state),
 ]);
 
 // ---------------------------------------------------------------------------
@@ -1575,6 +1581,10 @@ export const integrationProviderEnum = pgEnum('integration_provider', [
   // 0355 — Google connectors (OAuth offline credentials). Gmail backs the email
   // workflow node; Google Drive can back a project's file storage.
   'gmail', 'google_drive',
+  // 1147 — person-enrichment vendors. These are what `enrichment_cache` (PRD 19 §9)
+  // was built to wrap and had none of; each bills per lookup, which is why the cache
+  // is the only path to them (application/enrichment/enrichContact.ts).
+  'clearbit', 'people_data_labs', 'apollo',
 ]);
 
 

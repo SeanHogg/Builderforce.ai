@@ -7,6 +7,7 @@ import { hashSecret, generateApiKey, hashPassword, verifyPassword } from '../../
 import { IAuditRepository } from '../../domain/audit/IAuditRepository';
 import { AuditEvent } from '../../domain/audit/AuditEvent';
 import { ITenantRepository } from '../../domain/tenant/ITenantRepository';
+import { tenantRoleForListing } from '../tenant/tenantRoles';
 
 // ---------------------------------------------------------------------------
 // DTOs
@@ -148,7 +149,7 @@ export class AuthService {
           id: t.id,
           name: t.name,
           slug: t.slug,
-          role: member?.role ?? 'member',
+          role: tenantRoleForListing(member?.role),
           status: t.status,
           defaultAgentHostId: t.defaultAgentHostId,
           plan: t.plan,

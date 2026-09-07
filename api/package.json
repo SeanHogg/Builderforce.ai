@@ -1,6 +1,6 @@
 {
   "name": "builderforce-api",
-  "version": "2026.9.18",
+  "version": "2026.9.19",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
@@ -26,6 +26,7 @@
     "check:model-coverage": "node scripts/check-model-coverage.mjs",
     "check:layering": "node scripts/check-layering.mjs",
     "check:application-layering": "node scripts/check-application-layering.mjs",
+    "check:api-contract-mirror": "node scripts/check-api-contract-mirror.mjs",
     "check:project-ownership": "node scripts/check-project-ownership.mjs",
     "check:tenant-scope": "node scripts/check-tenant-scope.mjs",
     "check:source": "node scripts/check-source-text.mjs",

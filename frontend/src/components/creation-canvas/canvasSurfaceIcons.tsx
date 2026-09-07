@@ -28,6 +28,11 @@ import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
  * with no React in it, and putting JSX there would invert the dependency the whole seam
  * is built on.
  *
+ * "Complete" has to be MAINTAINED, and it had already stopped being true: `world` and
+ * `facilitate` reached the registry without glyphs and had been drawing their own initial
+ * in a 25px slot ever since — the exact symptom the paragraph below describes, back again
+ * the moment nobody checked. Both have glyphs now, alongside `room`.
+ *
  * ── WHY THE FALLBACK STAYS ───────────────────────────────────────────────────────
  * A surface added to the registry without a glyph must degrade, not throw: the lookup
  * used to be read straight into `<Glyph />`, so following the registry's own documented
@@ -40,11 +45,14 @@ const SURFACE_ICON: Partial<Record<CanvasSurfaceId, () => React.JSX.Element>> = 
   scene3d: ThreeDIcon,
   app: AppSurfaceIcon,
   insights: InsightsSurfaceIcon,
+  room: RoomSurfaceIcon,
   calendar: CalendarSurfaceIcon,
   page: PageSurfaceIcon,
   play: PlaySurfaceIcon,
   site: SiteSurfaceIcon,
   timeline: TimelineSurfaceIcon,
+  world: WorldSurfaceIcon,
+  facilitate: FacilitateSurfaceIcon,
 };
 
 /** What the session is worth, read back — two bars, one rising. The same reading
@@ -101,6 +109,42 @@ export function TimelineSurfaceIcon() {
     <rect x="1.7" y="4" width="7.4" height="3.2" rx=".9" fill="none" stroke="currentColor" strokeWidth="1.2" />
     <rect x="5" y="8.8" width="9.3" height="3.2" rx=".9" fill="none" stroke="currentColor" strokeWidth="1.2" />
     <path d="M1.7 2v12" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+  </svg>;
+}
+
+/** The people, not the work — a ring of bodies around a table seen from above.
+ *  Deliberately not a headcount badge: the room's subject is that everyone is in
+ *  the SAME place, which a circle says and a number does not. */
+export function RoomSurfaceIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx="8" cy="8" r="2.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    <circle cx="8" cy="1.9" r="1.35" fill="currentColor" />
+    <circle cx="13.3" cy="5" r="1.35" fill="currentColor" />
+    <circle cx="13.3" cy="11" r="1.35" fill="currentColor" />
+    <circle cx="8" cy="14.1" r="1.35" fill="currentColor" />
+    <circle cx="2.7" cy="11" r="1.35" fill="currentColor" />
+    <circle cx="2.7" cy="5" r="1.35" fill="currentColor" />
+  </svg>;
+}
+
+/** A space you stand in: a horizon with something built on it. The counterpart to
+ *  `ThreeDIcon`, which projects the board — this one is a PLACE. */
+export function WorldSurfaceIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M1.4 11.6h13.2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    <path d="M4.3 11.6V7.2l3-1.7 3 1.7v4.4" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+    <path d="M11.2 11.6V9l1.9-1.1 1.5.9v2.8" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
+  </svg>;
+}
+
+/** A tally in front of a room: three bars of different heights under a count line.
+ *  What a facilitator is actually watching while a poll is open. */
+export function FacilitateSurfaceIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M1.7 2.4h12.6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    <rect x="2.6" y="9.2" width="2.6" height="4.6" rx=".6" fill="currentColor" />
+    <rect x="6.7" y="5.8" width="2.6" height="8" rx=".6" fill="currentColor" />
+    <rect x="10.8" y="7.9" width="2.6" height="5.9" rx=".6" fill="currentColor" />
   </svg>;
 }
 

@@ -69,6 +69,7 @@
   "command.openPullRequest": "BuilderForce: Open a Pull Request",
   "command.reviewChanges": "BuilderForce: Review Changes",
   "command.refreshInbox": "BuilderForce: Refresh Inbox",
+  "command.refreshSessions": "BuilderForce: Refresh Sessions",
   "command.refreshDiagnostics": "BuilderForce: Refresh Diagnostics",
   "command.runDiagnostic": "BuilderForce: Run Diagnostic",
   "command.openDiagnosticReport": "BuilderForce: Open Diagnostic Report",

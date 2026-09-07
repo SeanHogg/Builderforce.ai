@@ -59,13 +59,23 @@ export const DEFAULT_CANVAS_PHASE: CanvasPhase = 'idea';
  * appears starting at Measure — the phase whose whole question is "what is this
  * worth" — and stays offered in Reach, same as everything else that has ever
  * appeared.
+ *
+ * `room` is offered in EVERY phase, and it is worth saying why it is not gated the
+ * way `insights` is. The two look similar — both new, both about something a young
+ * session may not have yet — but they fail differently when they are empty. An
+ * Insights tab with nothing pinned shows a reader nothing and can show nothing,
+ * because the data does not exist. A room with one person in it is a room with one
+ * person in it: correct, legible, and exactly what a workshop looks like ten seconds
+ * before the second person arrives. Gating a MEETING by which stage of the method a
+ * board says it is in would also be the wrong shape of rule — two people wanting to
+ * talk about an idea is the case for the room, not an argument against it.
  */
 const PHASE_SURFACES: Readonly<Record<CanvasPhase, readonly CanvasSurfaceId[]>> = {
-  idea: ['chat', 'graph', 'scene3d', 'app'],
-  make: ['chat', 'graph', 'scene3d', 'app'],
-  run: ['chat', 'graph', 'scene3d', 'app'],
-  measure: ['chat', 'graph', 'scene3d', 'app', 'insights'],
-  reach: ['chat', 'graph', 'scene3d', 'app', 'insights'],
+  idea: ['chat', 'graph', 'scene3d', 'app', 'room'],
+  make: ['chat', 'graph', 'scene3d', 'app', 'room'],
+  run: ['chat', 'graph', 'scene3d', 'app', 'room'],
+  measure: ['chat', 'graph', 'scene3d', 'app', 'room', 'insights'],
+  reach: ['chat', 'graph', 'scene3d', 'app', 'room', 'insights'],
 };
 
 export function surfacesForPhase(phase: CanvasPhase): readonly CanvasSurfaceId[] {

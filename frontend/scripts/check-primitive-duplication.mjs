@@ -168,6 +168,37 @@ const PRIMITIVES = [
     ],
   },
   {
+    id: 'panel-close-button',
+    owner: 'components/PanelCloseButton.tsx',
+    primitive: 'components/PanelCloseButton.tsx',
+    why:
+      'Every slide-out panel needs one way out, and seven surfaces each drew their own: the same\n' +
+      '   36px bordered box and the same two-line X, at four sizes, with four different aria\n' +
+      '   labels — and two of them put it on the LEFT of the header while the rest put it on the\n' +
+      '   right. Where the way out of a panel lives is not a per-panel decision.',
+    fix:
+      'Render <PanelCloseButton onClose={...} /> from @/components/PanelCloseButton, LAST in the\n' +
+      "   header's trailing group so it lands in the top-right corner. Pass `label` only when the\n" +
+      '   panel genuinely names what is being closed.',
+    // Both signals, because an X on its own is innocent: a hamburger toggles to
+    // one, a cart row removes with one, a toast dismisses with one. What says
+    // "panel close" is the two together — the inline-styled icon box AND a
+    // dismiss handler, on the same button.
+    threshold: 2,
+    signals: [
+      // The 36px bordered icon box, re-declared inline, wrapping the X.
+      {
+        name: 'inline icon-button box around the X',
+        test: /width:\s*3[26],[\s\S]{0,400}?border:\s*'1px solid var\(--border-subtle\)'[\s\S]{0,800}?x1=["']18["']\s+y1=["']6["']/,
+      },
+      // A dismiss handler on the button that draws the X.
+      {
+        name: 'dismiss handler on the X button',
+        test: /onClick=\{[^}]{0,80}[Cc]lose[^}]{0,80}\}[\s\S]{0,800}?x1=["']18["']\s+y1=["']6["']/,
+      },
+    ],
+  },
+  {
     id: 'slugify',
     owner: '../packages/creation-canvas-contract/',
     primitive: '@builderforce/creation-canvas-contract slugify (packages/creation-canvas-contract/src/slug.ts)',

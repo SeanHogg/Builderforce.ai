@@ -19,7 +19,7 @@ import { users } from '../../infrastructure/database/schema';
 import { eq } from 'drizzle-orm';
 import { sendTransactionalEmail } from '../email/sendEmail';
 import type { Env } from '../../env';
-import { persistProbe } from '../../presentation/routes/adminRoutes';
+import { persistProbe } from './vendorProbeStore';
 import {
   probeAllVendors,
   type VendorProbeResult,

@@ -19,6 +19,7 @@ import { convertWorkItemType, ConvertError, type WorkItemKind } from '../../appl
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { openTaskPullRequest } from '../../application/repos/openTaskPullRequest';
+import { dispatchTaskFinalize } from '../../application/task/taskFinalize';
 import { loadTicketBuildStatuses } from '../../application/repos/ticketBuildStatus';
 import { ensureTaskPrdRecord, linkSpecToTask } from '../../application/prd/taskPrd';
 import { recordStatusTransition } from '../../application/task/taskLifecycle';
@@ -34,7 +35,7 @@ import {
 import { loadPlanVerdictsForTasks } from '../../application/planning/planVerdictStore';
 import { pmoVersionKey } from './pmoRoutes';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
-import { dispatchCloudRunForTask, type CloudDispatchOutcome } from './runtimeRoutes';
+import { dispatchCloudRunForTask, type CloudDispatchOutcome } from '../../application/runtime/dispatchCloudRun';
 import { recordCloudToolEvent } from '../../application/runtime/cloudAgentEngine';
 import { evaluateTaskAutoRun, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
 import { resolveLaneAgentHostId } from '../../application/swimlane/laneAgentHost';
@@ -52,40 +53,8 @@ import { executionTokenGate } from './executionTokenGate';
 import { broadcastProjectChanged } from '../../infrastructure/relay/broadcastRoom';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
+import { taskAssigneesCacheKey } from '../../application/task/taskAssigneeCache';
 
-/** Parse a swimlane assignment's `required_capabilities` (JSON array stored as
- *  text) into a clean string[]. Tolerates null / malformed / non-array values by
- *  returning [] (no requirement) so a bad row never blocks auto-run with a throw. */
-/** Minimal shape of the agentHost relay Durable Object namespace binding. */
-type RelayNamespace = {
-  idFromName(name: string): unknown;
-  get(id: unknown): { fetch(url: string, init?: RequestInit): Promise<Response> };
-};
-
-/** The task fields the Done-transition finalize needs to pick host vs cloud path. */
-type FinalizeTask = {
-  assignedAgentHostId?: number | null;
-  assignedAgentRef?: string | null;
-  gitBranch?: string | null;
-  githubPrUrl?: string | null;
-  title?: string | null;
-};
-
-/**
- * On task → Done, finalize the ticket: commit the accumulated changes, push the
- * branch, and open a PR. Best-effort + background — never blocks the PATCH.
- *
- * Two finalize surfaces, picked by who the task is assigned to:
- *  - Self-hosted host (`assignedAgentHostId`): the host holds the on-disk ticket
- *    workspace, so we relay it a `task.finalize` message and IT commits/pushes/PRs.
- *  - Cloud agent (`assignedAgentRef`): there is no on-disk workspace — the agent
- *    committed each `write_file` straight onto the ticket branch via the provider
- *    API during the run, so the branch is already pushed. We just open the PR
- *    server-side from that branch. Guarded on `gitBranch` (nothing committed → no
- *    PR) and a missing `githubPrUrl` (the inline run-end finalize may have already
- *    opened it — never double-open).
- * A task with neither assignee is a no-op.
- */
 /** Per-task linked-PRD counts via one grouped query [1266]. Best-effort: returns
  *  an empty map (not an error) where `task_specs` (migration 0098) isn't applied,
  *  so the board list never 500s on environments that haven't run it yet. */
@@ -100,72 +69,6 @@ async function countSpecsByTask(db: Db, taskIds: number[]): Promise<Map<number, 
     return new Map(rows.map((r) => [r.taskId, Number(r.n)]));
   } catch {
     return new Map();
-  }
-}
-
-// Exported so the AI Manager (which advances review-complete tickets to Done under
-// non-queue PR policy) opens the PR through the SAME finalize path the board does,
-// rather than duplicating the commit/push/PR-open logic.
-export async function dispatchTaskFinalize(
-  env: HonoEnv['Bindings'],
-  db: Db,
-  tenantId: number,
-  taskId: number,
-  task: FinalizeTask,
-): Promise<void> {
-  const title = task.title ?? '';
-
-  if (task.assignedAgentHostId != null) {
-    const relay = (env as unknown as { AGENT_HOST_RELAY?: RelayNamespace }).AGENT_HOST_RELAY;
-    if (!relay) return;
-    const repoRef = await resolveDefaultRepoForTask(db, tenantId, taskId).catch(() => null);
-    try {
-      const stub = relay.get(relay.idFromName(String(task.assignedAgentHostId)));
-      await stub.fetch('https://relay.internal/dispatch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'task.finalize',
-          taskId,
-          title,
-          repo: repoRef ? { repoId: repoRef.repoId, defaultBranch: repoRef.defaultBranch } : null,
-        }),
-      });
-    } catch (error) { /* host offline / relay miss — branch can be finalized manually */ 
-      reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "dispatchTaskFinalize" });
-    }
-    return;
-  }
-
-  // Cloud agent: open the PR from the already-pushed ticket branch. Skip when the
-  // agent never committed (no branch) or a PR already exists (inline finalize).
-  // The duplicate-PR race (this human-drag vs. a concurrent inline run-end
-  // finalize) is closed inside openTaskPullRequest by an atomic claim (0140); the
-  // `!githubPrUrl` check below is just a cheap pre-filter, not the guard.
-  if (task.assignedAgentRef && task.gitBranch && !task.githubPrUrl) {
-    const e = env as unknown as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
-    const secret = e.INTEGRATION_ENCRYPTION_SECRET ?? e.JWT_SECRET ?? '';
-    try {
-      const res = await openTaskPullRequest(db, secret, tenantId, taskId, { branch: task.gitBranch, title }, env);
-      // Uniform PR observability: emit a TASK-scoped `pr_opened` event (no live
-      // execution on the Done-transition path) so a manually-completed cloud
-      // ticket shows the same timeline event as an execution-finalized one. Keyed
-      // to the agent ref so it surfaces in that agent's tool-audit timeline.
-      if (res.ok) {
-        await recordCloudToolEvent(db, {
-          tenantId,
-          cloudAgentRef: task.assignedAgentRef,
-          executionId: null,
-          sessionKey: `task:${taskId}`,
-          toolName: 'pr_opened',
-          category: 'tool',
-          detail: { taskId, branch: task.gitBranch, source: 'done-finalize' },
-          result: `opened PR #${res.number}${res.merged ? ' (auto-merged)' : ' — awaiting review'}`.slice(0, 300),
-        });
-      }
-    } catch (error) { /* best-effort — PR can be opened manually from the pushed branch */ 
-      reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "dispatchTaskFinalize" });
-    }
   }
 }
 
@@ -341,13 +244,14 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // before `/:id` so the static path isn't captured as a task id.
   //
   // Cached read-through (tenant membership changes rarely). Invalidated on member
-  // add/remove via invalidateTaskAssignees() in tenantRoutes.ts so a new teammate
+  // add/remove via invalidateTaskAssignees() (application/task/taskAssigneeCache.ts,
+  // which also owns the key this reads under) so a new teammate
   // appears immediately; the KV TTL (5 min) is just the backstop.
   router.get('/assignees', requirePermission(PERMISSIONS.TASK_READ), async (c) => {
     const tenantId = c.get('tenantId');
     const members = await getOrSetCached(
       c.env as Env,
-      `task-assignees:tenant:${tenantId}`,
+      taskAssigneesCacheKey(tenantId),
       async () => {
         const rows = await db
           .select({

@@ -63,7 +63,7 @@ export interface BoardFlowIssue {
     | 'noSteps' | 'llmNeedsPrompt' | 'connectorNeedsConnector' | 'connectorNeedsAction' | 'agentNeedsTask'
     // COMPOSITION — every way a nested canvas can fail to be a runnable step.
     | 'subflowNeedsCanvas' | 'subflowUnresolved' | 'subflowCycle' | 'subflowTooDeep'
-    | 'subflowEmpty' | 'subflowNotBuildable' | 'subflowNeedsBuild';
+    | 'subflowEmpty' | 'subflowNotBuildable' | 'subflowNeedsBuild' | 'subflowMissingInput';
   values?: Record<string, string>;
 }
 

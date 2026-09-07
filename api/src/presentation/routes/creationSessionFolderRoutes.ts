@@ -1,13 +1,13 @@
 /**
  * Creation Session Folders — the entity a session is filed into (migration
  * 1118). Kept as its own router rather than a 7th responsibility bolted onto
- * `creationSessionRouteService.ts`: folders are a new bounded concern (their
+ * `creationSessionRoutes.ts`: folders are a new bounded concern (their
  * own identity, rename, and optional Project tie), not a session sub-resource.
  */
 import { Hono, type Context } from 'hono';
 import { and, eq, sql } from 'drizzle-orm';
-import { authMiddleware } from '../../presentation/middleware/authMiddleware';
-import { scope } from '../../presentation/routes/segmentTrackerRoutes';
+import { authMiddleware } from '../middleware/authMiddleware';
+import { scope } from './segmentTrackerRoutes';
 import { creationSessionFolders, projects } from '../../infrastructure/database/schema';
 import { scopedToSegment } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';

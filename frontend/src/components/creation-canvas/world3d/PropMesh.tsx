@@ -6,7 +6,8 @@
 import { useMemo } from 'react';
 import { BallCollider, CuboidCollider, RigidBody, type IntersectionEnterPayload } from '@react-three/rapier';
 import type { ThreeEvent } from '@react-three/fiber';
-import type { CanvasWorldPhysicsKind, CanvasWorldProp, CanvasWorldPropKind } from '@builderforce/creation-canvas-contract';
+import { propTakesSurface, type CanvasWorldPhysicsKind, type CanvasWorldProp, type CanvasWorldPropKind, type CanvasWorldPropSurface } from '@builderforce/creation-canvas-contract';
+import { SurfacePanel } from './SurfacePanel';
 
 /**
  * PropMesh — renders one `CanvasWorldProp` as the right Three.js mesh + the
@@ -16,8 +17,15 @@ import type { CanvasWorldPhysicsKind, CanvasWorldProp, CanvasWorldPropKind } fro
  *
  * Ported from hired.video's `EntityMesh.tsx` — selection outline stays here
  * so the host scene doesn't need a per-prop gizmo overlay. Trimmed: no
- * texture mapping, no tag, no sensor-trigger event (challenges are out of
- * scope for this canvas's authoring surface — see `world.ts`'s header).
+ * tag, no sensor-trigger event (challenges are out of scope for this canvas's
+ * authoring surface — see `world.ts`'s header).
+ *
+ * Texture mapping was trimmed too and has come back in schema v2, as the ONE
+ * shared {@link SurfacePanel} the room's wall also uses — so a picture on a
+ * wall looks the same, loads the same and fails the same way in both places.
+ * Only the flat-faced kinds take one; `propTakesSurface` in the contract
+ * decides which, so this file and the properties panel cannot disagree about
+ * whether an author's image URL will do anything.
  */
 
 interface PropMeshProps {
@@ -67,6 +75,7 @@ export default function PropMesh({ prop, mode, selected, onSelect, onPlayerEnter
     return (
       <group position={prop.position} rotation={prop.rotation} scale={prop.scale}>
         <KindMesh kind={prop.kind} color={prop.color} selected={selected} onClick={handleClick} />
+        <PropSurface prop={prop} onClick={handleClick} />
       </group>
     );
   }
@@ -80,8 +89,34 @@ export default function PropMesh({ prop, mode, selected, onSelect, onPlayerEnter
       <KindCollider kind={prop.kind} scale={prop.scale} sensor={isSensor} />
       <group scale={prop.scale}>
         <KindMesh kind={prop.kind} color={prop.color} selected={selected} onClick={handleClick} />
+        <PropSurface prop={prop} onClick={handleClick} />
       </group>
     </RigidBody>
+  );
+}
+
+/**
+ * The picture on this prop's front face, if it has one.
+ *
+ * Drawn in the prop's LOCAL space — a unit face offset just past the box's +Z
+ * side, inside the same scale-wrapped group as the mesh — so it stretches with
+ * the prop exactly as the face it sits on does. A prop with no surface, or one
+ * whose kind has no flat face to use it, renders nothing at all rather than an
+ * invisible mesh that still costs a draw call.
+ */
+function PropSurface({ prop, onClick }: { prop: CanvasWorldProp; onClick: (event: ThreeEvent<MouseEvent>) => void }) {
+  const surface: CanvasWorldPropSurface | undefined = prop.surface;
+  if (!surface || !propTakesSurface(prop.kind)) return null;
+  return (
+    <SurfacePanel
+      width={1}
+      height={1}
+      color={prop.color}
+      imageUrl={surface.url}
+      fit={surface.fit ?? 'cover'}
+      offset={0.502}
+      onClick={onClick}
+    />
   );
 }
 

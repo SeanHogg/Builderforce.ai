@@ -129,7 +129,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const runTicket = async (tk: TicketLinkVM, agentRef: string) => {
     setBusy(true);
     try {
-      const res = await adapter.runTicket(tk.kind, tk.ref, agentRef);
+      const res = await adapter.runTicket(tk.kind, tk.ref, agentRef, chatId);
       flash(res.started ? labels.runStarted(res.agentName || poolName(agentRef)) : labels.runNoAgent);
       setRunKey(null);
       await load();

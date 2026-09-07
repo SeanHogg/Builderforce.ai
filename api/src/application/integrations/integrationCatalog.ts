@@ -92,6 +92,8 @@ export type IntegrationCategory = (typeof INTEGRATION_CATEGORIES)[number];
 /** Which port backs an entry. An entry may have several. */
 export type IntegrationSurface =
   | 'connector' | 'board' | 'data' | 'drive' | 'mailbox' | 'payout' | 'ledger' | 'ads' | 'measurement'
+  /** A person-enrichment vendor, billed per lookup and served through the cache. */
+  | 'enrichment'
   /** A package published through the Developer Portal — the ecosystem half. */
   | 'extension';
 
@@ -140,10 +142,20 @@ const BOARD_CATEGORY: Record<BoardProviderCategory, IntegrationCategory> = {
   scm: 'devtools',
 };
 
-/** Total map — the data catalog's two families. */
+/** Total map — the provider catalog's three families. */
 const DATA_CATEGORY: Record<ProviderFamily, IntegrationCategory> = {
   data: 'data',
   marketing: 'marketing',
+  // An enrichment vendor answers "who is this person" — a CRM question, not a
+  // warehouse one, and it is the Sales seat that browses for it.
+  enrichment: 'crm',
+};
+
+/** Total map — which port actually backs each family. */
+const DATA_SURFACE: Record<ProviderFamily, IntegrationSurface> = {
+  data: 'data',
+  marketing: 'data',
+  enrichment: 'enrichment',
 };
 
 /** Total map — same contract for the connector vocabulary. */
@@ -231,7 +243,7 @@ function build(): IntegrationCatalogEntry[] {
       id: provider.id,
       name: provider.label,
       category: DATA_CATEGORY[provider.family],
-      surfaces: ['data'],
+      surfaces: [DATA_SURFACE[provider.family]],
       direction: 'import',
       capabilities: [],
     });

@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { ToolResultView } from '@/components/tools/ToolResultView';
+import { PanelCloseButton } from '@/components/PanelCloseButton';
 import type { ProjectScore } from '@/lib/tools';
 
 const overlayStyle: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 10000 };
@@ -41,17 +42,8 @@ export function DiagnosticsResultsPanel({
       <div role="dialog" aria-label={title} style={drawerStyle}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{title}</div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t('closeResults')}
-            style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: 'pointer' }}
-          >
-            <svg viewBox="0 0 24 24" style={{ width: 16, height: 16, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+          {/* Top right — the app-wide panel close corner. */}
+          <PanelCloseButton onClose={onClose} />
         </div>
 
         <div style={{ flex: 1, overflow: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 20 }}>

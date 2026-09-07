@@ -79,4 +79,3 @@ export function PeerAvatar({ position, yaw, color, label, live }: PeerAvatarProp
   );
 }
 
-export default PeerAvatar;

@@ -1,0 +1,282 @@
+/*
+ * The room surface's own chrome. Its own stylesheet rather than more rules in
+ * `CreationCanvas.module.css` for the reason `CanvasFacilitateSurface` has one:
+ * that file is already the widest stylesheet in the canvas and a surface's
+ * layout is exactly the thing that should travel with the surface.
+ *
+ * Every colour is a token with a literal fallback, so both themes are covered
+ * and a missing variable degrades to something readable rather than to nothing.
+ */
+
+.surface {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: row;
+  min-width: 0;
+  min-height: 0;
+  background: var(--surface, #16181c);
+  color: var(--text-primary, #f5f5f5);
+}
+
+/* The 3D stage. `min-height: 0` matters: without it the flex child refuses to
+   shrink and the WebGL canvas grows past the surface on short viewports. */
+.stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.stage canvas {
+  display: block;
+  touch-action: none;
+}
+
+.roster {
+  flex: 0 0 clamp(180px, 22vw, 244px);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  overflow-y: auto;
+  border-left: 1px solid var(--border, #2a2d33);
+  background: var(--surface-raised, var(--surface, #1b1e23));
+}
+
+.rosterHead {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary, #a5abb5);
+  margin: 0 0 8px;
+}
+
+.seat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.35;
+  min-height: 34px;
+  color: var(--text-primary, #f5f5f5);
+}
+
+.seat[data-live='false'] { color: var(--text-secondary, #a5abb5); }
+
+.seatDot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid var(--border, #2a2d33);
+}
+
+.seatName {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seatState {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--text-secondary, #a5abb5);
+}
+
+.hidden {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary, #a5abb5);
+}
+
+/* The no-WebGL path. Not a degraded copy of the room — a legible list of who is
+   in it, in the same order the ring seats them, so the two readings agree. */
+.fallback {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  min-width: 0;
+}
+
+.fallback h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.fallback p {
+  margin: 0;
+  max-width: 46ch;
+  font-size: 13px;
+  color: var(--text-secondary, #a5abb5);
+}
+
+.ring {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.ringSeat {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px;
+  border: 1px solid var(--border, #2a2d33);
+  border-radius: 999px;
+  font-size: 13px;
+  background: var(--surface, #16181c);
+}
+
+.ringSeat[data-live='false'] { opacity: 0.6; }
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary, #a5abb5);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Phone and short viewports: the rail becomes a strip under the stage, so the
+   room keeps the height and the roster keeps a tap-friendly row. */
+@media (max-width: 760px), (max-height: 520px) {
+  .surface { flex-direction: column; }
+  .roster {
+    flex: 0 0 auto;
+    max-height: 34vh;
+    border-left: 0;
+    border-top: 1px solid var(--border, #2a2d33);
+  }
+}
+
+/* ── The standup bar ─────────────────────────────────────────────────────────
+   Published into the ONE session bar, so these rules style a row that is drawn
+   by the host rather than inside this surface's own tree. Sized for that row:
+   28px controls, nothing that forces the bar taller than the groups beside it. */
+
+.standup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.standupStep,
+.standupAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border, #2a2d33);
+  border-radius: 6px;
+  background: var(--surface, #16181c);
+  color: var(--text-primary, #f5f5f5);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* A step is a glyph, so it gets a square tap target rather than a text one. */
+.standupStep {
+  min-width: 28px;
+  padding: 0;
+  font-size: 15px;
+}
+
+.standupStep:hover:not(:disabled),
+.standupAction:hover:not(:disabled) { border-color: var(--accent, #6b8afd); }
+
+.standupStep:disabled,
+.standupAction:disabled { opacity: .45; cursor: not-allowed; }
+
+.standupPicker { display: inline-flex; align-items: center; min-width: 0; }
+
+.standupSelect {
+  min-height: 28px;
+  max-width: 190px;
+  padding: 0 6px;
+  border: 1px solid var(--border, #2a2d33);
+  border-radius: 6px;
+  background: var(--surface, #16181c);
+  color: var(--text-primary, #f5f5f5);
+  font-size: 12px;
+}
+
+/* A native <option> list is painted by the OS, not by the page: without its own
+   opaque pair it inherits whatever the platform picks and can render light text
+   on a light menu in one theme. */
+.standupSelect option {
+  background: var(--surface, #16181c);
+  color: var(--text-primary, #f5f5f5);
+}
+
+.standupLive {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-primary, #f5f5f5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.standupLive::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success, #34d399);
+}
+
+.standupError {
+  max-width: 260px;
+  padding: 2px 8px;
+  border: 1px solid var(--danger, #ef4444);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--danger, #ef4444);
+  font-size: 12px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* Available to a label whose text is for screen readers only — the picker is
+   identified by the group caption beside it, which sighted readers already see. */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* On a phone the bar already wraps; keep the picker from forcing a wide row. */
+@media (max-width: 760px) {
+  .standupSelect { max-width: 130px; }
+  .standupLive { max-width: 140px; }
+}

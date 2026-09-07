@@ -35,12 +35,6 @@
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { resolveAndAssertPublic } from './ssrfGuard';
 
-/** Normalised host of a URL: de-bracketed (IPv6) and lower-cased, as the guard's range
- *  checks expect. */
-function guardHost(url: URL): string {
-  return url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-}
-
 /**
  * Run `operation` while `hostname` is held to be public — the check before it starts
  * AND again concurrently with it, so a name that flips mid-operation is caught.
@@ -62,27 +56,38 @@ export async function withPublicHostGuard<T>(
   operation: () => Promise<T>,
   discard?: (value: T) => unknown,
 ): Promise<T> {
+  // De-bracketed (IPv6) and lower-cased, as the guard's range checks expect.
   const host = hostname.replace(/^\[|\]$/g, '').toLowerCase();
   // Before: a private answer here means the operation never runs.
   await resolveAndAssertPublic(host);
   const running = operation();
+  // A permanent handler for `running`, attached BEFORE anything can reject: the recheck
+  // may reject first, and a promise that then rejects with nobody listening is an
+  // unhandled rejection (a process-level warning, and a crash under some runtimes).
+  // This only records how it settled — nothing is discarded on the success path.
+  const settled = running.then(
+    (value) => ({ ok: true as const, value }),
+    (operationError: unknown) => ({ ok: false as const, operationError }),
+  );
   // During: the same check, in the window the target name is actually dereferenced.
   const recheck = resolveAndAssertPublic(host);
   try {
     const [value] = await Promise.all([running, recheck]);
     return value;
   } catch (error) {
-    if (discard) {
-      await Promise.resolve(running.then(discard)).catch((cleanupError) => {
-        // The operation itself already failed, or the recheck rejected it — either way
-        // the caller gets `error` below. A failure to CLEAN UP after that is still worth
-        // a line, because a body left uncancelled is a leaked connection.
+    // The caller gets `error` either way; what matters here is that a result the
+    // recheck rejected does not leak its connection.
+    const outcome = await settled;
+    if (outcome.ok && discard) {
+      try {
+        await discard(outcome.value);
+      } catch (cleanupError) {
         reportCaughtError(cleanupError, {
           source: 'infrastructure/net/fetchPublic.ts',
           operation: 'discardGuardedResult',
           level: 'warning',
         });
-      });
+      }
     }
     throw error;
   }
@@ -111,7 +116,7 @@ export async function fetchPublic(
 ): Promise<Response> {
   const target = url instanceof URL ? url : new URL(url);
   return withPublicHostGuard(
-    guardHost(target),
+    target.hostname,
     // The caller's own URL goes on the wire unchanged — `target` exists only to read
     // the host off, and round-tripping through `URL` would normalise the request.
     () => (opts.fetchImpl ?? fetch)(url, init),

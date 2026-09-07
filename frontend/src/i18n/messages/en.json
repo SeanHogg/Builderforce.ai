@@ -12272,6 +12272,22 @@
       "other": "Other"
     }
   },
+  "taskPrd": {
+    "emptyTask": "This task has no PRD yet. Agents use the PRD to understand the goal and hand off work between swimlanes.",
+    "emptyProject": "No PRD has been drafted for this project yet. Use Brain or the PRDs tab to draft one — agents use it to hand off work between swimlanes.",
+    "generating": "Generating…",
+    "generateWithAi": "Generate with AI",
+    "createPrd": "Create PRD",
+    "attachExisting": "Attach existing PRD…",
+    "setPrimary": "Set primary",
+    "detach": "Detach",
+    "viewPreview": "Preview",
+    "viewRaw": "RAW",
+    "expandFullScreen": "Expand to full screen",
+    "exitFullScreen": "Exit full screen",
+    "prdLabel": "PRD",
+    "prdFallback": "PRD {id}"
+  },
   "taskMgmt": {
     "bulkChangeStatus": "Bulk change status…",
     "branchAndPr": "Branch & PR",
@@ -22539,6 +22555,37 @@
         "regionLabel": "This session's insights",
         "openFull": "Open full dashboard"
       },
+      "room": {
+        "standup": {
+          "caption": "Standup",
+          "groupLabel": "Standup controls",
+          "projectLabel": "Project this standup is about",
+          "allProjects": "All projects",
+          "projectFallback": "Project {id}",
+          "previous": "Previous project",
+          "next": "Next project",
+          "start": "Start standup",
+          "starting": "Starting…",
+          "live": "Live · {project}",
+          "finish": "Finish",
+          "finishing": "Finishing…",
+          "needsProject": "Pick a project to record this standup against",
+          "dismiss": "Dismiss"
+        },
+        "label": "Room",
+        "enter": "Meet in the room",
+        "active": "You are in the room",
+        "regionLabel": "This session's room",
+        "here": "{here} of {total} here",
+        "rosterHead": "{count, plural, =0 {Nobody yet} one {# person} other {# people}}",
+        "unknown": "Collaborator",
+        "you": "You",
+        "inRoom": "In the room",
+        "onBoard": "On the board",
+        "noWebglTitle": "3D is not available on this device",
+        "noWebglBody": "The room needs WebGL, which this browser cannot start. Everyone in the session is listed below, and the rest of the canvas works normally.",
+        "wallOverflow": "{count, plural, one {# more object is not on the wall} other {# more objects are not on the wall}}"
+      },
       "page": {
         "label": "Page",
         "open": "Open as a page"
@@ -22624,6 +22671,11 @@
           }
         },
         "panel": {
+          "surfaceImage": "Image on its face",
+          "surfaceImagePlaceholder": "https://… (a photo, a diagram)",
+          "surfaceFit": "How it fits",
+          "surfaceFitCover": "Fill the face",
+          "surfaceFitContain": "Fit inside the face",
           "transform": "Transform",
           "appearance": "Appearance",
           "physics": "Physics & body",
@@ -23529,7 +23581,8 @@
       "subflowTooDeep": "Nested canvases go more than {depth} deep at “{canvas}”.",
       "subflowEmpty": "The canvas “{canvas}” has no steps to run yet.",
       "subflowNotBuildable": "The canvas “{canvas}” cannot be built yet — the step “{step}” is not ready.",
-      "subflowNeedsBuild": "Build the canvas “{canvas}” once before running it live from here."
+      "subflowNeedsBuild": "Build the canvas “{canvas}” once before running it live from here.",
+      "subflowMissingInput": "The canvas “{canvas}” needs “{key}” handed to it, and this step does not map it."
     },
     "frameSection": {
       "holds": "{count, plural, =0 {Empty} one {# object} other {# objects}}",
@@ -24135,30 +24188,6 @@
     "installIos": "Install Builderforce: tap Share, then “Add to Home Screen”."
   },
   "workflow": {
-    "subflowNode": {
-    "loadFailed": "Could not load your canvases.",
-    "canvas": "Canvas to run",
-    "choosePlaceholder": "Choose a canvas…",
-    "loading": "Loading canvases…",
-    "binding": "How it binds",
-    "bindingOption": {
-      "snapshot": "Snapshot — freeze it into this flow",
-      "live": "Live — follow the canvas"
-    },
-    "bindingHint": {
-      "snapshot": "The child's steps are copied into this flow when you build it. One run, one timeline; later edits to that canvas do not reach this flow until you build again.",
-      "live": "This flow calls the child's own built flow at run time, so edits reach it without a rebuild here. The child must have been built at least once."
-    },
-    "unreadable": "That canvas cannot be read — it may have been deleted, or not shared with you.",
-    "noSteps": "That canvas has no steps yet, so there is nothing to run.",
-    "stepCount": "{count, plural, one {# step} other {# steps}}",
-    "accepts": "Accepts",
-    "acceptsAnything": "Anything you pass it",
-    "acceptsNothing": "Nothing — it starts from its own steps",
-    "acceptsAlsoRaw": "It also accepts whatever else you pass it.",
-    "returns": "Returns",
-    "returnsNothing": "Nothing this flow can read"
-    },
     "connectorNode": {
       "integration": "Integration",
       "action": "Action",
@@ -24194,7 +24223,8 @@
       "bindingHint": {
         "snapshot": "The steps of that canvas are copied into this flow when you build. Later edits there do not change this flow until you build it again.",
         "live": "That canvas is read again every time this flow runs, so edits there apply straight away. It has to have been built there at least once."
-      }
+      },
+      "openCanvas": "Open this canvas"
     }
   },
   "kernel": {

@@ -1,0 +1,14 @@
+-- 1149 · Index the invite-landing lookup by address alone.
+--
+-- `findPendingByEmail` (application/kernel/InvitationService.ts) is DELIBERATELY
+-- unscoped: the caller has just proved control of an email address and belongs to
+-- no tenant yet, so there is no tenant to scope by. The existing composite
+-- `idx_invitations_email` leads with `tenant_id` and therefore cannot serve that
+-- query at all.
+--
+-- That was survivable while the only caller was `GET /api/tenants/mine`, an
+-- endpoint no client ever called. It is now on the sign-in path every surface
+-- takes to discover its workspaces (`GET /api/auth/my-tenants`,
+-- `GET /api/vscode/tenants`), so without this index every login sequentially
+-- scans `invitations`.
+CREATE INDEX IF NOT EXISTS idx_invitations_address ON invitations (email, state);

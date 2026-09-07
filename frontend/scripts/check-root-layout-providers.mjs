@@ -122,11 +122,13 @@ for (const { provider, hooks } of CONTRACTS) {
   );
 
   for (const name of rendered) {
-    const module = layoutImports.get(name);
-    if (!module) continue; // not one of the app's own components
-    const hit = reachesHook(module, hooks);
+    // Not `module`: assigning that identifier is a Next lint error, because a
+    // bundled CommonJS scope has one of its own.
+    const componentFile = layoutImports.get(name);
+    if (!componentFile) continue; // not one of the app's own components
+    const hit = reachesHook(componentFile, hooks);
     if (!hit) continue;
-    const how = hit.file === module
+    const how = hit.file === componentFile
       ? `calls ${hit.hook}()`
       : `reaches ${hit.hook}() through ${inSrc(hit.file)}`;
     failures.push(

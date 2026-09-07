@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { applyRemedy, type TriageTask, type TriagePolicy } from './triageStage';
 import { evaluateTaskAutoRun } from '../swimlane/evaluateAutoRun';
 import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
-import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
+import { dispatchCloudRunForTask } from '../runtime/dispatchCloudRun';
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -22,7 +22,7 @@ import type { RuntimeService } from '../runtime/RuntimeService';
 
 vi.mock('../swimlane/evaluateAutoRun', () => ({ evaluateTaskAutoRun: vi.fn() }));
 vi.mock('../swimlane/laneEntryTrigger', () => ({ maybeAutoRunOnLaneEntry: vi.fn() }));
-vi.mock('../../presentation/routes/runtimeRoutes', () => ({ dispatchCloudRunForTask: vi.fn() }));
+vi.mock('../runtime/dispatchCloudRun', () => ({ dispatchCloudRunForTask: vi.fn() }));
 vi.mock('../kanban/driveSignoffs', () => ({ driveOutstandingSignoffs: vi.fn() }));
 
 const mockEvaluate = vi.mocked(evaluateTaskAutoRun);

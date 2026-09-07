@@ -1948,7 +1948,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const runTicket = async (tk, agentRef) => {
     setBusy(true);
     try {
-      const res = await adapter.runTicket(tk.kind, tk.ref, agentRef);
+      const res = await adapter.runTicket(tk.kind, tk.ref, agentRef, chatId);
       flash(res.started ? labels.runStarted(res.agentName || poolName(agentRef)) : labels.runNoAgent);
       setRunKey(null);
       await load();
@@ -2422,6 +2422,123 @@ var S = {
     color: active ? "#fff" : V.text2
   })
 };
+
+// src/chatTickets/restAdapter.ts
+var RUNNABLE2 = new Set(RUNNABLE_KINDS);
+function createChatTicketsRestAdapter(opts) {
+  const { request: req } = opts;
+  let poolPromise = null;
+  const fetchAgentPool = async () => {
+    const [mine, purchased, registered] = await Promise.all([
+      req("/api/workforce/agents/mine").catch(() => []),
+      req("/api/workforce/agents/purchased").catch(() => []),
+      req("/api/agents").catch(() => [])
+    ]);
+    const wfById = /* @__PURE__ */ new Map();
+    for (const agent of [...mine, ...purchased]) wfById.set(String(agent.id), agent);
+    const workforce = [...wfById.values()].map((a) => ({
+      kind: "workforce",
+      ref: String(a.id),
+      name: a.name,
+      meta: a.title || a.base_model || ""
+    }));
+    const agents = registered.filter((a) => a.isActive).map((a) => ({ kind: "registered", ref: String(a.id), name: a.name, meta: a.type }));
+    return [...workforce, ...agents];
+  };
+  return {
+    listTickets: (chatId) => req(`/api/brain/chats/${chatId}/tickets`).then((r) => r.tickets),
+    linkTicket: (chatId, input) => req(`/api/brain/chats/${chatId}/tickets`, { method: "POST", body: JSON.stringify(input) }).then(() => void 0),
+    unlinkTicket: (chatId, kind, ref) => req(
+      `/api/brain/chats/${chatId}/tickets?kind=${encodeURIComponent(kind)}&ref=${encodeURIComponent(ref)}`,
+      { method: "DELETE" }
+    ).then(() => void 0),
+    listTicketChats: (kind, ref) => req(
+      `/api/brain/tickets/${encodeURIComponent(kind)}/${encodeURIComponent(ref)}/chats`
+    ).then((r) => r.chats.map((c) => ({
+      chatId: c.chatId,
+      title: c.title,
+      linkType: c.linkType,
+      isArchived: c.isArchived
+    }))),
+    consolidate: (targetChatId, sourceChatIds) => req("/api/brain/chats/consolidate", {
+      method: "POST",
+      body: JSON.stringify({ targetChatId, sourceChatIds })
+    }).then(() => void 0),
+    listAgents: (chatId) => req(`/api/brain/chats/${chatId}/agents`).then((r) => r.agents.map((a) => ({ id: a.id, agentRef: a.agentRef, role: a.role }))),
+    inviteAgent: (chatId, input) => req(`/api/brain/chats/${chatId}/agents`, { method: "POST", body: JSON.stringify(input) }).then(() => void 0),
+    removeAgent: (chatId, assignmentId) => req(`/api/brain/chats/${chatId}/agents/${assignmentId}`, { method: "DELETE" }).then(() => void 0),
+    listMembers: (chatId) => req(
+      `/api/brain/chats/${chatId}/members`
+    ).then((r) => r.members),
+    inviteMember: (chatId, email) => req(`/api/brain/chats/${chatId}/members`, {
+      method: "POST",
+      body: JSON.stringify({ email })
+    }).then((r) => ({ status: r.status })),
+    removeMember: (chatId, memberId) => req(`/api/brain/chats/${chatId}/members/${memberId}`, { method: "DELETE" }).then(() => void 0),
+    loadAgentPool: () => {
+      if (!poolPromise) poolPromise = fetchAgentPool().catch((error) => {
+        poolPromise = null;
+        throw error;
+      });
+      return poolPromise;
+    },
+    /** Server-side typeahead per tier (the shared LinkForm debounces). Replaces the
+     *  old fan-out that fetched EVERY task/objective/initiative/portfolio/roadmap/spec. */
+    searchTickets: async (kind, query, projectId) => {
+      const qs = new URLSearchParams({ kind, q: query });
+      if (projectId != null) qs.set("project_id", String(projectId));
+      const r = await req(`/api/brain/tickets/search?${qs.toString()}`).catch(() => ({ results: [] }));
+      return r.results ?? [];
+    },
+    ...opts.canRun ? { canRunTicket: opts.canRun } : {},
+    /**
+     * "Tag to execute" — three steps, in this order, and all three matter:
+     *
+     *  1. INVITE the agent into the chat. Without it the agent is not a
+     *     participant, so its reply has nowhere to be attributed.
+     *  2. ASSIGN it to the ticket, so the board shows who is working it.
+     *  3. RUN, bound to THIS chat. Without `chatId` the run narrates nowhere and
+     *     is unreachable from the conversation that asked for it — which is
+     *     exactly what the VS Code copy of this adapter did.
+     *
+     * The capability probe is what DISABLES the affordance; the throw here is the
+     * enforcement backstop, for a stale render or a role that changed between
+     * paint and click.
+     */
+    runTicket: async (_kind, ref, agentRef, chatId) => {
+      const gate = opts.canRun?.();
+      if (gate && !gate.allowed) throw new Error(gate.reason ?? "Running a ticket is not permitted here.");
+      const id = Number(ref);
+      await req(`/api/brain/chats/${chatId}/agents`, {
+        method: "POST",
+        body: JSON.stringify({ agentRef })
+      }).catch(() => void 0);
+      await req(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify({ assignedAgentRef: agentRef }) });
+      const res = await req(
+        `/api/tasks/${id}/run-now`,
+        { method: "POST", body: JSON.stringify({ chatId }) }
+      );
+      return { started: !!res.executionId, agentName: res.agentRef };
+    },
+    listQuestions: async (chatId) => {
+      const [links, pending] = await Promise.all([
+        req(`/api/brain/chats/${chatId}/tickets`).then((r) => r.tickets),
+        // `kind` is on the wire but not on the VM — the panel renders a question
+        // without caring which flavour it is, while the FILTER cares about nothing
+        // else. Typing the wire row here keeps both true.
+        req("/api/approvals?status=pending").then((r) => r.approvals)
+      ]);
+      const taskIds = new Set(
+        links.filter((link) => RUNNABLE2.has(link.kind)).map((link) => Number(link.ref))
+      );
+      return pending.filter((q) => (q.kind === "question" || q.kind === "feedback") && q.taskId != null && taskIds.has(q.taskId));
+    },
+    answerQuestion: (id, responseText) => req(`/api/approvals/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "answered", responseText })
+    }).then(() => void 0)
+  };
+}
 
 // src/chatTickets/useChatParticipants.ts
 import { useEffect as useEffect5, useMemo as useMemo6, useState as useState7 } from "react";
@@ -4927,6 +5044,7 @@ export {
   buildSettledTimeline,
   buildTimeline,
   byoVendorLabel,
+  createChatTicketsRestAdapter,
   displayModelName2 as displayModelName,
   evermindLearnedStatus,
   evermindNextAction,

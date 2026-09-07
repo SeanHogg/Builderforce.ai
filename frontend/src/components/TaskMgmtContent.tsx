@@ -80,6 +80,7 @@ import { TASK_PRIORITIES, taskPriorityBadgeClass } from '@/lib/taskPriority';
 import { WorkspaceAllowanceBanner } from '@/components/board/WorkspaceAllowanceBanner';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { PanelCloseButton } from '@/components/PanelCloseButton';
 type TaskView = 'board' | 'table' | 'calendar' | 'gantt';
 
 /** A rendered kanban column = a swimlane (board column). `status` is the lane key tasks sit in. */
@@ -2198,28 +2199,8 @@ export function TaskMgmtContent({
                 </svg>
               </button>
               )}
-              <button
-                type="button"
-                onClick={closeDrawer}
-                style={{
-                  width: 36,
-                  height: 36,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-md)',
-                  background: 'var(--bg-base)',
-                  color: 'var(--text-secondary)',
-                  cursor: 'pointer',
-                }}
-                aria-label={tCommon('close')}
-              >
-                <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
+              {/* Top right, last in the row — the app-wide panel close corner. */}
+              <PanelCloseButton onClose={closeDrawer} />
               </div>
             </div>
 

@@ -35,7 +35,7 @@
  * preference all read the flags.
  */
 
-export type CanvasSurfaceId = 'chat' | 'graph' | 'scene3d' | 'app' | 'insights' | 'calendar' | 'page' | 'play' | 'site' | 'timeline' | 'world' | 'facilitate';
+export type CanvasSurfaceId = 'chat' | 'graph' | 'scene3d' | 'app' | 'insights' | 'room' | 'calendar' | 'page' | 'play' | 'site' | 'timeline' | 'world' | 'facilitate';
 
 /**
  * What a surface is ABOUT.
@@ -113,24 +113,43 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // shares (`WidgetCard`, `ReorderableWidgetGrid`) rather than inventing a second
   // metrics surface — so `showsObjects` stays false the way `chat`'s does.
   { id: 'insights', scope: 'board', order: 4, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true },
+  // THE ROOM — the people, not the work.
+  //
+  // Board-scoped for the same reason `app` and `insights` are: a standup is about the
+  // whole session, so there is no card to enter it from and pressing it with nothing
+  // selected has an answer. It is the first surface whose subject is the ROSTER rather
+  // than the objects — the objects are on its wall, but as a reading of them.
+  //
+  // `showsObjects` is therefore FALSE, and the distinction matters: the wall draws a
+  // capped, newest-first selection of cards that cannot be moved, aligned or framed.
+  // Floating "6 selected · Align · Frame" over a standup would be a toolbar for
+  // something nobody in the room can act on, which is exactly the failure this flag
+  // exists to prevent on the chat surface.
+  //
+  // It does NOT persist, and this is the one board surface where that needs saying.
+  // `scene3d` does not persist because it is a projection; this one does not persist
+  // because it is a MOMENT. Landing tomorrow inside a room whose standup ended last
+  // night is the same wrong answer `facilitate` gives for a poll that closed, and a
+  // reload should put you back on the board where the work is.
+  { id: 'room', scope: 'board', order: 5, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   // The three medium runtimes. Each is a PROMOTION: the editor already existed, squeezed
   // into a node body where the medium's own axis had nowhere to go — a paged document in a
   // card, a playable build behind a bespoke `gameFocus` boolean, and a multi-track edit
   // with no room for a second track. None of them persists, because a surface bound to one
   // object cannot be restored without it.
-  { id: 'page', scope: 'object', order: 5, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
-  { id: 'play', scope: 'object', order: 6, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'page', scope: 'object', order: 6, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'play', scope: 'object', order: 7, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   // A site is pages AND a width. It is not the `page` surface with more room: that one
   // draws ONE sheet at a reading measure, and a website is a set of pages you move
   // between at a width you choose. Two axes the sheet does not have, so two surfaces.
-  { id: 'site', scope: 'object', order: 7, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
-  { id: 'timeline', scope: 'object', order: 8, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'site', scope: 'object', order: 8, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'timeline', scope: 'object', order: 9, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   // A `world` object is a place with its own camera and props, not a page — it does
   // not fit the sheet/build/track shapes above any more than they fit each other. It
   // does not persist as the active surface for the same reason they don't: a surface
   // bound to one object snaps back to the board on reload, not into an editor whose
   // target it has to re-find.
-  { id: 'world', scope: 'object', order: 9, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'world', scope: 'object', order: 10, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   // THE ROOM. A live poll's own axis is the people answering it — a join address on the
   // wall, a count that moves, and two controls (open/close voting, show/hide the count)
   // that are pressed while a room watches. A ~340px card can preview a question; it
@@ -139,7 +158,7 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   //
   // It does not persist, for the reason every object-scoped surface does not: coming
   // back tomorrow should land on the board, not inside a poll that closed last night.
-  { id: 'facilitate', scope: 'object', order: 10, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'facilitate', scope: 'object', order: 11, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   // THE MONTH — and the one entry on this list that used to be somewhere else.
   //
   // ── WHY IT STOPPED BEING A BOARD SURFACE ─────────────────────────────────────
@@ -160,7 +179,7 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // It does not persist, like every object-scoped surface: it cannot be restored without
   // knowing WHICH calendar, and a reload should land on the board rather than inside a
   // month whose card the reader may since have deleted.
-  { id: 'calendar', scope: 'object', order: 11, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'calendar', scope: 'object', order: 12, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
 ];
 
 /**

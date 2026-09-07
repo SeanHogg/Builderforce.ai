@@ -42,8 +42,11 @@ export function SubflowNodeFields({ config, setConfig, patchConfig }: Props) {
 
   const [sessions, setSessions] = useState<CreationSessionSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [shape, setShape] = useState<SubflowInterface | null>(null);
-  const [unreadable, setUnreadable] = useState(false);
+  /** The last canvas READ, and what it turned out to be — `shape: null` meaning it
+   *  could not be read at all. Keyed by the session it describes rather than reset
+   *  when the choice changes: a result for a previous choice is stale by
+   *  definition, so it is filtered below instead of cleared in an effect. */
+  const [loaded, setLoaded] = useState<{ sessionId: string; shape: SubflowInterface | null } | null>(null);
 
   const sessionId = subflowSessionId(config);
   const binding = subflowBinding(config);
@@ -59,15 +62,17 @@ export function SubflowNodeFields({ config, setConfig, patchConfig }: Props) {
   // The chosen canvas, read fresh: the author has just picked it, so they are
   // entitled to its real interface rather than a copy taken before their last edit.
   useEffect(() => {
+    if (!sessionId) return;
     let cancelled = false;
-    if (!sessionId) { setShape(null); setUnreadable(false); return; }
     void readSubflowBoardFresh(sessionId).then((board) => {
-      if (cancelled) return;
-      setUnreadable(!board);
-      setShape(board ? subflowInterface(board) : null);
+      if (!cancelled) setLoaded({ sessionId, shape: board ? subflowInterface(board) : null });
     });
     return () => { cancelled = true; };
   }, [sessionId]);
+
+  const current = loaded && loaded.sessionId === sessionId ? loaded : null;
+  const shape = current?.shape ?? null;
+  const unreadable = !!current && current.shape === null;
 
   /** Picking a canvas records its NAME too — so a step whose canvas has since been
    *  deleted can still say which one it meant, in the refusal and on the card. */
@@ -120,6 +125,21 @@ export function SubflowNodeFields({ config, setConfig, patchConfig }: Props) {
         </Select>
       </label>
       <div style={hintStyle}>{t(`bindingHint.${binding}`)}</div>
+
+      {/* THE WAY IN. Composition is the step that most invites "let me look at what
+          that actually does", and the answer used to be: find it in the canvas list
+          by name. A new tab rather than a navigation — the author is checking
+          something, not leaving the board they are building. */}
+      {sessionId && (
+        <a
+          href={`/create/${encodeURIComponent(sessionId)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ ...hintStyle, color: 'var(--accent)', fontWeight: 600, textDecoration: 'none', width: 'fit-content' }}
+        >
+          {t('openCanvas')} ↗
+        </a>
+      )}
 
       {sessionId && unreadable && <div style={{ ...hintStyle, color: 'var(--danger)' }}>{t('unreadable')}</div>}
 

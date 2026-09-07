@@ -4,10 +4,10 @@
  * PanelCloseButton — the one way out of a slide-out panel.
  *
  * CONVENTION (app-wide): the dismiss control lives at the TOP RIGHT of a
- * panel header, outermost in the trailing group, nearest the edge the drawer
- * docks to. It is chrome around the panel rather than an action inside it, so
- * it sits after every header action; and a right-docked drawer's own edge is
- * where a reader's hand already is when they want out of it.
+ * panel header, outermost in the trailing group — after every header action,
+ * because it is chrome around the panel rather than an action inside it. Same
+ * corner in every panel (a left-docked drawer included), so a reader looks in
+ * one place to get out rather than re-finding it per surface.
  *
  * Self-contained on purpose: it owns its label (`common.closePanel`), its icon
  * and its styling, so a panel adds a compliant escape hatch with one element

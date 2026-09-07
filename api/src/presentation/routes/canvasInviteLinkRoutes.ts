@@ -2,7 +2,7 @@
  * The OWNER's half of a canvas invite link: mint, list, revoke.
  *
  * Mounted on `/api/creation-sessions` beside the email-invite routes but kept in its
- * own module rather than added to `creationSessionRouteService.ts` — that file is
+ * own module rather than added to `creationSessionRoutes.ts` — that file is
  * already the place every canvas feature has been appended to, and link sharing is a
  * separate reason to change. Everything it needs is a port (`canvasInviteLinks.ts`)
  * that other callers read too, so nothing here is a second copy of a rule — including

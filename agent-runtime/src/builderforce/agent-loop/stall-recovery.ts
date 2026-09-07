@@ -36,7 +36,7 @@ export function modelRef(model: { provider: string; id: string }): string {
 }
 
 /** What the loop knows about the turn that just ended with zero tool calls. */
-export interface StallTurnFacts {
+interface StallTurnFacts {
   /** Visible assistant text — what the USER was left holding. */
   text: string;
   /** Tools the model COULD have called this turn. */
@@ -49,7 +49,7 @@ export interface StallTurnFacts {
 
 /** The loop's next move. `shape` rides along on every acting outcome so the caller can
  *  record WHAT the model did without re-deriving it. */
-export type StallOutcome =
+type StallOutcome =
   | { kind: "none" }
   /** Re-prompt the SAME model. */
   | { kind: "nudge"; nudge: string; recoveriesUsed: number; shape: StallShape | null }
@@ -65,7 +65,7 @@ export type StallOutcome =
   /** Nothing left to try — record `notice` so the run's emptiness is explained. */
   | { kind: "exhausted"; notice: string; shape: StallShape | null };
 
-export interface StallDecisionInput {
+interface StallDecisionInput {
   facts: StallTurnFacts;
   /** The model this turn ran on. */
   activeModel: Model;
@@ -113,7 +113,9 @@ export function resolveStallOutcome(input: StallDecisionInput): StallOutcome {
       shape,
     };
   }
-  if (!isExhaustedStall(stallInput)) return { kind: "none" };
+  if (!isExhaustedStall(stallInput)) {
+    return { kind: "none" };
+  }
 
   // Every recovery spent and the model is STILL only describing calls (or handing them
   // to a user who isn't there). Re-prompting IT again is spent; only a different model
@@ -147,7 +149,9 @@ export function resolveStallOutcome(input: StallDecisionInput): StallOutcome {
   // No `pickFallbackModel` ⇒ `chooseStallFailover` never ran, so the model that just
   // burned its budget is not yet in `tried`. Record it here so the notice names it and
   // a later failover (once a host wires one up) cannot hand it back.
-  if (!input.triedModels.includes(activeRef)) input.triedModels.push(activeRef);
+  if (!input.triedModels.includes(activeRef)) {
+    input.triedModels.push(activeRef);
+  }
   return {
     kind: "exhausted",
     notice: stallExhaustedNotice(activeRef, input.triedModels, shape),

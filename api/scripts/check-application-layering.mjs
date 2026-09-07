@@ -11,11 +11,25 @@
  * application services that imported `llmRoutes` was exactly that, and one
  * module escaped it with a dynamic import).
  *
- * The review that landed this guard found 23 such imports and moved the worst
- * one (`resolveTenantPlan`, imported by six application modules) into
- * `application/tenant/tenantPlanSnapshot`. The rest are frozen here as a
- * baseline that may only SHRINK: removing a violation and forgetting the list is
- * itself a failure, so the list is the review.
+ * The review that landed this guard found 23 such imports, moved the worst one
+ * (`resolveTenantPlan`) into `application/tenant/tenantPlanSnapshot`, and froze
+ * the rest as a baseline that may only SHRINK.
+ *
+ * THE BASELINE IS NOW EMPTY, so this is no longer a ratchet over debt — it is a
+ * hard architectural rule, and the first re-introduced import fails the build.
+ * The last eleven were closed by giving each shared symbol an application-layer
+ * owner and importing it from there in BOTH places:
+ *
+ *   dispatchCloudRunForTask  → application/runtime/dispatchCloudRun.ts
+ *   dispatchTaskFinalize     → application/task/taskFinalize.ts
+ *   persistProbe             → application/llm/vendorProbeStore.ts
+ *   fireAddressedTrigger     → application/workflow/fireAddressedTrigger.ts
+ *
+ * The two `creationSession*RouteService` files were not shared symbols at all —
+ * they were Hono routers misfiled under `application/`, which is why they
+ * imported `authMiddleware`, `scope` and `relayToRoom`. They moved to
+ * `presentation/routes/`, leaving their request-free rules behind in
+ * `application/creation/creationSessionModel.ts`.
  *
  * Run via `npm run check:application-layering`; wired into `npm test` through
  * `scripts/checks.manifest.mjs`. `--update` rewrites the baseline.
@@ -107,6 +121,8 @@ if (cleaned.length > 0) {
 if (failed) process.exit(1);
 
 console.log(
-  `✅  Inner-layer ratchet OK — ${current.size} application/domain/infrastructure file(s) still import presentation, ` +
-    'all known; 0 new.',
+  current.size === 0
+    ? '✅  Inner-layer rule OK — no application/domain/infrastructure file imports presentation.'
+    : `✅  Inner-layer ratchet OK — ${current.size} application/domain/infrastructure file(s) still import presentation, ` +
+      'all known; 0 new.',
 );

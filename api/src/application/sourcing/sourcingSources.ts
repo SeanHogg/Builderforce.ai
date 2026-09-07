@@ -23,9 +23,10 @@
  * which is the textbook shape of a server-side request forgery: point a "job
  * feed" at `http://169.254.169.254/` and the cron hands back cloud credentials.
  * `assertSafeUrl` runs at author time so the mistake is caught by the person
- * making it, and `resolveAndAssertPublic` runs at fetch time because a hostname
- * that resolved publicly yesterday can resolve to a private address today. The
- * source product did neither.
+ * making it, and the fetch goes through `fetchPublic`, which re-resolves the host
+ * before AND during the request because a hostname that resolved publicly yesterday
+ * can resolve to a private address today — or mid-request. The source product did
+ * neither.
  */
 
 import { and, eq } from 'drizzle-orm';

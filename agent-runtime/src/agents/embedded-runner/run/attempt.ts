@@ -10,14 +10,15 @@ import {
 import type { AgentMessage } from "../../../builderforce/model/agent-types.js";
 import type { AgentTool } from "../../../builderforce/model/agent-types.js";
 import type { ImageContent } from "../../../builderforce/model/types.js";
+import { globalPersonaRegistry } from "../../../builderforce/personas.js";
+import { raiseThinkLevel } from "../../../builderforce/psychometrics.js";
 import { resolveChannelCapabilities } from "../../../config/channel-capabilities.js";
-import { getMachineDisplayName } from "../../../infra/machine-name.js";
-import { getLimbicSystemService } from "../../../infra/limbic-system-service.js";
 import { emitAgentEvent } from "../../../infra/agent-events.js";
 import { resolveHiredAgentRef } from "../../../infra/hired-agents-sync.js";
+import { getLimbicSystemService } from "../../../infra/limbic-system-service.js";
+import { getMachineDisplayName } from "../../../infra/machine-name.js";
 import { reportPersonalityEvent } from "../../../infra/personality-event-reporter.js";
 import { fetchRunContextSection } from "../../../infra/run-context-client.js";
-import { globalPersonaRegistry } from "../../../builderforce/personas.js";
 import { MAX_IMAGE_BYTES } from "../../../media/constants.js";
 import { getGlobalHookRunner } from "../../../plugins/hook-runner-global.js";
 import {
@@ -34,14 +35,16 @@ import { normalizeMessageChannel } from "../../../utils/message-channel.js";
 import { isReasoningTagProvider } from "../../../utils/provider-utils.js";
 import { resolveBuilderForceAgentsAgentDir } from "../../agent-paths.js";
 import { resolveSessionAgentIds } from "../../agent-scope.js";
-import { createStallFallbackPicker } from "../stall-fallback.js";
+import {
+  ensureCompactionReserveTokens,
+  resolveCompactionReserveTokensFloor,
+} from "../../agent-settings.js";
 import { createAnthropicPayloadLogger } from "../../anthropic-payload-log.js";
 import {
   buildActiveLimbicPrompt,
   buildAssignedPersonaPrompt,
   resolveCognitiveExecParams,
 } from "../../assigned-capabilities.js";
-import { raiseThinkLevel } from "../../../builderforce/psychometrics.js";
 import { makeBootstrapWarn, resolveBootstrapContextForRun } from "../../bootstrap-files.js";
 import { createBuilderForceAgentsLlmLocalStreamFn } from "../../builderforcellm-local-stream.js";
 import { createCacheTrace } from "../../cache-trace.js";
@@ -49,14 +52,12 @@ import {
   listChannelSupportedActions,
   resolveChannelMessageToolHints,
 } from "../../channel-tools.js";
+import {
+  createBuilderForceAgentsCodingTools,
+  resolveToolLoopDetectionConfig,
+} from "../../coding-tools.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../defaults.js";
 import { resolveBuilderForceAgentsDocsPath } from "../../docs-path.js";
-import { isTimeoutError } from "../../failover-error.js";
-import { resolveImageSanitizationLimits } from "../../image-sanitization.js";
-import { resolveModelAuthMode } from "../../model-auth.js";
-import { resolveDefaultModelForAgent } from "../../model-selection.js";
-import { createLlamaStreamFn } from "../../llama-stream.js";
-import { createOllamaStreamFn, OLLAMA_NATIVE_BASE_URL } from "../../ollama-stream.js";
 import {
   isCloudCodeAssistFormatError,
   resolveBootstrapMaxChars,
@@ -65,15 +66,12 @@ import {
   validateGeminiTurns,
 } from "../../embedded-helpers.js";
 import { subscribeEmbeddedSession } from "../../embedded-subscribe.js";
-import {
-  ensureCompactionReserveTokens,
-  resolveCompactionReserveTokensFloor,
-} from "../../agent-settings.js";
-import { toClientToolDefinitions } from "../../tool-definition-adapter.js";
-import {
-  createBuilderForceAgentsCodingTools,
-  resolveToolLoopDetectionConfig,
-} from "../../coding-tools.js";
+import { isTimeoutError } from "../../failover-error.js";
+import { resolveImageSanitizationLimits } from "../../image-sanitization.js";
+import { createLlamaStreamFn } from "../../llama-stream.js";
+import { resolveModelAuthMode } from "../../model-auth.js";
+import { resolveDefaultModelForAgent } from "../../model-selection.js";
+import { createOllamaStreamFn, OLLAMA_NATIVE_BASE_URL } from "../../ollama-stream.js";
 import { resolveSandboxContext } from "../../sandbox.js";
 import { resolveSandboxRuntimeStatus } from "../../sandbox/runtime-status.js";
 import { repairSessionFileIfNeeded } from "../../session-file-repair.js";
@@ -92,6 +90,7 @@ import {
 } from "../../skills.js";
 import { buildSystemPromptParams } from "../../system-prompt-params.js";
 import { buildSystemPromptReport } from "../../system-prompt-report.js";
+import { toClientToolDefinitions } from "../../tool-definition-adapter.js";
 import { resolveTranscriptPolicy } from "../../transcript-policy.js";
 import { DEFAULT_BOOTSTRAP_FILENAME } from "../../workspace.js";
 import { isRunnerAbortError } from "../abort.js";
@@ -107,14 +106,11 @@ import {
 import { getDmHistoryLimitFromSessionKey, limitHistoryTurns } from "../history.js";
 import { log } from "../logger.js";
 import { buildModelAliasLines } from "../model.js";
-import {
-  clearActiveEmbeddedRun,
-  type EmbeddedQueueHandle,
-  setActiveEmbeddedRun,
-} from "../runs.js";
+import { clearActiveEmbeddedRun, type EmbeddedQueueHandle, setActiveEmbeddedRun } from "../runs.js";
 import { buildEmbeddedSandboxInfo } from "../sandbox-info.js";
 import { prewarmSessionFile, trackSessionManagerAccess } from "../session-manager-cache.js";
 import { prepareSessionManagerForRun } from "../session-manager-init.js";
+import { createStallFallbackPicker } from "../stall-fallback.js";
 import {
   applySystemPromptOverrideToSession,
   buildEmbeddedSystemPrompt,

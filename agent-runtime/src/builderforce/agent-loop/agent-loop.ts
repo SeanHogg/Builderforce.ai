@@ -8,6 +8,12 @@
  * surfaces subscribe to. Faithful to pi-agent-core 0.54's loop semantics.
  */
 
+import {
+  runAgentLoop,
+  type LoopCodec,
+  type LoopHooks,
+  type LoopPorts,
+} from "@builderforce/agent-loop";
 import type {
   AgentContext,
   AgentEvent,
@@ -17,10 +23,9 @@ import type {
   ThinkingLevel,
 } from "../model/agent-types.js";
 import type { AssistantMessage, Message, Model, ToolResultMessage } from "../model/types.js";
-import { runAgentLoop, type LoopCodec, type LoopHooks, type LoopPorts } from "@builderforce/agent-loop";
 import { EventStream } from "./event-stream.js";
-import type { StreamFn } from "./stream.js";
 import { modelRef, resolveStallOutcome } from "./stall-recovery.js";
+import type { StreamFn } from "./stream.js";
 
 export interface AgentLoopConfig {
   model: Model;
@@ -194,10 +199,10 @@ async function runLoop(
   // messages in as `user` turns: reading the newest user message later would ask
   // "did the user ask for a change?" of a nudge this loop wrote itself.
   const toolNames = (currentContext.tools ?? []).map((t) => t.name);
-  const userRequest = [...currentContext.messages]
-    .reverse()
-    .find((m): m is Extract<AgentMessage, { role: "user" }> => m.role === "user")
-    ?.content ?? "";
+  const userRequest =
+    [...currentContext.messages]
+      .reverse()
+      .find((m): m is Extract<AgentMessage, { role: "user" }> => m.role === "user")?.content ?? "";
 
   // ── THE loop ────────────────────────────────────────────────────────────────
   // The model→tools→model skeleton lives ONCE in `@builderforce/agent-loop` (the same
@@ -219,7 +224,8 @@ async function runLoop(
     currentContext.messages.push(m);
     newMessages.push(m);
   };
-  const isTerminal = (m: AssistantMessage): boolean => m.stopReason === "error" || m.stopReason === "aborted";
+  const isTerminal = (m: AssistantMessage): boolean =>
+    m.stopReason === "error" || m.stopReason === "aborted";
 
   const codec: LoopCodec<AgentMessage> = {
     assistant: (turn) => turn.meta as AssistantMessage,
@@ -239,12 +245,23 @@ async function runLoop(
 
   const ports: LoopPorts<AgentMessage> = {
     complete: async () => {
-      const message = await streamAssistantResponse(currentContext, config, activeModel, signal, stream, streamFn);
+      const message = await streamAssistantResponse(
+        currentContext,
+        config,
+        activeModel,
+        signal,
+        stream,
+        streamFn,
+      );
       // An errored / aborted turn never executes its calls: it is handed to the
       // no-tool-calls path, which records it and ends the run.
       const toolCalls = isTerminal(message)
         ? []
-        : message.content.filter(isToolCall).map((tc) => ({ id: tc.id, name: tc.name, arguments: JSON.stringify(tc.arguments ?? {}) }));
+        : message.content.filter(isToolCall).map((tc) => ({
+            id: tc.id,
+            name: tc.name,
+            arguments: JSON.stringify(tc.arguments ?? {}),
+          }));
       return { content: assistantText(message), toolCalls, meta: message };
     },
     dispatch: async (call) => {
@@ -371,7 +388,13 @@ async function runLoop(
       });
       if (steeringAfterTools) {
         // A queued user message outranks the rest of this turn's calls.
-        stream.push({ type: "tool_execution_end", toolCallId: call.id, toolName: call.name, result: skipped, isError: true });
+        stream.push({
+          type: "tool_execution_end",
+          toolCallId: call.id,
+          toolName: call.name,
+          result: skipped,
+          isError: true,
+        });
         return { result: { data: skipped, isError: true } };
       }
       return undefined;
@@ -398,7 +421,8 @@ async function runLoop(
       return undefined;
     },
     afterToolCalls: async () => {
-      if (turnMessage) stream.push({ type: "turn_end", message: turnMessage, toolResults: turnResults });
+      if (turnMessage)
+        stream.push({ type: "turn_end", message: turnMessage, toolResults: turnResults });
       pendingMessages = steeringAfterTools ?? ((await config.getSteeringMessages?.()) || []);
       return undefined;
     },

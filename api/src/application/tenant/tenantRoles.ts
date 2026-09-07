@@ -73,3 +73,21 @@ export async function tenantRoleOf(db: Db, tenantId: number, userId: string): Pr
     .limit(1);
   return isTenantRole(row?.role) ? row.role : null;
 }
+
+/**
+ * The role to report for a workspace in the caller's OWN workspace list.
+ *
+ * Both list projections (`AuthService.myTenants`, `TenantService.listTenantsForUser`)
+ * used to write `member?.role ?? 'member'` — the same fallback, twice, naming a role
+ * that does not exist on either side of the wire. `'member'` is not in
+ * {@link TENANT_ROLE_ORDER} and not in the frontend's mirror of it, so a row that
+ * ever hit the fallback rendered with NO capabilities at all and no way to tell that
+ * apart from a genuine viewer.
+ *
+ * Least privilege, and a REAL role, so the picker and every gate downstream agree
+ * on what it means. A caller who is not a member at all never reaches here: the
+ * token mint (`AuthService.tenantToken`) refuses outright.
+ */
+export function tenantRoleForListing(role: string | null | undefined): TenantRole {
+  return isTenantRole(role) ? role : 'viewer';
+}

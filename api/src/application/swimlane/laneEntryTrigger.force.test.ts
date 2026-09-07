@@ -21,7 +21,7 @@ vi.mock('./laneRequirementGate', () => ({ enforceLaneRequirements: vi.fn() }));
 vi.mock('./evaluateAutoRun', () => ({ evaluateTaskAutoRun: vi.fn() }));
 vi.mock('../audit/ticketAuditService', () => ({ TicketAuditService: class {} }));
 vi.mock('../runtime/cloudAgentEngine', () => ({ recordCloudToolEvent: vi.fn().mockResolvedValue(undefined) }));
-vi.mock('../../presentation/routes/runtimeRoutes', () => ({ dispatchCloudRunForTask: vi.fn() }));
+vi.mock('../runtime/dispatchCloudRun', () => ({ dispatchCloudRunForTask: vi.fn() }));
 
 const mockGate = vi.mocked(enforceLaneRequirements);
 const env = {} as Env;

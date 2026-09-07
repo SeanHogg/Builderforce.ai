@@ -17,7 +17,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 import { and, desc, eq } from 'drizzle-orm';
 import { ideAgents, projects, projectRepositories, securityAudits } from '../../infrastructure/database/schema';
-import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
+import { dispatchCloudRunForTask } from '../runtime/dispatchCloudRun';
 import { stampExecutionAuthority, systemInitiated } from '../runtime/executionAuthority';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { buildDatabase } from '../../infrastructure/database/connection';

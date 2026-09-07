@@ -10,66 +10,20 @@
  *   if (check) return c.json(check, 402);
  */
 
-import { and, count, eq } from 'drizzle-orm';
+import { count, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
   agentHosts,
-  tenantMembers,
   projects,
 } from '../../infrastructure/database/schema';
 import { canAddAgentHost, canAddProject, canAddSeat, getLimits } from '../../domain/tenant/PlanLimits';
-import { SEAT_KIND } from '../../domain/tenant/SeatKind';
-import { countPending } from '../../application/kernel/InvitationService';
 import { tenantHasSuperadminMember } from '../../application/llm/tenantTokenAvailability';
-import { TenantPlan } from '../../domain/shared/types';
 import { resolveTenantEffectivePlan } from '../../application/tenant/tenantPlanSnapshot';
+import { seatCapacityForTenant } from '../../application/tenant/seatCapacity';
 import type { UpgradeRequiredBody } from '../../domain/tenant/paymentRequired';
 
 type LimitError = UpgradeRequiredBody;
-
-/**
- * Seat accounting for a tenant — the single source of truth for "how many seats
- * are taken or promised". A seat is consumed by an ACTIVE member OR a pending
- * invitation (a promise to seat someone on signup). Shared by the invite-time
- * guard ({@link buildPlanLimitsGuard.checkSeatLimit}) and the accept-time
- * re-check in `acceptPendingInvitations`, so both agree on the math.
- *
- * TWO things are deliberately NOT counted, and both used to be:
- *
- *  - A DEACTIVATED member. `is_active = false` is how a member is removed
- *    (`Tenant.removeMember` never deletes the row), so counting them meant
- *    removing somebody never gave the seat back — every membership check in the
- *    product requires `is_active`, and the tally is now the only thing that
- *    agreed the person was still there.
- *  - A CANVAS COLLABORATOR. Their membership exists so a shared board resolves,
- *    not so they can work in the workspace; their cap is
- *    `maxCreationSessionCollaborators`. See `domain/tenant/SeatKind.ts`.
- */
-export async function seatCapacityForTenant(
-  db: Db,
-  env: Env,
-  tenantId: number,
-): Promise<{ plan: TenantPlan; maxSeats: number; members: number; pendingInvites: number }> {
-  // The plan (cached snapshot) and the two counts are independent reads.
-  const [plan, [memberRow], [inviteRow]] = await Promise.all([
-    resolveTenantEffectivePlan(env, tenantId, db),
-    db.select({ total: count() }).from(tenantMembers).where(and(
-      eq(tenantMembers.tenantId, tenantId),
-      eq(tenantMembers.isActive, true),
-      eq(tenantMembers.seatKind, SEAT_KIND.SEAT),
-    )),
-    // The SAME cached read the members page lists from, so a seat cap and the
-    // roster it is derived from can never disagree about what "pending" means.
-    countPending(db, env, tenantId, 'tenant', SEAT_KIND.SEAT).then((total) => [{ total }]),
-  ]);
-  return {
-    plan,
-    maxSeats: getLimits(plan).maxSeats,
-    members: Number(memberRow?.total ?? 0),
-    pendingInvites: Number(inviteRow?.total ?? 0),
-  };
-}
 
 export function buildPlanLimitsGuard(db: Db, env: Env) {
   // A tenant with an active superadmin member is unlimited — the SAME operator
@@ -124,7 +78,7 @@ export function buildPlanLimitsGuard(db: Db, env: Env) {
     /** Returns an error payload if the tenant has reached their seat limit, otherwise null.
      *  A PENDING invitation is a promised seat, so it counts toward the tally —
      *  otherwise a manager could queue many invites under the cap and have them
-     *  all auto-accept past the limit on signup (see {@link seatCapacityForTenant}). */
+     *  all auto-accept past the limit on signup (see `application/tenant/seatCapacity.ts`). */
     async checkSeatLimit(tenantId: number): Promise<LimitError | null> {
       if (await bypass(tenantId)) return null;
       const { plan, maxSeats, members, pendingInvites } = await seatCapacityForTenant(db, env, tenantId);

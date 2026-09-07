@@ -10,9 +10,10 @@
  * ── SECURITY POSTURE ─────────────────────────────────────────────────────────
  * A connector call is an authenticated, server-side fetch to a URL a TENANT
  * chose, carrying a secret the platform holds. Three controls, all mandatory:
- *   1. the resolved URL is re-validated immediately before the fetch, and its
- *      hostname re-resolved over DoH — registration-time validation alone loses
- *      to DNS rebinding, and the request carries the decrypted credential;
+ *   1. the resolved URL is re-validated immediately before the fetch, and the call
+ *      goes through `fetchPublic`, which re-resolves the hostname over DoH both
+ *      before and DURING the request — registration-time validation alone loses to
+ *      DNS rebinding, and the request carries the decrypted credential;
  *   2. `redirect: 'manual'` — a 302 must not bounce the authed request to an
  *      internal target after the guard has passed;
  *   3. credential values never enter a log, an error message, or the returned

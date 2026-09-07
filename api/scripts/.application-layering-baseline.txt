@@ -1,14 +1,3 @@
 # Application/domain/infrastructure files that still import from src/presentation/.
 # This list may only SHRINK — see scripts/check-application-layering.mjs.
 # Regenerate with: node scripts/check-application-layering.mjs --update
-application/creation/creationSessionFolderRouteService.ts
-application/creation/creationSessionRouteService.ts
-application/incident/incidentDispatch.ts
-application/kanban/requestRoleRun.ts
-application/llm/vendorHealthCron.ts
-application/manager/ManagerService.ts
-application/manager/triageStage.ts
-application/security/securityDispatch.ts
-application/swimlane/laneEntryTrigger.ts
-application/validation/validationDispatch.ts
-application/workflow/inboundEmail.ts

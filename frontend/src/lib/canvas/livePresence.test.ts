@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { canvasPresenceFrame, CANVAS_PRESENCE_FRAME } from '@builderforce/creation-canvas-contract';
 import {
   applyPresenceFrame, dropPresence, expirePresence, isPresenceFrame, mergeLivePresence,
-  LIVE_PRESENCE_TTL_MS, type LivePresenceMap,
+  spatialPeers, LIVE_PRESENCE_TTL_MS, type LivePresenceMap,
 } from './livePresence';
 
 const frame = (over: Record<string, unknown> = {}) => ({ type: CANVAS_PRESENCE_FRAME, ...over } as never);
@@ -99,5 +99,62 @@ describe('mergeLivePresence', () => {
   it('carries a retraction through, so a pointer that left the board stops being drawn', () => {
     const live = applyPresenceFrame({}, frame({ userId: 'u1', cursor: null }), 0);
     expect(mergeLivePresence(roster, live, 'me')[1]).toMatchObject({ cursor: null });
+  });
+});
+
+/**
+ * The spatial half. It rides the SAME frame as the pointer deliberately — a
+ * cursor and a body are one question asked by two surfaces — so these cases are
+ * really about one thing: a room and a board can never disagree about whether
+ * somebody is still connected, because there is only one record to disagree with.
+ */
+describe('spatial presence (the body a room surface draws)', () => {
+  const body = { position: [1, 0, 2] as [number, number, number], yaw: 0.5, seat: 3 };
+
+  it('carries a position, a yaw and a seat', () => {
+    expect(canvasPresenceFrame({ spatial: body })).toEqual({ spatial: body });
+  });
+
+  it('lets a body ride alongside a pointer without either erasing the other', () => {
+    const live = applyPresenceFrame({}, frame({ userId: 'u1', spatial: body }), 0);
+    const both = applyPresenceFrame(live, frame({ userId: 'u1', cursor: { x: 2, y: 2 } }), 1);
+    expect(both.u1).toMatchObject({ spatial: body, cursor: { x: 2, y: 2 } });
+  });
+
+  it('treats a malformed body as having left, rather than freezing it where it stood', () => {
+    expect(canvasPresenceFrame({ spatial: { position: [1, 2], yaw: 0 } })).toEqual({ spatial: null });
+    expect(canvasPresenceFrame({ spatial: { position: [1, Number.NaN, 2], yaw: 0 } })).toEqual({ spatial: null });
+    expect(canvasPresenceFrame({ spatial: { position: [1, 0, 2], yaw: Number.POSITIVE_INFINITY } })).toEqual({ spatial: null });
+  });
+
+  it('refuses a body outside any plausible room', () => {
+    expect(canvasPresenceFrame({ spatial: { position: [1e6, 0, 0], yaw: 0 } })).toEqual({ spatial: null });
+  });
+
+  it('drops a seat that is not a ring index, keeping the body', () => {
+    expect(canvasPresenceFrame({ spatial: { position: [0, 0, 0], yaw: 0, seat: -1 } }))
+      .toEqual({ spatial: { position: [0, 0, 0], yaw: 0 } });
+    expect(canvasPresenceFrame({ spatial: { position: [0, 0, 0], yaw: 0, seat: 1.5 } }))
+      .toEqual({ spatial: { position: [0, 0, 0], yaw: 0 } });
+  });
+
+  it('preserves an explicit retraction, so leaving the room removes the avatar', () => {
+    expect(canvasPresenceFrame({ spatial: null })).toEqual({ spatial: null });
+  });
+
+  it('lists only peers with a body, never the reader, in a stable order', () => {
+    let live: LivePresenceMap = {};
+    live = applyPresenceFrame(live, frame({ userId: 'u2', spatial: body }), 0);
+    live = applyPresenceFrame(live, frame({ userId: 'u1', spatial: body }), 0);
+    live = applyPresenceFrame(live, frame({ userId: 'me', spatial: body }), 0);
+    // Somebody on the flat board: present, but not in the room.
+    live = applyPresenceFrame(live, frame({ userId: 'u3', cursor: { x: 1, y: 1 } }), 0);
+
+    expect(spatialPeers(live, 'me').map((peer) => peer.userId)).toEqual(['u1', 'u2']);
+  });
+
+  it('stops listing a peer the board has already expired, so the two readings agree', () => {
+    const live = applyPresenceFrame({}, frame({ userId: 'u1', spatial: body }), 0);
+    expect(spatialPeers(expirePresence(live, LIVE_PRESENCE_TTL_MS + 1), 'me')).toEqual([]);
   });
 });

@@ -1,10 +1,11 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   CATALOG_PROVIDER_IDS,
   DATA_PROVIDER_IDS,
+  ENRICHMENT_PROVIDER_IDS,
   MARKETING_PROVIDER_IDS,
   callProvider,
   describeProviders,
@@ -226,13 +227,20 @@ describe('catalog / enum / palette parity', () => {
   it('every catalog provider has a storage label in the migration enum', () => {
     // The original bug: the palette advertised 24 integrations and the enum had
     // nowhere to store any of them. This test is what stops it recurring.
-    const migration = readFileSync(
-      resolve(apiRoot, 'migrations/0412_site_backend_domains_and_campaigns.sql'),
-      'utf8',
-    );
-    const declared = new Set(
-      [...migration.matchAll(/ADD VALUE IF NOT EXISTS '([a-z0-9_]+)'/g)].map((m) => m[1]!),
-    );
+    //
+    // EVERY migration is scanned, not the one that happened to add the first
+    // batch. Pinning this to 0412 meant the third family (enrichment, 1147) had
+    // to edit the test to pass it, which is the failure mode inverted: the test
+    // would have gone green on a provider the enum could not store, as long as
+    // whoever added it also remembered to widen the file list.
+    const declared = new Set<string>();
+    const migrationsDir = resolve(apiRoot, 'migrations');
+    for (const name of readdirSync(migrationsDir)) {
+      if (!name.endsWith('.sql')) continue;
+      const sql = readFileSync(resolve(migrationsDir, name), 'utf8');
+      if (!/ALTER TYPE\s+integration_provider/i.test(sql)) continue;
+      for (const match of sql.matchAll(/ADD VALUE IF NOT EXISTS '([a-z0-9_]+)'/g)) declared.add(match[1]!);
+    }
     const missing = CATALOG_PROVIDER_IDS.filter((id) => !declared.has(id));
     expect(missing).toEqual([]);
   });
@@ -258,10 +266,19 @@ describe('catalog / enum / palette parity', () => {
     expect(CATALOG_PROVIDER_IDS.filter((id) => !connectable.has(id))).toEqual([]);
   });
 
-  it('the two families are non-empty and disjoint', () => {
+  it('the three families are non-empty and pairwise disjoint', () => {
     expect(DATA_PROVIDER_IDS.length).toBeGreaterThanOrEqual(13);
     expect(MARKETING_PROVIDER_IDS.length).toBeGreaterThanOrEqual(11);
-    expect(DATA_PROVIDER_IDS.filter((id) => MARKETING_PROVIDER_IDS.includes(id))).toEqual([]);
+    expect(ENRICHMENT_PROVIDER_IDS.length).toBeGreaterThanOrEqual(3);
+    const families = [DATA_PROVIDER_IDS, MARKETING_PROVIDER_IDS, ENRICHMENT_PROVIDER_IDS];
+    for (const [i, left] of families.entries()) {
+      for (const right of families.slice(i + 1)) {
+        expect(left.filter((id) => right.includes(id))).toEqual([]);
+      }
+    }
+    // The families partition the catalog — a provider with no family, or one in
+    // two, would make `DATA_CATEGORY`'s total map silently wrong.
+    expect(families.flat().sort()).toEqual([...CATALOG_PROVIDER_IDS].sort());
   });
 
   it('every provider declares at least one credential field and one operation', () => {

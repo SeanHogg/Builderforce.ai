@@ -6,6 +6,8 @@
  *   POST   /api/revenue-intel/contacts/:ref/experience add a role                member
  *   POST   /api/revenue-intel/contacts/:ref/education  add education             member
  *   POST   /api/revenue-intel/contacts/:ref/compensation  record an observation  MANAGER
+ *   POST   /api/revenue-intel/contacts/:ref/enrich     buy depth from a vendor  MANAGER
+ *   GET    /api/revenue-intel/enrichment-savings       money the cache saved    MANAGER
  *   GET    /api/revenue-intel/alumni?company=          the warm-intro query      member
  *   GET    /api/revenue-intel/comp-benchmark?title=    median by confidence      MANAGER
  *
@@ -58,6 +60,11 @@ import {
   type Confidence,
 } from '../../application/sales/contactProfile';
 import {
+  EnrichmentError,
+  enrichContact,
+  enrichmentSavings,
+} from '../../application/enrichment/enrichContact';
+import {
   RevenueIntelError,
   advanceProspect,
   canonicalFor,
@@ -83,7 +90,7 @@ const handle = async (run: () => Promise<Response>): Promise<Response> => {
   try {
     return await run();
   } catch (error) {
-    if (error instanceof ContactProfileError || error instanceof RevenueIntelError) {
+    if (error instanceof ContactProfileError || error instanceof RevenueIntelError || error instanceof EnrichmentError) {
       return Response.json({ error: error.message }, { status: error.status });
     }
     throw error;
@@ -126,6 +133,33 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
 
   router.get('/contacts/:ref', (c) => handle(async () =>
     Response.json(await contactProfile(db, tenant(c), c.req.param('ref')))));
+
+  /**
+   * Buy contact depth from the connected enrichment vendor — THROUGH the cache.
+   *
+   * MANAGER, because every miss spends real money: the port bills per lookup and
+   * a member who could trigger it at will is an uncapped invoice. A cache HIT
+   * costs nothing, but the route cannot know which it will be before it runs, so
+   * the gate is on the ask rather than on the outcome.
+   */
+  router.post('/contacts/:ref/enrich', manager, (c) => handle(async () => {
+    const body = await c.req.json<Record<string, unknown>>().catch((): Record<string, unknown> => ({}));
+    const env = c.env as Env & { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
+    return Response.json(await enrichContact({
+      db,
+      tenantId: tenant(c),
+      encryptionSecret: env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '',
+      env: c.env as Env,
+    }, {
+      contactRef: c.req.param('ref'),
+      email: str(body.email) ?? '',
+      ...(str(body.provider) ? { provider: str(body.provider)! } : {}),
+    }));
+  }));
+
+  /** Money not spent on enrichment — the read `enrichment_cache` was built for. */
+  router.get('/enrichment-savings', manager, (c) => handle(async () =>
+    Response.json({ providers: await enrichmentSavings(db, tenant(c)) })));
 
   router.post('/contacts/:ref/experience', (c) => handle(async () => {
     const body = await c.req.json<Record<string, unknown>>();

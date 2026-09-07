@@ -15,6 +15,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslations } from 'next-intl';
+import { PanelCloseButton } from './PanelCloseButton';
 import {
   PanelWidthControl,
   resolvePanelWidth as resolveWidth,
@@ -176,31 +177,11 @@ export function SlideOutPanel({
             }}
           >
             <div className="slide-panel-header__row">
-              <div className="slide-panel-header__lead">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  aria-label={tCommon('closePanel')}
-                  style={{
-                    width: 36,
-                    height: 36,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 'var(--radius-md)',
-                    background: 'var(--bg-base)',
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    flexShrink: 0,
-                  }}
-                >
-                  <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-                {(title != null || crumb != null) && (
+              {/* The lead group is the title block alone now that the close
+                  button has moved to the corner, so a header with only actions
+                  renders no empty track for it. */}
+              {(title != null || crumb != null) && (
+                <div className="slide-panel-header__lead">
                   <div style={{ minWidth: 0 }}>
                     {crumb != null && (
                       <div className="ui-eyebrow" style={{ color: accentVar ? `var(${accentVar})` : 'var(--text-muted)' }}>{crumb}</div>
@@ -209,8 +190,8 @@ export function SlideOutPanel({
                       <div style={{ fontWeight: 700, fontSize: 'var(--font-size-card-title)', color: 'var(--text-primary)' }}>{title}</div>
                     )}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
               {/* The founder's-journey stage switcher (or any page's own
                   header-center control) — centered in the header row via the
                   grid's equal `1fr` lead/trail tracks, at every panel width
@@ -220,10 +201,10 @@ export function SlideOutPanel({
                 <div className="slide-panel-header__center">{headerCenter}</div>
               )}
               <div className="slide-panel-header__trail">
-                {/* Before the width control: an action (e.g. the project
-                    switcher) is something to use, the resize control is
-                    chrome around the panel itself — chrome sits outermost,
-                    nearest the edge. */}
+                {/* Actions first: an action (e.g. the project switcher) is
+                    something to USE, while the width control and the close
+                    button are chrome around the panel itself — chrome sits
+                    outermost, nearest the edge. */}
                 {headerActions}
                 {/* The reader's escape hatch — the thing a full-screen page
                     used to be. Widening never navigates and never remounts
@@ -231,6 +212,9 @@ export function SlideOutPanel({
                 {showWidthControl && (
                   <PanelWidthControl value={effectiveWidth as PanelWidth} onChange={chooseWidth} />
                 )}
+                {/* Last in the row — the top-right corner, where every panel
+                    in the app keeps its way out (`PanelCloseButton`). */}
+                <PanelCloseButton onClose={onClose} />
               </div>
             </div>
           </div>

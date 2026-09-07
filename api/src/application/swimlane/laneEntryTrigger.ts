@@ -32,7 +32,7 @@ import { tasks, projects } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { RuntimeService } from '../runtime/RuntimeService';
 import { buildRuntimeService } from '../../buildRuntimeService';
-import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
+import { dispatchCloudRunForTask } from '../runtime/dispatchCloudRun';
 import { recordCloudToolEvent } from '../runtime/cloudAgentEngine';
 import {
   autoRunSkipState, claimAutoRunSkipState, clearAutoRunSkip, emitAutoRunSkip, recordAutoRunSkip,

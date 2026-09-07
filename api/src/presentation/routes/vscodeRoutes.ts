@@ -1,13 +1,14 @@
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono } from 'hono';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
 import { projects, tasks, vscodeConnections } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { notSystemTask } from '../../application/task/taskScope';
 import type { TenantService } from '../../application/tenant/TenantService';
+import { landPendingInvitations } from '../../application/tenant/pendingInvitationLanding';
 import { provisionBuiltinAgents } from '../../application/agent/provisionBuiltinAgents';
 import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
 
@@ -37,6 +38,10 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
   // the web /api/tenants/mine. Doubles as the membership source for the switch below.
   router.get('/tenants', async (c) => {
     const userId = c.get('userId') as string;
+    // Same contract as the web `/api/auth/my-tenants`: land any invitation
+    // addressed to this account before listing, so a teammate invited by email
+    // sees the workspace here on their first look rather than never.
+    await landPendingInvitations(db, c.env as Env, tenantService, userId);
     const tenants = await tenantService.listTenantsForUser(userId);
     return c.json({ tenants });
   });

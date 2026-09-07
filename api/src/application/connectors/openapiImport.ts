@@ -62,9 +62,9 @@ export class OpenApiImportError extends Error {
  * This lives here rather than in the route because it is the same class of
  * request a connector action makes — an outbound fetch to a URL a customer
  * chose, issued by our worker from inside our network — and so it gets the
- * identical guard: literal check, DNS re-resolution against the public ranges,
- * and `redirect: 'manual'` so a 302 cannot bounce it to an internal target
- * after the check has passed.
+ * identical guard: the literal check here, `fetchPublic`'s DNS re-resolution
+ * against the public ranges before AND during the request, and `redirect: 'manual'`
+ * so a 302 cannot bounce it to an internal target after the check has passed.
  */
 export async function fetchOpenApiSpec(specUrl: string): Promise<{ spec: unknown; baseUrl: string }> {
   let safe: URL;

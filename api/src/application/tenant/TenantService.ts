@@ -16,6 +16,7 @@ import { SEAT_KIND, type SeatKind } from '../../domain/tenant/SeatKind';
 import { membershipChanged } from './membershipChanged';
 import type { Env } from '../../env';
 import { invalidateTenantPlan } from './tenantPlanCache';
+import { tenantRoleForListing } from './tenantRoles';
 
 export interface CreateTenantDto {
   name: string;
@@ -152,7 +153,7 @@ export class TenantService {
         id: t.id,
         name: t.name,
         slug: t.slug,
-        role: member?.role ?? 'member',
+        role: tenantRoleForListing(member?.role),
         status: t.status,
         defaultAgentHostId: t.defaultAgentHostId,
         plan: t.plan,

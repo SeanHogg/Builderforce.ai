@@ -152,7 +152,7 @@ import { createWorkflowDefinitionRoutes } from './presentation/routes/workflowDe
 import { createCreationSessionRoutes } from './presentation/routes/creationSessionRoutes';
 import { createCanvasInviteLinkRoutes } from './presentation/routes/canvasInviteLinkRoutes';
 import { createCanvasJoinRoutes } from './presentation/routes/canvasJoinRoutes';
-import { createCreationSessionFolderRoutes } from './application/creation/creationSessionFolderRouteService';
+import { createCreationSessionFolderRoutes } from './presentation/routes/creationSessionFolderRoutes';
 import { createPublicResumeRoutes } from './presentation/routes/publicResumeRoutes';
 import { createPublicProspectRoutes } from './presentation/routes/publicProspectRoutes';
 import { createSellMotionRoutes } from './presentation/routes/sellMotionRoutes';
@@ -811,7 +811,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/pending-prompts', createPendingPromptRoutes(db));
 
   // Public endpoints (no JWT required)
-  app.route('/api/auth',    createAuthRoutes(authService, db));
+  app.route('/api/auth',    createAuthRoutes(authService, tenantService, db));
   app.route('/api/auth',    createOAuthRoutes(db));
   // Passkeys. Two routers because the halves have opposite auth requirements:
   // enrolment is web-JWT gated (you add a key to an account you are already in),

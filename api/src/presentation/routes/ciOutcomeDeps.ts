@@ -9,7 +9,7 @@ import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { CiOutcomeDeps } from '../../application/ci/handleCiEventOutcome';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
-import { dispatchCloudRunForTask } from './runtimeRoutes';
+import { dispatchCloudRunForTask } from '../../application/runtime/dispatchCloudRun';
 
 export function ciOutcomeDeps(c: Context<HonoEnv>, db: Db, runtimeService: RuntimeService): CiOutcomeDeps {
   const env = c.env as Env;

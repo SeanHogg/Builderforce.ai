@@ -30,6 +30,20 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   967 → 968 (`useClientFiles`, 2026-09-07) — `components/PanelCloseButton.tsx`,
+ *   the ONE dismiss control every slide-out panel now renders. Argued on the
+ *   "808 → 868" terms: it is a shared reuse surface (seven importers on the day it
+ *   landed, and the app-wide convention that a panel's way out sits in its
+ *   top-right corner), so it carries its own boundary rather than inheriting one
+ *   from whoever mounts it — a panel opened from a Server Component must not be the
+ *   thing that discovers this file has no directive. It also reads
+ *   `useTranslations` and binds an `onClick`, so it could not be a Server
+ *   Component regardless. The +1 is a NET REDUCTION in client code: six hand-rolled
+ *   copies of the same button (`SlideOutPanel`, `AgentHostSlideOutPanel`,
+ *   `CloudAgentSlideOutPanel`, `DiagnosticsResultsPanel`, `ProjectPanelHeader`,
+ *   `TaskMgmtContent`, `ShoppingCart`, `TaskPrdTab`) collapsed into it, and
+ *   `check:primitives` now watches the shape so a ninth cannot appear.
+ *
  *   965 → 967 (`useClientFiles`, 2026-09-07) — nesting one canvas inside another
  *   as a `subflow` step. Two modules, both argued on the "808 → 868" terms:
  *

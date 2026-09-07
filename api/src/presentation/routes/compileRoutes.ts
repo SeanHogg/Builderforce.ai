@@ -29,7 +29,7 @@ import type { RecallKnowledge } from '../../application/compile';
 import { recallSops } from '../../application/knowledge/recallSops';
 import { deploy, DEPLOY_SURFACES } from '../../application/deploy';
 import { deployAndDispatch, type CloudRunDispatcher } from '../../application/deploy/dispatch';
-import { dispatchCloudRunForTask } from './runtimeRoutes';
+import { dispatchCloudRunForTask } from '../../application/runtime/dispatchCloudRun';
 import { stampExecutionAuthority, humanDirected } from '../../application/runtime/executionAuthority';
 import { gatewayExtractor } from '../../application/llm/gatewayExtractor';
 import { completeForTenant } from '../../application/llm/tenantProxy';

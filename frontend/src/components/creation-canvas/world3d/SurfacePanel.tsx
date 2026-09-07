@@ -72,4 +72,3 @@ export function SurfacePanel({
   );
 }
 
-export default SurfacePanel;

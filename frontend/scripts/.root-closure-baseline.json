@@ -33,6 +33,7 @@
     "components/OnboardingProgressPill.tsx",
     "components/OnboardingStepper.tsx",
     "components/PageContainer.tsx",
+    "components/PanelCloseButton.tsx",
     "components/PermissionDebuggerPanel.tsx",
     "components/PublicShell.tsx",
     "components/PwaInstallPrompt.tsx",

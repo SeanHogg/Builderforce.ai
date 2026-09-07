@@ -12272,6 +12272,22 @@
       "other": "其他"
     }
   },
+  "taskPrd": {
+    "emptyTask": "此任务尚无 PRD。智能体通过 PRD 理解目标，并在泳道之间交接工作。",
+    "emptyProject": "此项目尚未起草 PRD。可使用 Brain 或 PRD 标签页起草一份——智能体依靠它在泳道之间交接工作。",
+    "generating": "正在生成…",
+    "generateWithAi": "用 AI 生成",
+    "createPrd": "创建 PRD",
+    "attachExisting": "关联已有 PRD…",
+    "setPrimary": "设为主要",
+    "detach": "取消关联",
+    "viewPreview": "预览",
+    "viewRaw": "源码",
+    "expandFullScreen": "全屏展开",
+    "exitFullScreen": "退出全屏",
+    "prdLabel": "PRD",
+    "prdFallback": "PRD {id}"
+  },
   "taskMgmt": {
     "bulkChangeStatus": "批量更改状态…",
     "branchAndPr": "分支和 PR",
@@ -22539,6 +22555,37 @@
         "regionLabel": "此会话的洞察",
         "openFull": "打开完整看板"
       },
+      "room": {
+        "standup": {
+          "caption": "站会",
+          "groupLabel": "站会控件",
+          "projectLabel": "本次站会所属项目",
+          "allProjects": "全部项目",
+          "projectFallback": "项目 {id}",
+          "previous": "上一个项目",
+          "next": "下一个项目",
+          "start": "开始站会",
+          "starting": "正在开始…",
+          "live": "进行中 · {project}",
+          "finish": "结束",
+          "finishing": "正在结束…",
+          "needsProject": "请选择一个项目，以便记录本次站会",
+          "dismiss": "关闭"
+        },
+        "label": "会议室",
+        "enter": "在会议室中碰面",
+        "active": "你正在会议室中",
+        "regionLabel": "本会话的会议室",
+        "here": "{total} 人中有 {here} 人在场",
+        "rosterHead": "{count, plural, =0 {暂时无人} other {# 人}}",
+        "unknown": "协作者",
+        "you": "你",
+        "inRoom": "在会议室",
+        "onBoard": "在画板上",
+        "noWebglTitle": "此设备无法使用 3D",
+        "noWebglBody": "会议室需要 WebGL，而此浏览器无法启动它。会话中的所有成员都列在下方，画布的其余功能均可正常使用。",
+        "wallOverflow": "{count, plural, other {另有 # 个对象未展示在墙上}}"
+      },
       "page": {
         "label": "页面",
         "open": "以页面方式打开"
@@ -22624,6 +22671,11 @@
           }
         },
         "panel": {
+          "surfaceImage": "表面图片",
+          "surfaceImagePlaceholder": "https://…（照片或图表）",
+          "surfaceFit": "适配方式",
+          "surfaceFitCover": "填满表面",
+          "surfaceFitContain": "完整显示在表面内",
           "transform": "变换",
           "appearance": "外观",
           "physics": "物理与刚体",
@@ -23529,7 +23581,8 @@
       "subflowTooDeep": "在“{canvas}”处，嵌套画布的层级超过了 {depth} 层。",
       "subflowEmpty": "画布“{canvas}”还没有可运行的步骤。",
       "subflowNotBuildable": "画布“{canvas}”暂时无法构建——步骤“{step}”尚未就绪。",
-      "subflowNeedsBuild": "请先在画布“{canvas}”中构建一次，然后才能在此实时运行它。"
+      "subflowNeedsBuild": "请先在画布“{canvas}”中构建一次，然后才能在此实时运行它。",
+      "subflowMissingInput": "画布“{canvas}”需要传入“{key}”，但此步骤没有映射它。"
     },
     "frameSection": {
       "holds": "{count, plural, =0 {空} other {# 个对象}}",
@@ -24135,30 +24188,6 @@
     "installIos": "安装 Builderforce：点按“分享”，然后选择“添加到主屏幕”。"
   },
   "workflow": {
-    "subflowNode": {
-    "loadFailed": "无法加载你的画布。",
-    "canvas": "要运行的画布",
-    "choosePlaceholder": "选择一个画布…",
-    "loading": "正在加载画布…",
-    "binding": "绑定方式",
-    "bindingOption": {
-      "snapshot": "快照 — 冻结到此流程中",
-      "live": "实时 — 跟随该画布"
-    },
-    "bindingHint": {
-      "snapshot": "构建时会把子画布的步骤复制到此流程中。一次运行、一条时间线；此后对该画布的修改要等到再次构建才会生效。",
-      "live": "运行时调用子画布自己已构建的流程，因此修改无需在此重新构建即可生效。该子画布必须至少构建过一次。"
-    },
-    "unreadable": "无法读取该画布 — 它可能已被删除，或未与你共享。",
-    "noSteps": "该画布还没有任何步骤，无内容可运行。",
-    "stepCount": "{count, plural, other {# 个步骤}}",
-    "accepts": "接收",
-    "acceptsAnything": "你传入的任何内容",
-    "acceptsNothing": "无 — 它从自己的步骤开始",
-    "acceptsAlsoRaw": "它也接收你传入的其他内容。",
-    "returns": "返回",
-    "returnsNothing": "此流程无法读取任何返回值"
-    },
     "connectorNode": {
       "integration": "集成",
       "action": "操作",
@@ -24194,7 +24223,8 @@
       "bindingHint": {
         "snapshot": "构建时会把该画布的步骤复制到此流程中。之后在那里的修改不会影响此流程，除非你再次构建。",
         "live": "此流程每次运行都会重新读取该画布，因此那里的修改会立即生效。前提是该画布至少已构建过一次。"
-      }
+      },
+      "openCanvas": "打开该画布"
     }
   },
   "kernel": {

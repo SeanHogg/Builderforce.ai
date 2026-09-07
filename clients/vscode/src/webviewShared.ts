@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
-import { getTenantJwt } from "./bfApi";
 import { getBaseUrl } from "./gateway";
+import { handleSharedHostMessage, postToWebview, respondToWebview, type WebviewInbound } from "./webviewHostBridge";
 
 /** A random nonce for the webview CSP (`script-src`/inline `<style>` on the board). */
 export function makeNonce(): string {
@@ -83,11 +83,9 @@ export function renderWebviewHtml(
 </html>`;
 }
 
-/** The minimal inbound-message envelope every webview panel shares. */
-export interface WebviewInbound {
-  type?: string;
-  id?: string;
-}
+// The inbound envelope is declared once, beside the bridge that consumes it.
+// Re-exported here because the panel subclasses import it from their base.
+export type { WebviewInbound } from "./webviewHostBridge";
 
 /**
  * Shared lifecycle for the bundled-React webview panels. Creates the panel with the
@@ -141,31 +139,22 @@ export abstract class WebviewPanelBase<M extends WebviewInbound = WebviewInbound
     );
   }
 
-  /** Route the two shared, host-owned cases; delegate everything else to the subclass. */
+  /** Route the shared, host-owned cases; delegate everything else to the subclass.
+   *  The shared set lives in `webviewHostBridge` because the Evermind SIDEBAR VIEW
+   *  answers the same messages and cannot extend this panel base. */
   private async dispatchMessage(msg: M): Promise<void> {
-    switch (msg.type) {
-      case "token.refresh": {
-        const token = (await getTenantJwt(this.ctx.secrets)) ?? null;
-        this.respond(msg.id, true, { token });
-        return;
-      }
-      case "signin":
-        void vscode.commands.executeCommand("builderforce.signIn");
-        return;
-      default:
-        await this.onMessage(msg);
-    }
+    if (await handleSharedHostMessage(this.ctx, this.panel.webview, msg)) return;
+    await this.onMessage(msg);
   }
 
   /** Fire-and-forget post to the webview. */
   protected post(msg: unknown): void {
-    void this.panel.webview.postMessage(msg);
+    postToWebview(this.panel.webview, msg);
   }
 
   /** Reply to a webview `request` round-trip; a no-op without an id (fire-and-forget). */
   protected respond(id: string | undefined, ok: boolean, result?: unknown, error?: string): void {
-    if (!id) return;
-    void this.panel.webview.postMessage({ type: "response", id, ok, result, error });
+    respondToWebview(this.panel.webview, id, ok, result, error);
   }
 
   private teardown(): void {

@@ -15,6 +15,7 @@ import {
   type MarketplacePurchase,
 } from '@/lib/builderforceApi';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
+import { PanelCloseButton } from '@/components/PanelCloseButton';
 
 /** Cart prices are whole-dollar decimals; the formatter takes cents. */
 const toCents = (dollars: number): number => Math.round(dollars * 100);
@@ -228,16 +229,8 @@ export default function ShoppingCart() {
               </span>
             )}
           </div>
-          <button
-            type="button"
-            onClick={closeCart}
-            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }}
-            aria-label={t('close')}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+          {/* Top right — the app-wide panel close corner. */}
+          <PanelCloseButton onClose={closeCart} label={t('close')} />
         </div>
 
         {/* Items */}

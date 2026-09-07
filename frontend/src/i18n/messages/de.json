@@ -12272,6 +12272,22 @@
       "other": "Sonstiges"
     }
   },
+  "taskPrd": {
+    "emptyTask": "Für diese Aufgabe gibt es noch kein PRD. Agenten nutzen das PRD, um das Ziel zu verstehen und die Arbeit zwischen Swimlanes zu übergeben.",
+    "emptyProject": "Für dieses Projekt wurde noch kein PRD verfasst. Erstelle eines über Brain oder den PRD-Tab — Agenten übergeben damit die Arbeit zwischen Swimlanes.",
+    "generating": "Wird generiert…",
+    "generateWithAi": "Mit KI generieren",
+    "createPrd": "PRD erstellen",
+    "attachExisting": "Vorhandenes PRD verknüpfen…",
+    "setPrimary": "Als primär festlegen",
+    "detach": "Verknüpfung lösen",
+    "viewPreview": "Vorschau",
+    "viewRaw": "QUELLTEXT",
+    "expandFullScreen": "Auf Vollbild erweitern",
+    "exitFullScreen": "Vollbild beenden",
+    "prdLabel": "PRD",
+    "prdFallback": "PRD {id}"
+  },
   "taskMgmt": {
     "bulkChangeStatus": "Status im Stapel ändern…",
     "branchAndPr": "Branch & PR",
@@ -22539,6 +22555,37 @@
         "regionLabel": "Einblicke dieser Sitzung",
         "openFull": "Vollständiges Dashboard öffnen"
       },
+      "room": {
+        "standup": {
+          "caption": "Daily",
+          "groupLabel": "Daily-Steuerung",
+          "projectLabel": "Projekt, um das es in diesem Daily geht",
+          "allProjects": "Alle Projekte",
+          "projectFallback": "Projekt {id}",
+          "previous": "Vorheriges Projekt",
+          "next": "Nächstes Projekt",
+          "start": "Daily starten",
+          "starting": "Wird gestartet…",
+          "live": "Läuft · {project}",
+          "finish": "Beenden",
+          "finishing": "Wird beendet…",
+          "needsProject": "Wähle ein Projekt, damit dieses Daily erfasst wird",
+          "dismiss": "Ausblenden"
+        },
+        "label": "Raum",
+        "enter": "Im Raum treffen",
+        "active": "Du bist im Raum",
+        "regionLabel": "Der Raum dieser Sitzung",
+        "here": "{here} von {total} anwesend",
+        "rosterHead": "{count, plural, =0 {Noch niemand} one {# Person} other {# Personen}}",
+        "unknown": "Mitwirkende Person",
+        "you": "Du",
+        "inRoom": "Im Raum",
+        "onBoard": "Auf dem Board",
+        "noWebglTitle": "3D ist auf diesem Gerät nicht verfügbar",
+        "noWebglBody": "Der Raum benötigt WebGL, das dieser Browser nicht starten kann. Alle Personen der Sitzung stehen unten, und der Rest der Canvas funktioniert normal.",
+        "wallOverflow": "{count, plural, one {# weiteres Objekt hängt nicht an der Wand} other {# weitere Objekte hängen nicht an der Wand}}"
+      },
       "page": {
         "label": "Seite",
         "open": "Als Seite öffnen"
@@ -22624,6 +22671,11 @@
           }
         },
         "panel": {
+          "surfaceImage": "Bild auf der Fläche",
+          "surfaceImagePlaceholder": "https://… (ein Foto, ein Diagramm)",
+          "surfaceFit": "Einpassung",
+          "surfaceFitCover": "Fläche ausfüllen",
+          "surfaceFitContain": "In die Fläche einpassen",
           "transform": "Transformation",
           "appearance": "Erscheinungsbild",
           "physics": "Physik & Körper",
@@ -23529,7 +23581,8 @@
       "subflowTooDeep": "Verschachtelte Canvas gehen bei „{canvas}“ mehr als {depth} Ebenen tief.",
       "subflowEmpty": "Der Canvas „{canvas}“ hat noch keine Schritte zum Ausführen.",
       "subflowNotBuildable": "Der Canvas „{canvas}“ kann noch nicht gebaut werden — der Schritt „{step}“ ist nicht bereit.",
-      "subflowNeedsBuild": "Baue den Canvas „{canvas}“ einmal, bevor du ihn von hier aus live ausführst."
+      "subflowNeedsBuild": "Baue den Canvas „{canvas}“ einmal, bevor du ihn von hier aus live ausführst.",
+      "subflowMissingInput": "Der Canvas „{canvas}“ braucht „{key}“, und dieser Schritt bildet es nicht ab."
     },
     "frameSection": {
       "holds": "{count, plural, =0 {Leer} one {# Objekt} other {# Objekte}}",
@@ -24135,30 +24188,6 @@
     "installIos": "Builderforce installieren: auf „Teilen“ tippen, dann „Zum Home-Bildschirm“."
   },
   "workflow": {
-    "subflowNode": {
-    "loadFailed": "Deine Canvases konnten nicht geladen werden.",
-    "canvas": "Auszuführendes Canvas",
-    "choosePlaceholder": "Canvas wählen…",
-    "loading": "Canvases werden geladen…",
-    "binding": "Art der Bindung",
-    "bindingOption": {
-      "snapshot": "Snapshot – in diesen Ablauf einfrieren",
-      "live": "Live – dem Canvas folgen"
-    },
-    "bindingHint": {
-      "snapshot": "Die Schritte des untergeordneten Canvas werden beim Bauen in diesen Ablauf kopiert. Ein Lauf, eine Zeitleiste; spätere Änderungen an jenem Canvas kommen erst nach einem erneuten Bauen hier an.",
-      "live": "Dieser Ablauf ruft zur Laufzeit den eigenen gebauten Ablauf des untergeordneten Canvas auf, Änderungen kommen also ohne erneutes Bauen an. Das untergeordnete Canvas muss mindestens einmal gebaut worden sein."
-    },
-    "unreadable": "Dieses Canvas kann nicht gelesen werden – es wurde vielleicht gelöscht oder ist nicht für dich freigegeben.",
-    "noSteps": "Dieses Canvas hat noch keine Schritte, es gibt also nichts auszuführen.",
-    "stepCount": "{count, plural, one {# Schritt} other {# Schritte}}",
-    "accepts": "Nimmt entgegen",
-    "acceptsAnything": "Alles, was du übergibst",
-    "acceptsNothing": "Nichts – es startet mit seinen eigenen Schritten",
-    "acceptsAlsoRaw": "Es nimmt außerdem alles Weitere entgegen, was du übergibst.",
-    "returns": "Gibt zurück",
-    "returnsNothing": "Nichts, was dieser Ablauf lesen kann"
-    },
     "connectorNode": {
       "integration": "Integration",
       "action": "Aktion",
@@ -24194,7 +24223,8 @@
       "bindingHint": {
         "snapshot": "Die Schritte dieses Canvas werden beim Bauen in diesen Ablauf kopiert. Spätere Änderungen dort ändern diesen Ablauf erst nach einem erneuten Bauen.",
         "live": "Dieser Canvas wird bei jedem Lauf dieses Ablaufs neu gelesen, Änderungen dort wirken also sofort. Er muss dort mindestens einmal gebaut worden sein."
-      }
+      },
+      "openCanvas": "Diesen Canvas öffnen"
     }
   },
   "kernel": {

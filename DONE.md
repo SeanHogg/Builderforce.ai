@@ -1,3 +1,243 @@
+## ✅ RESOLVED 2026-09-07 — an invited teammate can actually join: the workspace-list endpoint every client calls now lands the invitation
+
+**The gap.** Inviting somebody who did not yet have an account recorded a pending
+`invitations` row and mailed them a signup link, and that was the last thing that ever
+happened to it. Converting that row into a real membership lived in
+`acceptPendingInvitations`, a private helper inside `presentation/routes/tenantRoutes.ts`
+called from exactly ONE handler — `GET /api/tenants/mine`. Nothing calls that endpoint.
+The web app and the agent-runtime CLI list workspaces through `GET /api/auth/my-tenants`,
+the editor through `GET /api/vscode/tenants`, and neither landed anything. So the invitee
+signed up with the invited address, saw zero workspaces, was auto-provisioned a "Default
+workspace" of their own by onboarding, and the invitation stayed `pending` forever — while
+the manager's members page went on listing it as sent. Only the WARM path worked: inviting
+an address that already had an account calls `addMember` inline and never touches the
+landing code at all, which is why this survived.
+
+**The landing is not a property of one endpoint.** It is what "list the workspaces I belong
+to" MEANS for a person who was invited by address, so it moved down a layer into the tenant
+bounded context as `application/tenant/pendingInvitationLanding.ts` → `landPendingInvitations`,
+and all three workspace-list entry points call it. It takes a narrow structural port
+(`MembershipSeating` — `addMember` + `admitCollaborator`) rather than the 700-line
+`TenantService` that happens to satisfy it, and resolves the account's address itself so no
+caller repeats that `users` select. Every rule the old helper had earned is preserved and now
+tested: the accept-time seat re-check against a plan DOWNGRADE, the in-run tally so a batch of
+invites for one workspace cannot collectively overshoot `maxSeats`, seating a cold invitee
+under the manager who invited them (the invitee cannot authorize their own membership), canvas
+collaborators admitted WITHOUT spending a workspace seat, already-members resolved rather than
+retried forever, and one failing workspace never blocking the others.
+
+**The seam that made it a layering violation.** The accept-time capacity re-check needed
+`seatCapacityForTenant`, which lived in `presentation/middleware/planLimitsGuard.ts` — an
+application use case would have had to import UPWARDS out of presentation. It is a tenant-domain
+read, so it moved to `application/tenant/seatCapacity.ts` and both layers now depend downwards
+on it; `check:application-layering` passes. The task-assignee cache key was written out in the
+producer (`taskRoutes`) and again in the invalidator (`tenantRoutes`) — the split that lets one
+side be renamed while the other quietly stops invalidating anything — so it is now
+`application/task/taskAssigneeCache.ts`, owning the key and the one way to drop it.
+
+**The index that made it safe to put on the sign-in path.** `findPendingByEmail` is
+deliberately unscoped — the caller has just proved control of an address and belongs to no
+tenant yet, so there is no tenant to lead with — and the only index on `invitations` leads with
+`tenant_id`, so it could not serve that query. Survivable while the sole caller was an endpoint
+nobody called; a sequential scan on every login once it was not. Migration 1149 adds
+`idx_invitations_address (email, state)`.
+
+**And the role no gate accepts.** Both workspace-list projections carried the same fallback,
+written twice: `member?.role ?? 'member'`. `'member'` is not in `TENANT_ROLE_ORDER` and not in
+the frontend's mirror of it, so a row that ever hit it rendered with NO capabilities and no way
+to tell that apart from a genuine viewer. Now one `tenantRoleForListing()` in
+`application/tenant/tenantRoles.ts`, which already owns the ladder: least privilege, and a REAL
+role.
+
+Verified: `tsgo`/`tsc` clean, `check:application-layering`, `check:schema`, `check:migrations`,
+`check:tenant-scope`, `check:silent-catches` pass; 8 new tests in
+`pendingInvitationLanding.test.ts` plus the 116 existing tenant/auth/rbac/kernel/permission tests.
+
+## ✅ RESOLVED 2026-09-07 — the standup happens on the board: a `room` surface, one spatial presence channel, and a face a picture can sit on
+
+**The gap.** The one ceremony whose entire subject is the work in front of you was the
+one ceremony with no home on the work. A standup meant leaving the board for a meeting
+room or a project round-table and screen-sharing the board everyone had just left.
+Meanwhile the canvas already had three quarters of a spatial product and no seam between
+the parts: `CeremonySeat` was a spatial model — a seat, a ring, a turn, a presence ring —
+rendered flat; `world3d` had a walker with real colliders in a space containing neither
+your work nor your colleagues (the port dropped multiplayer peers on purpose);
+`Canvas3DView` had a camera and your objects but no people.
+
+**One presence channel, not a second one.** `CanvasPresenceState` gained `spatial`
+(`{ position, yaw, seat? }`, metres and radians, matching `CanvasWorldTransform`). A
+cursor and a body are the same question asked by two surfaces, so they ride the SAME
+sanitized frame through the SAME `PeerRelay` allow-list — no second frame type, no second
+sanitizer, no second TTL that could disagree about whether somebody is still connected.
+`spatialPeers()` is the selector; the relay, the route and the Durable Object needed no
+new plumbing at all. A malformed or out-of-range body reads as "left the surface", the
+same rule a malformed cursor already followed, so a bad frame retracts a stale avatar
+instead of leaving it standing in the room forever.
+
+**The room owns no domain.** `CanvasRoomSurface` seats the session's own roster, marks who
+is actually present (lit) against who is on the board (dimmed), and hangs the session's
+newest objects on a wall — described by the SAME `describeThreeD` the depth projection
+uses, previews and all, so a card is the same card in both readings. No room table, no room
+membership, no room record: the session already has a roster and the relay already carries
+who is live. Because a still pointer is stale but sitting still is what a standup IS,
+presence is re-asserted on a 10s heartbeat inside the relay's 30s expiry, and leaving
+retracts the body immediately.
+
+**Geometry is arithmetic, and lives outside the renderer.** `lib/canvas/roomSeating.ts`
+owns the ring, the table, the wall layout and both theme palettes; `RoomScene` draws only
+what it returns. That is what let the layout be asserted (every body on the ring, every
+body facing the centre, each wall row centred on its own contents, the cap enforced even
+when the caller already applied it) rather than checked by squinting at a WebGL canvas.
+
+**A prop can hold a picture again.** `CANVAS_WORLD_SCHEMA_VERSION` moved to 2 for
+`CanvasWorldProp.surface` — additive and optional, so every v1 scene reads back unchanged
+and nothing migrates. Textures had been trimmed out of the original port; they are back
+because "put this photo of the whiteboard on that wall" is authoring, not engagement.
+`propTakesSurface()` in the contract decides which kinds have a flat face, so the renderer
+and the properties panel cannot disagree and an author is never offered a control the
+renderer would ignore. One `SurfacePanel` primitive serves both the room's wall and a
+world's props, so a picture loads, scales and FAILS identically in both — an image that
+cannot load falls back to the prop's own colour rather than a black square.
+
+**No `objectId` on a prop, deliberately.** The other half of "board cards become things in
+the room" did not become a stored reference. The room reads the BOARD, live, so a card that
+is renamed, recoloured, re-rendered or deleted is correct on the next frame with nothing to
+migrate and nothing to dangle. A stored id would have been a second, staler answer to
+"which objects exist".
+
+**Offered in every phase.** `PHASE_SURFACES` gains `room` from Idea onward rather than
+gating it the way `insights` is gated. The two look similar and fail differently: an
+Insights tab with nothing pinned can show a reader nothing, whereas a room with one person
+in it is correct and legible — and gating a *meeting* by which stage a board says it is in
+would be the wrong shape of rule.
+
+**Degrades rather than refuses.** WebGL is probed by trying, once, and where it cannot
+start the same session opens as a legible circle of names instead of a black canvas.
+
+**Also fixed in the same pass.**
+- `workflow.subflowNode` was declared TWICE in all five message catalogs. JSON is
+  last-wins, so the first block was dead — anyone editing it would have seen no effect.
+  Removed, with a parse-equality assertion proving the loaded catalog is byte-identical.
+- `canvasSurfaceIcons.tsx` claimed its glyph map was "complete" while `world` and
+  `facilitate` had none and were drawing their own initial in a 25px slot — the exact
+  symptom that file's own header warns about. Both have glyphs now, alongside `room`.
+- `canvasSurfaces.ts` and `CreationCanvas.tsx` both said `useCanvasThreeD` serves "the four
+  OTHER spatial canvases". It serves three (`WorkspaceCanvas`, `pm/DependencyGraph`,
+  `insights/ValueStreamGraph`), which the registry comment now names.
+
+**Verified.** `tsgo --noEmit` clean; 39 tests in `roomSeating.test.ts` +
+`livePresence.test.ts`; `canvasSurfaces.test.tsx` and `canvasSessionActions.test.tsx` green
+with their surface-list assertions updated to include `room`; `check:i18n-keys`,
+`check:design-tokens`, `check:destinations`, `check:primitives` and the React-hooks ratchet
+all pass. Marketing content: `content/blog/stand-up-inside-your-board.md`, registered in
+`blogData.ts`. Still open, logged in the Gap Register: ceremony attendance from the room
+(needs a product decision — a canvas attaches to many projects), the `release_notes` row
+(needs a live superadmin session), and video/audio in the room.
+
+## ✅ RESOLVED 2026-09-07 — a canvas can be placed on another canvas as one step: `subflow`, snapshot or live, with its interface derived from the child board
+
+**The gap.** The canvas IS the workflow, which made every board a closed system: the
+steps you could run were the steps you had drawn, on that board. So a real shared
+sequence — offboard an employee: revoke, final payroll, asset return, notify — had to be
+redrawn inside every flow that needed it, and the copy that got fixed was never the copy
+that ran. `CREATION_OBJECT_KINDS` had no kind referencing another canvas, `WorkflowNodeKind`
+had ~60 kinds and none of them called another workflow, and `canvasFlowTarget` resolved
+*the* flow on *a* board. Composition was not expressible anywhere in the stack.
+
+**A step, not a new object kind.** A nested canvas is a `flowStep` whose `stepKind` is
+`subflow` — the same rule that makes a switch a value rather than a kind, and what keeps
+the palette, the node renderer and the compiler from each growing a branch for it. The
+whole vocabulary is `domains/workflow/domain/subflow.ts`; the palette entry is one
+declaration in `stepKinds/composition.ts` and reaches the object picker, the card, the 3D
+badge and the marketing catalog without any of them being edited.
+
+**Two bindings, both real.**
+- `snapshot` (default) compiles the child board with the SAME compiler, one level deeper,
+  and splices it between two pass-through nodes (`subflowLowering.ts`). One definition,
+  one run, one timeline, nothing new for the executor to understand.
+- `live` stores the child's own definition id and resolves it when a run is instantiated
+  (`api/src/application/workflow/expandSubflows.ts`). Rebuild the offboarding canvas in its
+  own board and every parent that calls it picks it up without being rebuilt.
+
+**Its interface is derived, never declared.** A parameter is a `stepInputs` binding on a
+step nothing feeds; a return is a `stepOutputs` binding nothing on that board consumes
+(`subflowInterface.ts`). The tempting shape was a contract card on the child — explicit,
+stable, and wrong the first time somebody adds a step, because then two statements exist
+and the one that runs is not the one being read. Same refusal `canvasFlowTarget` already
+makes about a `framePurpose` marker: ask the drawing.
+
+**Every child failure is a parent failure.** No canvas chosen, a canvas that cannot be
+read, an empty one, one holding an unbuildable step, a board that reaches itself, and
+composition past 5 deep are all refusals naming the canvas, pinned to the step
+(7 new `flowIssue` keys × 5 catalogs). A subflow that compiled to nothing would be a step
+that runs, reports success and does not do the work.
+
+**Two defects found by the tests, both fixed.** A child whose only step was unbuildable
+compiled to zero nodes AND an issue, and reading emptiness first told the author their
+canvas was empty when what it had was a step needing a prompt — the refusal order now asks
+what the child SAID before what it produced. And inlining a child that held its own trigger
+suppressed the PARENT's synthesized entry point, because `hasTrigger` was read back off the
+node list: a board that built green and could never start. The parent now tracks its own
+authored trigger, and a child's trigger is dropped on inline (it is that canvas's entry
+point; mid-graph it could never fire).
+
+**Three seams closed rather than duplicated in the same pass.**
+- `flowDefinitionRef.ts` — the `workflow:<id>` prefix was spelled inline in
+  `canvasFlowTarget` and in `CreationCanvas`'s build, and composition would have been the
+  third. One module now spells it; both existing sites migrated.
+- `stepFieldEditors.ts` — `StepConfigForm` had a `kind === 'connector'` branch for the one
+  step whose options come from a live catalog. `subflow` is the second, so the pair became
+  registry DATA and the form lost the branch entirely. `stepFieldStyles.ts` shares the four
+  styles both editors are drawn with.
+- `subflowDefinitionGateway.ts` — one tenant-scoped read of a child definition, used by both
+  doors that need it (starting a run, and `compile('process-chart')`).
+
+**The compile primitive was closed, not logged.** `compileFromGraph` would have lowered a
+`subflow` node into a `node:subflow` step the executor has no handler for. `CompileDeps`
+already injects ports, so it gained `loadWorkflowDefinition`, the adapter became async and
+expands through the same expander, and the route wires the real tenant-scoped read. Without
+the loader it REFUSES the chart. `executeCloudNode` also gained a loud `subflow` case: a
+node of that kind reaching the executor means it was never expanded, and a pass-through
+there would report success for a whole canvas nobody ran.
+
+**`compileBoardFlow.ts` was split rather than grown** — it reached 476 lines. `boardFlow.ts`
+holds the shapes three peers now share, `subflowLowering.ts` holds composition and takes the
+compiler as an argument (which is what makes the recursion a straight line and not an import
+cycle), and the compiler re-exports its published vocabulary so no caller changed.
+
+**Three things this pass first logged as gaps and then closed, because none of them
+was actually blocked.**
+- **Open the canvas a step runs.** Composition is the feature that most invites "let me
+  see what that does", and the answer was: find it in the canvas list by name. The step's
+  own editor now links to `/create/<sessionId>` in a new tab — the author is checking
+  something, not leaving the board. It lives in `SubflowNodeFields`, a module this pass
+  owns, so `CreationCanvas.tsx`'s card-act registry was not grown to get it.
+- **A handover that misses what the child needs is refused.** `employe` where the child
+  declares `employee` used to build green and hand the child a payload without the one
+  field it reads. The check does NOT need a severity grade on `BoardFlowIssue`, which is
+  why it first looked blocked: a step declaring NO inputs passes the payload through and
+  is left alone, and once the author starts describing the handover that declaration IS
+  the statement of what arrives — so a missing parameter is the same defect class the
+  compiler already refuses. `subflowMissingInput`, naming the parameter and the canvas.
+- **The release note is authored.** `1148_canvas_composition_release_note.sql`, the
+  established pattern for every release note in this repo (1140, 1142–1146) — fixed id so
+  it replays safely, `emailed_at` NULL so the digest announces it once. The superadmin
+  panel is one way to author a row, not the only one, and a migration needs no credentials.
+
+**Verified.** 24 new frontend tests (`subflowLowering.test.ts`, `subflowInterface.test.ts`),
+9 new API tests (`expandSubflows.test.ts`, 2 in `compile.test.ts`); `compileBoardFlow`,
+`flowStepsFromCanvasSteps`, `cloudExecutor`, `compileRoutes` and the whole
+`application/compile` + `application/workflow` suites still green (169 API tests).
+`tsgo --noEmit` clean on both frontend and api. Guards run green: `check:i18n-keys`,
+`check:architecture` (0 import cycles), `check:api-transport`, `check:primitives`,
+`check:design-tokens`, `check:canvas-kind-labels` (213 kinds × 5 catalogs),
+`check:domain-boundary`, `check:db-access`, `check:shape-lint`, `check:migrations`,
+`check:react-hooks` (the one warning this pass introduced — a `setState` reset inside an
+effect — was fixed by deriving the stale-result case instead), eslint on every touched
+module. `CreationCanvas.test.tsx` and the full canvas + workflow domain suites
+(258 tests) green. Marketing: `content/blog/one-canvas-inside-another.md`, written along the
+Idea→Make→Run→Measure arc with `bf-figure` visuals.
+
 ## ✅ RESOLVED 2026-09-07 — `check:root-closure` ratchets the file SET now, not two line counts, and the four guards the subflow pass left red are green
 
 **The deploy that failed.** `Deploy frontend` went red on `check:root-closure` with

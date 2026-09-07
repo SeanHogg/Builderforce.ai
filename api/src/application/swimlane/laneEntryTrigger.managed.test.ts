@@ -3,7 +3,7 @@ import { maybeAutoRunOnLaneEntry } from './laneEntryTrigger';
 import { enforceLaneRequirements } from './laneRequirementGate';
 import { evaluateTaskAutoRun } from './evaluateAutoRun';
 import { requestRoleRun } from '../kanban/requestRoleRun';
-import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
+import { dispatchCloudRunForTask } from '../runtime/dispatchCloudRun';
 import { parseActAsRole } from '../runtime/cloudDispatch';
 import { evaluateExecutionApprovalGate } from '../runtime/executionApprovalGate';
 import type { Db } from '../../infrastructure/database/connection';
@@ -38,7 +38,7 @@ vi.mock('../runtime/autoRunSkipLedger', () => ({
 }));
 vi.mock('../runtime/cronWorkSignal', () => ({ signalPendingWork: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../runtime/executionApprovalGate', () => ({ evaluateExecutionApprovalGate: vi.fn() }));
-vi.mock('../../presentation/routes/runtimeRoutes', () => ({ dispatchCloudRunForTask: vi.fn() }));
+vi.mock('../runtime/dispatchCloudRun', () => ({ dispatchCloudRunForTask: vi.fn() }));
 
 const mockGate = vi.mocked(enforceLaneRequirements);
 const mockEval = vi.mocked(evaluateTaskAutoRun);

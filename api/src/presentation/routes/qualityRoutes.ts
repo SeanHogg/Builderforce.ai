@@ -29,7 +29,7 @@ import {
 import { qualityGroupsVersionKey, qualityGroupsTenantVersionKey, ingestErrorEvents } from '../../application/quality/ingestEngine';
 import type { CollectorRef, MappingRule } from '../../application/quality/errorMapping';
 import type { NormalizedErrorEvent } from '../../application/quality/errorSpec';
-import { dispatchCloudRunForTask } from './runtimeRoutes';
+import { dispatchCloudRunForTask } from '../../application/runtime/dispatchCloudRun';
 import { stampExecutionAuthority, humanDirected } from '../../application/runtime/executionAuthority';
 import { onTaskLandedInLane } from '../../application/swimlane/laneEntryTrigger';
 import { TaskPriority } from '../../domain/shared/types';

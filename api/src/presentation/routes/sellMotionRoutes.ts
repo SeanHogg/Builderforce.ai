@@ -1,7 +1,7 @@
 /**
  * The seller's half of the sell motion — the four acts that need real workspace data.
  *
- * ── WHY A SEPARATE ROUTER AND NOT MORE OF `creationSessionRouteService` ─────────
+ * ── WHY A SEPARATE ROUTER AND NOT MORE OF `creationSessionRoutes` ─────────
  * That module is already the largest presentation surface in the repo and it is the
  * BOARD's router: create, graph, commands, members, invitations, history. These four are a
  * DOMAIN's use cases that happen to be addressed by a board id, in the same way

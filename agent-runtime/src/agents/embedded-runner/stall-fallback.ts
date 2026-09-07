@@ -22,12 +22,12 @@
  */
 
 import { modelRef } from "../../builderforce/agent-loop/stall-recovery.js";
-import type { Api, Model } from "../../builderforce/model/types.js";
+import type { Model } from "../../builderforce/model/types.js";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import { resolveFallbackCandidates } from "../model-fallback.js";
 import { resolveModel } from "./model.js";
 
-export interface StallFallbackPickerParams {
+interface StallFallbackPickerParams {
   cfg: BuilderForceAgentsConfig | undefined;
   /** The provider the run STARTED on (the pin), as `resolveModel` was called with. */
   provider: string;
@@ -57,7 +57,9 @@ export function createStallFallbackPicker(
   });
   // One candidate = the pin itself. Nothing was declared to fall over to, so the loop
   // keeps its previous behaviour and never substitutes a model the operator did not name.
-  if (candidates.length <= 1) return undefined;
+  if (candidates.length <= 1) {
+    return undefined;
+  }
 
   return (tried: readonly string[]): Model | undefined => {
     const used = new Set(tried);
@@ -67,9 +69,13 @@ export function createStallFallbackPicker(
         candidate.model,
         params.agentDir,
         params.cfg,
-      ) as { model?: Model<Api> };
-      if (!resolved.model) continue;
-      if (used.has(modelRef(resolved.model))) continue;
+      ) as { model?: Model };
+      if (!resolved.model) {
+        continue;
+      }
+      if (used.has(modelRef(resolved.model))) {
+        continue;
+      }
       return resolved.model;
     }
     return undefined;

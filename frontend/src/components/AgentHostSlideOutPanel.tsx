@@ -24,6 +24,7 @@ import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useFormat } from "@/i18n/useFormat";
 import { PanelWidthControl, resolvePanelWidth, usePanelWidth, type PanelWidth } from '@/components/panelWidthControl';
+import { PanelCloseButton } from '@/components/PanelCloseButton';
 
 export type AgentHostPanelTab =
   | 'details'
@@ -212,28 +213,6 @@ export function AgentHostSlideOutPanel({
             flexWrap: 'wrap',
           }}
         >
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              width: 36,
-              height: 36,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--bg-base)',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer',
-            }}
-            aria-label={t('closePanel')}
-          >
-            <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>{agentHost.name}</div>
             {agentHost.slug && (
@@ -242,92 +221,99 @@ export function AgentHostSlideOutPanel({
               </div>
             )}
           </div>
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              textTransform: 'uppercase',
-              padding: '4px 8px',
-              borderRadius: 'var(--radius-sm)',
-              background: statusColor,
-              color: 'var(--text-secondary)',
-            }}
-          >
-            {statusLabel}
-          </span>
-          {isDefault && (
+          {/* The header's trailing group: badges, actions, then the panel's
+              way out. Its own wrapping row so a narrow drawer stacks the
+              actions while the close button stays in the top-right corner. */}
+          <div className="panel-header-trail">
             <span
               style={{
                 fontSize: 11,
                 fontWeight: 600,
+                textTransform: 'uppercase',
                 padding: '4px 8px',
                 borderRadius: 'var(--radius-sm)',
-                background: 'var(--surface-coral-soft, rgba(244,114,94,0.15))',
-                color: 'var(--coral-bright)',
+                background: statusColor,
+                color: 'var(--text-secondary)',
               }}
             >
-              {t('default')}
+              {statusLabel}
             </span>
-          )}
-          {canSetDefault &&
-            (isDefault ? (
-              <button
-                type="button"
-                onClick={handleClearDefault}
-                disabled={savingDefault}
+            {isDefault && (
+              <span
                 style={{
-                  padding: '6px 12px',
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: 600,
-                  background: 'var(--bg-base)',
-                  color: 'var(--text-secondary)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-md)',
-                  cursor: savingDefault ? 'wait' : 'pointer',
+                  padding: '4px 8px',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'var(--surface-coral-soft, rgba(244,114,94,0.15))',
+                  color: 'var(--coral-bright)',
                 }}
               >
-                {savingDefault ? t('updating') : t('clearDefault')}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleSetDefault}
-                disabled={savingDefault}
-                style={{
-                  padding: '6px 12px',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  background: 'var(--surface-interactive)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-md)',
-                  cursor: savingDefault ? 'wait' : 'pointer',
-                }}
-              >
-                {savingDefault ? t('setting') : t('setAsDefault')}
-              </button>
-            ))}
-          {showWidthControl && (
-            <PanelWidthControl value={effectiveWidth as PanelWidth} onChange={chooseWidth} />
-          )}
-          <button
-            type="button"
-            onClick={handleDeregister}
-            disabled={deleting}
-            title={t('deregisterTitle')}
-            style={{
-              padding: '6px 12px',
-              fontSize: 12,
-              fontWeight: 600,
-              background: 'var(--danger-bg, rgba(239,68,68,0.12))',
-              color: 'var(--danger)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 'var(--radius-md)',
-              cursor: deleting ? 'wait' : 'pointer',
-            }}
-          >
-            {deleting ? t('deregistering') : t('deregister')}
-          </button>
+                {t('default')}
+              </span>
+            )}
+            {canSetDefault &&
+              (isDefault ? (
+                <button
+                  type="button"
+                  onClick={handleClearDefault}
+                  disabled={savingDefault}
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    background: 'var(--bg-base)',
+                    color: 'var(--text-secondary)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 'var(--radius-md)',
+                    cursor: savingDefault ? 'wait' : 'pointer',
+                  }}
+                >
+                  {savingDefault ? t('updating') : t('clearDefault')}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleSetDefault}
+                  disabled={savingDefault}
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    background: 'var(--surface-interactive)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 'var(--radius-md)',
+                    cursor: savingDefault ? 'wait' : 'pointer',
+                  }}
+                >
+                  {savingDefault ? t('setting') : t('setAsDefault')}
+                </button>
+              ))}
+            {showWidthControl && (
+              <PanelWidthControl value={effectiveWidth as PanelWidth} onChange={chooseWidth} />
+            )}
+            <button
+              type="button"
+              onClick={handleDeregister}
+              disabled={deleting}
+              title={t('deregisterTitle')}
+              style={{
+                padding: '6px 12px',
+                fontSize: 12,
+                fontWeight: 600,
+                background: 'var(--danger-bg, rgba(239,68,68,0.12))',
+                color: 'var(--danger)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-md)',
+                cursor: deleting ? 'wait' : 'pointer',
+              }}
+            >
+              {deleting ? t('deregistering') : t('deregister')}
+            </button>
+            {/* Top right, last in the row — the app-wide panel close corner. */}
+            <PanelCloseButton onClose={onClose} />
+          </div>
         </div>
 
         {/* Tabs */}

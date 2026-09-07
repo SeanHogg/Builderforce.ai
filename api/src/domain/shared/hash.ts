@@ -3,7 +3,7 @@
  *
  * This function was written four times, byte for byte, differing only in whether
  * the author spelled the spread `[...new Uint8Array(d)]` or `Array.from(...)`:
- * `creationSessionRouteService.ts` (invitation tokens), `ObjectRegistry.ts` (share
+ * `creationSessionRoutes.ts` (invitation tokens), `ObjectRegistry.ts` (share
  * links), `feedbackSpec.ts` (duplicate-collapse keys) and `errorSpec.ts` (error
  * grouping fingerprints). Two of those four are security boundaries — the stored
  * hash is what makes a leaked database row unable to mint a working link — and a

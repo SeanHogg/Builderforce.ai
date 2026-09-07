@@ -4,7 +4,7 @@ import {
   distinctIdCounts,
   pgFailureDetail,
   type PlannedClaimWrite,
-} from './creationSessionRouteService';
+} from './creationSessionModel';
 
 /**
  * The claim's 500 could only ever be reasoned about by inference: `db.batch` on

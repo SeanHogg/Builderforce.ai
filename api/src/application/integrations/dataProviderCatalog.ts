@@ -27,7 +27,7 @@
  */
 
 /** Which half of the catalog a provider belongs to. */
-export type ProviderFamily = 'data' | 'marketing';
+export type ProviderFamily = 'data' | 'marketing' | 'enrichment';
 
 /** How the provider is reached from a Worker. See the transport note above. */
 export type ProviderTransport = 'http' | 'tcp';
@@ -652,6 +652,136 @@ const MAILCHIMP: ProviderSpec = {
   },
 };
 
+
+// ---------------------------------------------------------------------------
+// Enrichment — the third family (PRD 19 §9)
+// ---------------------------------------------------------------------------
+
+/**
+ * A PERSON-ENRICHMENT vendor: you hand it an email, it hands back roles,
+ * education and (with wildly varying confidence) compensation.
+ *
+ * These are the vendors `enrichment_cache` was built for and had none of. Every
+ * call costs real money PER CALL — which is the entire reason the cache exists,
+ * why {@link EnrichmentSpec.callCostCents} is declared here beside the request
+ * rather than guessed at the call site, and why `cost_cents_avoided` could only
+ * ever read zero while no vendor existed to avoid paying.
+ *
+ * The prices are the vendors' own published list rates at the time of writing,
+ * in whole cents per successful lookup, and they are a DEFAULT: a workspace on a
+ * negotiated rate overrides it per connection. They are used for one thing —
+ * reporting money not spent — so being approximately right is worth far more
+ * than the zero a missing number reports.
+ */
+export interface EnrichmentSpec {
+  id: string;
+  label: string;
+  /** Whole cents one successful person lookup costs at list price. */
+  callCostCents: number;
+  /** Build the person-by-email lookup. */
+  lookup(creds: Record<string, unknown>, email: string): ProviderRequest;
+  /** Header builder for the connectivity test, which is the same auth. */
+  testRequest(creds: Record<string, unknown>): ProviderRequest;
+}
+
+const ENRICHMENT_SPECS: EnrichmentSpec[] = [
+  {
+    id: 'clearbit',
+    label: 'Clearbit',
+    callCostCents: 20,
+    lookup: (creds, email) => ({
+      ok: true,
+      url: `https://person.clearbit.com/v2/people/find?email=${encodeURIComponent(email)}`,
+      method: 'GET',
+      headers: { ...JSON_HEADERS, authorization: `Bearer ${str(creds.apiKey)}` },
+    }),
+    // Clearbit has no cheap `whoami`; a lookup of a well-known address is the
+    // documented way to prove a key, and a 404 still proves authentication.
+    testRequest: (creds) => ({
+      ok: true,
+      url: 'https://person.clearbit.com/v2/people/find?email=alex@clearbit.com',
+      method: 'GET',
+      headers: { ...JSON_HEADERS, authorization: `Bearer ${str(creds.apiKey)}` },
+    }),
+  },
+  {
+    id: 'people_data_labs',
+    label: 'People Data Labs',
+    callCostCents: 10,
+    lookup: (creds, email) => ({
+      ok: true,
+      url: `https://api.peopledatalabs.com/v5/person/enrich?email=${encodeURIComponent(email)}`,
+      method: 'GET',
+      headers: { ...JSON_HEADERS, 'x-api-key': str(creds.apiKey) },
+    }),
+    testRequest: (creds) => ({
+      ok: true,
+      // `min_likelihood=10` with no identifiers returns a 400 from an AUTHENTICATED
+      // key and a 401 from a bad one, which is exactly the distinction a test needs.
+      url: 'https://api.peopledatalabs.com/v5/person/enrich',
+      method: 'GET',
+      headers: { ...JSON_HEADERS, 'x-api-key': str(creds.apiKey) },
+    }),
+  },
+  {
+    id: 'apollo',
+    label: 'Apollo.io',
+    callCostCents: 5,
+    lookup: (creds, email) => ({
+      ok: true,
+      url: 'https://api.apollo.io/api/v1/people/match',
+      method: 'POST',
+      headers: { ...JSON_HEADERS, 'x-api-key': str(creds.apiKey) },
+      body: JSON.stringify({ email, reveal_personal_emails: false }),
+    }),
+    testRequest: (creds) => ({
+      ok: true,
+      url: 'https://api.apollo.io/api/v1/auth/health',
+      method: 'GET',
+      headers: { ...JSON_HEADERS, 'x-api-key': str(creds.apiKey) },
+    }),
+  },
+];
+
+/** The one lookup operation an enrichment provider exposes. */
+export const ENRICHMENT_LOOKUP_OP = 'enrich-person';
+
+/** Provider id → its enrichment spec, for the port that prices and caches calls. */
+export const ENRICHMENT_CATALOG: ReadonlyMap<string, EnrichmentSpec> = new Map(
+  ENRICHMENT_SPECS.map((spec) => [spec.id, spec]),
+);
+
+export function enrichmentSpec(id: string): EnrichmentSpec | null {
+  return ENRICHMENT_CATALOG.get(normalizeProviderId(id)) ?? null;
+}
+
+/** Fold one enrichment vendor into the shared provider contract, so it connects,
+ *  tests and stores its credential exactly like every other integration. */
+function enrichmentProvider(spec: EnrichmentSpec): ProviderSpec {
+  return {
+    id: spec.id,
+    label: spec.label,
+    family: 'enrichment',
+    transport: 'http',
+    credentialFields: [API_KEY_FIELD],
+    operations: [
+      { id: 'whoami', label: 'Check connection' },
+      { id: ENRICHMENT_LOOKUP_OP, label: 'Enrich a person by email' },
+    ],
+    testOperation: 'whoami',
+    buildRequest(op, creds, params) {
+      if (!str(creds.apiKey)) return missing('apiKey');
+      if (op === 'whoami') return spec.testRequest(creds);
+      if (op === ENRICHMENT_LOOKUP_OP) {
+        const email = str(params.email);
+        if (!email) return missing('email');
+        return spec.lookup(creds, email);
+      }
+      return unsupportedOp(spec.label, op);
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // The catalog
 // ---------------------------------------------------------------------------
@@ -679,6 +809,9 @@ const SPECS: ProviderSpec[] = [
   // marketing
   ...MARKETING_PROVIDER_SPECS.map(bearerMarketingProvider),
   MAILCHIMP,
+  // enrichment — a person lookup, priced per call, which is what makes the
+  // enrichment cache worth having (see EnrichmentSpec).
+  ...ENRICHMENT_SPECS.map(enrichmentProvider),
 ];
 
 /** Provider id → spec. */
@@ -689,6 +822,7 @@ export const CATALOG_PROVIDER_IDS: readonly string[] = SPECS.map((s) => s.id);
 
 export const DATA_PROVIDER_IDS: readonly string[] = SPECS.filter((s) => s.family === 'data').map((s) => s.id);
 export const MARKETING_PROVIDER_IDS: readonly string[] = SPECS.filter((s) => s.family === 'marketing').map((s) => s.id);
+export const ENRICHMENT_PROVIDER_IDS: readonly string[] = SPECS.filter((s) => s.family === 'enrichment').map((s) => s.id);
 
 /**
  * Palette ids are kebab-case (`zoho-crm`, `google-cloud-sql`) because that is

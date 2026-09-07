@@ -898,8 +898,13 @@ interface ChatTicketsAdapter {
      * toast already falls back to the requested agent's pool name, so a null is a display
      * decision, not a missing value; naming the requested agent as the RUNNER would be
      * the only wrong answer.
+     *
+     * `chatId` BINDS the run to the conversation that asked for it: the agent is
+     * invited into the chat and the dispatch carries the chat, so the run narrates
+     * there and is reachable from it. A dispatch without it runs invisibly — which
+     * is precisely what the VS Code host's own copy of this adapter used to do.
      */
-    runTicket(kind: TicketKind, ref: string, agentRef: string): Promise<{
+    runTicket(kind: TicketKind, ref: string, agentRef: string, chatId: number): Promise<{
         started: boolean;
         agentName: string | null;
     }>;
@@ -1060,6 +1065,30 @@ declare function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, l
  * props (memoize `chatList` and `onChanged`) for the memo to take effect.
  */
 declare const ChatTicketsPanel: React.MemoExoticComponent<typeof ChatTicketsPanelInner>;
+
+/** An authenticated JSON call, relative to the gateway origin. */
+type ChatTicketsRequest = <T>(path: string, init?: {
+    method?: string;
+    body?: BodyInit;
+}) => Promise<T>;
+interface ChatTicketsRestOptions {
+    /** How this host makes an authenticated JSON call. */
+    request: ChatTicketsRequest;
+    /**
+     * Whether this surface may dispatch a run, and if not, why.
+     *
+     * Asked of the host because it is the one thing neither this package nor the
+     * gateway response can answer: the web app gates on the `runtime.execute`
+     * tenant role, and the VS Code webview has no tenant-role context at all.
+     * Omitted means permitted — which is the VSIX's existing behaviour, and the
+     * server still refuses on its own authority.
+     */
+    canRun?: () => {
+        allowed: boolean;
+        reason?: string;
+    };
+}
+declare function createChatTicketsRestAdapter(opts: ChatTicketsRestOptions): ChatTicketsAdapter;
 
 /**
  * The invited participants of a chat, resolved to display names, as addressable
@@ -2189,4 +2218,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, type MessageRating, ParticipantBadge, type PendingAskUser, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, SLOW_AFTER_MS, Sunburst, type SunburstProps, TICKET_KINDS, type ThinkSegment, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, answerTextOf, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, evermindLearnedStatus, evermindNextAction, formatDuration, formatElapsed, formatPayload, healthRingColor, initialsOf, parseAskUser, pendingChangesSummary, promptOptionsLabels, resolvePendingChangesLabels, selectPendingAskUser, serializeAskUser, splitThinkSegments, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };
+export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, type MessageRating, ParticipantBadge, type PendingAskUser, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, SLOW_AFTER_MS, Sunburst, type SunburstProps, TICKET_KINDS, type ThinkSegment, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, answerTextOf, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, createChatTicketsRestAdapter, evermindLearnedStatus, evermindNextAction, formatDuration, formatElapsed, formatPayload, healthRingColor, initialsOf, parseAskUser, pendingChangesSummary, promptOptionsLabels, resolvePendingChangesLabels, selectPendingAskUser, serializeAskUser, splitThinkSegments, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };

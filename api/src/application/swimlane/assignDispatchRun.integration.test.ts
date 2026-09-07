@@ -4,7 +4,7 @@ import { tryCoordinatorLaneEntry } from './laneCoordinatorEntry';
 import { evaluateTaskAutoRun } from './evaluateAutoRun';
 import { enforceLaneRequirements } from './laneRequirementGate';
 import { evaluateExecutionApprovalGate } from '../runtime/executionApprovalGate';
-import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
+import { dispatchCloudRunForTask } from '../runtime/dispatchCloudRun';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
@@ -41,7 +41,7 @@ vi.mock('../runtime/autoRunSkipLedger', () => ({
 vi.mock('../runtime/cronWorkSignal', () => ({ signalPendingWork: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../runtime/executionReadMemo', () => ({ createExecutionReadMemo: () => ({ listByTask: async () => [] }) }));
 vi.mock('../runtime/executionApprovalGate', () => ({ evaluateExecutionApprovalGate: vi.fn() }));
-vi.mock('../../presentation/routes/runtimeRoutes', () => ({ dispatchCloudRunForTask: vi.fn() }));
+vi.mock('../runtime/dispatchCloudRun', () => ({ dispatchCloudRunForTask: vi.fn() }));
 vi.mock('../../buildRuntimeService', () => ({ buildRuntimeService: () => ({} as RuntimeService) }));
 
 const mockCoordinator = vi.mocked(tryCoordinatorLaneEntry);

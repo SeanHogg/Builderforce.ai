@@ -5,7 +5,7 @@
  */
 
 import type { EMBEDDED_CAPABILITY_KEYS } from './embeddedCapabilities';
-import { attachEvermindLearn, subscribeToChatMessages } from '@seanhogg/builderforce-brain-embedded';
+import { createBrainRestPersistence } from '@seanhogg/builderforce-brain-embedded';
 import { AUTH_API_URL, getStoredTenantToken } from './auth';
 import { apiSocketUrl } from './apiSocket';
 import { downloadBlob, filenameFromResponse } from './download';
@@ -400,18 +400,24 @@ export interface BrainMessage {
   evermindLearn?: { learned: boolean; version: number };
 }
 
+/**
+ * The Builderforce `/api/brain` client.
+ *
+ * The chat/message half IS `createBrainRestPersistence` — the same definition the
+ * VS Code webview mounts, because both hosts call the same endpoints and their two
+ * hand-written copies had already drifted on `deleteChat` and `markChatRead`. What
+ * is spread on after it is the web-only surface: the team chat, chat↔ticket links,
+ * members, agent invites and the persisted run trace, none of which the webview
+ * mounts.
+ */
 export const brain = {
-  listChats: (params?: { projectId?: string; limit?: number; offset?: number }) => {
-    const q = new URLSearchParams();
-    if (params?.projectId) q.set('projectId', params.projectId);
-    if (params?.limit != null) q.set('limit', String(params.limit));
-    if (params?.offset != null) q.set('offset', String(params.offset));
-    const query = q.toString();
-    return request<{ chats: BrainChat[] }>(`/api/brain/chats${query ? `?${query}` : ''}`).then((r) => r.chats);
-  },
-
-  createChat: (body: { title?: string; projectId?: number | null; capability?: string | null; mode?: string | null }) =>
-    request<BrainChat>('/api/brain/chats', { method: 'POST', body: JSON.stringify(body) }),
+  ...createBrainRestPersistence({
+    baseUrl: AUTH_API_URL,
+    request,
+    getToken: getStoredTenantToken,
+    // No `uploadFile` override: `apiRequest` already leaves Content-Type unset for
+    // a FormData body, so the multipart boundary survives.
+  }),
 
   /** Resolve-or-create the canonical TEAM chat for a scope: a project when
    *  `projectId` is set, a named workforce team when `teamId` is set, otherwise
@@ -424,81 +430,6 @@ export const brain = {
     return request<BrainChat & { isTeamChat: true; isOwner: boolean; visibility: 'shared' | 'locked' }>(
       `/api/brain/team-chat${query ? `?${query}` : ''}`,
     );
-  },
-
-  getChat: (id: number) => request<BrainChat>(`/api/brain/chats/${id}`),
-
-  updateChat: (id: number, body: { title?: string; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null; mode?: string | null }) =>
-    request<BrainChat>(`/api/brain/chats/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
-
-  deleteChat: (id: number) =>
-    request<{ archived: boolean }>(`/api/brain/chats/${id}`, { method: 'DELETE' }),
-
-  /** Summarize chat and store summary on the chat. Returns { summary } or { error }. */
-  summarizeChat: (chatId: number) =>
-    request<{ summary: string } | { error: string }>(`/api/brain/chats/${chatId}/summarize`, { method: 'POST' }),
-
-  getMessages: (chatId: number, limit?: number) => {
-    const q = limit != null ? `?limit=${limit}` : '';
-    return request<{ messages: BrainMessage[] }>(`/api/brain/chats/${chatId}/messages${q}`).then((r) => r.messages);
-  },
-
-  subscribeMessages: (chatId: number, onChanged: () => void) =>
-    subscribeToChatMessages(AUTH_API_URL, getStoredTenantToken, chatId, onChanged),
-
-  /** Advance the caller's unread high-water mark for a chat (clears its unread
-   *  badge). `seq` omitted marks everything read. Best-effort on the client. */
-  markChatRead: (chatId: number, seq?: number) =>
-    request<{ lastReadSeq: number }>(`/api/brain/chats/${chatId}/read`, {
-      method: 'POST',
-      body: JSON.stringify(seq != null ? { seq } : {}),
-    }),
-
-  sendMessages: (chatId: number, messages: Array<{ role: string; content: string; metadata?: string }>) =>
-    request<{ messages: BrainMessage[]; evermindLearn?: { learned: boolean; version: number } }>(`/api/brain/chats/${chatId}/messages`, {
-      method: 'POST',
-      body: JSON.stringify({ messages }),
-      // Attach the server's TRUTHFUL learn-gate outcome (transient, not persisted) to
-      // the assistant turn(s) this POST persisted, so the Brain run loop renders a
-      // learn/skip step exactly when the server contributed — not from a client
-      // heuristic. Shared with the VS Code webview adapter so the two never drift.
-    }).then((r) => attachEvermindLearn(r.messages, r.evermindLearn)),
-
-  /** Set thumbs up/down on a message (null clears). `context.toolName` is the MCP
-   *  tool the rated turn ran — the server files it, with the reply's resolved model,
-   *  as an `llm_action_ratings` row the learned router ranks on. */
-  setMessageFeedback: (messageId: number, feedback: 'up' | 'down' | null, context?: { toolName?: string | null }) =>
-    request<{ ok: boolean }>(`/api/brain/messages/${messageId}/feedback`, {
-      method: 'PATCH',
-      body: JSON.stringify({ feedback, toolName: context?.toolName ?? null }),
-    }),
-
-  /** Upload a file for use as an attachment in chat. Returns key, name, type. */
-  upload: async (file: File): Promise<{ key: string; name: string; type: string }> => {
-    const form = new FormData();
-    form.append('file', file);
-    // apiRequest leaves Content-Type unset for FormData so the multipart
-    // boundary survives — no hand-built header block needed.
-    return request<{ key: string; name: string; type: string }>('/api/brain/upload', {
-      method: 'POST',
-      body: form,
-    });
-  },
-
-  /** URL to view/download an uploaded file by key. */
-  uploadUrl: (key: string) => `${AUTH_API_URL}/api/brain/uploads/${key}`,
-
-  /**
-   * Mint a short-lived signed public URL for an uploaded object so an upstream
-   * LLM provider can fetch it (vision). Used only for an image too large to
-   * inline as a data URL — see brain-embedded's image prep.
-   */
-  signedUploadUrl: async (key: string): Promise<string> => {
-    const { exp, sig } = await request<{ exp: number; sig: string }>('/api/brain/uploads/sign', {
-      method: 'POST',
-      body: JSON.stringify({ key }),
-    });
-    return `${AUTH_API_URL}/api/brain-files/${key}?exp=${exp}&sig=${encodeURIComponent(sig)}`;
   },
 
   /**
@@ -7063,7 +6994,11 @@ export type IntegrationProvider =
   | 'tavily' | 'ollama' | 'exa' | 'linkup'
   // Google connectors (OAuth offline credentials): Gmail powers the email
   // workflow node; Google Drive can back a project's file storage.
-  | 'gmail' | 'google_drive';
+  | 'gmail' | 'google_drive'
+  // Person-enrichment vendors. Each bills PER LOOKUP, which is why the key is
+  // yours and why every lookup goes through `enrichment_cache` — connect one and
+  // /revenue-intel can fill a contact's roles, education and inferred comp.
+  | 'clearbit' | 'people_data_labs' | 'apollo';
 
 export interface IntegrationCredential {
   id: string;

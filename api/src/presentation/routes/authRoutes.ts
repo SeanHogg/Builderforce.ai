@@ -1,6 +1,8 @@
 import { Hono, type Context } from 'hono';
 import { and, desc, eq, getTableColumns, gt, inArray, isNull, or, sql } from 'drizzle-orm';
 import { AuthService } from '../../application/auth/AuthService';
+import type { TenantService } from '../../application/tenant/TenantService';
+import { landPendingInvitations } from '../../application/tenant/pendingInvitationLanding';
 import { DeviceAuthService } from '../../application/auth/DeviceAuthService';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import { credentialSecret } from '../../application/integrations/credentialCrypto';
@@ -235,7 +237,7 @@ async function replaceRecoveryCodes(db: Db, userId: string, codes: string[]) {
  *   POST /api/auth/tenant-token   – exchange WebJWT + tenantId for tenant-scoped JWT
  *   GET  /api/auth/me             – return caller's profile (WebJWT required)
  */
-export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv> {
+export function createAuthRoutes(authService: AuthService, tenantService: TenantService, db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
   // GET /api/auth/introspect — the legacy worker's session check; own module.
@@ -1299,6 +1301,12 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
   // GET /api/auth/my-tenants  (requires WebJWT)
   router.get('/my-tenants', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
+    // Land any invitation sent to this account's address before it existed (or
+    // before it last returned) FIRST — it becomes a membership and appears in the
+    // list below on this very request. This is the endpoint every client actually
+    // calls to discover its workspaces, so without this a cold invitee signs up,
+    // sees nothing, and the invitation stays pending forever.
+    await landPendingInvitations(db, c.env as Env, tenantService, userId);
     const result = await authService.myTenants(userId);
     return c.json(result);
   });

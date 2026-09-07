@@ -134,14 +134,24 @@ export interface RoomPanel {
   objectId: string;
   label: string;
   color: string;
+  /** A picture of what the object produced, when it produced one. */
+  preview?: string | undefined;
   position: [number, number, number];
 }
 
-/** The minimum an object needs to hang on the wall. */
+/**
+ * The minimum an object needs to hang on the wall.
+ *
+ * Deliberately the same three-or-four facts `Canvas3DDescriptor` already
+ * carries, so the host describes an object ONCE for both spatial readings: a
+ * card is the same card whether you are looking at the depth projection or
+ * standing in front of it.
+ */
 export interface RoomWallObject {
   id: string;
   label: string;
   color: string;
+  preview?: string | undefined;
 }
 
 /**
@@ -149,16 +159,22 @@ export interface RoomWallObject {
  *
  * Rows build UPWARD from {@link ROOM_PANEL_BASE_Y} and each row is centred, so a
  * partial second row sits over the middle of the first rather than hanging off
- * one end. Returning the overflow count rather than silently truncating is the
- * point: a wall that quietly shows twelve of ninety cards is a wall that lies.
+ * one end.
+ *
+ * The cap is applied here even though the caller has usually applied it already —
+ * the caller slices because describing four hundred cards to draw ten of them is
+ * work nobody sees, and this slices because a layout function that trusts its
+ * input to be short is a layout function that eventually is not. One CONSTANT,
+ * two enforcements, no second opinion about the number. How many were left off is
+ * not returned: only the caller knows the true total, and a count derived from an
+ * already-truncated list would report zero and be believed.
  */
-export function wallPanels(objects: readonly RoomWallObject[]): { panels: RoomPanel[]; hidden: number } {
+export function wallPanels(objects: readonly RoomWallObject[]): RoomPanel[] {
   const shown = objects.slice(0, ROOM_WALL_CAPACITY);
-  const hidden = Math.max(0, objects.length - shown.length);
   const stride = ROOM_PANEL_WIDTH + ROOM_PANEL_GAP;
   const rowHeight = ROOM_PANEL_HEIGHT + ROOM_PANEL_GAP;
 
-  const panels = shown.map((object, i) => {
+  return shown.map((object, i) => {
     const row = Math.floor(i / ROOM_PANEL_COLUMNS);
     const column = i % ROOM_PANEL_COLUMNS;
     // Width of THIS row, so the last row centres on its own contents.
@@ -168,11 +184,10 @@ export function wallPanels(objects: readonly RoomWallObject[]): { panels: RoomPa
       objectId: object.id,
       label: object.label,
       color: object.color,
+      preview: object.preview,
       position: [left + column * stride, ROOM_PANEL_BASE_Y + row * rowHeight, ROOM_WALL_Z] as [number, number, number],
     };
   });
-
-  return { panels, hidden };
 }
 
 /**

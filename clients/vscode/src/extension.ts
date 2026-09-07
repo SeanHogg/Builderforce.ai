@@ -476,16 +476,18 @@ export function activate(context: vscode.ExtensionContext): void {
         surfaceError(e, "command:renameSession", `BuilderForce: could not rename chat (${(e as Error).message}).`);
       }
     }),
-    // "Open Chat" opens the unified Brain (the improved experience).
-    vscode.commands.registerCommand("builderforce.openChat", () => BrainWebview.open(context)),
-    // The unified Brain — the SAME React <BrainTimeline> + brain-embedded core as
-    // the web app, backed by the same server-side /api/brain conversations. This is
-    // the primary, improved chat experience (timeline transcript, tool input/output,
-    // images). Local file edits run in the host via the tool bridge.
-    vscode.commands.registerCommand("builderforce.openBrain", () => BrainWebview.open(context)),
-    // Mascot button in the editor title bar (top-right of the active pane) —
-    // opens the unified Brain chat, mirroring how peer agents surface there.
-    vscode.commands.registerCommand("builderforce.editorChat", () => BrainWebview.open(context)),
+    // THREE ids, ONE action: open the unified Brain — the same React <BrainTimeline>
+    // + brain-embedded core as the web app, backed by the same server-side
+    // /api/brain conversations. Local file edits run in the host via the tool bridge.
+    //
+    // They are not interchangeable CONTRIBUTIONS, which is why all three are still
+    // registered: `editorChat` is the mascot button in the editor title bar, and
+    // `openChat` is a back-compat alias kept for anyone whose keybinding or task
+    // still names it. Only `openBrain` is contributed to the palette — the two
+    // palette entries for one action were the duplication, not the ids.
+    ...["builderforce.openBrain", "builderforce.openChat", "builderforce.editorChat"].map((id) =>
+      vscode.commands.registerCommand(id, () => BrainWebview.open(context)),
+    ),
     vscode.commands.registerCommand("builderforce.signIn", () => signIn(context)),
     vscode.commands.registerCommand("builderforce.signOut", () => signOut(context, auth)),
     vscode.commands.registerCommand("builderforce.pickModel", () => pickModel(context)),

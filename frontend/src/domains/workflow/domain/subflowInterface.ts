@@ -29,7 +29,11 @@
  */
 
 import { stepInputsOf, stepOutputsOf } from './flowStepObject';
-import { isFlowStepObject } from './compileBoardFlow';
+// From `boardFlow`, NOT from the compiler that re-exports it: the compiler lowers a
+// nested canvas, the lowering asks this module what that canvas accepts, and going
+// back through the compiler for one predicate closes that line into a static import
+// cycle — which crashes the page it is bundled into before React mounts.
+import { isFlowStepObject } from './boardFlow';
 import type { SubflowBoard } from './subflow';
 
 /** One named thing crossing the boundary, and the step that named it. */

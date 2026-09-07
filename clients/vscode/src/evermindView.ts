@@ -4,6 +4,8 @@ import { canManageActiveWorkspace, getTenantJwt, invalidateProjectEvermind } fro
 import { getBaseUrl, SECRET_KEY } from "./gateway";
 import { getSelectedProject } from "./projectState";
 import { renderWebviewHtml } from "./webviewShared";
+import { handleSharedHostMessage, respondToWebview } from "./webviewHostBridge";
+import { assertHandled, type EvermindHostMessage } from "./bridgeProtocol";
 import { compactMemoryFiles, compactionTargets, readMemorySource, type CompactRequest } from "./memoryImport";
 
 /**
@@ -55,17 +57,13 @@ export class EvermindViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async onMessage(msg: { type?: string; id?: string; version?: number; text?: string } & CompactRequest): Promise<void> {
+    // `token.refresh` and `signin` are host-owned on EVERY surface and answered by
+    // the shared bridge, so this view and the panel base cannot disagree about them
+    // (they had already diverged on whether a success carries an `error` key).
+    if (await handleSharedHostMessage(this.ctx, this.view?.webview, msg)) return;
     switch (msg.type) {
       case "ready":
         await this.sendInit();
-        break;
-      case "token.refresh": {
-        const token = (await getTenantJwt(this.ctx.secrets)) ?? null;
-        this.respond(msg.id, true, { token });
-        break;
-      }
-      case "signin":
-        void vscode.commands.executeCommand("builderforce.signIn");
         break;
       // Import step 1 — let the user pick a memory SOURCE (a builderforce-memory JSON
       // snapshot or a Claude Code auto-memory folder); read + parse it and hand the
@@ -89,6 +87,13 @@ export class EvermindViewProvider implements vscode.WebviewViewProvider {
       case "evermind.copyText":
         await this.copyText(msg.id, msg.text);
         break;
+      default:
+        // Exhaustiveness over this view's OWN slice of the bridge vocabulary: once
+        // every `EvermindHostMessage` has a case above, the narrowed type here is
+        // `never` and this compiles. Add a name to `bridgeProtocol` without a case
+        // and the build fails — rather than the message being silently dropped,
+        // which is what an untyped `default: break` did.
+        assertHandled(msg.type as Exclude<EvermindHostMessage, "evermind.pickMemory" | "evermind.compactMemory" | "evermind.copyText">);
     }
   }
 
@@ -155,8 +160,7 @@ export class EvermindViewProvider implements vscode.WebviewViewProvider {
   }
 
   private respond(id: string | undefined, ok: boolean, result?: unknown, error?: string): void {
-    if (!id || !this.view) return;
-    void this.view.webview.postMessage({ type: "response", id, ok, result, ...(error ? { error } : {}) });
+    respondToWebview(this.view?.webview, id, ok, result, error);
   }
 
   /** Hand the React app its config: gateway URL, tenant token, active project, the

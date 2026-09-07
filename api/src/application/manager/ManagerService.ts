@@ -92,7 +92,7 @@ import {
 import { loadPassRotation, savePassRotation } from './passRotation';
 import { invalidateDailyDigest } from './dailyDigest';
 import { raiseSystemicFindings } from './systemicDiagnosis';
-import { dispatchTaskFinalize } from '../../presentation/routes/taskRoutes';
+import { dispatchTaskFinalize } from '../task/taskFinalize';
 import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
 import { TicketAuditService } from '../audit/ticketAuditService';
 import { coordinateTicket } from './coordinateTicket';

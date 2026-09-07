@@ -3,7 +3,7 @@
  * AT a board points at.
  *
  * ── WHY IT IS ITS OWN MODULE ─────────────────────────────────────────────────────
- * These two helpers were private closures in `creationSessionRouteService.ts` while
+ * These two helpers were private closures in `creationSessionRoutes.ts` while
  * that file was the only thing that needed them. Invite LINKS need the identical
  * answer: a link is a `share_links` row hanging off this object, exactly as an email
  * invitation is an `invitations` row hanging off it, and the two must resolve the

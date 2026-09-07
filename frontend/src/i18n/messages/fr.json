@@ -12272,6 +12272,22 @@
       "other": "Autre"
     }
   },
+  "taskPrd": {
+    "emptyTask": "Cette tâche n’a pas encore de PRD. Les agents s’appuient sur le PRD pour comprendre l’objectif et se passer le travail d’un couloir à l’autre.",
+    "emptyProject": "Aucun PRD n’a encore été rédigé pour ce projet. Utilisez Brain ou l’onglet PRD pour en rédiger un — les agents s’en servent pour se passer le travail d’un couloir à l’autre.",
+    "generating": "Génération…",
+    "generateWithAi": "Générer avec l’IA",
+    "createPrd": "Créer un PRD",
+    "attachExisting": "Associer un PRD existant…",
+    "setPrimary": "Définir comme principal",
+    "detach": "Dissocier",
+    "viewPreview": "Aperçu",
+    "viewRaw": "SOURCE",
+    "expandFullScreen": "Passer en plein écran",
+    "exitFullScreen": "Quitter le plein écran",
+    "prdLabel": "PRD",
+    "prdFallback": "PRD {id}"
+  },
   "taskMgmt": {
     "bulkChangeStatus": "Modifier le statut en masse…",
     "branchAndPr": "Branche et PR",
@@ -22539,6 +22555,37 @@
         "regionLabel": "Les analyses de cette session",
         "openFull": "Ouvrir le tableau de bord complet"
       },
+      "room": {
+        "standup": {
+          "caption": "Point quotidien",
+          "groupLabel": "Commandes du point quotidien",
+          "projectLabel": "Projet concerné par ce point",
+          "allProjects": "Tous les projets",
+          "projectFallback": "Projet {id}",
+          "previous": "Projet précédent",
+          "next": "Projet suivant",
+          "start": "Démarrer le point",
+          "starting": "Démarrage…",
+          "live": "En cours · {project}",
+          "finish": "Terminer",
+          "finishing": "Clôture…",
+          "needsProject": "Choisissez un projet pour enregistrer ce point",
+          "dismiss": "Masquer"
+        },
+        "label": "Salle",
+        "enter": "Se retrouver dans la salle",
+        "active": "Vous êtes dans la salle",
+        "regionLabel": "La salle de cette session",
+        "here": "{here} sur {total} présents",
+        "rosterHead": "{count, plural, =0 {Personne pour l'instant} one {# personne} other {# personnes}}",
+        "unknown": "Collaborateur",
+        "you": "Vous",
+        "inRoom": "Dans la salle",
+        "onBoard": "Sur le tableau",
+        "noWebglTitle": "La 3D n'est pas disponible sur cet appareil",
+        "noWebglBody": "La salle nécessite WebGL, que ce navigateur ne parvient pas à démarrer. Toutes les personnes présentes dans la session sont listées ci-dessous, et le reste du canevas fonctionne normalement.",
+        "wallOverflow": "{count, plural, one {# objet de plus n'est pas au mur} other {# objets de plus ne sont pas au mur}}"
+      },
       "page": {
         "label": "Page",
         "open": "Ouvrir en pleine page"
@@ -22624,6 +22671,11 @@
           }
         },
         "panel": {
+          "surfaceImage": "Image sur sa face",
+          "surfaceImagePlaceholder": "https://… (une photo, un schéma)",
+          "surfaceFit": "Ajustement",
+          "surfaceFitCover": "Remplir la face",
+          "surfaceFitContain": "Tenir dans la face",
           "transform": "Transformation",
           "appearance": "Apparence",
           "physics": "Physique et corps",
@@ -23529,7 +23581,8 @@
       "subflowTooDeep": "Les canevas imbriqués dépassent {depth} niveaux à « {canvas} ».",
       "subflowEmpty": "Le canevas « {canvas} » n’a encore aucune étape à exécuter.",
       "subflowNotBuildable": "Le canevas « {canvas} » ne peut pas encore être compilé : l’étape « {step} » n’est pas prête.",
-      "subflowNeedsBuild": "Compilez le canevas « {canvas} » une fois avant de l’exécuter en direct depuis ici."
+      "subflowNeedsBuild": "Compilez le canevas « {canvas} » une fois avant de l’exécuter en direct depuis ici.",
+      "subflowMissingInput": "Le canevas « {canvas} » a besoin qu’on lui passe « {key} », et cette étape ne le mappe pas."
     },
     "frameSection": {
       "holds": "{count, plural, =0 {Vide} one {# objet} other {# objets}}",
@@ -24135,30 +24188,6 @@
     "installIos": "Installez Builderforce : appuyez sur Partager, puis « Sur l’écran d’accueil »."
   },
   "workflow": {
-    "subflowNode": {
-    "loadFailed": "Impossible de charger vos canevas.",
-    "canvas": "Canevas à exécuter",
-    "choosePlaceholder": "Choisissez un canevas…",
-    "loading": "Chargement des canevas…",
-    "binding": "Mode de liaison",
-    "bindingOption": {
-      "snapshot": "Instantané — le figer dans ce flux",
-      "live": "En direct — suivre le canevas"
-    },
-    "bindingHint": {
-      "snapshot": "Les étapes du canevas enfant sont copiées dans ce flux à la compilation. Une exécution, une chronologie ; les modifications ultérieures de ce canevas n’arrivent ici qu’après une nouvelle compilation.",
-      "live": "Ce flux appelle le flux compilé du canevas enfant à l’exécution, donc les modifications arrivent sans recompiler ici. L’enfant doit avoir été compilé au moins une fois."
-    },
-    "unreadable": "Ce canevas est illisible — il a peut-être été supprimé, ou n’est pas partagé avec vous.",
-    "noSteps": "Ce canevas n’a encore aucune étape, il n’y a donc rien à exécuter.",
-    "stepCount": "{count, plural, one {# étape} other {# étapes}}",
-    "accepts": "Accepte",
-    "acceptsAnything": "Tout ce que vous lui transmettez",
-    "acceptsNothing": "Rien — il part de ses propres étapes",
-    "acceptsAlsoRaw": "Il accepte aussi tout ce que vous lui transmettez d’autre.",
-    "returns": "Renvoie",
-    "returnsNothing": "Rien que ce flux puisse lire"
-    },
     "connectorNode": {
       "integration": "Intégration",
       "action": "Action",
@@ -24194,7 +24223,8 @@
       "bindingHint": {
         "snapshot": "Les étapes de ce canevas sont copiées dans ce flux à la compilation. Les modifications faites ensuite là-bas ne changent ce flux qu’après une nouvelle compilation.",
         "live": "Ce canevas est relu à chaque exécution de ce flux, les modifications faites là-bas s’appliquent donc immédiatement. Il doit y avoir été compilé au moins une fois."
-      }
+      },
+      "openCanvas": "Ouvrir ce canevas"
     }
   },
   "kernel": {

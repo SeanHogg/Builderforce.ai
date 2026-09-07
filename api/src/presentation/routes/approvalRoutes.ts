@@ -46,7 +46,7 @@ import { checkAutoApprovalRules } from './approvalRuleRoutes';
 import { normalizeRequestKind, isAnswerableKind } from '../../domain/approval/requestKind';
 import { sendSlackNotification, notifyApprovalRequested } from '../../application/approval/approvalNotifier';
 import { resumePausedExecution } from '../../application/runtime/executionResume';
-import { dispatchCloudRunForTask, type CloudDispatchOutcome } from './runtimeRoutes';
+import { dispatchCloudRunForTask, type CloudDispatchOutcome } from '../../application/runtime/dispatchCloudRun';
 import { parseApprovalReplay } from '../../application/runtime/executionApprovalGate';
 import { approvalSubjectRef } from '../../application/approval/approvalGate';
 import {

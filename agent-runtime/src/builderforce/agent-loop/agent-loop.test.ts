@@ -1,5 +1,5 @@
-import { Type } from "@sinclair/typebox";
 import { MAX_ANNOUNCEMENT_RECOVERIES, MAX_MODEL_FAILOVERS } from "@builderforce/agent-stall";
+import { Type } from "@sinclair/typebox";
 import { describe, expect, it } from "vitest";
 import type { AgentEvent, AgentTool } from "../model/agent-types.js";
 import type { AssistantMessage, ToolCall } from "../model/types.js";
@@ -136,7 +136,12 @@ describe("native Agent loop", () => {
       parameters: Type.Object({ text: Type.String() }),
       execute: async () => ({ content: [{ type: "text", text: "echoed" }], details: {} }),
     };
-    const toolCall: ToolCall = { type: "toolCall", id: "tc1", name: "echo", arguments: { text: "hi" } };
+    const toolCall: ToolCall = {
+      type: "toolCall",
+      id: "tc1",
+      name: "echo",
+      arguments: { text: "hi" },
+    };
     const isNudge = (m: { role: string; content?: unknown }) =>
       m.role === "user" && String(m.content ?? "").includes("made zero tool calls");
 
@@ -156,8 +161,12 @@ describe("native Agent loop", () => {
       // ...the model then actually called the tool...
       expect(produced.filter((m) => m.role === "toolResult")).toHaveLength(1);
       // ...and the run ended on a real answer, not the announcement.
-      const finalAssistant = produced.filter((m) => m.role === "assistant").at(-1) as AssistantMessage;
-      expect((finalAssistant.content[0] as { text: string }).text).toBe("Found it in agent-loop.ts.");
+      const finalAssistant = produced
+        .filter((m) => m.role === "assistant")
+        .at(-1) as AssistantMessage;
+      expect((finalAssistant.content[0] as { text: string }).text).toBe(
+        "Found it in agent-loop.ts.",
+      );
     });
 
     it("gives up after the shared budget so an always-narrating model cannot spin", async () => {
@@ -183,9 +192,7 @@ describe("native Agent loop", () => {
       // Giving up must be LOUD. Ending on the promise alone leaves an autonomous run
       // looking like a clean completion that happened to do nothing.
       const tailMessage = produced.at(-1);
-      const tail = tailMessage && "content" in tailMessage
-        ? String(tailMessage.content ?? "")
-        : "";
+      const tail = tailMessage && "content" in tailMessage ? String(tailMessage.content ?? "") : "";
       expect(tail).toContain("nothing was actually run");
       // NOT "pick a different model": that advice was withdrawn from the shared notice
       // (efaa85925) because a runtime rejecting every request upstream looks identical
@@ -203,7 +210,10 @@ describe("native Agent loop", () => {
      */
     it("recovers a BARE pseudo-call, not just a first-person promise", async () => {
       const streamFn = scriptedStreamFn([
-        assistant([{ type: "text", text: "run tool builtin_chats_list_tickets with chatId is 85" }], "stop"),
+        assistant(
+          [{ type: "text", text: "run tool builtin_chats_list_tickets with chatId is 85" }],
+          "stop",
+        ),
         assistant([toolCall], "toolUse"),
         assistant([{ type: "text", text: "3 tickets, all in backlog." }], "stop"),
       ]);
@@ -230,9 +240,10 @@ describe("native Agent loop", () => {
         return (m) => {
           seen.push(m.id);
           const stream = new AssistantMessageEventStream();
-          const msg = m.id === answersOn
-            ? assistant([{ type: "text", text: "The handler is in agent-loop.ts." }], "stop")
-            : assistant([{ type: "text", text: "Let me search for that now." }], "stop");
+          const msg =
+            m.id === answersOn
+              ? assistant([{ type: "text", text: "The handler is in agent-loop.ts." }], "stop")
+              : assistant([{ type: "text", text: "Let me search for that now." }], "stop");
           queueMicrotask(() => {
             stream.push({ type: "done", reason: "stop", message: msg });
             stream.end();
@@ -268,7 +279,9 @@ describe("native Agent loop", () => {
         // model id behind two providers is two different routes.
         expect(fallbacks[0]).toContain("p/m");
         // The swap is announced on the transcript, never silent.
-        const notice = produced.find((m) => m.role === "custom" && m.customType === "model_failover");
+        const notice = produced.find(
+          (m) => m.role === "custom" && m.customType === "model_failover",
+        );
         expect(notice).toBeTruthy();
         expect(String((notice as { content: string }).content)).toContain("`p/m2`");
         // ...and the session now runs on the model that actually works.
@@ -283,9 +296,12 @@ describe("native Agent loop", () => {
         const produced = await agent.prompt([{ role: "user", content: "go", timestamp: 0 }]);
 
         expect(seen).toHaveLength(1 + MAX_ANNOUNCEMENT_RECOVERIES);
-        expect(produced.some((m) => m.role === "custom" && m.customType === "model_failover")).toBe(false);
+        expect(produced.some((m) => m.role === "custom" && m.customType === "model_failover")).toBe(
+          false,
+        );
         const tailMessage = produced.at(-1);
-        const tail = tailMessage && "content" in tailMessage ? String(tailMessage.content ?? "") : "";
+        const tail =
+          tailMessage && "content" in tailMessage ? String(tailMessage.content ?? "") : "";
         expect(tail).toContain("nothing was actually run");
       });
 
@@ -303,12 +319,15 @@ describe("native Agent loop", () => {
 
         const produced = await agent.prompt([{ role: "user", content: "go", timestamp: 0 }]);
 
-        const swapped = produced.filter((m) => m.role === "custom" && m.customType === "model_failover");
+        const swapped = produced.filter(
+          (m) => m.role === "custom" && m.customType === "model_failover",
+        );
         expect(swapped).toHaveLength(MAX_MODEL_FAILOVERS);
         // Distinct models tried: the pin plus one per failover — never the whole chain.
         expect(new Set(seen).size).toBe(1 + MAX_MODEL_FAILOVERS);
         const tailMessage = produced.at(-1);
-        const tail = tailMessage && "content" in tailMessage ? String(tailMessage.content ?? "") : "";
+        const tail =
+          tailMessage && "content" in tailMessage ? String(tailMessage.content ?? "") : "";
         // The notice names every model burned, so "it didn't work" is actionable.
         expect(tail).toContain("This run already failed over from");
       });
@@ -319,7 +338,10 @@ describe("native Agent loop", () => {
       const streamFn: StreamFn = () => {
         turns++;
         const stream = new AssistantMessageEventStream();
-        const msg = assistant([{ type: "text", text: "The build failed because the token expired." }], "stop");
+        const msg = assistant(
+          [{ type: "text", text: "The build failed because the token expired." }],
+          "stop",
+        );
         queueMicrotask(() => {
           stream.push({ type: "done", reason: "stop", message: msg });
           stream.end();

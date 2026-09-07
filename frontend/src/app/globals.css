@@ -2660,6 +2660,24 @@ html[data-theme='light'] .nebula {
   gap: 12px;
   min-width: 0;
   justify-self: end;
+  /* Actions stack rather than push the close button off the row when a panel
+     publishes several of them at `sheet` width. */
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* The same trailing group for the drawers that predate `SlideOutPanel` and
+   still render their own header (`AgentHostSlideOutPanel`,
+   `CloudAgentSlideOutPanel`): badges and actions wrap inside this group, so
+   the close button it ends with stays in the panel's top-right corner instead
+   of wrapping to a second line with them. */
+.panel-header-trail {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-width: 0;
 }
 
 /* The dismiss control (`PanelCloseButton`) — one look for every slide-out in
@@ -5889,4 +5907,3 @@ select.input option {
   border-radius: var(--radius-sm);
   padding: 0 2px;
 }
-                      

@@ -8,7 +8,7 @@
  * the new revision. Run six of the seven and the board is fine and the history has a
  * hole; run them in the wrong order and a foreign key fails halfway.
  *
- * That sequence was written out twice inside `creationSessionRouteService` — once in
+ * That sequence was written out twice inside `creationSessionRoutes` — once in
  * `PUT /:id/graph` and once in `POST /:id/commands` — and it is about to be needed a
  * third time by the public `/api/v1` item CRUD, which is exactly the moment a repo
  * decides whether it has a primitive or three copies. A third copy is how the two
@@ -46,7 +46,7 @@ import {
  *
  * It lives beside the writer because it is a property of the ROW being written —
  * `search_text` is a projection of `content` and the two are only ever correct
- * together. It moved here from `creationSessionRouteService`, which still re-exports
+ * together. It moved here from `creationSessionRoutes`, which still re-exports
  * it so the marketplace listing writer and the existing tests keep their import.
  */
 export function creationObjectSearchText(content: unknown): string {
@@ -283,7 +283,7 @@ export interface NewCreationSession {
  * The five-statement core every "create a board" path runs, in the one order
  * that works.
  *
- * There were SEVEN hand-written copies of it in `creationSessionRouteService`
+ * There were SEVEN hand-written copies of it in `creationSessionRoutes`
  * alone — claim, create, duplicate, branch, from-project, from-build,
  * from-resource — and they had already drifted: `from-project` wrote its session
  * row OUTSIDE the batch (so a failed member insert left a board with no owner),

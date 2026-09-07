@@ -56,6 +56,9 @@ import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasS
 import { CanvasSessionPill } from './CanvasSessionPill';
 import { RemoteCursors } from './RemoteCursors';
 import { applyPresenceFrame, dropPresence, expirePresence, isPresenceFrame, mergeLivePresence, LIVE_PRESENCE_TTL_MS, PRESENCE_SEND_INTERVAL_MS, type LivePresenceMap } from '@/lib/canvas/livePresence';
+import { ROOM_WALL_CAPACITY } from '@/lib/canvas/roomSeating';
+import { resolveStandupProject } from '@/lib/canvas/standupProject';
+import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { BRAND_BINDING_FIELD, CANVAS_PRESENCE_FRAME, canvasScreenshotToolRedirect, isBrandBoundKind, isDateComparator, looksLikeWebPageUrl, type CanvasPresenceState } from '@builderforce/creation-canvas-contract';
 import { CanvasCommandBar } from './CanvasCommandBar';
 import { TeamBar } from '@/components/team/TeamBar';
@@ -441,6 +444,13 @@ const Canvas3DView = dynamic(
 // and it must not sit in the main chunk for people who never open a `world`.
 const CanvasWorldView = dynamic(
   () => import('./CanvasWorldView').then((module) => module.CanvasWorldView),
+  { ssr: false },
+);
+// The room. Same WebGL stack as the world above and split for the same reason —
+// a person who only ever opens the board must not pay for three.js to have a
+// standup surface they have not pressed.
+const CanvasRoomSurface = dynamic(
+  () => import('./CanvasRoomSurface').then((module) => module.CanvasRoomSurface),
   { ssr: false },
 );
 // The `scene3d` surface's OTHER half — a `scene` object's generation panel, rather
@@ -4485,6 +4495,23 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     }).catch((error) => setNotice(faultText(error, t('noticeEvermindEvalFailed'))));
   }, [nodes, selectedNode, setEdges, setNodes]);
 
+  /**
+   * WHICH PROJECT this canvas is about, when it says so on the board itself.
+   *
+   * One of the three answers `resolveStandupProject` weighs, and the weakest —
+   * the standup card's action and the room surface both read it through that
+   * resolver rather than reaching for the first project node themselves, so
+   * "which project is this standup for" has one answer in one place.
+   */
+  const boardProjectId = useMemo(() => {
+    const project = canvasProjectNodes(nodes)[0];
+    return project ? canvasProjectId(project.data) : null;
+  }, [nodes]);
+  // Optional: the canvas also mounts inside the VS Code webview and the guest
+  // surfaces, neither of which has the shell's project switcher above it.
+  const projectScope = useOptionalProjectScope();
+  const scopeProjectId = projectScope?.currentProjectId ?? null;
+
   const startStandup = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'standup') return;
     if (persistence === 'local') { requireAccount('start', 'Create an account to start a collaborative stand-up', 'A live stand-up needs durable participants, shared activity, follow-up tasks, and tenant permissions.'); return; }
@@ -4500,8 +4527,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNodes((current) => current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, status: resourceId ? 'Live' : 'Draft', participants, resourceId: resourceId || node.data.resourceId, summary: resourceId ? undefined : t('standupGatheredSummary', { count: participants.length }) } } : node));
       setEdges((current) => [...current, ...people.filter((person) => !current.some((edge) => edge.source === person.id && edge.target === selectedNode.id)).map((person) => ({ id: crypto.randomUUID(), source: person.id, target: selectedNode.id, label: 'joins', type: 'smoothstep' }))]);
     };
-    const project = canvasProjectNodes(nodes)[0];
-    const projectId = project ? canvasProjectId(project.data) : null;
+    // The project a person is working IN wins over the one this board happens to
+    // draw: a standup started while scoped into a project is that project's, and
+    // a board with no project node can now start one at all.
+    const { projectId } = resolveStandupProject({ scopeProjectId, boardProjectId });
     if (persistence === 'server' && projectId) {
       setNotice(t('noticeStartingStandup'));
       void ceremonySessionsApi.start(projectId, 'standup', participants.map(({ kind, ref, name }) => ({ kind, ref, name }))).then((result) => {
@@ -4513,7 +4542,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     }
     applyStandup();
     setNotice(t('noticeNeedProjectForStandup'));
-  }, [nodes, persistence, requireAccount, selectedNode, setEdges, setNodes, t]);
+  }, [boardProjectId, nodes, persistence, requireAccount, scopeProjectId, selectedNode, setEdges, setNodes, t]);
 
   const onDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -11302,6 +11331,27 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setSelectedIds([id]);
   }, []);
   /**
+   * WHAT HANGS ON THE ROOM'S WALL.
+   *
+   * Newest first, and described by `describeThreeD` rather than by a second reader:
+   * a card is the same card whether you are looking at the depth projection or
+   * standing in front of it in the room, so its label, its colour and the picture of
+   * what it produced are answered once. `wallPanels` decides how many actually fit
+   * and reports the rest — the cap lives with the geometry, not here.
+   */
+  const roomWallObjects = useMemo(
+    () => [...threeDNodes].reverse().slice(0, ROOM_WALL_CAPACITY).map((node) => {
+      const described = describeThreeD(node);
+      return {
+        id: node.id,
+        label: described.label,
+        color: described.accent ?? '#94a3b8',
+        preview: described.preview,
+      };
+    }),
+    [describeThreeD, threeDNodes],
+  );
+  /**
    * Objects moved in the 3D space, written straight back to the board.
    *
    * There is one set of positions, not a 3D copy of them: across the plane the
@@ -12713,6 +12763,22 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             // What the session is worth, read back. Board-scoped for the same reason
             // `app` is — the metrics are about the whole session, not one card.
             insights: <CanvasInsightsSurface onExit={() => setSurface('graph')} />,
+            // THE ROOM. Board-scoped like `app` and `insights`: its subject is the
+            // whole session's roster, so there is no card to enter it from. It is
+            // handed the roster and the live presence map the host already holds —
+            // the room owns no membership of its own, because the session already
+            // has one and a second would be a second answer to "who is here".
+            room: <CanvasRoomSurface
+              members={rosterMembers}
+              currentUserId={currentUserId}
+              live={livePresence}
+              onPresence={sendPresence}
+              objects={roomWallObjects}
+              totalObjects={threeDNodes.length}
+              boardProjectId={boardProjectId}
+              {...(canEdit ? { onSelectObject: selectThreeDObject } : {})}
+              onExit={() => setSurface('graph')}
+            />,
             // The five medium runtimes. Each takes the object the surface is ABOUT, so
             // each is rendered only when one resolves — `surfaceNode` going null is what
             // the effect above turns back into the board.

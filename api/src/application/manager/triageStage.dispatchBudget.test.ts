@@ -43,7 +43,7 @@ import type { RuntimeService } from '../runtime/RuntimeService';
 vi.mock('./coordinateTicket', () => ({ coordinateTicket: vi.fn() }));
 vi.mock('../swimlane/evaluateAutoRun', () => ({ evaluateTaskAutoRun: vi.fn() }));
 vi.mock('../swimlane/laneEntryTrigger', () => ({ maybeAutoRunOnLaneEntry: vi.fn() }));
-vi.mock('../../presentation/routes/runtimeRoutes', () => ({ dispatchCloudRunForTask: vi.fn() }));
+vi.mock('../runtime/dispatchCloudRun', () => ({ dispatchCloudRunForTask: vi.fn() }));
 vi.mock('../kanban/driveSignoffs', () => ({ driveOutstandingSignoffs: vi.fn() }));
 vi.mock('./staffUnfilledRole', () => ({ staffUnfilledRole: vi.fn() }));
 

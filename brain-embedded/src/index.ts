@@ -126,6 +126,12 @@ export { useBrainChats, deriveChatTitle, DEFAULT_CHAT_TITLE } from './useBrainCh
 export type { UseBrainChats, UseBrainChatsOptions } from './useBrainChats';
 export { useBrainConversation } from './useBrainConversation';
 export { subscribeToChatMessages } from './chatMessageSubscription';
+
+// The /api/brain REST client, ONE implementation. The web app and the VS Code
+// webview each used to carry their own method-for-method copy, already drifted on
+// two return types — see brainRestPersistence.ts.
+export { createBrainRestPersistence } from './brainRestPersistence';
+export type { BrainRestInit, BrainRestOptions, BrainRestPersistence, BrainRestRequest } from './brainRestPersistence';
 export type { UseBrainConversation, UseBrainConversationOptions } from './useBrainConversation';
 
 // Cross-chat run indicators — which chats are executing / awaiting a confirm RIGHT

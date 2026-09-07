@@ -68,7 +68,7 @@ import {
   snapshots,
   users,
 } from '../../infrastructure/database/schema';
-import { creationObjectSearchText } from '../creation/creationSessionRouteService';
+import { creationObjectSearchText } from '../creation/creationSessionModel';
 import {
   bumpCacheVersion,
   getCacheVersion,

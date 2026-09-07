@@ -30,7 +30,7 @@ import type { RuntimeService } from '../runtime/RuntimeService';
 import type { TicketParticipantsService } from './ticketParticipants';
 import { buildProducerRequestPayload, buildSignoffRequestPayload } from './signoffRequest';
 import { recordActivity, cloudAgentActor } from '../activity/activityLog';
-import { dispatchCloudRunForTask, type CloudDispatchOutcome } from '../../presentation/routes/runtimeRoutes';
+import { dispatchCloudRunForTask, type CloudDispatchOutcome } from '../runtime/dispatchCloudRun';
 
 /** Whether the role is being asked to REVIEW the work or to PRODUCE it. */
 export type RoleRunKind = 'reviewer' | 'producer';

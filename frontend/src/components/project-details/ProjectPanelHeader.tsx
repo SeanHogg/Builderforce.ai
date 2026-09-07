@@ -12,6 +12,7 @@ import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
 import { useProjectStatusLabel } from '@/lib/projectStatus';
 import { DeleteProjectDialog } from '@/components/DeleteProjectDialog';
+import { PanelCloseButton } from '@/components/PanelCloseButton';
 
 const iconButtonStyle: React.CSSProperties = {
   width: 36,
@@ -99,12 +100,8 @@ export function ProjectPanelHeader({
             />
           </>
         )}
-        <button type="button" onClick={onClose} style={iconButtonStyle} aria-label={t('closeAria')}>
-          <svg viewBox="0 0 24 24" style={iconStyle}>
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
+        {/* Top right, last in the row — the app-wide panel close corner. */}
+        <PanelCloseButton onClose={onClose} />
       </div>
     </div>
   );

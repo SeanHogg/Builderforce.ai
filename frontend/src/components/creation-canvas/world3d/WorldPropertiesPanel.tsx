@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   deleteProp,
+  propTakesSurface,
+  setPropSurface,
   updateGround,
   updateLighting,
   updateProp,
@@ -20,10 +22,14 @@ import styles from '../CreationCanvas.module.css';
  * spawn and lighting controls.
  *
  * Adapted from hired.video's `world-3d/Game3DPropertiesPanel.tsx`. Trimmed:
- * no texture/tag fields (dropped with challenges — see `world.ts`'s header),
- * no `InspectorSectionList` accordion dependency (this repo has no
- * equivalent primitive) — sections are always-open here instead, which is
- * plenty for the field count this panel actually has.
+ * no tag field (dropped with challenges — see `world.ts`'s header), no
+ * `InspectorSectionList` accordion dependency (this repo has no equivalent
+ * primitive) — sections are always-open here instead, which is plenty for the
+ * field count this panel actually has.
+ *
+ * The texture field came back with schema v2, and only for the kinds that can
+ * actually show one: `propTakesSurface` is the contract's own answer, so this
+ * panel never offers an author a control that the renderer would ignore.
  */
 
 const PHYSICS_KINDS: readonly CanvasWorldPhysicsKind[] = ['static', 'dynamic', 'kinematic', 'sensor', 'none'];
@@ -56,6 +62,40 @@ export default function WorldPropertiesPanel({ scene, onChange, selectedPropId, 
             <input type="color" value={prop.color} onChange={(event) => onChange(updateProp(scene, prop.id, { color: event.target.value }))} className={styles.worldColorInput} />
             <code>{prop.color}</code>
           </label>
+          {propTakesSurface(prop.kind) && <>
+            <label className={styles.worldFieldRow}>
+              <span>{t('panel.surfaceImage')}</span>
+              <input
+                type="url"
+                inputMode="url"
+                value={prop.surface?.url ?? ''}
+                placeholder={t('panel.surfaceImagePlaceholder')}
+                // An emptied field is "no picture", not "a picture at the empty
+                // URL" — `setPropSurface(…, null)` strips the key entirely.
+                onChange={(event) => {
+                  const url = event.target.value.trim();
+                  onChange(setPropSurface(scene, prop.id, url ? { kind: 'image', url, ...(prop.surface?.fit ? { fit: prop.surface.fit } : {}) } : null));
+                }}
+                className={styles.worldTextInput}
+              />
+            </label>
+            {prop.surface && (
+              <label className={styles.worldFieldRow}>
+                <span>{t('panel.surfaceFit')}</span>
+                <select
+                  value={prop.surface.fit ?? 'cover'}
+                  onChange={(event) => {
+                    const fit = event.target.value === 'contain' ? 'contain' : 'cover';
+                    onChange(setPropSurface(scene, prop.id, { kind: 'image', url: prop.surface!.url, fit }));
+                  }}
+                  className={styles.worldSelect}
+                >
+                  <option value="cover">{t('panel.surfaceFitCover')}</option>
+                  <option value="contain">{t('panel.surfaceFitContain')}</option>
+                </select>
+              </label>
+            )}
+          </>}
         </PanelSection>
         <PanelSection title={t('panel.physics')}>
           <label className={styles.worldFieldRow}>

@@ -120,6 +120,7 @@ import { getAllVendorIds, vendorForModel, type VendorId } from '../../applicatio
 import { summarizeActionRatings } from '../../application/llm/actionRatings';
 import { llmFailoverLog, llmHealthProbes, llmTraces } from '../../infrastructure/database/schema';
 import { probeVendor, tryAcquireProbeSlot, type VendorProbeResult } from '../../application/llm/vendorHealthProbe';
+import { persistProbe } from '../../application/llm/vendorProbeStore';
 import { invalidateCapabilityCache } from '../../application/artifact/capabilityContext';
 import { membershipChanged } from '../../application/tenant/membershipChanged';
 import {
@@ -175,36 +176,6 @@ import { daysParam, limitParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { randomHex } from '../../domain/shared/bytes';
 import { excluded } from '../../infrastructure/database/upsert';
-
-/**
- * Coerce a `platform_modules.permissions` value into `string[]`.
- *
- * Schema drift: the column is JSONB in the database (per migration 0038)
- * but typed as `text` in the Drizzle schema. The pg driver auto-decodes
- * JSONB into a JS array at runtime, so `m.permissions` is *already* an
- * array — but `JSON.parse(array)` would coerce to `array.toString()`
- * (e.g. `"billing:read"`) and throw. This helper handles array, string,
- * and null inputs uniformly so every read site stays one-liner safe.
- */
-
-/** Persist one health-probe run. Shared by the manual route and the cron handler.
- *  `modelsJson` is a JSONB column ([1449]) — pass the JS array; Drizzle encodes it. */
-export async function persistProbe(
-  db: Db,
-  result: VendorProbeResult,
-  trigger: 'manual' | 'cron',
-): Promise<void> {
-  await db.insert(llmHealthProbes).values({
-    vendor:       result.vendor,
-    status:       result.status,
-    probedCount:  result.probedCount,
-    okCount:      result.okCount,
-    failedCount:  result.failedCount,
-    latencyMs:    result.latencyMs,
-    modelsJson:   result.models,
-    trigger,
-  });
-}
 
 /** Defensive coercion for `models_json` (now `jsonb` [1449]): the pg driver
  *  decodes JSONB to an array, but legacy rows written while the column was

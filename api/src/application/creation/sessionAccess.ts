@@ -2,7 +2,7 @@
  * THE canvas-session access check — "may this person do this to this board".
  *
  * ── WHY IT WAS EXTRACTED ─────────────────────────────────────────────────────────
- * It lived as two private closures inside `creationSessionRouteService`, which was correct
+ * It lived as two private closures inside `creationSessionRoutes`, which was correct
  * while that file was the only thing that answered the question. The sell-motion routes
  * need the identical answer (a call is summarized, a trust packet assembled and a trial
  * provisioned only by somebody who may edit the board), and there is exactly one

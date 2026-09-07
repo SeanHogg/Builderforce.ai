@@ -12,7 +12,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 import { and, eq } from 'drizzle-orm';
 import { ideAgents } from '../../infrastructure/database/schema';
-import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
+import { dispatchCloudRunForTask } from '../runtime/dispatchCloudRun';
 import { stampExecutionAuthority, systemInitiated } from '../runtime/executionAuthority';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { INCIDENT_TRIAGE_LANE_KEY } from './incidentTriageMarker';

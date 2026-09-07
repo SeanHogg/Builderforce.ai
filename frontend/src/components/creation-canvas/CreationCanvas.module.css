@@ -2867,6 +2867,10 @@
 .worldNumberInput { width:70px; padding:3px 6px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-ink); font-size:11px; }
 .worldSelect { flex:1; padding:3px 6px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-ink); font-size:11px; }
 .worldSelect option { background:var(--canvas-panel); color:var(--canvas-ink); }
+/* A texture URL is long and a rail is narrow: it takes the row's spare width and
+   its own minimum stays small enough that the label never gets pushed out. */
+.worldTextInput { flex:1; min-width:0; padding:3px 6px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-ink); font-size:11px; }
+.worldTextInput::placeholder { color:var(--canvas-ink-dim, var(--canvas-ink)); opacity:.55; }
 .worldDeleteAction { width:100%; padding:6px 10px; border:1px solid var(--danger-border); border-radius:var(--radius-sm); background:transparent; color:var(--danger-text); font:650 11px var(--font-sans); cursor:pointer; }
 .worldDeleteAction:hover,.worldDeleteAction:focus-visible { background:var(--danger-bg); outline:none; }
 .worldVec3Label { margin-bottom:3px; color:var(--canvas-muted); font-size:10px; }

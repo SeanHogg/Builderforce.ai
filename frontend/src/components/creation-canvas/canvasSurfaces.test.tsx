@@ -70,7 +70,10 @@ describe('canvas surface registry', () => {
     // cannot point one at the meetings, releases, holidays or connected accounts whose
     // dates already existed. The reading became a value on a `calendar` OBJECT, so the
     // month is entered from the card that IS it, like every other object surface.
-    expect(boardCanvasSurfaces().map((def) => def.id)).toEqual(['chat', 'graph', 'scene3d', 'app', 'insights']);
+    // `room` IS here, and it is the newest thing on this list that had to argue for it:
+    // its subject is the session's ROSTER, which is about the whole board and has no card
+    // to be entered from — the same argument `app` and `insights` each make.
+    expect(boardCanvasSurfaces().map((def) => def.id)).toEqual(['chat', 'graph', 'scene3d', 'app', 'insights', 'room']);
   });
 
   /**
@@ -258,8 +261,10 @@ describe('the chat surface on the canvas', () => {
     // fails here whatever it is called. Not pinned to `boardCanvasSurfaces().length`
     // any more — a session's own phase (`lib/canvasPhases.ts`) narrows the offer, and a
     // fresh canvas opens in the default Idea phase, which does not yet offer Insights.
+    // Room IS offered from Idea — unlike Insights it is legible with one person in it,
+    // and gating a meeting by which stage a board says it is in would be the wrong rule.
     const offered = within(switcher()).getAllByRole('button').map((button) => button.textContent);
-    expect(offered).toEqual(['Chat', 'Board', '3D space', 'App']);
+    expect(offered).toEqual(['Chat', 'Board', '3D space', 'App', 'Room']);
   });
 
   /**

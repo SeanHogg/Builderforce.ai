@@ -9,7 +9,6 @@ import {
   acceptInvitationStatement,
   findAcceptedByTokenHash,
   findByTokenHash,
-  findPendingByEmail,
   invalidateInvitations,
   invite,
   listPending,
@@ -18,6 +17,8 @@ import {
 import { getObject } from '../../application/kernel/ObjectRegistry';
 import { admitToBoard } from '../../application/creation/boardAdmission';
 import { tenantRoleOf } from '../../application/tenant/tenantRoles';
+import { landPendingInvitations } from '../../application/tenant/pendingInvitationLanding';
+import { invalidateTaskAssignees } from '../../application/task/taskAssigneeCache';
 import { sha256Hex } from '../../domain/shared/hash';
 import { TenantRole, TenantBillingCycle, TenantBillingStatus, TenantPlan } from '../../domain/shared/types';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
@@ -25,13 +26,11 @@ import { invalidateTenantPlan } from '../../application/tenant/tenantPlanCache';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { requirePermission } from '../middleware/requirePermission';
 import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { invalidateJwtMembershipCache } from '../../infrastructure/auth/keyResolutionCache';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
-import { buildPlanLimitsGuard, seatCapacityForTenant } from '../middleware/planLimitsGuard';
+import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import { resolveCanvasCapabilities } from '../middleware/featureGate';
-import { canAddSeat } from '../../domain/tenant/PlanLimits';
-import { asSeatKind, consumesSeat } from '../../domain/tenant/SeatKind';
 import { trialDaysRemaining } from '../../domain/tenant/effectivePlan';
 import { buildPaymentProvider } from '../../infrastructure/payment';
 import {
@@ -113,107 +112,6 @@ async function assertTenantMember(db: Db, tenantId: number, userId: string): Pro
 }
 
 /**
- * Drop the cached human assignee list for a tenant. Called from every membership
- * add/remove path so GET /api/tasks/assignees re-loads immediately instead of
- * serving a stale roster until the KV TTL expires (~5 min). Keep the key in sync
- * with the producer in taskRoutes.ts (`task-assignees:tenant:<id>`).
- */
-async function invalidateTaskAssignees(env: Env, tenantId: number): Promise<void> {
-  await invalidateCached(env, `task-assignees:tenant:${tenantId}`);
-}
-
-/**
- * Convert any still-pending invitations addressed to `email` into real
- * memberships for `userId`. Called on login (GET /tenants/mine) so an invite
- * sent before the person had an account "lands" the first time they return.
- *
- * Each accepted row is stamped accepted/accepted_at and the tenant's assignee +
- * invitation caches are dropped. If the user is already a member (invited twice,
- * or added manually in between) the row is still resolved to 'accepted' rather
- * than retried forever. Best-effort: a single tenant failing never blocks the others.
- */
-async function acceptPendingInvitations(
-  db: Db,
-  env: Env,
-  tenantService: TenantService,
-  userId: string,
-  email: string,
-): Promise<void> {
-  const normalized = email.toLowerCase().trim();
-  if (!normalized) return;
-
-  // One definition of "pending" (kernel `InvitationService`), so a revoked or
-  // expired row cannot be accepted here while the members page shows it gone.
-  const pending = (await findPendingByEmail(db, normalized, 'tenant')).map((row) => ({
-    id: row.id,
-    tenantId: row.tenantId,
-    role: row.role,
-    seatKind: asSeatKind(row.seatKind),
-    invitedByUserId: row.invitedBy,
-  }));
-
-  // Per-tenant live seat tally, fetched lazily on first use and incremented as we
-  // seat invites within this run, so a batch of invites for the same tenant can't
-  // collectively overshoot the cap.
-  const seatState = new Map<number, { plan: TenantPlan; seated: number }>();
-
-  for (const invite of pending) {
-    try {
-      // Already a member? Resolve the invite without re-adding (addMember would
-      // throw "already a member" and leave the row stuck pending).
-      const alreadyMember = await assertTenantMember(db, invite.tenantId, userId);
-      if (!alreadyMember) {
-        // Re-check seat capacity at ACCEPT time (members-only — this pending row
-        // is about to be consumed). The invite-time guard already counted pending
-        // seats, but a plan DOWNGRADE after the invites were queued can still
-        // over-subscribe. If the plan can't seat it, leave the invite pending
-        // (visible in the manager's invitations list, auto-retries once a seat
-        // frees up or they upgrade) instead of silently auto-accepting past the cap.
-        //
-        // A CANVAS COLLABORATOR skips this entirely: their membership is the
-        // mechanism that makes a shared board resolve, not a workspace seat, and
-        // it was capped at invite time against `maxCreationSessionCollaborators`.
-        // Gating it on `maxSeats` — 1 on both Free and Pro — is what made canvas
-        // sharing impossible on the plans that advertise it.
-        if (consumesSeat(invite.seatKind)) {
-          // The invitee can't authorize their own membership — replay the add
-          // under the manager who sent the invite (a manager or owner at invite
-          // time, which `Tenant.addMember` re-checks).
-          if (!invite.invitedByUserId) continue;
-          let state = seatState.get(invite.tenantId);
-          if (!state) {
-            const cap = await seatCapacityForTenant(db, env, invite.tenantId);
-            state = { plan: cap.plan, seated: cap.members };
-            seatState.set(invite.tenantId, state);
-          }
-          if (!canAddSeat(state.plan, state.seated)) {
-            continue; // over cap — leave pending, do not seat
-          }
-          state.seated += 1;
-          await tenantService.addMember(
-            invite.tenantId, invite.invitedByUserId, userId, invite.role as TenantRole, invite.seatKind,
-          );
-        } else {
-          // A canvas guest is NOT replayed under the inviter: board ownership is
-          // per-board and carries no workspace authority, so a developer who
-          // creates a canvas and shares it would fail the manager check and leave
-          // the invitation stuck pending forever. The board invite gate and the
-          // redeemed token are the authorization — see `Tenant.admitCollaborator`.
-          await tenantService.admitCollaborator(invite.tenantId, userId, invite.role as TenantRole);
-        }
-      }
-      await acceptInvitation(db, env, { id: invite.id, tenantId: invite.tenantId, inviteeRef: userId });
-      await invalidateTaskAssignees(env, invite.tenantId);
-    } catch (error) {
-      // A transient error on one tenant must not block the user's login or the
-      // other tenants' invites — leave the row pending so it retries next visit.
-    
-      reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "acceptPendingInvitations" });
-    }
-  }
-}
-
-/**
  * Tenant reads on the tenant-JWT path are SELF-SCOPED: a caller may only read the
  * workspace its token is scoped to. Returns a 403 Response to short-circuit otherwise.
  * Prevents enumerating another tenant's metadata (name/plan/billing) by guessing its id.
@@ -248,7 +146,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       .where(eq(users.id, userId))
       .limit(1);
     if (account?.email) {
-      await acceptPendingInvitations(db, c.env as Env, tenantService, userId, account.email);
+      await landPendingInvitations(db, c.env as Env, tenantService, userId, account.email);
     }
     const result = await tenantService.listTenantsForUser(userId);
     return c.json({ tenants: result });
@@ -315,7 +213,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       ? invitation.role as 'viewer' | 'commenter' | 'editor' | 'runner' | 'owner'
       : null;
     if (!role) return c.json({ error: 'Invitation role is invalid' }, 409);
-    await acceptPendingInvitations(db, c.env as Env, tenantService, userId, account.email);
+    await landPendingInvitations(db, c.env as Env, tenantService, userId, account.email);
     // Whatever the companion workspace invitation did or did not do, the redeemed
     // token is itself the authorization, so this seats the invitee against the cap
     // that actually governs canvas sharing. It used to answer 409 TENANT_SEAT_LIMIT

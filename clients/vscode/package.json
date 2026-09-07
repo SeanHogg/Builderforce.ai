@@ -126,11 +126,6 @@
     ],
     "commands": [
       {
-        "command": "builderforce.openChat",
-        "title": "%command.openChat%",
-        "icon": "$(comment-discussion)"
-      },
-      {
         "command": "builderforce.openCreateCanvas",
         "title": "%command.openCreateCanvas%",
         "icon": "$(layout)"
@@ -389,6 +384,11 @@
         "icon": "$(sync)"
       },
       {
+        "command": "builderforce.refreshSessions",
+        "title": "%command.refreshSessions%",
+        "icon": "$(refresh)"
+      },
+      {
         "command": "builderforce.refreshDiagnostics",
         "title": "%command.refreshDiagnostics%",
         "icon": "$(sync)"
@@ -456,6 +456,11 @@
           "command": "builderforce.rescanCodebase",
           "when": "view == builderforce.sessions",
           "group": "navigation@2"
+        },
+        {
+          "command": "builderforce.refreshSessions",
+          "when": "view == builderforce.sessions",
+          "group": "navigation@3"
         },
         {
           "command": "builderforce.pickModel",

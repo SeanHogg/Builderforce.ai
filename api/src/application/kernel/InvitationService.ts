@@ -13,7 +13,7 @@
  * a state, who sent it, when it expires, when it was accepted or revoked. Five
  * files had grown their own copy of "is there already a pending invite for this
  * address" (`tenantRoutes`, `BrainService`, `migrationStore`,
- * `creationSessionRouteService`, `planLimitsGuard`) and they did not agree: two
+ * `creationSessionRoutes`, `planLimitsGuard`) and they did not agree: two
  * lower-cased the address first and two did not.
  *
  * LAYER CONTRACT (§6.1). Application layer: use cases, tenancy, cache keys,

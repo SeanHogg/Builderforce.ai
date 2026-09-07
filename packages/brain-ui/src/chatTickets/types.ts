@@ -134,8 +134,18 @@ export interface ChatTicketsAdapter {
    * toast already falls back to the requested agent's pool name, so a null is a display
    * decision, not a missing value; naming the requested agent as the RUNNER would be
    * the only wrong answer.
+   *
+   * `chatId` BINDS the run to the conversation that asked for it: the agent is
+   * invited into the chat and the dispatch carries the chat, so the run narrates
+   * there and is reachable from it. A dispatch without it runs invisibly — which
+   * is precisely what the VS Code host's own copy of this adapter used to do.
    */
-  runTicket(kind: TicketKind, ref: string, agentRef: string): Promise<{ started: boolean; agentName: string | null }>;
+  runTicket(
+    kind: TicketKind,
+    ref: string,
+    agentRef: string,
+    chatId: number,
+  ): Promise<{ started: boolean; agentName: string | null }>;
   /**
    * Whether this host currently permits DISPATCHING a run, and if not, why.
    *

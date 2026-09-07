@@ -41,7 +41,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TaskStatus, isTerminalTaskStatus } from '../../domain/shared/types';
 import { evaluateTaskAutoRun } from '../swimlane/evaluateAutoRun';
 import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
-import { dispatchCloudRunForTask, type CloudDispatchOutcome } from '../../presentation/routes/runtimeRoutes';
+import { dispatchCloudRunForTask, type CloudDispatchOutcome } from '../runtime/dispatchCloudRun';
 import { classifySignoffOwnership, resolveRequiredSignoffGate, type SignoffGateResult } from '../kanban/signoffGate';
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
 import { decideTicketReadiness } from './evaluateTicketReadiness';

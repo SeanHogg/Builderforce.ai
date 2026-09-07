@@ -7,7 +7,7 @@ import {
   creationSessionSearchStatus,
   sanitizeClaimConnectionIds,
   validCreationGraph,
-} from './creationSessionRouteService';
+} from './creationSessionModel';
 // Moved to the writer whose unique constraints it reads — see `creationGraphWriter`.
 import { isCreationEventWriteConflict } from './creationGraphWriter';
 

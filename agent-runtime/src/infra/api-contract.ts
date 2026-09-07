@@ -95,7 +95,14 @@ export interface TaskBroadcastMessage {
 export interface ApprovalDecisionMessage {
   type: "approval.decision";
   approvalId: string;
+  /** 'approved' | 'rejected' | 'answered' */
   status: string;
+  /** Free-text human answer when status is 'answered' (question/feedback kinds). */
+  responseText?: string;
+  /** The reviewer's note on the decision, shown beside it on the agent's side. */
+  reviewNote?: string;
+  /** `users.id` of whoever resolved it, or 'auto-approval-rule' when a rule did. */
+  reviewedBy?: string;
 }
 
 // ── Shared ────────────────────────────────────────────────────────────────────

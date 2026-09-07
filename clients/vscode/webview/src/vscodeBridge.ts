@@ -19,6 +19,7 @@
  */
 
 import type { ModelChoiceLabels } from '@seanhogg/builderforce-brain-embedded';
+import type { HostMessageType } from '../../src/bridgeProtocol';
 import type { EditorContext } from '../../src/idePersona';
 import type { PendingChangeSet } from '../../src/gitChangeModel';
 
@@ -214,13 +215,21 @@ function settlePending(id: string, error: Error): void {
   p.reject(error);
 }
 
-/** Fire-and-forget message to the host. */
-export function post(type: string, payload?: Record<string, unknown>): void {
+/**
+ * Fire-and-forget message to the host.
+ *
+ * `type` is the shared union, not `string`: a name no host handles is a permanent
+ * silent no-op, and that is exactly what an untyped bridge cannot tell you about.
+ * See `src/bridgeProtocol.ts`.
+ */
+export function post(type: HostMessageType, payload?: Record<string, unknown>): void {
   api.postMessage({ type, ...(payload ?? {}) });
 }
 
-/** Request/response round-trip to the host (resolved by a matching `response`). */
-export function request<T = unknown>(type: string, payload?: Record<string, unknown>): Promise<T> {
+/** Request/response round-trip to the host (resolved by a matching `response`).
+ *  Same typed vocabulary as {@link post} — a request nobody answers hangs until the
+ *  timeout below, which is a slower and more confusing version of the same bug. */
+export function request<T = unknown>(type: HostMessageType, payload?: Record<string, unknown>): Promise<T> {
   const id = `r${++seq}`;
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => settlePending(id, new Error(`Request "${type}" timed out`)), REQUEST_TIMEOUT_MS);

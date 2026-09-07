@@ -112,6 +112,11 @@ export type {
 export { ChatTicketsPanel } from './chatTickets/ChatTicketsPanel';
 export type { ChatTicketsPanelProps } from './chatTickets/ChatTicketsPanel';
 export type { ChatTicketsExtension } from './chatTickets/types';
+// The chat↔ticket REST client, ONE implementation. The web app and the VS Code
+// webview each carried a hand-written copy, and the VSIX one had lost the run’s
+// chat binding entirely — see chatTickets/restAdapter.ts.
+export { createChatTicketsRestAdapter } from './chatTickets/restAdapter';
+export type { ChatTicketsRequest, ChatTicketsRestOptions } from './chatTickets/restAdapter';
 export { useChatParticipants } from './chatTickets/useChatParticipants';
 export { useMentionAutocomplete } from './mention/MentionAutocomplete';
 export type { MentionAutocomplete, MentionLabels, UseMentionAutocompleteOptions } from './mention/MentionAutocomplete';

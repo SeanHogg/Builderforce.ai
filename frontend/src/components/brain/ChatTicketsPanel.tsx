@@ -2,26 +2,29 @@
 
 /**
  * ChatTicketsPanel (web) — a thin host wrapper around the SHARED
- * `@seanhogg/builderforce-brain-ui` ChatTicketsPanel. All the UI lives in the
- * shared package (rendered identically in the VS Code webview); here we only:
- *   1. build the data `adapter` from the web's `brain.*` / `tasksApi` /
- *      `loadAgentPool` clients (the link-picker typeahead is served by the shared
- *      `brain.searchTickets` → `GET /api/brain/tickets/search`), and
- *   2. map the next-intl `brain.tickets` catalog into the shared labels bundle.
+ * `@seanhogg/builderforce-brain-ui` ChatTicketsPanel. All the UI AND the REST
+ * adapter live in the shared package (both rendered identically in the VS Code
+ * webview); here we only:
+ *   1. mount `createChatTicketsRestAdapter` on the web's authenticated request
+ *      function, supplying the one thing the package cannot know — whether this
+ *      viewer's tenant role permits dispatching a run,
+ *   2. map the next-intl `brain.tickets` catalog into the shared labels bundle, and
+ *   3. own the web-only chrome: routing a clicked ticket, and the owner's lock toggle.
+ *
+ * The adapter used to be built here by hand and again in the VS Code webview.
+ * See `chatTickets/restAdapter.ts` for what the two copies had already lost.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
   ChatTicketsPanel as SharedChatTicketsPanel,
+  createChatTicketsRestAdapter,
   type ChatTicketsAdapter, type ChatTicketsLabels, type TicketLinkVM,
 } from '@seanhogg/builderforce-brain-ui';
 import { artifactRoutePath } from '@seanhogg/builderforce-brain-embedded';
-import {
-  brain, tasksApi, approvalsApi,
-  type BrainChat, type ChatTicketLink, type ChatAgentInvite,
-} from '@/lib/builderforceApi';
-import { loadAgentPool } from '@/lib/agentPool';
+import { brain, type BrainChat } from '@/lib/builderforceApi';
+import { apiRequest } from '@/lib/apiClient';
 import { onBrainDataChanged } from '@/lib/brain/brainDataEvent';
 import { usePermission } from '@/lib/rbac';
 
@@ -97,48 +100,14 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
     mergedN: (n) => t('mergedN', { n }),
   }), [t]);
 
-  const adapter = useMemo<ChatTicketsAdapter>(() => ({
-    listTickets: (id) => brain.listChatTickets(id).then((rows) => rows.map(toTicketVM)),
-    linkTicket: (id, input) => brain.linkChatTicket(id, input).then(() => undefined),
-    unlinkTicket: (id, kind, ref) => brain.unlinkChatTicket(id, kind, ref).then(() => undefined),
-    listTicketChats: (kind, ref) => brain.listTicketChats(kind, ref).then((rows) => rows.map((c) => ({ chatId: c.chatId, title: c.title, linkType: c.linkType, isArchived: c.isArchived }))),
-    consolidate: (target, sources) => brain.consolidateChats(target, sources).then(() => undefined),
-    listAgents: (id) => brain.listChatAgents(id).then((rows) => rows.map((a: ChatAgentInvite) => ({ id: a.id, agentRef: a.agentRef, role: a.role }))),
-    inviteAgent: (id, input) => brain.inviteChatAgent(id, input).then(() => undefined),
-    removeAgent: (id, assignmentId) => brain.removeChatAgent(id, assignmentId).then(() => undefined),
-    listMembers: (id) => brain.listChatMembers(id),
-    inviteMember: (id, email) => brain.inviteChatMember(id, email).then((r) => ({ status: r.status })),
-    removeMember: (id, memberId) => brain.removeChatMember(id, memberId).then(() => undefined),
-    loadAgentPool: () => loadAgentPool().then((ps) => ps.map((p) => ({ ref: p.ref, name: p.name, meta: p.meta, kind: p.kind }))),
-    // Server-side typeahead per tier (debounced by the shared LinkForm) — replaces
-    // the old "fetch every task/objective/initiative/portfolio/roadmap/spec up front".
-    searchTickets: (kind, query, pid) => brain.searchTickets(kind, query, pid),
+  const adapter = useMemo<ChatTicketsAdapter>(() => createChatTicketsRestAdapter({
+    request: apiRequest,
     // The shared package can't read a tenant role, so the web host answers the
     // capability probe for it. This is what actually DISABLES the Run affordance;
-    // the throw below stays as the enforcement backstop (a stale render, or a role
-    // that changed between paint and click, must still be refused).
-    canRunTicket: () => ({ allowed: canDispatchRun, reason: tc('requiresDeveloperRole') }),
-    runTicket: async (kind, ref, agentRef) => {
-      // "Tag to execute": ensure the agent participates, assign it to the ticket,
-      // then start a run — reuses the board's dispatch (assignee + run-now).
-      if (!canDispatchRun) throw new Error(tc('requiresDeveloperRole'));
-      await brain.inviteChatAgent(chatId, { agentRef }).catch(() => {});
-      await tasksApi.update(Number(ref), { assignedAgentRef: agentRef });
-      // Bind the run to THIS chat: without it a chat-dispatched agent runs invisibly,
-      // narrating nowhere and unreachable from the conversation that asked for it.
-      const res = await tasksApi.runNow(Number(ref), { chatId });
-      return { started: !!res.executionId, agentName: res.agentRef };
-    },
-    listQuestions: async (id) => {
-      const [links, pending] = await Promise.all([
-        brain.listChatTickets(id),
-        approvalsApi.list({ status: 'pending' }),
-      ]);
-      const taskIds = new Set(links.filter((tk) => tk.kind === 'task' || tk.kind === 'epic' || tk.kind === 'gap').map((tk) => Number(tk.ref)));
-      return pending.filter((q) => (q.kind === 'question' || q.kind === 'feedback') && q.taskId != null && taskIds.has(q.taskId));
-    },
-    answerQuestion: (id, responseText) => approvalsApi.decide(id, { status: 'answered', responseText }).then(() => undefined),
-  }), [chatId, canDispatchRun, tc]);
+    // the adapter's own throw stays as the enforcement backstop (a stale render,
+    // or a role that changed between paint and click, must still be refused).
+    canRun: () => ({ allowed: canDispatchRun, reason: tc('requiresDeveloperRole') }),
+  }), [canDispatchRun, tc]);
 
   return (
     <div style={{ margin: '0 12px' }}>
@@ -158,9 +127,3 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
   );
 }
 
-function toTicketVM(r: ChatTicketLink) {
-  return {
-    linkId: r.linkId, kind: r.kind, ref: r.ref, label: r.label, status: r.status,
-    progressPct: r.progressPct, done: r.done, total: r.total, exists: r.exists, linkType: r.linkType,
-  };
-}

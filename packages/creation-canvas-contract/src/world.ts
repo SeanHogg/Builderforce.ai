@@ -35,12 +35,19 @@
 /**
  * ── VERSION 2 ────────────────────────────────────────────────────────────
  * A prop could say what COLOUR it was and nothing else, which is why nothing
- * could be put ON one: a photograph of a whiteboard, a live chart, a card from
- * the board this world belongs to. Two additive fields close that — `surface`
- * (what is painted on its face) and `objectId` (which board object it stands
- * for) — and both are optional, so every v1 scene reads back unchanged and no
- * migration runs. The version moves anyway, because a reader that cannot tell
- * which fields it may expect is a reader that guesses.
+ * could be put ON one: a photograph of a whiteboard, a diagram, a rendering.
+ * `surface` closes that, and it is optional, so every v1 scene reads back
+ * unchanged and no migration runs. The version moves anyway, because a reader
+ * that cannot tell which fields it may expect is a reader that guesses.
+ *
+ * ── WHY THERE IS NO `objectId` HERE ─────────────────────────────────────────
+ * Putting a board object into a 3D space was the other half of this change, and
+ * it deliberately did NOT become a stored reference on a prop. The `room`
+ * surface hangs the session's objects on its wall by reading the BOARD, live —
+ * so a card that is renamed, recoloured, re-rendered or deleted is correct in
+ * the room on the next frame, with nothing to migrate and nothing to dangle. A
+ * stored id would have been a second, staler answer to "which objects exist",
+ * which is the one thing a scene document should never be.
  */
 export const CANVAS_WORLD_SCHEMA_VERSION = 2;
 
@@ -118,6 +125,21 @@ export type CanvasWorldPropSurface = {
   fit?: 'cover' | 'contain';
 };
 
+/**
+ * The kinds with a flat face a picture can actually sit on.
+ *
+ * Declared here rather than decided twice: `PropMesh` needs it to know whether
+ * to draw a panel, and `WorldPropertiesPanel` needs it to know whether to offer
+ * the field. If only the renderer knew, the panel would accept an image URL for
+ * a sphere and nothing would happen — an author typing into a control that does
+ * nothing is worse than a control that is not there.
+ */
+const SURFACEABLE_PROP_KINDS: readonly CanvasWorldPropKind[] = ['block', 'platform', 'ramp', 'hazard', 'goal'];
+
+export function propTakesSurface(kind: CanvasWorldPropKind): boolean {
+  return SURFACEABLE_PROP_KINDS.includes(kind);
+}
+
 export interface CanvasWorldProp extends CanvasWorldTransform {
   id: string;
   kind: CanvasWorldPropKind;
@@ -126,16 +148,6 @@ export interface CanvasWorldProp extends CanvasWorldTransform {
   physics: CanvasWorldPhysicsKind;
   /** What is painted on the prop's face. Absent = plain colour. */
   surface?: CanvasWorldPropSurface;
-  /**
-   * The board object this prop STANDS FOR, by id.
-   *
-   * This is identity, not decoration: a prop carrying one is a card you can
-   * walk up to, so the renderer paints that object's preview on it and a click
-   * selects the card rather than the prop. A prop whose object has since been
-   * deleted keeps rendering as a plain prop — the id is a reference across a
-   * boundary, and dangling references are a fact of life, not a crash.
-   */
-  objectId?: string;
 }
 
 export interface CanvasWorldScene {
@@ -213,7 +225,6 @@ export function addProp(
     color?: string;
     physics?: CanvasWorldPhysicsKind;
     surface?: CanvasWorldPropSurface;
-    objectId?: string;
   },
 ): { scene: CanvasWorldScene; prop: CanvasWorldProp } {
   const defaults = PROP_KIND_DEFAULTS[opts.kind];
@@ -229,7 +240,6 @@ export function addProp(
     // key into the jsonb column — an absent field and a null one read the same
     // here, and only one of them survives a round-trip looking like the original.
     ...(opts.surface ? { surface: opts.surface } : {}),
-    ...(opts.objectId ? { objectId: opts.objectId } : {}),
   };
   return { scene: { ...scene, props: [...scene.props, prop] }, prop };
 }
@@ -242,6 +252,37 @@ export function updateProp(
   return {
     ...scene,
     props: scene.props.map((prop) => (prop.id === propId ? { ...prop, ...patch } : prop)),
+  };
+}
+
+/**
+ * Paint a prop's face, or strip it back to plain colour with `null`.
+ *
+ * Its own mutation rather than a call through {@link updateProp} because
+ * CLEARING is the interesting case: `updateProp(scene, id, { surface: undefined })`
+ * leaves the key present-and-undefined, and a key that exists holding undefined
+ * survives a jsonb round-trip differently from one that was never there. This
+ * rebuilds the prop without the key, so "no picture" is the same document it
+ * would have been if nobody had ever added one.
+ *
+ * Total like every other mutation here: an unknown prop id, or a surface on a
+ * kind with no flat face to put it on, returns the scene unchanged.
+ */
+export function setPropSurface(
+  scene: CanvasWorldScene,
+  propId: string,
+  surface: CanvasWorldPropSurface | null,
+): CanvasWorldScene {
+  return {
+    ...scene,
+    props: scene.props.map((prop) => {
+      if (prop.id !== propId) return prop;
+      if (!surface) {
+        const { surface: _dropped, ...bare } = prop;
+        return bare;
+      }
+      return propTakesSurface(prop.kind) ? { ...prop, surface } : prop;
+    }),
   };
 }
 
@@ -325,7 +366,6 @@ export function canvasWorldSceneFrom(value: unknown): CanvasWorldScene {
     if (!kind) return [];
     const defaults = PROP_KIND_DEFAULTS[kind];
     const surface = propSurface(prop.surface);
-    const objectId = typeof prop.objectId === 'string' && prop.objectId ? prop.objectId : undefined;
     return [{
       id: typeof prop.id === 'string' && prop.id ? prop.id : `${kind}-${index}`,
       kind,
@@ -335,7 +375,6 @@ export function canvasWorldSceneFrom(value: unknown): CanvasWorldScene {
       color: hexColor(prop.color, defaults.color),
       physics: PHYSICS_KINDS.includes(prop.physics as CanvasWorldPhysicsKind) ? prop.physics as CanvasWorldPhysicsKind : defaults.physics,
       ...(surface ? { surface } : {}),
-      ...(objectId ? { objectId } : {}),
     }];
   }) : [];
 

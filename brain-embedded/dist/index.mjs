@@ -4896,6 +4896,96 @@ function subscribeToChatMessages(baseUrl, getToken, chatId, onChanged) {
   };
 }
 
+// src/brainRestPersistence.ts
+function listQuery(params) {
+  const q = new URLSearchParams();
+  if (params?.projectId) q.set("projectId", params.projectId);
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
+  const query = q.toString();
+  return query ? `?${query}` : "";
+}
+function createBrainRestPersistence(opts) {
+  const { baseUrl, request, getToken } = opts;
+  return {
+    listChats: (params) => request(`/api/brain/chats${listQuery(params)}`).then((r) => r.chats),
+    getChat: (id) => request(`/api/brain/chats/${id}`),
+    createChat: (body) => request("/api/brain/chats", { method: "POST", body: JSON.stringify(body) }),
+    updateChat: (id, body) => request(`/api/brain/chats/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+    /** Archives rather than destroys — `archived` is what the server reports. */
+    deleteChat: (id) => request(`/api/brain/chats/${id}`, { method: "DELETE" }),
+    /** Summarize a chat and store the summary on it. */
+    summarizeChat: (id) => request(`/api/brain/chats/${id}/summarize`, { method: "POST" }),
+    getMessages: (chatId, limit) => request(
+      `/api/brain/chats/${chatId}/messages${limit != null ? `?limit=${limit}` : ""}`
+    ).then((r) => r.messages),
+    subscribeMessages: (chatId, onChanged) => subscribeToChatMessages(baseUrl, getToken, chatId, onChanged),
+    /**
+     * Advance this viewer's unread high-water mark (omit `seq` for "all read").
+     *
+     * Reading a chat in VS Code clears its badge on the web too — it is the same
+     * server conversation. Best-effort: the run loop never blocks on it.
+     */
+    markChatRead: (chatId, seq) => request(`/api/brain/chats/${chatId}/read`, {
+      method: "POST",
+      body: JSON.stringify(seq != null ? { seq } : {})
+    }),
+    /**
+     * Post turns, and attach the server's TRUTHFUL learn-gate outcome to the
+     * assistant turn(s) this POST persisted.
+     *
+     * The outcome is transient — it is never persisted — so a host that drops it
+     * renders a run that is silent about learning, which is exactly how
+     * "Connected, yet nothing learned" became an unexplained mystery in the VSIX.
+     * Folding it HERE is what stops one host from forgetting again.
+     */
+    sendMessages: (chatId, messages) => request(
+      `/api/brain/chats/${chatId}/messages`,
+      { method: "POST", body: JSON.stringify({ messages }) }
+    ).then((r) => attachEvermindLearn(r.messages, r.evermindLearn)),
+    /**
+     * Set thumbs up/down on a message (null clears).
+     *
+     * `context.toolName` is the MCP tool the rated turn ran — the server files it,
+     * with the reply's resolved model, as an `llm_action_ratings` row the learned
+     * router ranks on. So the press teaches routing, not just a button colour.
+     */
+    setMessageFeedback: (messageId, feedback, context) => request(`/api/brain/messages/${messageId}/feedback`, {
+      method: "PATCH",
+      body: JSON.stringify({ feedback, toolName: context?.toolName ?? null })
+    }),
+    /**
+     * Ask an invited agent participant to reply — a chat-scoped run that answers
+     * AS the agent, returning the posted assistant turn (attributed through
+     * `metadata.authoredBy`).
+     */
+    requestAgentReply: (chatId, input) => request(`/api/brain/chats/${chatId}/agent-reply`, {
+      method: "POST",
+      body: JSON.stringify(input)
+    }).then((r) => r.message),
+    upload: (file) => {
+      if (opts.uploadFile) return opts.uploadFile(file);
+      const form = new FormData();
+      form.append("file", file);
+      return request("/api/brain/upload", { method: "POST", body: form });
+    },
+    /** URL to view/download an uploaded file by key. */
+    uploadUrl: (key) => `${baseUrl}/api/brain/uploads/${key}`,
+    /**
+     * Mint a short-lived signed public URL for an uploaded object so an upstream
+     * LLM provider can fetch it (vision). Used only for an image too large to
+     * inline as a data URL — see the image prep in the run loop.
+     */
+    signedUploadUrl: async (key) => {
+      const { exp, sig } = await request("/api/brain/uploads/sign", {
+        method: "POST",
+        body: JSON.stringify({ key })
+      });
+      return `${baseUrl}/api/brain-files/${key}?exp=${exp}&sig=${encodeURIComponent(sig)}`;
+    }
+  };
+}
+
 // src/transcriptBudget.ts
 var DEFAULT_MIN_PAYLOAD = 240;
 function createPayloadBudget(opts) {
@@ -5740,6 +5830,7 @@ export {
   consolidationMarkerContent,
   consolidationMetadata,
   countReconciledMemories,
+  createBrainRestPersistence,
   createPayloadBudget,
   deriveChatTitle,
   describeLiveStep,

@@ -12272,6 +12272,22 @@
       "other": "Otros"
     }
   },
+  "taskPrd": {
+    "emptyTask": "Esta tarea todavía no tiene PRD. Los agentes usan el PRD para entender el objetivo y traspasar el trabajo entre carriles.",
+    "emptyProject": "Aún no se ha redactado ningún PRD para este proyecto. Usa Brain o la pestaña PRD para redactar uno: los agentes lo usan para traspasar el trabajo entre carriles.",
+    "generating": "Generando…",
+    "generateWithAi": "Generar con IA",
+    "createPrd": "Crear PRD",
+    "attachExisting": "Adjuntar un PRD existente…",
+    "setPrimary": "Marcar como principal",
+    "detach": "Desvincular",
+    "viewPreview": "Vista previa",
+    "viewRaw": "CÓDIGO",
+    "expandFullScreen": "Ampliar a pantalla completa",
+    "exitFullScreen": "Salir de pantalla completa",
+    "prdLabel": "PRD",
+    "prdFallback": "PRD {id}"
+  },
   "taskMgmt": {
     "bulkChangeStatus": "Cambiar estado en bloque…",
     "branchAndPr": "Rama y PR",
@@ -22539,6 +22555,37 @@
         "regionLabel": "Las estadísticas de esta sesión",
         "openFull": "Abrir panel completo"
       },
+      "room": {
+        "standup": {
+          "caption": "Daily",
+          "groupLabel": "Controles del daily",
+          "projectLabel": "Proyecto del que trata este daily",
+          "allProjects": "Todos los proyectos",
+          "projectFallback": "Proyecto {id}",
+          "previous": "Proyecto anterior",
+          "next": "Proyecto siguiente",
+          "start": "Iniciar daily",
+          "starting": "Iniciando…",
+          "live": "En curso · {project}",
+          "finish": "Finalizar",
+          "finishing": "Finalizando…",
+          "needsProject": "Elige un proyecto para dejar constancia de este daily",
+          "dismiss": "Descartar"
+        },
+        "label": "Sala",
+        "enter": "Reunirse en la sala",
+        "active": "Estás en la sala",
+        "regionLabel": "La sala de esta sesión",
+        "here": "{here} de {total} presentes",
+        "rosterHead": "{count, plural, =0 {Todavía no hay nadie} one {# persona} other {# personas}}",
+        "unknown": "Colaborador",
+        "you": "Tú",
+        "inRoom": "En la sala",
+        "onBoard": "En el tablero",
+        "noWebglTitle": "El 3D no está disponible en este dispositivo",
+        "noWebglBody": "La sala necesita WebGL y este navegador no puede iniciarlo. Abajo aparece todo el mundo que está en la sesión, y el resto del lienzo funciona con normalidad.",
+        "wallOverflow": "{count, plural, one {Hay # objeto más que no está en la pared} other {Hay # objetos más que no están en la pared}}"
+      },
       "page": {
         "label": "Página",
         "open": "Abrir como página"
@@ -22624,6 +22671,11 @@
           }
         },
         "panel": {
+          "surfaceImage": "Imagen en su cara",
+          "surfaceImagePlaceholder": "https://… (una foto, un diagrama)",
+          "surfaceFit": "Cómo encaja",
+          "surfaceFitCover": "Rellenar la cara",
+          "surfaceFitContain": "Caber dentro de la cara",
           "transform": "Transformación",
           "appearance": "Apariencia",
           "physics": "Física y cuerpo",
@@ -23529,7 +23581,8 @@
       "subflowTooDeep": "Los lienzos anidados superan los {depth} niveles en «{canvas}».",
       "subflowEmpty": "El lienzo «{canvas}» todavía no tiene pasos que ejecutar.",
       "subflowNotBuildable": "El lienzo «{canvas}» aún no se puede compilar: el paso «{step}» no está listo.",
-      "subflowNeedsBuild": "Compila el lienzo «{canvas}» una vez antes de ejecutarlo en vivo desde aquí."
+      "subflowNeedsBuild": "Compila el lienzo «{canvas}» una vez antes de ejecutarlo en vivo desde aquí.",
+      "subflowMissingInput": "El lienzo «{canvas}» necesita que se le pase «{key}», y este paso no lo asigna."
     },
     "frameSection": {
       "holds": "{count, plural, =0 {Vacío} one {# objeto} other {# objetos}}",
@@ -24135,30 +24188,6 @@
     "installIos": "Instala Builderforce: toca Compartir y luego «Añadir a pantalla de inicio»."
   },
   "workflow": {
-    "subflowNode": {
-    "loadFailed": "No se pudieron cargar tus lienzos.",
-    "canvas": "Lienzo que se ejecutará",
-    "choosePlaceholder": "Elige un lienzo…",
-    "loading": "Cargando lienzos…",
-    "binding": "Cómo se vincula",
-    "bindingOption": {
-      "snapshot": "Instantánea: congelarlo en este flujo",
-      "live": "En vivo: seguir el lienzo"
-    },
-    "bindingHint": {
-      "snapshot": "Los pasos del lienzo hijo se copian en este flujo al compilarlo. Una ejecución, una cronología; los cambios posteriores en ese lienzo no llegan aquí hasta que vuelvas a compilar.",
-      "live": "Este flujo llama al flujo compilado del lienzo hijo en tiempo de ejecución, así que los cambios llegan sin recompilar aquí. El hijo debe haberse compilado al menos una vez."
-    },
-    "unreadable": "Ese lienzo no se puede leer: puede haberse eliminado o no estar compartido contigo.",
-    "noSteps": "Ese lienzo aún no tiene pasos, así que no hay nada que ejecutar.",
-    "stepCount": "{count, plural, one {# paso} other {# pasos}}",
-    "accepts": "Acepta",
-    "acceptsAnything": "Cualquier cosa que le pases",
-    "acceptsNothing": "Nada: empieza desde sus propios pasos",
-    "acceptsAlsoRaw": "También acepta cualquier otra cosa que le pases.",
-    "returns": "Devuelve",
-    "returnsNothing": "Nada que este flujo pueda leer"
-    },
     "connectorNode": {
       "integration": "Integración",
       "action": "Acción",
@@ -24194,7 +24223,8 @@
       "bindingHint": {
         "snapshot": "Los pasos de ese lienzo se copian en este flujo al compilar. Las ediciones posteriores allí no cambian este flujo hasta que vuelvas a compilarlo.",
         "live": "Ese lienzo se lee de nuevo cada vez que se ejecuta este flujo, así que las ediciones allí se aplican de inmediato. Debe haberse compilado allí al menos una vez."
-      }
+      },
+      "openCanvas": "Abrir este lienzo"
     }
   },
   "kernel": {

@@ -14,7 +14,7 @@
 import { eq } from 'drizzle-orm';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { workflowTriggers } from '../../infrastructure/database/schema';
-import { fireAddressedTrigger } from '../../presentation/routes/workflowTriggerRoutes';
+import { fireAddressedTrigger } from './fireAddressedTrigger';
 
 export interface InboundEmailEnv {
   NEON_DATABASE_URL: string;
