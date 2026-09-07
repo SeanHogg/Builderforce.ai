@@ -4,7 +4,6 @@ import { useTranslations } from 'next-intl';
 import { SearchPicker, type SearchPickerSection } from '@/components/ui/SearchPicker';
 import type { CreationObjectGroup, CreationObjectKind } from './types';
 import { useAuth } from '@/lib/AuthContext';
-<<<<<<< Updated upstream
 import { useCanvasCapabilities } from '@/lib/canvasCapabilitiesApi';
 import { creationPaletteGroupsFor } from './creationObjectRegistry';
 import { STENCIL_PACKS, stencilChoice, type PaletteChoice } from '@/lib/canvasStencils';
@@ -16,9 +15,6 @@ import {
 } from '@/domains/workflow/domain/stepIntegrations';
 import { integrationDescription } from '@/domains/workflow/domain/stepCatalogI18n';
 import { integrationStepChoice, stepChoice } from '@/domains/workflow/domain/flowStepObject';
-=======
-import { creationPaletteGroupsFor } from './creationObjectRegistry';
->>>>>>> Stashed changes
 import styles from './CreationCanvas.module.css';
 
 /**
@@ -99,20 +95,16 @@ const PICKER_CLASS_NAMES = {
 export function CanvasObjectPicker({ anchor, group, fromNodeId, onPick, onDragStart, onClose }: CanvasObjectPickerProps) {
   const t = useTranslations('creationCanvas');
   const tPicker = useTranslations('creationCanvas.picker');
-<<<<<<< Updated upstream
   const tStencil = useTranslations('creationCanvas.stencil');
   const tPack = useTranslations('creationCanvas.stencilPack');
   // The step catalog names itself out of the builder's namespace — the same keys the
   // standalone palette reads, because they name the same steps.
   const tStep = useTranslations('evermindBuild');
   const tWorkflow = useTranslations('workflowBuilder');
-=======
->>>>>>> Stashed changes
   // The picker decides its own contents rather than being handed a boolean: a signed-out
   // board has no access control, so it does not advertise the restricted-by-default
   // kinds. `authReady` guards the first hydrated frame, where `isAuthenticated` is
   // unavoidably false for everyone and would briefly hide those kinds from a member.
-<<<<<<< Updated upstream
   const { isAuthenticated, authReady, tenant } = useAuth();
   const signedIn = !authReady || isAuthenticated;
   // ENTITLEMENT, resolved by the server. The picker asks the same question the palette
@@ -175,23 +167,6 @@ export function CanvasObjectPicker({ anchor, group, fromNodeId, onPick, onDragSt
         .filter((section) => section.items.length > 0),
     ],
     [t, tPack, tStencil, tStep, tWorkflow, signedIn, capabilities],
-=======
-  const { isAuthenticated, authReady } = useAuth();
-  const signedIn = !authReady || isAuthenticated;
-
-  const sections = useMemo<SearchPickerSection<CreationObjectKind>[]>(
-    () => creationPaletteGroupsFor(signedIn).map((entry) => ({
-      key: entry.group,
-      label: t(`group.${entry.group}` as 'group.Build'),
-      items: entry.items.map((item) => ({
-        kind: item.kind,
-        icon: item.icon,
-        label: t(`object.${item.kind}` as 'object.note'),
-        description: t(`objectDescription.${item.kind}` as 'objectDescription.note'),
-      })),
-    })),
-    [t, signedIn],
->>>>>>> Stashed changes
   );
 
   return (

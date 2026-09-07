@@ -23086,7 +23086,6 @@
         "buyerOwner": "对方负责人"
       }
     },
-<<<<<<< Updated upstream
     "exportRestricted": "受限 — 此卡片无法导出",
     "imageCapturedStatus": "已捕获",
     "imageCapturedValidation": "已渲染并捕获实时页面 {url}",
@@ -23540,9 +23539,6 @@
     "approveAgentActionTitle": "批准代理操作",
     "approveAgentActionBody": "会话代理想要运行 {action}。",
     "approveAgentActionConfirm": "批准"
-=======
-    "exportRestricted": "受限 — 此卡片无法导出"
->>>>>>> Stashed changes
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",

@@ -1,9 +1,5 @@
 import type { CreationNodeData, CreationObjectKind } from './types';
-<<<<<<< Updated upstream
 import { BRAND_BINDING_FIELD, CREATION_CONNECTION_KINDS, defaultConfidentialityForKind, isBrandBoundKind, emptyCanvasVideoTimeline, emptyCanvasWorldScene, emptyCanvasSceneSpec, FOUNDER_OBJECT_KINDS, type AcademicObjectKind, type CareerObjectKind, type CreationConnectionKind, type DataScienceObjectKind, type FounderObjectKind, type HiringObjectKind, type LegalObjectKind, type MarketingObjectKind, type OperationsObjectKind, type PeopleObjectKind, type SellMotionObjectKind, type SharedObjectKind } from '@builderforce/creation-canvas-contract';
-=======
-import { CREATION_CONNECTION_KINDS, defaultConfidentialityForKind, emptyCanvasVideoTimeline, emptyCanvasWorldScene, FOUNDER_OBJECT_KINDS, type AcademicObjectKind, type CreationConnectionKind, type DataScienceObjectKind, type FounderObjectKind, type HiringObjectKind, type LegalObjectKind, type OperationsObjectKind, type PeopleObjectKind, type SellMotionObjectKind, type SharedObjectKind } from '@builderforce/creation-canvas-contract';
->>>>>>> Stashed changes
 import { FOUNDER_BOOKKEEPING_FIELDS, FOUNDER_FIELD_NAMES, FOUNDER_OBJECT_SPECS, founderMutableFields } from '@/lib/founderObjects';
 // Importing the vocabulary registers it (see `specObjects.ts`), which is what makes the
 // academic kinds resolvable everywhere else without a second list of them here.
@@ -993,15 +989,11 @@ export function availableCreationObjects(
 ): readonly CreationObjectDefinition[] {
   const signedIn = options?.signedIn ?? true;
   return CREATION_OBJECT_REGISTRY.filter((definition) => (
-<<<<<<< Updated upstream
     // A LEGACY kind is not on offer at all. Not an entitlement and not a guest rule:
     // the kind has no editor left, so there is nothing to unlock and nothing to
     // upgrade to — which is why it is filtered here rather than locked below.
     !definition.legacy
     && (!definition.capability || capabilities.has(definition.capability))
-=======
-    (!definition.capability || capabilities.has(definition.capability))
->>>>>>> Stashed changes
     // The same guest rule `creationPaletteGroupsFor` applies, asked from the contract
     // rather than copied, so the palette and the capability set cannot disagree about
     // what a signed-out visitor may author.
@@ -1019,7 +1011,6 @@ export const CREATION_PALETTE_GROUPS = ([
   'Build', 'Data', 'Knowledge', 'Insights', 'Work', 'Quality', 'Teaching', 'Research',
   'Pitch', 'People', 'Hiring', 'Career', 'Operations', 'Revenue', 'Agents', 'Models', 'Collaborate', 'Integrations',
 ] as const satisfies readonly CreationObjectGroup[])
-<<<<<<< Updated upstream
   .map((group) => ({ group, items: CREATION_OBJECT_REGISTRY.filter((definition) => definition.group === group && !definition.legacy) }));
 
 /** A palette entry, plus whether this caller may actually place it. `locked` is set only
@@ -1030,11 +1021,6 @@ export interface CreationPaletteGroup {
   group: CreationObjectGroup;
   items: readonly CreationPaletteItem[];
 }
-=======
-  .map((group) => ({ group, items: CREATION_OBJECT_REGISTRY.filter((definition) => definition.group === group) }));
-
-export type CreationPaletteGroup = typeof CREATION_PALETTE_GROUPS[number];
->>>>>>> Stashed changes
 
 /**
  * The palette a SIGNED-OUT board advertises.
@@ -1057,7 +1043,6 @@ export type CreationPaletteGroup = typeof CREATION_PALETTE_GROUPS[number];
  * Empty groups are dropped, so the guest never sees a category heading with nothing under
  * it — a heading over an empty list reads as a loading failure.
  */
-<<<<<<< Updated upstream
 /**
  * The palette for one caller.
  *
@@ -1111,14 +1096,3 @@ export function creationPaletteGroupsFor(
     .filter((entry) => entry.items.length > 0);
 }
 
-=======
-export function creationPaletteGroupsFor(signedIn: boolean): readonly CreationPaletteGroup[] {
-  if (signedIn) return CREATION_PALETTE_GROUPS;
-  return CREATION_PALETTE_GROUPS
-    .map((entry) => ({
-      ...entry,
-      items: entry.items.filter((item) => defaultConfidentialityForKind(item.kind) !== 'restricted'),
-    }))
-    .filter((entry) => entry.items.length > 0);
-}
->>>>>>> Stashed changes

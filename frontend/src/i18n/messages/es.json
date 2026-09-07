@@ -23086,7 +23086,6 @@
         "buyerOwner": "Responsable suyo"
       }
     },
-<<<<<<< Updated upstream
     "exportRestricted": "Restringido: esta tarjeta no se puede exportar",
     "imageCapturedStatus": "Capturada",
     "imageCapturedValidation": "Página en vivo renderizada y capturada desde {url}",
@@ -23540,9 +23539,6 @@
     "approveAgentActionTitle": "Aprobar la acción del agente",
     "approveAgentActionBody": "Un agente de la sesión quiere ejecutar {action}.",
     "approveAgentActionConfirm": "Aprobar"
-=======
-    "exportRestricted": "Restringido: esta tarjeta no se puede exportar"
->>>>>>> Stashed changes
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",

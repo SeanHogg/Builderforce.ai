@@ -51,18 +51,11 @@ import { normalizeGameDocument, validateGameDocument } from '../../application/g
 import { ROBLOX_RESPONSE_SCHEMA, ROBLOX_SYSTEM_PROMPT, rbxlxFromSpec, readRobloxSpec } from '../../application/game/robloxPlace';
 import { findStockImages } from '../../application/creative/stockImageSearch';
 import {
-<<<<<<< Updated upstream
   SCREENSHOT_REASON_STATUS,
   ScreenshotUnavailableError,
   captureWebScreenshotCached,
 } from '../../application/web/webScreenshot';
 import { limitParam } from './queryParams';
-=======
-  ScreenshotUnavailableError,
-  captureWebScreenshotCached,
-  isScreenshotViewport,
-} from '../../application/web/webScreenshot';
->>>>>>> Stashed changes
 
 /** Every kind this route can generate — the `kind` a `/generate` body may carry. */
 const CREATIVE_KINDS = ['cad', 'model3d', 'game', 'resume', 'podcast', 'template'] as const;
@@ -282,44 +275,6 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
         // answers to the operator's monitoring and to the user reading the reply. The
         // mapping lives with the reasons so a new one must decide its own status.
         return c.json({ error: error.message, reason: error.reason }, SCREENSHOT_REASON_STATUS[error.reason]);
-      }
-      // An SSRF refusal or a malformed URL — the caller's input, not the renderer.
-      return c.json({ error: error instanceof Error ? error.message : 'The page could not be captured', reason: 'rejected' }, 400);
-    }
-  });
-
-  /**
-   * POST /api/creative/screenshot  { url, viewport?, fullPage? }
-   *  → { imageDataUrl, url, width, height, viewport, capturedAt, provider }
-   *
-   * Pixels of a LIVE page — the "before" a redesign is compared against. Sibling of
-   * `builtin_web_fetch`, which reads what a page says; this reads what it looks like,
-   * and a "show me a before and after" conversation needs both. See
-   * `application/web/webScreenshot.ts` for the session that made it necessary.
-   *
-   * The failure paths matter as much as the success one: every refusal carries the
-   * REAL reason (`unconfigured` — this deployment has no renderer; `provider` — the
-   * page timed out or refused; `too-large` — the capture exceeds what a canvas object
-   * may hold), because the canvas relays that sentence to the user verbatim rather
-   * than letting the model invent a limitation of its own.
-   *
-   * Cached inside the service (six hours), so a comparison re-read during a working
-   * session costs one render rather than one per turn.
-   */
-  router.post('/screenshot', async (c) => {
-    type ShotBody = { url?: unknown; viewport?: unknown; fullPage?: unknown };
-    const body = await c.req.json<ShotBody>().catch(() => ({} as ShotBody));
-    const url = String(body.url ?? '').trim();
-    if (!url) return c.json({ error: 'url is required' }, 400);
-    const viewport = isScreenshotViewport(body.viewport) ? body.viewport : 'desktop';
-    try {
-      const shot = await captureWebScreenshotCached(c.env, url, { viewport, fullPage: body.fullPage === true });
-      return c.json(shot);
-    } catch (error) {
-      if (error instanceof ScreenshotUnavailableError) {
-        // 503 for "this deployment cannot", 502 for "that page would not" — different
-        // answers to the operator's monitoring and to the user reading the reply.
-        return c.json({ error: error.message, reason: error.reason }, error.reason === 'unconfigured' ? 503 : 502);
       }
       // An SSRF refusal or a malformed URL — the caller's input, not the renderer.
       return c.json({ error: error instanceof Error ? error.message : 'The page could not be captured', reason: 'rejected' }, 400);

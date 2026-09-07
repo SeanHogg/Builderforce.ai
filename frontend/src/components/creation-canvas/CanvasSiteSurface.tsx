@@ -6,7 +6,6 @@
  */
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-<<<<<<< Updated upstream
 import {
   canvasViewport,
   websiteBeforeFrom,
@@ -14,9 +13,6 @@ import {
   type CanvasViewport,
 } from '@builderforce/creation-canvas-contract';
 import { captureCanvasScreenshot } from '@/lib/canvasImageAssets';
-=======
-import { canvasViewport, type CanvasViewport } from '@builderforce/creation-canvas-contract';
->>>>>>> Stashed changes
 import styles from './CreationCanvas.module.css';
 import { CanvasObjectSurface } from './CanvasObjectSurface';
 import { CanvasViewportSwitcher } from './CanvasViewportSwitcher';

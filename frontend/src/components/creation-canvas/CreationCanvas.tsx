@@ -194,13 +194,9 @@ import { captureCanvasScreenshot, resolveCanvasImage, type CanvasImageAsset, typ
 import { createProject, evaluateModel, fetchProjects, publishSite } from '@/lib/api';
 import { computeProjectHealth } from '@/lib/projectHealth';
 import { createCloudAgent, updateAgent } from '@/lib/api';
-<<<<<<< Updated upstream
 import { presentationSequence, presentationStepAt, presentationViewport, stepPresentation } from '@/lib/canvasPresentation';
 import { localCheckpointSummaries, readLocalCheckpoint, saveLocalCheckpoint, type LocalCheckpointSummary } from '@/lib/creationCheckpoints';
 import { CREATION_OBJECT_REGISTRY, createDefaultCreationData, creationObjectDefinition, creationObjectMutableFields, emptyShellProblem, sanitizeCreationObjectPatch, type CreationObjectGroup } from './creationObjectRegistry';
-=======
-import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData, creationObjectDefinition, creationPaletteGroupsFor, emptyShellProblem, sanitizeCreationObjectPatch, type CreationObjectGroup } from './creationObjectRegistry';
->>>>>>> Stashed changes
 import { CREATION_TEMPLATES, type CreationTemplate } from './creationTemplates';
 import { expandTemplateWorkflows } from './expandTemplateWorkflows';
 import { describeMailboxFilter, mailboxApi, resolveMailboxConnection, type MailboxFilter } from '@/lib/mailboxApi';
@@ -287,13 +283,9 @@ import {
 import { readAttachmentSource, uploadAttachmentSource } from '@/lib/canvasAttachmentUploadApi';
 import { importResumeFromAttachment } from '@/lib/resumeImportApi';
 import { aiContextGate, boardInventory, findInInventory, scopeNote } from '@/lib/canvasContextSnapshot';
-<<<<<<< Updated upstream
 import { erasureRefusal, objectMayCross, partitionForBoundary, withheldNotice } from '@/lib/canvasConfidentiality';
 import { BRAND_BINDING_HINT } from '@/lib/marketingObjects';
 import { CanvasAppPanel } from '@/components/apps/CanvasAppPanel';
-=======
-import { objectMayCross, partitionForBoundary, withheldNotice } from '@/lib/canvasConfidentiality';
->>>>>>> Stashed changes
 import {
   RESUME_TEMPLATES, RESUME_TEMPLATE_IDS, activeResumeRevision, createResumeFamily,
   initializeResumeFromPatch, preserveResumeSourceForPatch, renderResumeMarkdown,
@@ -393,11 +385,7 @@ import { canvasSignatureActions } from '@/lib/canvasSignatureTools';
 import { moveDeal as moveDealOnBoard } from '@/lib/founderOpsApi';
 import { notifyWorkspaceFilesChanged } from '@/lib/workspaceFileEvents';
 import { canvasWebPageUrl, normalizeWebPageUrl, webPageHost } from '@/lib/canvasWebPage';
-<<<<<<< Updated upstream
 import { CANVAS_VIEWPORTS, canvasViewport, websiteBeforePatch } from '@builderforce/creation-canvas-contract';
-=======
-import { canvasViewport } from '@builderforce/creation-canvas-contract';
->>>>>>> Stashed changes
 import { deleteIdeProject, listIdeProjects } from '@/lib/api';
 import { CREATIVE_GENERATOR_KINDS } from '@/lib/creationObjectGroups';
 import {
@@ -10528,7 +10516,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // directly with `defaultExportAction`, so the refusal has to live where the bytes are
     // written rather than where the buttons are drawn.
     if (!objectMayCross(target, 'export')) return t('exportRestricted');
-<<<<<<< Updated upstream
     // The second gate, and a different question: confidentiality asks whether this CARD
     // may leave, the use policy asks whether these ROWS may be used this way. A dataset
     // classified as personal data and collected for one purpose does not become
@@ -10539,8 +10526,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // that has ever existed. See `dataGovernance.ts` for the merge that closed it.
     const useGate = evaluateDatasetUse('export', normalizeClassifications(target.data.classifications), normalizeUsePolicy(target.data.dataUse));
     if (!useGate.allowed) { setNotice(useGate.reason ?? t('exportRestricted')); return useGate.reason ?? t('exportRestricted'); }
-=======
->>>>>>> Stashed changes
     const markdown = canvasObjectMarkdown(target.data);
     const base = safeDownloadName(target.data.title);
     const exportRefusals = {
@@ -12546,29 +12531,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           onVisibleChange={setOutlineHighlightIds}
         />}
 
-<<<<<<< Updated upstream
-=======
-        {!presentMode && paletteOpen && <aside id="canvas-object-palette" data-testid="canvas-palette" className={styles.palette}>
-          <div className={styles.paletteHeader}><strong>{t('addToCanvas')}</strong><button onClick={() => setPaletteOpen(false)} aria-label={t('closePalette')}>×</button></div>
-          <div className={styles.paletteSearchWrap}><span aria-hidden><Icon source="⌕" size="1em" /></span><input ref={paletteSearchRef} data-testid="canvas-palette-search" className={styles.search} aria-label={t('searchObjectTypes')} value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder={t('searchObjectTypes')} />{paletteSearch && <button type="button" aria-label={t('clearSearch')} onClick={() => setPaletteSearch('')}>×</button>}</div>
-          <div className={styles.paletteSections}>{creationPaletteGroupsFor(persistence === 'server').map((group) => ({ ...group, items: group.items.filter((item) => `${t(`object.${item.kind}`)} ${t(`group.${item.group}`)} ${item.group} ${item.kind}`.toLowerCase().includes(paletteSearch.trim().toLowerCase())) })).filter((group) => group.items.length).map((group) => {
-            const collapsed = !paletteSearch.trim() && collapsedPaletteGroups.has(group.group);
-            const regionId = `canvas-palette-${group.group.toLowerCase()}`;
-            return <section key={group.group} className={styles.paletteSection}>
-              {/* Named explicitly: without it the control's accessible name is
-                  its own contents — "Build 22 ⌄" — which tells a screen-reader
-                  user nothing about what pressing it does, and silently changes
-                  every time an object is added to the group. */}
-              <button type="button" className={styles.paletteSectionToggle} aria-expanded={!collapsed} aria-controls={regionId} aria-label={t(collapsed ? 'expandPaletteGroup' : 'collapsePaletteGroup', { group: t(`group.${group.group}`) })} onClick={() => setCollapsedPaletteGroups((current) => { const next = new Set(current); if (next.has(group.group)) next.delete(group.group); else next.add(group.group); return next; })}>
-                <span className={styles.paletteGroupIcon} aria-hidden><Icon source={PALETTE_GROUP_ICONS[group.group]} size={18} /></span><strong>{t(`group.${group.group}`)}</strong><small>{group.items.length}</small><span className={styles.paletteChevron} aria-hidden><Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={15} /></span>
-              </button>
-              {!collapsed && <div id={regionId} className={styles.paletteGrid}>{group.items.map((item) => <button key={item.kind} data-testid={`canvas-palette-${item.kind}`} aria-label={t(`object.${item.kind}`)} disabled={!canEdit} draggable={canEdit} onDragStart={(event) => { event.dataTransfer.setData(DND_MIME, item.kind); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addAtCenter(item.kind)}><span><Icon source={item.icon} size={20} /></span>{t(`object.${item.kind}`)}</button>)}</div>}
-            </section>;
-          })}</div>
-        </aside>}
-
-
->>>>>>> Stashed changes
         {buildFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('build.focusLabel')}>
           <header><div><strong>{t('build.focusTitle')}</strong><small>{t('build.focusHint')}</small></div><button type="button" onClick={() => setBuildFocus(null)} aria-label={t('build.closeBuilder')}>×</button></header>
           <div className={styles.buildFocusBody}>

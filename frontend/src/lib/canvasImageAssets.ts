@@ -4,7 +4,6 @@ import { apiRequest } from './apiClient';
 /**
  * The three ways real pixels reach the canvas.
  *
-<<<<<<< Updated upstream
  * `capture` is the newest and closes a hole the other two could not. A redesign
  * conversation ("upgrade my site, show me a before and after") needs pixels of a page
  * that ALREADY EXISTS, and neither searching stock photography nor generating an
@@ -17,14 +16,6 @@ import { apiRequest } from './apiClient';
  * model chooses between when it wants a picture OF something, and every arm of it takes
  * a free-text query. A capture takes a URL, which is a different input and a different
  * tool — see `CANVAS_SCREENSHOT_TOOL`.
-=======
- * `capture` is the newest and the one that closes a hole the other two could not. A
- * redesign conversation ("upgrade my site, show me a before and after") needs pixels of
- * a page that ALREADY EXISTS, and neither searching stock photography nor generating an
- * illustration can produce those — so the canvas had no honest answer and the model
- * invented one ("as a large language model I can't take screenshots of live websites").
- * See `api/src/application/web/webScreenshot.ts` for the measured session.
->>>>>>> Stashed changes
  */
 export type CanvasImageResolveMode = 'find' | 'generate' | 'auto';
 
@@ -97,13 +88,8 @@ export async function generateCanvasImage(prompt: string): Promise<CanvasImageAs
  * a JS-rendered marketing site captures as its visitors see it rather than as its HTML
  * source reads. Every refusal from that service carries the true reason in its message,
  * and this rethrows it unchanged: the whole point of the capability is that the user
-<<<<<<< Updated upstream
  * hears "that page took too long to render" or "capture is not configured on this
  * deployment" instead of a limitation the model made up.
-=======
- * hears "that page took too long to render" or "capture is not configured here" instead
- * of a limitation the model made up.
->>>>>>> Stashed changes
  */
 export async function captureCanvasScreenshot(
   url: string,

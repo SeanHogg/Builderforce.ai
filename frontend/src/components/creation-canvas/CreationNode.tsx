@@ -53,10 +53,7 @@ import { controlLabels, readGameControls } from '@/lib/gamePoster';
 import { canvasBuildBinding } from '@/lib/canvasBuild';
 import { canvasWebPageUrl, WEB_PAGE_KINDS } from '@/lib/canvasWebPage';
 import { canvasViewport } from '@builderforce/creation-canvas-contract';
-<<<<<<< Updated upstream
 import { formatBytes } from '@/lib/formatBytes';
-=======
->>>>>>> Stashed changes
 import { dashboardWidgetsPatch, readDashboardWidgets } from '@/lib/canvasDashboard';
 import { PIPELINE_MAX_CARDS_PER_CELL, cardProbabilityPercent, cardsAt, pipelineTotals, readPipelineModel, stageTotals } from '@/lib/canvasSalesPipeline';
 import {

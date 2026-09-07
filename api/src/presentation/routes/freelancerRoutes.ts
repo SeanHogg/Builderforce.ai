@@ -54,7 +54,6 @@ import {
   readFreelancerMilestones,
 } from '../../application/marketplace/milestones';
 import { summariseEscrow, type MilestoneAction } from '../../application/marketplace/escrow';
-<<<<<<< Updated upstream
 import {
   disputeTenantForFreelancer,
   fileDisputeStatement,
@@ -71,9 +70,6 @@ import {
 import { invalidateEarnings } from '../../application/finance/earningsLedger';
 import { hireShape } from '../../application/marketplace/engagementShape';
 import { requestDb } from '../../application/shared/dbHandle';
-=======
-import { buildDatabase } from '../../infrastructure/database/connection';
->>>>>>> Stashed changes
 import {
   freelancerEngagements,
   freelancerProfiles,
@@ -1428,29 +1424,14 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // forget. The `/mine/...` prefix mirrors the split `GET /` and `GET /mine` above
   // already draw, and is declared BEFORE `/:id/...` so `mine` is never read as an id.
 
-<<<<<<< Updated upstream
   // A refusal's HTTP status is `ESCROW_REFUSAL_STATUS` (owned by `disputeRoutes`): ONE
   // table for both doors, because `DisputeRefusal` extends `EscrowRefusal` precisely so
   // one translation serves both.
-=======
-  /** An escrow refusal as an HTTP answer. 409 for a state conflict, 403 for the wrong
-   *  party — a freelancer told "404" about their own milestone would go looking for a
-   *  bug, and one told "403" knows the action belongs to the client. */
-  const refusalStatus = (reason: string): 400 | 403 | 404 | 409 =>
-    reason === 'not_found' ? 404
-    : reason === 'wrong_party' ? 403
-    : reason === 'wrong_status' || reason === 'conflict' ? 409
-    : 400;
->>>>>>> Stashed changes
 
   // GET /mine/milestones — WORKER: every milestone I am engaged on, with the money
   // rolled up. The "what am I owed" view.
   router.get('/mine/milestones', webAuthMiddleware, async (c) => {
-<<<<<<< Updated upstream
     const db = requestDb(c);
-=======
-    const db = buildDatabase(c.env);
->>>>>>> Stashed changes
     const milestones = await readFreelancerMilestones(db, c.get('userId') as string);
     return c.json({ milestones, summary: summariseEscrow(milestones) });
   });
@@ -1460,28 +1441,19 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // has funded — which is the funded-before-work gate, enforced by the machine rather
   // than by asking the surface to hide a button.
   router.post('/mine/milestones/:milestoneId/submit', webAuthMiddleware, async (c) => {
-<<<<<<< Updated upstream
     const db = requestDb(c);
-=======
-    const db = buildDatabase(c.env);
->>>>>>> Stashed changes
     const userId = c.get('userId') as string;
     const milestoneId = c.req.param('milestoneId');
     // Scoped BY the acting user, so the tenant comes from the row rather than from the
     // caller — see `milestoneTenantForFreelancer`.
     const tenantId = await milestoneTenantForFreelancer(db, milestoneId, userId);
     if (tenantId === null) return c.json({ error: 'Not found' }, 404);
-<<<<<<< Updated upstream
     const b = await parseBody(c, MilestoneNoteBody);
-=======
-    const b = await c.req.json<{ note?: string }>().catch(() => ({ note: undefined }));
->>>>>>> Stashed changes
     const result = await moveMilestone(c.env as Env, db, {
       tenantId, milestoneId, action: 'submit', party: 'freelancer', actorUserId: userId, note: b.note ?? null,
     });
     return result.ok
       ? c.json({ milestone: result.milestone })
-<<<<<<< Updated upstream
       : refusalResponse(c, result.reason, ESCROW_REFUSAL_STATUS);
   });
 
@@ -1552,19 +1524,12 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     return result.ok
       ? c.json({ dispute: result.dispute })
       : refusalResponse(c, result.reason, ESCROW_REFUSAL_STATUS);
-=======
-      : c.json({ error: result.reason }, refusalStatus(result.reason));
->>>>>>> Stashed changes
   });
 
   // GET /:id/milestones — CLIENT: one engagement's schedule, its escrow summary, and
   // whether work is authorised.
   router.get('/:id/milestones', authMiddleware, async (c) => {
-<<<<<<< Updated upstream
     const db = requestDb(c);
-=======
-    const db = buildDatabase(c.env);
->>>>>>> Stashed changes
     const view = await readEngagementSchedule(db, c.get('tenantId') as number, c.req.param('id'));
     return c.json(view);
   });
@@ -1572,22 +1537,11 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // POST /:id/milestones — CLIENT: add a deliverable. Always lands in `draft`; writing
   // a milestone down never funds it.
   router.post('/:id/milestones', authMiddleware, async (c) => {
-<<<<<<< Updated upstream
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const engagementId = c.req.param('id');
     const b = await parseBody(c, CreateMilestoneBody);
     const amountCents = b.amountCents ?? 0;
-=======
-    const db = buildDatabase(c.env);
-    const tenantId = c.get('tenantId') as number;
-    const engagementId = c.req.param('id');
-    const b = await c.req.json<{ title?: string; description?: string; amountCents?: number; currency?: string; sequence?: number; dueAt?: string }>();
-    const title = String(b.title ?? '').trim();
-    if (!title) return c.json({ error: 'title is required' }, 400);
-    const amountCents = Math.floor(Number(b.amountCents ?? 0));
-    if (!Number.isFinite(amountCents) || amountCents < 0) return c.json({ error: 'amountCents must be a positive integer' }, 400);
->>>>>>> Stashed changes
     // The engagement must be this tenant's — otherwise a milestone could be attached to
     // somebody else's engagement and would be funded out of the wrong pocket.
     const [engagement] = await db.select({
@@ -1601,19 +1555,11 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
       tenantId,
       engagementId,
       freelancerUserId: engagement.freelancerUserId,
-<<<<<<< Updated upstream
       title: b.title,
       description: b.description ?? null,
       amountCents,
       currency: b.currency,
       sequence: b.sequence ?? 0,
-=======
-      title,
-      description: b.description ?? null,
-      amountCents,
-      currency: b.currency,
-      sequence: Number.isFinite(Number(b.sequence)) ? Number(b.sequence) : 0,
->>>>>>> Stashed changes
       dueAt: b.dueAt ? new Date(b.dueAt) : null,
       createdByUserId: c.get('userId') as string,
     });
@@ -1625,20 +1571,12 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   // state machine already understands — five endpoints would be five places to forget
   // the gate.
   router.post('/milestones/:milestoneId/:action', authMiddleware, async (c) => {
-<<<<<<< Updated upstream
     const db = requestDb(c);
-=======
-    const db = buildDatabase(c.env);
->>>>>>> Stashed changes
     const action = c.req.param('action');
     if (!CLIENT_ESCROW_ACTIONS.includes(action as MilestoneAction)) {
       return c.json({ error: 'unknown_action' }, 400);
     }
-<<<<<<< Updated upstream
     const b = await parseBody(c, MilestoneNoteBody);
-=======
-    const b = await c.req.json<{ note?: string }>().catch(() => ({ note: undefined }));
->>>>>>> Stashed changes
     const result = await moveMilestone(c.env as Env, db, {
       tenantId: c.get('tenantId') as number,
       milestoneId: c.req.param('milestoneId'),
@@ -1647,7 +1585,6 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
       actorUserId: c.get('userId') as string,
       note: b.note ?? null,
     });
-<<<<<<< Updated upstream
     // A move that moved money changed the freelancer's statement. Invalidated HERE
     // rather than inside `moveMilestone` because that module is the escrow writer and
     // knows nothing about the earnings report — and a report that lagged a release by
@@ -1655,14 +1592,11 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     if (result.ok && result.movedMoney && result.milestone.freelancerUserId) {
       await invalidateEarnings(c.env as Env, result.milestone.freelancerUserId);
     }
-=======
->>>>>>> Stashed changes
     return result.ok
       // `payoutConfigured: false` is not an error — the ledger entry is the platform's
       // own record and a self-hosted deployment with no payout webhook still releases.
       // The surface reads it to say "recorded, settle manually" rather than "paid".
       ? c.json({ milestone: result.milestone, movedMoney: result.movedMoney, payoutConfigured: result.payoutConfigured })
-<<<<<<< Updated upstream
       : refusalResponse(c, result.reason, ESCROW_REFUSAL_STATUS);
   });
 
@@ -1687,19 +1621,12 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     return result.ok
       ? c.json({ dispute: result.dispute }, 201)
       : refusalResponse(c, result.reason, ESCROW_REFUSAL_STATUS);
-=======
-      : c.json({ error: result.reason }, refusalStatus(result.reason));
->>>>>>> Stashed changes
   });
 
   // DELETE /milestones/:milestoneId — CLIENT: drop a draft. Refuses anything further
   // along, because a milestone that has held money is a financial record.
   router.delete('/milestones/:milestoneId', authMiddleware, async (c) => {
-<<<<<<< Updated upstream
     const db = requestDb(c);
-=======
-    const db = buildDatabase(c.env);
->>>>>>> Stashed changes
     const deleted = await deleteDraftMilestone(db, c.get('tenantId') as number, c.req.param('milestoneId'));
     return deleted ? c.json({ ok: true }) : c.json({ error: 'wrong_status' }, 409);
   });

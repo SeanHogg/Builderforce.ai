@@ -23086,7 +23086,6 @@
         "buyerOwner": "Ihr Owner"
       }
     },
-<<<<<<< Updated upstream
     "exportRestricted": "Eingeschränkt – diese Karte kann nicht exportiert werden",
     "imageCapturedStatus": "Aufgenommen",
     "imageCapturedValidation": "Live-Seite gerendert und von {url} aufgenommen",
@@ -23540,9 +23539,6 @@
     "approveAgentActionTitle": "Agentenaktion genehmigen",
     "approveAgentActionBody": "Ein Sitzungsagent möchte {action} ausführen.",
     "approveAgentActionConfirm": "Genehmigen"
-=======
-    "exportRestricted": "Eingeschränkt – diese Karte kann nicht exportiert werden"
->>>>>>> Stashed changes
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",

@@ -55,6 +55,8 @@ export interface SearchMatch {
   path: string;
   line: number;
   text: string;
+  /** The shared `RepoSearchResult.matches` element is an open record; stay assignable to it. */
+  [extra: string]: unknown;
 }
 
 /** True when `query` is a valid JS regular expression. */

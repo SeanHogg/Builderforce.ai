@@ -45,7 +45,6 @@ import { admitCandidate } from '../../application/hiring/candidateIntake';
 import { parseJsonArray } from '../../domain/shared/json';
 import { resolveTenantPlan } from '../../application/tenant/tenantPlanSnapshot';
 import { gatewayJudge } from '../../application/eval/gatewayJudge';
-<<<<<<< Updated upstream
 import { evaluateProposal, evalPercent, readProposalEvalLens } from '../../application/marketplace/proposalEval';
 import { jobFilterConditions, jobFilterIsEmpty, normalizeJobFilters } from '../../application/marketplace/jobFilters';
 import {
@@ -80,10 +79,6 @@ import {
 } from '../../application/marketplace/milestones';
 import { hireShape } from '../../application/marketplace/engagementShape';
 import { summariseEscrow } from '../../application/marketplace/escrow';
-=======
-import { evaluateProposal, evalPercent } from '../../application/marketplace/proposalEval';
-import { jobFilterConditions, jobFilterIsEmpty, normalizeJobFilters } from '../../application/marketplace/jobFilters';
->>>>>>> Stashed changes
 import type { EvalJudge } from '../../application/eval/semanticEval';
 import type { Env, HonoEnv } from '../../env';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
@@ -1219,11 +1214,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
   // GET / — browse OPEN jobs. Public jobs are world-browsable; the open-public
   // slice is cached and filtered (discipline/skill/q) in memory.
   router.get('/', async (c) => {
-<<<<<<< Updated upstream
     const db = requestDb(c);
-=======
-    const db = buildDatabase(c.env);
->>>>>>> Stashed changes
     // The criteria are normalised and lowered to SQL by `jobFilters`, which is also
     // what the job-alert sweep matches with — one declaration of what a job search
     // MEANS, two evaluators. Writing the predicate inline here a second time is how
