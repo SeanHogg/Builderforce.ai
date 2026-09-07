@@ -58,8 +58,11 @@ describe('applyPromptCaching — system prefix', () => {
     expect(out[0]!.content).toEqual([
       { type: 'text', text: 'You are a helpful agent.', cache_control: { type: 'ephemeral' } },
     ]);
-    // Volatile final user turn stays unmarked.
-    expect(out[1]!.content).toBe('hi');
+    // The final turn is the latest markable one, so it carries the history
+    // breakpoint too — that is what lets the NEXT request read this turn as prefix.
+    expect(out[1]!.content).toEqual([
+      { type: 'text', text: 'hi', cache_control: { type: 'ephemeral' } },
+    ]);
   });
 
   it('marks the last text part of an array-content system prompt', () => {
@@ -75,13 +78,17 @@ describe('applyPromptCaching — system prefix', () => {
   });
 
   it('does not mutate the caller-supplied array or its messages', () => {
+    // Three turns so there IS a message between the two breakpoints (system + latest
+    // turn) — that middle one is what proves unmarked messages are reused, not cloned.
     const messages = [
       { role: 'system', content: 'sys' },
-      { role: 'user', content: 'hi' },
+      { role: 'user', content: 'q1' },
+      { role: 'assistant', content: 'a1' },
     ];
     const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-5');
     expect(out).not.toBe(messages);
     expect(messages[0]!.content).toBe('sys'); // original untouched
+    expect(messages[2]!.content).toBe('a1');
     expect(out[1]).toBe(messages[1]); // unmarked messages reused by reference
   });
 });
