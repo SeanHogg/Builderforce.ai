@@ -6,6 +6,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-1);
   min-width: 0;
   container-type: inline-size;
@@ -32,7 +33,7 @@
   white-space: nowrap;
 }
 
-@container session-action-bar (min-width: 560px) {
+@container session-action-bar (min-width: 380px) {
   .label {
     display: inline;
   }

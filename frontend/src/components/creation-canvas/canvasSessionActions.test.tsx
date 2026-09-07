@@ -16,6 +16,7 @@ import {
   phoneSessionBarActions,
 } from '@/lib/canvasSessionActions';
 import { CANVAS_SURFACES, canvasSurfaceDefinition } from '@/lib/canvasSurfaces';
+import { canvasBarGroup } from '@/lib/canvasBarGroups';
 import enMessages from '@/i18n/messages/en.json';
 import { CreationCanvas } from './CreationCanvas';
 
@@ -161,11 +162,14 @@ describe('canvas session action registry', () => {
     const names = clusters.map((group) => group.cluster);
     expect(new Set(names).size).toBe(names.length);
 
-    // Every cluster that draws a trough carries a real, translated group name.
-    const clusterCopy = CANVAS_COPY.sessionActionCluster as Record<string, string>;
+    // Every cluster that draws a trough carries a real, translated group name — read from
+    // the GROUP registry, which is the one place a group is named now. The clusters used
+    // to carry a `sessionActionCluster.*` string of their own beside the caption's
+    // `barGroup.*`, which is two strings behind one set of buttons.
     for (const group of clusters) {
-      expect(typeof clusterCopy[group.cluster]).toBe('string');
-      expect(clusterCopy[group.cluster]).not.toMatch(/^creationCanvas\./);
+      const label = canvasCopy(canvasBarGroup(group.cluster).labelKey);
+      expect(typeof label, group.cluster).toBe('string');
+      expect(label as string).not.toMatch(/^creationCanvas\./);
     }
   });
 
@@ -182,7 +186,7 @@ describe('canvas session action registry', () => {
 });
 
 describe('the session actions on the canvas', () => {
-  const bar = () => screen.getByRole('group', { name: 'Canvas history' }).parentElement!;
+  const bar = () => screen.getByTestId('canvas-command-bar');
 
   /**
    * The grouping the bar was missing. Undo/redo were segmented and the three view actions
@@ -190,17 +194,27 @@ describe('the session actions on the canvas', () => {
    * with which. The assertion is on the group, not on a class name — a hashed CSS-module
    * class is not what a future refactor has to keep true.
    */
-  it('draws the history commands as one named group', () => {
+  it('files each command under the stage of the arc it serves', () => {
     render(<CreationCanvas sessionId="session-actions-cluster-test" persistence="local" />);
-    const history = screen.getByRole('group', { name: 'Canvas history' });
-    expect(within(history).getByRole('button', { name: 'Undo canvas change' })).toBeInTheDocument();
-    expect(within(history).getByRole('button', { name: 'Redo canvas change' })).toBeInTheDocument();
-    // …and the view commands are a DIFFERENT group, not four more buttons in this one.
-    const tools = screen.getByRole('group', { name: 'Canvas tools' });
-    expect(within(tools).getByRole('button', { name: 'View outcome metrics' })).toBeInTheDocument();
-    expect(within(tools).getByRole('button', { name: 'Full screen' })).toBeInTheDocument();
-    expect(within(history).queryByRole('button', { name: 'Full screen' })).toBeNull();
-    expect(bar()).toContainElement(tools);
+
+    // Shaping what is on the board is MAKE.
+    const make = screen.getByRole('group', { name: 'Make — shape what is on the board' });
+    expect(within(make).getByRole('button', { name: 'Undo canvas change' })).toBeInTheDocument();
+    expect(within(make).getByRole('button', { name: 'Redo canvas change' })).toBeInTheDocument();
+
+    // Reading the board is MEASURE, and it is a DIFFERENT group — not four more buttons
+    // in the one beside it, which is what `Tools` had become.
+    const measure = screen.getByRole('group', { name: 'Measure — read how it is doing' });
+    expect(within(measure).getByRole('button', { name: 'View outcome metrics' })).toBeInTheDocument();
+    expect(bar()).toContainElement(measure);
+
+    // FULL SCREEN IS IN NEITHER. It answers no stage's question — it is done to the
+    // board, not to the work — so it sits in the one group that names no stage. Filing it
+    // under `Tools` beside the diagnostics report is exactly how that shelf formed.
+    const board = screen.getByRole('group', { name: 'This board' });
+    expect(within(board).getByRole('button', { name: 'Full screen' })).toBeInTheDocument();
+    expect(within(measure).queryByRole('button', { name: 'Full screen' })).toBeNull();
+    expect(within(make).queryByRole('button', { name: 'Full screen' })).toBeNull();
   });
 
   /**
@@ -221,14 +235,16 @@ describe('the session actions on the canvas', () => {
     fireEvent.click(screen.getByRole('button', { name: 'More session actions' }));
 
     const sheet = screen.getByTestId('canvas-more-menu');
-    // `prove` is withheld by its own handler for `persistence === 'local'` — proving an
-    // idea needs a server-persisted session, which this fixture deliberately is not — so
-    // it is excluded here rather than asserted, the same way the fixture excludes it.
-    for (const def of phoneOverflowActions().filter((action) => action.id !== 'prove')) {
+    // The DOORS are excluded, and that is the point of the exclusion: `Make it real` is a
+    // worded button, not a `data-phone` glyph the breakpoint stands down, so its menu
+    // survives on a phone — and repeating Publish in this sheet would be one decision
+    // with two homes on the one screen size where that costs the most.
+    for (const def of phoneOverflowActions().filter((action) => action.chrome !== 'door')) {
       const label = canvasCopy(def.labelKey) as string;
       expect(within(sheet).getByRole('button', { name: label })).toBeInTheDocument();
     }
-    expect(within(sheet).queryByRole('button', { name: 'Make it real' })).toBeNull();
+    expect(within(sheet).queryByRole('button', { name: 'Publish' })).toBeNull();
+    expect(within(sheet).queryByRole('button', { name: 'Prove it' })).toBeNull();
     // Sanity: the sheet carries the overflow, not a second copy of the whole bar.
     expect(within(sheet).queryByRole('button', { name: 'Undo canvas change' })).toBeNull();
   });
@@ -301,14 +317,30 @@ describe('the board rail', () => {
    * the bar's button is the ONE way in. The rail keeps only what the bar does not carry:
    * the phone's surface switcher and the panels.
    */
-  it('gives the view commands and add-to-canvas to the command bar, leaving the rail its panels', () => {
+  it('gives add-to-canvas to the bar and the view commands to the board menu, leaving the rail its panels', () => {
     render(<CreationCanvas sessionId="board-rail-test" persistence="local" />);
 
-    for (const name of ['Zoom in', 'Zoom out', 'Fit canvas to view', 'Arrange canvas objects', 'Add to the board']) {
-      const buttons = screen.getAllByRole('button', { name });
-      expect(buttons).toHaveLength(1);
-      expect(buttons[0].closest('[data-testid="canvas-command-bar"]')).not.toBeNull();
+    // ONE door onto the palette, and it is on the bar, leading Idea.
+    const add = screen.getAllByRole('button', { name: 'Add to the board' });
+    expect(add).toHaveLength(1);
+    expect(add[0].closest('[data-testid="canvas-command-bar"]')).not.toBeNull();
+
+    // MOVING THE VIEWPORT IS NOT A STAGE OF ANYTHING, so it cannot be captioned by the
+    // arc — and a floating pill in the corner would have put "what can I do here" back
+    // into two places, which is what the rail was deleted for. The commands are a section
+    // of the ••• sheet, reached from the one group that names no stage.
+    for (const name of ['Zoom in', 'Zoom out', 'Arrange canvas objects']) {
+      expect(screen.queryByRole('button', { name })).toBeNull();
     }
+    fireEvent.click(screen.getByRole('button', { name: 'More session actions' }));
+    const tools = within(screen.getByTestId('canvas-more-menu')).getByRole('group', { name: 'Canvas view controls' });
+    for (const name of ['Zoom in', 'Zoom out', 'Fit canvas to view', 'Arrange canvas objects']) {
+      expect(within(tools).getByRole('button', { name })).toBeInTheDocument();
+    }
+    // Zoom is a control you press repeatedly. A sheet that closed under the second press
+    // would be a sheet you cannot zoom with.
+    fireEvent.click(within(tools).getByRole('button', { name: 'Zoom in' }));
+    expect(screen.getByTestId('canvas-more-menu')).toBeInTheDocument();
 
     expect(screen.getByRole('group', { name: 'Canvas panels' })).toBeInTheDocument();
   });

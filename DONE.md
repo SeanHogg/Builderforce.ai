@@ -25,8 +25,19 @@ renders DDL from parsed Drizzle (source line endings never reach the output) and
 `--check` in a CI chain. `gen-agent-relay-source.mjs` was the only guard that measured
 the machine instead of the code.
 
-`api/scripts/gen-agent-relay-source.mjs`, `api/src/application/runtime/generated/agentRelaySource.ts`.
-Verified: `node ../scripts/run-checks.mjs scripts/checks.manifest.mjs` → 31/31.
+Two adjacent defects the same look closed. The module's own header pointed the reader at a
+ratchet that does not exist — `api/scripts/check-agent-relay-source.mjs` was never written; the
+guard is `gen-agent-relay-source.mjs --check` — so the one file a new tool author reads named the
+wrong command for the build failure they were about to cause. And `DONE.md` carried a raw NUL byte
+at line 5486, written by the very entry describing the removal of NUL bytes from
+`visitorFlowGraph.ts`: the prose meant the escape text `\0` and got the byte instead. Git
+classified the whole file `-text` for it, so every edit to this record rendered as a 29,000-line
+binary rewrite — no diff, no blame, no review. Both fixed; the byte is now the two characters it
+was always meant to be.
+
+`api/scripts/gen-agent-relay-source.mjs`, `api/src/application/runtime/generated/agentRelaySource.ts`,
+`api/container/agentRelay.mjs`, `DONE.md`.
+Verified: `node ../scripts/run-checks.mjs scripts/checks.manifest.mjs` → 31/31; `DONE.md` diffs as text again.
 
 ## ✅ RESOLVED 2026-09-07 — The Creations library is the ONE place sessions and folders are managed
 
@@ -5483,7 +5494,7 @@ type-check green; frontend **13/13** and type-check green. The `'use client'` ba
 868 → 876, argued by name in the guard header.
 
 **Fixed in passing, on another session's in-flight visitor-journey work:** two raw NUL bytes in
-`domain/marketing/visitorFlowGraph.ts` (invisible to ripgrep and code search) became ` `
+`domain/marketing/visitorFlowGraph.ts` (invisible to ripgrep and code search) became `\0`
 escapes, and `visitorRoutes.ts` now takes its `Db` from the composition root instead of importing
 `buildDatabase`. A migration-number collision on 1109 — that session and this one both claimed it
 — was resolved by renumbering this one to 1110. Its three remaining guard failures are one design

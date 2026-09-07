@@ -86,6 +86,27 @@
   padding: var(--space-3);
 }
 
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* A definite width rather than an `auto` track: the action bar inside is its
+   own inline-size container, and a container in a content-sized column would
+   have to measure itself to know how wide it is. */
+.tile[data-view='table'] .body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 40%);
+  align-items: center;
+  column-gap: var(--space-3);
+}
+
+.actions {
+  min-width: 0;
+}
+
 .title {
   display: block;
   overflow: hidden;
@@ -155,4 +176,22 @@
   border-color: var(--accent);
   background: var(--surface-sunken);
   color: var(--text-primary);
+}
+
+/* The library's own width (`creation-sessions`, declared on the sessions root),
+   not the viewport: this tile sits in a full-page grid and in a ~300px slide-out
+   column alike, and a phone-width row cannot spend 108px on a thumbnail. */
+@container creation-sessions (max-width: 460px) {
+  .tile[data-view='table'] {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  /* Too narrow for two columns — the actions drop under the details. */
+  .tile[data-view='table'] .body {
+    display: flex;
+  }
+
+  .preview {
+    height: 110px;
+  }
 }

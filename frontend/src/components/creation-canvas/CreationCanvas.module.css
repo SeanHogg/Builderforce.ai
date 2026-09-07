@@ -3034,10 +3034,16 @@
      chrome it renders; matching the declaration rather than the styling is what keeps
      this correct for the next chrome as well. */
   .barGroupRow > [data-phone='menu'] { display:none; }
-  /* An empty group still draws its gap, so it stands down as a whole. Keyed on the
-     group HAVING placement declarations at all, so it is the session actions this
-     applies to and never the view commands, which declare none and belong on a phone. */
-  .barGroup:has([data-phone]):not(:has([data-phone='bar'])) { display:none; }
+  /* An empty group still draws its gap, so a group whose every member has stood down
+     stands down as a whole.
+     KEYED ON WHAT IS LEFT, not on what was declared. The previous rule hid any group that
+     declared placement and had no `bar` member — which was correct while a group held
+     nothing but registry actions, and became wrong the moment the groups became the arc:
+     Idea is the Add button (no placement of its own) beside `draw` (menu-only), and Reach
+     is the ROSTER beside two menu-only actions. Both would have vanished from a phone —
+     the palette's one door, and the avatars the whole collapse rule exists to protect.
+     This asks the only question that matters: is there a child that is not standing down. */
+  .barGroup:not(:has(.barGroupRow > :not([data-phone='menu']))) { display:none; }
   .moreMenuPhoneOnly { display:grid; grid-column:1 / -1; gap:2px; }
   /* PHONE CHROME. Everything floats, so a narrow screen tightens the cards rather than
      dropping what is in them. The roster in particular STAYS — it is the slot the whole

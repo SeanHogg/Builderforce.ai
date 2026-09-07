@@ -76,6 +76,7 @@ export function CreationSessionTile({ session, view, selected, onSelectedChange,
         />
       </div>
       <div className={styles.body}>
+        <div className={styles.details}>
         <strong className={styles.title}>{session.pinned && <Icon name="pin" size={14} />} {session.title}{session.unread ? ` · ${t('unreadBadge')}` : ''}</strong>
         <div className={styles.badges}>
           {(session.preview?.kinds ?? []).slice(0, 5).map((kind) => <small key={kind} className={styles.kind}>{kind}</small>)}
@@ -99,7 +100,10 @@ export function CreationSessionTile({ session, view, selected, onSelectedChange,
             <Icon name="folder" size={13} /> {session.folderName}
           </button>
         )}
-        {children}
+        </div>
+        {/* A row puts its actions at the right end; a card puts them along the
+            foot. Same markup, one layout token. */}
+        <div className={styles.actions}>{children}</div>
       </div>
     </article>
   );

@@ -6,7 +6,6 @@ vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')
 
 import {
   canvasChromeShows,
-  canvasChromeSlotsIn,
   readCanvasBarCollapsed,
   writeCanvasBarCollapsed,
 } from '@/lib/canvasChrome';
@@ -23,6 +22,10 @@ import { CreationCanvas } from './CreationCanvas';
  * These assert the table, and then assert that the bar actually obeys it — because a
  * rule that only the registry knows is a rule the header can quietly contradict.
  */
+
+/** Every slot the registry declares. It was derived from the placement table; with that
+ *  table gone it is stated once here, which is also the list a new slot has to join. */
+const ALL_SLOTS = ['saveState', 'roster', 'surfaces', 'actions', 'handoff', 'surfaceControls', 'surfaceStatus'] as const;
 
 describe('the canvas chrome rule', () => {
   it('keeps every status slot and drops every control when folded', () => {
@@ -52,58 +55,31 @@ describe('the canvas chrome rule', () => {
   });
 
   /**
-   * PLACEMENT IS DATA TOO, and every slot has exactly one home.
+   * WHERE a slot is drawn is no longer this registry's question, and the tests that
+   * asserted it went with the table.
    *
-   * The failure this forbids is a slot added to the kind table and forgotten in the
-   * placement table: it would keep obeying the collapse rule perfectly and never be
-   * drawn anywhere, which is the quietest possible way to lose a control.
+   * There used to be a `SLOT_PLACE` map and `canvasChromeSlotsIn(place)`, which the
+   * command bar iterated so the bar's order was stated once rather than read off a column
+   * of JSX. The bar has no linear order any more: its groups are the ARC, and that order
+   * belongs to `CANVAS_BAR_GROUP_ORDER`. The roster and the doors out are contributions
+   * INTO those groups rather than regions beside them, so a table naming a region per slot
+   * was describing a layout that had stopped existing.
+   *
+   * What still has to hold is the property those placement tests were really protecting:
+   * the things that survive a fold are the things a folded bar can still show.
    */
-  it('gives every slot exactly one floating region', () => {
-    const placed = (['pill', 'chips', 'bar'] as const).flatMap((place) => canvasChromeSlotsIn(place));
-    expect([...placed].sort()).toEqual(
-      ['actions', 'handoff', 'roster', 'saveState', 'surfaceControls', 'surfaceStatus', 'surfaces'].sort(),
-    );
-    // No slot in two regions.
-    expect(new Set(placed).size).toBe(placed.length);
-  });
-
-  /**
-   * The roster is in the BAR, and that is the placement the whole rule rests on. It is
-   * status, so it survives a collapse — and the bar is what a collapse leaves on screen,
-   * so anywhere else and "the team stays visible" would be a statement about an element
-   * that never folds in the first place.
-   */
-  it('puts every surviving control-bar slot where a collapse can be seen to spare it', () => {
-    const bar = canvasChromeSlotsIn('bar');
-    expect(bar).toContain('roster');
-    expect(bar).toContain('surfaceStatus');
-    // Everything that survives a fold is in the bar — the one region a fold acts on.
-    const survivors = (['pill', 'chips', 'bar'] as const)
-      .flatMap((place) => canvasChromeSlotsIn(place))
-      .filter((slot) => canvasChromeShows(slot, true));
+  it('spares exactly the three status slots when the bar folds', () => {
+    const survivors = ALL_SLOTS.filter((slot) => canvasChromeShows(slot, true));
     expect([...survivors].sort()).toEqual(['roster', 'saveState', 'surfaceStatus']);
-    for (const slot of survivors) if (slot !== 'saveState') expect(bar).toContain(slot);
   });
 
-  /**
-   * THE REGISTRY IS THE ORDER. `CanvasCommandBar` draws the bar by iterating this
-   * list, so what the runtime reports comes first, the glyphs after it, the roster
-   * after those and the doors out last — stated once here, and asserted so a
-   * re-declared table cannot quietly reshuffle the bar.
-   */
-  it('declares the bar in the order it is drawn', () => {
-    expect(canvasChromeSlotsIn('bar')).toEqual(['surfaceStatus', 'surfaceControls', 'actions', 'roster', 'handoff']);
-  });
-
-  /** Publish shares a REGION with the glyphs now (both `bar`), but not a SLOT — a word
-   *  opens somewhere else, a glyph acts here, and `handoff` staying its own slot is
-   *  what lets the bar draw it behind its own divider rather than folding it into the
-   *  same run as `actions`. */
-  it('keeps the door out of the canvas a distinct slot from the buttons that act on it', () => {
-    const bar = canvasChromeSlotsIn('bar');
-    expect(bar).toContain('handoff');
-    expect(bar).toContain('actions');
+  /** Publish is gated apart from the glyphs that act on the board — a word opens somewhere
+   *  else, a glyph acts here — which is what lets the bar stand the doors out down on a
+   *  fold while the roster beside them stays. */
+  it('folds the door out of the canvas, and never the roster', () => {
     expect(canvasChromeShows('handoff', true)).toBe(false);
+    expect(canvasChromeShows('actions', true)).toBe(false);
+    expect(canvasChromeShows('roster', true)).toBe(true);
   });
 
   /**
@@ -114,9 +90,8 @@ describe('the canvas chrome rule', () => {
    * fact is not the offer.
    */
   it('has no save slot, because the header is the one place that offers to keep the work', () => {
-    const every = (['pill', 'chips', 'bar'] as const).flatMap((place) => canvasChromeSlotsIn(place));
-    expect(every).not.toContain('save');
-    expect(every).toContain('saveState');
+    expect(ALL_SLOTS).not.toContain('save');
+    expect(ALL_SLOTS).toContain('saveState');
   });
 });
 

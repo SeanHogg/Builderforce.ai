@@ -63,44 +63,23 @@ export type CanvasChromeSlot =
 export type CanvasChromeKind = 'status' | 'control';
 
 /**
- * WHERE a slot is drawn, now that the canvas has no chrome band at all.
+ * ── WHERE A SLOT IS DRAWN IS NO LONGER THIS FILE'S QUESTION ──────────────────────
+ * It used to be: a `CanvasChromePlace` union (`pill` | `chips` | `bar`), a `SLOT_PLACE`
+ * table, and `canvasChromeSlotsIn(place)` which the command bar iterated so that "the
+ * sequence the bar shows" was stated once rather than read off a column of JSX.
  *
- * ── WHY PLACEMENT IS DATA ────────────────────────────────────────────────────────
- * The canvas used to spend four horizontal bands on chrome — marketing header, session
- * bar, team bar, board rail — before a single object was drawn, and the board got
- * whatever was left. The shell now gives the WHOLE window to the canvas and floats each
- * piece of chrome over it, which is the arrangement every scenario editor worth copying
- * converged on for the same reason: the artefact is the thing, and the controls are
- * guests on it.
+ * The bar has no linear slot order any more. Its groups are the ARC — Idea, Make, Run,
+ * Measure, Reach, then the board — and that order belongs to `CANVAS_BAR_GROUP_ORDER` in
+ * `lib/canvasBarGroups.ts`, which is where the five words already live. The roster and
+ * the doors out are contributions INTO those groups now rather than regions beside them,
+ * so a second table naming a region for each was describing a layout that had stopped
+ * existing. It was deleted rather than left to drift, which is the state a placement
+ * table nobody reads always ends in.
  *
- * The trap in that move is that "float it" is a per-element decision, so it decays into
- * three components each holding its own `position:absolute` and its own idea of which
- * corner is free. Placement is therefore declared HERE, beside the collapse rule, for the
- * same reason the collapse rule is here: one table answers both "is this on screen" and
- * "where", and a slot added later cannot be given a home by accident.
- *
- *   `pill`  — top left. Is the work somewhere safe: saved, and its connection state.
- *   `chips` — top centre. How it is being READ, and which PHASE of the session's own
- *             methodology you are in — the two are fused into one widget.
- *   `bar`   — bottom centre. What you DO to it AND how work LEAVES it: Share, Publish
- *             and the overflow sit here too now, behind their own divider — see
- *             `handoff`'s own doc for why that used to be a fourth place (`topRight`)
- *             and is not any more.
+ * What is left here is the ONE question every consumer still asks and none of them may
+ * answer privately: does this survive a collapse.
  */
-export type CanvasChromePlace = 'pill' | 'chips' | 'bar';
 
-/**
- * Which each slot is. The whole rule is this table plus the predicate under it.
- *
- * There is no `save` slot, and its absence is a decision rather than an omission. A board
- * held only on this device is kept by taking an account, and the header already makes
- * exactly that offer — the green CTA turns into "Keep your work" the moment this browser
- * holds a local board. A second button on the canvas saying the same word put two bars on
- * one screen competing to be the way to save, and ambient "Saved on this device" chatter
- * sitting in the pill at rest was the same collision one notch quieter — the header CTA
- * already says it. `saveState` in the pill now carries only what is not said anywhere
- * else: the last outcome, until it has nothing left to add.
- */
 const SLOT_KIND: Readonly<Record<CanvasChromeSlot, CanvasChromeKind>> = {
   saveState: 'status',
   roster: 'status',
@@ -110,37 +89,6 @@ const SLOT_KIND: Readonly<Record<CanvasChromeSlot, CanvasChromeKind>> = {
   handoff: 'control',
   surfaceControls: 'control',
 };
-
-/**
- * Where each slot floats — AND, within a region, the order it is drawn in.
- *
- * `roster` is in the BAR and not in the pill, which is the one placement worth arguing
- * about. Who is here is status, so it survives a collapse — and the collapsed bar is the
- * thing left on screen, so that is where the avatars have to be for the rule to mean
- * anything. Putting them in the pill would have kept them visible while making the
- * collapse rule a statement about an element that never folds.
- *
- * Declaration order is render order: `CanvasCommandBar` draws the bar by iterating
- * {@link canvasChromeSlotsIn}('bar'), so the sequence the bar shows — what the runtime
- * REPORTS, then its controls, then the glyphs, then who is here, then the doors out —
- * is stated here once rather than re-read off a column of JSX. A slot added to this
- * table is drawn in the place it is declared, or not drawn at all if the bar has no
- * content for it, and either is visible in one file.
- */
-const SLOT_PLACE: Readonly<Record<CanvasChromeSlot, CanvasChromePlace>> = {
-  saveState: 'pill',
-  surfaces: 'chips',
-  surfaceStatus: 'bar',
-  surfaceControls: 'bar',
-  actions: 'bar',
-  roster: 'bar',
-  handoff: 'bar',
-};
-
-/** Every slot that floats in one region, in declaration order — the region's render order. */
-export function canvasChromeSlotsIn(place: CanvasChromePlace): readonly CanvasChromeSlot[] {
-  return (Object.keys(SLOT_PLACE) as CanvasChromeSlot[]).filter((slot) => SLOT_PLACE[slot] === place);
-}
 
 /**
  * Whether this slot is on screen. The ONE question every consumer asks — so a slot that

@@ -212,7 +212,14 @@ export function CanvasSessionActions({
   if (variant === 'menu') {
     // Words, always. The sheet has room for them and a phone user pressing ••• is
     // looking for a named thing, not scanning a second row of glyphs.
-    return <>{offered(phoneOverflowActions(surface)).map(wordedRow)}</>;
+    //
+    // THE DOORS ARE NOT REPEATED HERE. `door` actions already have a menu of their own
+    // that a phone keeps — *Make it real* is a worded button, not a `data-phone` glyph the
+    // breakpoint stands down — so listing Publish in this sheet as well would be one
+    // decision with two homes on the one screen size where that costs the most. The
+    // overflow's job is the actions the phone bar could not FIT, and these were never on
+    // it.
+    return <>{offered(phoneOverflowActions(surface).filter((def) => def.chrome !== 'door')).map(wordedRow)}</>;
   }
 
   if (variant === 'doors') {

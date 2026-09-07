@@ -16,7 +16,7 @@
  *   • imported directly by the container image, which ships this file beside it, and
  *   • inlined verbatim into the single-file Actions runner script, from the generated
  *     `api/src/application/runtime/generated/agentRelaySource.ts`.
- * A ratchet (`api/scripts/check-agent-relay-source.mjs`) fails the build if that
+ * A ratchet (`api/scripts/gen-agent-relay-source.mjs --check`) fails the build if that
  * generated copy drifts from this file, so "the source of truth" is not a convention
  * someone has to remember.
  *
