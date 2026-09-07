@@ -18,10 +18,14 @@ vi.mock('@/lib/brain/runtime', () => ({ brainConfig: { transport: {} } }));
 vi.mock('@/lib/brain/guestRuntime', () => ({ guestBrainConfig: { transport: {} } }));
 vi.mock('@/lib/guestRoomApi', () => ({ ensureGuestToken: mocks.ensureGuestToken }));
 
+const { runCreationCanvasAi } = await import('./creationCanvasAi');
+// The budgets and the typed outcomes are their own modules — a turn's spending
+// limits and the two ways it can end without failing change for reasons the loop
+// does not. Imported statically because neither reaches a transport.
 const {
-  runCreationCanvasAi, MAX_CANVAS_TOOL_TURNS, MAX_CANVAS_BUILD_TURNS, CANVAS_BUILD_RESPONSE_TOKENS, CANVAS_TOOL_LIMIT,
-  CanvasRunAbortedError, isCanvasRunAborted,
-} = await import('./creationCanvasAi');
+  MAX_CANVAS_TOOL_TURNS, MAX_CANVAS_BUILD_TURNS, CANVAS_BUILD_RESPONSE_TOKENS, CANVAS_TOOL_LIMIT,
+} = await import('./canvasAiTurnBudget');
+const { CanvasRunAbortedError, isCanvasRunAborted } = await import('./canvasAiErrors');
 
 /**
  * Runtime notices come from the CATALOG now, not from string literals in the runner, so

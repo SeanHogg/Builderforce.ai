@@ -40,7 +40,11 @@ export interface McpServersState {
 
 export function useMcpServers(): McpServersState {
   const { allowed, requiredLabel } = usePermission('mcp.manage');
-  const tenantId = getStoredTenant()?.id ?? null;
+  // `Tenant.id` is the JWT claim's string; every tenant-scoped client takes the
+  // numeric id (see `BillingClient`), so the narrowing happens here rather than
+  // being pushed into the API module for one caller.
+  const storedTenantId = getStoredTenant()?.id;
+  const tenantId = storedTenantId != null ? Number(storedTenantId) : null;
   const [servers, setServers] = useState<McpExtension[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

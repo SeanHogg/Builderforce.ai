@@ -4,7 +4,7 @@ import { streamChatCompletion, type ChatCompletionMessage } from '@seanhogg/buil
 import { brainConfig } from '@/lib/brain/runtime';
 import { guestBrainConfig } from '@/lib/brain/guestRuntime';
 import { ensureGuestToken } from '@/lib/guestRoomApi';
-import { GuestAiUnavailableError } from '@/lib/creationCanvasAi';
+import { GuestAiUnavailableError } from '@/lib/canvasAiErrors';
 
 /** Run one isolated, reproducible marketplace comparison turn on the exact model. */
 export async function executeModelComparison(input: {

@@ -124,7 +124,12 @@ export async function ensureBuilderForceAgentsModelsJson(
     }
   }
 
-  const normalizedProviders = normalizeProviders({
+  // AWAITED. `normalizeProviders` became async (it reads the auth-profile store
+  // to fill a missing apiKey), and an un-awaited call serialises the PROMISE:
+  // `JSON.stringify(Promise)` is `{}`, so every models.json written since was
+  // `{"providers":{}}` — every provider the runtime had just resolved, silently
+  // dropped, with no error anywhere.
+  const normalizedProviders = await normalizeProviders({
     providers: mergedProviders,
     agentDir,
   });
@@ -167,7 +172,10 @@ export async function ensureBuilderForceAgentsModelsJson(
           return;
         }
         providers.ollama = { ...ollama, models };
-        const normalized = normalizeProviders({ providers, agentDir });
+        // Awaited for the same reason as the write above: an un-awaited call
+        // serialises a Promise, and background discovery would replace a good
+        // models.json with `{"providers":{}}` minutes after startup.
+        const normalized = await normalizeProviders({ providers, agentDir });
         await fs.writeFile(targetPath, `${JSON.stringify({ providers: normalized }, null, 2)}\n`, {
           mode: 0o600,
         });

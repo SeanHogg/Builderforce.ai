@@ -18,7 +18,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import SlideOutPanel from '@/components/SlideOutPanel';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { RoleGate } from '@/components/RoleGate';
 import { useConfirm } from '@/components/ConfirmProvider';
 import type { McpExtension } from '@/lib/mcpExtensionsApi';

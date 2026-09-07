@@ -9,7 +9,9 @@ vi.mock('@seanhogg/builderforce-brain-embedded', () => ({ streamChatCompletion: 
 vi.mock('@/lib/brain/runtime', () => ({ brainConfig: { transport: { baseUrl: 'tenant' } } }));
 vi.mock('@/lib/brain/guestRuntime', () => ({ guestBrainConfig: { transport: { baseUrl: 'guest' } } }));
 vi.mock('@/lib/guestRoomApi', () => ({ ensureGuestToken: mocks.ensureGuestToken }));
-vi.mock('@/lib/creationCanvasAi', () => ({ GuestAiUnavailableError: class extends Error {} }));
+// `GuestAiUnavailableError` used to be stubbed here, because importing it meant
+// importing the whole canvas turn runner. It lives in `canvasAiErrors` now, which
+// reaches nothing but the stream watchdog — so the real class is used.
 
 import { executeModelComparison } from './modelComparison';
 

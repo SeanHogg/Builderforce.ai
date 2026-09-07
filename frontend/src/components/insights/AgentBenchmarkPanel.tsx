@@ -18,6 +18,7 @@ import { useTranslations } from 'next-intl';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { faultMessage } from '@/lib/apiClient';
 import { agentBenchmarkApi, type BenchmarkReport } from '@/lib/agentBenchmarkApi';
+import type { ComponentSurfaceProps } from '@/lib/components/types';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -36,7 +37,7 @@ const statLabel: React.CSSProperties = { fontSize: 'var(--font-size-eyebrow)', c
 /** Percent, as the panel shows it everywhere. */
 const pct = (value: number): string => `${Math.round(value * 100)}%`;
 
-export function AgentBenchmarkPanel({ windowDays = 30 }: { windowDays?: number }) {
+export function AgentBenchmarkPanel({ days }: ComponentSurfaceProps) {
   const t = useTranslations('agentBenchmark');
   const [report, setReport] = useState<BenchmarkReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,14 +46,14 @@ export function AgentBenchmarkPanel({ windowDays = 30 }: { windowDays?: number }
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setReport(await agentBenchmarkApi.report(windowDays));
+      setReport(await agentBenchmarkApi.report(days));
       setError(null);
     } catch (e) {
       setError(faultMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [windowDays]);
+  }, [days]);
 
   useEffect(() => { void load(); }, [load]);
 

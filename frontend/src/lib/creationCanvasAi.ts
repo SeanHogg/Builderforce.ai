@@ -28,7 +28,6 @@ import {
   incompleteDocumentAnswer,
   isExecutiveTeammateRequest,
   isNarrowSearchResult,
-  isWebsiteRedesignRequest,
   requestedPagesForTurn,
   requestsCanvasMutation,
   snapshotHasTabularRows,
@@ -36,10 +35,27 @@ import {
   unverifiedCreationClaim,
 } from '@/lib/canvasTurnOutcome';
 import { CANVAS_BUILD_WORKSPACE_WRITE_TOOLS } from '@/lib/canvasBuildTools';
-import { founderCanvasSystemPrompt } from '@/lib/founderCanvasPrompt';
 import { CANVAS_STREAM_STALL_MS, CanvasStreamStalledError, streamBoundedByActivity } from '@/lib/canvasStreamWatchdog';
-import { canvasModeDirective } from '@/lib/canvasModeDirective';
 import type { CanvasNotices } from '@/lib/canvasNotices';
+import { canvasSystemMessages, promptNamedTools } from '@/lib/canvasAiSystemPrompt';
+import { CanvasRunAbortedError, GuestAiUnavailableError } from '@/lib/canvasAiErrors';
+import {
+  CANVAS_BUILD_RESPONSE_TOKENS,
+  CANVAS_RESPONSE_TOKENS,
+  CANVAS_TOOL_LIMIT,
+  MALFORMED_CALL_RESULT,
+  MALFORMED_TOOL_CALL_DIRECTIVE,
+  MAX_CANVAS_BUILD_TURNS,
+  MAX_CANVAS_TOOL_TURNS,
+  MAX_INTERRUPTED_TURN_RECOVERIES,
+  MAX_MUTATION_RECOVERIES,
+  MAX_NARROW_SEARCHES,
+  MAX_STALLED_STREAMS,
+  RESERVED_AUTHORING_TURNS,
+  TRUNCATED_CALL_RESULT,
+  TRUNCATED_ROUND_DIRECTIVE,
+  TRUNCATED_TURN_DIRECTIVE,
+} from '@/lib/canvasAiTurnBudget';
 import { runAgentLoop, openAiChatCodec } from '@builderforce/agent-loop';
 
 type CanvasAiOptions = {
@@ -153,156 +169,6 @@ function mutates(action: BrainAction, args: unknown): boolean {
 }
 
 
-/**
- * Model round-trips one composer submit may take before the loop gives up.
- *
- * This was 3, which is enough to author an object and answer, and NOT enough to
- * research anything: the pipeline the system prompt below prescribes is search → fetch
- * a source → fetch another → create the Dataset → geocode it → materialize the visual,
- * so a research turn ran out of rounds mid-pipeline and returned a half-built board.
- * These extra rounds are tool continuations of ONE user turn — the guest allowance
- * charges per turn (idempotent on `guestTurnId`), so a deeper loop costs the visitor
- * nothing from their message budget.
- */
-export const MAX_CANVAS_TOOL_TURNS = 8;
-
-/** Keep enough of a bounded turn to author the requested Canvas artifacts after
- * research. Without this reservation, a model can spend all eight continuations
- * retrying a narrow search backend and never reach canvas_add_object. */
-const RESERVED_AUTHORING_TURNS = 2;
-
-/** Two encyclopedic results are enough evidence that repeating differently worded
- * searches will not produce the open-web design sources the user requested. */
-const MAX_NARROW_SEARCHES = 2;
-
-/** Comparison documents and implementation guidance routinely need more than the
- * former 1,600-token ceiling. The durable result still belongs in Canvas objects;
- * this prevents the user-facing handoff from ending in the middle of a sentence. */
-const CANVAS_RESPONSE_TOKENS = 3_200;
-
-/**
- * The output ceiling once a turn is WRITING CODE. 3,200 tokens was sized for the prose
- * handoff and for authoring one card; a source file routinely runs 1,500 tokens and a
- * model asked to build an app sends two or three per response. Measured (session
- * `bf886fc1`, ui 2026.9.13): three of eight completions ended `finishReason: "length"`,
- * each mid-way through a `canvas_write_build_file` whose JSON never closed. A ceiling is
- * a cap, not a spend — the model is billed for what it emits — so raising it only for
- * turns that have already committed to a workspace costs nothing on ordinary turns.
- * Raised, not unbounded: 8K sits under every vendor's own limit in the coding pool.
- */
-export const CANVAS_BUILD_RESPONSE_TOKENS = 8_192;
-
-/**
- * The step budget once a turn is writing code. One file is one step, and the seeded
- * starter project needs list → read → several writes before it is the user's app, so
- * the eight steps sized for research-then-author ran out with the app half-written and
- * the runner reporting that nothing had happened. Sixteen is enough for a small app
- * with room for a diagnostics read; a bigger one continues on the next turn, and the
- * `stepsExhausted` notice tells the user exactly that.
- */
-export const MAX_CANVAS_BUILD_TURNS = 16;
-
-/**
- * How many tools one canvas completion advertises.
- *
- * A signed-in board carried 541 definitions (116 canvas tools plus the tenant's whole
- * MCP catalog) on every request — roughly 120K tokens of schema before the board or the
- * conversation was counted. No free coder's window holds that, so a FREE-plan turn
- * skipped its entire pool and landed on the funded direct-Anthropic floor on the first
- * completion, then soft-pinned it for the rest of the turn (measured: 16 of 16
- * completions on `claude-sonnet-5`, account "shared"). The standalone Brain has trimmed
- * per turn since its catalog passed ~300 (`brain-embedded/selectTools`); the canvas now
- * uses the SAME selector. Tools the system prompt NAMES are always advertised, tools
- * this turn already CALLED are never dropped, and the rest are chosen by relevance to
- * the request. 96: the canvas prompt names ~50 tools itself, and this stays under the
- * ~128 mark where providers degrade.
- */
-export const CANVAS_TOOL_LIMIT = 96;
-
-/** The tool result a call that arrived with unusable arguments gets INSTEAD of being run. */
-const TRUNCATED_CALL_RESULT = 'This tool call was cut off by the output limit before its arguments were complete, so it was NOT executed. Re-issue it in your next response as ONE call with complete JSON — one file or one object per response, never several.';
-const MALFORMED_CALL_RESULT = 'This tool call\'s arguments were not valid JSON, so it was NOT executed. Re-issue it with strictly valid JSON: no comments, no trailing commas, no unescaped newlines or quotes inside string values.';
-
-/** Pushed once after a round whose LAST call was cut off while the complete ones ran —
- * the whole-response directive below would be false here (most of the response was
- * used), and the remedy is narrower: smaller responses, not a different action. */
-const TRUNCATED_ROUND_DIRECTIVE = 'Your previous response hit the output limit. The complete tool calls in it were executed; the call it was cut off inside was discarded and must be re-sent. From here on send ONE file or ONE object per response.';
-
-/**
- * Every `canvas_*` / `builtin_*` tool the assembled system prompt tells the model to
- * call. Per-turn selection keeps these ahead of everything else: a prompt that says
- * "call canvas_read_object" while the tool is absent leaves the model no honest move.
- */
-function promptNamedTools(messages: readonly ChatCompletionMessage[]): Set<string> {
-  const names = new Set<string>();
-  for (const message of messages) {
-    if (message.role !== 'system' || typeof message.content !== 'string') continue;
-    for (const match of message.content.matchAll(/\b(?:canvas|builtin)_[a-z0-9_]+\b/g)) names.add(match[0]);
-  }
-  return names;
-}
-
-/** Act-now escalations before the turn stops asking a stalled model to author. */
-const MAX_MUTATION_RECOVERIES = 2;
-
-/** An INTERRUPTED turn — truncated by the output ceiling, or a tool call the
- * provider could not parse — is retried with the instruction that matches the
- * interruption. Two per turn: enough to clear a one-off, few enough that a model
- * which cannot author inside the ceiling fails over instead of looping. */
-const MAX_INTERRUPTED_TURN_RECOVERIES = 2;
-
-/** Silent round-trips tolerated on one model before the turn routes around it. Two:
- *  a stall is usually a single bad connection, and a model that swallows two requests
- *  in a row will swallow the third too. */
-const MAX_STALLED_STREAMS = 2;
-
-/** Truncation is an OUTPUT-SIZE failure, so the recovery is to author smaller —
- * the opposite of "answer again", which would truncate identically. The canvas
- * itself is the durable place for length, so splitting across calls costs nothing. */
-const TRUNCATED_TURN_DIRECTIVE = 'Your previous response was cut off at the output limit before it finished, so nothing you sent could be used. Produce less in one step: make ONE canvas_* tool call at a time with the fields that matter, keep prose short, and split a long artifact across several calls or several objects rather than sending it all at once.';
-
-/** The model DID choose to act; the arguments were unparseable. Telling it to
- * "answer" here would discard a correct intent, so the directive keeps the action
- * and constrains only the encoding. */
-const MALFORMED_TOOL_CALL_DIRECTIVE = 'Your previous tool call could not be parsed and was discarded. Make the same call again with strictly valid JSON arguments: no comments, no trailing commas, no unescaped newlines or quotes inside string values, and no placeholder text. Send one tool call.';
-
-/**
- * A guest turn could not start because no guest token could be obtained. Thrown
- * as a TYPE rather than a message so the surface can say it in the visitor's own
- * language — this path is reachable from the public landing canvas, where a raw
- * English string would be the first thing the product ever says to them.
- */
-/**
- * The user pressed Stop. Thrown (never returned) so a stopped turn can never be
- * mistaken for an answer, and typed so the canvas records "you stopped this"
- * instead of the red failure notice a real error earns.
- */
-export class CanvasRunAbortedError extends Error {
-  readonly code = 'canvas-run-aborted' as const;
-  constructor() {
-    super('canvas-run-aborted');
-    this.name = 'CanvasRunAbortedError';
-  }
-}
-
-/**
- * True for every shape a stopped run can arrive in: our own typed error, and the
- * `AbortError` the fetch layer rejects the streaming request with when the signal
- * fires mid-stream. One predicate, so no surface has to know both.
- */
-export function isCanvasRunAborted(error: unknown): boolean {
-  if (error instanceof CanvasRunAbortedError) return true;
-  if (error instanceof CanvasStreamStalledError) return false;
-  return error instanceof Error && error.name === 'AbortError';
-}
-
-export class GuestAiUnavailableError extends Error {
-  readonly code = 'guest-ai-unavailable' as const;
-  constructor() {
-    super('guest-ai-unavailable');
-    this.name = 'GuestAiUnavailableError';
-  }
-}
 
 /** Run a small, bounded agent loop over the active canvas and shared MCP catalog. */
 export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<string> {
@@ -363,128 +229,16 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     });
   }
   const memoryBlock = recalled?.seeded ? formatEvermindMemoryBlock(recalled.items) : '';
-  const participantDirective = options.participant
-    ? `You are ${options.participant.name}, an invited specialist agent participating in this Creation Session. Contribute your own expert perspective, respond under your own identity, and coordinate with the other participants visible in the conversation. Use Canvas tools when your contribution should create or change an artifact. Do not pretend to be Brain or speak for another participant.${options.participant.instructions?.trim() ? ` Your configured instructions are:\n${options.participant.instructions.trim().slice(0, 8_000)}` : ''}`
-    : 'You are Brain, the coordinating agent for this Creation Session. Synthesize participant perspectives, resolve disagreements explicitly, and turn the conversation into concrete Canvas artifacts.';
-  const messages: ChatCompletionMessage[] = [
-    {
-      role: 'system',
-      content: 'Creative objects are first-class, provider-neutral Builderforce Canvas widgets. Use image, animation, podcast, comic, cad, model3d, resume, template, video, document, or slides according to the requested output. A GAME IS BUILT, NEVER DESCRIBED: for any request to make, build, create or design a game — including a Roblox game, a phone game, an Android game or an iPhone game — call canvas_add_game, which writes the game AND attaches the playable artifact in one call. Use platform "roblox" when the user names Roblox, Studio or an experience, and platform "web" otherwise; a web game is one self-contained document that plays on the canvas, installs on an Android or iPhone home screen and wraps into a real app, so a phone or app-store request is still platform "web". NEVER author a game through canvas_add_object and never write a game design document into the content field of a game object — a concept, a pillar list, a roadmap and a monetisation plan are not a game, and presenting one as if the user could play it is the failure this rule exists to prevent. Author the brief and configuration into the widget first. Use the built-in builtin_creative_capabilities tool to discover the native contract and builtin_creative_compose to normalize a creative manifest, then mirror the returned fields into the same Canvas object with canvas_update_object. Do not require, name, or assume any external product or provider. Never claim a rendered or exported deliverable exists unless a native execution result confirms it. A RESUME IS IMPORTED BEFORE IT IS RESTYLED: when a CV is on the board as a document, an imported PDF or a Word file and the user asks to convert, import, parse or make a resume from it, call canvas_import_resume on that object. NEVER ask the user to paste or retype text this canvas already holds — the importer extracted it, canvas_read_document returns it, and canvas_import_resume structures it without a model. A RESUME IS RESTYLED, NEVER RETYPED: when the user asks for their résumé in different styles, templates, designs or layouts, or for several versions of it, call canvas_render_resume_variants once — it re-renders the existing document through the built-in template engine in one step. Authoring versions by hand with canvas_add_object is wrong even when it looks possible: it is far slower and it lets each version state a different work history.',
-    },
-    {
-      role: 'system',
-      content: `${participantDirective}\n\nYou are operating BuilderForce's unified creation canvas. Use the provided canvas_* function tools to make requested visual changes instead of writing code or merely describing them. Treat imperative requests as instructions to act now: do not ask for optional names or descriptions, and use sensible authored defaults when details are omitted. "Bring in", "add", or "invite" a named specialist or executive role means to call canvas_add_object to add an Agent with that role's perspective, then author the requested plan, review, forecast, or other useful deliverable as a separate object and connect it to the Agent with canvas_connect_objects. Use relevant existing canvas objects as context. On a new canvas, make a useful first pass with clearly stated assumptions and open questions inside the deliverable; never ask the user what "this" means and never merely repeat the request. A correction, complaint, question about a displayed value, or request to change labels on an existing/selected object is an UPDATE: call canvas_update_object on that object. Never create a replacement or duplicate unless the user explicitly asks for a new, additional, copied, or duplicated object. Never edit the Brain chat object merely to echo the conversation. For requests to organize, tidy, align, evenly space, or stop objects overlapping, call canvas_arrange_objects without objectIds unless the user explicitly identified a subset. Omitting objectIds arranges the entire visible canvas even if the composer scope says selection; the tool uses measured object bounds and is safer than manually estimating x/y positions with canvas_set_object_layout. Requests to create or add an artifact on this Canvas must use canvas_add_object, even when an MCP tool has a similar resource name. When asked to build, evaluate, test, or deliver an agent, create an operable package rather than an empty Agent card: include at least one authored knowledge, document, dataset, file, or URL object connected to the agent, and an Evaluation object with concrete test criteria. Put a representative test prompt and comma-separated expected response signals in the Agent's testPrompt and testExpected fields so the inspector can run and score it. Sales is the canonical exception: on a sales canvas, use builtin_sales_workspace_get to read the shared CRM and use the builtin_sales_* MCP tools for contacts, campaigns, goals, and coaching, because those records must be visible to the associate and superadmin. After a successful builtin_sales_* mutation on a salesContact, salesCampaign or salesGoal, mirror the returned canonical id and current values onto the matching card with canvas_update_object — those three kinds are authored cards with no projection behind them. NEVER do that for a salesPipeline or a fundingRound: both are projections of the real deals, and writing a stage, a value or a card row onto one by hand puts the board back into disagreement with the record. Carry ownerUserId from the sales canvas object when a superadmin is collaborating. Use builtin_meetings_schedule for actual calendar meeting creation and mirror the result into a salesMeeting object. For example, "create a workflow" means call canvas_add_object with kind "workflow" and authored workflow fields; do not call builtin_workflows_create or ask a follow-up question. A workflow's steps are EXECUTABLE, not labels: fields.steps must be an array of objects where every step carries the call it makes, not just a name. For an integration step set connector and action to real catalog keys plus an input object — for example {"title":"Send the SMS","connector":"twilio","action":"send_sms","input":{"To":"{{input.To}}","From":"+15550001111","Body":"..."}}. For a model step set prompt (and optionally provider and model); for an agent step set role and task. Never author a step that has only a title: a title-only step is rejected at build time as underspecified, and inventing plausible stage names such as "Audience" or "Approve" for a request that did not ask for them is a failure. Call builtin_connectors_actions to read the real connector and action keys before authoring an integration step rather than guessing them. After authoring the steps, invoke the object's "build" action with canvas_invoke_object_action to compile them into a real, runnable workflow definition; "run" builds first when needed. Build returns per-step issues when a step is not runnable — fix the named steps and build again. Never tell the user a workflow is complete, configured, or ready to run before a build has succeeded. Use MCP tools for a mutation only when the user explicitly asks to create or change a canonical tenant resource outside the Canvas, or when operating canonical sales data as described above. A request to REDESIGN, upgrade, modernise, improve or rebuild a site the user already has is a BEFORE AND AFTER, and half of it is not optional: capture the live page with canvas_capture_screenshot FIRST, then author the new design, then call canvas_capture_screenshot again with compareWithObjectId set to the new website object so the capture is attached to it as its "before" — one capture with compareWithObjectId does both. A redesign delivered without the before is an unsupported claim, and offering the page's TEXT as a substitute for its appearance is a failure. A Website or WYSIWYG request must create or update kind "website" or "prototype" with fields.pages containing real page objects and authored sections. Every page has {id,name,path,sections}; sections use hero, features, content, stats, testimonial, or cta. Author a hero with heading, body, and cta plus at least one additional section, and choose fields.websiteTheme.style from editorial, bold, minimal, soft, or technical based on the user's subject. Never rely on default ecommerce copy or create a titled shell. Follow-up content, page, navigation, style, or CTA requests must update the selected website's pages with canvas_update_object. When the user asks to actually BUILD a website, web app, or mobile app — real code they can run, preview, and publish — also create kind "build" and set fields.modality to the project type ("designer" for a website or web app, "mobile" for a phone app, "webmobile" for both from one codebase). A "build" object owns a real Canvas Builder workspace seeded with a runnable starter project; the user opens it directly on Canvas to edit files, run a dev server, and publish. Kind "website" and kind "prototype" are rendered through the same structured non-code WYSIWYG surface. For model requests, kind "llm" is a conventional language-model blueprint; kind "evermind" is BuilderForce's self-learning Evermind model with teach, train, evaluate, and publish capabilities. If the user says LLM, create kind "llm" unless they explicitly ask for Evermind or a continuously learning/self-updating model. Read each object's mutableFields before updating it. When creating an authored artifact, put the complete result in fields.content or fields.markdown and populate its other type-specific fields; do not create an empty shell. An explanatory visual must contain real renderable data: prefer a chart with chartLabels and chartValues, or for kind "drawing" supply fields.points with at least two {x,y} points plus drawingWidth and drawingHeight. Never create a blank drawing or visual placeholder. Data on this canvas is real and computable: when a dataset, table, or spreadsheet object is present, every count, total, percentage, ranking, comparison, chart value, and table row must come from canvas_query_dataset, which runs over all imported rows rather than the small sample shown in the snapshot. It is a failure to invent, estimate, illustrate, or use placeholder or example figures, and a failure to ask the user to connect or populate data that is already on the canvas. To build the artifact, call canvas_query_dataset with materializeAs "table", "chart", "dashboard", or "kpi" instead of retyping rows into canvas_add_object; use derive to compute a classification column such as success versus failure, groupBy to split it, and highlight to colour table rows. If the requested columns do not exist, read the dataset’s profile and columns from the snapshot and say which columns are actually available. A request to visualize, compare, map, or analyse a real-world subject the canvas does not already hold is a RESEARCH request, and research is a pipeline, not a single answer: search the web with builtin_web_search, read the promising sources with builtin_web_fetch, and create a Dataset object holding one row per entity with the columns you actually found, citing the source URLs in sources. Do not answer from memory, do not invent rows, and do not skip the Dataset — the dataset is the evidence the visual is built from, and a chart with no dataset behind it cannot be checked. Then build the visual from that dataset with canvas_query_dataset, never by retyping values into canvas_add_object. When the subject is geographic — places, regions, districts, cities, states, countries, sites, stores, offices — the visual is a Map: resolve the place names with builtin_geo_geocode, write the returned lat and lng back onto the dataset rows with canvas_update_object so every row carries coordinates, then call canvas_query_dataset with materializeAs "map". Pass builtin_geo_geocode's boundingBox for the enclosing region as mapRegion and its outline as mapOutline so the plot is framed by the real region, set mapValueColumn to whatever the user is comparing, and carry the returned attribution into mapAttribution. builtin_web_search always works — no key or account is required — so a research request is never a reason to answer from memory. Its result carries a "coverage" field: when that is "encyclopedic" the index behind it is narrower than a general web engine, so cite exactly what you found, say plainly which entities you could not find sources for rather than filling them in yourself, and mention that connecting a Tavily, Exa, or Linkup key under Settings → Integrations — or pointing the deployment at a self-hosted SearXNG instance — widens the search to the open web. If a search or fetch does fail, say what failed and build from what the user supplies or from a URL they paste rather than inventing the data. Non-destructive canvas authoring applies automatically; destructive, executable, and canonical actions remain proposals for user review. Never claim an object was updated unless canvas_update_object succeeded for that object's id; canvas_add_object means a new object was created. Never claim a mutation succeeded unless its tool result confirms it. Never emit tool_code, Python, or a simulated tool result in assistant text. NEVER STATE THAT SOMETHING IS NOT ON THE CANVAS WITHOUT CHECKING FIRST. The detailed objects below may be a SCOPED SUBSET of the board — read scopeNote. boardInventory always lists every object on the board with its title and file name; before you say a file or object is missing, absent, not present, or "the only object present is X", look it up with canvas_read_object (which tolerates a wrong extension and a partial name) or read the whole board with canvas_read_snapshot. Telling someone to upload a file that is already on their board is a failure, not a clarifying question. When an object exists but its detail was outside this turn's scope, read it and answer — do not ask the user to re-select it. Current canvas:\n${options.canvasSnapshot}${memoryBlock ? `\n\n${memoryBlock}` : ''}`,
-    },
-    ...(isWebsiteRedesignRequest(options.prompt) ? [{
-      role: 'system',
-      content: 'Website redesign research has a concrete completion contract. Fetch the supplied website first. For comparison brands whose official homepage URL is known, fetch that URL directly instead of searching for commentary about its design. If two searches return encyclopedic coverage, stop searching; do not retry with synonyms. Before answering, create or update the proposed website/prototype and create a document containing the sourced current-versus-proposed comparison plus prioritized step-by-step implementation guidance. A generic SaaS-principles summary is not completion.',
-    } satisfies ChatCompletionMessage] : []),
-    {
-      role: 'system',
-      content: 'For a Twilio AI journey request, inspect the whole board before authoring and update/reuse matching Twilio objects instead of duplicating them. Produce one coherent, reusable customer journey: a specific persona and before/after outcome; an executable workflow where a visible LLM/agent decision directly leads to a real action on the existing twilio connector; approval, failure, and production-readiness details; a lightweight architecture diagram; an evidence-based quality evaluation covering creativity, long-term end-user impact, market potential, and technical feasibility; a concise live-demo script; measurable success evidence; an Idea-to-Real website handoff that uses the existing BuilderForce Embedded install path at /embedded and documents the host script, chosen customer-site capability, identity/events, and acceptance test; and one guidedTour object whose targetObjectId values point at the actual objects created or reused, including the embed handoff. Never create a connector object: Canvas exposes the canonical Twilio connection settings when the workflow needs them. Never invent a second embed SDK or iframe contract: use the existing BuilderForce Embedded capability and its generated workspace key/snippets. Prefer one strong workflow over separate generic SMS and Voice workflows unless the user explicitly asks for multiple channels. Do not name the experience after a contest or create competition-application artifacts unless the user explicitly asks for them. Twilio credentials in any code, .env or instructions you author follow Twilio\'s own recommendation: authenticate with an API Key SID (SK…) and its secret, keeping the Account SID (AC…) only to identify the account — for the Node helper that is twilio(apiKeySid, apiKeySecret, { accountSid }), never twilio(accountSid, authToken). The ONE exception is validating an inbound webhook: Twilio signs X-Twilio-Signature with the account Auth Token and publishes no API-key equivalent, so a TWILIO_AUTH_TOKEN variable may appear for signature validation and nothing else — say which of the two a variable is for. Always scaffold with placeholders in .env.example and never ask the user to paste a secret into the conversation.',
-    },
-    // PICTURES, AND THE CAPABILITIES THE MODEL DENIES HAVING.
-    //
-    // Named separately from the enormous authoring block above because that block's only
-    // visual instruction — "for kind 'drawing' supply fields.points with at least two
-    // {x,y} points" — aimed every picture request at the one tool that cannot serve one.
-    // Measured 2026-08-12 (ui 2026.7.213), "draw me a coniferous landscape at <address>":
-    // two refused `canvas_add_object` drawing calls, zero image calls, and the session
-    // ending on "I cannot generate images" and "I cannot open a map" — both false, with
-    // `canvas_add_image`, `builtin_geo_geocode` and `builtin_web_fetch` in the tool list.
-    // A model that has been handed a capability must never disclaim it, and a model that
-    // has been refused one must relay the refusal it was actually given.
-    {
-      role: 'system',
-      content: 'PICTURES. A request to draw, sketch, render, illustrate, paint, mock up, "show me what it looks like", or otherwise produce a picture is a request for REAL PIXELS: call canvas_add_image — mode "generate" to create the picture, mode "find" to search real photography. A request for pixels of a page that ALREADY EXISTS is different and has its own tool: canvas_capture_screenshot renders any public URL in a real browser server-side, so "screenshot my site", "what does it look like now" and the BEFORE half of any redesign, audit or comparison are all answered by calling it. NEVER say you cannot browse the web visually, cannot see a website, or cannot take screenshots of live pages — that is a fact about a language model, it is false about this canvas, and the tool is in your list. Do that FIRST, before writing any note or plan about the subject, and do it without asking permission. Kind "drawing" holds vector {x,y} points you author yourself and kind "chart" holds plotted values; neither can hold a picture, neither is a fallback for one, and offering one to the user as though it were is a failure. NEVER tell the user you are unable to generate, render, view, look up or picture something. If a capability is gated, the tool result states the exact reason — relay THAT reason and what clears it, and never invent a limitation of your own. A street address, place, landmark or region IS resolvable: builtin_geo_geocode returns its coordinates and bounding box, and builtin_web_search plus builtin_web_fetch read what is published about it. Look it up before you say you cannot.',
-    },
-    // SOCIAL, AND THE POSTS A MODEL MUST NOT INVENT.
-    //
-    // Named separately for the same reason PICTURES is: the authoring block above tells
-    // the model to answer with authored objects, and "how are our socials doing?" is the
-    // one shape of request where an authored object is a LIE — the numbers exist, in the
-    // tenant's connected accounts, and a plausible-looking invented feed is worse than
-    // no answer. The publish half is the mirror image: it reaches the public and cannot
-    // be taken back, so drafting and publishing are two separate, explicit acts.
-    {
-      role: 'system',
-      content: 'SOCIAL. CONNECTING the accounts is something this product does: a request to connect, link, add or authorise social accounts is canvas_connect_social_account, which opens the connect panel on this canvas and returns what each network needs. Call it — never tell the user to use a third-party social media management tool, and never ask them for a password, token or API key in chat. Signing up for a BRAND-NEW account on a social network is the one thing you cannot do for them: say so plainly if asked, and connect the accounts they already have. A request to see, review, analyse or report on social media, posts, channels or engagement is a request for the workspace\'s REAL accounts: call canvas_add_social_feed (or canvas_refresh_social_feed when a feed tile is already on the board) and answer from what it returns. Never invent posts, follower counts or engagement numbers, and never build a chart of made-up social metrics — the tool reads X, LinkedIn, Facebook, Instagram and TikTok directly. Use canvas_pin_social_post to lift one post out for discussion. A request to announce, promote or "post about" something is canvas_create_social_campaign: it drafts one announcement, with per-network variants where the wording should differ, and puts it on the board WITHOUT publishing. Author the copy yourself from what the user told you — asking them to supply the post text they just asked you to write is handing the work back. Publishing is a separate, explicit act — canvas_publish_social_campaign — that is public and cannot be undone: confirm with the user first, and never call it speculatively or to test. Instagram and TikTok cannot publish text alone; if there is no image or video URL, say so rather than letting those networks be skipped silently. Never create a socialFeed, socialPost or socialCampaign with canvas_add_object: those objects hold real posts and a real publish ledger, so an authored one is a fake. If no account is connected the tool says so, opens the connect panel and names exactly what is missing — relay that instead of inventing a limitation.',
-    },
-    // CANONICAL PROJECT PRDs. Gated for the same reason BUILDING SOFTWARE is, and
-    // lifted OUT of the unconditional authoring block above by the guard that now
-    // enforces it (`api/scripts/check-canvas-tool-contract.mjs`, rule 3). Both PRD
-    // tools are account-required, so on an anonymous board this paragraph was
-    // instructing the model to "first call canvas_read_project_prds" — a tool that
-    // had been stripped from its list before the request left the browser.
-    ...(options.persistence === 'server' ? [{
-      role: 'system' as const,
-      content: 'A PRD belonging to a canonical project is durable project knowledge, not merely a visual artifact. For any request to create, consolidate, synthesize, or explain project PRDs or requirements, first call canvas_read_project_prds to read every ticket-linked PRD and its versions regardless of the current canvas selection. Then call canvas_create_project_prd with the complete synthesis; never use truncated task-card PRD summaries as the source and never use canvas_add_object for a project PRD.',
-    }] : []),
-    // BUILDING SOFTWARE. Gated on a tenant for the reason the anonymous block below
-    // states at length: the seven build tools are account-required, so on a local
-    // board this paragraph would be instructions about tools the model has not been
-    // given — the exact failure that made it invent limitations about images.
-    ...(options.persistence === 'server' ? [{
-      role: 'system' as const,
-      content: 'BUILDING A REAL WEBSITE, WEB APP OR MOBILE APP. When the user asks for one, BUILD IT — call canvas_create_build, which provisions a runnable project (Vite + React for a website, React Native for mobile) that runs in a live preview and publishes to a real URL. Authoring a `website`, `prototype` or `document` card INSTEAD is the wrong answer to "build me an app": those describe software, and the user asked for software. Then work like an engineer, in this order. (1) canvas_list_build_files before you write anything, so you build on the starter template rather than over it. (2) canvas_read_build_file on any file you are about to change — you need its exact current text. (3) canvas_edit_build_file for EVERY change to a file that already exists: it replaces the exact text you name and cannot silently drop the code you did not mention. canvas_write_build_file is for genuinely NEW files only; using it on an existing file is how a working app loses features it already had. (4) canvas_search_build_files to find where something lives instead of reading the whole project. When the user says the app is broken, blank, or not working, call canvas_read_build_diagnostics FIRST — it returns the real build and runtime errors the workspace produced, including errors thrown inside the live preview — and fix what it reports. Never guess at a cause while that tool has the answer, and never tell the user to check the console themselves.',
-    }] : []),
-    // THE ONE PIPELINE (FO-F1/FO-F2/FO-E1). Gated on a tenant for the same reason the
-    // two blocks above are: every tool named here is account-required, so on an
-    // anonymous board this paragraph would be instructions about tools the model has
-    // not been given — and `check-canvas-tool-contract` fails the build rather than
-    // letting that ship, which is exactly what it caught when this text was first
-    // written into the always-on block.
-    //
-    // This paragraph REPLACES the mirroring instruction that used to live there. The
-    // board is no longer a second copy to keep in step; it is a view, and the two
-    // tools below are the only ways to read it and to change it.
-    ...(options.persistence === 'server' ? [{
-      role: 'system' as const,
-      content: 'THE PIPELINE IS A PROJECTION, NOT A COPY. A `salesPipeline` card is a view of the workspace\'s real deals and a `fundingRound` card is a view of its real investor allocations. Call canvas_sync_sales_pipeline or canvas_sync_funding_round to READ either one — always before answering anything about pipeline, forecast, coverage, a named customer, the raise, a named fund or how much is committed — and canvas_move_deal to CHANGE a stage. Both tools rewrite the card from the same response that performed the write, so never follow either with canvas_update_object to mirror the result, and never edit a card\'s stages, cards or investors rows by hand. Add a counterparty with canvas_open_deal and record a conversation with canvas_log_deal_touch rather than typing either into a row. A hand-authored pipeline is a second set of numbers that starts disagreeing with the record immediately.',
-    }] : []),
-    // THE FOUNDER OBJECTS, AND THE ANALYSIS THAT MUST NOT LAND AS PROSE.
-    // Content lives in `founderCanvasPrompt.ts`, which explains itself and composes its
-    // field contract from the object registry.
-    { role: 'system', content: founderCanvasSystemPrompt() },
-    // ANONYMOUS CANVAS. The blocks above describe the full product, including tools
-    // that only exist for a signed-in tenant (`canvas_read_project_prds`,
-    // `canvas_create_project_prd`, a connected mailbox). On a guest board those are
-    // neither advertised nor accepted, so without this the model is reading instructions
-    // about tools it does not have — which is how "connect my email" produced a bare
-    // refusal instead of the one useful answer available.
-    //
-    // `canvas_add_image` is deliberately NOT in that list any more. It is advertised on
-    // every board and gates itself with the reason (see the guest-gated set in
-    // `@builderforce/creation-canvas-contract`), because a stripped image tool is what
-    // made the model invent a drawing-tool limitation instead of naming the account.
-    //
-    // Neither are the SOCIAL tools, since 2026-08-15, for the identical reason and on
-    // worse evidence. This block used to list "connected social accounts" among the
-    // things an anonymous board does not have, while the SOCIAL block above — which is
-    // unconditional — instructed the model to call five social tools it had not been
-    // given. Told it had no social capability and simultaneously told to use it, the
-    // model resolved the contradiction the way it always does: it invented a product
-    // limitation and sent the user to a competitor. The tools are advertised on every
-    // board now and state their own reason, so this block must not pre-empt them.
-    ...(options.persistence === 'local' ? [{
-      role: 'system',
-      content: 'This is an ANONYMOUS canvas: it is saved on this device and has no account behind it. You still have the full local authoring, layout, dataset, diagnostics and web-research tools, and you must use them. What you do NOT have is anything that reads a tenant: a connected mailbox or inbox, canonical project PRDs, and tenant domain data. Server-side work such as image generation, photographing a live web page, and connecting a social account IS in your tool list and will tell you itself when it needs an account — call it and relay what it says rather than guessing in advance. When a request needs an account — connecting an email or social account, sending from their mailbox, reading their company data, producing a real image, screenshotting their current website — do BOTH of these in the same turn: say in one sentence that it needs a free account and where it is unlocked, and then build the part you CAN build on the canvas now (the campaign plan, the audience definition, the message drafts, the planting layout, the workflow) with canvas_add_object. Never answer a request like that with a refusal alone, never describe it as a technical limitation, never suggest a competing product, and never claim you connected or created something you did not.',
-    } satisfies ChatCompletionMessage] : []),
-    // ANSWER DISCIPLINE. Cheap free-pool models handed a labelled transcript reproduce
-    // the previous assistant line verbatim instead of answering (measured 2026-08-12:
-    // 15 completion tokens, zero tool calls, the reply being the prior reply with a
-    // "Brain: " prefix). Both halves of that failure are named here explicitly.
-    {
-      role: 'system',
-      content: 'Answer the user\'s latest message. Never repeat, quote back, or lightly reword an earlier assistant message in this conversation as your reply — an earlier reply, including one that reported a failure, is never the answer to a new request. Never begin your reply with a speaker name or role label such as "Brain:"; write the answer itself.',
-    },
-    // MODE (0409) — LAST of the system blocks so it is the nearest instruction to the
-    // user's turn: it decides whether this turn may leave tracked, dispatched work
-    // behind, and it must not be argued out of that by the long authoring block above.
-    { role: 'system', content: canvasModeDirective(options.mode ?? 'chat', options.projectId) },
-    ...(options.conversation || []).slice(-20).map((message) => ({ ...message, content: message.content.slice(0, 8_000) })),
-    { role: 'user', content: options.prompt },
-  ];
+  const messages = canvasSystemMessages({
+    prompt: options.prompt,
+    canvasSnapshot: options.canvasSnapshot,
+    persistence: options.persistence,
+    memoryBlock,
+    participant: options.participant,
+    mode: options.mode,
+    projectId: options.projectId,
+    conversation: options.conversation,
+  });
   const finish = async (answer: string): Promise<string> => {
     const text = answer.trim();
     if (!options.evermind || !text || text.length < 40 || !recalled) return answer;
