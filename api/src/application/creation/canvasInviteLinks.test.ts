@@ -7,7 +7,7 @@ import {
   linkRoleForShareScope,
   shareScopeForLinkRole,
 } from './canvasInviteLinks';
-import { cleanGuestName, GUEST_ACCOUNT_TYPE, isGuestAccount } from './canvasGuestAccount';
+import { cleanGuestName, GUEST_ACCOUNT_TYPE } from './canvasGuestAccount';
 
 describe('what a canvas invite link may carry', () => {
   it('refuses the two roles that must never travel in a URL', () => {
@@ -57,10 +57,12 @@ describe('the guest identity a claim mints', () => {
     expect(cleanGuestName('x'.repeat(200))).toHaveLength(40);
   });
 
-  it('is recognisable by exactly one field', () => {
-    expect(isGuestAccount(GUEST_ACCOUNT_TYPE)).toBe(true);
-    expect(isGuestAccount('standard')).toBe(false);
-    expect(isGuestAccount(null)).toBe(false);
-    expect(isGuestAccount(undefined)).toBe(false);
+  it('is marked by one discriminator, and it is the one the browser keys off', () => {
+    // `users.account_type = 'guest'` is the whole marking. The join response ships this
+    // literal and `AuthUser['accountType']` (frontend/src/lib/types.ts) and
+    // `GuestCollaboratorNotice` read it back, so the string is a contract across the two
+    // trees rather than an internal detail — changing it silently is what would leave a
+    // link guest looking like a signed-up member.
+    expect(GUEST_ACCOUNT_TYPE).toBe('guest');
   });
 });

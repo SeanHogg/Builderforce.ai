@@ -3583,9 +3583,13 @@ export async function prepareCloudRun(
   },
 ): Promise<{ systemPrompt: string; userContent: string; execParams: AgentExecParams; agentPsychometric: string | null }> {
   const tPrep0 = Date.now();
+  // The capability set this run's surface advertises. Resolved ONCE: the identity it
+  // issues and the prompt it builds have to agree about which tools exist, and a
+  // second `opts?.shell ? … : …` further down is how they stop agreeing.
+  const surfaceCaps = opts?.shell ? CONTAINER_SURFACE_CAPS : CLOUD_SURFACE_CAPS;
   const prepIdentity = await ensureAgentRunIdentity(db, {
     tenantId, executionId, agentRef: cloudAgentRef, issuedBy: `execution:${executionId}`,
-    capabilities: [...(opts?.shell ? CONTAINER_SURFACE_CAPS : CLOUD_SURFACE_CAPS)],
+    capabilities: [...surfaceCaps],
   });
   // The agent's OWN personality (independent of assigned personas) — folded into the
   // capability prompt block, the exec params, and (by the caller) the limbic setpoints.
@@ -3823,7 +3827,7 @@ export async function prepareCloudRun(
       // the things it did were the repeatable ones, and it knows that at the end.
       kind: 'directive', subject: `reflection:${executionId}`, channel: 'user',
       order: RUN_CONTEXT_ORDER.followUp, trustTier: 'operator', pinned: true,
-      body: skillReflectionDirective(repoLabel != null),
+      body: skillReflectionDirective(repoLabel != null && surfaceCaps.has('skill.author')),
     },
     {
       // The workspace's OWN approved skills — procedures earlier runs worked out and

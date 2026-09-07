@@ -163,12 +163,36 @@ export class Tenant {
     }
     return new Tenant({
       ...this.props,
-      members: [
-        ...this.props.members,
-        { userId: newUserId, role, isActive: true, joinedAt: new Date(), seatKind },
-      ],
+      members: this.rosterWith({ userId: newUserId, role, isActive: true, joinedAt: new Date(), seatKind }),
       updatedAt: new Date(),
     });
+  }
+
+  /**
+   * Put a membership into the roster: REACTIVATE the row this person already has,
+   * or append one when they have none.
+   *
+   * `removeMember` deactivates in place — `is_active` is how this platform suspends
+   * a membership without losing its history or its per-seat spend bookkeeping — so
+   * a removed person still holds an entry here while {@link getMember}, which only
+   * sees active rows, correctly reports none. Appending unconditionally therefore
+   * produced a roster carrying TWO entries for one `(tenant_id, user_id)`, and the
+   * repository persists the roster with a single `INSERT … ON CONFLICT DO UPDATE`,
+   * which Postgres refuses outright when two values target the same conflicting row.
+   * The whole write failed, so nobody who had ever been removed could be added back —
+   * including a canvas guest returning to a board, where the failure was swallowed by
+   * the invitation-accept loop and surfaced to the invitee as an unseatable invite.
+   *
+   * `joinedAt` is deliberately preserved: the repository's upsert does not write it,
+   * so re-stamping it here would leave the aggregate disagreeing with the stored row.
+   */
+  private rosterWith(member: TenantMemberProps): TenantMemberProps[] {
+    if (!this.props.members.some(m => m.userId === member.userId)) {
+      return [...this.props.members, member];
+    }
+    return this.props.members.map(m => m.userId === member.userId
+      ? { ...m, role: member.role, isActive: true, seatKind: member.seatKind }
+      : m);
   }
 
   /**
@@ -198,10 +222,9 @@ export class Tenant {
     }
     return new Tenant({
       ...this.props,
-      members: [
-        ...this.props.members,
-        { userId: newUserId, role, isActive: true, joinedAt: new Date(), seatKind: SEAT_KIND.COLLABORATOR },
-      ],
+      members: this.rosterWith({
+        userId: newUserId, role, isActive: true, joinedAt: new Date(), seatKind: SEAT_KIND.COLLABORATOR,
+      }),
       updatedAt: new Date(),
     });
   }

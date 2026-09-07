@@ -24,8 +24,8 @@ describe('CLOUD_SURFACE_CAPS → durable/Worker toolset', () => {
     expect(names(CLOUD_AGENT_TOOLS)).toEqual([
       'ask_human', 'claim_resource', 'delete_file', 'edit_file', 'finish', 'list_files',
       'memory_forget', 'memory_recall', 'memory_remember', 'read_file', 'release_resource',
-      'run_checks', 'search_code', 'update_prd', 'web_fetch', 'web_search', 'workspace_note',
-      'workspace_read', 'write_file',
+      'run_checks', 'search_code', 'skill_list', 'skill_propose', 'update_prd', 'web_fetch',
+      'web_search', 'workspace_note', 'workspace_read', 'write_file',
     ]);
   });
 

@@ -120,6 +120,42 @@ const isPending = () =>
   );
 
 /**
+ * What a re-invite writes onto the pending row it matched.
+ *
+ * A re-invite normally updates in place — same row, current role, current sender —
+ * and `seatKind` moves with it, because a workspace invite that FOLLOWS a canvas
+ * share is a genuine upgrade from guest to seat and a row still saying
+ * 'collaborator' would seat that person without ever counting them.
+ *
+ * The reverse direction is not an update at all, and that asymmetry is the whole
+ * reason this is a named function rather than three ternaries inside the write.
+ * The companion workspace invitation that a canvas share writes is not a decision
+ * about the workspace — it exists only so a shared board can resolve — so when it
+ * matched a pending SEAT invitation it silently demoted a real one: somebody
+ * invited as a manager, then shared a single board, became a viewer-level canvas
+ * guest and stopped counting against `maxSeats`. A seat is given up deliberately,
+ * by revoking and re-inviting, never as a side effect of sharing a canvas.
+ *
+ * Pure, so the rule can be tested without a database — it is exactly the kind of
+ * bookkeeping whose regression is invisible until somebody cannot accept an invite.
+ */
+export function resolveReinvite(
+  existing: Pick<InvitationRow, 'role' | 'seatKind' | 'invitedBy'>,
+  incoming: { role: string; seatKind: SeatKind; invitedBy?: string | null },
+): { role: string; seatKind: string; invitedBy: string | null; changed: boolean } {
+  const keepSeat = consumesSeat(existing.seatKind) && !consumesSeat(incoming.seatKind);
+  const role = keepSeat ? existing.role : incoming.role;
+  const seatKind = keepSeat ? existing.seatKind : incoming.seatKind;
+  const invitedBy = keepSeat ? existing.invitedBy : (incoming.invitedBy ?? existing.invitedBy);
+  return {
+    role,
+    seatKind,
+    invitedBy,
+    changed: existing.role !== role || existing.seatKind !== seatKind || existing.invitedBy !== invitedBy,
+  };
+}
+
+/**
  * Ensure a pending invitation exists, and return it.
  *
  * Idempotent on `(tenant, kind, email)` for a pending row — which is what four
@@ -171,19 +207,15 @@ export async function invite(
     .limit(1);
 
   if (existing && !input.tokenHash) {
-    // A re-invite with no new token updates in place: same row, current role.
-    // `seatKind` is refreshed with it — a workspace invite that follows a canvas
-    // share is a genuine upgrade from guest to seat, and leaving the row saying
-    // 'collaborator' would seat that person without ever counting them.
-    if (existing.role !== role || existing.seatKind !== seatKind
-      || (input.invitedBy && existing.invitedBy !== input.invitedBy)) {
+    const next = resolveReinvite(existing, { role, seatKind, invitedBy: input.invitedBy });
+    if (next.changed) {
       await db
         .update(invitations)
-        .set({ role, seatKind, invitedBy: input.invitedBy ?? existing.invitedBy, updatedAt: new Date() })
+        .set({ role: next.role, seatKind: next.seatKind, invitedBy: next.invitedBy, updatedAt: new Date() })
         .where(and(eq(invitations.id, existing.id), eq(invitations.tenantId, input.tenantId)));
     }
     await invalidateInvitations(env, input.tenantId);
-    return { ...existing, role, seatKind };
+    return { ...existing, role: next.role, seatKind: next.seatKind, invitedBy: next.invitedBy };
   }
 
   const [row] = await db

@@ -29,6 +29,25 @@ import { CreationCanvas } from './CreationCanvas';
 
 const CANVAS_COPY = (enMessages as { creationCanvas: Record<string, unknown> }).creationCanvas;
 
+/**
+ * A `labelKey` resolved the way next-intl resolves it — by PATH.
+ *
+ * This was a flat index, which quietly assumed every action's copy sits at the top
+ * of the `creationCanvas` namespace. That is an accident of the eleven actions that
+ * happened to exist, not the property these tests are guarding: the invariant is
+ * that every action IS named in the shipped catalog, and an action whose copy lives
+ * with the rest of its feature (`walkthrough.action`) satisfies it just as well.
+ * The flat lookup returned `undefined` for one, which then matched every unnamed
+ * button in the sheet — a guard failing for a reason that had nothing to do with
+ * what it exists to catch.
+ */
+function canvasCopy(key: string): unknown {
+  return key.split('.').reduce<unknown>(
+    (current, segment) => (current && typeof current === 'object' ? (current as Record<string, unknown>)[segment] : undefined),
+    CANVAS_COPY,
+  );
+}
+
 describe('canvas session action registry', () => {
   it('declares every action exactly once, with a unique order', () => {
     const ids = CANVAS_SESSION_ACTIONS.map((def) => def.id);
@@ -156,7 +175,7 @@ describe('canvas session action registry', () => {
     for (const def of CANVAS_SESSION_ACTIONS) {
       for (const key of [def.labelKey, def.activeLabelKey, def.titleKey]) {
         if (!key) continue;
-        expect(typeof CANVAS_COPY[key]).toBe('string');
+        expect(typeof canvasCopy(key)).toBe('string');
       }
     }
   });
@@ -206,7 +225,7 @@ describe('the session actions on the canvas', () => {
     // idea needs a server-persisted session, which this fixture deliberately is not — so
     // it is excluded here rather than asserted, the same way the fixture excludes it.
     for (const def of phoneOverflowActions().filter((action) => action.id !== 'prove')) {
-      const label = (CANVAS_COPY[def.labelKey] as string);
+      const label = canvasCopy(def.labelKey) as string;
       expect(within(sheet).getByRole('button', { name: label })).toBeInTheDocument();
     }
     expect(within(sheet).queryByRole('button', { name: 'Make it real' })).toBeNull();

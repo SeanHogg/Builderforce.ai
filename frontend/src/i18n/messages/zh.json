@@ -23571,7 +23571,23 @@
     "inviteLinkAriaLabel": "画布邀请链接",
     "guestNoticeTitle": "你正以访客身份参与",
     "guestNoticeBody": "你在此画布上的所有操作都会被保存。创建账号即可拥有自己的工作区。",
-    "guestNoticeCta": "创建账号"
+    "guestNoticeCta": "创建账号",
+    "walkthrough": {
+      "label": "为你创建的内容",
+      "action": "带我浏览此画布",
+      "actionTitle": "逐组浏览已创建的内容",
+      "offerTitle": "此画布上有 {count} 个对象",
+      "offerBody": "与其一次性全部阅读，不如分 {count} 个简短的停留点逐步了解：每组是什么，以及应该从哪一个开始。",
+      "start": "带我浏览",
+      "finish": "开始工作",
+      "step": "第 {step} 站，共 {total} 站",
+      "stopTitleOne": "{kind} · {title}",
+      "stopTitleMany": "{count} 个{kind}对象",
+      "stopBodyOne": "这里创建了一个{kind}。打开它查看内容，或就地编辑。",
+      "stopBodyMany": "这 {count} 项是一并调研的，从 {title} 开始。请将它们作为一组来看——重点在于相互比较，而非单张卡片。",
+      "stopOverflow": "画布上的其余部分（另有 {count} 类对象）分布在这些内容周围；大纲面板中列出了全部对象。"
+    },
+    "teammateAlreadySeated": "{name} 已在此画布上——正在将其带入视图。"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",

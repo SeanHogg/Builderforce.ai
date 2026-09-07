@@ -21,6 +21,21 @@
  * the correct call: a listing pointing at a URL that answers challenge HTML is
  * worse than no listing.
  *
+ * ── IT IS NOT ONLY MACHINES (2026-09-07) ─────────────────────────────────────
+ * A real Chrome, on a residential IP, is hit too — whenever it reaches this host
+ * by a CROSS-SITE top-level navigation with no `cf_clearance` cookie yet. The
+ * reported case: an invitee opens a canvas invitation in the installed PWA and
+ * presses "Continue with Google", which navigates out of the PWA's scope to
+ * `api.builderforce.ai/api/auth/oauth/google`. That first hop answers a bare 403
+ * — Chrome's empty-body error page, not a Cloudflare interstitial, because the
+ * in-app browser view cannot complete the challenge — and pressing Reload on the
+ * same URL succeeds, the attempt having left the clearance cookie behind.
+ *
+ * The click-then-reload signature is the tell, and it is worth knowing because
+ * the natural first suspicion is the Worker: nothing in it answers 403 to that
+ * GET. Anybody diagnosing "the API 403s but only the first time" should run this
+ * script before reading another line of application code.
+ *
  * ── THE CAUSES ARE NOT INTERCHANGEABLE ───────────────────────────────────────
  * FOUR different settings emit the same `cf-mitigated:` header and the same
  * 403, and they have DIFFERENT remedies — which is why this reads the zone

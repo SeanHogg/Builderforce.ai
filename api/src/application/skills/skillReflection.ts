@@ -50,14 +50,20 @@ export function runEarnedReflection(signals: RunReflectionSignals): boolean {
 }
 
 /**
- * The reflection directive for a run's prompt. Empty for a run with no repository
- * to have learned a procedure about, so the caller injects unconditionally.
+ * The reflection directive for a run's prompt. Empty when the run cannot propose a
+ * skill at all, so the caller injects unconditionally.
+ *
+ * TWO conditions, and the caller ANDs them: a run with no repository has learned no
+ * procedure about one, and a surface that does not advertise `skill_propose` must not
+ * be told to call it — the container's image ends unknown tools in
+ * `unknown tool '<name>'`, so a directive naming a tool that surface lacks is an
+ * instruction to fail. The prompt names tools; the toolset decides which exist.
  *
  * The wording carries the bar as well as the invitation: most runs should propose
  * nothing, and a step that always fires is a step that always produces noise.
  */
-export function skillReflectionDirective(hasRepository: boolean): string {
-  if (!hasRepository) return '';
+export function skillReflectionDirective(canProposeSkills: boolean): string {
+  if (!canProposeSkills) return '';
   return [
     '## Reflection — before you finish',
     '',

@@ -23571,7 +23571,23 @@
     "inviteLinkAriaLabel": "Enlace de invitación al lienzo",
     "guestNoticeTitle": "Estás aquí como invitado",
     "guestNoticeBody": "Todo lo que haces en este lienzo se guarda. Crea una cuenta para tener tu propio espacio de trabajo.",
-    "guestNoticeCta": "Crear una cuenta"
+    "guestNoticeCta": "Crear una cuenta",
+    "walkthrough": {
+      "label": "Lo que se ha creado",
+      "action": "Recorrer este lienzo",
+      "actionTitle": "Recorre lo que se ha creado, grupo por grupo",
+      "offerTitle": "Hay {count} objetos en este lienzo",
+      "offerBody": "En lugar de leerlos todos a la vez, recórrelos en {count} paradas breves: qué es cada grupo y por cuál conviene empezar.",
+      "start": "Enséñamelo",
+      "finish": "Empezar a trabajar",
+      "step": "Parada {step} de {total}",
+      "stopTitleOne": "{kind} · {title}",
+      "stopTitleMany": "{count} objetos de tipo {kind}",
+      "stopBodyOne": "Aquí se ha creado un elemento de tipo {kind}. Ábrelo para leer su contenido o edítalo directamente.",
+      "stopBodyMany": "Estos {count} se investigaron juntos, empezando por {title}. Léelos como un conjunto: lo importante es la comparación, no una tarjeta suelta.",
+      "stopOverflow": "El resto del lienzo — {count} tipos de objeto más — se encuentra alrededor de estos; el panel de esquema los enumera todos."
+    },
+    "teammateAlreadySeated": "{name} ya está en este lienzo: mostrándolo en pantalla."
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",

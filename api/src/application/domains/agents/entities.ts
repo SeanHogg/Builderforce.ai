@@ -21,6 +21,8 @@ import {
   agentDefinitionReleases,
   agentDefinitionVersions,
   agentOutboundInspections,
+  agentBenchmarkCases,
+  agentBenchmarkResults,
   agentRunPrincipals,
   enrichmentCache,
   executionClaimEvidence,
@@ -30,6 +32,7 @@ import {
   llmActionRatings,
   modelLocks,
   skillAssignments,
+  tenantSkills,
   workflowActions,
   previewSessions,
 } from '../../../infrastructure/database/schema/agents';
@@ -96,4 +99,20 @@ export const AGENTS_ENTITIES = defineDomainEntities('agents', [
    *  what the product uses; this registration is what makes the rows visible to the
    *  generic reader alongside the rest of the agents seat. */
   entity(skillAssignments),
+  /** The workspace's OWN skills (migration 1135): procedures a run worked out and
+   *  proposed, and the ones a human approved. Read-only — `status` is a REVIEW
+   *  DECISION, and the whole safety property of agent-authored skills is that nothing
+   *  reaches another run until a person moves a draft across that line. A generic
+   *  write here is an approval nobody gave. `application/skills` owns the transition;
+   *  this registration is what makes the rows readable beside the rest of the seat. */
+  entity(tenantSkills, { readOnly: true }),
+  /** A benchmark CASE (migration 1136) — a fixed prompt plus the substrings a good
+   *  answer contains. Writable: authoring and retiring cases is an ordinary
+   *  administrative act, and it is the one half of the benchmark a person is meant
+   *  to edit. */
+  entity(agentBenchmarkCases),
+  /** One scored ATTEMPT at a case. Read-only for the reason every measurement here is:
+   *  the regression series IS these rows, and a hand-written score is a result nobody
+   *  ran — it would move the quality trend the insights hub plots. */
+  entity(agentBenchmarkResults, { readOnly: true }),
 ]);

@@ -19,6 +19,7 @@ import {
   mailboxAutomationRules,
   mailboxPushReceipts,
   mailboxWatches,
+  otelExporters,
   tenantExtensionInstalls,
 } from '../../../infrastructure/database/schema/integrations';
 import { defineDomainEntities, entity } from '../entityDefinition';
@@ -65,4 +66,14 @@ export const INTEGRATIONS_ENTITIES = defineDomainEntities('integrations', [
   // actually observed". A generic write that could set `verdict: 'pass'` would be
   // a review nobody ran, recorded as one that did.
   entity(extensionReviewStages, { readOnly: true }),
+
+  // A configured OTLP collector (migration 1136) — where a workspace's agent spans
+  // are shipped. Read-only for the reason every credential-bearing config here is:
+  // the vendor auth header lives in `headers_enc`/`headers_iv` as an AES-GCM pair,
+  // and a generic write takes plain columns — it could set an endpoint without
+  // rotating the credential that authenticates to it, or write one half of the pair
+  // and leave the other pointing at a different plaintext. `otelExporter.ts` seals
+  // and unseals them together; this registration is what makes the row, its enabled
+  // flag and its failure count readable beside the rest of the seat.
+  entity(otelExporters, { readOnly: true }),
 ]);

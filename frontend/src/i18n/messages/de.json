@@ -23571,7 +23571,23 @@
     "inviteLinkAriaLabel": "Einladungslink zur Canvas",
     "guestNoticeTitle": "Du bist als Gast hier",
     "guestNoticeBody": "Alles, was du auf dieser Canvas tust, wird gespeichert. Lege ein Konto an, um einen eigenen Workspace zu erhalten.",
-    "guestNoticeCta": "Konto anlegen"
+    "guestNoticeCta": "Konto anlegen",
+    "walkthrough": {
+      "label": "Was erstellt wurde",
+      "action": "Durch dieses Board führen",
+      "actionTitle": "Gehen Sie Gruppe für Gruppe durch das Erstellte",
+      "offerTitle": "Auf diesem Board liegen {count} Objekte",
+      "offerBody": "Statt alles auf einmal zu lesen, gehen Sie sie in {count} kurzen Stationen durch: was jede Gruppe ist und womit Sie anfangen sollten.",
+      "start": "Zeig es mir",
+      "finish": "Loslegen",
+      "step": "Station {step} von {total}",
+      "stopTitleOne": "{kind} · {title}",
+      "stopTitleMany": "{count} Objekte vom Typ {kind}",
+      "stopBodyOne": "Hier wurde ein Objekt vom Typ {kind} erstellt. Öffnen Sie es, um den Inhalt zu lesen, oder bearbeiten Sie es direkt.",
+      "stopBodyMany": "Diese {count} wurden gemeinsam recherchiert, beginnend mit {title}. Lesen Sie sie als einen Satz — es kommt auf den Vergleich an, nicht auf eine einzelne Karte.",
+      "stopOverflow": "Der Rest des Boards — {count} weitere Objektarten — liegt rundherum; das Gliederungs-Panel listet jedes einzelne auf."
+    },
+    "teammateAlreadySeated": "{name} ist bereits auf diesem Board — wird angezeigt."
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",

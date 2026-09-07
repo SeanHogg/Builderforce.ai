@@ -30,6 +30,31 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   949 -> 953 (`useClientFiles`, 2026-09-07) - the four client modules canvas
+ *   invite links landed. Each is argued on the terms the "808 -> 868" entry set:
+ *   a shared reuse surface carries its own boundary, and interactivity that is
+ *   real is not inferred from whoever happens to mount it.
+ *
+ *     - `app/create/join/[token]/JoinCanvasClient.tsx` - the landing page for a
+ *       canvas invite link. It is the CLIENT ROOT under a Server Component
+ *       `page.tsx` (zero client-rooted pages spent): it reads the session through
+ *       `useAuth`, previews the link, and claims it. None of that is a render.
+ *     - `components/share/ShareLinkField.tsx` - the URL-plus-copy control shared
+ *       by the guest room and the signed-in canvas link. Two importers today and
+ *       a reuse surface by intent, which is exactly the case that must not depend
+ *       on its callers already being client files.
+ *     - `components/creation-canvas/CanvasInviteLinkPanel.tsx` - mints, lists and
+ *       revokes links; owns its own fetch and its own owner-gate.
+ *     - `components/guest/GuestCollaboratorNotice.tsx` - the sibling of
+ *       `GuestAccountPrompt` (the "935 -> 936" entry), and client for the same
+ *       reason: it decides whether to render at all from `useOptionalAuth`.
+ *
+ *   The tree stands ABOVE this number, and the gap is not this change's: commit
+ *   448debcb1 landed nine further `'use client'` files (`app/import/*`,
+ *   `components/mcp/*`, `components/insights/*`, ...) without raising the
+ *   baseline, and an unreviewed raise is exactly what this changelog exists to
+ *   prevent. Recorded in the Consolidated Gap Register rather than blessed here.
+ *
  *   948 → 949 (`useClientFiles`, 2026-09-07) — `components/ui/SectionState.tsx`.
  *   The "935 → 936" entry below records it as the one importer of
  *   `GuestAccountPrompt` that had NO directive, and that is what changed: it now

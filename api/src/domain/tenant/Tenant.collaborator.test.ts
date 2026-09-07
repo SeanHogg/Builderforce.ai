@@ -41,3 +41,37 @@ describe('admitCollaborator', () => {
     expect(() => seated.admitCollaborator('dev-1', TenantRole.VIEWER)).toThrow(ValidationError);
   });
 });
+
+describe('readmitting somebody who was removed', () => {
+  // `removeMember` deactivates in place, so the roster still carries their row. A
+  // second entry for the same user is not a stale-looking roster: the repository
+  // persists it with one `INSERT … ON CONFLICT DO UPDATE`, which Postgres refuses
+  // when two values hit the same conflicting row, so the whole membership write
+  // failed and nobody who had ever been removed could come back.
+  const removed = () => workspace()
+    .addMember('owner-1', 'dev-1', TenantRole.DEVELOPER)
+    .removeMember('owner-1', 'dev-1');
+
+  it('reactivates the existing row rather than appending a second one', () => {
+    const readded = removed().addMember('owner-1', 'dev-1', TenantRole.VIEWER);
+    const rows = readded.members.filter((m) => m.userId === 'dev-1');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.isActive).toBe(true);
+    expect(rows[0]?.role).toBe(TenantRole.VIEWER);
+  });
+
+  it('lets a removed canvas guest be admitted to the board again', () => {
+    const readmitted = removed().admitCollaborator('dev-1', TenantRole.VIEWER);
+    const rows = readmitted.members.filter((m) => m.userId === 'dev-1');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.isActive).toBe(true);
+    expect(rows[0]?.seatKind).toBe(SEAT_KIND.COLLABORATOR);
+  });
+
+  it('keeps the original joinedAt, which the repository upsert never rewrites', () => {
+    const before = removed();
+    const joinedAt = before.members.find((m) => m.userId === 'dev-1')?.joinedAt;
+    const readded = before.addMember('owner-1', 'dev-1', TenantRole.DEVELOPER);
+    expect(readded.members.find((m) => m.userId === 'dev-1')?.joinedAt).toEqual(joinedAt);
+  });
+});

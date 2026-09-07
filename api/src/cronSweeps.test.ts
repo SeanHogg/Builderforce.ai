@@ -55,7 +55,13 @@ describe('CRON_SWEEPS registry', () => {
    */
   it('flags every sweep that can start billable agent runs', () => {
     const dispatching = CRON_SWEEPS.filter((s) => s.dispatches).map((s) => s.key).sort();
-    expect(dispatching).toEqual(['auto-exec', 'mailbox-automation', 'manager', 'pr-merge', 'qa-sweep', 'security', 'validator']);
+    expect(dispatching).toEqual([
+      // `agent-benchmark` runs each workspace's fixed benchmark set on the tenant's own
+      // plan, so it is billable and declares the flag — listed here as the deliberate
+      // decision this assertion exists to force.
+      'agent-benchmark', 'auto-exec', 'mailbox-automation', 'manager', 'pr-merge', 'qa-sweep',
+      'security', 'validator',
+    ]);
   });
 
   it('resolves the frequent group to the KV-gated tick sweeps', () => {

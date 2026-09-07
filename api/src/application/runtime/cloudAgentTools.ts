@@ -164,6 +164,18 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
  * toolset (the Cloudflare Container and the GitHub Actions runner) dispatch `update_prd`
  * to it, so the capability is backed on every surface it is advertised to.
  *
+ * `skill.author` is INTENTIONALLY omitted, for the reason `web.search` was omitted
+ * until its op existed: the image's tool loop ends in `unknown tool '<name>'`, and it
+ * has no handler for `skill_propose` or `skill_list` and no op behind them, so
+ * advertising the capability here would surface two tools that 400 mid-run. The point
+ * that makes this a not-yet rather than an oversight: the image is a SEPARATE
+ * artifact — adding a handler to `api/container/server.mjs` changes nothing until that
+ * image is rebuilt and deployed, so the capability must follow the deployed image, not
+ * the source. To add it: a `skill` op in `handleContainerOp` relaying to the same
+ * Worker-side authoring service the durable surface calls (exactly as `memory`,
+ * `coordinate`, `prd` and `search` do), a dispatch arm in the image, and this entry —
+ * in that order.
+ *
  * `repo.edit` is INTENTIONALLY omitted (not a gap): unlike the shell-less durable
  * surface — which must do surgical edits over the git API (read blob → string-replace
  * → commit), hence advertises `repo.edit` — the container edits files IN its local
@@ -185,9 +197,6 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
  */
 export const CONTAINER_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   'repo.read', 'repo.write', 'shell', 'memory', 'memory.forget', 'coordinate', 'prd.write', 'human',
-  // Parity with the durable surface — the container relays the proposal back through
-  // the same Worker-side service, so the draft path is identical.
-  'skill.author',
   // `web.search` — PARITY with the durable surface, and only now safe to advertise.
   // It was absent because the container's capabilities come from the image's own tool
   // loop and there was no op behind them, so the tool would have 400'd mid-run. The

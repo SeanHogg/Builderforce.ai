@@ -3792,7 +3792,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         builtinAgent: true,
       } : {}),
     };
-    if (!point) { addAtCenter('agent', data); }
+    // ALREADY IN THE ROOM. Addressing five teammates in one prompt seats five, and
+    // addressing the same one again — a second `@CMO`, a re-sent prompt, a keyboard
+    // route racing the drag — used to seat another card with the same name. One real
+    // board finished with `CMO` on it three times, which Brain then spent a turn
+    // deleting. A seat is an identity, not an event: bring the existing card forward
+    // instead. `canvasObjectTwin` is the same rule the authoring tool applies, asked
+    // in the same words, so the two cannot disagree about what a duplicate is.
+    const seated = canvasObjectTwin('agent', teammate.name, nodesRef.current, (kind) => TITLE_IS_CONTENT_KINDS.has(kind));
+    if (seated) {
+      revealObject(seated.id);
+      setNotice(t('teammateAlreadySeated', { name: teammate.name }));
+    } else if (!point) { addAtCenter('agent', data); }
     else {
       const node = newNode('agent', point);
       node.data = { ...node.data, ...data };
@@ -3803,7 +3814,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // Addressable immediately: the composer is seeded with the mention rather
     // than leaving the person to retype a name they just dragged in.
     setPrompt((current) => (current.includes(`@${teammate.name}`) ? current : `${current ? `${current.trimEnd()} ` : ''}@${teammate.name} `));
-  }, [addAtCenter, canEdit, setNodes, t]);
+  }, [addAtCenter, canEdit, placeAppended, revealObject, setNodes, t]);
 
   // The keyboard half of §3.3. Only the board actually on the stage answers —
   // hidden cached boards hear the same event and must not quietly seat someone
@@ -10279,20 +10290,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (connectedId != null) return connectedId;
     const source = nodes.find((node) => node.id === sourceId);
     // THE BOARD MAY ALREADY BE A PROJECT. "Make this a project" writes the identity
-    // link and claims the address, and it places no card — so a board that had just
-    // been converted looked project-less here and the very next publish provisioned a
-    // SECOND project and shipped the site to an address the creator never chose. The
-    // link is READ (cached, and invalidated by the conversion itself) rather than
-    // inferred from what happens to be drawn on the board.
+    // link and claims the address — so a board that had just been converted looked
+    // project-less here and the very next publish provisioned a SECOND project and
+    // shipped the site to an address the creator never chose. The link is READ
+    // (cached, and invalidated by the conversion itself) rather than inferred from
+    // what happens to be drawn on the board.
+    //
+    // NO CARD IS DRAWN on this branch: conversion places the project card server-side
+    // (`placeCanvasObject`) and this board adopts it live. Drawing a second one here
+    // would race that adoption for the same resource.
     const appProject = await embeddedAppsApi.sessionAppState(sessionId)
       .then((state) => state.app)
       .catch(() => null);
-    const project = appProject
-      ? { id: appProject.projectId, name: appProject.name }
-      : await createProject({ name: name.trim().slice(0, 120) || 'Untitled project', origin: 'canvas' });
-    // Placed either way: the card is what every LATER reader resolves through —
-    // `connectedCanvasProjectNode` here, and the `project` object row that lets
-    // `/projects/:id/open` bring somebody back to this exact board.
+    if (appProject) return appProject.projectId;
+    const project = await createProject({ name: name.trim().slice(0, 120) || 'Untitled project', origin: 'canvas' });
     // Left of the object it serves, so the edge reads container → thing, and far
     // enough out that the two cards do not overlap on a fresh board.
     const node = newNode('project', source ? { x: source.position.x - 380, y: source.position.y } : { x: 200, y: 200 });

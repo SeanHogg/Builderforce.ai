@@ -28,6 +28,13 @@
  * A slide-out rather than a modal: this is a form, and centred dialogs are
  * reserved for terminal destructive approvals.
  *
+ * ── WHAT "OPEN THE PROJECT" OPENS ────────────────────────────────────────────
+ * The project's own card, on this board. Conversion places that card
+ * (`placeCanvasObject`), so `/projects/<id>` — which resolves a project to the
+ * board that BECAME it — lands on the card rather than, as it once did, on a
+ * brand-new empty board. It is a `<Link>` for that reason: the destination board
+ * is the one already on the stage, and a document load would tear it down.
+ *
  * ── WHERE THE TRIGGER IS DRAWN ───────────────────────────────────────────────
  * A row in the canvas's ••• sheet, not a worded button in the command bar: a
  * board becomes one project, ONCE, so it does not earn permanent width beside
@@ -43,6 +50,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import {
@@ -198,9 +206,13 @@ export function CanvasAppPanel({ sessionId, onOpenChange }: CanvasAppPanelProps)
               />
 
               <div className={styles.actions}>
-                <a className={styles.primary} href={`/projects/${app.projectId}`}>
+                {/* A CLIENT transition, not a document load. `/projects/<id>` resolves
+                    to the project's card on its own board, and that board is the one
+                    already mounted on the shell's stage — an `<a>` here tore the whole
+                    canvas down and rebuilt it to arrive back where it started. */}
+                <Link className={styles.primary} href={`/projects/${app.projectId}`}>
                   {t('openProject')}
-                </a>
+                </Link>
               </div>
             </>
           ) : (

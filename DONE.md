@@ -1,3 +1,131 @@
+## ✅ RESOLVED 2026-09-07 — Sharing a canvas got WORSE the moment you signed up, and an invitee could not join without an account
+
+A logged-out visitor could share a board the way people actually share things: start a session, copy
+a URL, send it. The screenshot that opened this pass is that flow working — "Shared — send the link
+to invite people", a link, a Copy button. Sign up, and the same panel became an address field: type
+an email, we mail a one-time token, and the recipient has to sign in **as that exact address** before
+they see anything. The product's sharing model degraded on the transition it spends everything to
+cause, and the two halves disagreed about what an invitation even is.
+
+**The decision.** A link invitation is the same grant, unaddressed. It hangs off the board's registry
+object as a `share_links` row exactly as an emailed invitation hangs off it as an `invitations` row —
+same object, same revocation surface, same plan cap — so a link can never grant access to something
+the invite panel never showed. And the person who takes one gets a REAL identity rather than a
+parallel anonymous credential, because a durable canvas resolves through workspace membership and a
+user id across ~60 endpoints; teaching every one of them a second credential is the change where one
+endpoint does not learn.
+
+**What shipped.**
+
+1. **`canvasInviteLinks.ts`** (api/src/application/creation/) — the port. Mint / list / revoke /
+   preview / claim. The role a link may carry is `viewer | commenter | editor` and nothing else:
+   `share_links.scope` is already `view | comment | edit`, and the two board roles it cannot spell
+   are exactly the two that must not travel in a URL — `runner` spends the workspace's tokens and
+   `owner` can give the board away. `asCanvasLinkRole` returns null for those rather than quietly
+   downgrading, so a caller asking for `owner` is refused rather than served something else.
+2. **`canvasGuestAccount.ts`** — the passwordless identity a claim mints. `account_type = 'guest'` is
+   the one field that says so; the address is `guest-<uuid>@guest.invalid` (RFC 2606 reserved, so it
+   can never be mailed and never collide). The workspace membership is a `collaborator`, not a seat
+   — capped by `maxCreationSessionCollaborators` like every other canvas guest, billed at nothing —
+   and the workspace role is the BOARD role's ceiling via `tenantRoleForSessionRole`. Because the row
+   is a real `users` row, the guest is a member like any other: presence, comments, the relay
+   principal and the plan cap are all the paths that already existed.
+3. **`canvasInviteLinkRoutes.ts` / `canvasJoinRoutes.ts`** — owner-gated mint/list/revoke, and the
+   invitee's three doors: `GET /:token` describes the invitation without spending one of its uses,
+   `POST /:token/guest` mints an identity for somebody who has declined to sign up, and
+   `POST /:token/account` seats the person who already has a session. Three routes rather than one
+   because they differ in what proves who is calling, and an endpoint with two auth stories is an
+   endpoint where one of them is eventually forgotten.
+4. **The claim checks the plan cap BEFORE it spends the link's use**, so a claim refused for capacity
+   leaves the link intact — a single-use link burned by a refusal would be a share the owner has to
+   notice and re-mint for a reason they never see. An existing member short-circuits the whole thing:
+   re-opening a link you already took is how people return to a board.
+5. **`/create/join/[token]`** — the landing page, and the only screen in the product that leads with
+   "Join without an account". It says what board it is and what access is on offer before anything is
+   claimed, then offers three answers: join by name, sign in, or create an account. Added to
+   `LOCAL_FIRST_APP_PATTERNS` so a signed-out visitor gets the real shell instead of the marketing
+   teaser — the whole promise of the link is that no account is needed, and a teaser is a sign-up wall.
+6. **`CanvasInviteLinkPanel`** renders in the SAME sheet as the address field rather than replacing
+   it — both motions are real, and which one fits depends on whether you know the person's email or
+   only have a chat window open. It is owner-gated and decides that itself from the board role it is
+   handed. Its list carries no URLs, deliberately: only a link's hash is stored, so a leaked link is
+   revoked and re-minted, never re-read.
+7. **`GuestCollaboratorNotice`** is the other side of the same link — an OFFER of a workspace of
+   their own, never a wall, because a link guest is a real member of the board and nothing is being
+   withheld from them. It shows itself only to `accountType === 'guest'`.
+
+**What was extracted rather than copied.** `ensureSessionObject`/`findSessionObject` →
+`sessionObjectRef.ts` and `collaboratorCapacity` → `canvasCollaboratorCapacity.ts`, both out of
+`creationSessionRouteService.ts` (3,000 lines) and both now read by three callers: an email invite, a
+link mint and a link claim are three ways onto one board and must resolve the same registry entry and
+the same plan cap. `resolveShareToken` grew a non-consuming twin, `peekShareToken`, with the three
+liveness conditions written once — a second copy of that test is how a preview screen comes to
+advertise a link the claim behind it then refuses. `ShareLinkField` is the URL-and-copy control the
+guest room and the canvas link now share; `GuestInviteLink` is what is left of the guest-room version
+once the shared part moved, and `guestRoom.copyInvite` / `linkCopied` / `copyFallback` were deleted
+from all five catalogs as the dead keys they became.
+
+**Verification.** api `tsgo` clean on every touched file; `check:layering`, `check:application-layering`,
+`check:tenant-scope`, `check:unvalidated-bodies`, `check:db-access`, `check:signature-duplication`,
+`check:shape-lint`, `check:domain-boundary`, `check:silent-catches` all green (the first two needed
+the DB read and the token mint moved behind ports — `ownedCanvasSession` and `issueGuestSession` —
+and the bodies read through `parseBody`, whose role schema is `z.enum(CANVAS_LINK_ROLES)` so the one
+list that says what a URL may carry is the one the API validates against). Frontend `tsc` clean;
+`check:design-tokens`, `check:i18n-keys`, `check:route-exports`, `check:edge-runtime`,
+`check:api-transport`, `check:primitives`, `check:design-scale` green. 7 api tests, 9 frontend tests
+for the new surfaces; 517 canvas/guest component tests and the catalog-parity + shell-routing suites
+re-run green. Release note authored as migration `1140`.
+
+## ✅ RESOLVED 2026-09-07 — Conversion left no trace on the board it converted, so "Open the project" went nowhere
+
+Follow-up to the same-day fix above, and the resolution of the one item it left in the Gap Register.
+That fix taught `POST /projects/:projectId/open` to answer with the board that BECAME a project, which
+stopped the session from appearing lost — but the board still carried no `project` card, so the
+panel's own **Open the project** action resolved back to the exact board it was mounted on, reloaded
+the document, and landed the reader precisely where they started.
+
+**The decision.** THE PROJECT IS THE APP, so "open the project" has no separate destination — but it
+does have a *thing*: the project's own card on its board, which expands into delivery, metrics and
+feedback (`expandProject`). Conversion was leaving that card unplaced. So the answer was not to
+re-point the action, it was to make conversion complete.
+
+**What closed it.**
+
+1. **`placeCanvasObject`** (api/src/application/canvas/placeCanvasObject.ts) — the primitive that did
+   not exist: a server-side write of ONE object onto a board that somebody may be looking at. Every
+   graph write until now belonged to a request *about* that graph and arrived with the caller's
+   `If-Match`; conversion is the first write that is a CONSEQUENCE of something else. It reads the
+   revision, writes at +1 through `creationGraphStatements` (one writer, not an append that drifts
+   from it), and broadcasts `canvas.changed` so the open board adopts it through `AdoptRemoteBoard` —
+   the same door a collaborator's edit uses, including its refusal to overwrite unsaved local work.
+   Idempotent on `(resourceType, resourceId)`, not on the object id, because the caller mints a fresh
+   id per attempt. Best-effort by construction: a lost revision race returns `placed: false` rather
+   than failing a conversion whose project, link and address are already correct.
+2. **`isCreationEventWriteConflict` moved to `creationGraphWriter`** — it reads that module's own
+   unique constraints (`uq_creation_events_revision` / `uq_creation_events_idempotency`), which is
+   where it belonged the moment a second caller of `creationGraphStatements` needed to tell a lost
+   race from a real failure. `creationSessionRouteService` imports it; the test follows it.
+3. **`convertSessionToApp` places the card on BOTH paths** — the fresh conversion and the idempotent
+   replay. "This board is a project" and "this board shows its project" have to be the same fact, and
+   routing the replay through it repairs any board converted before the card existed: the next press
+   of the button places it, and costs one read when it is already there.
+4. **`ensureCanvasProject` no longer draws a card on the app-link branch** (CreationCanvas.tsx) — the
+   server owns that placement now, and a client card for the same resource would race the adoption.
+   It still places one when it genuinely PROVISIONS a project, which has no server-side placement.
+5. **The panel's action is a `<Link>`, not an `<a>`** (CanvasAppPanel.tsx) — `/projects/<id>` now
+   resolves to `/create/<thisBoard>?focus=<card>`, and that board is the one already mounted on the
+   shell's stage. A document load tore the whole canvas down to arrive back at itself; a client
+   transition just focuses the card.
+
+**Net effect.** Convert a board, press **Open the project**, and the project's card is focused on the
+board you built — no reload, no empty canvas, and the next publish ships to the address you chose.
+
+**Verification.** `src/application/canvas` + `creationSessionRouteService.test.ts`: 43 passed (4 new
+covering the placement geometry, including the unpositioned-object case that used to drag a card
+off-screen). `src/components/apps`: 18 passed. `tsgo --noEmit` clean on every touched file in both
+packages. *Note: `CreationCanvas.tsx` was being edited by a concurrent session during this pass
+(`placeAppended` on the node-append line); the edit here was applied around it rather than over it.*
+
 ## ✅ RESOLVED 2026-09-07 — "Convert to project" appeared to destroy the canvas session it converted
 
 **Symptom (reported 2026-09-07).** Someone started a canvas, built out a substantial board, opened the

@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@builderforce/agent-loop':
+        specifier: link:../packages/agent-loop
+        version: link:../packages/agent-loop
       '@builderforce/agent-stall':
         specifier: link:../packages/agent-stall
         version: link:../packages/agent-stall

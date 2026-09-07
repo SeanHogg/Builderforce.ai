@@ -23571,7 +23571,23 @@
     "inviteLinkAriaLabel": "Lien d’invitation au canevas",
     "guestNoticeTitle": "Vous êtes ici en tant qu’invité",
     "guestNoticeBody": "Tout ce que vous faites sur ce canevas est enregistré. Créez un compte pour avoir votre propre espace de travail.",
-    "guestNoticeCta": "Créer un compte"
+    "guestNoticeCta": "Créer un compte",
+    "walkthrough": {
+      "label": "Ce qui a été créé",
+      "action": "Faire le tour de ce canevas",
+      "actionTitle": "Parcourez ce qui a été créé, groupe par groupe",
+      "offerTitle": "Ce canevas contient {count} objets",
+      "offerBody": "Plutôt que de tout lire d’un coup, parcourez-les en {count} courtes étapes : ce qu’est chaque groupe, et par lequel commencer.",
+      "start": "Faites-moi visiter",
+      "finish": "Commencer à travailler",
+      "step": "Étape {step} sur {total}",
+      "stopTitleOne": "{kind} · {title}",
+      "stopTitleMany": "{count} objets de type {kind}",
+      "stopBodyOne": "Un objet de type {kind} a été créé ici. Ouvrez-le pour lire son contenu, ou modifiez-le directement.",
+      "stopBodyMany": "Ces {count} éléments ont été étudiés ensemble, en commençant par {title}. Lisez-les comme un ensemble : c’est la comparaison qui compte, pas une carte isolée.",
+      "stopOverflow": "Le reste du canevas — {count} autres types d’objet — se trouve autour de ceux-ci ; le panneau de plan les répertorie tous."
+    },
+    "teammateAlreadySeated": "{name} est déjà sur ce canevas — affichage en cours."
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",

@@ -57,6 +57,7 @@ import {
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { buildProjectKey } from '../project/projectKey';
+import { placeCanvasObject } from './placeCanvasObject';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import {
   HOSTING_APEX,
@@ -300,6 +301,34 @@ async function allocateProjectKey(db: Db, tenantId: number, name: string): Promi
 }
 
 /**
+ * The card a converted board carries, placed or repaired.
+ *
+ * Called on BOTH paths through {@link convertSessionToApp} — the fresh
+ * conversion and the idempotent replay — because "this board is a project" and
+ * "this board shows its project" have to be the same fact. A board converted
+ * before the card existed gets it the next time anybody presses the button, and
+ * `placeCanvasObject` is idempotent on the resource, so the ordinary replay costs
+ * one read and writes nothing.
+ */
+async function placeAppProjectCard(
+  db: Db,
+  env: Env,
+  input: { sessionId: string; tenantId: number; userId: string; projectId: number; name: string; subdomain: string },
+): Promise<void> {
+  await placeCanvasObject(db, env, {
+    sessionId: input.sessionId,
+    tenantId: input.tenantId,
+    userId: input.userId,
+    kind: 'project',
+    resourceType: 'project',
+    resourceId: String(input.projectId),
+    content: { kind: 'project', title: input.name, status: 'Active' },
+    eventType: 'canvas.converted_to_app',
+    eventPayload: { projectId: input.projectId, subdomain: input.subdomain },
+  });
+}
+
+/**
  * Convert a canvas session into an app project.
  *
  * IDEMPOTENT by design: a board that is already an app returns that app rather
@@ -330,6 +359,12 @@ export async function convertSessionToApp(
   const already = await appForSession(db, input.tenantId, session.id);
   if (already) {
     const subdomain = already.subdomain ?? '';
+    // Repairs a board converted before the card was part of conversion; a no-op
+    // for every board that already carries one.
+    await placeAppProjectCard(db, env, {
+      sessionId: session.id, tenantId: input.tenantId, userId: input.userId,
+      projectId: already.projectId, name: already.name, subdomain,
+    });
     return {
       ok: true,
       app: {
@@ -445,6 +480,18 @@ export async function convertSessionToApp(
       operation: `reserveAddress:${subdomain}`,
     });
   }
+
+  // THE CARD. A board that became a project has to SHOW the project, and not for
+  // decoration: `POST /projects/:projectId/open` focuses it, and the canvas
+  // resolves "the project this board acts against" through it — without it the
+  // next publish provisioned a second project and shipped to the wrong address.
+  // Best-effort by construction (see `placeCanvasObject`): the project, the link
+  // and the address are already correct, and a card that lost a race to a
+  // concurrent save must not fail the conversion the person is waiting on.
+  await placeAppProjectCard(db, env, {
+    sessionId: session.id, tenantId: input.tenantId, userId: input.userId,
+    projectId: project.id, name: project.name, subdomain,
+  });
 
   // AFTER the address is reserved, not after the link: `subdomain` is part of the
   // answer, so invalidating between the two would let a concurrent read refill

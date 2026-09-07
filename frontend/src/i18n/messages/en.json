@@ -23571,7 +23571,23 @@
     "inviteLinkAriaLabel": "Canvas invite link",
     "guestNoticeTitle": "You are here as a guest",
     "guestNoticeBody": "Everything you do on this canvas is saved. Create an account to get a workspace of your own.",
-    "guestNoticeCta": "Create an account"
+    "guestNoticeCta": "Create an account",
+    "walkthrough": {
+      "label": "What you were given",
+      "action": "Walk me through this board",
+      "actionTitle": "Step through what was created, one group at a time",
+      "offerTitle": "{count} objects are on this board",
+      "offerBody": "Rather than reading them all at once, step through them in {count} short stops — what each group is, and which one to start with.",
+      "start": "Show me round",
+      "finish": "Start working",
+      "step": "Stop {step} of {total}",
+      "stopTitleOne": "{kind} · {title}",
+      "stopTitleMany": "{count} {kind} objects",
+      "stopBodyOne": "A {kind} was created here. Open it to read what it holds, or edit it in place.",
+      "stopBodyMany": "These {count} were researched together, starting with {title}. Read them as one set — the comparison is the point, not any single card.",
+      "stopOverflow": "The rest of the board — {count} more kinds of object — sits around these; the outline panel lists every one of them."
+    },
+    "teammateAlreadySeated": "{name} is already on this board — bringing them into view."
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",

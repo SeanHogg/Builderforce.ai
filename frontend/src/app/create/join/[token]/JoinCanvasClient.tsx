@@ -117,9 +117,12 @@ export default function JoinCanvasClient({ token, navigate = replaceLocation }: 
         aria-live="polite"
         style={{ width: 'min(460px, 100%)', textAlign: 'center', display: 'grid', gap: 'var(--space-4)', justifyItems: 'center' }}
       >
-        <div aria-hidden="true" style={{ fontSize: '1.9rem', color: 'var(--coral-bright)' }}><Icon source="✦" size="1em" /></div>
+        <div aria-hidden="true" style={{ fontSize: 'var(--font-size-section)', color: 'var(--coral-bright)' }}><Icon source="✦" size="1em" /></div>
 
-        <h1 style={{ margin: 0, font: '700 clamp(1.25rem, 2.6vw, 1.62rem)/1.15 var(--font-display)', letterSpacing: '-.022em', color: 'var(--text-primary)' }}>
+        {/* The role, not the size: `.ui-text-page-title` carries family, size, weight
+            and tracking together, so this heading is the SAME page title the rest of
+            the product uses rather than a fourth hand-typed approximation of one. */}
+        <h1 className="ui-text-page-title" style={{ margin: 0, color: 'var(--text-primary)' }}>
           {target ? t('invitedTo', { title: target.title }) : t('title')}
         </h1>
 

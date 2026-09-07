@@ -16,6 +16,8 @@ import {
   revokeInvitation,
 } from '../../application/kernel/InvitationService';
 import { getObject } from '../../application/kernel/ObjectRegistry';
+import { admitToBoard } from '../../application/creation/boardAdmission';
+import { tenantRoleOf } from '../../application/tenant/tenantRoles';
 import { sha256Hex } from '../../domain/shared/hash';
 import { TenantRole, TenantBillingCycle, TenantBillingStatus, TenantPlan } from '../../domain/shared/types';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
@@ -103,20 +105,11 @@ function emitMemberActivity(
 
 type SourceControlProvider = 'github' | 'bitbucket';
 
+/** Is this person an active member of the workspace? Delegates to the ONE membership
+ *  read (`application/tenant/tenantRoles.ts`), which already answers null for an
+ *  inactive row — this file used to carry a second copy of that query. */
 async function assertTenantMember(db: Db, tenantId: number, userId: string): Promise<boolean> {
-  const [row] = await db
-    .select({ id: tenantMembers.id })
-    .from(tenantMembers)
-    .where(
-      and(
-        eq(tenantMembers.tenantId, tenantId),
-        eq(tenantMembers.userId, userId),
-        eq(tenantMembers.isActive, true),
-      ),
-    )
-    .limit(1);
-
-  return Boolean(row);
+  return (await tenantRoleOf(db, tenantId, userId)) !== null;
 }
 
 /**
@@ -318,21 +311,26 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       : null;
     if (!target) return c.json({ error: 'Invitation is invalid, expired, or already used' }, 410);
     const sessionId = target.refId;
-    await acceptPendingInvitations(db, c.env as Env, tenantService, userId, account.email);
-    if (!(await assertTenantMember(db, invitation.tenantId, userId))) {
-      // Reached only when the companion workspace invitation could not be seated:
-      // a real, paid seat the plan cannot honour. A canvas guest never lands here
-      // (see `acceptPendingInvitations`), so the message can say the one true
-      // thing about this state instead of describing every invite as blocked.
-      return c.json({
-        error: 'That workspace has no seat available. Ask the person who invited you to free a seat or upgrade, then open this link again.',
-        code: 'TENANT_SEAT_LIMIT',
-      }, 409);
-    }
     const role = ['viewer', 'commenter', 'editor', 'runner', 'owner'].includes(invitation.role)
       ? invitation.role as 'viewer' | 'commenter' | 'editor' | 'runner' | 'owner'
       : null;
     if (!role) return c.json({ error: 'Invitation role is invalid' }, 409);
+    await acceptPendingInvitations(db, c.env as Env, tenantService, userId, account.email);
+    // Whatever the companion workspace invitation did or did not do, the redeemed
+    // token is itself the authorization, so this seats the invitee against the cap
+    // that actually governs canvas sharing. It used to answer 409 TENANT_SEAT_LIMIT
+    // here instead — the seat cap is 1 on both Free and Pro and is filled by the
+    // owner, so any invitation whose companion row was missing, already consumed or
+    // marked as a seat told the invitee the workspace was full. See `boardAdmission`.
+    const refusal = await admitToBoard(db, c.env as Env, {
+      tenantId: invitation.tenantId,
+      sessionId,
+      objectId: invitation.objectId,
+      userId,
+      sessionRole: role,
+      email: account.email,
+    });
+    if (refusal) return c.json(refusal, 403);
     await db.batch([
       db.insert(creationSessionMembers).values({ sessionId, userId, role, invitedBy: invitation.invitedBy })
         .onConflictDoUpdate({ target: [creationSessionMembers.sessionId, creationSessionMembers.userId], set: { role } }),

@@ -2585,6 +2585,8 @@ function selectToolsForTurn(tools, options) {
     if (chosen.length >= limit) break;
     take(tool);
   }
+  const position = new Map(tools.map((t, i) => [t, i]));
+  chosen.sort((a, b) => (position.get(a) ?? 0) - (position.get(b) ?? 0));
   return { tools: chosen, trimmed: true, available };
 }
 
@@ -3048,6 +3050,169 @@ function turnOptimizationDirective() {
   ].join("\n");
 }
 
+// ../packages/agent-loop/src/parseToolCall.ts
+function parseToolArgs(raw) {
+  const text = typeof raw === "string" ? raw.trim() : "";
+  if (!text) return { args: {}, malformed: false };
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return { args: parsed, malformed: false };
+    }
+    return { args: {}, malformed: true };
+  } catch {
+    return { args: {}, malformed: true };
+  }
+}
+function parseToolCall(raw) {
+  const { args, malformed } = parseToolArgs(raw.arguments);
+  return { id: raw.id, name: raw.name, args, raw, malformed };
+}
+
+// ../packages/agent-loop/src/loop.ts
+var Ctx = class {
+  constructor(messages, signal) {
+    this.messages = messages;
+    this.signal = signal;
+  }
+  messages;
+  signal;
+  step = 0;
+  stepInCall = 0;
+  output = "";
+};
+async function runAgentLoop(args) {
+  const { codec, ports, budget, signal } = args;
+  const hooks = args.hooks ?? {};
+  const ctx = new Ctx(args.messages, signal);
+  const startStep = Math.max(0, budget.startStep ?? 0);
+  const maxThisCall = budget.maxSteps ?? Number.POSITIVE_INFINITY;
+  ctx.step = startStep;
+  ctx.output = args.initialOutput ?? "";
+  let ok = true;
+  let finished = false;
+  let cancelled = false;
+  let awaitingInput;
+  const isCancelled = async () => Boolean(signal?.aborted) || Boolean(await hooks.isCancelled?.(ctx));
+  for (; ctx.step < budget.stepCap && !finished && ctx.stepInCall < maxThisCall; ctx.step++, ctx.stepInCall++) {
+    if (await isCancelled()) {
+      cancelled = true;
+      break;
+    }
+    const before = await hooks.beforeTurn?.(ctx);
+    if (before?.action === "stop") {
+      ok = before.ok ?? false;
+      if (before.output !== void 0) ctx.output = before.output;
+      finished = before.finished ?? true;
+      break;
+    }
+    let turnResult;
+    try {
+      turnResult = await ports.complete(ctx);
+    } catch (err) {
+      if (signal?.aborted) {
+        cancelled = true;
+        break;
+      }
+      throw err;
+    }
+    if ("skip" in turnResult) continue;
+    if ("failed" in turnResult) {
+      ok = false;
+      ctx.output = turnResult.failed;
+      finished = true;
+      break;
+    }
+    const turn = turnResult;
+    if (turn.content) ctx.output = turn.content;
+    await hooks.afterTurn?.(ctx, turn);
+    if (turn.toolCalls.length === 0) {
+      const decision = await hooks.onNoToolCalls?.(ctx, turn) ?? { action: "finish" };
+      if (decision.action === "continue") continue;
+      if (decision.action === "stop") {
+        ok = decision.ok ?? false;
+        if (decision.output !== void 0) ctx.output = decision.output;
+        finished = decision.finished ?? true;
+        break;
+      }
+      if (decision.output !== void 0) ctx.output = decision.output;
+      finished = true;
+      break;
+    }
+    const calls = turn.toolCalls.map(parseToolCall);
+    const gate = await hooks.beforeToolCalls?.(ctx, turn, calls);
+    if (gate?.action === "stop") {
+      ok = gate.ok ?? true;
+      if (gate.output !== void 0) ctx.output = gate.output;
+      finished = gate.finished ?? true;
+      break;
+    }
+    ctx.messages.push(codec.assistant(turn));
+    for (let i = 0; i < calls.length; i++) {
+      let call = calls[i];
+      let result;
+      const pre = await hooks.beforeDispatch?.(call, ctx);
+      if (pre && "result" in pre) result = pre.result;
+      else if (pre && "rewrite" in pre) call = pre.rewrite;
+      if (!result) result = await ports.dispatch(call, ctx);
+      if (result.control?.kind === "finish") {
+        const block = await hooks.onFinish?.(ctx, result.control.summary, call);
+        if (block) {
+          result = { data: { ok: false, error: block }, isError: true };
+        } else {
+          finished = true;
+          if (result.control.summary) ctx.output = result.control.summary;
+        }
+      } else if (result.control?.kind === "ask_human") {
+        await hooks.onAskHuman?.(ctx, result.control, call);
+        awaitingInput = { approvalId: result.control.approvalId, question: result.control.question, callId: call.id };
+      }
+      const row = codec.tool(call, result);
+      ctx.messages.push(row);
+      const post = await hooks.afterDispatch?.(call, result, row, ctx);
+      if (post?.skipRemaining) {
+        const skipped = { data: post.skipRemaining.data, isError: post.skipRemaining.isError ?? true };
+        for (const rest of calls.slice(i + 1)) ctx.messages.push(codec.tool(rest, skipped));
+        break;
+      }
+    }
+    const after = await hooks.afterToolCalls?.(ctx, finished);
+    if (after && after.finished !== void 0) finished = after.finished;
+    if (awaitingInput) break;
+  }
+  return {
+    ok,
+    output: ctx.output,
+    finished,
+    cancelled,
+    step: ctx.step,
+    exhausted: !finished && !cancelled && !awaitingInput && ctx.step >= budget.stepCap,
+    ...awaitingInput ? { awaitingInput } : {}
+  };
+}
+
+// ../packages/agent-loop/src/openaiCodec.ts
+function toOpenAiToolCall(call) {
+  return { id: call.id, type: "function", function: { name: call.name, arguments: call.arguments?.trim() ? call.arguments : "{}" } };
+}
+var defaultToolRowSerializer = (result) => JSON.stringify(result.data ?? null);
+function openAiChatCodec(serialize = defaultToolRowSerializer) {
+  return {
+    assistant(turn) {
+      const row = {
+        role: "assistant",
+        content: turn.content ?? "",
+        tool_calls: turn.toolCalls.map(toOpenAiToolCall)
+      };
+      return row;
+    },
+    tool(call, result) {
+      const row = { role: "tool", tool_call_id: call.id, content: serialize(result, call) };
+      return row;
+    }
+  };
+}
+
 // src/brainRunStore.ts
 function provenanceMetadata(result) {
   const model = result.resolvedModel;
@@ -3235,13 +3400,6 @@ function nowMs2() {
 function nowIso() {
   return typeof Date !== "undefined" ? (/* @__PURE__ */ new Date()).toISOString() : "";
 }
-function parseArgs(raw) {
-  try {
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
 function attachDeltaToRunTicket(toolName, args, deltaTicketId) {
   if (toolName !== "builtin_tickets_from_delta" || deltaTicketId == null) return;
   if (!args || typeof args !== "object" || Array.isArray(args)) return;
@@ -3338,6 +3496,14 @@ async function summarizeMiddle(stream, model, msgs, signal) {
         { role: "user", content: renderForSummary(msgs) }
       ],
       model,
+      // A compaction note is a UTILITY completion: a bounded answer with no thinking.
+      // Left unset, it inherited the run's full output ceiling and, on a thinking-
+      // capable model, the run's reasoning depth — the most expensive way to write a
+      // paragraph the user never sees. ~1.2k tokens holds a dense memory of any
+      // middle this loop compacts (the tail is 8 turns; the middle is summarised
+      // afresh at most once per 8 new turns).
+      maxTokens: 1200,
+      reasoning: { level: "off" },
       signal
     });
     const out = (res.text ?? "").trim();
@@ -3819,141 +3985,13 @@ ${continuationDirective()}`;
       }
     }
   };
-  for (let iter = 0; iter < maxIterations; iter++) {
-    if (c.abort?.signal.aborted) return;
-    c.streamingText = "";
-    emit(c);
-    const working = await buildWorkingTranscript(c, systemPrompt, stream, activeModel);
-    if (c.abort?.signal.aborted) return;
-    const llmStart = nowMs2();
-    let firstTokenAt;
-    let result;
-    const selection = selectToolsForTurn(allTools, {
-      // The REQUEST, captured once before the loop — never "the latest user message".
-      // The loop pushes its own `role:'user'` turns (the stall-recovery nudge, the
-      // tool-budget close-out), so reading the newest one re-rolled the advertised
-      // set from text WE wrote: after one recovery the query became "…made zero tool
-      // calls… answer using its result…", which scores `key_results`/`dashboards`/
-      // `incidents` and drops the ticket tools the user actually asked for. The tool
-      // the model was told to call then genuinely did not exist, and it narrated.
-      // Holding the request steady also keeps the advertised set STABLE across turns
-      // — a tool must not vanish between one turn and the next.
-      query: requestQuery,
-      pinned: usedTools,
-      // Tools the SYSTEM PROMPT instructs the model to call (e.g. the chat↔ticket
-      // directive names `builtin_chats_list_tickets`) are never optional: telling a
-      // model to call a tool we then decline to advertise is the exact contradiction
-      // that produces a narrated call. Derived from the prompt text, so a directive
-      // edit can never silently desync from this list — plus the local workspace
-      // tools, which the prompt names in prose the pattern cannot see.
-      required: alwaysAdvertised
-    });
-    const advertised = selection.trimmed ? [...selection.tools, ...routerToolSpecs(allTools?.length ?? 0)] : selection.tools;
-    const tools = advertised.length > 0 ? advertised : void 0;
-    const advertisedNames = new Set(advertised.map((t) => t.function.name));
-    if (selection.trimmed) {
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "message",
-        label: "tools.selected",
-        args: { step: iter },
-        result: `${selection.tools.length} of ${selection.available} tools advertised this turn (relevance-selected; ${usedTools.size} pinned from earlier calls)`
-      });
-    }
-    setActivity(c, { phase: "thinking", startedAt: Date.now(), step: iter });
-    try {
-      result = await stream(
-        { messages: working, tools, tool_choice: tools ? "auto" : void 0, model: activeModel, modelStrict: !!activeModel && modelStrict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
-        {
-          onTextDelta: (d) => {
-            c.streamingText += d;
-            if (firstTokenAt === void 0) {
-              firstTokenAt = nowMs2();
-              c.activity = { phase: "writing", startedAt: Date.now(), step: iter };
-              emit(c);
-              return;
-            }
-            emitStreaming(c);
-          }
-        }
-      );
-    } catch (e) {
-      if (c.abort?.signal.aborted) return;
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "error",
-        label: "llm.complete",
-        durationMs: nowMs2() - llmStart,
-        args: { model: activeModel ?? "default", step: iter },
-        result: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
-        isError: true
-      });
-      throw e;
-    }
-    accrueByoUnresolved(c, result.byoUnresolved);
-    accrueProviderCap(c, result.providerCap);
-    const resolved = result.resolvedModel ?? activeModel ?? "default";
-    const requested = activeModel ?? "default";
-    setLastResolvedModel(chatId, result.resolvedModel);
-    if (requested !== "default" && resolved !== "default" && resolved !== requested) {
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "message",
-        label: "llm.model_downgrade",
-        args: { requestedModel: requested, model: resolved, step: iter },
-        result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) \u2014 a smaller context window can truncate long transcripts.`
-      });
-    }
-    const narratedUnadvertised = result.toolCalls.length === 0 ? toolNamesMentionedIn(result.text).filter((n) => !advertisedNames.has(n)) : [];
-    pushDurableStep(c, chatId, persistence, {
-      ts: nowIso(),
-      category: "llm",
-      label: "llm.complete",
-      durationMs: nowMs2() - llmStart,
-      ttftMs: firstTokenAt !== void 0 ? firstTokenAt - llmStart : void 0,
-      // `model` is the model the gateway ACTUALLY used (resolved), falling back to
-      // what we requested when the gateway didn't report one. `requestedModel`
-      // keeps the caller's ask (empty/'default' ⇒ gateway auto-selects) so triage
-      // can tell "what I asked for" from "what answered".
-      args: {
-        model: resolved,
-        requestedModel: requested,
-        step: iter,
-        toolCalls: result.toolCalls.length,
-        // Which account served the turn + any connected-BYO provider the gateway
-        // could NOT resolve — so triage tells "ran on the shared pool despite a
-        // connected Claude account (expired?)" apart from "nothing connected".
-        account: result.account,
-        byoUnresolved: result.byoUnresolved,
-        // How many tools the turn was actually OFFERED, out of the whole catalog.
-        // A zero here is the difference between "the model refused to act" and "it had
-        // nothing to act with" — previously unanswerable from a copied report, which
-        // only ever carried the registry-wide total.
-        advertisedTools: advertised.length,
-        catalogTools: allTools?.length ?? 0,
-        ...narratedUnadvertised.length ? { narratedUnadvertised } : {}
-      },
-      // Structured diagnostics fields — the A-vs-B triage reads these directly.
-      usage: result.usage,
-      finishReason: result.finishReason,
-      textChars: result.text.length,
-      result: `${result.toolCalls.length} tool call(s) \xB7 ${result.text.length} chars \xB7 finish: ${result.finishReason ?? "\u2014"}${result.usage?.prompt != null ? ` \xB7 prompt ${result.usage.prompt} tok` : ""}`
-    });
-    if (result.text.trim()) {
-      pushTrace(c, { ts: nowIso(), category: "message", label: "agent.message", args: { step: iter }, result: result.text });
-    }
-    if (result.toolCalls.length > 0 && runTool) {
-      convo.push({
-        role: "assistant",
-        content: result.text,
-        tool_calls: result.toolCalls.map((tc) => ({
-          id: tc.id,
-          type: "function",
-          // An empty `arguments` string is not valid JSON; strict vendors (Gemini)
-          // reject it. Normalize a no-arg call to an empty object.
-          function: { name: tc.name, arguments: tc.args && tc.args.trim() ? tc.args : "{}" }
-        }))
-      });
+  const metaOf = (turn) => turn.meta;
+  const codec = openAiChatCodec((r) => typeof r.data === "string" ? r.data : JSON.stringify(r.data));
+  let pendingReplay = null;
+  let pendingRun = null;
+  const hooks = {
+    beforeToolCalls: async (_ctx, turn) => {
+      const { result } = metaOf(turn);
       const narration = result.text.trim();
       if (narration) {
         const meta = provenanceMetadata(result);
@@ -3962,222 +4000,385 @@ ${continuationDirective()}`;
       }
       c.streamingText = "";
       emit(c);
-      for (const rawCall of result.toolCalls) {
-        let tc = rawCall;
-        if (isRouterTool(tc.name)) {
-          const routed = handleRouterCall(allTools ?? [], tc.name, parseArgs(tc.args));
-          if ("result" in routed) {
-            convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(routed.result) });
-            pushDurableStep(c, chatId, persistence, {
-              ts: nowIso(),
-              category: "tool",
-              label: tc.name,
-              args: parseArgs(tc.args),
-              result: routed.result
-            });
-            continue;
-          }
-          tc = { ...tc, name: routed.dispatch.name, args: JSON.stringify(routed.dispatch.args ?? {}) };
-          pushTrace(c, {
+      return void 0;
+    },
+    beforeDispatch: async (rawCall, ctx) => {
+      const iter = ctx.step;
+      pendingReplay = null;
+      pendingRun = null;
+      let call = rawCall;
+      if (isRouterTool(call.name)) {
+        const routed = handleRouterCall(allTools ?? [], call.name, call.args);
+        if ("result" in routed) {
+          pushDurableStep(c, chatId, persistence, {
             ts: nowIso(),
-            category: "message",
-            label: "tools.routed",
-            args: { step: iter, via: rawCall.name },
-            result: `Called ${tc.name} through the tool router (it was not advertised directly this turn).`
+            category: "tool",
+            label: call.name,
+            args: call.args,
+            result: routed.result
           });
+          return { result: { data: routed.result } };
         }
-        const args = parseArgs(tc.args);
-        attachDeltaToRunTicket(tc.name, args, c.deltaTicketId);
-        if (needsConfirm && needsConfirm({ name: tc.name, args })) {
-          const ok = await new Promise((resolve) => {
-            c.pendingConfirm = { name: tc.name, args };
-            c.confirmResolver = resolve;
-            c.activity = { ...toolActivity(tc.name, args, iter, Date.now()), phase: "awaiting" };
-            emit(c);
-          });
-          if (!ok) {
-            convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify({ cancelled: true, reason: "User declined this action." }) });
-            pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: "tool", label: tc.name, args, result: { cancelled: true, reason: "User declined this action." } });
-            continue;
-          }
+        const routedArgs = routed.dispatch.args ?? {};
+        call = { ...call, name: routed.dispatch.name, args: routedArgs, raw: { ...call.raw, name: routed.dispatch.name, arguments: JSON.stringify(routedArgs) } };
+        pushTrace(c, {
+          ts: nowIso(),
+          category: "message",
+          label: "tools.routed",
+          args: { step: iter, via: rawCall.name },
+          result: `Called ${call.name} through the tool router (it was not advertised directly this turn).`
+        });
+      }
+      const args = call.args;
+      attachDeltaToRunTicket(call.name, args, c.deltaTicketId);
+      if (needsConfirm && needsConfirm({ name: call.name, args })) {
+        const ok = await new Promise((resolve) => {
+          c.pendingConfirm = { name: call.name, args };
+          c.confirmResolver = resolve;
+          c.activity = { ...toolActivity(call.name, args, iter, Date.now()), phase: "awaiting" };
+          emit(c);
+        });
+        if (!ok) {
+          const declined = { cancelled: true, reason: "User declined this action." };
+          pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: "tool", label: call.name, args, result: declined });
+          return { result: { data: declined } };
         }
-        const isReadTool = isDedupableRead(tc.name);
-        if (isReadTool) {
-          if (readCoverage.isRepeat(tc.name, args)) {
-            const cached2 = readCoverage.cachedResult(tc.name, args);
-            if (cached2 && !stillInWorkingContext(c, cached2.anchor)) {
-              const replayNote = `Replayed from this run's read cache: this exact ${tc.name} call succeeded earlier in the run, but its result was compressed out of the working context, so here it is again \u2014 served from memory, not re-read. Act on it now; do not request it again.`;
-              const visit = readCoverage.record(tc.name, args);
-              const target = visit ? activityTarget(args) : void 0;
-              const revisit = visit && target ? revisitAdvisory(tc.name, target, visit) : null;
-              const replayed = trimToolResult(tc.name, cached2.result ?? null, { advisory: revisit ? `${replayNote}
+      }
+      if (isDedupableRead(call.name)) {
+        if (readCoverage.isRepeat(call.name, args)) {
+          const cached2 = readCoverage.cachedResult(call.name, args);
+          if (cached2 && !stillInWorkingContext(c, cached2.anchor)) {
+            const replayNote = `Replayed from this run's read cache: this exact ${call.name} call succeeded earlier in the run, but its result was compressed out of the working context, so here it is again \u2014 served from memory, not re-read. Act on it now; do not request it again.`;
+            const visit = readCoverage.record(call.name, args);
+            const target = visit ? activityTarget(args) : void 0;
+            const revisit = visit && target ? revisitAdvisory(call.name, target, visit) : null;
+            const replayed = trimToolResult(call.name, cached2.result ?? null, { advisory: revisit ? `${replayNote}
 
 ${revisit}` : replayNote });
-              const message = { role: "tool", tool_call_id: tc.id, content: replayed.content };
-              convo.push(message);
-              readCoverage.cacheResult(tc.name, args, { result: cached2.result, anchor: message });
-              pushTrace(c, {
-                ts: nowIso(),
-                category: "tool",
-                label: tc.name,
-                args,
-                result: { replayed: true, note: replayNote },
-                resultBytes: replayed.bytes,
-                truncated: replayed.truncated
-              });
-              continue;
-            }
-            const stub = {
-              note: `Duplicate ${tc.name} call \u2014 identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping).`
-            };
-            convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(stub) });
-            pushTrace(c, { ts: nowIso(), category: "tool", label: tc.name, args, result: stub });
-            continue;
-          }
-        } else {
-          readCoverage.invalidate(tc.name, args);
-        }
-        const toolStart = nowMs2();
-        setActivity(c, toolActivity(tc.name, args, iter, Date.now()));
-        let out;
-        try {
-          out = await runTool(tc.name, withObservedModel(chatId, tc.name, args));
-        } catch (e) {
-          const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-          out = { ok: false, error: message };
-          const repeat = failureAdvisoryFor(tc.name, args, out, iter);
-          convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(repeat ? withAdvisory(out, repeat) : out) });
-          pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: "tool", label: tc.name, durationMs: nowMs2() - toolStart, args, result: out, isError: true });
-          continue;
-        }
-        if (isCodeChangeTool(tc.name)) {
-          const first = !c.codeChanged;
-          c.codeChanged = true;
-          const f = codeChangeFile(args);
-          if (f && !c.touchedFiles.includes(f)) c.touchedFiles.push(f);
-          if (first && !c.ticketRecorded && req.projectId != null && req.runTool) {
-            await recordCodeChangeTicket(chatId, c, req, "open").catch(() => {
+            pendingReplay = { name: call.name, args, result: cached2.result };
+            pushTrace(c, {
+              ts: nowIso(),
+              category: "tool",
+              label: call.name,
+              args,
+              result: { replayed: true, note: replayNote },
+              resultBytes: replayed.bytes,
+              truncated: replayed.truncated
             });
+            return { result: { data: replayed.content } };
           }
+          const stub = {
+            note: `Duplicate ${call.name} call \u2014 identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping).`
+          };
+          pushTrace(c, { ts: nowIso(), category: "tool", label: call.name, args, result: stub });
+          return { result: { data: stub } };
         }
-        if (isTicketRecordingTool(tc.name)) c.ticketRecorded = true;
-        if (runTool) await autoLinkCreatedItem(chatId, c, persistence, runTool, tc.name, out);
-        let advisory = null;
-        if (isFailedToolResult(out)) {
-          advisory = failureAdvisoryFor(tc.name, args, out, iter);
-        } else {
-          failures.clear(tc.name, args);
-          if (isReadTool) {
-            const visit = readCoverage.record(tc.name, args);
-            const target = visit ? activityTarget(args) : void 0;
-            advisory = visit && target ? revisitAdvisory(tc.name, target, visit) : null;
-            if (advisory) {
-              pushTrace(c, {
-                ts: nowIso(),
-                category: "message",
-                label: "tools.revisit_guard",
-                args: { step: iter, tool: tc.name, target, visits: visit.count },
-                result: advisory
-              });
-            }
-          }
-        }
-        const trimmedOut = trimToolResult(tc.name, out ?? null, { advisory });
-        const toolMessage = { role: "tool", tool_call_id: tc.id, content: trimmedOut.content };
-        convo.push(toolMessage);
-        if (isReadTool && !isFailedToolResult(out)) readCoverage.cacheResult(tc.name, args, { result: out ?? null, anchor: toolMessage });
-        pushDurableStep(c, chatId, persistence, {
-          ts: nowIso(),
-          category: "tool",
-          label: tc.name,
-          durationMs: nowMs2() - toolStart,
-          args,
-          result: out ?? null,
-          isError: isFailedToolResult(out),
-          resultBytes: trimmedOut.bytes,
-          truncated: trimmedOut.truncated
-        });
-        usedTools.add(tc.name);
+      } else {
+        readCoverage.invalidate(call.name, args);
       }
-      continue;
-    }
-    const stallInput = {
-      text: result.text,
-      toolCallCount: result.toolCalls.length,
-      availableToolCount: toolSpecs?.length ?? 0,
-      recoveriesUsed: announcementRecoveries,
-      availableToolNames: [...advertisedNames],
-      requestText: userRequest
-    };
-    const shape = stallShape(stallInput);
-    if (runTool && shouldRecoverStalledTurn(stallInput)) {
-      announcementRecoveries += 1;
-      const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
-      const narration = result.text.trim();
-      if (narration) {
-        const meta = provenanceMetadata(result);
-        const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: narration, ...meta ? { metadata: meta } : {} }]);
-        recordAppended(c, narrationMsg);
+      return call === rawCall ? void 0 : { rewrite: call };
+    },
+    afterDispatch: (call, _result, row) => {
+      if (pendingReplay) {
+        readCoverage.cacheResult(pendingReplay.name, pendingReplay.args, { result: pendingReplay.result, anchor: row });
+        pendingReplay = null;
+        return void 0;
       }
-      convo.push({ role: "assistant", content: result.text });
-      convo.push({ role: "user", content: stallRecoveryNudge(lastChance, shape) });
+      const run = pendingRun;
+      pendingRun = null;
+      if (!run) return void 0;
+      const args = call.args;
+      if (run.threw) {
+        pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: "tool", label: call.name, durationMs: nowMs2() - run.toolStart, args, result: run.out, isError: true });
+        return void 0;
+      }
+      if (run.isReadTool && !isFailedToolResult(run.out)) readCoverage.cacheResult(call.name, args, { result: run.out ?? null, anchor: row });
       pushDurableStep(c, chatId, persistence, {
         ts: nowIso(),
-        category: "message",
-        label: shape === "handed-off" ? "loop.recover_handed_off_work" : "loop.recover_announced_tool_call",
-        args: { step: iter, attempt: announcementRecoveries, of: MAX_ANNOUNCEMENT_RECOVERIES, advertisedTools: advertised.length, shape },
-        result: shape === "handed-off" ? `Model ended by telling the user to run the commands itself holds tools for \u2014 re-prompted to run them (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).` : `Model announced a tool call without making one \u2014 re-prompted (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`
+        category: "tool",
+        label: call.name,
+        durationMs: nowMs2() - run.toolStart,
+        args,
+        result: run.out ?? null,
+        isError: isFailedToolResult(run.out),
+        resultBytes: run.bytes,
+        truncated: run.truncated
       });
-      c.streamingText = "";
-      emit(c);
-      continue;
-    }
-    const finalText = result.text.trim() || "No response.";
-    convo.push({ role: "assistant", content: finalText });
-    const finalMeta = provenanceMetadata(result);
-    const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText, ...finalMeta ? { metadata: finalMeta } : {} }]);
-    c.streamingText = "";
-    recordAppended(c, assistantMsg);
-    if (runTool && isExhaustedStall(stallInput)) {
-      const next = chooseStallFailover({
-        activeModel,
-        resolvedModel: resolved,
-        tried: triedModels,
-        failoversUsed: modelFailovers,
-        pick: pickFallbackModel
-      });
-      if (next) {
-        modelFailovers += 1;
+      usedTools.add(call.name);
+      return void 0;
+    },
+    onNoToolCalls: async (ctx, turn) => {
+      const iter = ctx.step;
+      const { result, resolved, advertised, advertisedNames } = metaOf(turn);
+      const stallInput = {
+        text: result.text,
+        toolCallCount: result.toolCalls.length,
+        availableToolCount: toolSpecs?.length ?? 0,
+        recoveriesUsed: announcementRecoveries,
+        availableToolNames: [...advertisedNames],
+        requestText: userRequest
+      };
+      const shape = stallShape(stallInput);
+      if (runTool && shouldRecoverStalledTurn(stallInput)) {
+        announcementRecoveries += 1;
+        const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
+        const narration = result.text.trim();
+        if (narration) {
+          const meta = provenanceMetadata(result);
+          const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: narration, ...meta ? { metadata: meta } : {} }]);
+          recordAppended(c, narrationMsg);
+        }
+        convo.push({ role: "assistant", content: result.text });
+        convo.push({ role: "user", content: stallRecoveryNudge(lastChance, shape) });
         pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
           category: "message",
-          label: "loop.model_failover",
-          args: { step: iter, from: resolved, to: next, attempt: modelFailovers, of: MAX_MODEL_FAILOVERS },
-          result: modelFailoverNotice(resolved, next, shape)
+          label: shape === "handed-off" ? "loop.recover_handed_off_work" : "loop.recover_announced_tool_call",
+          args: { step: iter, attempt: announcementRecoveries, of: MAX_ANNOUNCEMENT_RECOVERIES, advertisedTools: advertised, shape },
+          result: shape === "handed-off" ? `Model ended by telling the user to run the commands itself holds tools for \u2014 re-prompted to run them (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).` : `Model announced a tool call without making one \u2014 re-prompted (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`
         });
-        activeModel = next;
-        announcementRecoveries = 0;
-        convo.push({ role: "user", content: stallRecoveryNudge(false, shape) });
         c.streamingText = "";
         emit(c);
-        continue;
+        return { action: "continue" };
       }
-      const notice = stallExhaustedNotice(resolved, triedModels, shape);
+      const finalText = result.text.trim() || "No response.";
+      convo.push({ role: "assistant", content: finalText });
+      const finalMeta = provenanceMetadata(result);
+      const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText, ...finalMeta ? { metadata: finalMeta } : {} }]);
+      c.streamingText = "";
+      recordAppended(c, assistantMsg);
+      if (runTool && isExhaustedStall(stallInput)) {
+        const next = chooseStallFailover({
+          activeModel,
+          resolvedModel: resolved,
+          tried: triedModels,
+          failoversUsed: modelFailovers,
+          pick: pickFallbackModel
+        });
+        if (next) {
+          modelFailovers += 1;
+          pushDurableStep(c, chatId, persistence, {
+            ts: nowIso(),
+            category: "message",
+            label: "loop.model_failover",
+            args: { step: iter, from: resolved, to: next, attempt: modelFailovers, of: MAX_MODEL_FAILOVERS },
+            result: modelFailoverNotice(resolved, next, shape)
+          });
+          activeModel = next;
+          announcementRecoveries = 0;
+          convo.push({ role: "user", content: stallRecoveryNudge(false, shape) });
+          c.streamingText = "";
+          emit(c);
+          return { action: "continue" };
+        }
+        const notice = stallExhaustedNotice(resolved, triedModels, shape);
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: "error",
+          label: "loop.stall_unrecovered",
+          args: { step: iter, model: resolved, attempts: announcementRecoveries, tried: triedModels, advertisedTools: advertised, shape },
+          result: notice,
+          isError: true
+        });
+        c.error = notice;
+      }
+      emit(c);
+      emitEvermindLearnReconcile(assistantMsg, finalText);
+      onActivity?.(chatId);
+      return { action: "stop", ok: true, output: finalText };
+    }
+  };
+  const ports = {
+    complete: async (ctx) => {
+      const iter = ctx.step;
+      c.streamingText = "";
+      emit(c);
+      const working = await buildWorkingTranscript(c, systemPrompt, stream, activeModel);
+      if (c.abort?.signal.aborted) throw new Error("run stopped");
+      const llmStart = nowMs2();
+      let firstTokenAt;
+      let result;
+      const selection = selectToolsForTurn(allTools, {
+        // The REQUEST, captured once before the loop — never "the latest user message".
+        // The loop pushes its own `role:'user'` turns (the stall-recovery nudge, the
+        // tool-budget close-out), so reading the newest one re-rolled the advertised
+        // set from text WE wrote: after one recovery the query became "…made zero tool
+        // calls… answer using its result…", which scores `key_results`/`dashboards`/
+        // `incidents` and drops the ticket tools the user actually asked for. The tool
+        // the model was told to call then genuinely did not exist, and it narrated.
+        // Holding the request steady also keeps the advertised set STABLE across turns
+        // — a tool must not vanish between one turn and the next.
+        query: requestQuery,
+        pinned: usedTools,
+        // Tools the SYSTEM PROMPT instructs the model to call (e.g. the chat↔ticket
+        // directive names `builtin_chats_list_tickets`) are never optional: telling a
+        // model to call a tool we then decline to advertise is the exact contradiction
+        // that produces a narrated call. Derived from the prompt text, so a directive
+        // edit can never silently desync from this list — plus the local workspace
+        // tools, which the prompt names in prose the pattern cannot see.
+        required: alwaysAdvertised
+      });
+      const advertised = selection.trimmed ? [...selection.tools, ...routerToolSpecs(allTools?.length ?? 0)] : selection.tools;
+      const tools = advertised.length > 0 ? advertised : void 0;
+      const advertisedNames = new Set(advertised.map((t) => t.function.name));
+      if (selection.trimmed) {
+        pushTrace(c, {
+          ts: nowIso(),
+          category: "message",
+          label: "tools.selected",
+          args: { step: iter },
+          result: `${selection.tools.length} of ${selection.available} tools advertised this turn (relevance-selected; ${usedTools.size} pinned from earlier calls)`
+        });
+      }
+      setActivity(c, { phase: "thinking", startedAt: Date.now(), step: iter });
+      try {
+        result = await stream(
+          { messages: working, tools, tool_choice: tools ? "auto" : void 0, model: activeModel, modelStrict: !!activeModel && modelStrict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
+          {
+            onTextDelta: (d) => {
+              c.streamingText += d;
+              if (firstTokenAt === void 0) {
+                firstTokenAt = nowMs2();
+                c.activity = { phase: "writing", startedAt: Date.now(), step: iter };
+                emit(c);
+                return;
+              }
+              emitStreaming(c);
+            }
+          }
+        );
+      } catch (e) {
+        if (c.abort?.signal.aborted) throw e;
+        pushTrace(c, {
+          ts: nowIso(),
+          category: "error",
+          label: "llm.complete",
+          durationMs: nowMs2() - llmStart,
+          args: { model: activeModel ?? "default", step: iter },
+          result: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+          isError: true
+        });
+        throw e;
+      }
+      accrueByoUnresolved(c, result.byoUnresolved);
+      accrueProviderCap(c, result.providerCap);
+      const resolved = result.resolvedModel ?? activeModel ?? "default";
+      const requested = activeModel ?? "default";
+      setLastResolvedModel(chatId, result.resolvedModel);
+      if (requested !== "default" && resolved !== "default" && resolved !== requested) {
+        pushTrace(c, {
+          ts: nowIso(),
+          category: "message",
+          label: "llm.model_downgrade",
+          args: { requestedModel: requested, model: resolved, step: iter },
+          result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) \u2014 a smaller context window can truncate long transcripts.`
+        });
+      }
+      const narratedUnadvertised = result.toolCalls.length === 0 ? toolNamesMentionedIn(result.text).filter((n) => !advertisedNames.has(n)) : [];
       pushDurableStep(c, chatId, persistence, {
         ts: nowIso(),
-        category: "error",
-        label: "loop.stall_unrecovered",
-        args: { step: iter, model: resolved, attempts: announcementRecoveries, tried: triedModels, advertisedTools: advertised.length, shape },
-        result: notice,
-        isError: true
+        category: "llm",
+        label: "llm.complete",
+        durationMs: nowMs2() - llmStart,
+        ttftMs: firstTokenAt !== void 0 ? firstTokenAt - llmStart : void 0,
+        // `model` is the model the gateway ACTUALLY used (resolved), falling back to
+        // what we requested when the gateway didn't report one. `requestedModel`
+        // keeps the caller's ask (empty/'default' ⇒ gateway auto-selects) so triage
+        // can tell "what I asked for" from "what answered".
+        args: {
+          model: resolved,
+          requestedModel: requested,
+          step: iter,
+          toolCalls: result.toolCalls.length,
+          // Which account served the turn + any connected-BYO provider the gateway
+          // could NOT resolve — so triage tells "ran on the shared pool despite a
+          // connected Claude account (expired?)" apart from "nothing connected".
+          account: result.account,
+          byoUnresolved: result.byoUnresolved,
+          // How many tools the turn was actually OFFERED, out of the whole catalog.
+          // A zero here is the difference between "the model refused to act" and "it had
+          // nothing to act with" — previously unanswerable from a copied report, which
+          // only ever carried the registry-wide total.
+          advertisedTools: advertised.length,
+          catalogTools: allTools?.length ?? 0,
+          ...narratedUnadvertised.length ? { narratedUnadvertised } : {}
+        },
+        // Structured diagnostics fields — the A-vs-B triage reads these directly.
+        usage: result.usage,
+        finishReason: result.finishReason,
+        textChars: result.text.length,
+        result: `${result.toolCalls.length} tool call(s) \xB7 ${result.text.length} chars \xB7 finish: ${result.finishReason ?? "\u2014"}${result.usage?.prompt != null ? ` \xB7 prompt ${result.usage.prompt} tok` : ""}`
       });
-      c.error = notice;
+      if (result.text.trim()) {
+        pushTrace(c, { ts: nowIso(), category: "message", label: "agent.message", args: { step: iter }, result: result.text });
+      }
+      const meta = { result, resolved, requested, advertised: advertised.length, advertisedNames };
+      const toolCalls = runTool ? result.toolCalls.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.args })) : [];
+      return { content: result.text, toolCalls, meta };
+    },
+    dispatch: async (call, ctx) => {
+      const iter = ctx.step;
+      const args = call.args;
+      const isReadTool = isDedupableRead(call.name);
+      const toolStart = nowMs2();
+      setActivity(c, toolActivity(call.name, args, iter, Date.now()));
+      if (!runTool) throw new Error("tool call without a tool runner");
+      let out;
+      try {
+        out = await runTool(call.name, withObservedModel(chatId, call.name, args));
+      } catch (e) {
+        const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+        out = { ok: false, error: message };
+        const repeat = failureAdvisoryFor(call.name, args, out, iter);
+        pendingRun = { out, toolStart, isReadTool, threw: true };
+        return { data: repeat ? withAdvisory(out, repeat) : out, isError: true };
+      }
+      if (isCodeChangeTool(call.name)) {
+        const first = !c.codeChanged;
+        c.codeChanged = true;
+        const f = codeChangeFile(args);
+        if (f && !c.touchedFiles.includes(f)) c.touchedFiles.push(f);
+        if (first && !c.ticketRecorded && req.projectId != null && req.runTool) {
+          await recordCodeChangeTicket(chatId, c, req, "open").catch(() => {
+          });
+        }
+      }
+      if (isTicketRecordingTool(call.name)) c.ticketRecorded = true;
+      await autoLinkCreatedItem(chatId, c, persistence, runTool, call.name, out);
+      let advisory = null;
+      if (isFailedToolResult(out)) {
+        advisory = failureAdvisoryFor(call.name, args, out, iter);
+      } else {
+        failures.clear(call.name, args);
+        if (isReadTool) {
+          const visit = readCoverage.record(call.name, args);
+          const target = visit ? activityTarget(args) : void 0;
+          advisory = visit && target ? revisitAdvisory(call.name, target, visit) : null;
+          if (advisory) {
+            pushTrace(c, {
+              ts: nowIso(),
+              category: "message",
+              label: "tools.revisit_guard",
+              args: { step: iter, tool: call.name, target, visits: visit.count },
+              result: advisory
+            });
+          }
+        }
+      }
+      const trimmedOut = trimToolResult(call.name, out ?? null, { advisory });
+      pendingRun = { out, toolStart, isReadTool, threw: false, bytes: trimmedOut.bytes, truncated: trimmedOut.truncated };
+      return { data: trimmedOut.content, isError: isFailedToolResult(out) };
     }
-    emit(c);
-    emitEvermindLearnReconcile(assistantMsg, finalText);
-    onActivity?.(chatId);
-    return;
-  }
+  };
+  const loop = await runAgentLoop({
+    messages: convo,
+    codec,
+    ports,
+    hooks,
+    signal: c.abort?.signal,
+    budget: { stepCap: maxIterations }
+  });
+  if (loop.finished || loop.cancelled) return;
   c.streamingText = "";
   if (!c.abort?.signal.aborted) {
     const closeStart = nowMs2();

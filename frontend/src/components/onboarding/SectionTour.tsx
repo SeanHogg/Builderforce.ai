@@ -34,6 +34,11 @@ interface SectionTourProps {
 
 interface Box { top:number; left:number; width:number; height:number }
 
+/** How long the spotlight keeps chasing a moving target before it settles for what it has. */
+const SETTLE_LIMIT_MS = 900;
+/** One frame at 60Hz, as the settling budget counts them. */
+const FRAME_MS = 16;
+
 function findVisibleTarget(selector: string): HTMLElement | null {
   return Array.from(document.querySelectorAll<HTMLElement>(selector)).find((element) => {
     const rect = element.getBoundingClientRect();
@@ -92,7 +97,35 @@ export function SectionTour(props: SectionTourProps) {
   useLayoutEffect(() => {
     if (phase !== 'active') return;
     onStepChange?.(step);
-    const frame = requestAnimationFrame(() => { findVisibleTarget(current.target)?.scrollIntoView({ block:'nearest',inline:'nearest' }); measure(); });
+    // ── WHY THIS RE-MEASURES FOR A WHILE, NOT ONCE ────────────────────────────
+    // A single frame is only correct when the target is already where it will
+    // end up. It usually is not: `scrollIntoView` scrolls smoothly, and a tour
+    // over a pan-and-zoom board (`CanvasWalkthrough`) asks the canvas to fly to
+    // the next object, which takes about a third of a second. Measuring on the
+    // first frame pinned the spotlight to where the card WAS and left it there,
+    // because a canvas transform fires neither `scroll` nor `resize`.
+    //
+    // So the geometry is re-read each frame until it stops changing, with a hard
+    // ceiling so a target that animates forever cannot hold a loop open. One
+    // `getBoundingClientRect` per frame for a few frames — cheaper than the
+    // reflow the veil above it already costs.
+    let frame = 0;
+    let settledFor = 0;
+    let previous = '';
+    const settle = (elapsed: number) => {
+      const target = findVisibleTarget(current.target);
+      if (elapsed === 0) target?.scrollIntoView({ block:'nearest',inline:'nearest' });
+      measure();
+      const rect = target?.getBoundingClientRect();
+      const signature = rect ? `${Math.round(rect.top)}:${Math.round(rect.left)}:${Math.round(rect.width)}:${Math.round(rect.height)}` : '';
+      settledFor = signature === previous ? settledFor + 1 : 0;
+      previous = signature;
+      // Three identical frames is a stopped animation; 900ms is the ceiling.
+      if (settledFor < 3 && elapsed < SETTLE_LIMIT_MS) {
+        frame = requestAnimationFrame(() => settle(elapsed + FRAME_MS));
+      }
+    };
+    frame = requestAnimationFrame(() => settle(0));
     const onMove = () => measure();
     window.addEventListener('resize',onMove);
     window.addEventListener('scroll',onMove,true);

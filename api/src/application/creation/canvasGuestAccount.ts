@@ -61,11 +61,6 @@ export function cleanGuestName(raw: unknown, fallback = 'Guest'): string {
   return value || fallback;
 }
 
-/** Is this an identity minted by a link claim rather than a real signup? */
-export function isGuestAccount(accountType: string | null | undefined): boolean {
-  return accountType === GUEST_ACCOUNT_TYPE;
-}
-
 /**
  * Mint the guest `users` row. Nothing else: seating them in a workspace is a separate
  * decision made by whoever knows which workspace and at what ceiling, and folding it in
@@ -86,17 +81,6 @@ export async function createGuestUser(db: Db, displayName: string): Promise<Canv
     accountTypeSelectedAt: new Date(),
   });
   return { id, email, name, isGuest: true };
-}
-
-/** Read back a guest identity by id, or null when the id is not a guest account. */
-export async function findGuestUser(db: Db, userId: string): Promise<CanvasGuestIdentity | null> {
-  const [row] = await db
-    .select({ id: users.id, email: users.email, name: users.displayName, accountType: users.accountType })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-  if (!row || !isGuestAccount(row.accountType)) return null;
-  return { id: row.id, email: row.email, name: row.name ?? 'Guest', isGuest: true };
 }
 
 /**

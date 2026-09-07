@@ -46,7 +46,7 @@ import {
 import { ensureSessionObject, findSessionObject, type SessionRef } from './sessionObjectRef';
 import { requireSessionRole, tenantRoleForSessionRole } from './sessionAccess';
 import { collaboratorCapacity, type CollaboratorCapacityRefusal } from './canvasCollaboratorCapacity';
-import { createGuestUser, findGuestUser, seatAsCollaborator, type CanvasGuestIdentity } from './canvasGuestAccount';
+import { createGuestUser, seatAsCollaborator, type CanvasGuestIdentity } from './canvasGuestAccount';
 
 /** The board roles a LINK may carry. Not `runner` (spends the workspace's tokens) and
  *  not `owner` (can give the board away) — neither belongs in something forwardable. */
@@ -302,11 +302,13 @@ export async function claimCanvasInviteLink(
   const spent = await targetForToken(db, env, input.token, true);
   if (!spent) return { ok: false, reason: 'invalid' };
 
+  // `guest` is null on the signed-in path and that is the whole distinction: nothing
+  // is MINTED for somebody who already has an identity, so there is nothing to hand
+  // back a session for. The route reads it as "did this claim create a person".
   let guest: CanvasGuestIdentity | null = null;
   let userId: string;
   if (input.claimant.kind === 'user') {
     userId = input.claimant.userId;
-    guest = await findGuestUser(db, userId);
   } else {
     guest = await createGuestUser(db, input.claimant.displayName);
     userId = guest.id;

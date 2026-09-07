@@ -26,13 +26,19 @@ export interface HybridWeights {
 }
 
 /**
- * Clamp each weight to [0,1] and renormalise so the pair sums to 1 — a fused
- * score is only comparable across queries if the weights always sum the same.
- * A degenerate pair (both zero or non-finite) falls back to the defaults.
+ * Renormalise a pair of weights so it sums to 1 — a fused score is only comparable
+ * across queries if the weights always sum the same. A degenerate pair (both zero
+ * or non-finite) falls back to the defaults.
+ *
+ * The pair is a RATIO, so only the lower bound is clamped. Capping each weight at 1
+ * first — which this did — silently rewrites the caller's intent: `(3, 1)` means
+ * "three parts semantic to one part lexical" and came back as an even 0.5/0.5 split,
+ * with nothing to indicate the request had been discarded. Normalisation is what
+ * bounds the result; the clamp only has to reject a negative or non-finite weight.
  */
 export function normalizeHybridWeights(vectorWeight?: number, textWeight?: number): HybridWeights {
   const clamp = (n: number | undefined, fallback: number): number =>
-    typeof n === "number" && Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : fallback;
+    typeof n === "number" && Number.isFinite(n) ? Math.max(0, n) : fallback;
   const v = clamp(vectorWeight, DEFAULT_HYBRID_VECTOR_WEIGHT);
   const t = clamp(textWeight, DEFAULT_HYBRID_TEXT_WEIGHT);
   const sum = v + t;
