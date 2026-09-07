@@ -1,0 +1,83 @@
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  padding: var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--control-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--font-size-small);
+  cursor: pointer;
+}
+
+.chip:hover,
+.chip:focus-visible {
+  border-color: var(--accent);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.chip[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-raised));
+  color: var(--text-primary);
+}
+
+.count {
+  color: var(--text-muted);
+}
+
+/* One folder and everything that can be done to it, kept together so the
+   controls cannot drift away from the chip they belong to. */
+.folder {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-1);
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+}
+
+.folder:hover,
+.folder:focus-within {
+  border-color: var(--border-subtle);
+}
+
+.folderAction {
+  padding-inline: var(--space-2);
+  color: var(--text-muted);
+}
+
+.folderAction:hover,
+.folderAction:focus-visible {
+  color: var(--text-primary);
+}
+
+.projectSelect {
+  min-width: 130px;
+  max-width: 200px;
+}
+
+.inlineForm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2);
+  min-width: 0;
+}

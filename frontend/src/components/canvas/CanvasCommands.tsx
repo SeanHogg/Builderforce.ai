@@ -304,6 +304,27 @@ export function ProveIdeaIcon() {
   </svg>;
 }
 
+/** Put a mark on the board by hand. A nib with its stroke trailing behind it, so the
+ *  glyph says "this leaves ink" rather than "this selects something". */
+export function DrawIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M10.6 2.5a1.5 1.5 0 0 1 2.12 2.12l-6.4 6.4-2.83.71.71-2.83Z" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+    <path d="M9.5 3.6l2.12 2.12" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+    <path d="M2.6 14h10.8" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+  </svg>;
+}
+
+/** Show the board to the room. A screen with a play mark inside it — deliberately NOT
+ *  {@link RunCanvasIcon}'s bare triangle, because running the board and showing it
+ *  running sit in the same group and must not be the same shape. */
+export function PresentIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <rect x="1.9" y="3" width="12.2" height="8.2" rx="1.3" fill="none" stroke="currentColor" strokeWidth="1.25" />
+    <path d="M6.6 5.9v3.4l3-1.7Z" fill="currentColor" />
+    <path d="M5.6 13.6h4.8" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+  </svg>;
+}
+
 export function PublishCanvasIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">
     <path d="M2.4 9.9v2.7a1.4 1.4 0 0 0 1.4 1.4h8.4a1.4 1.4 0 0 0 1.4-1.4V9.9" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />

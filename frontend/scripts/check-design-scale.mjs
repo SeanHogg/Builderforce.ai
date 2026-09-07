@@ -208,7 +208,7 @@ const BASELINE = {
    * absorbed, `RosterNav` and `ProjectList` went with their typed sizes; the new
    * set-password panel names its roles from the start.
    */
-  offScaleFontSizes: 3518,
+  offScaleFontSizes: 3513,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

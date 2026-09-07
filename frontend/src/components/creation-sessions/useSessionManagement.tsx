@@ -6,8 +6,10 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { Select } from '@/components/Select';
 import { TextField, type IconName } from '@/components/ui';
 import { faultText } from '@/lib/apiClient';
+import type { Project } from '@/lib/types';
 import { FolderField } from './FolderField';
 import { SessionEditorPanel } from './SessionEditorPanel';
+import { SessionProjectField } from './SessionProjectField';
 import styles from './SessionEditorPanel.module.css';
 
 export interface ManagedSession {
@@ -30,6 +32,12 @@ export interface SessionManagementPorts {
   mergeCandidates?: ManagedSession[];
   /** Folder names that already exist, so "move" offers a list instead of a blank box. */
   folders?: string[];
+  /** Projects this session can be tied to. Omit them and the action is absent —
+   *  a surface with no project scope (a browser-local draft) never offers one. */
+  projects?: Project[];
+  linkedProjectIds?: number[];
+  onLinkProject?: (projectId: number) => void | Promise<void>;
+  onUnlinkProject?: (projectId: number) => void | Promise<void>;
   onRename: (title: string) => void | Promise<void>;
   onMove: (folder: string | null) => void | Promise<void>;
   onMerge?: (sourceId: string) => void | Promise<void>;
@@ -38,7 +46,7 @@ export interface SessionManagementPorts {
   localOnly?: boolean;
 }
 
-type Editor = 'rename' | 'move' | 'merge' | null;
+type Editor = 'rename' | 'move' | 'merge' | 'project' | null;
 
 /**
  * What can be DONE to one session, and the form that does it.
@@ -47,7 +55,7 @@ type Editor = 'rename' | 'move' | 'merge' | null;
  * PRESENTED — `SessionActionBar` renders them where the reader can see them,
  * and nothing has to re-derive the confirm copy or the folder list to do it.
  */
-export function useSessionManagement({ session, mergeCandidates = [], folders = [], onRename, onMove, onMerge, onDelete, extraActions = [], localOnly = false }: SessionManagementPorts): { actions: SessionMenuAction[]; editor: ReactNode } {
+export function useSessionManagement({ session, mergeCandidates = [], folders = [], projects = [], linkedProjectIds = [], onLinkProject, onUnlinkProject, onRename, onMove, onMerge, onDelete, extraActions = [], localOnly = false }: SessionManagementPorts): { actions: SessionMenuAction[]; editor: ReactNode } {
   const t = useTranslations('sessionManagement');
   const confirm = useConfirm();
   const [editor, setEditor] = useState<Editor>(null);
@@ -56,13 +64,15 @@ export function useSessionManagement({ session, mergeCandidates = [], folders = 
   const [error, setError] = useState('');
 
   const openEditor = (next: Exclude<Editor, null>) => {
-    setValue(next === 'rename' ? session.title : next === 'move' ? session.folder ?? '' : mergeCandidates[0]?.id ?? '');
+    setValue(next === 'rename' ? session.title : next === 'move' ? session.folder ?? '' : next === 'merge' ? mergeCandidates[0]?.id ?? '' : '');
     setError('');
     setEditor(next);
   };
 
   const submit = async () => {
     if (!editor) return;
+    // The project editor ties as you go — closing it IS the submit.
+    if (editor === 'project') { setEditor(null); return; }
     if ((editor === 'rename' || editor === 'merge') && !value.trim()) { setError(t('required')); return; }
     setBusy(true);
     setError('');
@@ -103,6 +113,7 @@ export function useSessionManagement({ session, mergeCandidates = [], folders = 
     { id: 'rename', label: t('rename'), icon: 'edit', run: () => openEditor('rename') },
     { id: 'move', label: t('move'), icon: 'folder', run: () => openEditor('move') },
     { id: 'merge', label: t('merge'), icon: 'workflow', disabled: !onMerge || mergeCandidates.length === 0, run: () => openEditor('merge') },
+    ...(onLinkProject && onUnlinkProject ? [{ id: 'project', label: t('project'), icon: 'project' as const, run: () => openEditor('project') }] : []),
     ...extraActions,
     { id: 'delete', label: t('delete'), icon: 'trash', danger: true, run: remove },
   ];
@@ -114,7 +125,7 @@ export function useSessionManagement({ session, mergeCandidates = [], folders = 
         open
         title={t(`${editor}Title`)}
         description={t(`${editor}Description`)}
-        submitLabel={t(editor)}
+        submitLabel={editor === 'project' ? t('done') : t(editor)}
         busy={busy}
         error={error}
         onSubmit={() => void submit()}
@@ -129,6 +140,8 @@ export function useSessionManagement({ session, mergeCandidates = [], folders = 
           </div>
         ) : editor === 'move' ? (
           <FolderField value={value} folders={folders} onChange={setValue} />
+        ) : editor === 'project' && onLinkProject && onUnlinkProject ? (
+          <SessionProjectField linkedProjectIds={linkedProjectIds} projects={projects} onLink={onLinkProject} onUnlink={onUnlinkProject} />
         ) : (
           <TextField id="session-rename-value" autoFocus label={t('nameLabel')} value={value} onChange={(event) => setValue(event.target.value)} />
         )}

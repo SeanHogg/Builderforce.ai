@@ -42,25 +42,47 @@ import {
 } from './canvasSurfaces';
 
 export type CanvasSessionActionId =
+  | 'draw'
   | 'undo'
   | 'redo'
+  | 'run'
+  | 'present'
   | 'outcomes'
-  | 'prove'
   | 'diagnostics'
   | 'walkthrough'
-  | 'fullscreen'
   | 'call'
   | 'talktrack'
-  | 'run'
   | 'share'
-  | 'publish';
+  | 'prove'
+  | 'publish'
+  | 'fullscreen';
 
 /**
- * The set an action belongs to. A cluster is drawn as ONE segmented control in a shared
- * trough — the same shape the surface switcher uses — because a trough is what says
- * "these are the same kind of thing" without a caption saying it.
+ * The set an action belongs to — WHICH STAGE OF THE ARC IT SERVES.
+ *
+ * A cluster is drawn as ONE segmented control in a shared trough, captioned by the group
+ * registry, because a trough says "these are the same kind of thing" and only the caption
+ * can say WHICH kind.
+ *
+ * ── WHY THESE FIVE WORDS AND NOT THE OLD FIVE ────────────────────────────────────
+ * The clusters used to be `run · history · inspect · live · session` — names taken from
+ * how the actions are implemented. They captioned the bar as `Workflow · History · Tools ·
+ * Live · Share`, and every one of those is a shelf rather than a purpose: *Tools* held the
+ * outcome scorecard, the diagnostics report AND full screen; *Live* held a call and a
+ * screen recording; *Workflow* was a euphemism invented so the bar's Run would not read as
+ * an object's Run.
+ *
+ * The product already teaches five words — `STAGES` in `lib/navGroups.ts`, the left rail's
+ * `--stage-*` dots, the session's own phase in `lib/canvasPhases.ts` — and the bar was the
+ * one surface not using them. So a cluster IS a stage now, and the bar reads
+ * `Idea · Make · Run · Measure · Reach` left to right, in the same order and the same hues
+ * as the rail. An action is filed under the stage whose question it answers.
+ *
+ * `board` is the one cluster that is not a stage, deliberately: full screen, and the ••• 
+ * sheet's own contents, act on the BOARD rather than on the work. A control that answers
+ * no stage's question must not be given a stage's caption — that is how `Tools` happened.
  */
-export type CanvasSessionActionCluster = 'run' | 'history' | 'inspect' | 'live' | 'session';
+export type CanvasSessionActionCluster = 'idea' | 'make' | 'run' | 'measure' | 'reach' | 'board';
 
 /**
  * What an action NEEDS from the surface it is drawn on.
@@ -85,14 +107,22 @@ export interface CanvasSessionActionDef {
   /** Order within the bar. Clusters are drawn in first-appearance order. */
   order: number;
   /**
-   * `icon` = a glyph inside its cluster's trough. `labelled` = its own button with a
-   * word on it, which is reserved for actions that open somewhere else rather than
-   * acting on the board — a glyph can say "undo", only a label can say "Publish".
-   * `roster` = a glyph drawn as a trailing chip on the roster itself — "bring a
-   * person into THIS group", so it belongs at the end of the avatars it grows
-   * rather than in its own worded button beside them.
+   * `icon` = a glyph inside its cluster's trough.
+   * `roster` = a glyph drawn as a trailing chip on the roster itself — "bring a person
+   *   into THIS group", so it belongs at the end of the avatars it grows rather than in
+   *   its own worded button beside them.
+   * `door` = a worded row inside the **Make it real** menu — the ways work LEAVES this
+   *   canvas.
+   *
+   * ── WHY `labelled` IS GONE ───────────────────────────────────────────────────────
+   * It meant "its own worded button on the bar", and the bar ended up with two of them
+   * side by side — *Make it real* and *Publish* — which read as a fork between two things
+   * that mean the same thing. A word opening somewhere else is still the rule; what
+   * changed is that there is now ONE word for it, and the doors are rows under it. So the
+   * chrome that used to say "give me a button" says "give me a row in that menu", and an
+   * action added to it lands there without either call site being edited.
    */
-  chrome: 'icon' | 'labelled' | 'roster';
+  chrome: 'icon' | 'roster' | 'door';
   /**
    * What the button reports about itself. `pressed` is a mode you are in (full screen);
    * `expanded` is a panel this button owns (the invite sheet); `none` is a command that
@@ -130,45 +160,61 @@ export interface CanvasSessionActionDef {
 export const PHONE_SESSION_BAR_LIMIT = 2;
 
 export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
-  // RUN LEADS THE BAR, and both halves of that are decisions.
+  // ── IDEA · "What if?" ───────────────────────────────────────────────────────────
+  // Putting something down. The palette's own door is contributed by the bar (it needs
+  // the button's screen rect to open the picker above itself), so this cluster's only
+  // registry action is the other way to put a mark on a board.
   //
-  // WHY IT IS A SESSION ACTION. It used to be a button drawn on the `workflow` card.
+  // Draw was a row in the ••• sheet, which filed "make a mark" alongside "export the
+  // session" — one is the first thing anybody does on a canvas and the other is a
+  // once-a-month errand.
+  { id: 'draw', cluster: 'idea', order: 0, chrome: 'icon', state: 'pressed', phone: 'menu', labelKey: 'draw', activeLabelKey: 'stopDrawing', needs: 'board' },
+
+  // ── MAKE · "Build it." ──────────────────────────────────────────────────────────
+  // The three ways you shape what is already down. The prompt toggle is contributed by
+  // the bar (the host owns the composer's placement) and leads this group: it is the main
+  // input to the canvas, and it used to sit in VIEW beside nine zoom glyphs, which said
+  // it was chrome.
+  //
+  // Undo keeps its phone slot: a fat-fingered drag on a touch board is the single
+  // likeliest thing a phone user needs to take back, and burying the only cure two taps
+  // deep is what makes a canvas feel unsafe to touch.
+  { id: 'undo', cluster: 'make', order: 10, chrome: 'icon', state: 'none', phone: 'bar', labelKey: 'undoCanvasChange' },
+  { id: 'redo', cluster: 'make', order: 11, chrome: 'icon', state: 'none', phone: 'menu', labelKey: 'redoCanvasChange' },
+
+  // ── RUN · "Run it as a company." ────────────────────────────────────────────────
+  // Start it, or show it running.
+  //
+  // WHY RUN IS A SESSION ACTION. It used to be a button drawn on the `workflow` card.
   // Then the card became what it always stood for: a `frame` bounding real `flowStep`
   // objects, because the board IS the workflow. There is no longer one card to hang Run
   // off — the flow is a REGION of the board — so running it is something you do to the
   // canvas, which is what this registry is for.
   //
-  // WHY IT IS A GLYPH IN THE COMMAND BAR and not a word in the top-right corner: the
-  // corner is where work LEAVES the canvas (`canvasChrome.ts` — a word opens somewhere
-  // else), and running the board is not leaving it. It is the most direct thing you can
-  // do TO the board, so it sits with the other things you do to the board, at the head
-  // of the bar. Its own cluster, and first: a trough says "these are the same kind of
-  // thing", and Run is not undo's kind of thing.
+  // Its caption used to read `Workflow`, a euphemism invented because a board can carry
+  // objects with Run buttons of their own and two groups both called Run is ambiguous. A
+  // stage name settles that without the euphemism: this is the RUN stage, and the
+  // object's button is the object's.
   //
   // It withdraws (`available: false`) on a board with no flow on it, rather than sitting
   // lit up with nothing to run; the host decides that from the same predicate Run itself
   // resolves with (`canvasFlowTarget.ts`), so the button cannot be offered for one object
-  // and then act on another. Pressing it on a section that has never been compiled BUILDS
-  // it first — `runWorkflow` has always said so, and this is the door that makes that
-  // sentence reachable again.
+  // and then act on another.
+  { id: 'run', cluster: 'run', order: 20, chrome: 'icon', state: 'none', phone: 'menu', labelKey: 'runCanvas', titleKey: 'runWorkflow', needs: 'objects' },
+  // Present is showing the board running to somebody in the room. It was a ••• row under
+  // "Create and view", a heading that filed "start something" with "show what you
+  // started".
+  { id: 'present', cluster: 'run', order: 21, chrome: 'icon', state: 'pressed', phone: 'menu', labelKey: 'present', activeLabelKey: 'exitPresentation' },
+
+  // ── MEASURE · "Is it working?" ──────────────────────────────────────────────────
+  // Three readings of this session. They shared a trough captioned `Tools`, which is a
+  // shelf and not a purpose — and that shelf also held full screen, which reads nothing.
   //
-  // Named `Run`, with `Run workflow` as the hover: the glyph sits beside undo and redo,
-  // where one word is the whole vocabulary.
-  { id: 'run', cluster: 'run', order: -1, chrome: 'icon', state: 'none', phone: 'menu', labelKey: 'runCanvas', titleKey: 'runWorkflow', needs: 'objects' },
-  // History first, and undo keeps its phone slot: a fat-fingered drag on a touch board is
-  // the single likeliest thing a phone user needs to take back, and burying the only cure
-  // two taps deep is what makes a canvas feel unsafe to touch.
-  { id: 'undo', cluster: 'history', order: 0, chrome: 'icon', state: 'none', phone: 'bar', labelKey: 'undoCanvasChange' },
-  { id: 'redo', cluster: 'history', order: 1, chrome: 'icon', state: 'none', phone: 'menu', labelKey: 'redoCanvasChange' },
-  // Two readings of this session and one way to see more of it. They were the three that
-  // read as unrelated: `↗` said "opens elsewhere" for a scorecard, and `⚠` drew a standing
-  // warning triangle for a report that is usually clean — a permanent alarm on a healthy
-  // board is an alarm nobody reads.
   // The outcome scorecard reads THIS BOARD'S OBJECTS — deliverables, and what they were
   // worth. Over a conversation with nothing on it that is a button whose only answer is
   // "nothing", so it asks the surface for objects rather than naming which surfaces have
   // them.
-  { id: 'outcomes', cluster: 'inspect', order: 2, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'viewOutcomeMetrics', titleKey: 'outcomeMetricsTitle', needs: 'objects' },
+  { id: 'outcomes', cluster: 'measure', order: 30, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'viewOutcomeMetrics', titleKey: 'outcomeMetricsTitle', needs: 'objects' },
   //
   // DIAGNOSTICS NEEDS NOTHING, and getting that wrong is why this comment is long.
   //
@@ -183,104 +229,99 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   //
   // So it is unconditional, deliberately, and the test asserts that it survives on every
   // surface the registry declares.
-  { id: 'diagnostics', cluster: 'inspect', order: 3, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'openDiagnostics' },
+  { id: 'diagnostics', cluster: 'measure', order: 31, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'openDiagnostics' },
   //
   // SHOW ME WHAT I WAS GIVEN.
   //
-  // A generated board is the product working and, for the person who asked one
-  // question and got twenty-four objects back, a wall. The canvas already had a
-  // tour and it toured the CHROME — Brain dock, palette, Share — which teaches
-  // the tool and says nothing about the work. This one walks the ARTIFACTS.
+  // A generated board is the product working and, for the person who asked one question
+  // and got twenty-four objects back, a wall. The canvas already had a tour and it toured
+  // the CHROME — Brain dock, palette, Share — which teaches the tool and says nothing
+  // about the work. This one walks the ARTIFACTS, which is a reading of the board and so
+  // belongs with the other two.
   //
-  // WHY IT IS IN `inspect`. It is a reading of this board, like the outcome
-  // scorecard beside it: both answer "what have I actually got here". It is not
-  // history, and it does not leave the canvas.
+  // It needs OBJECTS for the reason the scorecard does, and the host withdraws it as well
+  // (`available: false`) on a board too small to get lost in — three cards do not need a
+  // guide, and an offer to walk somebody round them reads as the product not trusting
+  // them. That threshold is the walkthrough's own (`MIN_WALKTHROUGH_OBJECTS`), asked
+  // once, rather than a number repeated here.
+  { id: 'walkthrough', cluster: 'measure', order: 32, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'walkthrough.action', titleKey: 'walkthrough.actionTitle', needs: 'objects' },
+
+  // ── REACH · "Sell it, be found, grow it." ───────────────────────────────────────
+  // Getting it in front of somebody: a collaborator, a viewer, a buyer. The roster leads
+  // the group (contributed by the bar, which owns the session's member list), then the
+  // two ways to talk somebody through it, then the doors out.
   //
-  // It needs OBJECTS for the reason the scorecard does, and the host withdraws it
-  // as well (`available: false`) on a board too small to get lost in — three cards
-  // do not need a guide, and an offer to walk somebody round them reads as the
-  // product not trusting them. That threshold is the walkthrough's own
-  // (`MIN_WALKTHROUGH_OBJECTS`), asked once, rather than a number repeated here.
-  { id: 'walkthrough', cluster: 'inspect', order: 4, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'walkthrough.action', titleKey: 'walkthrough.actionTitle', needs: 'objects' },
-  // Full screen keeps its phone slot for the reason it always had one: a small screen is
-  // where trading app chrome for board is worth the most.
-  { id: 'fullscreen', cluster: 'inspect', order: 5, chrome: 'icon', state: 'pressed', phone: 'bar', labelKey: 'fullScreen', activeLabelKey: 'exitFullScreen' },
-  // Share is the only worded action, and now the ONLY control that opens the invite
-  // panel: the collaborator roster's `+` used to open the same sheet, which is one
-  // decision with two controls — the thing the surface registry exists to prevent.
-  // THE CALL IS AN ACTION, NOT A STRIP OF ITS OWN.
-  //
-  // Starting a call used to be a dormant band across the bottom of the shell — a
-  // control and a line of explanation, occupying a measured band of the window on
-  // every canvas nobody was calling from, which is every canvas almost all of the
-  // time. And because the band was the room's own chrome, "start a call" lived in a
-  // different place from every other thing you can do to this canvas.
-  //
-  // So it is a registry action like the rest, which is what makes it apply to EVERY
-  // modality by construction: chat, board, 3D space and a running app all draw the
-  // same bar from this list, and a surface added later gets the call for free. It
-  // needs nothing from the surface — a conversation is as callable as a board — so
-  // it declares no requirement.
-  //
-  // Its own cluster: it is neither history nor a reading of the board, and the dock
-  // that appears once the call is running is a whole band of chrome rather than a
-  // panel, so grouping it into the inspect trough would have said the two are the
-  // same kind of thing.
-  //
-  // The host withdraws it (`available: false`) the moment a call is running: from
-  // then on the dock IS the control, and a second lit "call" button in the bar would
-  // be one decision with two homes — the failure this registry exists to prevent.
-  { id: 'call', cluster: 'live', order: 6, chrome: 'icon', state: 'none', phone: 'menu', labelKey: 'startCall', titleKey: 'startCallTitle' },
+  // Share draws as the trailing chip on the roster, not a worded button beside it: "who
+  // is here" and "bring someone else in" are one group to look at, and the word was the
+  // only thing telling them apart. The glyph opens the same sheet, so nothing about WHAT
+  // it does changed.
+  { id: 'share', cluster: 'reach', order: 40, chrome: 'roster', state: 'expanded', phone: 'menu', labelKey: 'share', titleKey: 'inviteCollaborators' },
   //
   // TALKTRACK — the recording of this board, beside the live version of it.
   //
-  // It sits in the `live` cluster with the call rather than with share/publish
-  // because the decision it belongs to is "am I explaining this board to somebody
-  // right now" — a call is that synchronously, a talktrack asynchronously, and the
-  // second is the one that leaves something behind. Grouping it with Share would
-  // have said it was a distribution control, and the recording is not distributed
-  // by making it: it becomes a `video` object on the board like anything else the
-  // canvas produces, and leaves by whichever door that object then takes.
+  // It needs nothing from the surface, deliberately. A talktrack is a screen recording of
+  // whatever is on screen, which is as true of a running app or a 3D space as it is of
+  // the board — and the conversation surface is where somebody is most likely to be
+  // explaining what they just asked for. The recording becomes a `video` object on the
+  // board like anything else the canvas produces, and leaves by whichever door that
+  // object then takes.
+  { id: 'talktrack', cluster: 'reach', order: 41, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'recordTalktrack', titleKey: 'recordTalktrackTitle' },
   //
-  // It needs nothing from the surface, deliberately. A walkthrough is a screen
-  // recording of whatever is on screen, which is as true of a running app or a 3D
-  // space as it is of the board — and the conversation surface is where somebody is
-  // most likely to be explaining what they just asked for.
-  { id: 'talktrack', cluster: 'live', order: 7, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'recordTalktrack', titleKey: 'recordTalktrackTitle' },
+  // THE CALL IS AN ACTION, NOT A STRIP OF ITS OWN.
   //
-  // PROVE IT — the act the whole method turns on, and the one the product had no
-  // door for from a board.
+  // Starting a call used to be a dormant band across the bottom of the shell — a control
+  // and a line of explanation, occupying a measured band of the window on every canvas
+  // nobody was calling from, which is every canvas almost all of the time. As a registry
+  // action it applies to EVERY modality by construction: chat, board, 3D space and a
+  // running app all draw the same bar from this list.
   //
-  // Reading an idea is cheap and building is not, so choosing WHICH proof is worth
-  // running is the most consequential decision in the first month of anything. That
-  // choice lived only on `/realize`, reachable from the nav and from nowhere a person
-  // is actually having the idea — so a board full of an idea had no way to become a
-  // proof, and the loop's outcome events had no session to attach to. Both halves of
-  // that are fixed by one door: this hands the board's own idea to the proof picker
-  // and names the session, which is what lets Read, Prove, Build and Measure be
-  // recorded against it and the north-star metric be computed at all.
+  // The host withdraws it (`available: false`) the moment a call is running: from then on
+  // the dock IS the control, and a second lit "call" button in the bar would be one
+  // decision with two homes.
+  { id: 'call', cluster: 'reach', order: 42, chrome: 'icon', state: 'none', phone: 'menu', labelKey: 'startCall', titleKey: 'startCallTitle' },
   //
-  // It needs OBJECTS for the same reason the scorecard does: "make this real" over a
-  // conversation with nothing on it has nothing to make real.
-  { id: 'prove', cluster: 'session', order: 8, chrome: 'labelled', state: 'none', phone: 'menu', labelKey: 'proveThisIdea', titleKey: 'proveThisIdeaTitle', needs: 'objects' },
-  // Share draws as the trailing chip on the roster now, not a worded button beside
-  // it: "who is here" and "bring someone else in" are one group to look at, and the
-  // word was the only thing telling them apart. The icon alone still opens the same
-  // sheet — `inviteCollaborators` — so nothing about WHAT it does changed, only where
-  // it reads as belonging.
-  { id: 'share', cluster: 'session', order: 9, chrome: 'roster', state: 'expanded', phone: 'menu', labelKey: 'share', titleKey: 'inviteCollaborators' },
-  // Publish is the other of the two ways work leaves this canvas — Share brings a
-  // person IN, this puts the result where strangers can reach it. They no longer
-  // sit beside each other (Share moved to the roster), but the pairing is still why
-  // this exists at all.
+  // ── THE DOORS OUT, behind ONE word ──────────────────────────────────────────────
   //
-  // It is here from the first second of a session, before there is anything worth
-  // publishing, and that is the point: it was previously reachable ONLY through
-  // `SellInMarketplace` in a selected card's inspector, which made "get this to a URL"
-  // three clicks deep, framed as commerce, and invisible until you had clicked the right
-  // card. It opens the SAME release lifecycle that button does — one gate, two doors —
-  // scoped to the whole board, which is the scope an application actually has.
-  { id: 'publish', cluster: 'session', order: 10, chrome: 'labelled', state: 'expanded', phone: 'menu', labelKey: 'publishCanvas', titleKey: 'publishCanvasTitle' },
+  // These two used to be two worded buttons side by side on the bar — Make it real and
+  // Publish — which reads as a fork between two things that both mean "ship it". They are
+  // rows under one trigger now (`chrome: 'door'`), and the trigger keeps the verb the
+  // methodology already uses.
+  //
+  // PROVE IT is the act the whole method turns on. Reading an idea is cheap and building
+  // is not, so choosing WHICH proof is worth running is the most consequential decision
+  // in the first month of anything. That choice lived only on `/realize`, reachable from
+  // the nav and from nowhere a person is actually having the idea — so a board full of an
+  // idea had no way to become a proof, and the loop's outcome events had no session to
+  // attach to. Both halves are fixed by this door: it hands the board's own idea to the
+  // proof picker and names the session, which is what lets Read, Prove, Build and Measure
+  // be recorded against it and the north-star metric be computed at all.
+  //
+  // Its label is `proveIt` and NOT `proveThisIdea`: that key reads "Make it real", which
+  // is now the word on the trigger these rows hang under, and a menu whose first row
+  // repeats the button that opened it says nothing. The hover text is unchanged, because
+  // what it does is unchanged.
+  //
+  // It needs OBJECTS for the same reason the scorecard does: proving a conversation with
+  // nothing on it has nothing to prove.
+  { id: 'prove', cluster: 'reach', order: 43, chrome: 'door', state: 'none', phone: 'menu', labelKey: 'proveIt', titleKey: 'proveThisIdeaTitle', needs: 'objects' },
+  // PUBLISH puts the result where strangers can reach it. It is here from the first
+  // second of a session, before there is anything worth publishing, and that is the
+  // point: it was previously reachable ONLY through `SellInMarketplace` in a selected
+  // card's inspector, which made "get this to a URL" three clicks deep, framed as
+  // commerce, and invisible until you had clicked the right card. It opens the SAME
+  // release lifecycle that button does — one gate, two doors — scoped to the whole board,
+  // which is the scope an application actually has.
+  { id: 'publish', cluster: 'reach', order: 44, chrome: 'door', state: 'expanded', phone: 'menu', labelKey: 'publishCanvas', titleKey: 'publishCanvasTitle' },
+
+  // ── BOARD · not a stage, and that is the point ──────────────────────────────────
+  // Full screen answers no stage's question — it is done to the board, not to the work —
+  // so it sits in the one group with no stage name rather than being filed under a stage
+  // it does not serve. It used to live in `Tools` beside the diagnostics report, which is
+  // how a shelf forms.
+  //
+  // It keeps its phone slot for the reason it always had one: a small screen is where
+  // trading app chrome for board is worth the most.
+  { id: 'fullscreen', cluster: 'board', order: 50, chrome: 'icon', state: 'pressed', phone: 'bar', labelKey: 'fullScreen', activeLabelKey: 'exitFullScreen' },
 ];
 
 const BY_ID = new Map<CanvasSessionActionId, CanvasSessionActionDef>(

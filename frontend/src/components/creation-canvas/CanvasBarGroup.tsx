@@ -15,23 +15,31 @@ import styles from './CreationCanvas.module.css';
  * own — and the only thing that said what any of them were for was an `aria-label` a
  * sighted reader never sees plus a tooltip you have to hover one icon at a time to
  * collect. A trough can say "these belong together"; nothing on the bar said WHAT they
- * belong to. The ••• sheet already captioned its sections and the bar did not.
+ * belong to.
  *
- * So this draws the group's name above it — the same 8px uppercase heading the sheet
+ * So this draws the group's name above it — the same 8px uppercase heading the ••• sheet
  * uses (`.chromeHeading`, shared by both, so the two chromes cannot drift into two
  * typographies for one idea) — and keeps the trough underneath.
  *
+ * ── THE CAPTION IS THE STAGE, AND THE STAGE OWNS THE WORD ────────────────────────
+ * A host group names a `Stage` (`lib/canvasBarGroups.ts`), and its caption is
+ * `nav.stage.<id>` — the SAME string the left rail draws over the same-coloured dot, not
+ * a second translation of it in a canvas namespace. Two translators here rather than one
+ * is the whole point: the arc's five words belong to the arc, and the group's fuller
+ * accessible name belongs to the canvas.
+ *
+ * The stage also travels to the stylesheet as `data-stage`, which is what lets the
+ * caption's dot take `--stage-<id>` — the rail's hue, on the rail's vocabulary, so the
+ * two surfaces cannot disagree about what colour Measure is.
+ *
  * ── WHY EVERY GROUP IN THE BAR GOES THROUGH HERE ─────────────────────────────────
- * Because captioning is the kind of decision that decays into six half-migrations. The
- * bar draws groups from four places — the session-action registry, the host's view
- * commands, the roster, and whatever the SURFACE contributed — and before this each one
- * spelled its own wrapper, its own `role="group"`, its own idea of whether a trough was
- * warranted and its own accessible name. One component, one row shell, one caption
- * treatment, and a group added next year is captioned by construction.
+ * Because captioning is the kind of decision that decays into six half-migrations. One
+ * component, one row shell, one caption treatment, and a group added next year is
+ * captioned by construction.
  *
  * ── THE TWO WAYS TO NAME ONE ─────────────────────────────────────────────────────
- * `group` — a host group, named by `lib/canvasBarGroups.ts`. Caption and accessible name
- *           both come from that table, so they cannot say different things.
+ * `group` — a host group, named by the registry. Caption and accessible name both come
+ *           from that table, so they cannot say different things.
  * `caption`/`label` — a SURFACE's own contribution (an app runtime's Run/Stop, an
  *           insights window). The surface owns its vocabulary; a host registry naming an
  *           app's controls would be the host learning what an app is.
@@ -39,8 +47,8 @@ import styles from './CreationCanvas.module.css';
 
 type CanvasBarGroupNaming =
   | { group: CanvasBarGroupId; caption?: never; label?: never }
-  /** A surface naming its own contribution. `caption` is optional for the same reason
-   *  `captionKey` is: a group whose controls are already worded has nothing to add. */
+  /** A surface naming its own contribution. `caption` is optional: a group whose controls
+   *  are already worded has nothing to add above them. */
   | { group?: never; caption?: string; label: string };
 
 export type CanvasBarGroupProps = {
@@ -59,15 +67,25 @@ export type CanvasBarGroupProps = {
 
 export function CanvasBarGroup({ group, caption, label, shell = 'bare', children, ...rest }: CanvasBarGroupProps) {
   const t = useTranslations('creationCanvas');
+  const tn = useTranslations('nav');
   const def = group ? canvasBarGroup(group) : null;
   // The registry's keys are catalog keys; the cast is the same one every other consumer
-  // of a registry-declared key makes (see `CanvasSessionActions`), because next-intl types
-  // the key as a literal union and a registry deals in strings.
+  // of a registry-declared key makes, because next-intl types the key as a literal union
+  // and a registry deals in strings.
   const name = def ? t(def.labelKey as 'share') : (label as string);
-  const heading = def ? (def.captionKey ? t(def.captionKey as 'share') : null) : caption ?? null;
+  const heading = def
+    ? (def.stage ? tn(`stage.${def.stage}` as 'stage.idea') : def.captionKey ? t(def.captionKey as 'share') : null)
+    : caption ?? null;
 
   return (
-    <div className={styles.barGroup} role="group" aria-label={name} data-group={group} {...rest}>
+    <div
+      className={styles.barGroup}
+      role="group"
+      aria-label={name}
+      data-group={group}
+      data-stage={def?.stage}
+      {...rest}
+    >
       {/* Hidden from assistive tech, not from the reader: the group is already NAMED by
           `aria-label`, and a caption exposed as text as well would have a screen reader
           read the same word twice — once as the group's name, once as stray text inside

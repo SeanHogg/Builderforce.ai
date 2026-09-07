@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { brain, creationSessionFoldersApi, creationSessionsApi, workflowDefinitions, type BrainChat, type CreationSessionSummary, type WorkflowDefinitionSummary } from '@/lib/builderforceApi';
+import { brain, creationSessionFoldersApi, creationSessionsApi, workflowDefinitions, type BrainChat, type CreationSessionFolder, type CreationSessionSummary, type WorkflowDefinitionSummary } from '@/lib/builderforceApi';
 import { openedBoardHref } from '@/lib/openedBoardHref';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
@@ -12,6 +12,7 @@ import { getModality } from '@/lib/modality';
 import styles from './DashboardCreationSessions.module.css';
 import { Icon } from '@/components/ui/Icon';
 import { ViewToggle } from '@/components/ViewToggle';
+import { CreationFolderBar, UNFILED, type FolderSelection } from '@/components/creation-sessions/CreationFolderBar';
 import { CreationSessionTile } from '@/components/creation-sessions/CreationSessionTile';
 import { SessionActionBar, type SessionMenuAction } from '@/components/creation-sessions/SessionActionBar';
 import { SessionBulkBar } from '@/components/creation-sessions/SessionBulkBar';
@@ -22,10 +23,6 @@ import { SessionBulkBar } from '@/components/creation-sessions/SessionBulkBar';
 type CreationLibraryView = 'card' | 'table';
 const CREATION_LIBRARY_VIEW_KEY = 'builderforce.dashboard.creationLibraryView';
 const SESSIONS_PAGE_SIZE = 24;
-
-/** The bucket a session with no folder falls into — the same key the group
- *  headings and the folder filter both use, so "unfiled" is one idea. */
-const UNFILED = '';
 
 export function DashboardCreationSessions() {
   const t = useTranslations('creationCanvas');
@@ -46,8 +43,8 @@ export function DashboardCreationSessions() {
   const [agents, setAgents] = useState<PublishedAgent[]>([]);
   const [resourcesLoading, setResourcesLoading] = useState(true);
   const [libraryView, setLibraryView] = useState<CreationLibraryView>('card');
-  const [savedFolders, setSavedFolders] = useState<string[]>([]);
-  const [folderFilter, setFolderFilter] = useState<string | null>(null);
+  const [folders, setFolders] = useState<CreationSessionFolder[]>([]);
+  const [folderFilter, setFolderFilter] = useState<FolderSelection>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -61,7 +58,7 @@ export function DashboardCreationSessions() {
   };
 
   const loadFolders = useCallback(() => {
-    void creationSessionFoldersApi.list().then((result) => setSavedFolders(result.folders.map((folder) => folder.name))).catch(() => undefined);
+    void creationSessionFoldersApi.list().then((result) => setFolders(result.folders)).catch(() => undefined);
   }, []);
   useEffect(loadFolders, [loadFolders]);
 
@@ -143,6 +140,15 @@ export function DashboardCreationSessions() {
     reload();
   }, [reload]);
 
+  const linkProject = async (session: CreationSessionSummary, projectId: number) => {
+    await creationSessionsApi.linkProject(session.id, projectId);
+    reload();
+  };
+  const unlinkProject = async (session: CreationSessionSummary, projectId: number) => {
+    await creationSessionsApi.unlinkProject(session.id, projectId);
+    reload();
+  };
+
   const renameSession = async (session: CreationSessionSummary, title: string) => {
     await creationSessionsApi.update(session.id, { title });
     reload();
@@ -157,13 +163,13 @@ export function DashboardCreationSessions() {
   const kindFilter = searchParams.get('filter');
   const visible = useMemo(() => sessions
     .filter((session) => !kindFilter || session.preview?.kinds?.includes(kindFilter))
-    .filter((session) => folderFilter === null || (session.folderName || UNFILED) === folderFilter)
+    .filter((session) => folderFilter === null || (session.folderId ?? UNFILED) === folderFilter)
     .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned)), [sessions, kindFilter, folderFilter]);
   const selected = useMemo(() => visible.filter((session) => selectedIds.includes(session.id)).map((session) => ({ id: session.id, title: session.title, folder: session.folderName })), [visible, selectedIds]);
   /** Every folder a move can land in: the ones that exist server-side plus any
    *  carried by a session on screen, so the picker is never short a name. */
-  const folderOptions = useMemo(() => [...new Set([...savedFolders, ...sessions.map((session) => session.folderName).filter((name): name is string => !!name)])].sort((a, b) => a.localeCompare(b)), [savedFolders, sessions]);
-  const toggleFolderFilter = (folder: string) => setFolderFilter((current) => (current === folder ? null : folder));
+  const folderOptions = useMemo(() => [...new Set([...folders.map((folder) => folder.name), ...sessions.map((session) => session.folderName).filter((name): name is string => !!name)])].sort((a, b) => a.localeCompare(b)), [folders, sessions]);
+  const toggleFolderFilter = (folderId: string) => setFolderFilter((current) => (current === folderId ? null : folderId));
   const toggleSelected = (id: string, checked: boolean) => setSelectedIds((current) => (checked ? [...new Set([...current, id])] : current.filter((selectedId) => selectedId !== id)));
 
   const openBuild = async (build: IdeProject) => {
@@ -214,11 +220,15 @@ export function DashboardCreationSessions() {
       projectLabel={(id) => projects.find((project) => project.id === id)?.name ?? t('projectBadge', { id })}
       onOpen={() => router.push(`/create/${session.id}${session.matchingObjectId ? `?focus=${session.matchingObjectId}` : ''}`)}
       onFolderSelect={toggleFolderFilter}
-      folderActive={folderFilter === (session.folderName || UNFILED)}
+      folderActive={folderFilter === (session.folderId ?? UNFILED)}
     >
       <SessionActionBar
         session={{ id: session.id, title: session.title, folder: session.folderName }}
         folders={folderOptions}
+        projects={projects}
+        linkedProjectIds={session.projectIds ?? []}
+        onLinkProject={(projectId) => linkProject(session, projectId)}
+        onUnlinkProject={(projectId) => unlinkProject(session, projectId)}
         mergeCandidates={status === 'active' ? sessions.filter((candidate) => candidate.id !== session.id && candidate.status === 'active').map((candidate) => ({ id: candidate.id, title: candidate.title, folder: candidate.folderName })) : []}
         onRename={(title) => renameSession(session, title)}
         onMove={(folder) => moveSession(session, folder)}
@@ -234,7 +244,10 @@ export function DashboardCreationSessions() {
     </CreationSessionTile>
   ));
 
-  const folderGroups = folderFilter !== null ? [folderFilter] : [...new Set(visible.map((session) => session.folderName || UNFILED))];
+  // Groups are keyed by folder ID and labelled by name, so a rename never
+  // splits one folder into two headings.
+  const folderGroups = [...new Set(visible.map((session) => session.folderId ?? UNFILED))]
+    .map((id) => ({ id, name: id === UNFILED ? '' : visible.find((session) => session.folderId === id)?.folderName ?? folders.find((folder) => folder.id === id)?.name ?? '' }));
 
   return <section className={styles.sessionsRoot}>
     <div className={styles.libraryHeader}>
@@ -250,13 +263,15 @@ export function DashboardCreationSessions() {
       </div>
     </div>
     {sessionLimitReached && <p role="alert" className={styles.quotaNotice}>{t('sessionLimitPlan', { limit: sessionQuota?.limit ?? 0 })}</p>}
-    {folderFilter !== null && (
-      <button type="button" className={styles.folderFilterChip} onClick={() => setFolderFilter(null)}>
-        <Icon name="folder" size={14} /> {folderFilter || t('unfiledFolder')}
-        <span className={styles.folderFilterClear}>{t('clearFolderFilter')}</span>
-        <Icon name="close" size={14} />
-      </button>
-    )}
+    <CreationFolderBar
+      folders={folders}
+      projects={projects}
+      totalCount={sessions.length}
+      unfiledCount={sessions.filter((session) => !session.folderId).length}
+      selected={folderFilter}
+      onSelect={setFolderFilter}
+      onChanged={() => { loadFolders(); reload(); }}
+    />
     <SessionBulkBar
       selected={selected}
       archived={status === 'archived'}
@@ -268,14 +283,14 @@ export function DashboardCreationSessions() {
     {loading || resourcesLoading ? <div className={styles.libraryState}>{t('loadingCreations')}</div> : visible.length === 0 && resourceItems.length === 0 ?
       <button onClick={createBlank} className={styles.emptyLibrary}><strong>{t('blankCanvas')}</strong>{t('blankCanvasHint')}</button> :
       <div aria-label={t('libraryLabel')} data-view={libraryView} className={styles.libraryGrid}>
-        {folderGroups.map((folder) => <section key={folder || '__unfiled'} className={styles.folderGroup}>
-          {folder && <h3 className={styles.folderHeading}>
-            <button type="button" aria-pressed={folderFilter === folder} onClick={() => toggleFolderFilter(folder)} className={styles.folderHeadingButton}>
-              <Icon name="folder" size={16} /> {folder}
-              <span className={styles.folderHint}>{folderFilter === folder ? t('clearFolderFilter') : t('filterByFolder')}</span>
+        {folderGroups.map((group) => <section key={group.id || '__unfiled'} className={styles.folderGroup}>
+          {group.id !== UNFILED && <h3 className={styles.folderHeading}>
+            <button type="button" aria-pressed={folderFilter === group.id} onClick={() => toggleFolderFilter(group.id)} className={styles.folderHeadingButton}>
+              <Icon name="folder" size={16} /> {group.name}
+              <span className={styles.folderHint}>{folderFilter === group.id ? t('clearFolderFilter') : t('filterByFolder')}</span>
             </button>
           </h3>}
-          {renderSessionItems(visible.filter((session) => (session.folderName || UNFILED) === folder))}
+          {renderSessionItems(visible.filter((session) => (session.folderId ?? UNFILED) === group.id))}
         </section>)}
         {resourceItems.map((item) => <button key={item.key} type="button" onClick={() => void item.open()} className={styles.resourceItem}>
           <span aria-hidden className={styles.resourceIcon}><Icon source={item.icon} size={22} /></span>

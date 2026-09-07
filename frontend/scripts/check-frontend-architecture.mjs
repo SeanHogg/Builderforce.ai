@@ -30,10 +30,12 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
- *   959 → 965 (`useClientFiles`, 2026-09-07) — the Creations library stopped
- *   hiding its actions behind a `⋯` menu, and the god component that held them
- *   split. Seven client modules landed and one was deleted, so the count is a
- *   NET +6, and each is argued on the "808 → 868" terms — a shared reuse surface
+ *   959 → 964 (`useClientFiles`, 2026-09-07) — the Creations library stopped
+ *   hiding its actions behind a `⋯` menu, and the two surfaces that managed
+ *   sessions and folders became one. Nine client modules landed and four were
+ *   deleted (`SessionManagementControls` plus the three `session-management/*`
+ *   files of the duplicate "Sessions & folders" slide-out), so the count is a
+ *   NET +5, and each is argued on the "808 → 868" terms — a shared reuse surface
  *   carries its own boundary rather than inheriting one from whoever mounts it:
  *
  *     - `components/creation-sessions/useSessionManagement.tsx` — the hook that
@@ -47,6 +49,12 @@
  *       it. Both hold a draft the reader is editing.
  *     - `components/creation-sessions/SessionBulkBar.tsx` — self-gating on a
  *       selection it is handed, with its own merge panel and confirms.
+ *     - `components/creation-sessions/CreationFolderBar.tsx` — the ONE folder
+ *       control: it filters the library AND renames, deletes, creates and ties
+ *       folders to a Project, which is what the deleted slide-out did in a
+ *       second place nobody found. It owns its own mutations.
+ *     - `components/creation-sessions/SessionProjectField.tsx` — the session's
+ *       own project ties, absorbed from that same panel.
  *     - `components/creation-sessions/CreationSessionTile.tsx` — the card/row
  *       itself: it carries the open handler, the selection checkbox and the
  *       folder-filter toggle.

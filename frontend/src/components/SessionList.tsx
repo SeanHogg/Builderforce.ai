@@ -19,8 +19,11 @@
  * to that project (directly, or via a tied folder) plus a separate "Unfiled"
  * bucket for anything not yet organized — nothing disappears just because it
  * hasn't been filed. "+ New canvas" is a {@link SplitButton}: the primary
- * action is unchanged, and its caret opens {@link SessionManagePanel} for
- * organizing sessions into folders and tying them to a Project.
+ * action is unchanged, and its caret goes to the Create library (`/create`),
+ * which is the ONE place sessions and folders are organized — renamed, filed,
+ * merged, archived and tied to a Project. A second slide-out that did the same
+ * things from this caret used to exist; two surfaces for one job meant whoever
+ * found one never learned the other was there.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
@@ -36,7 +39,6 @@ import { CanvasSyncBadge } from '@/components/canvas/CanvasSyncBadge';
 import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 import { SplitButton } from '@/components/ui';
 import { menuItemStyle } from '@/components/workspace/MenuSurface';
-import { SessionManagePanel } from '@/components/session-management/SessionManagePanel';
 import { usePointerResize } from '@/lib/usePointerResize';
 import {
   SESSION_LIST_MAX_HEIGHT,
@@ -79,7 +81,6 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
   const [recent, setRecent] = useState<CreationSessionSummary[]>([]);
   const [drafts, setDrafts] = useState<LocalCreationEntry[]>([]);
   const [creating, setCreating] = useState(false);
-  const [managePanelOpen, setManagePanelOpen] = useState(false);
   // Null keeps the default 42%-of-rail height (globals.css) until a drag sets
   // an explicit px value. Seeded from a stored preference, or — the first
   // time this browser sees the panel — from its own rendered height, so the
@@ -236,7 +237,7 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
                 type="button"
                 role="menuitem"
                 style={menuItemStyle(false)}
-                onClick={() => { close(); setManagePanelOpen(true); }}
+                onClick={() => { close(); router.push('/create'); }}
               >
                 {t('manage')}
               </button>
@@ -312,7 +313,6 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
         {...resize}
       />
 
-      <SessionManagePanel open={managePanelOpen} onClose={() => { setManagePanelOpen(false); invalidateRecentCanvases(); void fetchRecentCanvases(currentProjectId).then(setRecent); }} />
     </div>
   );
 }

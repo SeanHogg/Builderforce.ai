@@ -24335,19 +24335,18 @@
     "bulkMergeConfirmTitle": "Merge these sessions?",
     "bulkMergeConfirmMessage": "{count} sessions will be added to “{target}” and then archived.",
     "bulkDeleteConfirmTitle": "Delete these sessions?",
-    "bulkDeleteConfirmMessage": "Delete {count} sessions? They remain recoverable during the retention period."
+    "bulkDeleteConfirmMessage": "Delete {count} sessions? They remain recoverable during the retention period.",
+    "project": "Projects",
+    "projectTitle": "Tied projects",
+    "projectDescription": "Tie this session to the projects it belongs to, or remove a tie.",
+    "done": "Done",
+    "projectsLabel": "Tied projects",
+    "projectsEmpty": "Not tied to a project yet.",
+    "tieToProject": "+ Tie to project",
+    "untieProject": "Remove {project}"
   },
   "canvasLibrary": {
     "pendingTitle": "Waiting to be saved",
-    "renameSession": "Rename session",
-    "moveSession": "Move to folder",
-    "moveSessionPrompt": "Folder name (leave blank to remove from its folder)",
-    "mergeSession": "Merge sessions",
-    "mergeSessionPrompt": "Enter the exact name of the session to merge into this one. Available: {sessions}",
-    "mergeSessionNotFound": "No session with that name was found.",
-    "mergeSessionConfirm": "Merge “{source}” into “{target}”? The source will be deleted from this browser.",
-    "deleteSession": "Delete session",
-    "deleteSessionConfirm": "Delete “{title}”? This cannot be undone.",
     "pendingHint": "These canvases are still held in this browser. Open one to save it to your workspace.",
     "untitled": "Untitled canvas",
     "signedOutSubtitle": "The boards you started in this browser. Sign in to keep them and to see everything your workspace has made.",
@@ -24433,25 +24432,6 @@
     "offlineRetry": "Offline · edits will retry",
     "reconnecting": "Reconnecting…",
     "connecting": "Connecting…"
-  },
-  "sessionManagePanel": {
-    "title": "Sessions & folders",
-    "allSessions": "All sessions",
-    "loading": "Loading…",
-    "emptySessions": "No sessions yet",
-    "renameFolderLabel": "Folder name",
-    "renameFolder": "Rename folder",
-    "deleteFolder": "Delete folder",
-    "deleteFolderTitle": "Delete folder?",
-    "deleteFolderMessage": "\"{name}\" will be removed. Sessions inside it become unfiled — nothing is deleted.",
-    "save": "Save",
-    "folderProjectLabel": "Project for {name}",
-    "noProject": "No project",
-    "newFolder": "New folder",
-    "sessionFolderLabel": "Folder for {title}",
-    "untieProject": "Remove {project}",
-    "tieToProjectLabel": "Tie {title} to a project",
-    "tieToProject": "+ Tie to project"
   },
   "shellPanel": {
     "crumb": "Workspace",
@@ -28446,5 +28426,23 @@
     "failed": "Could not join this canvas.",
     "loading": "Checking your invitation…",
     "workspaceUnavailable": "That workspace is not available."
+  },
+  "creationFolders": {
+    "label": "Folders",
+    "all": "All sessions",
+    "unfiled": "Unfiled",
+    "rename": "Rename folder",
+    "renameFolder": "Rename {name}",
+    "renameLabel": "Folder name",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete folder",
+    "deleteFolder": "Delete {name}",
+    "deleteTitle": "Delete folder?",
+    "deleteMessage": "\"{name}\" will be removed. Sessions inside it become unfiled — nothing is deleted.",
+    "newFolder": "New folder",
+    "add": "Add",
+    "noProject": "No project",
+    "folderProjectLabel": "Project for {name}"
   }
 }

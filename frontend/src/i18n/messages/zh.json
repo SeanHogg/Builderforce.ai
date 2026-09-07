@@ -24335,19 +24335,18 @@
     "bulkMergeConfirmTitle": "合并这些会话？",
     "bulkMergeConfirmMessage": "{count} 个会话将并入“{target}”，随后被归档。",
     "bulkDeleteConfirmTitle": "删除这些会话？",
-    "bulkDeleteConfirmMessage": "删除 {count} 个会话？在保留期内仍可恢复。"
+    "bulkDeleteConfirmMessage": "删除 {count} 个会话？在保留期内仍可恢复。",
+    "project": "项目",
+    "projectTitle": "关联的项目",
+    "projectDescription": "将此会话关联到它所属的项目，或移除关联。",
+    "done": "完成",
+    "projectsLabel": "关联的项目",
+    "projectsEmpty": "尚未关联任何项目。",
+    "tieToProject": "+ 关联到项目",
+    "untieProject": "移除 {project}"
   },
   "canvasLibrary": {
     "pendingTitle": "等待保存",
-    "renameSession": "重命名会话",
-    "moveSession": "移动到文件夹",
-    "moveSessionPrompt": "文件夹名称（留空即可移出文件夹）",
-    "mergeSession": "合并会话",
-    "mergeSessionPrompt": "输入要合并到此会话中的会话准确名称。可用会话：{sessions}",
-    "mergeSessionNotFound": "未找到该名称的会话。",
-    "mergeSessionConfirm": "将“{source}”合并到“{target}”吗？源会话将从此浏览器中删除。",
-    "deleteSession": "删除会话",
-    "deleteSessionConfirm": "删除“{title}”吗？此操作无法撤销。",
     "pendingHint": "这些画布仍保存在此浏览器中。打开其中一个即可将其保存到您的工作区。",
     "untitled": "未命名画布",
     "signedOutSubtitle": "你在此浏览器中创建的画板。登录后即可保存它们，并查看工作区中的全部内容。",
@@ -24433,25 +24432,6 @@
     "offlineRetry": "离线 · 将重试编辑",
     "reconnecting": "正在重新连接…",
     "connecting": "正在连接…"
-  },
-  "sessionManagePanel": {
-    "title": "会话与文件夹",
-    "allSessions": "所有会话",
-    "loading": "加载中……",
-    "emptySessions": "暂无会话",
-    "renameFolderLabel": "文件夹名称",
-    "renameFolder": "重命名文件夹",
-    "deleteFolder": "删除文件夹",
-    "deleteFolderTitle": "删除文件夹？",
-    "deleteFolderMessage": "将移除“{name}”。其中的会话会变为未归档状态——不会删除任何内容。",
-    "save": "保存",
-    "folderProjectLabel": "{name} 的项目",
-    "noProject": "无项目",
-    "newFolder": "新建文件夹",
-    "sessionFolderLabel": "{title} 的文件夹",
-    "untieProject": "移除 {project}",
-    "tieToProjectLabel": "将 {title} 关联到项目",
-    "tieToProject": "+ 关联到项目"
   },
   "shellPanel": {
     "crumb": "工作区",
@@ -28446,5 +28426,23 @@
     "failed": "无法加入此画布。",
     "loading": "正在检查你的邀请…",
     "workspaceUnavailable": "该工作区不可用。"
+  },
+  "creationFolders": {
+    "label": "文件夹",
+    "all": "所有会话",
+    "unfiled": "未归档",
+    "rename": "重命名文件夹",
+    "renameFolder": "重命名{name}",
+    "renameLabel": "文件夹名称",
+    "save": "保存",
+    "cancel": "取消",
+    "delete": "删除文件夹",
+    "deleteFolder": "删除{name}",
+    "deleteTitle": "删除文件夹？",
+    "deleteMessage": "将移除“{name}”。其中的会话会变为未归档状态——不会删除任何内容。",
+    "newFolder": "新建文件夹",
+    "add": "添加",
+    "noProject": "无项目",
+    "folderProjectLabel": "{name} 的项目"
   }
 }

@@ -33,8 +33,9 @@ interface Props {
   /** Reads a linked project's name; the tile never fetches one itself. */
   projectLabel: (projectId: number) => string;
   onOpen: () => void;
-  /** Clicking the folder chip filters the library to that folder, and clears it again. */
-  onFolderSelect: (folder: string) => void;
+  /** Clicking the folder chip filters the library to that folder, and clears it
+   *  again. The folder's ID, not its name — a rename must not drop the filter. */
+  onFolderSelect: (folderId: string) => void;
   folderActive: boolean;
   /** The session's own actions, rendered at the foot of the tile. */
   children?: ReactNode;
@@ -88,12 +89,12 @@ export function CreationSessionTile({ session, view, selected, onSelectedChange,
           {running > 0 && <span>{t('sessionRunning', { count: running })}</span>}
           <span>{fmt.date(session.lastActivityAt)}</span>
         </div>
-        {session.folderName && (
+        {session.folderName && session.folderId && (
           <button
             type="button"
             className={styles.folder}
             aria-pressed={folderActive}
-            onClick={(event) => { event.stopPropagation(); onFolderSelect(session.folderName!); }}
+            onClick={(event) => { event.stopPropagation(); onFolderSelect(session.folderId!); }}
           >
             <Icon name="folder" size={13} /> {session.folderName}
           </button>

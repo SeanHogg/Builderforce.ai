@@ -24335,19 +24335,18 @@
     "bulkMergeConfirmTitle": "Diese Sitzungen zusammenführen?",
     "bulkMergeConfirmMessage": "{count} Sitzungen werden zu „{target}“ hinzugefügt und danach archiviert.",
     "bulkDeleteConfirmTitle": "Diese Sitzungen löschen?",
-    "bulkDeleteConfirmMessage": "{count} Sitzungen löschen? Sie bleiben während der Aufbewahrungsfrist wiederherstellbar."
+    "bulkDeleteConfirmMessage": "{count} Sitzungen löschen? Sie bleiben während der Aufbewahrungsfrist wiederherstellbar.",
+    "project": "Projekte",
+    "projectTitle": "Verknüpfte Projekte",
+    "projectDescription": "Verknüpfe diese Sitzung mit den Projekten, zu denen sie gehört, oder löse eine Verknüpfung.",
+    "done": "Fertig",
+    "projectsLabel": "Verknüpfte Projekte",
+    "projectsEmpty": "Noch mit keinem Projekt verknüpft.",
+    "tieToProject": "+ Projekt zuordnen",
+    "untieProject": "{project} entfernen"
   },
   "canvasLibrary": {
     "pendingTitle": "Warten auf Speicherung",
-    "renameSession": "Sitzung umbenennen",
-    "moveSession": "In Ordner verschieben",
-    "moveSessionPrompt": "Ordnername (leer lassen, um aus dem Ordner zu entfernen)",
-    "mergeSession": "Sitzungen zusammenführen",
-    "mergeSessionPrompt": "Gib den genauen Namen der Sitzung ein, die hier zusammengeführt werden soll. Verfügbar: {sessions}",
-    "mergeSessionNotFound": "Keine Sitzung mit diesem Namen gefunden.",
-    "mergeSessionConfirm": "„{source}“ mit „{target}“ zusammenführen? Die Quelle wird aus diesem Browser gelöscht.",
-    "deleteSession": "Sitzung löschen",
-    "deleteSessionConfirm": "„{title}“ löschen? Dies kann nicht rückgängig gemacht werden.",
     "pendingHint": "Diese Canvas liegen noch in diesem Browser. Öffne eines, um es in deinem Workspace zu speichern.",
     "untitled": "Unbenanntes Canvas",
     "signedOutSubtitle": "Die Boards, die du in diesem Browser begonnen hast. Melde dich an, um sie zu behalten und alles zu sehen, was dein Workspace erstellt hat.",
@@ -24433,25 +24432,6 @@
     "offlineRetry": "Offline · Änderungen werden erneut versucht",
     "reconnecting": "Verbindung wird wiederhergestellt…",
     "connecting": "Verbindung wird hergestellt…"
-  },
-  "sessionManagePanel": {
-    "title": "Sitzungen & Ordner",
-    "allSessions": "Alle Sitzungen",
-    "loading": "Wird geladen …",
-    "emptySessions": "Noch keine Sitzungen",
-    "renameFolderLabel": "Ordnername",
-    "renameFolder": "Ordner umbenennen",
-    "deleteFolder": "Ordner löschen",
-    "deleteFolderTitle": "Ordner löschen?",
-    "deleteFolderMessage": "„{name}“ wird entfernt. Sitzungen darin werden nicht abgelegt – nichts wird gelöscht.",
-    "save": "Speichern",
-    "folderProjectLabel": "Projekt für {name}",
-    "noProject": "Kein Projekt",
-    "newFolder": "Neuer Ordner",
-    "sessionFolderLabel": "Ordner für {title}",
-    "untieProject": "{project} entfernen",
-    "tieToProjectLabel": "{title} einem Projekt zuordnen",
-    "tieToProject": "+ Projekt zuordnen"
   },
   "shellPanel": {
     "crumb": "Workspace",
@@ -28446,5 +28426,23 @@
     "failed": "Diese Canvas konnte nicht betreten werden.",
     "loading": "Einladung wird geprüft…",
     "workspaceUnavailable": "Dieser Workspace ist nicht verfügbar."
+  },
+  "creationFolders": {
+    "label": "Ordner",
+    "all": "Alle Sitzungen",
+    "unfiled": "Nicht abgelegt",
+    "rename": "Ordner umbenennen",
+    "renameFolder": "{name} umbenennen",
+    "renameLabel": "Ordnername",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "delete": "Ordner löschen",
+    "deleteFolder": "{name} löschen",
+    "deleteTitle": "Ordner löschen?",
+    "deleteMessage": "„{name}“ wird entfernt. Sitzungen darin werden nicht abgelegt – nichts wird gelöscht.",
+    "newFolder": "Neuer Ordner",
+    "add": "Hinzufügen",
+    "noProject": "Kein Projekt",
+    "folderProjectLabel": "Projekt für {name}"
   }
 }

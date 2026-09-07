@@ -24335,19 +24335,18 @@
     "bulkMergeConfirmTitle": "¿Combinar estas sesiones?",
     "bulkMergeConfirmMessage": "Se añadirán {count} sesiones a «{target}» y después se archivarán.",
     "bulkDeleteConfirmTitle": "¿Eliminar estas sesiones?",
-    "bulkDeleteConfirmMessage": "¿Eliminar {count} sesiones? Se pueden recuperar durante el periodo de retención."
+    "bulkDeleteConfirmMessage": "¿Eliminar {count} sesiones? Se pueden recuperar durante el periodo de retención.",
+    "project": "Proyectos",
+    "projectTitle": "Proyectos vinculados",
+    "projectDescription": "Vincula esta sesión a los proyectos a los que pertenece, o quita un vínculo.",
+    "done": "Listo",
+    "projectsLabel": "Proyectos vinculados",
+    "projectsEmpty": "Todavía no está vinculada a ningún proyecto.",
+    "tieToProject": "+ Vincular a un proyecto",
+    "untieProject": "Quitar {project}"
   },
   "canvasLibrary": {
     "pendingTitle": "Pendientes de guardar",
-    "renameSession": "Renombrar sesión",
-    "moveSession": "Mover a carpeta",
-    "moveSessionPrompt": "Nombre de la carpeta (déjalo vacío para quitarla de la carpeta)",
-    "mergeSession": "Combinar sesiones",
-    "mergeSessionPrompt": "Escribe el nombre exacto de la sesión que quieres combinar con esta. Disponibles: {sessions}",
-    "mergeSessionNotFound": "No se encontró ninguna sesión con ese nombre.",
-    "mergeSessionConfirm": "¿Combinar «{source}» con «{target}»? La sesión de origen se eliminará de este navegador.",
-    "deleteSession": "Eliminar sesión",
-    "deleteSessionConfirm": "¿Eliminar «{title}»? Esta acción no se puede deshacer.",
     "pendingHint": "Estos lienzos siguen guardados en este navegador. Abre uno para guardarlo en tu espacio de trabajo.",
     "untitled": "Lienzo sin título",
     "signedOutSubtitle": "Los tableros que empezaste en este navegador. Inicia sesión para conservarlos y ver todo lo que ha creado tu espacio de trabajo.",
@@ -24433,25 +24432,6 @@
     "offlineRetry": "Sin conexión · se reintentarán los cambios",
     "reconnecting": "Reconectando…",
     "connecting": "Conectando…"
-  },
-  "sessionManagePanel": {
-    "title": "Sesiones y carpetas",
-    "allSessions": "Todas las sesiones",
-    "loading": "Cargando…",
-    "emptySessions": "Aún no hay sesiones",
-    "renameFolderLabel": "Nombre de la carpeta",
-    "renameFolder": "Cambiar nombre de la carpeta",
-    "deleteFolder": "Eliminar carpeta",
-    "deleteFolderTitle": "¿Eliminar carpeta?",
-    "deleteFolderMessage": "Se eliminará \"{name}\". Las sesiones que contiene quedarán sin archivar; no se elimina nada.",
-    "save": "Guardar",
-    "folderProjectLabel": "Proyecto de {name}",
-    "noProject": "Sin proyecto",
-    "newFolder": "Nueva carpeta",
-    "sessionFolderLabel": "Carpeta de {title}",
-    "untieProject": "Quitar {project}",
-    "tieToProjectLabel": "Vincular {title} a un proyecto",
-    "tieToProject": "+ Vincular a un proyecto"
   },
   "shellPanel": {
     "crumb": "Espacio de trabajo",
@@ -28446,5 +28426,23 @@
     "failed": "No se pudo unir a este lienzo.",
     "loading": "Comprobando tu invitación…",
     "workspaceUnavailable": "Ese espacio de trabajo no está disponible."
+  },
+  "creationFolders": {
+    "label": "Carpetas",
+    "all": "Todas las sesiones",
+    "unfiled": "Sin archivar",
+    "rename": "Cambiar nombre de la carpeta",
+    "renameFolder": "Cambiar el nombre de {name}",
+    "renameLabel": "Nombre de la carpeta",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "delete": "Eliminar carpeta",
+    "deleteFolder": "Eliminar {name}",
+    "deleteTitle": "¿Eliminar carpeta?",
+    "deleteMessage": "Se eliminará \"{name}\". Las sesiones que contiene quedarán sin archivar; no se elimina nada.",
+    "newFolder": "Nueva carpeta",
+    "add": "Añadir",
+    "noProject": "Sin proyecto",
+    "folderProjectLabel": "Proyecto de {name}"
   }
 }

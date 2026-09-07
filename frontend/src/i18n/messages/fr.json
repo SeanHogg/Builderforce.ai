@@ -24335,19 +24335,18 @@
     "bulkMergeConfirmTitle": "Fusionner ces sessions ?",
     "bulkMergeConfirmMessage": "{count} sessions seront ajoutées à « {target} », puis archivées.",
     "bulkDeleteConfirmTitle": "Supprimer ces sessions ?",
-    "bulkDeleteConfirmMessage": "Supprimer {count} sessions ? Elles restent récupérables pendant la période de rétention."
+    "bulkDeleteConfirmMessage": "Supprimer {count} sessions ? Elles restent récupérables pendant la période de rétention.",
+    "project": "Projets",
+    "projectTitle": "Projets liés",
+    "projectDescription": "Liez cette session aux projets auxquels elle appartient, ou retirez un lien.",
+    "done": "Terminé",
+    "projectsLabel": "Projets liés",
+    "projectsEmpty": "Pas encore liée à un projet.",
+    "tieToProject": "+ Associer à un projet",
+    "untieProject": "Retirer {project}"
   },
   "canvasLibrary": {
     "pendingTitle": "En attente d’enregistrement",
-    "renameSession": "Renommer la session",
-    "moveSession": "Déplacer dans un dossier",
-    "moveSessionPrompt": "Nom du dossier (laisser vide pour retirer du dossier)",
-    "mergeSession": "Fusionner les sessions",
-    "mergeSessionPrompt": "Saisissez le nom exact de la session à fusionner dans celle-ci. Disponibles : {sessions}",
-    "mergeSessionNotFound": "Aucune session ne porte ce nom.",
-    "mergeSessionConfirm": "Fusionner « {source} » dans « {target} » ? La source sera supprimée de ce navigateur.",
-    "deleteSession": "Supprimer la session",
-    "deleteSessionConfirm": "Supprimer « {title} » ? Cette action est irréversible.",
     "pendingHint": "Ces canevas sont encore conservés dans ce navigateur. Ouvrez-en un pour l’enregistrer dans votre espace de travail.",
     "untitled": "Canevas sans titre",
     "signedOutSubtitle": "Les tableaux que vous avez commencés dans ce navigateur. Connectez-vous pour les conserver et voir tout ce que votre espace de travail a créé.",
@@ -24433,25 +24432,6 @@
     "offlineRetry": "Hors ligne · les modifications seront réessayées",
     "reconnecting": "Reconnexion…",
     "connecting": "Connexion…"
-  },
-  "sessionManagePanel": {
-    "title": "Sessions et dossiers",
-    "allSessions": "Toutes les sessions",
-    "loading": "Chargement…",
-    "emptySessions": "Aucune session pour l'instant",
-    "renameFolderLabel": "Nom du dossier",
-    "renameFolder": "Renommer le dossier",
-    "deleteFolder": "Supprimer le dossier",
-    "deleteFolderTitle": "Supprimer le dossier ?",
-    "deleteFolderMessage": "« {name} » sera supprimé. Les sessions qu'il contient deviennent non classées — rien n'est supprimé.",
-    "save": "Enregistrer",
-    "folderProjectLabel": "Projet pour {name}",
-    "noProject": "Aucun projet",
-    "newFolder": "Nouveau dossier",
-    "sessionFolderLabel": "Dossier pour {title}",
-    "untieProject": "Retirer {project}",
-    "tieToProjectLabel": "Associer {title} à un projet",
-    "tieToProject": "+ Associer à un projet"
   },
   "shellPanel": {
     "crumb": "Espace de travail",
@@ -28446,5 +28426,23 @@
     "failed": "Impossible de rejoindre ce canevas.",
     "loading": "Vérification de votre invitation…",
     "workspaceUnavailable": "Cet espace de travail n’est pas disponible."
+  },
+  "creationFolders": {
+    "label": "Dossiers",
+    "all": "Toutes les sessions",
+    "unfiled": "Non classé",
+    "rename": "Renommer le dossier",
+    "renameFolder": "Renommer {name}",
+    "renameLabel": "Nom du dossier",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer le dossier",
+    "deleteFolder": "Supprimer {name}",
+    "deleteTitle": "Supprimer le dossier ?",
+    "deleteMessage": "« {name} » sera supprimé. Les sessions qu'il contient deviennent non classées — rien n'est supprimé.",
+    "newFolder": "Nouveau dossier",
+    "add": "Ajouter",
+    "noProject": "Aucun projet",
+    "folderProjectLabel": "Projet pour {name}"
   }
 }
