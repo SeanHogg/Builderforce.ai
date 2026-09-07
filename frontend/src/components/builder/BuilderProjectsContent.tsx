@@ -9,6 +9,7 @@ import { useToast } from '@/components/ToastProvider';
 import { listIdeProjects, deleteIdeProject } from '@/lib/api';
 import { persistLastProjectId } from '@/lib/auth';
 import { creationSessionsApi } from '@/lib/builderforceApi';
+import { openedBoardHref } from '@/lib/openedBoardHref';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import type { IdeProject } from '@/lib/types';
 import { BuilderProjectCard } from '@/components/BuilderProjectCard';
@@ -67,7 +68,7 @@ export function BuilderProjectsContent({
     persistLastProjectId(String(p.storageProjectId));
     try {
       const opened = await creationSessionsApi.openIdeProject(p.id);
-      router.push(`/create/${opened.sessionId}?focus=${opened.objectId}&build=1`);
+      router.push(openedBoardHref(opened, { build: '1' }));
       onNavigate?.();
     } catch {
       router.push('/create?filter=build');

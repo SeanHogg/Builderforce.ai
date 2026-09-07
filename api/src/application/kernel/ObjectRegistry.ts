@@ -499,26 +499,52 @@ export async function revokeShareLink(db: Db, env: Env, tenantId: number, object
 }
 
 /**
- * Resolve a raw share token to the object it grants access to.
+ * The live row behind a raw share token, or null.
  *
  * One expiry policy and one use-count check, applied here so a caller cannot
  * accidentally honour an expired link by forgetting one of the three conditions.
  * Deliberately NOT cached: a revocation has to take effect on the next request,
  * and a cache is how a revoked link keeps working for a TTL.
  */
-export async function resolveShareToken(
-  db: Db,
-  token: string,
-): Promise<{ tenantId: number; objectId: string; scope: string } | null> {
+async function liveShareRow(db: Db, token: string) {
   const [row] = await db
     .select()
     .from(shareLinks)
     .where(eq(shareLinks.tokenHash, await hashToken(token)))
     .limit(1);
   if (!row) return null;
+  // THE three conditions, written once. `peekShareToken` and `resolveShareToken`
+  // differ only in whether they spend a use; a second copy of this test is how a
+  // preview screen comes to advertise a link the claim behind it then refuses.
   if (row.revokedAt) return null;
   if (row.expiresAt && row.expiresAt <= new Date()) return null;
   if (row.maxUses != null && row.useCount >= row.maxUses) return null;
+  return row;
+}
+
+/**
+ * Read what a share token grants WITHOUT spending one of its uses.
+ *
+ * A link that has to be described before it is accepted — "you have been invited to
+ * <board>, join as a guest or sign in" — is read once to render that screen and once
+ * more when the person actually decides. Charging the first read against `maxUses`
+ * would let a preview burn a single-use link that nobody ever claimed.
+ */
+export async function peekShareToken(
+  db: Db,
+  token: string,
+): Promise<{ tenantId: number; objectId: string; scope: string } | null> {
+  const row = await liveShareRow(db, token);
+  return row ? { tenantId: row.tenantId, objectId: row.objectId, scope: row.scope } : null;
+}
+
+/** Resolve a raw share token to the object it grants access to, SPENDING one use. */
+export async function resolveShareToken(
+  db: Db,
+  token: string,
+): Promise<{ tenantId: number; objectId: string; scope: string } | null> {
+  const row = await liveShareRow(db, token);
+  if (!row) return null;
 
   // Scoped by the tenant the row itself reported, not by one the caller supplied —
   // a share token has no session and therefore no tenant context, which is the

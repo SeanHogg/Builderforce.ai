@@ -1802,7 +1802,10 @@
     "done": "Fertig",
     "keepYourWork": "Arbeit behalten",
     "yes": "Ja",
-    "no": "Nein"
+    "no": "Nein",
+    "copyLink": "Link kopieren",
+    "copyFallback": "Kopiere diesen Link von Hand – die Zwischenablage ist nicht verfügbar.",
+    "unavailable": "Nicht verfügbar"
   },
   "prdCreate": {
     "title": "Neues PRD",
@@ -14626,9 +14629,6 @@
     "emptyBody": "Alle hier sprechen mit demselben Brain und sehen denselben Verlauf. Teile den Link, um weitere Personen dazuzuholen, oder schalte deine Kamera ein und trefft euch.",
     "invitePeople": "Personen einladen",
     "starting": "Wird gestartet…",
-    "copyInvite": "Einladungslink kopieren",
-    "linkCopied": "Link kopiert",
-    "copyFallback": "Kopiere diesen Einladungslink:",
     "roomFull": "Sitzung ist voll",
     "startVideo": "Video starten",
     "stopVideo": "Video beenden",
@@ -22705,11 +22705,23 @@
     "founderMetricRefreshed": "Kennzahl aktualisiert: {title}",
     "founderTriggerEvaluated": "Auslöser ausgewertet: {title}",
     "sessionActionCluster": {
-      "run": "Diese Leinwand ausführen",
+      "run": "Workflow ausführen",
       "history": "Leinwandverlauf",
       "inspect": "Leinwand-Werkzeuge",
       "live": "Live und Aufnahme",
       "session": "Teilen und veröffentlichen"
+    },
+    "barGroup": {
+      "run": "Workflow",
+      "history": "Verlauf",
+      "inspect": "Werkzeuge",
+      "live": "Live",
+      "session": "Teilen",
+      "view": "Ansicht",
+      "add": "Hinzufügen",
+      "people": "Personen",
+      "peopleLabel": "Personen auf dieser Leinwand",
+      "handoffLabel": "Veröffentlichen und weitere Aktionen"
     },
     "moreMenuSessionActions": "Diese Leinwand",
     "templateCategoryAutomation": "Automatisierungen",
@@ -23543,7 +23555,23 @@
     "exportUnmaskedColumns": "Export abgelehnt: {columns} enthalten unmaskierte personenbezogene Daten. Maskieren Sie sie zuerst auf der Karte.",
     "approveAgentActionTitle": "Agentenaktion genehmigen",
     "approveAgentActionBody": "Ein Sitzungsagent möchte {action} ausführen.",
-    "approveAgentActionConfirm": "Genehmigen"
+    "approveAgentActionConfirm": "Genehmigen",
+    "inviteLinkHeading": "Per Link einladen",
+    "inviteLinkHint": "Wer den Link hat, kann diese Canvas öffnen – auch ohne ein Konto anzulegen.",
+    "inviteLinkRole": "Zugriff, den dieser Link gewährt",
+    "inviteLinkCreate": "Link erstellen",
+    "inviteLinkCreating": "Wird erstellt…",
+    "inviteLinkCopyNow": "Jetzt kopieren – ein Link wird nur einmal angezeigt.",
+    "inviteLinkActive": "Aktive Links",
+    "inviteLinkUses": "{count} mal genutzt",
+    "inviteLinkRevoke": "Link widerrufen",
+    "inviteLinkRevoked": "Einladungslink widerrufen",
+    "inviteLinkFailed": "Einladungslink konnte nicht erstellt werden",
+    "inviteLinkRevokeFailed": "Dieser Link konnte nicht widerrufen werden",
+    "inviteLinkAriaLabel": "Einladungslink zur Canvas",
+    "guestNoticeTitle": "Du bist als Gast hier",
+    "guestNoticeBody": "Alles, was du auf dieser Canvas tust, wird gespeichert. Lege ein Konto an, um einen eigenen Workspace zu erhalten.",
+    "guestNoticeCta": "Konto anlegen"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",
@@ -28356,5 +28384,24 @@
       "headerHint": "Verschlüsselt gespeichert und nie wieder angezeigt. Beide leer lassen, wenn der Collector keine Zugangsdaten braucht.",
       "add": "Collector hinzufügen"
     }
+  },
+  "canvasJoin": {
+    "title": "Du wurdest eingeladen",
+    "invitedTo": "Du wurdest zu {title} eingeladen",
+    "accessViewer": "Du kannst diese Canvas ansehen.",
+    "accessCommenter": "Du kannst diese Canvas kommentieren.",
+    "accessEditor": "Du kannst diese Canvas bearbeiten.",
+    "nameLabel": "Dein Name",
+    "namePlaceholder": "Wie sollen dich andere sehen?",
+    "joinAsGuest": "Ohne Konto beitreten",
+    "joinAsMember": "Als {name} beitreten",
+    "joining": "Beitreten…",
+    "guestNote": "Keine Anmeldung, kein Passwort. Du kannst später ein Konto anlegen.",
+    "signInInstead": "Stattdessen anmelden",
+    "createAccount": "Konto anlegen",
+    "invalid": "Dieser Einladungslink ist ungültig, abgelaufen oder wurde widerrufen.",
+    "failed": "Diese Canvas konnte nicht betreten werden.",
+    "loading": "Einladung wird geprüft…",
+    "workspaceUnavailable": "Dieser Workspace ist nicht verfügbar."
   }
 }

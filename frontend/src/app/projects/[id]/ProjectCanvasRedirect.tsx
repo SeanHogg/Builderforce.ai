@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { fetchProjects } from '@/lib/api';
 import { creationSessionsApi } from '@/lib/builderforceApi';
+import { openedBoardHref } from '@/lib/openedBoardHref';
 
 /**
  * A Project opens as live context in the user's most recent Creation Session.
@@ -23,7 +24,7 @@ export function ProjectCanvasRedirect({ id }: { id: string }) {
       const project = projects.find((candidate) => String(candidate.id) === id || String(candidate.publicId ?? '') === id);
       if (!project) throw new Error('Project not found');
       return creationSessionsApi.openProject(project.id);
-    }).then(({ sessionId, objectId }) => { if (active) router.replace(`/create/${sessionId}?focus=${objectId}`); })
+    }).then((opened) => { if (active) router.replace(openedBoardHref(opened)); })
       .catch(() => { if (active) router.replace('/projects'); });
     return () => { active = false; };
   }, [id, router]);

@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { fetchIdeProjectByStorage, fetchProject } from '@/lib/api';
 import { creationSessionsApi } from '@/lib/builderforceApi';
+import { openedBoardHref } from '@/lib/openedBoardHref';
 
 /** Resolve a legacy storage-project reference into its Builder object on Canvas. */
 export function BuildCanvasRedirect({ projectRef }: { projectRef: string }) {
@@ -18,12 +19,12 @@ export function BuildCanvasRedirect({ projectRef }: { projectRef: string }) {
       .then((build) => creationSessionsApi.openIdeProject(build.id))
       .then((opened) => {
         if (cancelled) return;
-        const next = new URLSearchParams({ focus: opened.objectId, build: '1' });
-        for (const key of ['prompt', 'chat', 'ticket'] as const) {
-          const value = searchParams.get(key);
-          if (value) next.set(key, value);
-        }
-        router.replace(`/create/${opened.sessionId}?${next.toString()}`);
+        router.replace(openedBoardHref(opened, {
+          build: '1',
+          prompt: searchParams.get('prompt'),
+          chat: searchParams.get('chat'),
+          ticket: searchParams.get('ticket'),
+        }));
       })
       .catch(() => {
         if (!cancelled) router.replace('/create?filter=build');

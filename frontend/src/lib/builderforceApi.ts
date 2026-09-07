@@ -9401,6 +9401,62 @@ export interface CreationSnapshot extends CreationSnapshotSummary { graph: { obj
 export interface CreationTemplate { id: string; name: string; description: string | null; category: string; visibility: 'private' | 'tenant'; graph: CreationGraphInput; createdBy: string | null; updatedAt: string }
 export interface CreationSessionInvitation { id: string; email: string; role: CreationSessionSummary['role']; expiresAt: string; acceptedAt: string | null; revokedAt: string | null; createdAt: string }
 
+/** What a canvas invite LINK grants. Three of the five board roles: `runner` spends the
+ *  workspace's tokens and `owner` can give the board away, so neither may travel in a URL. */
+export type CanvasInviteLinkRole = 'viewer' | 'commenter' | 'editor';
+
+export interface CanvasInviteLink {
+  id: string;
+  role: CanvasInviteLinkRole;
+  expiresAt: string | null;
+  maxUses: number | null;
+  useCount: number;
+  lastUsedAt: string | null;
+  createdAt: string;
+}
+
+/** The mint response — the one and only time the token and the path exist. */
+export interface MintedCanvasInviteLink extends CanvasInviteLink {
+  token: string;
+  joinPath: string;
+}
+
+export interface CanvasJoinTarget {
+  title: string;
+  role: CanvasInviteLinkRole;
+}
+
+export interface CanvasJoinResult {
+  sessionId: string;
+  tenantId: number;
+  title: string;
+  role: CanvasInviteLinkRole;
+  /** The link had already been taken by this account — a reload, or a bookmark. */
+  alreadyMember: boolean;
+}
+
+export interface CanvasGuestJoinResult extends CanvasJoinResult {
+  /** A real web session for the passwordless identity the claim minted. */
+  token: string;
+  user: { id: string; email: string; name: string; accountType: 'guest'; accountTypeSelected: true; hasPassword: false };
+}
+
+/**
+ * Taking a canvas invite link. UNAUTHENTICATED by design — `preview` and `joinAsGuest`
+ * are the only two calls in this client that carry no credential at all, because the
+ * whole point is the person who has refused to make an account. `joinWithAccount` is
+ * the same link taken by somebody who already has a session.
+ */
+export const canvasJoinApi = {
+  preview: (token: string) => apiRequest<CanvasJoinTarget>(`/api/canvas-join/${encodeURIComponent(token)}`, { auth: 'none' }),
+  joinAsGuest: (token: string, displayName: string) =>
+    apiRequest<CanvasGuestJoinResult>(`/api/canvas-join/${encodeURIComponent(token)}/guest`, {
+      method: 'POST', auth: 'none', body: JSON.stringify({ displayName }),
+    }),
+  joinWithAccount: (token: string) =>
+    webRequest<CanvasJoinResult>(`/api/canvas-join/${encodeURIComponent(token)}/account`, { method: 'POST', body: '{}' }),
+};
+
 export const creationSessionsApi = {
   list: (status: 'active' | 'archived' = 'active', projectId?: number | null, page?: { offset: number; limit: number }): Promise<{ sessions: CreationSessionSummary[]; hasMore: boolean }> => {
     const params = new URLSearchParams({ status });
@@ -9466,6 +9522,18 @@ export const creationSessionsApi = {
   },
   invite: (id: string, invitee: { userId?: string; email?: string }, role: CreationSessionSummary['role'] = 'editor') =>
     request<{ userId: string; role: string; emailSent?: boolean } | { invitationId: string; email: string; role: string; expiresAt: string; acceptPath: string; emailSent?: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/invite`, { method: 'POST', body: JSON.stringify({ ...invitee, role }) }),
+  /**
+   * INVITE LINKS — the unaddressed half of sharing a board. `create` is the only
+   * moment the raw token exists (only its hash is stored), which is why the list
+   * cannot rebuild a URL and offers revoke-and-remint instead.
+   */
+  inviteLinks: {
+    list: (id: string) => request<{ links: CanvasInviteLink[] }>(`/api/creation-sessions/${encodeURIComponent(id)}/invite-links`),
+    create: (id: string, body: { role: CanvasInviteLinkRole; expiresInHours?: number | null; maxUses?: number | null }) =>
+      request<MintedCanvasInviteLink>(`/api/creation-sessions/${encodeURIComponent(id)}/invite-links`, { method: 'POST', body: JSON.stringify(body) }),
+    revoke: (id: string, linkId: string) =>
+      request<void>(`/api/creation-sessions/${encodeURIComponent(id)}/invite-links/${encodeURIComponent(linkId)}`, { method: 'DELETE' }),
+  },
   invitations: {
     accept: (token: string) => request<{ sessionId: string; role: CreationSessionSummary['role'] }>(`/api/creation-sessions/invitations/${encodeURIComponent(token)}/accept`, { method: 'POST', body: '{}' }),
     acceptWithAccount: (token: string) => webRequest<{ sessionId: string; tenantId: number; role: CreationSessionSummary['role'] }>(`/api/tenants/creation-invitations/${encodeURIComponent(token)}/accept`, { method: 'POST', body: '{}' }),
@@ -9500,8 +9568,11 @@ export const creationSessionsApi = {
     remove: (templateId: string) => request<void>(`/api/creation-sessions/templates/${encodeURIComponent(templateId)}`, { method: 'DELETE' }),
     apply: (id: string, templateId: string, revision: number) => request<{ revision: number; objectIds: string[] }>(`/api/creation-sessions/${encodeURIComponent(id)}/templates/${encodeURIComponent(templateId)}/apply`, { method: 'POST', headers: { 'If-Match': String(revision) }, body: '{}' }),
   },
+  /** `objectId` is NULL for a board that BECAME this project: conversion writes the
+   *  identity link and no project card, and that board still outranks any other.
+   *  Build the URL with `openedBoardHref` rather than interpolating a `focus`. */
   openProject: (projectId: number) =>
-    request<{ sessionId: string; objectId: string; created: boolean }>(`/api/creation-sessions/projects/${projectId}/open`, { method: 'POST' }),
+    request<{ sessionId: string; objectId: string | null; created: boolean }>(`/api/creation-sessions/projects/${projectId}/open`, { method: 'POST' }),
   openIdeProject: (ideProjectId: number) =>
     request<{ sessionId: string; objectId: string; created: boolean }>(`/api/creation-sessions/ide-projects/${ideProjectId}/open`, { method: 'POST' }),
   expandProject: (id: string, projectId: number, lens: 'everything' | 'delivery' | 'metrics' | 'customer-feedback' = 'everything') =>

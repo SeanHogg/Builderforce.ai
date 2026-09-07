@@ -150,6 +150,8 @@ import { createSpecRoutes }         from './presentation/routes/specRoutes';
 import { createWorkflowRoutes }     from './presentation/routes/workflowRoutes';
 import { createWorkflowDefinitionRoutes } from './presentation/routes/workflowDefinitionRoutes';
 import { createCreationSessionRoutes } from './presentation/routes/creationSessionRoutes';
+import { createCanvasInviteLinkRoutes } from './presentation/routes/canvasInviteLinkRoutes';
+import { createCanvasJoinRoutes } from './presentation/routes/canvasJoinRoutes';
 import { createCreationSessionFolderRoutes } from './application/creation/creationSessionFolderRouteService';
 import { createPublicResumeRoutes } from './presentation/routes/publicResumeRoutes';
 import { createPublicProspectRoutes } from './presentation/routes/publicProspectRoutes';
@@ -965,7 +967,15 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Mounted before the broader '/api/creation-sessions' below so the more
   // specific '/folders' path can't be shadowed by that router's own '/:id'.
   app.route('/api/creation-sessions/folders', createCreationSessionFolderRoutes(db));
+  // Invite LINKS, mounted ahead of the broad canvas router for the same reason
+  // '/folders' is: sharing is its own reason to change, and it must not be reached
+  // through that router's '/:id' catch-alls. See `canvasInviteLinkRoutes.ts`.
+  app.route('/api/creation-sessions', createCanvasInviteLinkRoutes(db));
   app.route('/api/creation-sessions', createCreationSessionRoutes(db));
+  // The invitee's half of a canvas invite link, INCLUDING the person who declines to
+  // sign up. Unauthenticated by design and therefore never behind `authMiddleware` —
+  // it is the one door into the product that a person with no account can open.
+  app.route('/api/canvas-join', createCanvasJoinRoutes(db));
   app.route('/api/public/resumes', createPublicResumeRoutes((token) => resolvePublicResume(db, token)));
   // The seller's half of the sell motion: read a call, assemble a trust packet, provision
   // a trial, hand the board off on close. Addressed by board id but owned by the revenue

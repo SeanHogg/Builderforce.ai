@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { brain, creationSessionFoldersApi, creationSessionsApi, workflowDefinitions, type BrainChat, type CreationSessionSummary, type WorkflowDefinitionSummary } from '@/lib/builderforceApi';
+import { openedBoardHref } from '@/lib/openedBoardHref';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
 import { fetchProjects, listIdeProjects, listMyAgents } from '@/lib/api';
@@ -225,23 +226,23 @@ export function DashboardCreationSessions() {
   const visible = [...sessions].filter((session) => !searchParams.get('filter') || session.preview?.kinds?.includes(searchParams.get('filter')!)).sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned));
   const openBuild = async (build: IdeProject) => {
     const result = await creationSessionsApi.openIdeProject(build.id);
-    router.push(`/create/${result.sessionId}?focus=${result.objectId}&build=1`);
+    router.push(openedBoardHref(result, { build: '1' }));
   };
   const openWorkflow = async (workflow: WorkflowDefinitionSummary) => {
     const result = await creationSessionsApi.openResource('workflow', workflow.id);
-    router.push(`/create/${result.sessionId}?focus=${result.objectId}`);
+    router.push(openedBoardHref(result));
   };
   const openChat = async (chat: BrainChat) => {
     const result = await creationSessionsApi.openResource('chat', chat.id);
-    router.push(`/create/${result.sessionId}?focus=${result.objectId}`);
+    router.push(openedBoardHref(result));
   };
   const openProject = async (project: Project) => {
     const result = await creationSessionsApi.openProject(project.id);
-    router.push(`/create/${result.sessionId}?focus=${result.objectId}`);
+    router.push(openedBoardHref(result));
   };
   const openAgent = async (agent: PublishedAgent) => {
     const result = await creationSessionsApi.openResource('agent', agent.id);
-    router.push(`/create/${result.sessionId}?focus=${result.objectId}`);
+    router.push(openedBoardHref(result));
   };
   const visibleBuilds = builds.filter((build) => !query.trim() || `${build.name} ${build.modality} ${build.containerName || ''}`.toLowerCase().includes(query.trim().toLowerCase()));
   const visibleWorkflows = workflows.filter((workflow) => !query.trim() || `${workflow.name} ${workflow.description || ''} ${workflow.projectName || ''}`.toLowerCase().includes(query.trim().toLowerCase()));

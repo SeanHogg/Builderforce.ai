@@ -13,10 +13,12 @@ export interface AuthUser {
   /** When true, user can access Platform Admin (/admin). */
   isSuperadmin?: boolean;
   /** Account-type discriminator. 'freelancer' = a restricted gig/for-hire account
-   *  that sees only the Profile / Find Work / Timecard shell; 'standard' (or
-   *  undefined) = the full builder app. Sourced from the web JWT `act` claim /
-   *  /api/auth/me. */
-  accountType?: 'standard' | 'freelancer' | 'sales';
+   *  that sees only the Profile / Find Work / Timecard shell; 'guest' = a passwordless
+   *  identity minted by claiming a canvas invite link (see
+   *  `api/application/creation/canvasGuestAccount.ts`) — a real member of the board they
+   *  were invited to and nothing else; 'standard' (or undefined) = the full builder app.
+   *  Sourced from the web JWT `act` claim / /api/auth/me. */
+  accountType?: 'standard' | 'freelancer' | 'sales' | 'guest';
   /** True once the user has EXPLICITLY chosen Build vs Hired. False/undefined for an
    *  OAuth/magic-link account that was auto-provisioned and hasn't picked a role yet —
    *  the onboarding gate forces the one-time choice. From /api/auth/me. */

@@ -41,12 +41,14 @@
  * publish fills it in.
  */
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
   SESSION_PROJECT_LINK_APP,
   SESSION_PROJECT_LINK_REFERENCE,
+  creationSessionMembers,
+  creationSessionObjects,
   creationSessionProjectLinks,
   creationSessions,
   projectSites,
@@ -199,6 +201,82 @@ export async function cachedAppForSession(
     sessionAppCacheKey(sessionId),
     () => appForSession(db, tenantId, sessionId),
   );
+}
+
+/** The board that BECAME a project, from the project's side. */
+export interface AppSessionForProject {
+  sessionId: string;
+  /**
+   * The project's own object card on that board, when it has one. NULL is the
+   * ordinary case for a converted board: conversion claims an address and writes
+   * the identity link, it does not place a card. Callers that focus an object
+   * must therefore treat this as optional rather than interpolating it.
+   */
+  objectId: string | null;
+}
+
+/**
+ * THE BOARD THIS PROJECT CAME FROM — the reverse of {@link appForSession}.
+ *
+ * ── THE BUG THIS EXISTS TO KILL ──────────────────────────────────────────────
+ * `POST /api/creation-sessions/projects/:projectId/open` — the only way into a
+ * project, because `/projects/:id` redirects through it — resolved "which board
+ * is this project's" by looking for a board carrying a `project` OBJECT CARD for
+ * it. Conversion writes no card. So the board that had just become the project
+ * was invisible to that lookup, the route fell through to its create branch, and
+ * a person who pressed "Make this a project" and then opened it landed on a
+ * BRAND NEW EMPTY BOARD — every object they had built appearing to be gone.
+ *
+ * The `app` link is an IDENTITY (see this module's header) and therefore
+ * outranks any card-based guess: it is the board that IS this project, not one
+ * that merely references it. It is answered first for that reason.
+ *
+ * ── WHY MEMBERSHIP IS PART OF THE QUERY ──────────────────────────────────────
+ * Canvas reads are membership-gated (`resolveSessionAccess`), so handing back a
+ * board the caller cannot open would turn a working redirect into a 404. A
+ * non-member gets null and the caller's ordinary "give me a board with this
+ * project on it" path runs, exactly as before.
+ *
+ * ── WHY IT IS NOT CACHED ─────────────────────────────────────────────────────
+ * The answer is per-READER, not per-project — the membership gate is inside it —
+ * so a project-keyed cache entry would be wrong for the second person to ask.
+ * It is one indexed lookup on a navigation the reader is already waiting on,
+ * which is why `cachedAppForSession` exists and this deliberately has no twin.
+ */
+export async function appSessionForProject(
+  db: Db,
+  tenantId: number,
+  segmentId: string | null,
+  projectId: number,
+  userId: string,
+): Promise<AppSessionForProject | null> {
+  const [row] = await db
+    .select({ sessionId: creationSessions.id, objectId: creationSessionObjects.id })
+    .from(creationSessionProjectLinks)
+    .innerJoin(creationSessions, eq(creationSessions.id, creationSessionProjectLinks.sessionId))
+    .innerJoin(creationSessionMembers, and(
+      eq(creationSessionMembers.sessionId, creationSessions.id),
+      eq(creationSessionMembers.userId, userId),
+    ))
+    // LEFT, not inner: the card is a bonus that lets the caller focus something,
+    // and requiring it is the exact mistake this function was written to undo.
+    .leftJoin(creationSessionObjects, and(
+      eq(creationSessionObjects.sessionId, creationSessions.id),
+      eq(creationSessionObjects.resourceType, 'project'),
+      eq(creationSessionObjects.resourceId, String(projectId)),
+    ))
+    .where(and(
+      eq(creationSessionProjectLinks.projectId, projectId),
+      eq(creationSessionProjectLinks.linkKind, SESSION_PROJECT_LINK_APP),
+      // The tenant gate is on the SESSION: the link table carries no tenant of
+      // its own, so reading by project id alone would answer across workspaces.
+      eq(creationSessions.tenantId, tenantId),
+      segmentId == null ? isNull(creationSessions.segmentId) : eq(creationSessions.segmentId, segmentId),
+      // A deleted or archived board is not somewhere to send anybody.
+      eq(creationSessions.status, 'active'),
+    ))
+    .limit(1);
+  return row ? { sessionId: row.sessionId, objectId: row.objectId ?? null } : null;
 }
 
 /** Allocate a free project key, walking a numeric suffix on collision. */

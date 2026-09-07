@@ -273,6 +273,11 @@
    this file needing to know which surfaces exist. */
 .commandBar {
   bottom:14px; gap:7px; padding:6px 7px; flex-wrap:nowrap;
+  /* BOTTOM, not centre. Every group now carries a caption above it and the loose pieces
+     between them (the grip, the dividers, the green Run, the collapse chevron) do not, so
+     centring would leave the captioned groups' buttons sitting lower than their
+     uncaptioned neighbours' — one row of controls drawn on two baselines. */
+  align-items:flex-end;
   left:calc(50% + (var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)) / 2);
   transform:translateX(-50%);
   max-width:calc(100% - 28px - var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px));
@@ -303,7 +308,11 @@
    three small status marks reads as a bar that has lost its buttons, which is the exact
    impression a collapse is supposed to remove. WHAT survives is decided in
    `canvasChrome.ts`, never here; this only sizes what does. */
-.commandBar[data-collapsed='true'] { gap:5px; padding:4px 5px; }
+.commandBar[data-collapsed='true'] { gap:5px; padding:4px 5px; align-items:center; }
+/* A folded bar keeps only STATUS (`canvasChrome.ts`), so what is left is the roster and
+   whatever the runtime is reporting — one row of faces that names itself. A caption over
+   it would be the fold spending the height it was pressed to reclaim. */
+.commandBar[data-collapsed='true'] .barGroupCaption { display:none; }
 
 /* Run is the only control on this bar that STARTS something, so it is the only one with
    a fill. Positive rather than brand: the accent is already spent on "which surface am I
@@ -370,16 +379,36 @@
 .hostActions .secondaryButton:disabled { opacity:.45; cursor:not-allowed; }
 .hostActions .secondaryButton[aria-busy='true'] { opacity:.6; }
 
-/* ── Session actions ───────────────────────────────────────────────────────────────
-   The other half of the session bar, and the same argument the surface switcher makes:
-   a trough is what says "these belong together". Undo/redo were already segmented and
-   the three view actions beside them were not, so a row of five equally-weighted icons
-   read as five unrelated things. Same shell, same radius and same lit state as
-   `.surfaceTabs`, so the bar reads as ONE language of controls left to right. */
-.sessionActionCluster { display:inline-flex; flex:none; align-items:center; gap:2px; padding:3px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel-muted); }
-/* A cluster of one gets no shell — a lone button in a segmented trough reads as a
-   group with a member missing. */
-.sessionActionSolo { display:inline-flex; flex:none; align-items:center; }
+/* ── A NAMED GROUP IN THE BAR ─────────────────────────────────────────────────────
+   The same argument the surface switcher makes, carried one step further. A trough says
+   "these belong together" — same shell, same radius and same lit state as `.surfaceTabs`,
+   so the bar reads as ONE language of controls left to right — and it stops there: it
+   cannot say WHAT they are for. So a bar of five troughs read as five anonymous huddles
+   whose only explanation was a tooltip you had to collect one icon at a time.
+
+   The caption is what closes that, and it is drawn by ONE component (`CanvasBarGroup`)
+   for every group on the bar, so the sets cannot end up half captioned. See that file,
+   and `lib/canvasBarGroups.ts` for the names themselves. */
+.barGroup { display:inline-flex; flex:none; flex-direction:column; align-items:center; gap:1px; min-width:0; }
+.barGroupCaption {
+  composes: chromeHeading;
+  /* Capped so a long word in a long language cannot set the width of the group beneath
+     it — a German "Hinzufügen" over a single 30px button would otherwise stretch the bar
+     by the length of its own caption. It ellipsises instead; the group's full name is
+     still on the group itself, where a screen reader and a hover both find it. */
+  max-width:96px; overflow:hidden; line-height:1.1; text-align:center; text-overflow:ellipsis; white-space:nowrap;
+  /* The caption is a label, not a target: a drag on the bar's own grip must not begin
+     with a text selection because the pointer landed on a word. */
+  user-select:none;
+}
+.barGroupRow { display:inline-flex; flex:none; align-items:center; gap:2px; }
+/* The segmented shell, for a set of glyphs. A group of ONE, or of members that carry
+   their own chrome (a worded button, an avatar), is `bare`: a lone button in a segmented
+   trough reads as a group with a member missing. */
+.barGroupRow[data-shell='trough'] { padding:3px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel-muted); }
+/* A group whose members set their own spacing keeps room between them — 2px is the gap
+   BETWEEN segments of one control, not between a Run button and the switcher beside it. */
+.barGroupRow[data-shell='bare'] { gap:6px; }
 .sessionActionButton {
   width:30px; height:28px; display:inline-grid; place-items:center; padding:0;
   border:0; border-radius:var(--radius-sm); background:transparent;
@@ -416,13 +445,13 @@
    chromed buttons inside a chromed shell draws three borders and stands 6px taller than
    the icon troughs next to it. Same trade the surface tabs make: the trough carries the
    shell, the segment carries only the word and its lit state. */
-.sessionActionCluster > .sessionActionLabelled {
+.barGroupRow[data-shell='trough'] > .sessionActionLabelled {
   min-height:28px; padding:5px 9px; border:0; border-radius:var(--radius-sm);
   background:transparent; color:var(--canvas-muted);
 }
-.sessionActionCluster > .sessionActionLabelled:hover,
-.sessionActionCluster > .sessionActionLabelled:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); }
-.sessionActionCluster > .sessionActionLabelled[aria-expanded='true'] {
+.barGroupRow[data-shell='trough'] > .sessionActionLabelled:hover,
+.barGroupRow[data-shell='trough'] > .sessionActionLabelled:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); }
+.barGroupRow[data-shell='trough'] > .sessionActionLabelled[aria-expanded='true'] {
   background:var(--canvas-panel); color:var(--canvas-accent); box-shadow:0 1px 2px var(--canvas-shadow);
 }
 /* The same actions inside the ••• sheet, where a phone reaches the ones the bar had no
@@ -506,7 +535,12 @@
    nth-child rule here, so the sheet keeps working whichever rows the session offers. */
 .moreMenu button[data-wide='true'] { grid-column:1 / -1; }
 .moreMenu button:hover,.moreMenu button:focus-visible { outline:none; background:var(--canvas-hover); color:var(--canvas-accent); }.moreMenu button:hover > span,.moreMenu button:focus-visible > span { background:color-mix(in srgb,var(--canvas-accent) 24%,var(--canvas-panel)); color:var(--canvas-accent); }
-.moreMenuHeading { grid-column:1 / -1; margin:5px 5px 1px; color:var(--canvas-muted); font-size:8px; font-weight:750; letter-spacing:.1em; text-transform:uppercase; }.moreMenuHeading:first-child { margin-top:1px; }
+/* The ONE way a piece of canvas chrome names a group of controls — the ••• sheet's
+   section headings and the command bar's group captions are the same idea at the same
+   size, so they are the same declaration. Split into two the moment they were both
+   wanted and they drift into two typographies for one thing. */
+.chromeHeading { color:var(--canvas-muted); font-size:8px; font-weight:750; letter-spacing:.1em; text-transform:uppercase; }
+.moreMenuHeading { composes: chromeHeading; grid-column:1 / -1; margin:5px 5px 1px; }.moreMenuHeading:first-child { margin-top:1px; }
 .moreMenu label { grid-column:1 / -1; display:flex; align-items:center; justify-content:space-between; margin-top:3px; border-top:1px solid var(--canvas-line); border-radius:0; cursor:default; }.moreMenu label > span { display:flex; align-items:center; gap:8px; }.moreMenu label i { width:22px; height:22px; display:grid; place-items:center; border-radius:var(--radius-sm); font-style:normal; }
 .moreMenu select { max-width:105px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); padding:4px; background:var(--canvas-panel); color:var(--canvas-ink); font:inherit; }
 /* Native option lists are painted by the OS and inherit nothing from the control,
@@ -2957,7 +2991,11 @@
      The troughs go with them — a segmented shell around two 30px buttons is border on a
      screen that has none to spare — leaving the commands themselves at a 40px touch
      target, which is what they were missing even where they did survive. */
-  .sessionActionCluster { gap:2px; padding:0; border:0; border-radius:0; background:transparent; }
+  .barGroupRow[data-shell='trough'] { gap:2px; padding:0; border:0; border-radius:0; background:transparent; }
+  /* The captions go too, and for the same reason the troughs do: a 360px bar spends its
+     width on 40px touch targets, and the ••• sheet already names every section it
+     carries (`.moreMenuHeading`) — which is where a phone reads what a group is for. */
+  .barGroupCaption { display:none; }
   .sessionActionButton { width:40px; height:40px; border-radius:var(--radius-md); }
   .sessionActionButton > svg { width:17px; height:17px; }
   /* Keyed on `data-phone` alone, not on the chrome class beside it. A cluster used to
@@ -2966,11 +3004,11 @@
      which that selector does not match. The registry publishes `data-phone` on every
      chrome it renders; matching the declaration rather than the styling is what keeps
      this correct for the next chrome as well. */
-  .sessionActionCluster > [data-phone='menu'],
-  .sessionActionSolo > [data-phone='menu'] { display:none; }
-  /* An empty cluster still draws its gap, so it stands down as a whole. */
-  .sessionActionCluster:not(:has([data-phone='bar'])),
-  .sessionActionSolo:not(:has([data-phone='bar'])) { display:none; }
+  .barGroupRow > [data-phone='menu'] { display:none; }
+  /* An empty group still draws its gap, so it stands down as a whole. Keyed on the
+     group HAVING placement declarations at all, so it is the session actions this
+     applies to and never the view commands, which declare none and belong on a phone. */
+  .barGroup:has([data-phone]):not(:has([data-phone='bar'])) { display:none; }
   .moreMenuPhoneOnly { display:grid; grid-column:1 / -1; gap:2px; }
   /* PHONE CHROME. Everything floats, so a narrow screen tightens the cards rather than
      dropping what is in them. The roster in particular STAYS — it is the slot the whole
@@ -4925,28 +4963,11 @@
   color: var(--canvas-widget-icon);
 }
 
-/* Move-around-the-board, folded out of the left rail and into the one bar. */
-.commandBarView { display: flex; align-items: center; gap: 2px; flex: none; }
-.commandBarView button {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--canvas-muted);
-  cursor: pointer;
-}
-.commandBarView button:hover, .commandBarView button:focus-visible { background: var(--canvas-hover); color: var(--canvas-ink); outline: none; }
-.commandBarView button > svg { display: block; width: 15px; height: 15px; }
-/* A mode that is on, or a panel this button owns that is open, is LIT — same signal
-   as `.sessionActionButton`, so the merged rail commands read as the same language
-   of controls as the rest of the bar rather than a second, unlit toolbar. */
-.commandBarView button[aria-pressed='true'] {
-  background: var(--canvas-panel); color: var(--canvas-accent); box-shadow: 0 1px 2px var(--canvas-shadow);
-}
+/* Move-around-the-board, folded out of the left rail and into the one bar. It has no
+   rules of its own any more: the buttons wear `.sessionActionButton` and the group wears
+   `.barGroup`, which is the whole point — this used to be a near-copy of the session
+   button (28px vs 30px, its own hover, its own lit state) that a reader could tell apart
+   from the glyphs beside it without being able to say why. */
 
 /* ── THE PROMPT'S THREE PLACEMENTS ────────────────────────────────────────────────
    `closed` is not styled: the composer is not rendered at all, which is the point — a

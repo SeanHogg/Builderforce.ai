@@ -1802,7 +1802,10 @@
     "done": "Terminé",
     "keepYourWork": "Garder mon travail",
     "yes": "Oui",
-    "no": "Non"
+    "no": "Non",
+    "copyLink": "Copier le lien",
+    "copyFallback": "Copiez ce lien à la main : le presse-papiers est indisponible.",
+    "unavailable": "Indisponible"
   },
   "prdCreate": {
     "title": "Nouveau PRD",
@@ -14626,9 +14629,6 @@
     "emptyBody": "Tout le monde ici parle au même Brain et voit la même conversation. Partagez le lien pour inviter d’autres personnes, ou activez votre caméra pour vous retrouver.",
     "invitePeople": "Inviter des personnes",
     "starting": "Création…",
-    "copyInvite": "Copier le lien d’invitation",
-    "linkCopied": "Lien copié",
-    "copyFallback": "Copiez ce lien d’invitation :",
     "roomFull": "Session complète",
     "startVideo": "Activer la vidéo",
     "stopVideo": "Arrêter la vidéo",
@@ -22705,11 +22705,23 @@
     "founderMetricRefreshed": "Indicateur actualisé : {title}",
     "founderTriggerEvaluated": "Déclencheur évalué : {title}",
     "sessionActionCluster": {
-      "run": "Exécuter cette toile",
+      "run": "Exécuter le workflow",
       "history": "Historique de la toile",
       "inspect": "Outils de la toile",
       "live": "Direct et enregistrement",
       "session": "Partager et publier"
+    },
+    "barGroup": {
+      "run": "Workflow",
+      "history": "Historique",
+      "inspect": "Outils",
+      "live": "Direct",
+      "session": "Partager",
+      "view": "Vue",
+      "add": "Ajouter",
+      "people": "Personnes",
+      "peopleLabel": "Personnes sur cette toile",
+      "handoffLabel": "Publier et autres actions"
     },
     "moreMenuSessionActions": "Cette toile",
     "templateCategoryAutomation": "Automatisations",
@@ -23543,7 +23555,23 @@
     "exportUnmaskedColumns": "Export refusé : {columns} contiennent des données personnelles non masquées. Masquez-les d’abord sur la carte.",
     "approveAgentActionTitle": "Approuver l’action de l’agent",
     "approveAgentActionBody": "Un agent de la session veut exécuter {action}.",
-    "approveAgentActionConfirm": "Approuver"
+    "approveAgentActionConfirm": "Approuver",
+    "inviteLinkHeading": "Inviter par lien",
+    "inviteLinkHint": "Toute personne disposant du lien peut ouvrir ce canevas. Elle peut le rejoindre sans créer de compte.",
+    "inviteLinkRole": "Accès accordé par ce lien",
+    "inviteLinkCreate": "Créer un lien",
+    "inviteLinkCreating": "Création…",
+    "inviteLinkCopyNow": "Copiez-le maintenant : un lien ne s’affiche qu’une seule fois.",
+    "inviteLinkActive": "Liens actifs",
+    "inviteLinkUses": "{count} utilisation(s)",
+    "inviteLinkRevoke": "Révoquer le lien",
+    "inviteLinkRevoked": "Lien d’invitation révoqué",
+    "inviteLinkFailed": "Impossible de créer le lien d’invitation",
+    "inviteLinkRevokeFailed": "Impossible de révoquer ce lien",
+    "inviteLinkAriaLabel": "Lien d’invitation au canevas",
+    "guestNoticeTitle": "Vous êtes ici en tant qu’invité",
+    "guestNoticeBody": "Tout ce que vous faites sur ce canevas est enregistré. Créez un compte pour avoir votre propre espace de travail.",
+    "guestNoticeCta": "Créer un compte"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",
@@ -28356,5 +28384,24 @@
       "headerHint": "Enregistré chiffré et jamais réaffiché. Laissez les deux vides pour un collecteur sans identifiants.",
       "add": "Ajouter un collecteur"
     }
+  },
+  "canvasJoin": {
+    "title": "Vous avez été invité",
+    "invitedTo": "Vous avez été invité à {title}",
+    "accessViewer": "Vous pouvez consulter ce canevas.",
+    "accessCommenter": "Vous pouvez commenter ce canevas.",
+    "accessEditor": "Vous pouvez modifier ce canevas.",
+    "nameLabel": "Votre nom",
+    "namePlaceholder": "Comment souhaitez-vous apparaître ?",
+    "joinAsGuest": "Rejoindre sans compte",
+    "joinAsMember": "Rejoindre en tant que {name}",
+    "joining": "Connexion…",
+    "guestNote": "Aucune inscription, aucun mot de passe. Vous pourrez créer un compte plus tard.",
+    "signInInstead": "Se connecter à la place",
+    "createAccount": "Créer un compte",
+    "invalid": "Ce lien d’invitation est invalide, expiré ou a été révoqué.",
+    "failed": "Impossible de rejoindre ce canevas.",
+    "loading": "Vérification de votre invitation…",
+    "workspaceUnavailable": "Cet espace de travail n’est pas disponible."
   }
 }

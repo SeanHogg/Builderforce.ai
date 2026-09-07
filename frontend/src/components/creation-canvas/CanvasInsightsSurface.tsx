@@ -11,6 +11,7 @@ import { DaysWindowSelect } from '@/components/insights/LensShell';
 import { WidgetGrid } from '@/components/widgets/WidgetGrid';
 import { ReorderableWidgetGrid } from '@/components/widgets/ReorderableWidgetGrid';
 import { usePins } from '@/lib/widgets/PinsProvider';
+import { CanvasBarGroup } from './CanvasBarGroup';
 import { useCanvasSurfaceActions } from './canvasSurfaceActions';
 import styles from './CreationCanvas.module.css';
 
@@ -56,9 +57,14 @@ export function CanvasInsightsSurface({ onExit }: CanvasInsightsSurfaceProps) {
   const [days, setDays] = useState(30);
   useCanvasSurfaceActions(() => ({
     controls: (
-      <DaysWindowSelect value={days} onChange={setDays} />
+      // Captioned like every other group on the bar, and named by the SURFACE — see
+      // `CanvasBarGroup` for why a contributed group brings its own words rather than an
+      // id from the host's registry.
+      <CanvasBarGroup caption={t('label')} label={t('regionLabel')}>
+        <DaysWindowSelect value={days} onChange={setDays} />
+      </CanvasBarGroup>
     ),
-  }), [days, setDays]);
+  }), [days, setDays, t]);
 
   return (
     <section

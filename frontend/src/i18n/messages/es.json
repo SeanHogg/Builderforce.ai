@@ -1802,7 +1802,10 @@
     "done": "Listo",
     "keepYourWork": "Conserva tu trabajo",
     "yes": "Sí",
-    "no": "No"
+    "no": "No",
+    "copyLink": "Copiar enlace",
+    "copyFallback": "Copia este enlace a mano: el portapapeles no está disponible.",
+    "unavailable": "No disponible"
   },
   "prdCreate": {
     "title": "Nuevo PRD",
@@ -14626,9 +14629,6 @@
     "emptyBody": "Todos aquí hablan con el mismo Brain y ven la misma conversación. Comparte el enlace para sumar a más gente, o enciende tu cámara y reúnete.",
     "invitePeople": "Invitar a alguien",
     "starting": "Creando…",
-    "copyInvite": "Copiar enlace de invitación",
-    "linkCopied": "Enlace copiado",
-    "copyFallback": "Copia este enlace de invitación:",
     "roomFull": "La sesión está llena",
     "startVideo": "Iniciar vídeo",
     "stopVideo": "Detener vídeo",
@@ -22705,11 +22705,23 @@
     "founderMetricRefreshed": "Métrica actualizada: {title}",
     "founderTriggerEvaluated": "Disparador evaluado: {title}",
     "sessionActionCluster": {
-      "run": "Ejecutar este lienzo",
+      "run": "Ejecutar el flujo de trabajo",
       "history": "Historial del lienzo",
       "inspect": "Herramientas del lienzo",
       "live": "En directo y grabación",
       "session": "Compartir y publicar"
+    },
+    "barGroup": {
+      "run": "Flujo",
+      "history": "Historial",
+      "inspect": "Herramientas",
+      "live": "En directo",
+      "session": "Compartir",
+      "view": "Vista",
+      "add": "Añadir",
+      "people": "Personas",
+      "peopleLabel": "Personas en este lienzo",
+      "handoffLabel": "Publicar y más acciones"
     },
     "moreMenuSessionActions": "Este lienzo",
     "templateCategoryAutomation": "Automatizaciones",
@@ -23543,7 +23555,23 @@
     "exportUnmaskedColumns": "Exportación rechazada: {columns} contienen datos personales sin enmascarar. Enmascáralas primero en la tarjeta.",
     "approveAgentActionTitle": "Aprobar la acción del agente",
     "approveAgentActionBody": "Un agente de la sesión quiere ejecutar {action}.",
-    "approveAgentActionConfirm": "Aprobar"
+    "approveAgentActionConfirm": "Aprobar",
+    "inviteLinkHeading": "Invitar por enlace",
+    "inviteLinkHint": "Cualquiera con el enlace puede abrir este lienzo. Puede unirse sin crear una cuenta.",
+    "inviteLinkRole": "Acceso que concede este enlace",
+    "inviteLinkCreate": "Crear enlace",
+    "inviteLinkCreating": "Creando…",
+    "inviteLinkCopyNow": "Cópialo ahora: un enlace solo se muestra una vez.",
+    "inviteLinkActive": "Enlaces activos",
+    "inviteLinkUses": "{count} usos",
+    "inviteLinkRevoke": "Revocar enlace",
+    "inviteLinkRevoked": "Enlace de invitación revocado",
+    "inviteLinkFailed": "No se pudo crear el enlace de invitación",
+    "inviteLinkRevokeFailed": "No se pudo revocar ese enlace",
+    "inviteLinkAriaLabel": "Enlace de invitación al lienzo",
+    "guestNoticeTitle": "Estás aquí como invitado",
+    "guestNoticeBody": "Todo lo que haces en este lienzo se guarda. Crea una cuenta para tener tu propio espacio de trabajo.",
+    "guestNoticeCta": "Crear una cuenta"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",
@@ -28356,5 +28384,24 @@
       "headerHint": "Se guarda cifrada y no se vuelve a mostrar. Deja ambos vacíos si el recolector no necesita credencial.",
       "add": "Añadir recolector"
     }
+  },
+  "canvasJoin": {
+    "title": "Te han invitado",
+    "invitedTo": "Te han invitado a {title}",
+    "accessViewer": "Puedes ver este lienzo.",
+    "accessCommenter": "Puedes comentar en este lienzo.",
+    "accessEditor": "Puedes editar este lienzo.",
+    "nameLabel": "Tu nombre",
+    "namePlaceholder": "¿Cómo quieres que te vean?",
+    "joinAsGuest": "Unirse sin cuenta",
+    "joinAsMember": "Unirse como {name}",
+    "joining": "Uniéndote…",
+    "guestNote": "Sin registro ni contraseña. Puedes crear una cuenta más tarde.",
+    "signInInstead": "Iniciar sesión en su lugar",
+    "createAccount": "Crear una cuenta",
+    "invalid": "Este enlace de invitación no es válido, ha caducado o ha sido revocado.",
+    "failed": "No se pudo unir a este lienzo.",
+    "loading": "Comprobando tu invitación…",
+    "workspaceUnavailable": "Ese espacio de trabajo no está disponible."
   }
 }

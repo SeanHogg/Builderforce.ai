@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { APP_MODALITY, cachedAppForSession, copyableLinkFilter } from './convertSessionToApp';
+import { APP_MODALITY, appSessionForProject, cachedAppForSession, copyableLinkFilter } from './convertSessionToApp';
 import {
   SESSION_PROJECT_LINK_APP,
   SESSION_PROJECT_LINK_REFERENCE,
@@ -121,5 +121,53 @@ describe('cachedAppForSession', () => {
   it('reports a board that never became an app as null', async () => {
     const { db } = countingDb(null);
     await expect(cachedAppForSession(db, env, 1, 'session-never-converted')).resolves.toBeNull();
+  });
+});
+
+/**
+ * THE READ THAT STOPS A CONVERTED BOARD DISAPPEARING.
+ *
+ * `POST /projects/:projectId/open` used to find a project's board by looking for
+ * a board carrying a `project` OBJECT CARD. Conversion writes no card, so the
+ * board that had just become the project was invisible there and the route made a
+ * NEW EMPTY one — which is what "I converted my canvas and lost the session" was.
+ */
+describe('appSessionForProject', () => {
+  /** Enough of a db to answer the one join, capturing nothing else. */
+  function dbWithRow(row: Record<string, unknown> | null) {
+    return {
+      select: () => ({
+        from: () => ({
+          innerJoin: () => ({
+            innerJoin: () => ({
+              leftJoin: () => ({
+                where: () => ({ limit: async () => (row ? [row] : []) }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    } as unknown as Parameters<typeof appSessionForProject>[0];
+  }
+
+  it('answers with the origin board even when it carries no project card', async () => {
+    // The LEFT join is the whole point: requiring the card is the bug.
+    const db = dbWithRow({ sessionId: 'board-1', objectId: null });
+    await expect(appSessionForProject(db, 1, null, 42, 'user-1')).resolves.toEqual({
+      sessionId: 'board-1',
+      objectId: null,
+    });
+  });
+
+  it('carries the card through when the board has one, so the caller can focus it', async () => {
+    const db = dbWithRow({ sessionId: 'board-1', objectId: 'object-9' });
+    await expect(appSessionForProject(db, 1, null, 42, 'user-1')).resolves.toEqual({
+      sessionId: 'board-1',
+      objectId: 'object-9',
+    });
+  });
+
+  it('answers null for a project no board became, so the caller falls through', async () => {
+    await expect(appSessionForProject(dbWithRow(null), 1, null, 42, 'user-1')).resolves.toBeNull();
   });
 });

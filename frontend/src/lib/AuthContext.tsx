@@ -72,6 +72,16 @@ interface AuthContextValue {
   /** Set a password on an OAuth-only account; the stored user then reads `hasPassword: true`. */
   setPassword: (password: string) => Promise<void>;
   selectTenant: (tenant: Tenant) => Promise<void>;
+  /**
+   * Take a session that was issued somewhere other than a sign-in form, and select the
+   * workspace it belongs to — today, claiming a canvas invite link as a guest, where
+   * the API mints the identity and the session in one call.
+   *
+   * It cannot be `adoptSession` followed by `selectTenant`: `selectTenant` reads the web
+   * token out of STATE, and the state write from `adoptSession` has not landed in the
+   * same tick. So the token it was handed is what it uses.
+   */
+  adoptIssuedSession: (token: string, user: AuthUser, tenantId: number) => Promise<void>;
   fetchTenants: () => Promise<Tenant[]>;
   logout: () => void;
 }
@@ -205,6 +215,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [webToken]
   );
 
+  const adoptIssuedSession = useCallback(
+    async (token: string, nextUser: AuthUser, tenantId: number) => {
+      adoptSession(token, nextUser);
+      const tenants = await getMyTenants(token);
+      const target = tenants.find((candidate) => Number(candidate.id) === tenantId);
+      if (!target) throw new Error('Workspace unavailable');
+      const res = await getTenantToken(token, target.id);
+      setTenantToken(res.token);
+      setTenant(target);
+      persistTenantSession(res.token, target);
+    },
+    [adoptSession],
+  );
+
   const logout = useCallback(() => {
     clearSession();
     setWebToken(null);
@@ -230,6 +254,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAvailableForHire,
       setPassword,
       selectTenant,
+      adoptIssuedSession,
       fetchTenants,
       logout,
     }),
@@ -247,6 +272,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAvailableForHire,
       setPassword,
       selectTenant,
+      adoptIssuedSession,
       fetchTenants,
       logout,
     ]

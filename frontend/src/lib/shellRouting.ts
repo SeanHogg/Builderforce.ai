@@ -151,9 +151,12 @@ const PUBLIC_SHELL_PREFIXES = ['/about', '/legal', '/product', '/blog', '/tutori
  * DIFFERENT product from the one they were being asked to sign up for — and the
  * shell IS the product, so the two must be the same surface.
  *
- * `/create/invitations/*` is here for a second reason: that page renders its own
- * "sign in with the invited email" branch, so as a default app route it was a
- * dead end — the teaser mounted in its place and the invitee never saw it.
+ * `/create/invitations/*` and `/create/join/*` are here for a second reason: those
+ * pages render their own accept screens — "sign in with the invited email" for an
+ * addressed invitation, "join without an account" for a link — so as default app
+ * routes they were dead ends: the teaser mounted in their place and the invitee never
+ * saw the thing they were sent. The link one matters most, because its whole promise is
+ * that the person does not need an account, and a teaser is a sign-up wall.
  *
  * `/create/new` is here for the same reason, and it was the worst version of it:
  * that route is not a page, it is the ONE prompt-led entry point — it opens a
@@ -170,7 +173,23 @@ const LOCAL_FIRST_APP_PATTERNS: RegExp[] = [
   /^\/create\/new$/,
   /^\/create\/local-/,
   /^\/create\/invitations(?:\/|$)/,
+  /^\/create\/join(?:\/|$)/,
 ];
+
+/**
+ * A canvas URL that is an INVITATION landing rather than a board.
+ *
+ * Two routes, one property: they mount their own accept screen, hold no canvas, and
+ * therefore need none of the cross-origin isolation a real board does. The middleware
+ * reads this rather than repeating the prefixes — it had exactly one of the two, so the
+ * link-join route would have been handed COOP/COEP headers for a page with no canvas in
+ * it purely because it was added second.
+ */
+const CANVAS_INVITATION_PREFIXES = ['/create/invitations/', '/create/join/'];
+
+export function isCanvasInvitationRoute(pathname: string): boolean {
+  return CANVAS_INVITATION_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
 
 /**
  * A route that renders IDENTICALLY signed in or out, so the shell must not wait

@@ -47,7 +47,16 @@ workspace could not share a canvas either.
    so it names the remedy (free a seat or upgrade, then re-open the link) instead of describing every
    invitation as blocked.
 
-**Two adjacent defects the same code path forced open.**
+**Three adjacent defects the same code path forced open.**
+
+- *The seating was replayed under the inviter, who need not be a workspace manager.* Board ownership
+  is per-board (`creation_session_members.role`) and carries no workspace authority, so a developer
+  who created a canvas and shared it produced an invitation `Tenant.addMember` refused with
+  `ForbiddenError` — stuck pending forever, and on Teams (unlimited seats) that was the whole failure
+  on its own. `Tenant.admitCollaborator` is the separate intent: no workspace-role gate, because the
+  authorization is the board-invite gate plus the unguessable single-use token the redeemer had to
+  present while signed in as the addressed account; and it can only ever create a `collaborator`, so
+  the door with no role check on it cannot reach a paid seat.
 
 - *`TenantRepository.update()` deleted the entire roster and re-inserted it on every membership
   write.* `tenant_members` carries per-seat state the aggregate does not model — the monthly spend cap
@@ -63,7 +72,8 @@ workspace could not share a canvas either.
 guards are another session's in-flight memory-embedding/otel work, and `check:tenant-scope` no longer
 names `InvitationService`; `vitest run src/domain/tenant src/application/kernel src/application/creation
 src/infrastructure/database` — 142 passed, including new `SeatKind.test.ts` (the plan-matrix invariant
-that made this a permanent bug) and `sessionAccess.test.ts` (the privilege ceiling). Release note
+that made this a permanent bug), `sessionAccess.test.ts` (the privilege ceiling) and
+`Tenant.collaborator.test.ts` (the admission door). Release note
 shipped as migration 1139, `category = 'fix'` — making something work as advertised is not news.
 
 ## ✅ RESOLVED 2026-09-07 — Eight competitive-parity gaps: three capabilities that were built and unreachable now have doors, agents write their own skills, and cloud memory finally searches by meaning

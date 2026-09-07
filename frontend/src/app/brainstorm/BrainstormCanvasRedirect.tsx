@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { creationSessionsApi } from '@/lib/builderforceApi';
+import { openedBoardHref } from '@/lib/openedBoardHref';
 import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 
 /**
@@ -25,7 +26,7 @@ export function BrainstormCanvasRedirect() {
     const open = async () => {
       if (chatId && hasTenant) {
         const result = await creationSessionsApi.openResource('chat', chatId);
-        if (!cancelled) router.replace(`/create/${result.sessionId}?focus=${result.objectId}`);
+        if (!cancelled) router.replace(openedBoardHref(result));
         return;
       }
       if (prompt) {

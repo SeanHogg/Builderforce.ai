@@ -41,6 +41,7 @@ import {
 } from '../../infrastructure/database/schema';
 import {
   appForSession,
+  appSessionForProject,
   cachedAppForSession,
   convertSessionToApp,
   copyableLinkFilter,
@@ -94,7 +95,6 @@ import {
   getObjectShares,
   registerObject,
   revokeShareLink,
-  type ObjectRef,
 } from '../kernel/ObjectRegistry';
 import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
 import { creationSessionQuotaError, resolveCreationSessionQuota } from '../../domain/tenant/creationSessionQuota';
@@ -105,12 +105,16 @@ import {
   invalidateInvitations,
   invite as inviteToObject,
   listForObject,
-  listPending,
   revokeInvitation,
 } from '../kernel/InvitationService';
 import {
   resolveSessionAccess, SESSION_ROLE_RANK, tenantRoleForSessionRole, type SessionRole as SharedSessionRole,
 } from './sessionAccess';
+import { ensureSessionObject, findSessionObject, type SessionRef } from './sessionObjectRef';
+import {
+  collaboratorCapacity as canvasCollaboratorCapacity,
+  type CollaboratorArrival,
+} from './canvasCollaboratorCapacity';
 import { SEAT_KIND } from '../../domain/tenant/SeatKind';
 import { boundedIntParam, limitParam, offsetParam } from '../../domain/shared/boundedInt';
 // THE graph write. The delete/re-insert/bump/event/snapshot sequence below used to be
@@ -334,32 +338,6 @@ export function cleanCommentAnchor(raw: unknown): CreationCommentAnchor | null {
   };
 }
 
-/**
- * A session's entry in the object registry — what its invitations point at now
- * that `creation_session_invites.session_id` is gone (migration 0435).
- *
- * TWO helpers rather than one, because the registry write is an upsert and a GET
- * must not perform one: `ensure` runs on the invite-creation path, where a session
- * that has never been registered is exactly the case that needs fixing, and `find`
- * runs on list and revoke, where a missing entry means there are no invitations to
- * show and a write would be a read path quietly mutating the database.
- */
-type SessionRef = { id: string; tenantId: number; title: string };
-
-async function ensureSessionObject(db: Db, env: Env, session: SessionRef): Promise<ObjectRef> {
-  return registerObject(db, env, {
-    tenantId: session.tenantId,
-    kind: 'creation_session',
-    refId: session.id,
-    domain: 'canvas',
-    title: session.title,
-  });
-}
-
-async function findSessionObject(db: Db, session: SessionRef): Promise<ObjectRef | null> {
-  return findObject(db, session.tenantId, 'creation_session', session.id);
-}
-
 /** Is this résumé object publishable by link? One answer, shared with the projection
  *  that actually serves it — a third private copy of this rule is how a résumé comes to
  *  be share-able but un-viewable. */
@@ -517,43 +495,18 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     return Number((result.rows[0] as { count?: number } | undefined)?.count ?? 0);
   }
 
-  /**
-   * "May this board take one more collaborator?" — the plan cap that actually
-   * governs canvas sharing (`maxCreationSessionCollaborators`).
-   *
-   * ONE definition, because there were nearly two: the invite route enforced it
-   * for somebody who already had an account and enforced NOTHING for a cold
-   * email, so the cap was whatever the invitee's signup status happened to be.
-   * A pending invitation counts, exactly as a pending seat does — it is a promise
-   * of a slot, and without counting it a Free board could queue twenty invites
-   * under a cap of three and let them all land.
-   *
-   * Returns null when there is room, or the 403 body to answer with.
-   */
+  /** Delegated to `canvasCollaboratorCapacity.ts`, which the invite-LINK mint and the
+   *  anonymous link claim read too — three ways onto a board, one plan cap. The plan
+   *  limit is resolved here because only this router holds the tenant's plan reader. */
   async function collaboratorCapacity(
     env: Env,
     tenantId: number,
     sessionId: string,
     objectId: string | null,
-    /** Who is being invited. `alreadyMember` — a re-invite or a role change —
-     *  consumes nothing, and neither does a repeat invite to an address that
-     *  already holds a pending row for this board, which is why the address is
-     *  excluded from the pending tally rather than counted against itself. */
-    invitee: { alreadyMember: boolean; email?: string },
-  ): Promise<{ error: string; code: string; usage: number; limit: number } | null> {
-    if (invitee.alreadyMember) return null;
+    arrival: CollaboratorArrival,
+  ) {
     const limit = (await creationLimits(tenantId)).maxCreationSessionCollaborators;
-    if (limit === -1) return null;
-    const [members, pending] = await Promise.all([
-      countRows('creation_session_members', sql`session_id = ${sessionId}`),
-      objectId
-        ? listPending(db, env, tenantId, 'session').then((rows) => rows.filter((row) =>
-          row.objectId === objectId && row.email !== (invitee.email ?? null)).length)
-        : Promise.resolve(0),
-    ]);
-    const usage = members + pending;
-    if (usage < limit) return null;
-    return { error: 'Collaborator limit reached', code: 'CREATION_COLLABORATOR_QUOTA', usage, limit };
+    return canvasCollaboratorCapacity(db, env, { tenantId, sessionId, objectId, limit, arrival });
   }
 
   async function sessionQuota(c: Context<HonoEnv>, tenantId: number) {
@@ -1692,7 +1645,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       // feature quietly re-introduced a recoverable credential.
       return c.json({ engagement, shared: card.share != null });
     }
-    const registered = await findObject(db, access.session.tenantId, 'creation_session', access.session.id);
+    const registered = await findSessionObject(db, access.session);
     if (!registered) return c.json({ error: 'This board has never been shared' }, 404);
     return c.json({ engagement: await readProspectEngagement(db, access.session.tenantId, registered.id) });
   });
@@ -2811,6 +2764,13 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const projectSegment = segmentId == null ? isNull(projects.segmentId) : eq(projects.segmentId, segmentId);
     const [project] = await db.select({ id: projects.id, name: projects.name }).from(projects).where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId), projectSegment)).limit(1);
     if (!project) return c.json({ error: 'Project not found' }, 404);
+    // IDENTITY FIRST. A board that BECAME this project owns it, and conversion
+    // writes no project CARD — so the lookup below, which requires one, could
+    // never see it and this route minted a NEW EMPTY BOARD for a project that
+    // already had one. That is what "I converted my canvas and lost the whole
+    // session" was. See `appSessionForProject`.
+    const identity = await appSessionForProject(db, tenantId, segmentId, projectId, userId);
+    if (identity) return c.json({ sessionId: identity.sessionId, objectId: identity.objectId, created: false });
     const sessionSegment = segmentId == null ? isNull(creationSessions.segmentId) : eq(creationSessions.segmentId, segmentId);
     const [existing] = await db.select({ id: creationSessions.id, objectId: creationSessionObjects.id })
       .from(creationSessionProjectLinks)

@@ -8,6 +8,7 @@ import { useTranslations } from 'next-intl';
 import { CodeReadingIcon, ConsoleReadingIcon, PreviewReadingIcon } from '@/components/canvas/CanvasCommands';
 import { CANVAS_APP_FRAME_SANDBOX, canvasApp, type CanvasAppFile } from '@/lib/canvasApp';
 import type { CanvasViewport } from '@builderforce/creation-canvas-contract';
+import { CanvasBarGroup } from './CanvasBarGroup';
 import { CanvasDeviceFrame } from './CanvasDeviceFrame';
 import { CanvasViewportSwitcher } from './CanvasViewportSwitcher';
 import { useCanvasSurfaceActions } from './canvasSurfaceActions';
@@ -126,7 +127,11 @@ export function CanvasAppSurface({ nodes, onExit, onOpenObject }: CanvasAppSurfa
       </span>
     ),
     controls: (
-    <div className={styles.appBarControls} role="group" aria-label={t('regionLabel')}>
+    // Captioned like every other group on the bar. The name comes from the SURFACE, not
+    // from the host's group registry — an app runtime owns its own vocabulary, and a host
+    // table naming these controls would be the host learning what an app is.
+    <CanvasBarGroup caption={t('label')} label={t('regionLabel')}>
+    <div className={styles.appBarControls}>
       <button
         type="button"
         className={styles.appRunButton}
@@ -166,6 +171,7 @@ export function CanvasAppSurface({ nodes, onExit, onOpenObject }: CanvasAppSurfa
       <CanvasViewportSwitcher value={viewport} onChange={setViewport} />
 
     </div>
+    </CanvasBarGroup>
     ),
   }), [running, reading, viewport, errors, entryPath, app.document, t]);
 

@@ -1802,7 +1802,10 @@
     "done": "Done",
     "keepYourWork": "Keep your work",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "copyLink": "Copy link",
+    "copyFallback": "Copy this link by hand — the clipboard is unavailable.",
+    "unavailable": "Unavailable"
   },
   "prdCreate": {
     "title": "New PRD",
@@ -14626,9 +14629,6 @@
     "emptyBody": "Everyone here talks to the same Brain and sees the same conversation. Share the link to bring more people in, or turn your camera on and meet.",
     "invitePeople": "Invite people",
     "starting": "Starting…",
-    "copyInvite": "Copy invite link",
-    "linkCopied": "Link copied",
-    "copyFallback": "Copy this invite link:",
     "roomFull": "Session is full",
     "startVideo": "Start video",
     "stopVideo": "Stop video",
@@ -22705,11 +22705,23 @@
     "founderMetricRefreshed": "Metric refreshed: {title}",
     "founderTriggerEvaluated": "Trigger evaluated: {title}",
     "sessionActionCluster": {
-      "run": "Run this canvas",
+      "run": "Run workflow",
       "history": "Canvas history",
       "inspect": "Canvas tools",
       "live": "Live and recording",
       "session": "Share and publish"
+    },
+    "barGroup": {
+      "run": "Workflow",
+      "history": "History",
+      "inspect": "Tools",
+      "live": "Live",
+      "session": "Share",
+      "view": "View",
+      "add": "Add",
+      "people": "People",
+      "peopleLabel": "People on this canvas",
+      "handoffLabel": "Publish and more actions"
     },
     "moreMenuSessionActions": "This canvas",
     "templateCategoryAutomation": "Automations",
@@ -23543,7 +23555,23 @@
     "exportUnmaskedColumns": "Export refused: {columns} hold personal data and are not masked. Mask them on the card first.",
     "approveAgentActionTitle": "Approve agent action",
     "approveAgentActionBody": "A session agent wants to run {action}.",
-    "approveAgentActionConfirm": "Approve"
+    "approveAgentActionConfirm": "Approve",
+    "inviteLinkHeading": "Invite by link",
+    "inviteLinkHint": "Anyone with the link can open this canvas. They can join without creating an account.",
+    "inviteLinkRole": "Access this link grants",
+    "inviteLinkCreate": "Create link",
+    "inviteLinkCreating": "Creating…",
+    "inviteLinkCopyNow": "Copy it now — a link is only shown once.",
+    "inviteLinkActive": "Active links",
+    "inviteLinkUses": "{count} used",
+    "inviteLinkRevoke": "Revoke link",
+    "inviteLinkRevoked": "Invite link revoked",
+    "inviteLinkFailed": "Could not create the invite link",
+    "inviteLinkRevokeFailed": "Could not revoke that link",
+    "inviteLinkAriaLabel": "Canvas invite link",
+    "guestNoticeTitle": "You are here as a guest",
+    "guestNoticeBody": "Everything you do on this canvas is saved. Create an account to get a workspace of your own.",
+    "guestNoticeCta": "Create an account"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
@@ -28356,5 +28384,24 @@
       "headerHint": "Stored encrypted and never shown again. Leave both empty for a collector that needs no credential.",
       "add": "Add collector"
     }
+  },
+  "canvasJoin": {
+    "title": "You have been invited",
+    "invitedTo": "You have been invited to {title}",
+    "accessViewer": "You can view this canvas.",
+    "accessCommenter": "You can comment on this canvas.",
+    "accessEditor": "You can edit this canvas.",
+    "nameLabel": "Your name",
+    "namePlaceholder": "How should people see you?",
+    "joinAsGuest": "Join without an account",
+    "joinAsMember": "Join as {name}",
+    "joining": "Joining…",
+    "guestNote": "No sign-up, no password. You can create an account later.",
+    "signInInstead": "Sign in instead",
+    "createAccount": "Create an account",
+    "invalid": "This invitation link is invalid, expired, or has been revoked.",
+    "failed": "Could not join this canvas.",
+    "loading": "Checking your invitation…",
+    "workspaceUnavailable": "That workspace is not available."
   }
 }

@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { creationSessionsApi } from '@/lib/builderforceApi';
+import { openedBoardHref } from '@/lib/openedBoardHref';
 
 /**
  * Compatibility adapter: workflow authoring now opens from a Canvas object. Not a
@@ -21,8 +22,8 @@ export function WorkflowBuilderCanvasRedirect() {
     }
     let cancelled = false;
     void creationSessionsApi.openResource('workflow', id)
-      .then(({ sessionId, objectId }) => {
-        if (!cancelled) router.replace(`/create/${sessionId}?focus=${objectId}`);
+      .then((opened) => {
+        if (!cancelled) router.replace(openedBoardHref(opened));
       })
       .catch(() => {
         if (!cancelled) router.replace('/create?filter=workflow');

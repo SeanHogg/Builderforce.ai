@@ -1802,7 +1802,10 @@
     "done": "完成",
     "keepYourWork": "保留你的成果",
     "yes": "是",
-    "no": "否"
+    "no": "否",
+    "copyLink": "复制链接",
+    "copyFallback": "剪贴板不可用，请手动复制此链接。",
+    "unavailable": "不可用"
   },
   "prdCreate": {
     "title": "新建 PRD",
@@ -14626,9 +14629,6 @@
     "emptyBody": "这里的每个人都与同一个 Brain 对话，并看到同一段对话记录。分享链接邀请更多人，或者打开摄像头见面聊聊。",
     "invitePeople": "邀请他人",
     "starting": "正在创建……",
-    "copyInvite": "复制邀请链接",
-    "linkCopied": "链接已复制",
-    "copyFallback": "请复制此邀请链接：",
     "roomFull": "会话已满",
     "startVideo": "开启视频",
     "stopVideo": "关闭视频",
@@ -22705,11 +22705,23 @@
     "founderMetricRefreshed": "指标已刷新：{title}",
     "founderTriggerEvaluated": "触发条件已评估：{title}",
     "sessionActionCluster": {
-      "run": "运行此画布",
+      "run": "运行工作流",
       "history": "画布历史",
       "inspect": "画布工具",
       "live": "通话与录制",
       "session": "共享与发布"
+    },
+    "barGroup": {
+      "run": "工作流",
+      "history": "历史",
+      "inspect": "工具",
+      "live": "通话",
+      "session": "共享",
+      "view": "视图",
+      "add": "添加",
+      "people": "成员",
+      "peopleLabel": "此画布上的成员",
+      "handoffLabel": "发布与更多操作"
     },
     "moreMenuSessionActions": "此画布",
     "templateCategoryAutomation": "自动化",
@@ -23543,7 +23555,23 @@
     "exportUnmaskedColumns": "已拒绝导出：{columns} 包含个人数据且未脱敏。请先在卡片上脱敏。",
     "approveAgentActionTitle": "批准代理操作",
     "approveAgentActionBody": "会话代理想要运行 {action}。",
-    "approveAgentActionConfirm": "批准"
+    "approveAgentActionConfirm": "批准",
+    "inviteLinkHeading": "通过链接邀请",
+    "inviteLinkHint": "拥有该链接的任何人都可以打开此画布，无需注册账号即可加入。",
+    "inviteLinkRole": "此链接授予的权限",
+    "inviteLinkCreate": "创建链接",
+    "inviteLinkCreating": "创建中…",
+    "inviteLinkCopyNow": "请立即复制——链接只显示一次。",
+    "inviteLinkActive": "有效链接",
+    "inviteLinkUses": "已使用 {count} 次",
+    "inviteLinkRevoke": "撤销链接",
+    "inviteLinkRevoked": "邀请链接已撤销",
+    "inviteLinkFailed": "无法创建邀请链接",
+    "inviteLinkRevokeFailed": "无法撤销该链接",
+    "inviteLinkAriaLabel": "画布邀请链接",
+    "guestNoticeTitle": "你正以访客身份参与",
+    "guestNoticeBody": "你在此画布上的所有操作都会被保存。创建账号即可拥有自己的工作区。",
+    "guestNoticeCta": "创建账号"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
@@ -28356,5 +28384,24 @@
       "headerHint": "加密保存且不再显示。若采集器无需凭据，请两项都留空。",
       "add": "添加采集器"
     }
+  },
+  "canvasJoin": {
+    "title": "你收到了一份邀请",
+    "invitedTo": "你被邀请加入《{title}》",
+    "accessViewer": "你可以查看此画布。",
+    "accessCommenter": "你可以在此画布上发表评论。",
+    "accessEditor": "你可以编辑此画布。",
+    "nameLabel": "你的名字",
+    "namePlaceholder": "其他人该怎么称呼你？",
+    "joinAsGuest": "无需账号直接加入",
+    "joinAsMember": "以 {name} 的身份加入",
+    "joining": "正在加入…",
+    "guestNote": "无需注册，无需密码。你可以稍后再创建账号。",
+    "signInInstead": "改为登录",
+    "createAccount": "创建账号",
+    "invalid": "此邀请链接无效、已过期或已被撤销。",
+    "failed": "无法加入此画布。",
+    "loading": "正在检查你的邀请…",
+    "workspaceUnavailable": "该工作区不可用。"
   }
 }

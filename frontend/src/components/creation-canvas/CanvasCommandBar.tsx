@@ -4,12 +4,13 @@
 // same reason `CanvasSessionActions` omits it.
 import { Fragment } from 'react';
 import { useTranslations } from 'next-intl';
-import { AddObjectIcon, ClosePaletteIcon, CollapseBarIcon, ExpandBarIcon, PromptIcon, RunCanvasIcon } from '@/components/canvas/CanvasCommands';
+import { AddObjectIcon, ChatSurfaceIcon, ClosePaletteIcon, CollapseBarIcon, ExpandBarIcon, RunCanvasIcon } from '@/components/canvas/CanvasCommands';
 import { canvasChromeShows, canvasChromeSlotsIn, type CanvasChromeSlot } from '@/lib/canvasChrome';
 import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import type { CanvasSessionActionId } from '@/lib/canvasSessionActions';
 import { mergeRefs } from '@/lib/mergeRefs';
 import type { CreationObjectGroup } from './creationObjectRegistry';
+import { CanvasBarGroup } from './CanvasBarGroup';
 import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasSessionActions';
 import { PanelDragHandle } from './PanelDragHandle';
 import { usePanelDragOffset } from './usePanelDragOffset';
@@ -192,21 +193,42 @@ export function CanvasCommandBar({
 
       {/* Moving around the board sits with acting on it. It used to be a second floating
           rail pinned to the left edge — two toolbars over one canvas, each with its own
-          idea of which commands are "view" and which are "session". */}
-      {view}
+          idea of which commands are "view" and which are "session".
 
-      {/* The prompt is a THING YOU CAN PUT AWAY now, so the bar has to be able to bring
-          it back — a close with no way back is the trap that keeps people from ever
-          pressing it. */}
-      {onTogglePrompt && <button
-        type="button"
-        className={styles.sessionActionButton}
-        data-testid="canvas-prompt-toggle"
-        aria-pressed={promptOpen}
-        aria-label={promptOpen ? t('hidePrompt') : t('showPrompt')}
-        title={promptOpen ? t('hidePrompt') : t('showPrompt')}
-        onClick={onTogglePrompt}
-      ><PromptIcon /></button>}
+          The GROUP is drawn here and its contents come from the host, which is the split
+          that stopped this being the one uncaptioned huddle on the bar: React Flow owns
+          the viewport so the host owns the buttons, but what the set IS is a decision the
+          bar makes for every group the same way. */}
+      {view && <CanvasBarGroup group="view" shell="trough">
+        {/* FIRST in the group, and drawn as the CONVERSATION'S OWN BUBBLE.
+            It used to be last, behind eight zoom-and-panel glyphs, wearing the spark that
+            the prompt and the Brain object also carry — and a spark says "AI", not "the
+            place you type". Nobody read it as the composer, so the one control that
+            brings back a prompt somebody had just closed was both the least legible glyph
+            on the bar and the last one your eye reached. A speech bubble is what a
+            composer looks like everywhere else, including this canvas's own Chat surface
+            (`ChatSurfaceIcon`, reused rather than redrawn — the same object gets the same
+            mark), and the thing you are most likely to want back goes first.
+
+            It belongs IN this group rather than loose beside it: showing and hiding the
+            composer is the same species as the mini map and the outline — a piece of this
+            canvas's chrome you put away — and a lone glyph outside every group was the
+            last thing on the bar with nothing saying what it was for.
+
+            The prompt is a THING YOU CAN PUT AWAY now, so the bar has to be able to bring
+            it back — a close with no way back is the trap that keeps people from ever
+            pressing it. */}
+        {onTogglePrompt && <button
+          type="button"
+          className={styles.sessionActionButton}
+          data-testid="canvas-prompt-toggle"
+          aria-pressed={promptOpen}
+          aria-label={promptOpen ? t('hidePrompt') : t('showPrompt')}
+          title={promptOpen ? t('hidePrompt') : t('showPrompt')}
+          onClick={onTogglePrompt}
+        ><ChatSurfaceIcon /></button>}
+        {view}
+      </CanvasBarGroup>}
 
       {extras}
     </>,
@@ -215,6 +237,7 @@ export function CanvasCommandBar({
        rule that keeps them would be a statement about an element that never folds. */
     roster: <>
       <span className={styles.commandBarDivider} aria-hidden />
+      <CanvasBarGroup group="people">
       {roster}
       {team}
       {/* Bring someone into THIS group — drawn as its trailing chip, not a worded
@@ -227,6 +250,7 @@ export function CanvasCommandBar({
         <CanvasSessionActions variant="roster" surface={surface} handlers={handlers} />
         {inviteMenu}
       </span>}
+      </CanvasBarGroup>
     </>,
     /* The doors out — Invite, Publish, ••• — behind their own divider so the group
        reads apart from the roster beside it, the same way it always read apart from
@@ -234,7 +258,10 @@ export function CanvasCommandBar({
        `canvasChrome.ts`, so the registry folds it with the rest of the controls. */
     handoff: handoff ? <>
       <span className={styles.commandBarDivider} aria-hidden />
-      {handoff}
+      {/* Named, not captioned: Publish is already a word and ••• is universal, so the
+          group needs a name for assistive tech and has nothing to add on screen — see
+          `canvasBarGroups.ts` for why `captionKey` is optional. */}
+      <CanvasBarGroup group="handoff">{handoff}</CanvasBarGroup>
     </> : null,
   };
   // Own drag offset: this bar is one of the floating cards someone might want to pull
@@ -267,16 +294,18 @@ export function CanvasCommandBar({
             whole — but a dot with no glyph next to five other dots told nobody what
             pressing it did. The shortlist is gone; every group is still one press away,
             through the picker's own category rail rather than a menu that duplicated it. */}
-        <button
-          type="button"
-          data-tour="creation-object-palette"
-          className={styles.sessionActionButton}
-          data-testid="canvas-quick-add"
-          aria-pressed={quickAddOpen}
-          aria-label={t('quickAdd')}
-          title={t('quickAdd')}
-          onClick={(event) => onQuickAdd(undefined, event.currentTarget.getBoundingClientRect())}
-        >{quickAddOpen ? <ClosePaletteIcon /> : <AddObjectIcon />}</button>
+        <CanvasBarGroup group="add">
+          <button
+            type="button"
+            data-tour="creation-object-palette"
+            className={styles.sessionActionButton}
+            data-testid="canvas-quick-add"
+            aria-pressed={quickAddOpen}
+            aria-label={t('quickAdd')}
+            title={t('quickAdd')}
+            onClick={(event) => onQuickAdd(undefined, event.currentTarget.getBoundingClientRect())}
+          >{quickAddOpen ? <ClosePaletteIcon /> : <AddObjectIcon />}</button>
+        </CanvasBarGroup>
       </>}
 
       {/* The toggle is never hidden — a collapse with no way back is a one-way door — and

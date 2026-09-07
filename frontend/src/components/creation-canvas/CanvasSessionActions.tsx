@@ -26,6 +26,7 @@ import {
 } from '@/lib/canvasSessionActions';
 import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import { canvasChromeShows } from '@/lib/canvasChrome';
+import { CanvasBarGroup } from './CanvasBarGroup';
 import { useContributedSurfaceActions } from './canvasSurfaceActions';
 import styles from './CreationCanvas.module.css';
 
@@ -263,16 +264,14 @@ export function CanvasSessionActions({ handlers, variant, surface, collapsed = f
         ><Glyph /></button>;
       });
 
-      // A cluster of one is not a set, so it gets no trough — a lone button in a
-      // segmented shell reads as a group with a member missing.
-      if (actions.length < 2) return <div key={cluster} className={styles.sessionActionSolo}>{buttons}</div>;
-
-      return <div
+      // ONE captioned group, whatever its size. A cluster of one gets no trough — a lone
+      // button in a segmented shell reads as a group with a member missing — but it keeps
+      // its NAME, drawn above it, which is what a lone unlabelled glyph needed most.
+      return <CanvasBarGroup
         key={cluster}
-        className={styles.sessionActionCluster}
-        role="group"
-        aria-label={t(`sessionActionCluster.${cluster}` as 'sessionActionCluster.history')}
-      >{buttons}</div>;
+        group={cluster}
+        shell={actions.length < 2 ? 'bare' : 'trough'}
+      >{buttons}</CanvasBarGroup>;
     })}
   </>;
 }

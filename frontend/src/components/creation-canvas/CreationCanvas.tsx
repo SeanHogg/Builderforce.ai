@@ -172,6 +172,8 @@ import { TEAMMATE_JOIN_EVENT, teammateFromDrag, type TeammatePayload } from '@/l
 import { getGuestDisplayName, guestMediaTransport } from '@/lib/guestRoomApi';
 import { useCanvasLiveRoom } from '@/lib/live/useCanvasLiveRoom';
 import { GuestInviteLink } from '@/components/guest/GuestInviteLink';
+import { GuestCollaboratorNotice } from '@/components/guest/GuestCollaboratorNotice';
+import { CanvasInviteLinkPanel } from './CanvasInviteLinkPanel';
 import { CanvasRunAbortedError, GuestAiUnavailableError, isCanvasRunAborted, runCreationCanvasAi, type CanvasAiCompletion } from '@/lib/creationCanvasAi';
 import { canvasNoticesFrom } from '@/lib/canvasNotices';
 import { canvasTranscriptForModel } from '@/lib/canvasTranscript';
@@ -286,6 +288,7 @@ import { aiContextGate, boardInventory, findInInventory, scopeNote } from '@/lib
 import { erasureRefusal, objectMayCross, partitionForBoundary, withheldNotice } from '@/lib/canvasConfidentiality';
 import { BRAND_BINDING_HINT } from '@/lib/marketingObjects';
 import { CanvasAppPanel } from '@/components/apps/CanvasAppPanel';
+import { embeddedAppsApi } from '@/lib/embeddedApps';
 import {
   RESUME_TEMPLATES, RESUME_TEMPLATE_IDS, activeResumeRevision, createResumeFamily,
   initializeResumeFromPatch, preserveResumeSourceForPatch, renderResumeMarkdown,
@@ -10231,15 +10234,29 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const connectedId = connected ? canvasProjectId(connected.data) : null;
     if (connectedId != null) return connectedId;
     const source = nodes.find((node) => node.id === sourceId);
-    const created = await createProject({ name: name.trim().slice(0, 120) || 'Untitled project', origin: 'canvas' });
+    // THE BOARD MAY ALREADY BE A PROJECT. "Make this a project" writes the identity
+    // link and claims the address, and it places no card — so a board that had just
+    // been converted looked project-less here and the very next publish provisioned a
+    // SECOND project and shipped the site to an address the creator never chose. The
+    // link is READ (cached, and invalidated by the conversion itself) rather than
+    // inferred from what happens to be drawn on the board.
+    const appProject = await embeddedAppsApi.sessionAppState(sessionId)
+      .then((state) => state.app)
+      .catch(() => null);
+    const project = appProject
+      ? { id: appProject.projectId, name: appProject.name }
+      : await createProject({ name: name.trim().slice(0, 120) || 'Untitled project', origin: 'canvas' });
+    // Placed either way: the card is what every LATER reader resolves through —
+    // `connectedCanvasProjectNode` here, and the `project` object row that lets
+    // `/projects/:id/open` bring somebody back to this exact board.
     // Left of the object it serves, so the edge reads container → thing, and far
     // enough out that the two cards do not overlap on a fresh board.
     const node = newNode('project', source ? { x: source.position.x - 380, y: source.position.y } : { x: 200, y: 200 });
-    node.data = { ...node.data, ...canvasProjectPatch(created) };
+    node.data = { ...node.data, ...canvasProjectPatch(project) };
     setNodes((current) => [...current, node]);
     setEdges((current) => addEdge({ id: crypto.randomUUID(), source: node.id, target: sourceId, type: connectionKind }, current));
-    return created.id;
-  }, [connectionKind, edges, nodes, setEdges, setNodes]);
+    return project.id;
+  }, [connectionKind, edges, nodes, sessionId, setEdges, setNodes]);
 
   const publishWebsite = useCallback((websiteId?: string) => {
     const target = nodes.find((node) => node.id === websiteId && node.data.kind === 'website')
@@ -11770,6 +11787,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           the bar on every surface and in both auth states, and a second copy in
           this panel would be one decision with two homes. */}
     </> : <button disabled={sharedRoom.busy} onClick={() => void sharedRoom.start()}>{sharedRoom.busy ? t('sharedStarting') : t('sharedStart')}</button>) : <>
+      {/* SIGNED IN, and the link half of sharing — the half that did not exist.
+          A logged-out visitor could always start a room and send the URL; the moment
+          somebody signed up, "share this" became an address field and an email the
+          recipient had to sign in to redeem. Both motions live here now, in this order,
+          because the link is the one that works when all you have is a chat window.
+          The panel is owner-gated and decides that itself. */}
+      <CanvasInviteLinkPanel sessionId={sessionId} role={sessionRole} />
       <div><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder={t('emailPlaceholder')} /><select aria-label={t('invitationRole')} value={inviteRole} onChange={(event) => setInviteRole(event.target.value as CreationSessionSummary['role'])}><option value="viewer">{t('roleViewer')}</option><option value="commenter">{t('roleCommenter')}</option><option value="editor">{t('roleEditor')}</option><option value="runner">{t('roleRunner')}</option><option value="owner">{t('roleOwner')}</option></select><button disabled={!inviteEmail.trim()} onClick={() => { void creationSessionsApi.invite(sessionId, { email: inviteEmail.trim() }, inviteRole).then(async (result) => { if ('acceptPath' in result) { await copyTextToClipboard(`${canvasWebOrigin()}${result.acceptPath}`); setPendingInvitations((current) => [...current.filter((item) => item.id !== result.invitationId), { id: result.invitationId, email: result.email, role: result.role as CreationSessionSummary['role'], expiresAt: result.expiresAt, acceptedAt: null, revokedAt: null, createdAt: new Date().toISOString() }]); setNotice(result.emailSent ? t('invitationEmailed') : t('invitationSavedLinkCopied')); } else { const detail = await creationSessionsApi.get(sessionId); setAllMembers(detail.members); setNotice(result.emailSent ? t('collaboratorInvitedEmail') : t('collaboratorInvited')); } setInviteEmail(''); }).catch((error) => setNotice(faultText(error, t('inviteFailed')))); }}>{t('invite')}</button></div>
       {sessionRole === 'owner' && <div aria-label={t('sessionMembers')}>{allMembers.map((member) => <div key={member.userId} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
         <span>{member.displayName || t('collaborator')}{member.userId === currentUserId ? ` ${t('youSuffix')}` : ''}</span>
@@ -11780,6 +11804,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       </div>)}</div>}</div>}
     </>}
     <small>{t('accessLabel', { access: persistence === 'local' ? (inRoom ? t('sharedAnyoneWithLink') : t('privateOnDevice')) : inviteRole })}</small>
+    {/* The other side of the same link: somebody who took one and declined to sign up.
+        They are a real member of this board, so this is an offer of a workspace of
+        their own — never a wall. It shows itself only to a guest identity. */}
+    <GuestCollaboratorNotice />
   </div> : null;
 
   /**
@@ -12071,34 +12099,38 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // Moving around the board, folded out of the left-edge rail. The rail was the
         // last toolbar competing with this bar, and it split "what can I do to this
         // canvas" across two floating elements with nothing saying why.
-        view={<div className={styles.commandBarView} role="group" aria-label={t('canvasViewControls')}>
-          <button type="button" onClick={zoomInAction} aria-label={t('zoomIn')} title={t('zoomIn')}><ZoomInIcon /></button>
-          <button type="button" onClick={zoomOutAction} aria-label={t('zoomOut')} title={t('zoomOut')}><ZoomOutIcon /></button>
-          <button type="button" onClick={fitViewAction} aria-label={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')} title={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')}>{threeDControls ? <ResetViewIcon /> : <FitViewIcon />}</button>
-          <button type="button" onClick={cleanLayout} aria-label={t('arrangeObjects')} title={t('arrangeObjects')}><CleanLayoutIcon /></button>
+        // The BUTTONS, not the group: `CanvasCommandBar` wraps them in the one captioned
+        // `CanvasBarGroup` every other set on the bar goes through, so the name above them
+        // and the trough around them are decided in the same place for all of them. React
+        // Flow owns the viewport, so the host still owns what the buttons DO.
+        view={<>
+          <button type="button" className={styles.sessionActionButton} onClick={zoomInAction} aria-label={t('zoomIn')} title={t('zoomIn')}><ZoomInIcon /></button>
+          <button type="button" className={styles.sessionActionButton} onClick={zoomOutAction} aria-label={t('zoomOut')} title={t('zoomOut')}><ZoomOutIcon /></button>
+          <button type="button" className={styles.sessionActionButton} onClick={fitViewAction} aria-label={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')} title={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')}>{threeDControls ? <ResetViewIcon /> : <FitViewIcon />}</button>
+          <button type="button" className={styles.sessionActionButton} onClick={cleanLayout} aria-label={t('arrangeObjects')} title={t('arrangeObjects')}><CleanLayoutIcon /></button>
           {/* WHAT THE BOARD ALONE HAS. A mini map is a map of the flat board, and pan vs
               marquee is a decision about dragging on one; neither means anything on a
               surface that has no board, so these two are the only view commands that read
               the surface at all. */}
           {surfaceDef.showsBoard && <>
-            <button type="button" onClick={() => setMinimapOpen((open) => !open)} aria-pressed={minimapOpen} aria-label={minimapOpen ? tCommands('hideMiniMap') : tCommands('showMiniMap')} title={minimapOpen ? tCommands('hideMiniMap') : tCommands('showMiniMap')}><MinimapIcon /></button>
-            <button type="button" onClick={() => setCanvasGesture((current) => (current === 'select' ? 'pan' : 'select'))} aria-pressed={canvasGesture === 'select'} aria-label={t('canvasGestureToggle')} title={canvasGesture === 'select' ? t('canvasGestureSelectActive') : t('canvasGesturePanActive')}><MarqueeSelectIcon /></button>
+            <button type="button" className={styles.sessionActionButton} onClick={() => setMinimapOpen((open) => !open)} aria-pressed={minimapOpen} aria-label={minimapOpen ? tCommands('hideMiniMap') : tCommands('showMiniMap')} title={minimapOpen ? tCommands('hideMiniMap') : tCommands('showMiniMap')}><MinimapIcon /></button>
+            <button type="button" className={styles.sessionActionButton} onClick={() => setCanvasGesture((current) => (current === 'select' ? 'pan' : 'select'))} aria-pressed={canvasGesture === 'select'} aria-label={t('canvasGestureToggle')} title={canvasGesture === 'select' ? t('canvasGestureSelectActive') : t('canvasGesturePanActive')}><MarqueeSelectIcon /></button>
           </>}
           {/* WHAT THE SCENE ADDS while it is up. These were the last commands living on the
               bottom-left rail; with the rail gone they are contributed here, beside the
               zoom and reset that already switch to the scene's own camera. */}
           {threeDControls && <>
-            <button type="button" onClick={threeDControls.toggleDepth} aria-pressed={threeDControls.depthMode !== 'flow'} aria-label={tCommands('threeD.depthGroup')} title={threeDControls.depthMode !== 'flow' ? tCommands('threeD.depthGroupActive') : tCommands('threeD.depthGroupInactive')}><DepthIcon /></button>
-            <button type="button" onClick={threeDControls.toggleLayers} aria-pressed={threeDControls.layersVisible} aria-label={tCommands('threeD.layerGuides')} title={threeDControls.layersVisible ? tCommands('threeD.layerGuidesActive') : tCommands('threeD.layerGuidesInactive')}><LayerGuidesIcon /></button>
-            {threeDControls.dropToLayers && <button type="button" onClick={threeDControls.dropToLayers} aria-label={tCommands('threeD.dropToLayers')} title={tCommands('threeD.dropToLayers')}><DropToLayersIcon /></button>}
+            <button type="button" className={styles.sessionActionButton} onClick={threeDControls.toggleDepth} aria-pressed={threeDControls.depthMode !== 'flow'} aria-label={tCommands('threeD.depthGroup')} title={threeDControls.depthMode !== 'flow' ? tCommands('threeD.depthGroupActive') : tCommands('threeD.depthGroupInactive')}><DepthIcon /></button>
+            <button type="button" className={styles.sessionActionButton} onClick={threeDControls.toggleLayers} aria-pressed={threeDControls.layersVisible} aria-label={tCommands('threeD.layerGuides')} title={threeDControls.layersVisible ? tCommands('threeD.layerGuidesActive') : tCommands('threeD.layerGuidesInactive')}><LayerGuidesIcon /></button>
+            {threeDControls.dropToLayers && <button type="button" className={styles.sessionActionButton} onClick={threeDControls.dropToLayers} aria-label={tCommands('threeD.dropToLayers')} title={tCommands('threeD.dropToLayers')}><DropToLayersIcon /></button>}
           </>}
           {/* WHAT EVERY SURFACE HAS. This canvas's files and its readable outline are about
               the SESSION, not about which way it is being read. They used to be gated on
               the board here and drawn on the corner rail everywhere else — one control in
               two places, and neither of them where you last saw it. */}
-          <button type="button" onClick={() => toggleDockPanel('files')} aria-pressed={dockPanel === 'files'} aria-label={tFiles('title')} title={tFiles('title')}><CanvasFilesIcon /></button>
-          <button type="button" onClick={() => toggleDockPanel('outline')} aria-pressed={dockPanel === 'outline'} aria-label={t('canvasOutline')} title={t('canvasOutline')}><AccessibleOutlineIcon /></button>
-        </div>}
+          <button type="button" className={styles.sessionActionButton} onClick={() => toggleDockPanel('files')} aria-pressed={dockPanel === 'files'} aria-label={tFiles('title')} title={tFiles('title')}><CanvasFilesIcon /></button>
+          <button type="button" className={styles.sessionActionButton} onClick={() => toggleDockPanel('outline')} aria-pressed={dockPanel === 'outline'} aria-label={t('canvasOutline')} title={t('canvasOutline')}><AccessibleOutlineIcon /></button>
+        </>}
         onTogglePrompt={presentMode || surfaceDef.brainIsSurface ? undefined : () => setPromptPlacement(toggledCanvasPromptPlacement(promptPlacement))}
         promptOpen={effectivePromptPlacement !== 'closed'}
         // The always-on seats, folded out of the shell's footer band and into the one

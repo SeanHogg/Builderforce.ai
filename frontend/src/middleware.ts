@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 import { VSCODE_WEBVIEW_SCHEME } from '@/lib/embed/embedTrust';
 import { LOCALES, DEFAULT_LOCALE, LOCALE_COOKIE, type Locale } from '@/i18n/config';
 import { isUnknownRootSlug, NOT_FOUND_REWRITE_PATH } from '@/lib/rootRoutes';
+import { isCanvasInvitationRoute } from '@/lib/shellRouting';
 
 /**
  * Route protection rules:
@@ -159,9 +160,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  const needsCoi = (
-    pathname.startsWith('/create/') && !pathname.startsWith('/create/invitations/')
-  );
+  const needsCoi = pathname.startsWith('/create/') && !isCanvasInvitationRoute(pathname);
 
   // Embedded surfaces (/embed/*) are framed cross-origin by host apps (e.g.
   // BurnRateOS). They authenticate via postMessage (not cookies), so we must NOT

@@ -60,3 +60,35 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_tenant_members_tenant_user
 -- The seat tally reads exactly these three columns.
 CREATE INDEX IF NOT EXISTS idx_tenant_members_seat_tally
   ON tenant_members (tenant_id, is_active, seat_kind);
+
+-- Rescue the invitations already stuck by this. A companion workspace invite is
+-- identifiable with certainty: a pending `tenant` invitation whose address also
+-- holds a `session` invitation in the same workspace is one the canvas-share
+-- route wrote, and nothing else produces that pair. Reclassify those as
+-- collaborators so the people currently holding a dead invite link can accept it,
+-- and — same rule as new invites — cap the workspace role at the board role they
+-- were actually given, since these rows have not been redeemed yet.
+UPDATE invitations t
+   SET seat_kind = 'collaborator',
+       role = CASE
+         WHEN EXISTS (
+           SELECT 1 FROM invitations s
+            WHERE s.tenant_id = t.tenant_id
+              AND s.kind = 'session'
+              AND s.email = t.email
+              AND s.role IN ('editor', 'runner', 'owner')
+         ) THEN 'developer'
+         ELSE 'viewer'
+       END,
+       updated_at = NOW()
+ WHERE t.kind = 'tenant'
+   AND t.state = 'pending'
+   AND t.accepted_at IS NULL
+   AND t.revoked_at IS NULL
+   AND t.email IS NOT NULL
+   AND EXISTS (
+     SELECT 1 FROM invitations s
+      WHERE s.tenant_id = t.tenant_id
+        AND s.kind = 'session'
+        AND s.email = t.email
+   );
