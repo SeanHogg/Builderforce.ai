@@ -1,7 +1,7 @@
-/* Its OWN container, so the labels answer to the width the bar was given
-   rather than to the viewport: the same component sits in a ~260px card column
-   and across a full-width list row. The query below targets `.label`, a
-   DESCENDANT of this element — a container cannot style itself. */
+/* Its OWN container so the labels answer to the width THIS BAR was given
+   rather than to the viewport - the same component sits in a ~260px card
+   column and across a full-width list row. The query at the foot of this file
+   styles a descendant of this element; a container cannot style itself. */
 .bar {
   display: flex;
   flex-wrap: wrap;

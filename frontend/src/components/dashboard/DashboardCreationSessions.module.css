@@ -330,13 +330,13 @@
 
 .libraryIntro h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: var(--font-size-section);
 }
 
 .libraryIntro p {
   margin: 5px 0 0;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-small);
 }
 
 .libraryControls {
@@ -366,7 +366,7 @@
 .quotaNotice {
   margin: -7px 0 14px;
   color: var(--warning);
-  font-size: 12px;
+  font-size: var(--font-size-small);
 }
 
 /* The active folder, said once above the library and clearable from there —
@@ -411,7 +411,7 @@
   display: block;
   margin-bottom: 6px;
   color: var(--text-primary);
-  font-size: 18px;
+  font-size: var(--font-size-lede);
 }
 
 .libraryGrid {
@@ -525,7 +525,7 @@
 .resourceCopy span {
   margin-top: 4px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-small);
 }
 
 .resourceChevron {

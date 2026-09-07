@@ -19,7 +19,7 @@ INSERT INTO release_notes (
 ) VALUES
   (
     'a1b2c301-0009-4000-8000-000000000009',
-    '2026.9.16',
+    '2026.9.17',
     'Sub-agents everywhere — and they can write the code now',
     'An agent could already hand a side quest to a sub-agent: a bounded question, answered in its own context, so the main run stays on the work instead of drowning in what it had to read to get there. It just could not do it in the two places it was worth the most. A long-lived run in a container or on a GitHub Actions runner — the ones with a real shell, a real checkout and the time to use them — had no way to delegate, so every search happened inline and every file it opened stayed in the transcript. Both of those surfaces can now spawn a sub-agent, on the same budget and the same terms as everywhere else, and the child''s work is metered and attributed to your workspace exactly like the run that commissioned it. The second half is the editor. A sub-agent on your own machine used to be read-only, because a delegated run had no way to reach the approval prompt — so it could tell you which fourteen files needed the same change and then hand them all back for you to edit. Now it can make the edit. Every write a sub-agent makes asks you first, naming the file, on the same prompt your agent''s own writes use and under the same governance gates; Auto covers them like anything else, a blocked tool stays blocked, and a decline comes back to the sub-agent as something to work around rather than a dead end. Delegation still defaults to read-only, because most of it is investigation — an agent has to ask for a writable child, and you still say yes.',
     'new',

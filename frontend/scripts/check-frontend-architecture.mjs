@@ -30,6 +30,31 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   959 → 965 (`useClientFiles`, 2026-09-07) — the Creations library stopped
+ *   hiding its actions behind a `⋯` menu, and the god component that held them
+ *   split. Seven client modules landed and one was deleted, so the count is a
+ *   NET +6, and each is argued on the "808 → 868" terms — a shared reuse surface
+ *   carries its own boundary rather than inheriting one from whoever mounts it:
+ *
+ *     - `components/creation-sessions/useSessionManagement.tsx` — the hook that
+ *       owns what can be DONE to a session (rename / move / merge / delete), its
+ *       editor state and its confirms. A hook is client by construction.
+ *     - `components/creation-sessions/SessionActionBar.tsx` — the presentation of
+ *       those actions, replacing `SessionManagementControls.tsx` (in this delta's
+ *       removals). Two importers today: the library and the pending-drafts notice.
+ *     - `components/creation-sessions/SessionEditorPanel.tsx` and
+ *       `FolderField.tsx` — the slide-out form shell and the folder picker inside
+ *       it. Both hold a draft the reader is editing.
+ *     - `components/creation-sessions/SessionBulkBar.tsx` — self-gating on a
+ *       selection it is handed, with its own merge panel and confirms.
+ *     - `components/creation-sessions/CreationSessionTile.tsx` — the card/row
+ *       itself: it carries the open handler, the selection checkbox and the
+ *       folder-filter toggle.
+ *     - `components/dashboard/DashboardCreationLauncher.tsx` — a MOVE, not new
+ *       behaviour: the launcher lifted out of `DashboardCreationSessions.tsx`,
+ *       which kept its own directive, so the two halves of the Create destination
+ *       are two files rather than one module with two unrelated jobs.
+ *
  *   953 → 959 (`useClientFiles`, 2026-09-07) — the debt the entry below NAMED and
  *   left open. It recorded that commit 448debcb1 had landed client modules without
  *   raising the baseline and logged that to the Gap Register rather than blessing
