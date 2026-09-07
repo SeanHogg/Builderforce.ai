@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ideSystemPromptBase, AUTONOMY_DIRECTIVE, FOLLOW_THROUGH_DIRECTIVE, DISCOVERY_DIRECTIVE, DISPATCH_STRATEGY_DIRECTIVE } from "./idePersona";
+import { ideSystemPromptBase, AUTONOMY_DIRECTIVE, FOLLOW_THROUGH_DIRECTIVE, DISCOVERY_DIRECTIVE, DISPATCH_STRATEGY_DIRECTIVE, NO_HANDOFF_DIRECTIVE } from "./idePersona";
 
 /**
  * The persona is assembled from named directives, and the failure mode is silent: a
@@ -75,5 +75,27 @@ describe("DISPATCH_STRATEGY_DIRECTIVE", () => {
 
   it("tells the agent to read a refused dispatch rather than retry it", () => {
     expect(DISPATCH_STRATEGY_DIRECTIVE).toMatch(/refusal names the reason/i);
+  });
+});
+
+describe("NO_HANDOFF_DIRECTIVE", () => {
+  it("rides only the surface that can actually run things", () => {
+    // With no folder open there is no `run_command`, so telling the user to run the
+    // build is the truth — scolding the agent for it would make the persona wrong.
+    expect(ideSystemPromptBase(true)).toContain(NO_HANDOFF_DIRECTIVE);
+    expect(ideSystemPromptBase(false)).not.toContain(NO_HANDOFF_DIRECTIVE);
+  });
+
+  it("names the closing shape the agent actually stopped on", () => {
+    // The measured reply: edits applied, then "Now run the type-check, then commit
+    // and push" — a correct instruction handed to the wrong person.
+    expect(NO_HANDOFF_DIRECTIVE).toMatch(/never hand the user a command/i);
+    expect(NO_HANDOFF_DIRECTIVE).toMatch(/your work order/i);
+    expect(NO_HANDOFF_DIRECTIVE).toMatch(/not a change you finished/i);
+  });
+
+  it("still allows the steps that genuinely are not the agent's", () => {
+    expect(NO_HANDOFF_DIRECTIVE).toMatch(/credential/i);
+    expect(NO_HANDOFF_DIRECTIVE).toMatch(/name that step/i);
   });
 });

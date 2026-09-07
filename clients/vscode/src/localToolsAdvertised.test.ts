@@ -51,6 +51,19 @@ describe("the local workspace tools are always advertised", () => {
     }
   });
 
+  it("pins the cleanup verb the persona routes the LAST step of shipping through", () => {
+    // Trimmed by relevance, this one is the easiest to lose: by the time the agent
+    // reaches it the turn's text is about the change, not about branches, so "cleanup"
+    // shares no stem with anything the user said. Unpinned, the agent falls back to
+    // hand-rolled `run_command` git — which is how `git push origin --delete <branch>`
+    // → "remote ref does not exist" happened on a branch the host had already deleted.
+    const prompt = ideSystemPromptBase(true);
+    expect(prompt).toContain("git_cleanup_merged");
+    expect(LOCAL_WORKSPACE_TOOLS.has("git_cleanup_merged")).toBe(true);
+    expect(coreNames.has("git_cleanup_merged")).toBe(true);
+    expect(localToolsIn([...coreNames])).toContain("git_cleanup_merged");
+  });
+
   it("survives the trim on the request that started this: 'commit and push to main'", () => {
     const catalog = [...coreNames, "builtin_tasks_create"];
     const pinned = localToolsIn(catalog);

@@ -2,6 +2,13 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.9.21] — Chats run side by side, and the agent stops going round in circles
+
+- **The Auto-mode switch no longer answers a question a different chat was asked.** Runs live in the extension host so you can switch chats — or close a tab — while the work behind it carries on. But Auto was one switch for every live run: turning it on to stop *this* refactor asking you also said yes to whatever another conversation was parked on, in a tab you were not looking at. It now applies to the chat whose panel you flipped it in, and re-applies when you come back to a chat that is waiting on you.
+- **A run starting in one chat no longer rewrites what another chat's diagnostics report.** The "tools available to the model" count is matched against the chat the panel is showing, so a copied report names that conversation's catalogue and not whichever run happened to start last.
+- **The loop guard survives verification.** The advisory that catches an agent re-reading the same file over and over was reset by every `run_command` — so any run that builds, typechecks or tests between reads never reached the threshold, and the guard was effectively off for exactly the runs that do real work. A real run spent 46% of 99 tool calls revisiting ground it had already covered with the guard silent throughout. Re-reading straight after a build is still free, because that is the right move; going back a second time with nothing changed in between is not.
+- **Repeating a call that has already failed the same way twice is now called out.** An identical failing call got no pushback at all: `git_status` was answered three times with the same "pass `repo` to name the checkout" remedy and re-issued bare each time. The first retry is still free — flakes are real — but from the second the result carries the count, the error already given, and the moves that remain.
+
 ## [2026.9.20] — An @-addressed agent does the work in its own runtime
 
 - **"Bob, merge your changes and push to main" now reaches Bob's runtime.** A message addressed to an invited agent is answered on the server, which has no working tree — so the agent could only say it had no git tool, while its clone, shell and git were sitting in its container. The agent now hands such an instruction to its own run: it steers a live run, resumes a paused one, or starts a follow-up run on the same ticket branch its previous run left the changes on, and that run narrates in the chat. A container run told explicitly to push to main does so and reports the commit.

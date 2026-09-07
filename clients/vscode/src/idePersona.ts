@@ -102,6 +102,31 @@ export const SHIP_CLEANUP_DIRECTIVE =
  * bash and retries a cmd.exe parse failure there, so what remains is the agent's half:
  * prefer the tool over the shell, and keep shell commands to what shells are for.
  */
+/**
+ * No-handoff directive (workspace surface only).
+ *
+ * {@link FOLLOW_THROUGH_DIRECTIVE} closes the EDIT half of "finish the job": do not
+ * describe a change you could have made. This closes the half AFTER it, which is where
+ * the agent was actually stopping. It made the edits, and then wrote:
+ *
+ *     "Now run `pnpm --filter builderforce-api type-check`, then commit and push."
+ *
+ * Every sentence of that is true and useful, so nothing in the persona objected — and
+ * the user, who had asked for the errors to be FIXED, was handed the verification step
+ * instead of a verified fix. Verification handed to the user is verification nobody
+ * does: the change ships unchecked and the next CI failure is the first anyone hears
+ * of it. {@link SHELL_USE_DIRECTIVE} already says to verify with `run_command`; this
+ * says the thing that sentence leaves open — that listing the commands is not
+ * verifying, and that the list is the agent's own work order.
+ *
+ * The run loop enforces it structurally as well: a turn that ends this way is caught
+ * and re-prompted (the HANDOFF shape in `@builderforce/agent-stall`). The model still
+ * has to hold the rule, because a turn the loop has to fight back is a turn the user
+ * waited through for nothing.
+ */
+export const NO_HANDOFF_DIRECTIVE =
+  "Never hand the user a command you could have run yourself. If your reply would end with \"now run the build / tests / type-check\", \"you'll need to install first\", or a Next-steps list of shell or git commands, that list is YOUR work order and not theirs: run it, read the output, and fix what fails before you answer. A change you did not verify is not a change you finished, and a commit-and-push the user asked for is not done until YOU have made it. The only steps you may leave to them are ones you genuinely cannot do here — something needing a credential, a browser, a VS Code restart, or a decision that is theirs to make — and when you leave one, name that step, say why, and state plainly that the change is unverified.";
+
 export const SHELL_USE_DIRECTIVE =
   "Use `run_command` for BUILDING and CHECKING — install, build, type-check, lint, test — and verify your changes with it before reporting done. Do NOT use it for git: `git_status`, `git_diff`, `git_history`, `git_sync_latest`, `git_undo`, `git_redo`, `git_commit`, `git_push`, `open_pull_request` and `git_cleanup_merged` already exist, they are safer, and their failures tell you what to do next where raw git's do not. When a `run_command` DOES fail, read the output before retrying: a non-zero exit from a build or test run is a real result to act on, not a reason to run the same command again.";
 
@@ -117,7 +142,10 @@ export function ideSystemPromptBase(hasWorkspace: boolean): string {
   // Discovery guidance only applies where the file tools exist; the dispatch-handoff
   // strategy rides both surfaces (platform tools are always available).
   const parts = [base, AUTONOMY_DIRECTIVE, FOLLOW_THROUGH_DIRECTIVE];
-  if (hasWorkspace) parts.push(DISCOVERY_DIRECTIVE, SHELL_USE_DIRECTIVE, SHIP_CLEANUP_DIRECTIVE);
+  // All workspace-only: they name `run_command` and the git tools, and stating them
+  // where those do not exist would tell the agent off for correctly reporting that it
+  // cannot run anything.
+  if (hasWorkspace) parts.push(DISCOVERY_DIRECTIVE, SHELL_USE_DIRECTIVE, NO_HANDOFF_DIRECTIVE, SHIP_CLEANUP_DIRECTIVE);
   parts.push(DISPATCH_STRATEGY_DIRECTIVE);
   return parts.join("\n\n");
 }

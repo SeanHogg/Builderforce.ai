@@ -541,3 +541,99 @@ describe('what the model is handed for a large read (chat #99, the loop that nev
     expect(executed.filter((n) => n === 'read_file')).toHaveLength(1);
   });
 });
+
+describe('a turn that hands the user the commands it holds the tools for', () => {
+  const persistence = { sendMessages: async () => [] };
+  /** The IDE surface's real shape: it can edit AND it can run. */
+  const IDE_TOOLS = [
+    { type: 'function' as const, function: { name: 'edit_file', description: 'edit', parameters: {} } },
+    { type: 'function' as const, function: { name: 'run_command', description: 'run a shell command', parameters: {} } },
+  ];
+
+  /**
+   * The measured shape (VS Code chat #100): the model edits, then closes the run by
+   * telling the user to verify it. Every existing detector reads that as a finished
+   * answer, so the run ended with the change unverified and the user holding a list.
+   */
+  const editsThenHandsOff = (): { stream: BrainStreamFn; nudges: () => string[] } => {
+    let turn = 0;
+    const nudges: string[] = [];
+    const stream: BrainStreamFn = async (opts) => {
+      turn += 1;
+      for (const m of opts.messages) {
+        if (m.role === 'user' && String(m.content).includes('telling the USER to run commands')) {
+          nudges.push(String(m.content));
+        }
+      }
+      if (turn === 1) {
+        return {
+          text: '',
+          toolCalls: [{ id: 'e1', name: 'edit_file', args: JSON.stringify({ path: 'boardRoutes.ts', find: 'a', replace: 'b' }) }],
+          finishReason: 'tool_calls',
+        };
+      }
+      // Every turn from here hands the work back — the model does not take the hint,
+      // which is what makes the recovery budget observable.
+      return {
+        text: 'I applied the fix to boardRoutes.ts.\n\nNext steps:\n1. Run `pnpm --filter builderforce-api type-check`\n2. Commit and push the change\n',
+        toolCalls: [],
+        finishReason: 'stop',
+      };
+    };
+    return { stream, nudges: () => nudges };
+  };
+
+  it('re-prompts it instead of accepting it as the final answer', async () => {
+    const { stream, nudges } = editsThenHandsOff();
+    await startRun(4801, {
+      resolvedSystemPrompt: 'sys',
+      tools: IDE_TOOLS,
+      runTool: async () => ({ ok: true }),
+      stream,
+      persistence,
+      userTurn: 'Fix the type errors',
+      maxIterations: 6,
+    });
+    expect(nudges().length).toBeGreaterThan(0);
+    expect(nudges()[0]).toContain('run_command');
+    const trace = getRunTrace(4801);
+    expect(trace.some((e) => e.label === 'loop.recover_handed_off_work')).toBe(true);
+  });
+
+  it('leaves it alone when the run had no way to run anything', async () => {
+    // The web Brain: file/shell tools absent. Telling the user to run the build is
+    // then a limit being reported, and re-prompting would only produce an apology.
+    const { stream, nudges } = editsThenHandsOff();
+    await startRun(4802, {
+      resolvedSystemPrompt: 'sys',
+      tools: [{ type: 'function' as const, function: { name: 'builtin_tasks_create', description: 'create', parameters: {} } }],
+      runTool: async () => ({ ok: true }),
+      stream: async (opts, cb) => {
+        // Skip the edit turn — this surface has no editor; go straight to the handoff.
+        const out = await stream(opts, cb);
+        return out.toolCalls.length
+          ? { text: 'I applied the fix.\n\nNext steps:\n1. Run `pnpm build`\n', toolCalls: [], finishReason: 'stop' }
+          : out;
+      },
+      persistence,
+      userTurn: 'Fix the type errors',
+      maxIterations: 6,
+    });
+    expect(nudges()).toHaveLength(0);
+    expect(getRunTrace(4802).some((e) => e.label === 'loop.recover_handed_off_work')).toBe(false);
+  });
+
+  it('leaves a QUESTION alone — the commands are the answer to "how do I…"', async () => {
+    const { stream, nudges } = editsThenHandsOff();
+    await startRun(4803, {
+      resolvedSystemPrompt: 'sys',
+      tools: IDE_TOOLS,
+      runTool: async () => ({ ok: true }),
+      stream,
+      persistence,
+      userTurn: 'How do I run the API type-check locally?',
+      maxIterations: 6,
+    });
+    expect(nudges()).toHaveLength(0);
+  });
+});

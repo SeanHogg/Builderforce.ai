@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { needsPosixShell, findBash, bashCandidates, posixShellReport, posixShellStatus, resetBashCache } from "./posixShell";
+import { needsPosixShell, cmdCannotRun, findBash, bashCandidates, posixShellReport, posixShellStatus, resetBashCache } from "./posixShell";
 import { buildGitCommand } from "@builderforce/agent-tools";
 
 beforeEach(resetBashCache);
@@ -27,6 +27,34 @@ describe("needsPosixShell", () => {
       "cd Builderforce.ai/frontend && git add -A && git commit -m \"x\" && git push",
       "git status --short --branch",
       "npx tsc --noEmit",
+    ]) expect(needsPosixShell(cmd)).toBe(false);
+  });
+
+  it("recognizes a unix utility as a command word — the `'head' is not recognized` failure", () => {
+    // A real reported run_command failure: cmd.exe has no `head`, so the pipeline was
+    // never even attempted and the agent got a message naming nothing it could act on.
+    for (const cmd of [
+      "git log --oneline | head -5",
+      "grep -rn TODO src",
+      "cat package.json",
+      "ls -la",
+      "git status --short | wc -l",
+      "npm ls 2>&1 | tail -20",
+      "/usr/bin/head -3 x.txt",
+    ]) expect(needsPosixShell(cmd)).toBe(true);
+  });
+
+  it("leaves names cmd.exe also has in the default shell", () => {
+    // Routing these would change the behaviour of commands that work today; the
+    // cmd-cannot-run retry covers them if one ever does fail.
+    for (const cmd of [
+      "dir /b",
+      "sort file.txt",
+      "findstr TODO src",
+      "echo hello",
+      "mkdir build",
+      "npm test",
+      "pnpm -r build",
     ]) expect(needsPosixShell(cmd)).toBe(false);
   });
 
@@ -110,5 +138,25 @@ describe("posixShellStatus / posixShellReport", () => {
     const report = posixShellReport({});
     if (process.platform === "win32") expect(report).toMatch(/git_sync_latest|POSIX/);
     else expect(report).toContain("POSIX scripts");
+  });
+});
+
+describe("cmdCannotRun", () => {
+  it("matches cmd.exe saying it could not attempt the command at all", () => {
+    for (const out of [
+      "'head' is not recognized as an internal or external command,\r\noperable program or batch file.",
+      "The syntax of the command is incorrect.",
+      "') was unexpected at this time.",
+      "Environment variable -e not defined",
+    ]) expect(cmdCannotRun(out)).toBe(true);
+  });
+
+  it("does NOT match a program that ran and failed — those must not be run twice", () => {
+    for (const out of [
+      "src/a.ts(9,4): error TS2339: Property 'ok' does not exist",
+      "Tests  3 failed | 40 passed",
+      "npm ERR! code ELIFECYCLE",
+      "",
+    ]) expect(cmdCannotRun(out)).toBe(false);
   });
 });

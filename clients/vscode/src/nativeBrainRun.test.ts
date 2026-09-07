@@ -213,7 +213,7 @@ describe("a workspace edit", () => {
 // dispatcher, which is the thing the migration had to prove (they used to be a second,
 // native-only copy). NOT covered: that the server actually mints the row.
 describe("a code-changing turn that never records a ticket", () => {
-  it("mints one via from_delta and advances the linked backlog ticket", async () => {
+  it("opens the ticket on the FIRST edit, not at the end of the run", async () => {
     const edit = toolDef("edit_file", { mutating: true });
     const fromDelta = toolDef("builtin_tickets_from_delta", { mutating: true, remote: true, result: { id: 7 } });
     const listTickets = toolDef("builtin_chats_list_tickets", {
@@ -237,7 +237,10 @@ describe("a code-changing turn that never records a ticket", () => {
     expect(update.calls).toEqual([{ id: 42, status: "in_progress" }]);
   });
 
-  it("stays quiet when the model recorded the ticket itself", async () => {
+  it("points the model's own from_delta at that ticket instead of minting a second", async () => {
+    // Both ends follow the same directive, so both record the delta. Two tickets for
+    // one change is worse on the board than the missing ticket this exists to prevent,
+    // so the model's call is given the `taskId` it left out and attaches instead.
     const edit = toolDef("edit_file", { mutating: true });
     const fromDelta = toolDef("builtin_tickets_from_delta", { mutating: true, remote: true, result: { id: 7 } });
     const listTickets = toolDef("builtin_chats_list_tickets", { remote: true, result: [] });
@@ -256,9 +259,72 @@ describe("a code-changing turn that never records a ticket", () => {
       },
     });
 
-    // Once — the model's own call. The backstop must not add a second.
-    expect(fromDelta.calls).toHaveLength(1);
+    // The run's own opening call, then the model's — attached, never a second mint.
+    expect(fromDelta.calls).toHaveLength(2);
+    expect(fromDelta.calls[0]).not.toHaveProperty("taskId");
+    expect(fromDelta.calls[1]).toMatchObject({ summary: "did a thing", taskId: 7 });
     expect(update.calls).toHaveLength(0);
+  });
+
+  it("leaves an explicit taskId from the model alone — it may know a better ticket", async () => {
+    const edit = toolDef("edit_file", { mutating: true });
+    const fromDelta = toolDef("builtin_tickets_from_delta", { mutating: true, remote: true, result: { id: 7 } });
+    const listTickets = toolDef("builtin_chats_list_tickets", { remote: true, result: [] });
+
+    await runTurn({
+      tools: [edit, fromDelta, listTickets],
+      projectId: 5,
+      permissionMode: "acceptEdits",
+      script: (ctx) => {
+        if (ctx.turn === 0) return { toolCalls: [{ name: "edit_file", args: { path: "src/app.ts" } }] };
+        if (ctx.turn === 1) {
+          return { toolCalls: [{ name: "builtin_tickets_from_delta", args: { projectId: 5, summary: "s", taskId: 2427 } }] };
+        }
+        return { text: "done" };
+      },
+    });
+
+    expect(fromDelta.calls[1]).toMatchObject({ taskId: 2427 });
+  });
+
+  it("attaches files touched AFTER the ticket was opened to that same ticket", async () => {
+    const edit = toolDef("edit_file", { mutating: true });
+    const fromDelta = toolDef("builtin_tickets_from_delta", { mutating: true, remote: true, result: { id: 7 } });
+    const listTickets = toolDef("builtin_chats_list_tickets", { remote: true, result: [] });
+
+    await runTurn({
+      tools: [edit, fromDelta, listTickets],
+      projectId: 5,
+      permissionMode: "acceptEdits",
+      script: (ctx) => {
+        if (ctx.turn === 0) return { toolCalls: [{ name: "edit_file", args: { path: "src/a.ts" } }] };
+        if (ctx.turn === 1) return { toolCalls: [{ name: "edit_file", args: { path: "src/b.ts" } }] };
+        return { text: "done" };
+      },
+    });
+
+    expect(fromDelta.calls).toHaveLength(2);
+    // The opening call carries only what was known then; the settle pass carries the
+    // rest, attached to the ticket the first call minted.
+    expect(fromDelta.calls[0]).toMatchObject({ files: ["src/a.ts"] });
+    expect(fromDelta.calls[0]).not.toHaveProperty("taskId");
+    expect(fromDelta.calls[1]).toMatchObject({ files: ["src/b.ts"], taskId: 7 });
+  });
+
+  it("does not spend a second call when the first edit was the only one", async () => {
+    const edit = toolDef("edit_file", { mutating: true });
+    const fromDelta = toolDef("builtin_tickets_from_delta", { mutating: true, remote: true, result: { id: 7 } });
+    const listTickets = toolDef("builtin_chats_list_tickets", { remote: true, result: [] });
+
+    await runTurn({
+      tools: [edit, fromDelta, listTickets],
+      projectId: 5,
+      permissionMode: "acceptEdits",
+      script: (ctx) =>
+        ctx.turn === 0 ? { toolCalls: [{ name: "edit_file", args: { path: "src/a.ts" } }] } : { text: "done" },
+    });
+
+    expect(fromDelta.calls).toHaveLength(1);
   });
 });
 
