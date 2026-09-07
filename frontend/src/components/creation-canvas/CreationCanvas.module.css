@@ -379,6 +379,12 @@
 .hostActions .secondaryButton:disabled { opacity:.45; cursor:not-allowed; }
 .hostActions .secondaryButton[aria-busy='true'] { opacity:.6; }
 
+/* The ONE way a piece of canvas chrome names a group of controls — the ••• sheet's
+   section headings and the command bar's group captions are the same idea at the same
+   size, so they are the same declaration. Split into two the moment they were both
+   wanted and they drift into two typographies for one thing. */
+.chromeHeading { color:var(--canvas-muted); font-size:8px; font-weight:750; letter-spacing:.1em; text-transform:uppercase; }
+
 /* ── A NAMED GROUP IN THE BAR ─────────────────────────────────────────────────────
    The same argument the surface switcher makes, carried one step further. A trough says
    "these belong together" — same shell, same radius and same lit state as `.surfaceTabs`,
@@ -535,11 +541,6 @@
    nth-child rule here, so the sheet keeps working whichever rows the session offers. */
 .moreMenu button[data-wide='true'] { grid-column:1 / -1; }
 .moreMenu button:hover,.moreMenu button:focus-visible { outline:none; background:var(--canvas-hover); color:var(--canvas-accent); }.moreMenu button:hover > span,.moreMenu button:focus-visible > span { background:color-mix(in srgb,var(--canvas-accent) 24%,var(--canvas-panel)); color:var(--canvas-accent); }
-/* The ONE way a piece of canvas chrome names a group of controls — the ••• sheet's
-   section headings and the command bar's group captions are the same idea at the same
-   size, so they are the same declaration. Split into two the moment they were both
-   wanted and they drift into two typographies for one thing. */
-.chromeHeading { color:var(--canvas-muted); font-size:8px; font-weight:750; letter-spacing:.1em; text-transform:uppercase; }
 .moreMenuHeading { composes: chromeHeading; grid-column:1 / -1; margin:5px 5px 1px; }.moreMenuHeading:first-child { margin-top:1px; }
 .moreMenu label { grid-column:1 / -1; display:flex; align-items:center; justify-content:space-between; margin-top:3px; border-top:1px solid var(--canvas-line); border-radius:0; cursor:default; }.moreMenu label > span { display:flex; align-items:center; gap:8px; }.moreMenu label i { width:22px; height:22px; display:grid; place-items:center; border-radius:var(--radius-sm); font-style:normal; }
 .moreMenu select { max-width:105px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); padding:4px; background:var(--canvas-panel); color:var(--canvas-ink); font:inherit; }
