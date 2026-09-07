@@ -17,7 +17,7 @@ import type { BrainStreamFn } from "@seanhogg/builderforce-brain-embedded";
 import { TOOL_DEFS, type ToolDef } from "./fileTools";
 import { cognitionToolDefs } from "./cognition";
 import { listPlatformTools } from "./platformTools";
-import { subagentToolDef } from "./subagentTool";
+import { subagentToolDef, type SubagentToolDeps } from "./subagentTool";
 
 export async function brainToolCatalog(
   secrets: vscode.SecretStorage,
@@ -27,6 +27,10 @@ export async function brainToolCatalog(
    *  tool whose only backing is a model we cannot reach would surface a call that is
    *  certain to fail. */
   stream?: () => Promise<BrainStreamFn>,
+  /** How a delegated child asks permission to write. Omitted ⇒ children stay read-only;
+   *  `spawn_agent` is still advertised, because a read-only child is the DEFAULT and is
+   *  most of what delegation is for. */
+  confirmWrite?: SubagentToolDeps["confirmWrite"],
 ): Promise<ToolDef[]> {
   const cognitionTools = projectId != null ? cognitionToolDefs(secrets, projectId) : [];
   const platformTools = await listPlatformTools(secrets);
@@ -37,7 +41,11 @@ export async function brainToolCatalog(
   // could drift from it.
   const delegation: ToolDef[] =
     root && stream
-      ? [subagentToolDef({ stream, catalog: () => [...localTools, ...cognitionTools, ...platformTools] })]
+      ? [subagentToolDef({
+          stream,
+          catalog: () => [...localTools, ...cognitionTools, ...platformTools],
+          ...(confirmWrite ? { confirmWrite } : {}),
+        })]
       : [];
   return [...localTools, ...cognitionTools, ...platformTools, ...delegation];
 }

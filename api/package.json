@@ -49,7 +49,9 @@
     "models:refresh": "node scripts/refresh-model-snapshot.mjs",
     "models:check": "node scripts/refresh-model-snapshot.mjs --check",
     "backfill:byo-usage": "node scripts/backfill-byo-usage.mjs",
-    "check:burnrate-parity": "node scripts/check-burnrate-parity.mjs"
+    "check:burnrate-parity": "node scripts/check-burnrate-parity.mjs",
+    "gen:agent-relay": "node scripts/gen-agent-relay-source.mjs",
+    "check:agent-relay": "node scripts/gen-agent-relay-source.mjs --check"
   },
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",

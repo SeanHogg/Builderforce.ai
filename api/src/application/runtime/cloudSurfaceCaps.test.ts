@@ -37,12 +37,14 @@ describe('CLOUD_SURFACE_CAPS → durable/Worker toolset', () => {
     expect(names(CLOUD_AGENT_TOOLS)).toContain('spawn_agent');
   });
 
-  it('withholds `orchestrate` from the container — its image has no spawn handler', () => {
-    // Same rule that keeps `skill.author` out: the container runs its OWN loop, and a
-    // tool the image cannot dispatch 400s mid-run. It follows the deployed image, not
-    // this source.
-    expect(CONTAINER_SURFACE_CAPS.has('orchestrate')).toBe(false);
-    expect(names(CONTAINER_AGENT_TOOLS)).not.toContain('spawn_agent');
+  it('backs `orchestrate` on the container too — the child runs in the Worker', () => {
+    // This used to be withheld, and the reason was the deployed-image ordering rule
+    // rather than a missing backing: the image runs its own loop, so a tool it could
+    // not dispatch was a wasted step mid-run. Both halves are now closed — the `spawn`
+    // container-op runs the child HERE (same kernel, same metered turn), and every
+    // image dispatches `spawn_agent` through the shared relay module.
+    expect(CONTAINER_SURFACE_CAPS.has('orchestrate')).toBe(true);
+    expect(names(CONTAINER_AGENT_TOOLS)).toContain('spawn_agent');
   });
 
   it('backs `coordinate` — several agents can be staffed onto one ticket at once', () => {
@@ -92,8 +94,8 @@ describe('CONTAINER_SURFACE_CAPS → container toolset (must match server.mjs)',
     expect(names(CONTAINER_AGENT_TOOLS)).toEqual([
       'ask_human', 'claim_resource', 'finish', 'git_diff', 'git_history', 'git_redo', 'git_status',
       'git_sync_latest', 'git_undo', 'list_files', 'memory_forget', 'memory_recall', 'memory_remember',
-      'read_file', 'release_resource', 'run_command', 'update_prd', 'web_search', 'workspace_note',
-      'workspace_read', 'write_file',
+      'read_file', 'release_resource', 'run_command', 'spawn_agent', 'update_prd', 'web_search',
+      'workspace_note', 'workspace_read', 'write_file',
     ]);
   });
 

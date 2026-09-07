@@ -19,11 +19,27 @@ export class SalesWorkspaceService {
     return row;
   }
 
+  /**
+   * Whose sales workspace this request is allowed to read or write.
+   *
+   * EVERY signed-in account owns one. It used to require `accountType === 'sales'`,
+   * which read the product backwards: an associate selling Builderforce needs a
+   * pipeline, and so does every founder who ships something on it — the platform
+   * dogfoods the capability it sells. Nothing here was ever shared between accounts;
+   * every row this service touches is keyed by `ownerUserId`, so the account type was
+   * gating a private workspace rather than protecting anyone's data. Opening it is
+   * therefore the removal of a gate, not a widening of scope.
+   *
+   * The CROSS-ACCOUNT read is unchanged and still narrow: a superadmin may open
+   * ANOTHER user's workspace only when that user is an `accountType === 'sales'`
+   * associate of the platform's own programme (`associates()` is that same roster).
+   * Somebody's private pipeline does not become readable because this row exists.
+   */
   async owner(userId: string, requestedId?: string): Promise<{ id: string; admin: boolean } | null> {
     const current = await this.viewer(userId);
     if (!current) return null;
     const requested = requestedId || current.id;
-    if (requested === current.id) return current.accountType === 'sales' ? { id: requested, admin: current.isSuperadmin } : null;
+    if (requested === current.id) return { id: requested, admin: current.isSuperadmin };
     if (!current.isSuperadmin) return null;
     const [associate] = await this.db.select({ id: users.id }).from(users).where(and(eq(users.id, requested), eq(users.accountType, 'sales'))).limit(1);
     return associate ? { id: requested, admin: true } : null;

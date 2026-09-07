@@ -40,7 +40,10 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
   const streamForRoute = async (): Promise<BrainStreamFn> =>
     routeStream(await resolveModelRoute(secrets), await getApiKey(secrets));
   return createBrainRunHost({
-    tools: (projectId) => brainToolCatalog(secrets, workspaceRoot() || undefined, projectId, streamForRoute),
+    // `confirmWrite` comes from the RUN (it knows the chat and the live Auto switch),
+    // so it is passed straight through rather than rebuilt here.
+    tools: (projectId, confirmWrite) =>
+      brainToolCatalog(secrets, workspaceRoot() || undefined, projectId, streamForRoute, confirmWrite),
     workspaceRoot,
     // Resolved per run, not once: an explicit pick, the project's Evermind pin or an
     // on-device route can all change between turns, and a local credential can expire.

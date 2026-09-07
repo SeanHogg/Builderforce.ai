@@ -189,6 +189,7 @@ __export(src_exports, {
   ratedTurnTool: () => ratedTurnTool,
   reasoningForRun: () => reasoningForRun,
   repeatedFailureAdvisory: () => repeatedFailureAdvisory,
+  requestRunConfirm: () => requestRunConfirm,
   resetApiVersionCache: () => resetApiVersionCache,
   resetBrainRunStore: () => resetBrainRunStore,
   resolveRecipient: () => resolveRecipient,
@@ -2118,7 +2119,13 @@ var LOCAL_WORKSPACE_TOOLS = /* @__PURE__ */ new Set([
   // branches, so "cleanup" shares no stem with anything the user said. Unpinned, the
   // agent falls back to hand-rolled `run_command` git — which is exactly how
   // `git push origin --delete <branch>` → `remote ref does not exist` happened.
-  "git_cleanup_merged"
+  "git_cleanup_merged",
+  // Delegation to a sub-agent. It belongs here for the same reason and fails the same
+  // way: a turn phrased "where does the auth middleware live?" shares no stem with
+  // "delegate", so relevance drops the one tool that would answer it cheaply, and the
+  // agent burns the turns delegation exists to save. Nothing is pinned that the host
+  // did not advertise — the web Brain offers no `spawn_agent`, so this is inert there.
+  "spawn_agent"
 ]);
 var CODE_CHANGE_TOOLS = /* @__PURE__ */ new Set([
   "write_file",
@@ -3905,6 +3912,19 @@ function clearRunError(chatId) {
   c.errorAction = null;
   emit(c);
 }
+function requestRunConfirm(chatId, req, opts) {
+  if (getRunDriver()) return Promise.resolve(false);
+  const c = getCell(chatId);
+  return new Promise((resolve) => {
+    c.pendingConfirm = { name: req.name, args: req.args };
+    c.confirmResolver = resolve;
+    c.activity = {
+      ...toolActivity(req.name, req.args, opts?.step ?? c.activity?.step ?? 0, Date.now()),
+      phase: "awaiting"
+    };
+    emit(c);
+  });
+}
 function resolveRunConfirm(chatId, ok) {
   const driver = getRunDriver();
   if (driver) return driver.confirm(chatId, ok);
@@ -4330,12 +4350,7 @@ ${continuationDirective()}`;
       const args = call.args;
       attachDeltaToRunTicket(call.name, args, c.deltaTicketId);
       if (needsConfirm && needsConfirm({ name: call.name, args })) {
-        const ok = await new Promise((resolve) => {
-          c.pendingConfirm = { name: call.name, args };
-          c.confirmResolver = resolve;
-          c.activity = { ...toolActivity(call.name, args, iter, Date.now()), phase: "awaiting" };
-          emit(c);
-        });
+        const ok = await requestRunConfirm(chatId, { name: call.name, args }, { step: iter });
         if (!ok) {
           const declined = { cancelled: true, reason: "User declined this action." };
           pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: "tool", label: call.name, args, result: declined });
@@ -6026,6 +6041,7 @@ function artifactRoutePath(kind, ref, projectId) {
   ratedTurnTool,
   reasoningForRun,
   repeatedFailureAdvisory,
+  requestRunConfirm,
   resetApiVersionCache,
   resetBrainRunStore,
   resolveRecipient,

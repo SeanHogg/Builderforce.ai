@@ -29,8 +29,29 @@ const apiRoot = resolve(here, '../../..');
 const read = (rel: string) => readFileSync(resolve(apiRoot, rel), 'utf8');
 
 const containerImage = read('container/server.mjs');
+// The pause itself now lives ONCE, in the dispatch table both images run — the
+// container by importing it, the Actions runner by inlining the generated copy of it.
+const relayModule = read('container/agentRelay.mjs');
 const actionsRunner = read('src/application/runtime/githubActionsRunner.ts');
 const engine = read('src/application/runtime/cloudAgentEngine.ts');
+
+describe('container/agentRelay.mjs — the pause, implemented once for both images', () => {
+  it('handles the ask_human tool by posting the ask_human op', () => {
+    expect(relayModule).toContain("name === 'ask_human'");
+    expect(relayModule).toContain("op('ask_human'");
+  });
+
+  it('hands the conversation over, so the resumed process continues rather than restarts', () => {
+    // `messages` is the whole point: the repo survives on the ticket branch, the
+    // conversation survives ONLY because it is posted here.
+    expect(relayModule).toMatch(/messages: Array\.isArray\(state\.messages\)/);
+    expect(relayModule).toMatch(/writtenPaths: state\.writtenPaths/);
+  });
+
+  it('returns `paused` so the calling image stops its loop', () => {
+    expect(relayModule).toMatch(/if \(r && r\.paused\) return \{ ok: true, paused: true/);
+  });
+});
 
 describe('ask_human is wired end to end on the redispatch surfaces', () => {
   it('the surface advertises it, so the model can actually reach it', () => {
@@ -55,16 +76,14 @@ describe('ask_human is wired end to end on the redispatch surfaces', () => {
     ['githubActionsRunner.ts', actionsRunner],
   ] as const) {
     describe(label, () => {
-      it('handles the ask_human tool by posting the ask_human op', () => {
-        expect(source).toContain("name === 'ask_human'");
-        expect(source).toContain("'ask_human'");
-      });
-
-      it('hands its conversation over, so the resumed process continues rather than restarts', () => {
-        // `messages` is the whole point: the repo survives on the ticket branch, the
-        // conversation survives ONLY because it is posted here.
+      it('routes the tool through the shared relay table, carrying its live loop state', () => {
+        // The image no longer implements the pause itself — it hands the call to the
+        // ONE dispatch table both images run. What each image still owns is passing
+        // the state only it has: the conversation to hand over, and the live
+        // `writtenPaths` set the resumed process must be seeded with.
+        expect(source).toContain('execRelayTool');
         expect(source).toMatch(/messages: loop && Array\.isArray\(loop\.messages\)/);
-        expect(source).toMatch(/writtenPaths: \[\.\.\.writtenPaths\]/);
+        expect(source).toMatch(/writtenPaths,/);
       });
 
       it('stops the loop on a paused tool result instead of running more tools', () => {

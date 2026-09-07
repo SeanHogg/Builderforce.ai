@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ToolRegistry, type Capability, type CapabilityProvider, type ToolDefinition, type ToolSchema } from '@builderforce/agent-tools';
 import type { LoopTurnResult } from '@builderforce/agent-loop';
-import { buildOrchestrationCapability, childCapabilities, MUTATING_CAPABILITIES, NON_DELEGABLE_CAPABILITIES } from './cloudSubagent';
+import { buildOrchestrationCapability, childCapabilities, imageHostedChildCeiling, MUTATING_CAPABILITIES, NON_DELEGABLE_CAPABILITIES } from './cloudSubagent';
+import { CONTAINER_SURFACE_CAPS } from './cloudAgentTools';
 
 /**
  * What a child may TOUCH is the whole of this module's job — the run itself belongs to
@@ -172,5 +173,55 @@ describe('buildOrchestrationCapability', () => {
 
     expect(seen).toBeDefined();
     expect(seen!.orchestration).toBeUndefined();
+  });
+});
+
+describe('imageHostedChildCeiling', () => {
+  /**
+   * A child commissioned by the container or the Actions runner does NOT run in that
+   * image — it runs in the Worker. So the parent's set cannot be inherited verbatim,
+   * and the two ways to get that wrong are opposite: hand over a capability this host
+   * cannot back, or narrow so hard the child cannot do the job it was delegated.
+   */
+  it('drops `shell`, which no Worker can back', () => {
+    // The failure this prevents: a child offered `run_command` with nothing behind it.
+    expect(CONTAINER_SURFACE_CAPS.has('shell')).toBe(true);
+    expect(imageHostedChildCeiling(CONTAINER_SURFACE_CAPS).has('shell')).toBe(false);
+  });
+
+  it('translates the shell into `repo.search`, so a delegated investigation can search', () => {
+    // An image parent greps its clone THROUGH the shell, which is the only reason
+    // `repo.search` is absent from its set. Dropping the shell without this would leave
+    // a child unable to search at all — and searching is most of what delegation is for.
+    expect(CONTAINER_SURFACE_CAPS.has('repo.search')).toBe(false);
+    expect(imageHostedChildCeiling(CONTAINER_SURFACE_CAPS).has('repo.search')).toBe(true);
+  });
+
+  it('grants nothing the parent did not already hold', () => {
+    // `repo.search` is the ONE addition, and only as the read half of a shell the
+    // parent has. A ceiling that grew any other way would be an escalation.
+    const parent = CONTAINER_SURFACE_CAPS;
+    const extra = [...imageHostedChildCeiling(parent)].filter((c) => !parent.has(c));
+    expect(extra).toEqual(['repo.search']);
+  });
+
+  it('adds no search capability to a parent that has no shell', () => {
+    const ceiling = imageHostedChildCeiling(new Set<Capability>(['repo.read', 'memory']));
+    expect(ceiling.has('repo.search')).toBe(false);
+    expect([...ceiling].sort()).toEqual(['memory', 'repo.read']);
+  });
+
+  it('still yields a child that cannot spawn, once the withheld set is applied', () => {
+    // The structural invariant has to survive the new ceiling: recursion stays
+    // impossible by construction, not by a depth counter.
+    const child = childCapabilities(imageHostedChildCeiling(CONTAINER_SURFACE_CAPS), false);
+    expect(child.has('orchestrate')).toBe(false);
+    expect(child.has('human')).toBe(false);
+  });
+
+  it('gives a WRITABLE child the repo write the parent holds, and a read-only one none', () => {
+    const ceiling = imageHostedChildCeiling(CONTAINER_SURFACE_CAPS);
+    expect(childCapabilities(ceiling, false).has('repo.write')).toBe(true);
+    expect(childCapabilities(ceiling, true).has('repo.write')).toBe(false);
   });
 });

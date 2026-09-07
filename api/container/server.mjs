@@ -29,6 +29,13 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
 import { join, dirname, relative, sep } from 'node:path';
 import { tmpdir } from 'node:os';
+// The Worker-relayed half of the tool table — memory, PRD, coordination, search,
+// delegation, the platform catalog and the human pause. ONE implementation, shared
+// verbatim with the GitHub Actions runner (which inlines this same file), so a new
+// relayed tool is a one-file change instead of a per-image transcription. Everything
+// below that touches the clone or the shell stays here, because that half genuinely
+// differs between the two images.
+import { execRelayTool, SUPPORTED_TOOL_NAMES } from './agentRelay.mjs';
 
 const PORT = Number(process.env.PORT || 8080);
 // Live-preview passthrough: when a run starts a dev server on PREVIEW_PORT, the
@@ -210,101 +217,25 @@ async function execTool(spec, workdir, writtenPaths, name, parsed, proc, loop) {
     if (!workdir) return { ok: false, error: 'no repository checked out — git tools need a bound repo' };
     return gitTool(spec, workdir, proc, name, parsed);
   }
-  // Durable cross-run memory. Like the platform tools, the container holds no DB
-  // creds, so all three verbs relay to the Worker's `memory` op — which drives the
-  // SAME governed capability the durable surface uses (scope chain, provenance, TTL;
-  // migration 0371), so a fact stored by a container run is recalled by a durable one
-  // and vice versa, under one set of rules.
-  if (name === 'memory_recall') {
-    return op(spec, { op: 'memory', args: { action: 'recall', query: parsed.query, limit: parsed.limit } });
-  }
-  if (name === 'memory_remember') {
-    return op(spec, {
-      op: 'memory',
-      args: {
-        action: 'remember',
-        key: parsed.key, content: parsed.content, tags: parsed.tags, importance: parsed.importance,
-        // Governance metadata the model may now supply — how widely the fact applies
-        // and when it lapses. The Worker resolves the concrete scope owner from the run.
-        scope: parsed.scope, ttl_days: parsed.ttl_days,
-      },
-    });
-  }
-  if (name === 'memory_forget') {
-    return op(spec, { op: 'memory', args: { action: 'forget', key: parsed.key } });
-  }
-  // The ticket's PRD. The container holds no DB creds and the PRD lives in the
-  // platform's spec store (not the clone), so both modes relay to the Worker's `prd`
-  // op — the SAME capability the durable loop calls, so an `update_prd` on this surface
-  // lands identically to one on that surface.
-  if (name === 'update_prd') {
-    return op(spec, {
-      op: 'prd',
-      args: {
-        action: parsed.mode === 'section' ? 'section' : 'append',
-        section: parsed.section,
-        content: parsed.content,
-      },
-    });
-  }
-  // Multi-agent leases + blackboard. The Worker owns both stores; this image only
-  // relays the four shared coordination verbs, exactly like durable memory above.
-  if (name === 'claim_resource') {
-    return op(spec, { op: 'coordinate', args: { action: 'claim', resource: parsed.resource, mode: parsed.mode, reason: parsed.reason } });
-  }
-  if (name === 'release_resource') {
-    return op(spec, { op: 'coordinate', args: { action: 'release', resource: parsed.resource } });
-  }
-  if (name === 'workspace_note') {
-    return op(spec, { op: 'coordinate', args: { action: 'note', key: parsed.key, content: parsed.content } });
-  }
-  if (name === 'workspace_read') {
-    return op(spec, { op: 'coordinate', args: { action: 'read', query: parsed.query, limit: parsed.limit } });
-  }
-  // Human-in-the-loop. The Worker opens the question, routes the ticket to the
-  // board's needs-attention lane, parks the row in `paused` and PERSISTS the
-  // conversation we hand it — so a fresh container process can be started with the
-  // same conversation once someone answers. We deliberately send `messages` rather
-  // than a summary: the resumed process must continue the run, not re-derive it.
-  if (name === 'ask_human') {
-    const question = typeof parsed.question === 'string' ? parsed.question.trim() : '';
-    if (!question) return { ok: false, error: 'question is required to ask a human' };
-    const r = await op(spec, {
-      op: 'ask_human',
-      args: {
-        question,
-        context: typeof parsed.context === 'string' ? parsed.context : undefined,
-        messages: loop && Array.isArray(loop.messages) ? loop.messages : [],
-        writtenPaths: [...writtenPaths],
-        step: loop && typeof loop.step === 'number' ? loop.step : 0,
-        // This turn's tool-call ids so the Worker can close the pairing before it
-        // freezes the transcript: our own call has no result yet, and any sibling
-        // call never runs because the loop stops here.
-        toolCallId: (loop && loop.toolCallId) || '',
-        toolCallIds: (loop && loop.toolCallIds) || [],
-      },
-    });
-    // `paused` is what stops the loop; anything else (a cancelled run, a rejected
-    // question) is an ordinary tool failure the agent can react to.
-    if (r && r.paused) return { ok: true, paused: true, note: r.note };
-    return r && typeof r === 'object' ? r : { ok: false, error: 'could not park the run on a human question' };
-  }
-  // Web search. Relayed for the same reason memory and the platform tools are: the
-  // vendor credential, the shared read-through cache and the spend meter all live in
-  // the Worker. This op is what lets the container advertise `web.search` at all —
-  // before it existed the capability was withheld here, so the two cloud surfaces
-  // disagreed about what an agent could do purely because of where it happened to run.
-  if (name === 'web_search') {
-    const query = typeof parsed.query === 'string' ? parsed.query : '';
-    if (!query.trim()) return { ok: false, error: 'query is required' };
-    return op(spec, { op: 'search', args: { query } });
-  }
-  // Platform (project-management) tools — the container holds no DB creds, so it
-  // relays each `builtin_*` call back to the Worker, which runs the curated,
-  // subset-guarded tool in-process (create task / update OKR / read remaining work).
-  if (name.startsWith('builtin_')) {
-    return op(spec, { op: 'platform_tool', args: { name, arguments: parsed } });
-  }
+  // Everything else the model can call is backed by the WORKER, not by this process:
+  // durable memory, the ticket PRD, coordination leases + blackboard, web search,
+  // delegation, the curated platform tools and the human-in-the-loop pause. All of it
+  // is dispatched by the SHARED relay module — the same code the GitHub Actions runner
+  // inlines — so the two image surfaces cannot drift apart in what they can execute.
+  // `null` means "not a relayed tool", which here means nothing implements it.
+  const relayed = await execRelayTool(
+    (opName, opArgs) => op(spec, { op: opName, args: opArgs }),
+    name,
+    parsed,
+    {
+      messages: loop && Array.isArray(loop.messages) ? loop.messages : [],
+      step: loop && typeof loop.step === 'number' ? loop.step : 0,
+      toolCallId: (loop && loop.toolCallId) || '',
+      toolCallIds: (loop && loop.toolCallIds) || [],
+      writtenPaths,
+    },
+  );
+  if (relayed !== null) return relayed;
   return { ok: false, error: `unknown tool '${name}'` };
 }
 
@@ -595,7 +526,13 @@ async function runLoop(spec) {
       // A heartbeat may have observed a cancel (and killed an in-flight command)
       // since the last step — stop before spending another LLM call.
       if (cancelled) break;
-      const turn = await op(spec, { op: 'llm', args: { messages } });
+      // `supportedTools` is this image's capability HANDSHAKE. The Worker advertises
+      // the intersection of what the surface's capability set permits and what this
+      // process can actually dispatch, which is what lets a capability be added to
+      // `CONTAINER_SURFACE_CAPS` the moment its Worker-side op exists rather than only
+      // after every image has been rebuilt and deployed. An older image simply omits
+      // the new name and is never offered the tool.
+      const turn = await op(spec, { op: 'llm', args: { messages, supportedTools: SUPPORTED_TOOL_NAMES } });
       // A gateway LLM error (cascade exhausted: 429 / 413 context-too-big / etc.) is a
       // FAILURE, not an orderly finish — the model produced no turn. Route it to the
       // `fail` channel (self-heal/retry) via `crashed`, NOT `finalize`, so the run is

@@ -771,8 +771,7 @@
       "reach": "Reach",
       "admin": "Admin",
       "notYet": "not yet",
-      "lockHint": "Sign in to use this",
-      "expand": "Expand"
+      "lockHint": "Sign in to use this"
     },
     "journey": {
       "label": "Founder's journey",
@@ -25665,8 +25664,7 @@
       "make": "Build it.",
       "run": "Run it as a company.",
       "measure": "Is it working?",
-      "reach": "Sell, buy, hire, be found.",
-      "expand": "Grow it.",
+      "reach": "Sell it, be found, grow it.",
       "admin": "Settings."
     },
     "arcNote": "Measure is what makes this a loop rather than a line: the kill condition set during Prove is graded there, and the answer goes back to Idea. A proof with no condition that could fail is a launch with extra steps.",

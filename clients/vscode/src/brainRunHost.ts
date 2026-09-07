@@ -46,6 +46,7 @@ import {
   type ModelFallbackSurface,
   type ReasoningIntent,
 } from "@seanhogg/builderforce-brain-embedded";
+import { createChildWriteGate, type ChildWriteDecision } from "./childWriteGate";
 import type { ToolDef } from "./fileTools";
 import { createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs, type NativeRunLabels } from "./nativeBrainRun";
 import { renderPolicyDirectives, type PolicyGate } from "./policy";
@@ -116,8 +117,17 @@ export interface ToolRunInfo {
 
 /** What the editor supplies to a run; every member is host-side, none needs the panel. */
 export interface BrainRunHostPorts {
-  /** Local file tools + cognition + the gateway's platform catalog, for a project. */
-  tools(projectId: number | undefined): Promise<readonly ToolDef[]>;
+  /**
+   * Local file tools + cognition + the gateway's platform catalog, for a project.
+   *
+   * `confirmWrite` is how a DELEGATED sub-agent asks to write. It is built here (not by
+   * the port) because only the run knows the chat whose modal the question appears on
+   * and the live Auto switch that may answer it.
+   */
+  tools(
+    projectId: number | undefined,
+    confirmWrite: (req: { name: string; args: Record<string, unknown> }) => Promise<ChildWriteDecision>,
+  ): Promise<readonly ToolDef[]>;
   /** Workspace root the local tools resolve against; '' when no folder is open. */
   workspaceRoot(): string;
   /** The transport-bound streamer for the CURRENT route (gateway or on-device). */
@@ -258,9 +268,20 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     flags.set(chatId, flag);
     const root = ports.workspaceRoot();
     const projectId = p.projectId ?? undefined;
-    const defs = await ports.tools(projectId);
-    // Governance first: an unreadable policy throws here and the run never starts.
+    // Governance FIRST: an unreadable policy throws here and the run never starts — and
+    // the gates are also what a delegated child's write gate is built from, so they have
+    // to exist before the catalog that carries it.
     const gates = (await ports.policyGates?.(projectId)) ?? [];
+    // The child asks on THIS chat's modal, under THIS run's live Auto switch — the same
+    // gate the native participant builds, so a delegated write means the same thing on
+    // both editor surfaces.
+    const confirmChildWrite = createChildWriteGate({
+      chatId,
+      ...(gates.length ? { gates } : {}),
+      autoApprove: () => flag.autoApprove,
+      blockedByPolicy: ports.labels.blockedByPolicy,
+    });
+    const defs = await ports.tools(projectId, confirmChildWrite);
     broadcast({ type: "run.tools", chatId, count: defs.length });
     const native = createNativeRunTool({
       defs,

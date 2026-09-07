@@ -142,6 +142,9 @@ export {
   getRunTrace,
   clearRunError,
   resolveRunConfirm,
+  // The other half of that channel: raise the question. Exported because a delegated
+  // sub-agent runs its own nested loop and must reach the SAME prompt the run cell owns.
+  requestRunConfirm,
   // Teardown only — a headless harness reuses one chat id across scenarios, and the
   // store is a module-level singleton keyed by it.
   resetBrainRunStore,

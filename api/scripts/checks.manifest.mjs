@@ -39,6 +39,10 @@ export default [
   ['check:pinned-defects', 'check-pinned-defects.mjs'],
   ['check:prompt-tools', 'check-prompt-tool-names.mjs'],
   ['check:canvas-tools', 'check-canvas-tool-contract.mjs'],
+  // The Actions runner inlines a COPY of container/agentRelay.mjs (a Worker has no
+  // filesystem to read it from at request time). This fails the build the moment that
+  // copy drifts, so the "one dispatch table, every image" rule is enforced, not hoped for.
+  ['check:agent-relay', 'gen-agent-relay-source.mjs', '--check'],
   ['check:trigger-palette', 'check-trigger-palette-parity.mjs'],
   ['check:no-burnrate-runtime', 'check-no-burnrate-runtime.mjs'],
   ['check:burnrate-policy', 'check-burnrate-cutover-policy.mjs'],

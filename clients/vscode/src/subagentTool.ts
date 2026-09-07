@@ -3,21 +3,28 @@
  *
  * Same tool, same brief and same budget as the cloud's (both take the schema from
  * `@builderforce/agent-tools` and the run from `@builderforce/agent-loop`, so a model
- * that learned to delegate in one surface delegates identically in the other). What
- * differs is what a child may touch, and that difference is deliberate:
+ * that learned to delegate in one surface delegates identically in the other), and now
+ * the same answer to what a child may touch: a child can WRITE, and every write it makes
+ * is approved by the same human, on the same prompt, under the same governance gates as
+ * a write the parent makes.
  *
- * A child here is ALWAYS read-only. The local approval prompt — the thing standing
- * between "an agent wants to write to your disk" and it happening — is raised by the
- * Brain run cell that owns the chat UI, and a nested loop has no way to reach it. So
- * rather than run a writable child past an approval gate it cannot raise, the child
- * gets the read-only half of the workspace tools and the parent (which CAN prompt)
- * keeps every write. A parent that asks for a writable child is told so in the result,
- * so it makes the change itself instead of assuming the child did.
+ * That was the one thing this surface could not do. The approval prompt is raised by the
+ * Brain run cell that owns the chat UI, and a nested loop had no way to reach it — so a
+ * writable child would have been a disk write nobody approved, and the honest thing was
+ * to run children read-only and say so. The cell's confirm channel is now callable from
+ * outside it (`requestRunConfirm`), so the child asks the question rather than skipping
+ * it, and `createChildWriteGate` is where the answer is decided.
+ *
+ * Read-only is still the DEFAULT, because it is the right default: most delegation is
+ * investigation, and a read-only child cannot cost anything but time. A parent gets a
+ * writable child only by asking for one (`read_only: false`) — and only when the host
+ * supplied a gate, because a surface with no way to prompt must still never write.
  */
 
 import { runSubagent, SUBAGENT_MAX_STEPS } from "@builderforce/agent-loop";
 import { spawnAgentTool } from "@builderforce/agent-tools";
 import type { BrainStreamFn, BrainToolSpec, ChatCompletionMessage } from "@seanhogg/builderforce-brain-embedded";
+import type { ChildWriteDecision } from "./childWriteGate";
 import type { ToolDef } from "./fileTools";
 
 /** What the local `spawn_agent` needs from the host: a model route and the catalog the
@@ -25,18 +32,32 @@ import type { ToolDef } from "./fileTools";
  *  switch, and the catalog depends on whether a workspace is open. */
 export interface SubagentToolDeps {
   stream(): Promise<BrainStreamFn>;
-  /** The parent's full tool catalog; the child gets the read-only, local subset. */
+  /** The parent's full tool catalog; the child gets the local subset of it. */
   catalog(): ToolDef[];
+  /**
+   * Decide one write the child wants to make — governance, then the run's Auto switch,
+   * then the human. ABSENT means this host cannot raise a prompt, and a child here is
+   * then read-only whatever the parent asked for: the alternative is writing to someone's
+   * disk with no way to ask them, which is the thing the gate exists to prevent.
+   */
+  confirmWrite?(req: { name: string; args: Record<string, unknown> }): Promise<ChildWriteDecision>;
 }
 
 /**
- * The child's tools: local (never the server-side platform catalog — a delegated
- * investigation is about THIS workspace, and the parent keeps the platform reach) and
- * non-mutating, minus `spawn_agent` itself, which is what makes recursion impossible
- * here in the same way withholding the capability does in the cloud.
+ * The child's tools: local ones only (never the server-side platform catalog — a
+ * delegated task is about THIS workspace, and the parent keeps the platform reach),
+ * minus `spawn_agent` itself, which is what makes recursion impossible here in the same
+ * way withholding the capability does in the cloud.
+ *
+ * `writable` keeps the mutating half. It is false by default and false whenever the host
+ * gave no way to ask a human — the tools a child is HANDED are the boundary, so a child
+ * that must not write is never shown a tool that writes, rather than being shown one and
+ * refused at dispatch.
  */
-export function childToolDefs(catalog: readonly ToolDef[]): ToolDef[] {
-  return catalog.filter((t) => !t.remote && !t.mutating && t.name !== spawnAgentTool.name);
+export function childToolDefs(catalog: readonly ToolDef[], writable = false): ToolDef[] {
+  return catalog.filter(
+    (t) => !t.remote && t.name !== spawnAgentTool.name && (writable || !t.mutating),
+  );
 }
 
 /** A local tool's serialized result, back as data. Not every executor returns JSON
@@ -64,9 +85,9 @@ export function subagentToolDef(deps: SubagentToolDeps): ToolDef {
     name: schema.name,
     description: schema.description,
     parameters: schema.parameters as Record<string, unknown>,
-    // The tool itself changes nothing — its child is read-only — so it never raises the
-    // approval prompt. The reads the child makes are the same reads the parent could
-    // have made without one.
+    // The tool itself changes nothing, and a child's writes raise their OWN prompt at
+    // the moment they happen — naming the file being written, which "run spawn_agent?"
+    // never could. Marking it mutating would ask twice and ask worse.
     mutating: false,
     execute: async (args, root) => {
       const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
@@ -75,21 +96,25 @@ export function subagentToolDef(deps: SubagentToolDeps): ToolDef {
       if (!task) {
         return JSON.stringify({ ok: false, error: "task is required — the child sees none of your conversation" });
       }
-      const defs = childToolDefs(deps.catalog());
+      // Writable only when the parent asked AND this host can reach a human. Both
+      // halves are required: the first is the tool's contract, the second is the reason
+      // the contract was unavailable here until now.
+      const writable = args.read_only === false && !!deps.confirmWrite;
+      const defs = childToolDefs(deps.catalog(), writable);
       const specs = toSpecs(defs);
       const byName = new Map(defs.map((d) => [d.name, d]));
       // Say it plainly rather than silently narrowing: a parent that believes a child
       // made an edit will not make it, and the change would be lost.
       const declinedWrite =
-        args.read_only === false
-          ? "This surface only runs read-only sub-agents, because a child cannot raise the local approval prompt. The findings below are an investigation — make any change yourself."
+        args.read_only === false && !writable
+          ? "This host cannot raise an approval prompt, so the sub-agent ran read-only. The findings below are an investigation — make any change yourself."
           : undefined;
 
       try {
         const stream = await deps.stream();
         const run = await runSubagent<BrainToolSpec>({
           task,
-          readOnly: true,
+          readOnly: !writable,
           tools: specs,
           complete: async ({ messages, tools }) => {
             const result = await stream({
@@ -109,6 +134,14 @@ export function subagentToolDef(deps: SubagentToolDeps): ToolDef {
                 isError: true,
               };
             }
+            // A write asks the human FIRST, on the parent run's own modal, naming the
+            // file. A refusal comes back as an ordinary tool result with its reason, so
+            // the child adapts (or reports what it found) instead of failing the
+            // delegation — the same shape a blocked call takes in the parent's loop.
+            if (def.mutating && deps.confirmWrite) {
+              const decision = await deps.confirmWrite({ name: call.name, args: call.args });
+              if (!decision.ok) return { data: { ok: false, error: decision.reason }, isError: true };
+            }
             try {
               // Local executors hand back an already-serialized payload; the loop's
               // codec serializes what it is given, so parse first or the child reads
@@ -125,7 +158,7 @@ export function subagentToolDef(deps: SubagentToolDeps): ToolDef {
           output: run.output,
           steps: run.steps,
           maxSteps: SUBAGENT_MAX_STEPS,
-          readOnly: true,
+          readOnly: !writable,
           ...(run.truncated ? { truncated: true, note: "The sub-agent ran out of turns — treat this as partial." } : {}),
           ...(declinedWrite ? { writeDeclined: declinedWrite } : {}),
           ...(run.ok ? {} : { error: run.cancelled ? "the run was stopped while this sub-agent was working" : "the sub-agent stopped without an answer" }),

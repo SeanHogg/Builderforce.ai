@@ -70,7 +70,7 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
 
   r.get('/workspace', async (c) => {
     const target = await owner(c);
-    if (!target) return c.json({ error: 'Sales associate access required' }, 403);
+    if (!target) return c.json({ error: 'Sales workspace access required' }, 403);
     return c.json(await sales.workspace(target.id));
   });
 
@@ -200,7 +200,7 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
       return c.json({ report, scope: requested ? 'associate' : 'aggregate' });
     }
     const target = await owner(c);
-    if (!target) return c.json({ error: 'Sales associate access required' }, 403);
+    if (!target) return c.json({ error: 'Sales workspace access required' }, 403);
     return c.json({ report: await sales.report(c.get('tenantId') as number, target.id), scope: 'associate' });
   });
 

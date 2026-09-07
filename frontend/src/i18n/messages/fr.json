@@ -771,8 +771,7 @@
       "reach": "Portée",
       "admin": "Administration",
       "notYet": "pas encore",
-      "lockHint": "Connectez-vous pour y accéder",
-      "expand": "Développer"
+      "lockHint": "Connectez-vous pour y accéder"
     },
     "journey": {
       "label": "Le parcours du fondateur",
@@ -25665,8 +25664,7 @@
       "make": "Construisez-le.",
       "run": "Exploitez-le comme une entreprise.",
       "measure": "Est-ce que ça marche ?",
-      "reach": "Vendez, achetez, recrutez, faites-vous trouver.",
-      "expand": "Faites-le grandir.",
+      "reach": "Vendez-le, faites-vous trouver, faites-le grandir.",
       "admin": "Paramètres."
     },
     "arcNote": "Mesurer est ce qui fait de cet arc une boucle et non une ligne : la condition d’arrêt fixée au moment de Prouver y est jugée, et la réponse retourne à Idée. Une preuve sans condition capable d’échouer n’est qu’un lancement avec des étapes en plus.",

@@ -13,6 +13,10 @@ RUN apt-get update \
 WORKDIR /app
 COPY package.json ./
 COPY server.mjs ./
+# The shared Worker-relay dispatch table, imported by server.mjs. The GitHub Actions
+# runner inlines this SAME file (via the generated agentRelaySource.ts), so both image
+# surfaces execute one implementation rather than two transcriptions of it.
+COPY agentRelay.mjs ./
 
 ENV NODE_ENV=production
 ENV PORT=8080

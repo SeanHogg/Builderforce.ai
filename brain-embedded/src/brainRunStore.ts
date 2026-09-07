@@ -1102,6 +1102,45 @@ export function clearRunError(chatId: number | null): void {
   emit(c);
 }
 
+/**
+ * Ask the human about one tool call and wait for the answer — the ONE way a pending
+ * confirmation is raised on a chat's run cell.
+ *
+ * It exists as a function rather than as four lines inside the tool loop because the
+ * loop is no longer the only thing that needs to ask. A sub-agent delegated by a run
+ * executes in its own nested loop, and a child that could not reach this channel was a
+ * child that could only ever read — which is why local delegation was investigation-only
+ * until this became callable from outside.
+ *
+ * The resolver lives on the CELL, so whichever Brain instance is mounted answers it —
+ * including one that navigated in after the question was asked. Answered by
+ * {@link resolveRunConfirm}; a Stop unwinds it as a decline so nothing waits forever.
+ *
+ * Returns false immediately when the run for this chat is driven by ANOTHER process
+ * (a run driver is installed): the confirming UI belongs to whoever owns the loop, and
+ * a caller here has no channel to it. Declining is the safe answer — the action simply
+ * does not happen.
+ */
+export function requestRunConfirm(
+  chatId: number,
+  req: { name: string; args: unknown },
+  opts?: { step?: number },
+): Promise<boolean> {
+  if (getRunDriver()) return Promise.resolve(false);
+  const c = getCell(chatId);
+  return new Promise<boolean>((resolve) => {
+    c.pendingConfirm = { name: req.name, args: req.args };
+    c.confirmResolver = resolve;
+    // Waiting on a HUMAN, not on us. The indicator must stop animating as though work
+    // is happening — nothing advances until the user answers.
+    c.activity = {
+      ...toolActivity(req.name, req.args, opts?.step ?? c.activity?.step ?? 0, Date.now()),
+      phase: 'awaiting',
+    };
+    emit(c);
+  });
+}
+
 /** Resolve a pending human-in-the-loop confirmation. No-op if none is pending. */
 export function resolveRunConfirm(chatId: number, ok: boolean): void {
   const driver = getRunDriver();
@@ -1838,14 +1877,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       // predicate says so. The resolver lives on the cell, so whichever Brain
       // instance is mounted (even after a navigation swapped it) can answer.
       if (needsConfirm && needsConfirm({ name: call.name, args })) {
-        const ok = await new Promise<boolean>((resolve) => {
-          c.pendingConfirm = { name: call.name, args };
-          c.confirmResolver = resolve;
-          // Waiting on a HUMAN, not on us. The indicator must stop animating as
-          // though work is happening — nothing advances until the user answers.
-          c.activity = { ...toolActivity(call.name, args, iter, Date.now()), phase: 'awaiting' };
-          emit(c);
-        });
+        const ok = await requestRunConfirm(chatId, { name: call.name, args }, { step: iter });
         if (!ok) {
           const declined = { cancelled: true, reason: 'User declined this action.' };
           pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: 'tool', label: call.name, args, result: declined });

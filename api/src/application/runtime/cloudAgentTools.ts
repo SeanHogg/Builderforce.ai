@@ -150,9 +150,7 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   // step per alarm tick, so a delegation is at most one long tick, and it heartbeats
   // `executions.updated_at` on the step that contains it — the orphan reaper measures
   // liveness from that heartbeat, so a tick spent inside a child is not mistaken for a
-  // dead run. Deliberately NOT in CONTAINER_SURFACE_CAPS: the container image runs its
-  // OWN loop and has no `spawn_agent` handler, so advertising it there would surface a
-  // tool that 400s mid-run — the same rule that kept `skill.author` out of that set.
+  // dead run.
   'orchestrate',
 ]);
 
@@ -179,17 +177,20 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
  * toolset (the Cloudflare Container and the GitHub Actions runner) dispatch `update_prd`
  * to it, so the capability is backed on every surface it is advertised to.
  *
- * `skill.author` is INTENTIONALLY omitted, for the reason `web.search` was omitted
- * until its op existed: the image's tool loop ends in `unknown tool '<name>'`, and it
- * has no handler for `skill_propose` or `skill_list` and no op behind them, so
- * advertising the capability here would surface two tools that 400 mid-run. The point
- * that makes this a not-yet rather than an oversight: the image is a SEPARATE
- * artifact — adding a handler to `api/container/server.mjs` changes nothing until that
- * image is rebuilt and deployed, so the capability must follow the deployed image, not
- * the source. To add it: a `skill` op in `handleContainerOp` relaying to the same
- * Worker-side authoring service the durable surface calls (exactly as `memory`,
- * `coordinate`, `prd` and `search` do), a dispatch arm in the image, and this entry —
- * in that order.
+ * `skill.author` is INTENTIONALLY omitted, and it is now the ONLY thing in this file
+ * that is: it has no `skill` container-op behind it and no dispatch arm in the shared
+ * relay module, so advertising it would surface two tools with nothing to answer them.
+ * Adding it is a `skill` op in `handleContainerOp` relaying to the same Worker-side
+ * authoring service the durable surface calls, plus an arm in `container/agentRelay.mjs`
+ * — and, unlike before, in EITHER order.
+ *
+ * That ordering used to matter, and no longer does. Each image is a separately shipped
+ * artifact, so a capability had to follow the DEPLOYED image rather than the source, or
+ * a run would be offered a tool its image answered with `unknown tool`. Every image now
+ * sends the tool names it can actually dispatch on each `llm` op and the Worker
+ * advertises the intersection (`imageToolHandshake.ts`), so a capability can be added
+ * the moment its op exists: an older image simply does not name the tool and is never
+ * offered it.
  *
  * `repo.edit` is INTENTIONALLY omitted (not a gap): unlike the shell-less durable
  * surface — which must do surgical edits over the git API (read blob → string-replace
@@ -212,6 +213,13 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
  */
 export const CONTAINER_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   'repo.read', 'repo.write', 'shell', 'memory', 'memory.forget', 'coordinate', 'prd.write', 'human',
+  // Delegation. The `spawn` container-op is the backing: the CHILD runs in the Worker
+  // (an image has no gateway credential, no meter and no registry), on the same
+  // `runSubagent` kernel and the same metered turn primitive as a parent turn, with a
+  // ceiling narrowed by `imageHostedChildCeiling` because a Worker-hosted child cannot
+  // hold the image's `shell`. Both images dispatch `spawn_agent` through the SHARED
+  // relay module, so this capability is backed on every surface it is advertised to.
+  'orchestrate',
   // `web.search` — PARITY with the durable surface, and only now safe to advertise.
   // It was absent because the container's capabilities come from the image's own tool
   // loop and there was no op behind them, so the tool would have 400'd mid-run. The

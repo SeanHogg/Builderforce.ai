@@ -27,6 +27,7 @@ import {
   type ToolSchema,
 } from '@builderforce/agent-tools';
 import { runSubagent, SUBAGENT_MAX_STEPS, type LoopTurnResult } from '@builderforce/agent-loop';
+import { CLOUD_SURFACE_CAPS } from './cloudAgentTools';
 
 /**
  * Never handed to a child, whatever the parent holds.
@@ -58,6 +59,33 @@ export function childCapabilities(parent: ReadonlySet<Capability>, readOnly: boo
     ...(readOnly ? MUTATING_CAPABILITIES : []),
   ]);
   return new Set([...parent].filter((c) => !withheld.has(c)));
+}
+
+/**
+ * The ceiling for a child spawned by an IMAGE-run surface (the Cloudflare Container or
+ * the GitHub Actions runner).
+ *
+ * Those parents run their own loop in their own process, but a child they commission
+ * runs HERE, in the Worker — so the child cannot simply inherit the parent's set. The
+ * parent holds `shell`, and there is no shell in a Worker; a child handed it would be
+ * offered `run_command` with nothing behind it, which is the exact failure the
+ * capability sets exist to prevent.
+ *
+ * So the ceiling is the parent's set narrowed to what this host can actually back, with
+ * one deliberate translation: an image parent greps its clone THROUGH the shell, which
+ * is why `repo.search` never appears in its capability set even though searching the
+ * repo is plainly something it can do. Dropping the shell would therefore leave the
+ * child unable to search at all — and searching is most of what a delegated
+ * investigation IS. `repo.search` is added back as the Worker's form of that same
+ * read authority. Only the READ half is translated: nothing here grants a child the
+ * ability to execute, which is the other half of what a shell is.
+ *
+ * Pure, and the security boundary for two surfaces, so it is tested directly.
+ */
+export function imageHostedChildCeiling(parentCaps: ReadonlySet<Capability>): ReadonlySet<Capability> {
+  const ceiling = new Set<Capability>([...parentCaps].filter((c) => CLOUD_SURFACE_CAPS.has(c)));
+  if (parentCaps.has('shell')) ceiling.add('repo.search');
+  return ceiling;
 }
 
 export interface SubagentDeps {

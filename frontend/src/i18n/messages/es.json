@@ -771,8 +771,7 @@
       "reach": "Alcance",
       "admin": "Administración",
       "notYet": "aún no",
-      "lockHint": "Inicia sesión para usarlo",
-      "expand": "Expandir"
+      "lockHint": "Inicia sesión para usarlo"
     },
     "journey": {
       "label": "El viaje del fundador",
@@ -25665,8 +25664,7 @@
       "make": "Constrúyelo.",
       "run": "Opéralo como una empresa.",
       "measure": "¿Está funcionando?",
-      "reach": "Vende, compra, contrata, hazte encontrar.",
-      "expand": "Hazlo crecer.",
+      "reach": "Véndelo, hazte encontrar, hazlo crecer.",
       "admin": "Ajustes."
     },
     "arcNote": "Medir es lo que convierte esto en un bucle y no en una línea: la condición de parada fijada al Probar se evalúa ahí, y la respuesta vuelve a Idea. Una prueba sin una condición que pueda fallar es un lanzamiento con pasos de más.",

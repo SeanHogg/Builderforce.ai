@@ -66,10 +66,11 @@ import {
   appraiseTask, buildLimbicBlock, compileLimbicState, neutralState,
   applyDelta, appraiseAmygdala, homeostasis,
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type LimbicState, type LimbicEvent, type PolicyGate, type AgentExecParams, type Capability,
-  type PrdWriteCapability, type PrdUpdateResult,
+  type PrdWriteCapability, type PrdUpdateResult, type ToolSchema,
 } from '@builderforce/agent-tools';
 import { runAgentLoop, openAiChatCodec, readOpenAiToolCalls, type LoopHooks, type LoopPorts, type LoopResult } from '@builderforce/agent-loop';
-import { buildOrchestrationCapability } from './cloudSubagent';
+import { buildOrchestrationCapability, imageHostedChildCeiling } from './cloudSubagent';
+import { imageAdvertisedTools, readToolManifest } from './imageToolHandshake';
 import { renderRunContext, summarizeBlocks, type RunContextBlock } from '@builderforce/run-context';
 import { RUN_CONTEXT_ORDER } from './runContextSource';
 import { buildRunContext } from './runContextService';
@@ -1255,6 +1256,112 @@ async function heartbeatExecution(db: Db, executionId: number): Promise<void> {
 }
 
 /**
+ * ONE metered model turn on behalf of an IMAGE-run surface (the Cloudflare Container
+ * or the GitHub Actions runner).
+ *
+ * Both places an image causes a completion go through here: the `llm` op that advances
+ * its own loop, and the `spawn` op's CHILD loop. That is the point — a sub-agent
+ * commissioned from a container used to be the easiest place for routing to drift
+ * (a child funded from the wrong pool, or billed to nobody, is invisible until the
+ * invoice), and sharing the primitive makes the two impossible to tell apart in the
+ * ledger.
+ *
+ * Everything genuinely per-caller stays outside: the parent's steering drain and
+ * history compaction belong to the `llm` op, and the child's transcript is its own.
+ */
+async function imageRunTurn(
+  run: {
+    env: Env;
+    db: Db;
+    ctx: ContainerRunContext;
+    executionId: number;
+    tenantId: number;
+    projectId: number;
+    taskId: number;
+    cloudAgentRef: string | undefined;
+    /** The run's explicit model pin, if it has one. */
+    model: string | undefined;
+  },
+  args: {
+    messages: Array<Record<string, unknown>>;
+    tools: ToolSchema[];
+    /** Surface the assistant message to subscribers. TRUE for the parent's own turn
+     *  (an image has no separate output stream); FALSE for a child's, whose turns are
+     *  an implementation detail of one parent tool call. */
+    notify: boolean;
+    tGen0?: number;
+    signal?: AbortSignal;
+  },
+): Promise<{ ok: true; content: string; toolCalls: unknown[] } | { ok: false; error: string; code?: string }> {
+  const { env, db, ctx, executionId, tenantId, projectId, taskId, cloudAgentRef, model } = run;
+  const tGen0 = args.tGen0 ?? Date.now();
+  // A connected Claude subscription powers a direct-Claude turn; BYO OpenAI/Google/
+  // Anthropic api-keys override the operator keys for their vendors (tenant-funded →
+  // byo). One round-trip (parallel reads); empty (operator-key floor) when the tenant
+  // has connected nothing. Resolved BEFORE the model pick so a free tenant may pin a
+  // BYO model (byoVendors lifts the free-plan choice gate).
+  const creds = await resolveTenantLlmCredentials(env, tenantId);
+  // Same fail-closed BYO rule as the in-Worker loop (GAP-B4) — an image is a cloud
+  // execution surface too, so it must not degrade onto the platform key.
+  const byoBlocked = await refuseCloudRunWithoutByo(db, { tenantId, cloudAgentRef, executionId }, creds);
+  if (byoBlocked) return { ok: false, error: byoBlocked.message, code: byoBlocked.code };
+  const { anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, vendorKeys: tenantVendorKeys } = creds;
+  const pick = pickCloudModel(model, ctx.effectivePlan, ctx.premiumOverride, {
+    // Context-aware seed: a small-window model isn't picked for a big turn.
+    estimatedTokens: estimateRequestTokens(args.messages, args.tools),
+    byoVendors: byoVendorIdsFromCredentials(creds),
+    // Tenant BYO precedence — lead with the owner's chosen account (e.g. Meta first).
+    byoVendorPriority: creds.vendorPriority,
+    byoAlertedVendors: creds.alertedVendors ?? [],
+    isSuperadmin: ctx.isSuperadmin,
+    registeredOpenRouterModels: creds.registeredOpenRouterModels,
+    preferredRegisteredModel: creds.preferredOpenRouterModel,
+    // Parity with the durable loop: a PREMIUM pin needs a validated billing card.
+    premiumEntitled: ctx.premiumEntitled,
+  });
+  const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, {
+    backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true,
+    ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}),
+    ...(openaiCodexAuth ? { openaiCodexAuth } : {}),
+    ...(xaiOAuthToken ? { xaiOAuthToken } : {}),
+    ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}),
+    ...(creds.vendorPriority.length ? { byoVendorPriority: creds.vendorPriority } : {}),
+    ...(creds.alertedVendors?.length ? { byoAlertedVendors: creds.alertedVendors } : {}),
+    ...(creds.providerPriorities?.length ? { byoProviderPriorities: creds.providerPriorities } : {}),
+    ...(creds.openRouterConnections?.length ? { openRouterConnections: creds.openRouterConnections } : {}),
+    ...(creds.openRouterModelKeys && Object.keys(creds.openRouterModelKeys).length ? { openRouterModelKeys: creds.openRouterModelKeys } : {}),
+    ...(creds.configuredProviders.length ? { byoRequired: true } : {}),
+  }).complete({
+    messages: args.messages as unknown as ChatMessage[], tools: args.tools, tool_choice: 'auto',
+    ...(pick.model ? { model: pick.model, ...(pick.strict ? { modelStrict: true } : {}) } : {}),
+    // Personality temperature — parity with the Worker/DO loop.
+    ...(ctx.execParams.temperature != null ? { temperature: ctx.execParams.temperature } : {}),
+    // Personality reasoning levers (thinkLevel/reasoningLevel) → the CORRECT vendor
+    // param for THIS model family (Anthropic `thinking` / OpenAI `reasoning_effort`),
+    // or nothing for a model that doesn't support one (reasoningCapability drops it).
+    // Only on a STRICT pin: an unpinned model may cascade to a different vendor that
+    // would reject the param, so we attach it solely when the resolved model is fixed.
+    // First-turn detection: no assistant turn yet in this slice.
+    ...(pick.strict
+      ? reasoningParamsForModel(pick.model, ctx.execParams, {
+          isFirstTurn: !args.messages.some((m) => (m as { role?: string }).role === 'assistant'),
+        }) ?? {}
+      : {}),
+    useCase: 'task_execution',
+  }, undefined, undefined, args.signal);
+  // Shared post-`complete` processing (metering + telemetry) — identical to the
+  // in-Worker loop, so a child's tokens are the tenant's tokens and a delegation that
+  // quietly billed to nobody cannot happen.
+  const turn = await recordCloudLlmTurn(result, {
+    env, db, tenantId, cloudAgentRef, executionId, taskId, projectId,
+    requestedModel: pick.model ?? model, fallbackModel: pick.model,
+    effectivePlan: ctx.effectivePlan, premiumOverride: ctx.premiumOverride,
+  }, { tGen0, notify: args.notify });
+  if (!turn.ok) return { ok: false, error: turn.error };
+  return { ok: true, content: turn.content, toolCalls: turn.toolCalls };
+}
+
+/**
  * Handle one container-op call from the long-lived Container executor. The container
  * runs the agent loop in its own process and delegates to the Worker for everything
  * that must stay server-side: the gateway LLM step (`llm`), per-file commit to the
@@ -1515,6 +1622,78 @@ export async function handleContainerOp(
     return { status: 200, body: result };
   }
 
+  /**
+   * `spawn` — delegation from an IMAGE surface (capability `orchestrate`).
+   *
+   * The child RUN happens HERE, in the Worker, and that is deliberate. An image holds
+   * no gateway credential, no meter and no tool registry, so a nested loop inside the
+   * container process would have to reimplement all three — a third copy of exactly
+   * what the shared relay module exists to prevent. Relaying instead means a sub-agent
+   * spawned from a container is the SAME sub-agent the durable surface spawns:
+   * `runSubagent` from the shared kernel, the same budget, the same withheld
+   * capabilities, the same timeline event, the same tenant meter.
+   *
+   * The child's ceiling is NOT the parent's set verbatim — see `imageHostedChildCeiling`
+   * for why a Worker-hosted child cannot hold the image's `shell`.
+   *
+   * This op blocks for as long as the child runs, which is why it heartbeats the
+   * execution first: the image's own heartbeat timer keeps beating throughout, but the
+   * op can outlast an LLM turn, and a delegation must never look like a dead run.
+   */
+  if (op === 'spawn') {
+    const task = typeof args.task === 'string' ? args.task.trim() : '';
+    if (!task) return { status: 200, body: { ok: false, error: 'task is required — the child sees none of your conversation' } };
+    const label = typeof args.label === 'string' && args.label.trim() ? args.label.trim() : task.slice(0, 60);
+    const readOnly = args.read_only !== false;
+    if (await isExecutionCancelled(db, executionId)) {
+      return { status: 200, body: { ok: false, error: 'this run was cancelled; do not delegate, just stop' } };
+    }
+    await heartbeatExecution(db, executionId);
+    const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskId);
+    // The ceiling the CHILD is measured against, and the backing it runs on. The
+    // child's own writes go through the Worker's git-API provider — the same writer the
+    // durable surface uses — so a file a child commits lands on the ticket branch the
+    // image is cloned from, exactly like one the image wrote through the `write` op.
+    const parentCaps = imageHostedChildCeiling(CONTAINER_SURFACE_CAPS);
+    const spawnWrittenPaths = new Set<string>();
+    const provider = buildCloudProvider({
+      env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef,
+      repoCtx: repo.ok ? repo.ctx : null,
+      repoMiss: repo.ok ? '' : repo.reason,
+      writtenPaths: spawnWrittenPaths,
+      capabilities: parentCaps,
+    });
+    const orchestration = buildOrchestrationCapability({
+      parentCaps,
+      provider,
+      registry: cloudToolRegistry,
+      complete: async ({ messages: childMessages, tools }) => {
+        const childTurn = await imageRunTurn(
+          { env, db, ctx, executionId, tenantId, projectId, taskId, cloudAgentRef, model },
+          // `notify: false` — a child's turns are an implementation detail of one
+          // parent tool call, not messages the run's subscribers should see.
+          { messages: childMessages, tools, notify: false },
+        );
+        if (!childTurn.ok) return { failed: childTurn.error };
+        return { content: childTurn.content, toolCalls: readOpenAiToolCalls({ tool_calls: childTurn.toolCalls }) };
+      },
+      record: async (event) => {
+        await recordCloudToolEvent(db, {
+          tenantId, cloudAgentRef, executionId,
+          toolName: 'agent.subagent', category: 'tool', detail: event.detail, result: event.result,
+        });
+      },
+    });
+    const result = await orchestration.spawn({ task, label, readOnly });
+    await heartbeatExecution(db, executionId);
+    // A child's writes are the RUN's writes. The provider already did the Worker-side
+    // bookkeeping (the commit, the `task_file_changes` row, the subscriber notify), but
+    // the image owns the `writtenPaths` its own `finalize` reports — so hand them back
+    // and let it merge them, or the PR would list every file except the ones the
+    // sub-agent wrote.
+    return { status: 200, body: { ...result, label, writtenPaths: [...spawnWrittenPaths] } };
+  }
+
   if (op === 'llm') {
     const messages = Array.isArray(args.messages) ? (args.messages as unknown as Array<Record<string, unknown>>) : ([] as Array<Record<string, unknown>>);
     // Cooperative cancel BEFORE the paid call (GAP-S6). The container polls the
@@ -1554,60 +1733,25 @@ export async function handleContainerOp(
     // Repo/shell tools + the curated platform subset (create tasks / update OKRs /
     // read remaining) — parity with the durable loop. The container relays each
     // `builtin_*` call back via the `platform_tool` op below (it has no DB).
-    const containerTools = [...CONTAINER_AGENT_TOOLS, ...cloudAgentPlatformToolSchemas(ctx.originatingChatId)];
-    // A connected Claude subscription powers a direct-Claude container turn; BYO
-    // OpenAI/Google/Anthropic api-keys override the operator keys for their vendors
-    // (tenant-funded → byo). One round-trip (parallel reads); empty (operator-key
-    // floor) when the tenant has connected nothing. Resolved BEFORE model pick so a
-    // free tenant may pin a BYO model (byoVendors lifts the free-plan choice gate).
-    const containerCreds = await resolveTenantLlmCredentials(env, tenantId);
-    // Same fail-closed BYO rule as the in-Worker loop (GAP-B4) — the container is a
-    // cloud execution surface too, so it must not degrade onto the platform key.
-    const containerByoBlocked = await refuseCloudRunWithoutByo(db, { tenantId, cloudAgentRef, executionId }, containerCreds);
-    if (containerByoBlocked) return { status: 200, body: { error: containerByoBlocked.message, code: containerByoBlocked.code } };
-    const { anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, vendorKeys: tenantVendorKeys } = containerCreds;
-    const pick = pickCloudModel(model, ctx.effectivePlan, ctx.premiumOverride, {
-      // Context-aware seed: a small-window model isn't picked for a big container turn.
-      estimatedTokens: estimateRequestTokens(sendMessages, containerTools),
-      byoVendors: byoVendorIdsFromCredentials(containerCreds),
-      // Tenant BYO precedence — lead with the owner's chosen account (e.g. Meta first).
-      byoVendorPriority: containerCreds.vendorPriority,
-      byoAlertedVendors: containerCreds.alertedVendors ?? [],
-      isSuperadmin: ctx.isSuperadmin,
-      registeredOpenRouterModels: containerCreds.registeredOpenRouterModels,
-      preferredRegisteredModel: containerCreds.preferredOpenRouterModel,
-      // Parity with the durable loop: a PREMIUM pin needs a validated billing card.
-      premiumEntitled: ctx.premiumEntitled,
-    });
-    const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}), ...(openaiCodexAuth ? { openaiCodexAuth } : {}), ...(xaiOAuthToken ? { xaiOAuthToken } : {}), ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}), ...(containerCreds.vendorPriority.length ? { byoVendorPriority: containerCreds.vendorPriority } : {}), ...(containerCreds.alertedVendors?.length ? { byoAlertedVendors: containerCreds.alertedVendors } : {}), ...(containerCreds.providerPriorities?.length ? { byoProviderPriorities: containerCreds.providerPriorities } : {}), ...(containerCreds.openRouterConnections?.length ? { openRouterConnections: containerCreds.openRouterConnections } : {}), ...(containerCreds.openRouterModelKeys && Object.keys(containerCreds.openRouterModelKeys).length ? { openRouterModelKeys: containerCreds.openRouterModelKeys } : {}), ...(containerCreds.configuredProviders.length ? { byoRequired: true } : {}) }).complete({
-      messages: sendMessages as unknown as ChatMessage[], tools: containerTools, tool_choice: 'auto',
-      ...(pick.model ? { model: pick.model, ...(pick.strict ? { modelStrict: true } : {}) } : {}),
-      // Personality temperature — parity with the Worker/DO loop.
-      ...(ctx.execParams.temperature != null ? { temperature: ctx.execParams.temperature } : {}),
-      // Personality reasoning levers (thinkLevel/reasoningLevel) → the CORRECT vendor
-      // param for THIS model family (Anthropic `thinking` / OpenAI `reasoning_effort`),
-      // or nothing for a model that doesn't support one (reasoningCapability drops it).
-      // Only on a STRICT pin: an unpinned model may cascade to a different vendor that
-      // would reject the param, so we attach it solely when the resolved model is fixed.
-      // First-turn detection: the container op has no assistant turn yet in its slice.
-      ...(pick.strict
-        ? reasoningParamsForModel(pick.model, ctx.execParams, {
-            isFirstTurn: !sendMessages.some((m) => (m as { role?: string }).role === 'assistant'),
-          }) ?? {}
-        : {}),
-      useCase: 'task_execution',
-    });
-    // Shared post-`complete` processing (metering + telemetry) — identical to the
-    // in-Worker loop. `notify: true` surfaces the assistant message to subscribers
-    // (the container has no separate output stream).
-    const turn = await recordCloudLlmTurn(result, {
-      env, db, tenantId, cloudAgentRef, executionId, taskId, projectId,
-      requestedModel: pick.model ?? model, fallbackModel: pick.model,
-      effectivePlan: ctx.effectivePlan, premiumOverride: ctx.premiumOverride,
-    }, { tGen0, notify: true });
+    // …narrowed to what the CALLING IMAGE says it can dispatch. The image sends its
+    // own tool manifest on every `llm` op, so a capability can be advertised the moment
+    // its Worker-side op exists instead of having to wait for every image to be rebuilt
+    // and deployed first — an older image simply does not name the new tool and is never
+    // offered it. See `imageToolHandshake.ts` for the rule this replaced.
+    const containerTools = imageAdvertisedTools(
+      [...CONTAINER_AGENT_TOOLS, ...cloudAgentPlatformToolSchemas(ctx.originatingChatId)],
+      readToolManifest(args.supportedTools),
+    );
+    // ONE metered turn, through the primitive the `spawn` op's child also uses — so a
+    // sub-agent commissioned from an image surface is routed, funded, metered and
+    // attributed exactly like the parent turn that commissioned it.
+    const turn = await imageRunTurn(
+      { env, db, ctx, executionId, tenantId, projectId, taskId, cloudAgentRef, model },
+      { messages: sendMessages, tools: containerTools, notify: true, tGen0 },
+    );
     // Heartbeat: a live container keeps the run out of the orphan reaper.
     await heartbeatExecution(db, executionId);
-    if (!turn.ok) return { status: 200, body: { error: turn.error } };
+    if (!turn.ok) return { status: 200, body: { error: turn.error, ...(turn.code ? { code: turn.code } : {}) } };
     return { status: 200, body: {
       content: turn.content, toolCalls: turn.toolCalls, steering,
       // When the history was compacted, hand the container the compacted form so it

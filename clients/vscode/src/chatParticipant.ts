@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { formatEvermindLearnStep, type ChatCompletionMessage } from "@seanhogg/builderforce-brain-embedded";
 import { ChatMessage, SECRET_KEY, fetchLimbicBlock } from "./gateway";
 import { resolveModelRoute, routeRequiresSignIn, routeStream } from "./modelRouting";
+import { createChildWriteGate } from "./childWriteGate";
 import { permissionMode as resolvePermissionMode } from "./permissionMode";
 import {
   getCurrentUserId,
@@ -176,15 +177,10 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
     // (projects, tasks, OKRs, specs, …) fetched from the gateway MCP relay. File tools
     // need a workspace; `remember_fact` needs only a project (works chat-only). Gate
     // each on what it actually requires.
-    // A delegated child runs on THIS turn's resolved route, so it can never land on a
-    // different model (or a stale credential) than the participant that spawned it.
-    const tools: ToolDef[] = await brainToolCatalog(ctx.secrets, root, activeProject?.id, async () =>
-      routeStream(modelChoice, key),
-    );
-
     // The tenant's effective governance gates — the SAME compiled rows the cloud and
     // on-prem loops enforce — so a block/approval gate holds in this editor too.
-    // Fail-closed like the server: an unreadable policy refuses the turn.
+    // Fail-closed like the server: an unreadable policy refuses the turn. Resolved
+    // BEFORE the catalog because a delegated child's write gate is built from them.
     let policyGates: PolicyGate[];
     try {
       policyGates = await resolveRunPolicyGates(ctx.secrets, activeProject?.id);
@@ -196,12 +192,30 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
       return {};
     }
 
+    const runChatId = brainChatId ?? unlinkedRunId();
+    // A delegated child runs on THIS turn's resolved route, so it can never land on a
+    // different model (or a stale credential) than the participant that spawned it —
+    // and its writes go through the SAME gate the webview run uses, raised on this
+    // chat's own modal below.
+    const tools: ToolDef[] = await brainToolCatalog(
+      ctx.secrets,
+      root,
+      activeProject?.id,
+      async () => routeStream(modelChoice, key),
+      createChildWriteGate({
+        chatId: runChatId,
+        ...(policyGates.length ? { gates: policyGates } : {}),
+        autoApprove: () => permissionMode === "acceptEdits",
+        blockedByPolicy: (reason: string) => vscode.l10n.t("Blocked by a governance gate: {0}", reason),
+      }),
+    );
+
     const { systemPrompt, seed } = splitSystemPrompt(messages);
 
     await runNativeBrain({
       // With no server chat (the platform was unreachable) the run still needs a cell
       // key; a unique negative id keeps it isolated and unmistakable for a real chat.
-      chatId: brainChatId ?? unlinkedRunId(),
+      chatId: runChatId,
       systemPrompt,
       seed,
       userTurn: request.prompt,

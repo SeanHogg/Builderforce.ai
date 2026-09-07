@@ -4,10 +4,11 @@ import type { ToolDef } from "./fileTools";
 import type { BrainToolSpec } from "@seanhogg/builderforce-brain-embedded";
 
 /**
- * Delegation on the MACHINE. The child's tool set is the security boundary here — a
- * nested loop cannot raise the local approval prompt, so a mutating tool reaching a
- * child would be a write the user never approved. That, and the honesty of the result
- * when a writable child was asked for and not given, is what these cover.
+ * Delegation on the MACHINE. The child's tool set is the security boundary here, and it
+ * turns on ONE thing: whether the host gave the child a way to ask a human. With a gate,
+ * a child may write and every write is approved; without one, a mutating tool reaching a
+ * child would be a write nobody approved, so it never gets one — and the result says so
+ * rather than letting the parent believe an edit was made.
  */
 
 const def = (name: string, over: Partial<ToolDef> = {}): ToolDef => ({
@@ -29,14 +30,28 @@ const CATALOG: ToolDef[] = [
 ];
 
 describe("childToolDefs", () => {
-  it("gives a child the read-only local tools", () => {
+  it("gives a child the read-only local tools by default", () => {
     expect(childToolDefs(CATALOG).map((t) => t.name)).toEqual(["read_file", "search_code"]);
   });
 
-  it("withholds every mutating tool — a child cannot raise the approval prompt", () => {
+  it("withholds every mutating tool unless the delegation is writable", () => {
     const names = childToolDefs(CATALOG).map((t) => t.name);
     expect(names).not.toContain("write_file");
     expect(names).not.toContain("run_command");
+  });
+
+  it("hands a WRITABLE child the mutating tools too", () => {
+    // The tools a child is handed ARE the boundary: a child that may write is shown the
+    // writing tools, and one that may not never sees them.
+    expect(childToolDefs(CATALOG, true).map((t) => t.name)).toEqual([
+      "read_file", "search_code", "write_file", "run_command",
+    ]);
+  });
+
+  it("still withholds the platform catalog and delegation from a writable child", () => {
+    const names = childToolDefs(CATALOG, true).map((t) => t.name);
+    expect(names).not.toContain("builtin_tasks_update");
+    expect(names).not.toContain("spawn_agent");
   });
 
   it("withholds the platform catalog — a delegation is about this workspace", () => {
@@ -118,5 +133,71 @@ describe("subagentToolDef", () => {
     });
     const out = JSON.parse(await tool.execute({ label: "look", task: "look" }, "/repo"));
     expect(out).toMatchObject({ ok: false, error: "not signed in" });
+  });
+});
+
+  it("runs a WRITABLE child when the host can ask, and asks before each write", async () => {
+    const confirmWrite = vi.fn(async () => ({ ok: true }) as const);
+    const wrote = vi.fn(async () => JSON.stringify({ ok: true }));
+    const catalog = [def("read_file"), def("write_file", { mutating: true, execute: wrote })];
+    const tool = subagentToolDef({
+      stream: async () => streamOf(
+        { text: "", toolCalls: [{ id: "c1", name: "write_file", args: JSON.stringify({ path: "a.ts" }) }] },
+        { text: "done" },
+      ) as never,
+      catalog: () => catalog,
+      confirmWrite,
+    });
+    const out = JSON.parse(await tool.execute({ label: "edit", task: "rename it", read_only: false }, "/repo"));
+
+    expect(confirmWrite).toHaveBeenCalledWith({ name: "write_file", args: { path: "a.ts" } });
+    expect(wrote).toHaveBeenCalled();
+    expect(out).toMatchObject({ ok: true, readOnly: false });
+    // Nothing to warn the parent about: it asked for a writable child and got one.
+    expect(out.writeDeclined).toBeUndefined();
+  });
+
+  it("does not execute a write the human declined, and tells the child why", async () => {
+    const wrote = vi.fn(async () => JSON.stringify({ ok: true }));
+    const catalog = [def("read_file"), def("write_file", { mutating: true, execute: wrote })];
+    const tool = subagentToolDef({
+      stream: async () => streamOf(
+        { text: "", toolCalls: [{ id: "c1", name: "write_file", args: JSON.stringify({ path: "a.ts" }) }] },
+        { text: "could not change it" },
+      ) as never,
+      catalog: () => catalog,
+      confirmWrite: async () => ({ ok: false, reason: "declined by the user" }),
+    });
+    const out = JSON.parse(await tool.execute({ label: "edit", task: "rename it", read_only: false }, "/repo"));
+
+    // A refusal is an ordinary tool result the child adapts to, not a dead delegation.
+    expect(wrote).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ ok: true });
+  });
+
+  it("asks for nothing when the child only reads, even on a writable delegation", async () => {
+    const confirmWrite = vi.fn(async () => ({ ok: true }) as const);
+    const tool = subagentToolDef({
+      stream: async () => streamOf(
+        { text: "", toolCalls: [{ id: "c1", name: "read_file", args: JSON.stringify({ path: "a.ts" }) }] },
+        { text: "found it" },
+      ) as never,
+      catalog: () => CATALOG,
+      confirmWrite,
+    });
+    await tool.execute({ label: "look", task: "find it", read_only: false }, "/repo");
+    expect(confirmWrite).not.toHaveBeenCalled();
+  });
+
+  it("falls back to read-only, and SAYS so, when the host cannot ask a human", async () => {
+    // The honesty rule: a parent that believes a child made an edit will not make it,
+    // and the change would be lost.
+    const tool = subagentToolDef({
+      stream: async () => streamOf({ text: "here is what I found" }) as never,
+      catalog: () => CATALOG,
+    });
+    const out = JSON.parse(await tool.execute({ label: "edit", task: "rename it", read_only: false }, "/repo"));
+    expect(out).toMatchObject({ readOnly: true });
+    expect(out.writeDeclined).toContain("cannot raise an approval prompt");
   });
 });

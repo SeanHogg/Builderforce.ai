@@ -45,15 +45,18 @@ import type { SeatOrPlatform } from './seats';
  * when a signed-in person opens one it mounts as a panel over the board rather
  * than throwing them out of their session (§11.4.5).
  *
- * `expand` is the arc's last productive step and the newest: REACH is "put it
- * in front of people", EXPAND is "grow the business off the back of it" — the
- * referral and sales-associate programme, where somebody sells Builderforce
- * itself. It sat under RUN, which read as day-to-day operations and is the one
- * thing selling the product is not. (Renamed from `market` — it collided with
- * the unrelated Marketplace commerce surface. `growth` was considered next but
- * collided with the existing CMO destination at `/growth`, so `reach` won.)
+ * REACH is the arc's last productive step: "put it in front of people, and grow
+ * the business off the back of it". It absorbed the former `expand` stage, which
+ * held exactly one idea — the sales programme — behind a sixth heading. A stage
+ * heading with one row under it is not an information architecture, it is a
+ * label; and an entrepreneur reading the rail top to bottom has to be able to say
+ * the arc back in five words. Selling what you made and being found for it are
+ * the same act at different volumes, so they are one stage.
+ * (`reach` was renamed from `market` — it collided with the unrelated Marketplace
+ * commerce surface. `growth` was considered next but collided with the existing
+ * CMO destination at `/growth`, so `reach` won.)
  */
-export const STAGES = ['idea', 'make', 'run', 'measure', 'reach', 'expand', 'admin'] as const;
+export const STAGES = ['idea', 'make', 'run', 'measure', 'reach', 'admin'] as const;
 export type Stage = (typeof STAGES)[number];
 
 /**
@@ -404,7 +407,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: '/facts', labelKey: 'tab.facts', icon: '🧩' },
     ],
   },
-  // ── MARKET ───────────────────────────────────────────────────────────────
+  // ── REACH ────────────────────────────────────────────────────────────────
   // The second front door. Canvas is "I have an idea"; the marketplace is "I
   // have a business" — and both end in a company you run. Public, so rung 0.
   // Agents are a FAMILY inside it, never a destination of their own (§11.5).
@@ -421,6 +424,26 @@ export const NAV_GROUPS: NavGroup[] = [
   // audience is a company that may not be a customer at all — which is the whole
   // premise of a publisher being distinct from a tenant.
   { id: 'developers', labelKey: 'group.developers', icon: '🧩', href: '/developers', match: ['/developers'], seat: 'platform', stage: 'reach' },
+  // EVERY account's own sales programme — pipeline, campaigns, weekly goals,
+  // reports, payouts and the referral link, all scoped to the person who owns
+  // them. It used to be a row only a `sales` account type could see, which read
+  // the product backwards: an associate selling Builderforce needs a CRM, and so
+  // does every founder who ships something on it. The workspace was already
+  // keyed by `ownerUserId` — nothing was shared, only gated — so opening it took
+  // removing the gate, not building a second hub (see `SalesWorkspaceService`).
+  //
+  // REACH, not a stage of its own: selling what you made is the same act as being
+  // found for it. See the `STAGES` header for why `expand` is gone.
+  { id: 'sales', labelKey: 'group.sales', icon: '📈', href: '/sales', match: ['/sales'], seat: 'CRO', stage: 'reach' },
+  // The platform owner's view of the sales programme. `/admin/sales`, NOT
+  // `/sales`: `/sales` is EVERY account's own sales programme, and a superadmin
+  // opening it reads their own pipeline, not the platform's. Same reports,
+  // aggregated across every associate, filterable to one. REACH, with the hub it
+  // reports on — see the `sales` row above.
+  {
+    id: 'sales-admin', labelKey: 'group.salesProgramme', icon: '📈', href: '/admin/sales',
+    match: ['/admin/sales'], superadminOnly: true, seat: 'CRO', stage: 'reach',
+  },
   // Escrow mediation, from the workspace's side. Owned by the CFO because what a
   // ruling decides is where held money goes, and filed under RUN rather than ADMIN
   // because a dispute is live work with a counterparty waiting on it, not a setting.
@@ -462,15 +485,6 @@ export const NAV_GROUPS: NavGroup[] = [
     seat: 'platform', stage: 'admin',
     tabKind: 'query', basePath: '/admin',
     tabs: ADMIN_GROUP_META.map((g) => ({ id: g.id, labelKey: g.labelKey, icon: g.icon })),
-  },
-  // ── EXPAND ───────────────────────────────────────────────────────────────
-  // The platform owner's view of the sales programme. `/admin/sales`, NOT
-  // `/sales`: `/sales` is the ASSOCIATE's hub and a superadmin opening it would
-  // be reading a hub with no referral link of their own in it. Same reports,
-  // aggregated across every associate, filterable to one.
-  {
-    id: 'sales-admin', labelKey: 'group.salesProgramme', icon: '📈', href: '/admin/sales',
-    match: ['/admin/sales'], superadminOnly: true, seat: 'CRO', stage: 'expand',
   },
 ];
 
@@ -624,9 +638,10 @@ export const FREELANCER_ALLOWED_EXACT = ['/settings', '/security'];
 
 /** Focused navigation for referral and sales-associate accounts. */
 export const SALES_NAV_GROUPS: NavGroup[] = [
-  // EXPAND, not RUN — selling Builderforce is growing the business, not running
-  // day-to-day operations, and RUN is where the operational rows live.
-  { id: 'sales', labelKey: 'group.sales', icon: '📈', href: '/sales', match: ['/sales'], seat: 'CRO', stage: 'expand' },
+  // REACH, not RUN — selling is growing the business, not running day-to-day
+  // operations, and RUN is where the operational rows live. Same row, same stage
+  // as the one every other account now gets in `NAV_GROUPS`.
+  { id: 'sales', labelKey: 'group.sales', icon: '📈', href: '/sales', match: ['/sales'], seat: 'CRO', stage: 'reach' },
   { id: 'settings', labelKey: 'group.settings', icon: '⚙', href: '/settings', match: ['/settings'], seat: 'platform', stage: 'admin' },
 ];
 

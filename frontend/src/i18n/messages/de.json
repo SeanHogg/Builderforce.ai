@@ -771,8 +771,7 @@
       "reach": "Reichweite",
       "admin": "Verwaltung",
       "notYet": "noch nicht",
-      "lockHint": "Zum Nutzen anmelden",
-      "expand": "Ausbauen"
+      "lockHint": "Zum Nutzen anmelden"
     },
     "journey": {
       "label": "Der Weg des Gründers",
@@ -25665,8 +25664,7 @@
       "make": "Bauen Sie es.",
       "run": "Betreiben Sie es als Unternehmen.",
       "measure": "Funktioniert es?",
-      "reach": "Verkaufen, kaufen, einstellen, gefunden werden.",
-      "expand": "Lassen Sie es wachsen.",
+      "reach": "Verkaufen, gefunden werden, wachsen.",
       "admin": "Einstellungen."
     },
     "arcNote": "Messen macht daraus eine Schleife statt einer Linie: Die beim Beweisen gesetzte Abbruchbedingung wird dort bewertet, und die Antwort geht zurück an Idee. Ein Nachweis ohne Bedingung, die scheitern kann, ist ein Launch mit Zwischenschritten.",

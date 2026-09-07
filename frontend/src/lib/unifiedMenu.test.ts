@@ -58,8 +58,17 @@ describe('the arc — every destination sits in exactly one stage', () => {
    *  `market`, which collided with the unrelated Marketplace commerce surface;
    *  `growth` was considered next but collided with the existing CMO
    *  destination at `/growth`.) */
-  it('renders Idea → Make → Run before Measure, Reach, Expand and Admin', () => {
-    expect(STAGES).toEqual(['idea', 'make', 'run', 'measure', 'reach', 'expand', 'admin']);
+  it('renders Idea → Make → Run before Measure, Reach and Admin', () => {
+    expect(STAGES).toEqual(['idea', 'make', 'run', 'measure', 'reach', 'admin']);
+  });
+
+  it('keeps the arc to five sayable words, with the sales programme inside Reach', () => {
+    // `expand` was a sixth heading over a single row. An entrepreneur has to be
+    // able to say the arc back, and selling what you made is the same act as
+    // being found for it — so Reach absorbed it rather than the rail carrying a
+    // heading whose whole content was one link.
+    expect(STAGES).not.toContain('expand');
+    expect(groupsForStage(NAV_GROUPS, 'reach').map((g) => g.id)).toContain('sales');
   });
 
   it('gives the RUN group one row per business seat, each owned by a teammate', () => {
@@ -272,9 +281,10 @@ describe('the active destination is resolved against the visitor, not the builde
   it('resolves a sales associate on their own hub', () => {
     const groups = navGroupsForAccountType(false, false, true);
     expect(findActiveGroup('/sales', groups)?.id).toBe('sales');
-    // The builder registry is the wrong book to look it up in — and that is the
-    // defect this parameter exists to make impossible to reintroduce.
-    expect(findActiveGroup('/sales')).toBeUndefined();
+    // The builder registry answers for `/sales` too now, and to the SAME row:
+    // every account owns a sales programme, so the associate's hub stopped being
+    // a restricted destination. One row, one id, whichever book you open.
+    expect(findActiveGroup('/sales')?.id).toBe('sales');
   });
 
   it('resolves a freelancer on their own destinations', () => {
