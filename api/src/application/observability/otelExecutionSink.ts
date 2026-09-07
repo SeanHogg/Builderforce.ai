@@ -15,6 +15,7 @@ import { eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { executions } from '../../infrastructure/database/schema';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { reportCaughtError } from './caughtErrorReporter';
 import type { ExecutionEventSink, ExecutionSubscriberEvent } from '../runtime/executionEvents';
 import { exportAgentSpans } from './otelExporter';
 import type { AgentSpan } from './otelSpans';
@@ -84,8 +85,14 @@ export function makeOtelExecutionSink(env: Env, db: Db): ExecutionEventSink {
       const tenantId = await tenantForExecution(env, db, event.executionId);
       if (tenantId == null) return;
       await exportAgentSpans(env, db, tenantId, [span]);
-    })().catch(() => {
-      /* exportAgentSpans already records its own failures on the exporter row */
-    });
+    })().catch((error) => reportCaughtError(error, {
+      source: 'application/observability/otelExecutionSink.ts',
+      operation: 'makeOtelExecutionSink',
+      level: 'warning',
+      // `exportAgentSpans` records ITS OWN failures on the exporter row, but the
+      // tenant lookup ahead of it can fail too, and that one had nowhere to land:
+      // the sink would go quiet for a run and nothing would say why.
+      context: { logMessage: '[otel-sink] span export failed (the run is unaffected)', details: { executionId: event.executionId, error } },
+    }));
   };
 }

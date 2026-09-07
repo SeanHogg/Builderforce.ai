@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { CreationFlowNode } from './CreationNode';
-import { alignCanvasNodesLeft, arrangeCanvasNodes, canvasArrangementTargets, canvasNodeDimensions, freeCanvasSlot, nextCanvasObjectPosition } from './creationCanvasLayout';
+import { alignCanvasNodesLeft, arrangeCanvasNodes, canvasArrangementTargets, canvasNodeDimensions, freeCanvasSlot, nextCanvasObjectPosition, placeAppendedCanvasNodes } from './creationCanvasLayout';
+
+/** A desktop board and a phone, as the layout measures them. */
+const WIDE = { width: 1_600, narrow: false } as const;
+const PHONE = { width: 380, narrow: true } as const;
 
 function node(id: string, x: number, y: number, width: number, height: number): CreationFlowNode {
   return { id, type: 'creation', position: { x, y }, measured: { width, height }, data: { kind: 'task', title: id } };
@@ -42,6 +46,17 @@ describe('creation canvas layout', () => {
     expect(positions.get('d')).toEqual({ x: 440, y: 490 });
   });
 
+  it('fits the grid to the board rather than to the object count', () => {
+    const nine = Array.from({ length: 9 }, (_, index) => node(`n${index}`, index, index, 260, 180));
+    const columnsIn = (width: number) => new Set([...arrangeCanvasNodes(nine, 'grid', 48, undefined, width).values()].map((placement) => placement.x)).size;
+
+    // `ceil(sqrt(9))` was 3 columns on every screen there has ever been.
+    expect(columnsIn(3_440)).toBeGreaterThan(3);
+    expect(columnsIn(900)).toBeLessThan(4);
+    // An explicit request still wins over the fit.
+    expect(new Set([...arrangeCanvasNodes(nine, 'grid', 48, 3, 3_440).values()].map((placement) => placement.x)).size).toBe(3);
+  });
+
   it('targets the whole visible canvas when no explicit ids were requested', () => {
     const all = [node('brain', 0, 0, 280, 300), node('task-1', 20, 20, 300, 400), node('task-2', 30, 30, 300, 200)];
     const selectedScope = [all[0]!];
@@ -54,26 +69,74 @@ describe('creation canvas layout', () => {
   it('stacks new mobile output below existing objects while preserving desktop defaults', () => {
     const existing = [node('brain', 80, 40, 280, 300), node('lesson', 80, 388, 320, 220)];
 
-    expect(nextCanvasObjectPosition(existing, {}, true)).toEqual({ x: 80, y: 656 });
-    expect(nextCanvasObjectPosition(existing, {}, false)).toEqual({ x: 520, y: 280 });
-    expect(nextCanvasObjectPosition(existing, { x: 900, y: 120 }, true)).toEqual({ x: 900, y: 120 });
+    expect(nextCanvasObjectPosition(existing, {}, PHONE)).toEqual({ x: 80, y: 656 });
+    expect(nextCanvasObjectPosition(existing, {}, WIDE)).toEqual({ x: 520, y: 280 });
+    expect(nextCanvasObjectPosition(existing, { x: 900, y: 120 }, PHONE)).toEqual({ x: 900, y: 120 });
   });
 
   it('never drops an authored object on top of one that is already there', () => {
     const existing = [node('agent', 520, 280, 285, 210)];
 
-    // Same default point that every unplaced object used to land on.
-    expect(nextCanvasObjectPosition(existing, {}, false)).toEqual({ x: 520, y: 530 });
-    // An explicit column is kept; only the depth moves.
-    expect(nextCanvasObjectPosition(existing, { x: 560, y: 300 }, false)).toEqual({ x: 560, y: 530 });
+    // The default point is taken, so the next card goes BESIDE it: a wide board has
+    // room across, and spending it is the whole reason the viewport is measured.
+    expect(nextCanvasObjectPosition(existing, {}, WIDE)).toEqual({ x: 845, y: 280 });
+    expect(nextCanvasObjectPosition(existing, { x: 560, y: 300 }, WIDE)).toEqual({ x: 845, y: 300 });
     // Somewhere clear stays exactly where it was asked for.
-    expect(nextCanvasObjectPosition(existing, { x: 1400, y: 300 }, false)).toEqual({ x: 1400, y: 300 });
+    expect(nextCanvasObjectPosition(existing, { x: 1400, y: 300 }, WIDE)).toEqual({ x: 1400, y: 300 });
   });
 
-  it('walks past a whole column of objects to find a clear slot', () => {
+  it('fills the width of a wide board before it grows downward', () => {
+    // The failure this replaced: nine objects authored in one turn with no
+    // coordinates, every one placed below the last — one ribbon of cards running
+    // off the bottom of a 3440px screen with two thirds of the board empty.
+    const board = { width: 2_000, narrow: false } as const;
+    let placed: CreationFlowNode[] = [];
+    for (let index = 0; index < 6; index += 1) {
+      const at = nextCanvasObjectPosition(placed, {}, board, 'task');
+      placed = [...placed, node(`n${index}`, at.x, at.y, 260, 180)];
+    }
+
+    expect(placed.filter((item) => item.position.y === 280)).toHaveLength(6);
+    expect(overlappingPairs(placed.map((item) => ({ ...item.position, ...canvasNodeDimensions(item) })))).toBe(0);
+  });
+
+  it('keeps stacking on a phone, where there is no width to fill', () => {
+    let placed: CreationFlowNode[] = [];
+    for (let index = 0; index < 4; index += 1) {
+      const at = nextCanvasObjectPosition(placed, {}, PHONE, 'task');
+      placed = [...placed, node(`n${index}`, at.x, at.y, 260, 180)];
+    }
+
+    expect(new Set(placed.map((item) => item.position.x)).size).toBe(1);
+    expect(new Set(placed.map((item) => item.position.y)).size).toBe(4);
+  });
+
+  it('walks along the row and then past it to find a clear slot', () => {
     const existing = [node('a', 500, 100, 300, 200), node('b', 500, 340, 300, 200), node('c', 500, 580, 300, 200)];
-    const slot = freeCanvasSlot(existing, { x: 520, y: 120 }, { width: 260, height: 180 });
-    expect(slot).toEqual({ x: 520, y: 820 });
+
+    // No room across: it walks down, exactly as it always did.
+    expect(freeCanvasSlot(existing, { x: 520, y: 120 }, { width: 260, height: 180 })).toEqual({ x: 520, y: 820 });
+    // Given room, it steps beside the object it hit instead.
+    expect(freeCanvasSlot(existing, { x: 520, y: 120 }, { width: 260, height: 180 }, { wrapWidth: 900 })).toEqual({ x: 840, y: 120 });
+  });
+
+  it('places a batch against itself, so six objects added in one tick are not one card', () => {
+    // Six @-mentioned agents seated in one turn: every call site computed the same
+    // viewport centre, and appending straight onto `current` put all six on it. A
+    // real session's diagnostics showed exactly this, at { x: 312.57, y: 182.01 }.
+    const batch = Array.from({ length: 6 }, (_, index) => node(`agent-${index}`, 312, 182, 285, 212));
+    const placed = placeAppendedCanvasNodes([], batch, WIDE);
+
+    expect(placed).toHaveLength(6);
+    expect(overlappingPairs(placed.map((item) => ({ ...item.position, ...canvasNodeDimensions(item) })))).toBe(0);
+    // The first asked for a clear point and keeps it — identity included, so an
+    // untouched addition does not churn React Flow.
+    expect(placed[0]).toBe(batch[0]);
+  });
+
+  it('leaves an authored layout exactly where it authored itself', () => {
+    const laidOut = [node('step-1', 0, 0, 260, 180), node('step-2', 340, 0, 260, 180), node('step-3', 680, 0, 260, 180)];
+    expect(placeAppendedCanvasNodes([], laidOut, WIDE)).toEqual(laidOut);
   });
 
   it('aligns a selected row into a readable column instead of a pile', () => {

@@ -34,9 +34,9 @@
 
 import { Hono, type Context } from 'hono';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
+import { parseBody, z } from './requestBody';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
-import { mintWebSessionToken } from '../../infrastructure/auth/webSessionToken';
 import {
   CANVAS_LINK_TOKEN_RE,
   claimCanvasInviteLink,
@@ -44,8 +44,16 @@ import {
   type CanvasLinkClaim,
   type CanvasLinkClaimant,
 } from '../../application/creation/canvasInviteLinks';
-import { cleanGuestName, GUEST_ACCOUNT_TYPE } from '../../application/creation/canvasGuestAccount';
+import {
+  GUEST_ACCOUNT_TYPE,
+  cleanGuestName,
+  issueGuestSession,
+} from '../../application/creation/canvasGuestAccount';
 import { collaboratorLimitForTenant } from '../../application/creation/canvasCollaboratorCapacity';
+
+/** Optional and unbounded HERE, because `cleanGuestName` is the one place that trims,
+ *  collapses and caps it — a second length rule in a schema is a second answer. */
+const GuestJoinBody = z.object({ displayName: z.string().optional() });
 
 export function createCanvasJoinRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -62,14 +70,17 @@ export function createCanvasJoinRoutes(db: Db): Hono<HonoEnv> {
     };
   }
 
-  async function claim(
-    c: Context<HonoEnv>,
-    claimant: CanvasLinkClaimant,
-  ) {
+  /** ONE wording for a link that cannot be taken. A dead link, a revoked link and an
+   *  exhausted one are deliberately indistinguishable: telling a holder WHICH is telling
+   *  them whether the board exists. */
+  const dead = (c: Context<HonoEnv>) =>
+    c.json({ error: 'This invitation link is invalid, expired, or has been revoked' }, 410);
+
+  async function claim(c: Context<HonoEnv>, claimant: CanvasLinkClaimant) {
     const token = c.req.param('token') ?? '';
     if (!CANVAS_LINK_TOKEN_RE.test(token)) return { failed: c.json({ error: 'Invalid invitation link' }, 400) } as const;
     const target = await previewCanvasInviteLink(db, c.env as Env, token);
-    if (!target) return { failed: c.json({ error: 'This invitation link is invalid, expired, or has been revoked' }, 410) } as const;
+    if (!target) return { failed: dead(c) } as const;
     const result = await claimCanvasInviteLink(db, c.env as Env, {
       token,
       claimant,
@@ -78,7 +89,7 @@ export function createCanvasJoinRoutes(db: Db): Hono<HonoEnv> {
     if (!result.ok) {
       return result.reason === 'capacity'
         ? { failed: c.json(result.refusal, 403) } as const
-        : { failed: c.json({ error: 'This invitation link is invalid, expired, or has been revoked' }, 410) } as const;
+        : { failed: dead(c) } as const;
     }
     return { failed: null, result } as const;
   }
@@ -90,30 +101,22 @@ export function createCanvasJoinRoutes(db: Db): Hono<HonoEnv> {
     const token = c.req.param('token') ?? '';
     if (!CANVAS_LINK_TOKEN_RE.test(token)) return c.json({ error: 'Invalid invitation link' }, 400);
     const target = await previewCanvasInviteLink(db, c.env as Env, token);
-    if (!target) return c.json({ error: 'This invitation link is invalid, expired, or has been revoked' }, 410);
+    if (!target) return dead(c);
     return c.json({ title: target.title, role: target.role });
   });
 
   router.post('/:token/guest', async (c) => {
-    const body = await c.req.json<{ displayName?: unknown }>().catch(() => ({} as { displayName?: unknown }));
+    const body = await parseBody(c, GuestJoinBody);
     const outcome = await claim(c, { kind: 'guest', displayName: cleanGuestName(body.displayName) });
     if (outcome.failed) return outcome.failed;
     const guest = outcome.result.guest;
-    if (!guest) return c.json({ error: 'This invitation link is invalid, expired, or has been revoked' }, 410);
-    const { token: webToken } = await mintWebSessionToken(db, (c.env as Env).JWT_SECRET, {
-      userId: guest.id,
-      email: guest.email,
-      username: guest.id,
-      sessionName: 'Canvas guest',
+    if (!guest) return dead(c);
+    const token = await issueGuestSession(db, (c.env as Env).JWT_SECRET, guest, {
       userAgent: c.req.header('user-agent') ?? null,
-      // Thirty days, not the usual day. A guest has no password to sign back in with,
-      // so an expired token is not an inconvenience — it is the permanent loss of the
-      // only identity that holds their work on the board.
-      expiresIn: 30 * 86_400,
     });
     return c.json({
       ...claimResponse(outcome.result),
-      token: webToken,
+      token,
       user: {
         id: guest.id,
         email: guest.email,

@@ -31,6 +31,7 @@ import { touchTenantApiKey } from '../../application/llm/tenantApiKeyService';
 // canvas, webhook and widget routers are three more callers, and a second copy of
 // an authorization check is the copy that keeps granting access after the original
 // learns to refuse. See `publicApiAuth.ts`.
+import { skillSearchMatches } from '../../application/marketplace/skillSearch';
 import { requirePublicApiKey } from '../../application/publicApi/publicApiAuth';
 import { createPublicCanvasRoutes } from '../../application/publicApi/publicCanvasApiService';
 import { createPublicWebhookRoutes } from '../../application/publicApi/publicWebhookApiService';
@@ -163,7 +164,7 @@ export function createPublicApiRoutes(db: Db): Hono<HonoEnv> {
         })
         .from(schema.marketplaceSkills)
         .innerJoin(schema.users, eq(schema.marketplaceSkills.authorId, schema.users.id))
-        .where(sql`${and(...conditions)} AND ${schema.marketplaceSkills.searchVector} @@ websearch_to_tsquery(${q})`)
+        .where(and(...conditions, skillSearchMatches(q)))
         .orderBy(desc(schema.marketplaceSkills.downloads))
         .limit(limitNum)
         .offset(offset);

@@ -9,10 +9,11 @@
  * near-identical blocks inside the service.
  */
 
-import { and, desc, eq, gt, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, or, sql, type SQL } from 'drizzle-orm';
+import type { PgColumn } from 'drizzle-orm/pg-core';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentMemory, projectFacts } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { MEMORY_EMBEDDING_MODEL } from './memoryEmbedding';
 
 /** One candidate from either arm, before fusion. */
@@ -32,9 +33,10 @@ export interface RecalledRow {
 const similarity = (column: SQL | ReturnType<typeof sql>, literal: string) =>
   sql<number>`greatest(0, 1 - (${column} <=> ${literal}::vector))`;
 
-/** Rows still in force: no expiry, or an expiry in the future. */
-const unexpired = (expiresAt: typeof agentMemory.expiresAt) =>
-  or(isNull(expiresAt), gt(expiresAt, new Date()));
+/** Rows still in force: no expiry, or an expiry in the future.
+ *  Typed against the column, not against ONE table's column — both stores carry the
+ *  same nullable `expires_at` and the predicate is the same sentence about either. */
+const unexpired = (expiresAt: PgColumn) => or(isNull(expiresAt), gt(expiresAt, new Date()));
 
 /**
  * The scoped store's ANN arm: the `limit` nearest rows in the given scopes whose
@@ -129,8 +131,16 @@ export async function unembeddedMemories(db: Db, limit: number): Promise<Array<{
   return db
     .select({ id: agentMemory.id, key: agentMemory.key, content: agentMemory.content })
     .from(agentMemory)
-    .where(isNull(agentMemory.embedding))
-    .orderBy(desc(agentMemory.updatedAt))
+    // DECLARED cross-tenant: the backfill is a platform sweep over rows written
+    // before migration 1134 (or whose embed failed), and there is no tenant to scope
+    // by — the claim set is "every row with no vector", deployment-wide. The vector
+    // it writes is derived from content the row already holds, so nothing crosses a
+    // tenant boundary; recall stays tenant-scoped in the two ANN reads above.
+    .where(acrossTenants(agentMemory, 'scheduled_sweep', isNull(agentMemory.embedding)))
+    // OLDEST first, as the doc says: the population this drains is everything written
+    // before 1134, and newest-first would re-serve the same recent slice every pass
+    // while the backlog it exists for never moved.
+    .orderBy(asc(agentMemory.updatedAt))
     .limit(limit);
 }
 
@@ -139,7 +149,8 @@ export async function unembeddedProjectFacts(db: Db, limit: number): Promise<Arr
   return db
     .select({ id: projectFacts.id, key: projectFacts.key, content: projectFacts.content })
     .from(projectFacts)
-    .where(isNull(projectFacts.embedding))
-    .orderBy(desc(projectFacts.updatedAt))
+    // Same declared sweep, project half — see `unembeddedMemories`.
+    .where(acrossTenants(projectFacts, 'scheduled_sweep', isNull(projectFacts.embedding)))
+    .orderBy(asc(projectFacts.updatedAt))
     .limit(limit);
 }

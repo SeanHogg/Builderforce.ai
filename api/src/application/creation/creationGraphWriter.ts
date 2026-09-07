@@ -60,6 +60,28 @@ export function creationObjectSearchText(content: unknown): string {
     .slice(0, 2_000);
 }
 
+/**
+ * Expected loser of a concurrent revision or idempotency-key insert race.
+ *
+ * It reads THIS module's own unique constraints — `uq_creation_events_revision`
+ * and `uq_creation_events_idempotency`, the two indexes the statement order above
+ * exists to serialize writers onto — which is why it lives beside the writer
+ * rather than in the route file that happened to catch it first. Every caller of
+ * `creationGraphStatements` has to tell a lost race apart from a real failure,
+ * and a second copy of that regex is a caller that starts reporting 500s for a
+ * retry it should have translated.
+ */
+export function isCreationEventWriteConflict(error: unknown): boolean {
+  const detail = error && typeof error === 'object'
+    ? error as { code?: unknown; constraint?: unknown; message?: unknown }
+    : null;
+  const text = [detail?.constraint, detail?.message, error instanceof Error ? error.message : String(error)]
+    .filter((value): value is string => typeof value === 'string')
+    .join(' ');
+  const isUniqueViolation = detail?.code === '23505' || /duplicate key|unique constraint|23505/i.test(text);
+  return isUniqueViolation && /(?:uq_creation_events_(?:revision|idempotency)|creation_session_events_session_id_(?:revision|idempotency_key)_key)/i.test(text);
+}
+
 export type GraphObjectInput = {
   id: string;
   kind: string;

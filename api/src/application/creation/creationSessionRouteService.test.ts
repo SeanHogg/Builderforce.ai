@@ -5,10 +5,11 @@ import {
   cleanCommentAnchor,
   creationObjectSearchText,
   creationSessionSearchStatus,
-  isCreationEventWriteConflict,
   sanitizeClaimConnectionIds,
   validCreationGraph,
 } from './creationSessionRouteService';
+// Moved to the writer whose unique constraints it reads — see `creationGraphWriter`.
+import { isCreationEventWriteConflict } from './creationGraphWriter';
 
 describe('creationKindForModality', () => {
   it('keeps every IDE modality attached to the Builder workspace', () => {

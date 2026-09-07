@@ -33,7 +33,9 @@
 import { and, eq } from 'drizzle-orm';
 import { tenantMembers, users } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { SEAT_KIND } from '../../domain/tenant/SeatKind';
+import { mintWebSessionToken } from '../../infrastructure/auth/webSessionToken';
 import type { TenantRole } from '../../domain/shared/types';
 
 /** The `users.account_type` value that marks an identity minted by a link claim. */
@@ -116,7 +118,8 @@ export async function seatAsCollaborator(
     .where(and(eq(tenantMembers.tenantId, input.tenantId), eq(tenantMembers.userId, input.userId)))
     .limit(1);
   if (existing) {
-    await db.update(tenantMembers).set({ isActive: true }).where(eq(tenantMembers.id, existing.id));
+    await db.update(tenantMembers).set({ isActive: true })
+      .where(scopedToTenant(tenantMembers, input.tenantId, eq(tenantMembers.id, existing.id)));
     return;
   }
   await db.insert(tenantMembers).values({
@@ -127,4 +130,39 @@ export async function seatAsCollaborator(
     joinedAt: new Date(),
     seatKind: SEAT_KIND.COLLABORATOR,
   }).onConflictDoNothing();
+}
+
+/**
+ * THIRTY DAYS, deliberately, and not the usual one.
+ *
+ * A guest has no password and no inbox, so an expired session is not an inconvenience
+ * they can recover from — it is the permanent loss of the only identity that holds
+ * their place on somebody else's board. The link they were sent may itself be spent by
+ * then, and there is nothing else that proves who they were.
+ */
+const GUEST_SESSION_SECONDS = 30 * 86_400;
+
+/**
+ * Issue a real web session for a guest identity.
+ *
+ * It is the ordinary web session every account gets — same minting primitive, same
+ * revocation record — because the whole design of the link claim is that a guest is a
+ * member like any other and no endpoint has to learn a second credential. The only
+ * thing that differs is how long it lasts, and that is stated above.
+ */
+export async function issueGuestSession(
+  db: Db,
+  jwtSecret: string,
+  guest: CanvasGuestIdentity,
+  context: { userAgent?: string | null } = {},
+): Promise<string> {
+  const { token } = await mintWebSessionToken(db, jwtSecret, {
+    userId: guest.id,
+    email: guest.email,
+    username: guest.id,
+    sessionName: 'Canvas guest',
+    userAgent: context.userAgent ?? null,
+    expiresIn: GUEST_SESSION_SECONDS,
+  });
+  return token;
 }

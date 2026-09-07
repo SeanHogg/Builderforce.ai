@@ -47,6 +47,7 @@ export type CanvasSessionActionId =
   | 'outcomes'
   | 'prove'
   | 'diagnostics'
+  | 'walkthrough'
   | 'fullscreen'
   | 'call'
   | 'talktrack'
@@ -183,9 +184,27 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // So it is unconditional, deliberately, and the test asserts that it survives on every
   // surface the registry declares.
   { id: 'diagnostics', cluster: 'inspect', order: 3, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'openDiagnostics' },
+  //
+  // SHOW ME WHAT I WAS GIVEN.
+  //
+  // A generated board is the product working and, for the person who asked one
+  // question and got twenty-four objects back, a wall. The canvas already had a
+  // tour and it toured the CHROME — Brain dock, palette, Share — which teaches
+  // the tool and says nothing about the work. This one walks the ARTIFACTS.
+  //
+  // WHY IT IS IN `inspect`. It is a reading of this board, like the outcome
+  // scorecard beside it: both answer "what have I actually got here". It is not
+  // history, and it does not leave the canvas.
+  //
+  // It needs OBJECTS for the reason the scorecard does, and the host withdraws it
+  // as well (`available: false`) on a board too small to get lost in — three cards
+  // do not need a guide, and an offer to walk somebody round them reads as the
+  // product not trusting them. That threshold is the walkthrough's own
+  // (`MIN_WALKTHROUGH_OBJECTS`), asked once, rather than a number repeated here.
+  { id: 'walkthrough', cluster: 'inspect', order: 4, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'walkthrough.action', titleKey: 'walkthrough.actionTitle', needs: 'objects' },
   // Full screen keeps its phone slot for the reason it always had one: a small screen is
   // where trading app chrome for board is worth the most.
-  { id: 'fullscreen', cluster: 'inspect', order: 4, chrome: 'icon', state: 'pressed', phone: 'bar', labelKey: 'fullScreen', activeLabelKey: 'exitFullScreen' },
+  { id: 'fullscreen', cluster: 'inspect', order: 5, chrome: 'icon', state: 'pressed', phone: 'bar', labelKey: 'fullScreen', activeLabelKey: 'exitFullScreen' },
   // Share is the only worded action, and now the ONLY control that opens the invite
   // panel: the collaborator roster's `+` used to open the same sheet, which is one
   // decision with two controls — the thing the surface registry exists to prevent.
@@ -211,7 +230,7 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // The host withdraws it (`available: false`) the moment a call is running: from
   // then on the dock IS the control, and a second lit "call" button in the bar would
   // be one decision with two homes — the failure this registry exists to prevent.
-  { id: 'call', cluster: 'live', order: 5, chrome: 'icon', state: 'none', phone: 'menu', labelKey: 'startCall', titleKey: 'startCallTitle' },
+  { id: 'call', cluster: 'live', order: 6, chrome: 'icon', state: 'none', phone: 'menu', labelKey: 'startCall', titleKey: 'startCallTitle' },
   //
   // TALKTRACK — the recording of this board, beside the live version of it.
   //
@@ -227,7 +246,7 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // recording of whatever is on screen, which is as true of a running app or a 3D
   // space as it is of the board — and the conversation surface is where somebody is
   // most likely to be explaining what they just asked for.
-  { id: 'talktrack', cluster: 'live', order: 6, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'recordTalktrack', titleKey: 'recordTalktrackTitle' },
+  { id: 'talktrack', cluster: 'live', order: 7, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'recordTalktrack', titleKey: 'recordTalktrackTitle' },
   //
   // PROVE IT — the act the whole method turns on, and the one the product had no
   // door for from a board.

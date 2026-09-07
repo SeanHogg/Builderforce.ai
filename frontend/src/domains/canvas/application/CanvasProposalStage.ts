@@ -38,6 +38,7 @@
 
 import type { Edge } from '@xyflow/react';
 import type { CreationConnectionKind } from '@builderforce/creation-canvas-contract';
+import type { CanvasLayoutViewport } from '@/lib/canvasGridFit';
 import type { CanvasObject, CanvasObjectData, CreationObjectKind } from '../domain/canvasObject';
 import type { ProposedCanvasChange } from '../domain/canvasChange';
 
@@ -68,11 +69,19 @@ export interface CanvasObjectFactory {
   position: (
     against: readonly CanvasObject[],
     requested: { x?: number; y?: number },
-    narrow: boolean,
+    viewport: CanvasLayoutViewport,
     kind: CreationObjectKind,
   ) => { x: number; y: number };
-  /** True on the viewport widths that stack authored objects instead of placing them. */
-  narrow: () => boolean;
+  /**
+   * How much board the layout may spend, measured now rather than at construction:
+   * a stage outlives a window resize and a zoom, and both change the answer.
+   *
+   * It used to be `narrow: () => boolean`, which is the same measurement with
+   * everything but the phone test thrown away — so a batch of objects authored in
+   * one turn packed into a single column on every screen wide enough not to be a
+   * phone. See `lib/canvasGridFit.ts`.
+   */
+  viewport: () => CanvasLayoutViewport;
 }
 
 /** What a connection between two objects carries. */
@@ -150,7 +159,7 @@ export class CanvasProposalStage {
     return {
       id: this.nextId(),
       type: 'creation',
-      position: this.factory.position(this.nodes(), at, this.factory.narrow(), kind),
+      position: this.factory.position(this.nodes(), at, this.factory.viewport(), kind),
       data: this.factory.defaults(kind),
     };
   }

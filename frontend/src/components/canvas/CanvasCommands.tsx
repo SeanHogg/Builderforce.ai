@@ -4,6 +4,7 @@ import { ControlButton, Controls, MiniMap, type Edge, type Node, type ReactFlowI
 import { useTranslations } from 'next-intl';
 import { useCallback, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { useCanvas3DControls } from './canvas3dControls';
+import { canvasGridColumns, canvasLayoutViewport, DEFAULT_CANVAS_LAYOUT_WIDTH } from '@/lib/canvasGridFit';
 import { canvasNodeFootprint, graphLayerRanks } from './canvasGraph';
 import styles from './CanvasCommands.module.css';
 
@@ -218,6 +219,20 @@ export function RedoIcon() {
 
 /** The outcome scorecard: measured bars with the trend drawn over them. It names a
  *  READING of this session, which is why it is not an arrow leaving the page. */
+/**
+ * A path stepping between the cards on a board — the walkthrough of what was
+ * generated. Deliberately not a question mark: this is not help, it is a tour of
+ * the person's own work, and a `?` would file it under "I am confused".
+ */
+export function WalkthroughIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <rect x="1.6" y="2.4" width="4.6" height="3.8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    <rect x="9.8" y="9.8" width="4.6" height="3.8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    <path d="M6.9 4.3h2.2a1.6 1.6 0 0 1 1.6 1.6v4.4" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeDasharray="1.8 1.5" />
+    <circle cx="8.9" cy="11.7" r="1.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
+  </svg>;
+}
+
 export function OutcomeMetricsIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">
     <path d="M2 13.6h12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
@@ -620,7 +635,12 @@ export function canvasLayoutOrientation(width: number, height: number): CanvasLa
  * spread along the other one. Callers get it from `canvasLayoutOrientation` (or
  * from `useCanvasCleanLayout`, which measures the board for them).
  */
-export function cleanCanvasLayout<T extends Node>(nodes: T[], edges: Edge[], orientation: CanvasLayoutOrientation = 'horizontal'): T[] {
+export function cleanCanvasLayout<T extends Node>(
+  nodes: T[],
+  edges: Edge[],
+  orientation: CanvasLayoutOrientation = 'horizontal',
+  availableWidth = DEFAULT_CANVAS_LAYOUT_WIDTH,
+): T[] {
   if (nodes.length < 2) return nodes;
   const horizontalGap = 88;
   const verticalGap = 64;
@@ -628,10 +648,15 @@ export function cleanCanvasLayout<T extends Node>(nodes: T[], edges: Edge[], ori
   const { ranks, connected } = graphLayerRanks(nodes, edges);
 
   if (!connected) {
-    // A square-ish grid on a wide board; a narrow one on a tall board, so the
-    // block of unconnected objects runs down the screen rather than off it.
-    const square = Math.sqrt(nodes.length);
-    const columns = Math.max(1, vertical ? Math.round(square / 1.6) : Math.ceil(square));
+    // FITTED to the board, not to the object count. This was `ceil(sqrt(n))` —
+    // twelve unconnected objects became four columns on a phone and four columns
+    // on a 3440px ultrawide, which is how "arrange" managed to hand back a tall
+    // block with two thirds of the screen empty beside it. A tall board still
+    // narrows (a layered graph laid out for width there is several screens wide
+    // before the first fit), so the orientation keeps its say.
+    const widest = Math.max(...nodes.map((node) => canvasNodeFootprint(node).width));
+    const fitted = canvasGridColumns({ available: availableWidth, columnWidth: widest, gap: horizontalGap, count: nodes.length });
+    const columns = Math.max(1, vertical ? Math.round(fitted / 1.6) : fitted);
     const columnWidths = Array.from({ length: columns }, () => 0);
     const rowHeights: number[] = [];
     nodes.forEach((node, index) => {
@@ -707,7 +732,16 @@ export function useCanvasCleanLayout<NodeType extends Node, EdgeType extends Edg
       box?.width ?? (typeof window === 'undefined' ? 0 : window.innerWidth),
       box?.height ?? (typeof window === 'undefined' ? 0 : window.innerHeight),
     );
-    setNodes((current) => cleanCanvasLayout(current, edges ?? [], orientation));
+    // The board's width in FLOW coordinates — see `useCanvasLayoutViewport` for why
+    // the zoom divides out. A budget in screen pixels would halve the number of
+    // columns every time somebody zoomed out to see more of the board.
+    const zoom = instanceRef.current?.getViewport?.().zoom;
+    const scale = typeof zoom === 'number' && Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+    const { width } = canvasLayoutViewport({
+      boardWidth: box?.width ? box.width / scale : undefined,
+      screenWidth: typeof window === 'undefined' ? undefined : window.innerWidth,
+    });
+    setNodes((current) => cleanCanvasLayout(current, edges ?? [], orientation, width));
     // Next frame: the fit has to read the positions we just set.
     window.setTimeout(() => void instanceRef.current?.fitView({ padding, maxZoom, minZoom: CANVAS_FIT_MIN_ZOOM, duration: 320 }), 0);
   }, [boardRef, instanceRef, setNodes, edges, padding, maxZoom]);

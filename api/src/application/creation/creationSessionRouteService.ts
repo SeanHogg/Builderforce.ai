@@ -126,6 +126,7 @@ import {
   buildPreview,
   creationGraphStatements,
   creationObjectSearchText,
+  isCreationEventWriteConflict,
   newCreationSessionStatements,
   CREATION_UUID_RE as UUID_RE,
   uuidKey,
@@ -204,18 +205,6 @@ const BUILT_IN_TEMPLATE_IDS = ['campaign', 'product-discovery', 'data-story', 's
 
 export function creationSessionSearchStatus(raw: unknown): 'active' | 'archived' | 'all' {
   return raw === 'archived' || raw === 'all' ? raw : 'active';
-}
-
-/** Expected loser of a concurrent revision or idempotency-key insert race. */
-export function isCreationEventWriteConflict(error: unknown): boolean {
-  const detail = error && typeof error === 'object'
-    ? error as { code?: unknown; constraint?: unknown; message?: unknown }
-    : null;
-  const text = [detail?.constraint, detail?.message, error instanceof Error ? error.message : String(error)]
-    .filter((value): value is string => typeof value === 'string')
-    .join(' ');
-  const isUniqueViolation = detail?.code === '23505' || /duplicate key|unique constraint|23505/i.test(text);
-  return isUniqueViolation && /(?:uq_creation_events_(?:revision|idempotency)|creation_session_events_session_id_(?:revision|idempotency_key)_key)/i.test(text);
 }
 
 /**

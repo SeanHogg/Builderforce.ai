@@ -19,10 +19,10 @@ function edge(id: string, source: string, target: string): Edge {
 /** A grid factory: every object lands 100px below the last, so placement is assertable. */
 const factory: CanvasObjectFactory = {
   defaults: (kind) => ({ kind, title: kind }),
-  position: (against, requested, narrow, _kind) => (
-    narrow ? { x: 0, y: against.length * 100 } : { x: requested.x ?? 0, y: requested.y ?? 0 }
+  position: (against, requested, viewport, _kind) => (
+    viewport.narrow ? { x: 0, y: against.length * 100 } : { x: requested.x ?? 0, y: requested.y ?? 0 }
   ),
-  narrow: () => true,
+  viewport: () => ({ width: 360, narrow: true }),
 };
 
 function stageOver(nodes: CanvasObject[] = [], edges: Edge[] = []) {

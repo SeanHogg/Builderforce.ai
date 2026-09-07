@@ -15,6 +15,7 @@
 import { eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentMemory, projectFacts } from '../../infrastructure/database/schema';
+import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { Env } from '../../env';
 import {
@@ -76,17 +77,22 @@ export async function runMemoryEmbeddingBackfill(env: Env, db: Db, batch = BACKF
     unembeddedProjectFacts(db, batch),
   ]);
 
+  // DECLARED cross-tenant, both writes: the claim set was gathered deployment-wide
+  // (see `unembeddedMemories`), so the row's own id is the only thing there is to
+  // scope by — and it is stronger than a tenant filter, naming exactly one row that
+  // this pass already read. The write adds a vector derived from that row's own
+  // content and changes nothing else.
   const memories = await backfillStore(env, db, memoryRows, (id, vector, embeddedAt) =>
     db
       .update(agentMemory)
       .set({ embedding: vector, embeddingModel: MEMORY_EMBEDDING_MODEL, embeddedAt })
-      .where(eq(agentMemory.id, id)),
+      .where(acrossTenants(agentMemory, 'scheduled_sweep', eq(agentMemory.id, id))),
   );
   const facts = await backfillStore(env, db, factRows, (id, vector, embeddedAt) =>
     db
       .update(projectFacts)
       .set({ embedding: vector, embeddingModel: MEMORY_EMBEDDING_MODEL, embeddedAt })
-      .where(eq(projectFacts.id, id)),
+      .where(acrossTenants(projectFacts, 'scheduled_sweep', eq(projectFacts.id, id))),
   );
 
   return { memories, projectFacts: facts };

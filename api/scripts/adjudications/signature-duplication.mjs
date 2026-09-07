@@ -53,6 +53,26 @@ export default {
   'kanban_template_lane_requirements = swimlane_requirements':
     'TEMPLATE versus INSTANCE, which the docstrings already state: the swimlane row is \'materialised onto a board\'s swimlanes when a template is applied (and directly editable)\'. That editability is the whole difference -- a live board\'s requirements are tuned per board and must keep working when the template they came from is changed or deleted, which is why the copy exists rather than a pointer. The parents differ accordingly (`lane_id` into a shared template, `swimlane_id` into one board\'s lane), so this is the same two-parents objection as the type-mappings cluster, plus a tenancy one: the template table has no tenant column and inherits through the template, while the swimlane table carries `tenant_id` NOT NULL because a live board\'s gating rules are read by the audit engine on the ticket path.',
 
+  'agent_memory = project_facts':
+    'the same governed-recall CONTRACT deliberately kept over two different PARENTS, which is why '
+      + 'the payload columns match: `content`, `importance`, `expires_at`, `origin_execution_id` and '
+      + 'the three 1134 embedding columns are the contract one service (`memoryService`) applies to '
+      + 'both, and duplicating that contract is the POINT — a half-embedded union ranks half its '
+      + 'results by meaning and half by keyword. What cannot merge is the scope. `project_facts.project_id` '
+      + 'is NOT NULL REFERENCES projects(id) ON DELETE CASCADE: a project fact is a CHILD of a project '
+      + 'and dies with it, and `(tenant_id, project_id, key)` is the upsert target every surface writes '
+      + 'through. `agent_memory` addresses its scope as `(scope_kind, scope_id)` — a discriminator plus '
+      + 'a plain integer with no foreign key, NOT NULL and defaulted to 0 precisely so '
+      + '`(tenant_id, scope_kind, scope_id, key)` stays a plain upsert target for a scope (`tenant`) that '
+      + 'has no owning row at all. Folding them means the project FK becomes nullable, or the project id '
+      + 'moves into `scope_id` and stops being a foreign key: either way an enforced parent and its '
+      + 'cascade are traded for a convention, and deleting a project silently orphans its facts forever '
+      + '— the same objection as the collector-integrations and type-mappings clusters. The two unique '
+      + 'constraints cannot be reconciled either: one table cannot be unique on (tenant, project, key) '
+      + 'and on (tenant, scope_kind, scope_id, key) at once without the project id appearing twice. The '
+      + 'behaviour that WOULD be duplication is not: recall, governance, retention and the embedding '
+      + 'backfill each have one implementation that takes the store as a parameter.',
+
   'project_manager_configs = tenant_manager_defaults':
     'the column NAMES match and their MEANINGS are opposite, which is the one case where merging on a shared signature destroys information. At the project tier each column is a VALUE; at the workspace tier the same name is a BOUND on that value, and the fold in `managerPolicy.ts` reads them differently on purpose. `enabled` is NOT NULL DEFAULT true on a project (a master switch) and a nullable KILL-SWITCH on the workspace, whose own docstring records why: project rows default to true, so last-tier-wins would let every existing row silently defeat the workspace switch. `allow_auto_merge`, `allow_unattended_ceremonies`, `allow_agent_reassignment` and `allow_auto_staff_lanes` are CEILINGS at the workspace tier and plain overrides at the project tier. `agent_reassign_idle_hours` and `agent_reassign_max_per_session` are folded MOST-RESTRICTIVE-WINS from the workspace (largest idle, smallest cap) and taken at face value from the project. `require_signoff_to_complete` is a workspace FLOOR and a project DECISION -- NOT NULL there specifically so the project states it outright instead of deferring. One table cannot hold a value and a bound on that value in one column; disambiguating by whether `project_id` is null is exactly the ambiguity that makes a merged settings table go wrong. The two rows are also different nouns beyond the policy: the project row NAMES the manager (`manager_ref`, `manager_type`) and carries the sweep\'s own runtime state (`last_run_at`, `last_sweep_decision`, `last_sweep_reason`, `last_sweep_at`), six columns that can never be non-null on a workspace row.',
 

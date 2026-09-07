@@ -434,6 +434,43 @@ export function assertBoardInvariants(board: CanvasBoard): CanvasBoard {
  * and a list kept pointing at it. Repairing in the SAME change is the invariant:
  * "not on the next render" is the part that makes it a rule rather than a hope.
  */
+/**
+ * THE OBJECT THIS BOARD ALREADY HOLDS UNDER THIS NAME.
+ *
+ * ── THE DUPLICATION THIS ENDS ────────────────────────────────────────────────
+ * A real session (2026-09-07, ui 2026.9.13) finished with 24 objects, seven of
+ * them duplicates: `CMO` three times, `NutriPlan`, `Yuka`, `MyFitnessPal` and
+ * `Fooducate` twice each. Nothing malfunctioned in the canvas — two of the
+ * turn's completions ended with `finishReason: "length"`, and a model whose own
+ * transcript has been truncated re-authors what it can no longer see it already
+ * made. The board is the thing that CAN still see it, so the board is where the
+ * rule belongs.
+ *
+ * A name is an identity: two objects of the same kind with the same name on one
+ * board are one object, said twice. The single exception is a kind whose title
+ * IS its content — a wall of stickies may perfectly well have three saying
+ * "Pricing" — and `TITLE_IS_CONTENT_KINDS` in the object registry already
+ * declares which those are, so this reads that list rather than starting a
+ * second one.
+ *
+ * Untitled objects match nothing: an object with no name has no identity to
+ * collide with, and treating two blanks as twins would block a legitimate batch.
+ */
+export function canvasObjectTwin(
+  kind: CreationObjectKind,
+  title: string | undefined,
+  nodes: readonly CanvasObject[],
+  titleIsContent: (kind: CreationObjectKind) => boolean,
+): CanvasObject | undefined {
+  const name = (title ?? '').trim().toLowerCase();
+  if (!name || titleIsContent(kind)) return undefined;
+  return nodes.find((node) => (
+    node.data.kind === kind
+    && node.data.placementHidden !== true
+    && (node.data.title ?? '').trim().toLowerCase() === name
+  ));
+}
+
 export function edgesWithinBoard(nodes: readonly CanvasObject[], edges: readonly Edge[]): Edge[] {
   const present = new Set(nodes.map((node) => node.id));
   return edges.filter((edge) => present.has(edge.source) && present.has(edge.target));

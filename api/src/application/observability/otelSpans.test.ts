@@ -35,27 +35,27 @@ describe('buildOtlpTracePayload', () => {
       scopeSpans: Array<{ spans: Array<Record<string, unknown>> }>;
     }>;
   };
-  const spans = payload.resourceSpans[0].scopeSpans[0].spans;
+  const spans = payload.resourceSpans[0]!.scopeSpans[0]!.spans;
 
   it('carries the service and tenant on the resource', () => {
-    const keys = payload.resourceSpans[0].resource.attributes.map((a) => a.key);
+    const keys = payload.resourceSpans[0]!.resource.attributes.map((a) => a.key);
     expect(keys).toContain('service.name');
     expect(keys).toContain('builderforce.tenant_id');
   });
 
   it('encodes times as nanosecond strings', () => {
-    expect(spans[0].startTimeUnixNano).toBe('1700000000000000000');
-    expect(spans[0].endTimeUnixNano).toBe('1700000000250000000');
+    expect(spans[0]!.startTimeUnixNano).toBe('1700000000000000000');
+    expect(spans[0]!.endTimeUnixNano).toBe('1700000000250000000');
   });
 
   it('drops empty and null attributes rather than exporting blanks', () => {
-    const keys = (spans[0].attributes as Array<{ key: string }>).map((a) => a.key);
+    const keys = (spans[0]!.attributes as Array<{ key: string }>).map((a) => a.key);
     expect(keys).toEqual(['builderforce.tool', 'builderforce.execution_id']);
   });
 
   it('marks a failed run ERROR and leaves an unjudged span UNSET', () => {
-    expect(spans[1].status).toEqual({ code: 2 });
-    expect(spans[0].status).toEqual({ code: 0 });
+    expect(spans[1]!.status).toEqual({ code: 2 });
+    expect(spans[0]!.status).toEqual({ code: 0 });
   });
 });
 

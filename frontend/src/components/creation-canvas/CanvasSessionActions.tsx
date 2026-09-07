@@ -16,6 +16,7 @@ import {
   ShareCanvasIcon,
   StartCallIcon,
   UndoIcon,
+  WalkthroughIcon,
 } from '@/components/canvas/CanvasCommands';
 import {
   canvasSessionActionsFor,
@@ -57,6 +58,7 @@ const ACTION_ICON: Record<CanvasSessionActionId, () => React.JSX.Element> = {
   redo: RedoIcon,
   outcomes: OutcomeMetricsIcon,
   diagnostics: DiagnosticsIcon,
+  walkthrough: WalkthroughIcon,
   fullscreen: FullscreenIcon,
   call: StartCallIcon,
   talktrack: RecordTalktrackIcon,

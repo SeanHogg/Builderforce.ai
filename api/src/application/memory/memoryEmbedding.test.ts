@@ -38,7 +38,7 @@ describe('memory embeddings', () => {
     dispatch.mockResolvedValueOnce({ data: [{ index: 0, embedding: vector(0.5) }] });
     const out = await embedMemoryText(env, 'how do we deploy?');
     expect(out).toHaveLength(MEMORY_EMBEDDING_DIMS);
-    expect(dispatch.mock.calls[0][0]).toMatchObject({ model: MEMORY_EMBEDDING_MODEL });
+    expect(dispatch.mock.calls[0]![0]).toMatchObject({ model: MEMORY_EMBEDDING_MODEL });
   });
 
   it('refuses a wrong-width vector rather than poisoning the index', async () => {

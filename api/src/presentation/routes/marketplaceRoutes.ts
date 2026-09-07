@@ -16,6 +16,7 @@ import { signWebJwt } from '../../infrastructure/auth/JwtService';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { hashPassword, verifyPassword } from '../../infrastructure/auth/HashService';
 import { invalidateCapabilityCache } from '../../application/artifact/capabilityContext';
+import { skillSearchMatches } from '../../application/marketplace/skillSearch';
 import { ensureStarterWorkspace } from '../../application/tenant/starterWorkspace';
 import { getOrSetCached, invalidateCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
@@ -377,7 +378,7 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
         .from(schema.marketplaceSkills)
         .innerJoin(schema.users, eq(schema.marketplaceSkills.authorId, schema.users.id))
         .where(
-          sql`${and(...conditions)} AND ${schema.marketplaceSkills.searchVector} @@ websearch_to_tsquery(${q})`,
+          and(...conditions, skillSearchMatches(q)),
         )
         .orderBy(desc(schema.marketplaceSkills.downloads), desc(schema.marketplaceSkills.likes))
         .limit(limitNum)

@@ -111,6 +111,15 @@ export interface AfterDispatchDecision {
   skipRemaining?: { data: unknown; isError?: boolean };
 }
 
+/** What `afterToolCalls` may change about the turn it just watched. Named, like every
+ *  other hook decision here, because an inline object literal in the hook signature
+ *  left the loop's `const after = await hooks.afterToolCalls?.(…)` with nothing to
+ *  infer from and the compiler resolved it circularly (TS7022). */
+export interface AfterToolCallsDecision {
+  /** Override whether the run is finished — queued steering re-opens a finished run. */
+  finished?: boolean;
+}
+
 export interface LoopHooks<M> {
   /** Polled before every step, in addition to `signal`. */
   isCancelled?(ctx: TurnContext<M>): Promise<boolean> | boolean;
@@ -131,7 +140,7 @@ export interface LoopHooks<M> {
   /** Per call, after its result row was pushed (`message` is that row). */
   afterDispatch?(call: ParsedToolCall, result: LoopDispatchResult, message: M, ctx: TurnContext<M>): Promise<AfterDispatchDecision | void> | AfterDispatchDecision | void;
   /** After every call of the turn ran. May override `finished` (queued steering re-opens a finished run). */
-  afterToolCalls?(ctx: TurnContext<M>, finished: boolean): Promise<{ finished?: boolean } | void> | { finished?: boolean } | void;
+  afterToolCalls?(ctx: TurnContext<M>, finished: boolean): Promise<AfterToolCallsDecision | void> | AfterToolCallsDecision | void;
 }
 
 export interface LoopBudget {

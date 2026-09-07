@@ -44,7 +44,7 @@ import {
   revokeShareLink,
 } from '../kernel/ObjectRegistry';
 import { ensureSessionObject, findSessionObject, type SessionRef } from './sessionObjectRef';
-import { tenantRoleForSessionRole } from './sessionAccess';
+import { requireSessionRole, tenantRoleForSessionRole } from './sessionAccess';
 import { collaboratorCapacity, type CollaboratorCapacityRefusal } from './canvasCollaboratorCapacity';
 import { createGuestUser, findGuestUser, seatAsCollaborator, type CanvasGuestIdentity } from './canvasGuestAccount';
 
@@ -87,6 +87,31 @@ export function canvasJoinPath(token: string): string {
 
 /** A share token is two concatenated de-hyphenated UUIDs (see `createShareLink`). */
 export const CANVAS_LINK_TOKEN_RE = /^[0-9a-f]{64}$/i;
+
+/**
+ * The board a caller may mint links for, or null.
+ *
+ * The route asks this rather than reading `creation_sessions` itself: a presentation
+ * module that queries a table is a presentation module that will eventually apply its
+ * own idea of who may share a board. Owner-gated, because minting a link is giving
+ * access away to whoever it is forwarded to.
+ *
+ * Null for "no such board", "not yours" and "not the owner" alike — the route answers
+ * 404 for all three so a board id cannot be probed for existence.
+ */
+export async function ownedCanvasSession(
+  db: Db,
+  input: { sessionId: string; tenantId: number; userId: string },
+): Promise<SessionRef | null> {
+  const access = await requireSessionRole(db, input.sessionId, input.tenantId, input.userId, 'owner');
+  if (!access) return null;
+  const [row] = await db
+    .select({ id: creationSessions.id, tenantId: creationSessions.tenantId, title: creationSessions.title })
+    .from(creationSessions)
+    .where(scopedToTenant(creationSessions, input.tenantId, eq(creationSessions.id, input.sessionId)))
+    .limit(1);
+  return row ?? null;
+}
 
 export interface CanvasInviteLink {
   id: string;

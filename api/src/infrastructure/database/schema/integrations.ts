@@ -828,7 +828,7 @@ export const otelExporters = pgTable('otel_exporters', {
   /** OTLP/HTTP base; spans POST to `${endpoint}/v1/traces`. */
   endpoint:            text('endpoint').notNull(),
   headersEnc:          text('headers_enc'),
-  headersIv:           varchar('iv', { length: 64 }),
+  headersIv:           varchar('headers_iv', { length: 64 }),
   serviceName:         varchar('service_name', { length: 255 }),
   sampleRate:          real('sample_rate').notNull().default(1),
   enabled:             boolean('enabled').notNull().default(true),

@@ -1,3 +1,63 @@
+## ✅ RESOLVED 2026-09-07 — "Convert to project" appeared to destroy the canvas session it converted
+
+**Symptom (reported 2026-09-07).** Someone started a canvas, built out a substantial board, opened the
+••• sheet and pressed **Make this a project**. The project was created — and the whole session was
+gone. Opening the project showed an empty canvas carrying one project card and nothing else.
+
+**Root cause — the project could not find the board it came from.** Nothing deleted anything. There
+are two records of a board↔project relationship and only one of them was ever read:
+
+- `convertSessionToApp` (api/src/application/canvas/convertSessionToApp.ts) writes the IDENTITY: a
+  `creation_session_project_links` row with `link_kind = 'app'`, a `projects` row and a
+  `project_sites` address reservation. It places **no canvas object** — by design, per its own
+  header: "Nothing on the board moves and nothing is copied."
+- `POST /api/creation-sessions/projects/:projectId/open` — the ONLY way into a project, because
+  `/projects/[id]` is a redirect through it — resolved "which board is this project's" with an
+  `innerJoin` on `creation_session_objects` requiring a `project` **object card** for that id.
+
+A converted board has the link and no card. So the lookup missed, the route fell through to its
+create branch, and it minted a **brand-new session** containing one project card — then redirected
+the reader to it. The original board was never touched and was still sitting at its own
+`/create/<sessionId>`; it had simply become unreachable from the project it had just become.
+
+**The adjacent defect, same root.** With no card on the board, `ensureCanvasProject`
+(frontend/src/components/creation-canvas/CreationCanvas.tsx) also saw a project-less board: publishing
+a Website after converting provisioned a **second** project and shipped the site to an address derived
+from its name — not the address the creator had just chosen and reserved at conversion.
+
+**What closed it.**
+
+1. **`appSessionForProject`** (api/src/application/canvas/convertSessionToApp.ts) — the reverse of
+   `appForSession`, and the counterpart the app-link role never had. One query: the `'app'` link, its
+   session, the caller's membership row (canvas reads are membership-gated, so returning a board the
+   reader cannot open would trade one broken redirect for another), and a **LEFT** join to the project
+   card, because requiring that card is precisely the bug. Tenant gate on the SESSION, segment and
+   `status = 'active'` enforced. Not cached, deliberately: the membership gate makes the answer
+   per-reader, so a project-keyed entry would be wrong for the second person to ask.
+2. **`POST /projects/:projectId/open` answers identity first** (creationSessionRouteService.ts). A
+   board that BECAME the project outranks any board that merely references it; the card-based lookup
+   stays as the fallback for projects created any other way.
+3. **`openedBoardHref`** (frontend/src/lib/openedBoardHref.ts) — `objectId` is now legitimately null,
+   and seven call sites built `` `/create/${sessionId}?focus=${objectId}` `` by hand, which would have
+   produced `?focus=null` on the one navigation a person makes right after converting. One builder now
+   omits `focus` when there is nothing to focus and carries the `build=1` / `prompt` / `chat` /
+   `ticket` flags the redirect surfaces were each assembling their own way. All seven migrated:
+   `ProjectCanvasRedirect`, `DashboardCreationSessions` (×5), `BuilderProjectsContent`,
+   `BuildCanvasRedirect`, `WorkflowBuilderCanvasRedirect`, `BrainstormCanvasRedirect`.
+   `creationSessionsApi.openProject`'s response type widened to `objectId: string | null`.
+4. **`ensureCanvasProject` reads the board's app project before provisioning one** — through
+   `embeddedAppsApi.sessionAppState`, which is already cached and already invalidated by the
+   conversion itself — and places the card either way, so the next publish resolves it locally and the
+   board finally carries the `project` object the open route's fallback looks for.
+
+**Verification.** `convertSessionToApp.test.ts` 11 passed (3 new: the origin board resolves with no
+card, the card is carried through when present, null falls through). `openedBoardHref.test.ts` 4
+passed. `src/components/apps` + the three `CreationCanvas` suites: 104 passed. `tsgo --noEmit` clean on
+every touched file in both packages.
+
+**Left open** (Gap Register): "Open the project" on the convert panel now navigates in a circle —
+correct, but redundant, and what it should do instead is a product decision.
+
 ## ✅ RESOLVED 2026-09-07 — Canvas invitations could never be accepted on the two plans that sell canvas collaboration
 
 **Symptom (support ticket, 2026-09-07).** A Free workspace owner invited someone to a canvas. The

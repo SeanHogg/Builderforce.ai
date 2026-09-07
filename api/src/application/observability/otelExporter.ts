@@ -100,6 +100,7 @@ export async function createExporter(
       createdBy: userId,
     })
     .returning();
+  if (!row) return { ok: false, error: 'Could not save the exporter' };
   await invalidateCached(env, cacheKey(tenantId));
   return { ok: true, exporter: toView(row) };
 }
@@ -221,14 +222,18 @@ export async function exportAgentSpans(
       if (sampled.length === 0) continue;
       const headers: Record<string, string> = { 'content-type': 'application/json' };
       if (row.headersEnc && row.headersIv) {
-        try {
-          const decoded = await decryptCredentials(row.headersEnc, row.headersIv, credentialSecret(env), tenantId);
-          for (const [key, value] of Object.entries(decoded)) {
-            if (typeof value === 'string') headers[key] = value;
-          }
-        } catch {
+        // `decryptCredentials` REPORTS failure as null rather than throwing — a v2
+        // blob opened without its owning tenant id is a normal, expected refusal.
+        // The old shape only had a `catch`, so the refusal reached
+        // `Object.entries(null)` and was handled by the TypeError that raised: right
+        // outcome, reached by accident, and one narrowing away from being a real one.
+        const decoded = await decryptCredentials(row.headersEnc, row.headersIv, credentialSecret(env), tenantId);
+        if (!decoded) {
           await recordOutcome(db, tenantId, row.id, 'stored headers could not be decrypted');
           continue;
+        }
+        for (const [key, value] of Object.entries(decoded)) {
+          if (typeof value === 'string') headers[key] = value;
         }
       }
       const payload = buildOtlpTracePayload(

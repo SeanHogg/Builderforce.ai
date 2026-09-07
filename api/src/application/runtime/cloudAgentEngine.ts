@@ -3526,7 +3526,12 @@ export async function finalizeCloudRun(
       toolName: 'skill.reflection', category: 'lifecycle',
       detail: { merged, prOpened, producedChanges: writtenPaths.size > 0 },
       result: 'run cleared the reflection bar',
-    }).catch(() => { /* telemetry must never fail a finalize */ });
+    }).catch((error) => reportCaughtError(error, {
+      source: 'application/runtime/cloudAgentEngine.ts',
+      operation: 'finalizeCloudRun',
+      level: 'warning',
+      context: { logMessage: '[cloud-finalize] reflection-bar telemetry failed (the run is unaffected)', details: { tenantId, executionId, error } },
+    }));
   }
 
   // The run is terminal: its callback principal stops authenticating NOW, not at its

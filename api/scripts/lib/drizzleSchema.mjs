@@ -79,12 +79,12 @@ export function parseDrizzleTables(srcDir) {
   // this parser, and an invisible column is one both guards then swear is fine.
   // `agent_memory.embedding` and `project_facts.embedding` were exactly that —
   // migrated, declared, and reported as missing from schema.ts.
-  const customBuilders = [...schemaText.matchAll(/export const (\w+)\s*=\s*customType/g)]
+  const customBuilders = [...schemaText.matchAll(/export const (\w+)\s*=\s*customType\b/g)]
     .map((m) => m[1]);
 
   // The SQL column name is always the first string literal inside the builder call:
   // `varchar('foo_bar', …)`. The builtin builders come from BUILDER_TYPES rather
-  // than a second hand-kept list, `\\w*Enum` matches NAMED pgEnum builders
+  // than a second hand-kept list, `\w*Enum` matches NAMED pgEnum builders
   // (`taskStatusEnum('status')`), and the discovered custom builders close the last
   // hole.
   const colRe = new RegExp(

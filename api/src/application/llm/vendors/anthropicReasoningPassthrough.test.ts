@@ -32,7 +32,7 @@ describe('direct-Anthropic thinking blocks reach the chat-completion message', (
       { type: 'text', text: 'Renaming the helper.' },
     ]);
     const r = await anthropicModule.call({ apiKey: 'sk-ant-test', model: 'claude-opus-4-8', messages: [{ role: 'user', content: 'fix it' }] });
-    const message = (r.raw as Choice).choices[0].message;
+    const message = (r.raw as Choice).choices[0]!.message;
     expect(message.content).toBe('Renaming the helper.');
     expect(message.reasoning_content).toBe('The failing test names the helper.');
     expect(splitReasoning(message)).toEqual({ content: 'Renaming the helper.', reasoning: 'The failing test names the helper.' });
@@ -41,7 +41,7 @@ describe('direct-Anthropic thinking blocks reach the chat-completion message', (
   it('omits reasoning_content when the turn carried no thinking block', async () => {
     respondWith([{ type: 'text', text: 'ok' }]);
     const r = await anthropicModule.call({ apiKey: 'sk-ant-test', model: 'claude-opus-4-8', messages: [{ role: 'user', content: 'hi' }] });
-    const message = (r.raw as Choice).choices[0].message;
+    const message = (r.raw as Choice).choices[0]!.message;
     expect('reasoning_content' in message).toBe(false);
   });
 });

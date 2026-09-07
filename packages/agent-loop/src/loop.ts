@@ -13,6 +13,7 @@
  */
 
 import type {
+  AfterToolCallsDecision,
   LoopDispatchResult,
   LoopResult,
   LoopRunArgs,
@@ -142,7 +143,7 @@ export async function runAgentLoop<M>(args: LoopRunArgs<M>): Promise<LoopResult>
       }
     }
 
-    const after = await hooks.afterToolCalls?.(ctx, finished);
+    const after: AfterToolCallsDecision | void = await hooks.afterToolCalls?.(ctx, finished);
     if (after && after.finished !== undefined) finished = after.finished;
     if (awaitingInput) break;
   }

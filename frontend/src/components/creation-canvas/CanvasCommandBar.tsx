@@ -237,19 +237,21 @@ export function CanvasCommandBar({
        rule that keeps them would be a statement about an element that never folds. */
     roster: <>
       <span className={styles.commandBarDivider} aria-hidden />
+      {/* Who is editing this, who works here and how to bring somebody in are ONE named
+          set now — three neighbours that were adjacent and nothing more. */}
       <CanvasBarGroup group="people">
-      {roster}
-      {team}
-      {/* Bring someone into THIS group — drawn as its trailing chip, not a worded
-          button in the corner beside it. See `chrome: 'roster'` in
-          `canvasSessionActions.ts` for why Share moved here. Its own positioned
-          box, because `inviteMenu` anchors `right:0` against whatever wraps this
-          button — it has to be this wrapper and not the bar itself, or the sheet
-          opens off the button that spawned it. */}
-      {showsActions && <span className={styles.rosterInviteAnchor} data-testid="canvas-roster-invite">
-        <CanvasSessionActions variant="roster" surface={surface} handlers={handlers} />
-        {inviteMenu}
-      </span>}
+        {roster}
+        {team}
+        {/* Bring someone into THIS group — drawn as its trailing chip, not a worded
+            button in the corner beside it. See `chrome: 'roster'` in
+            `canvasSessionActions.ts` for why Share moved here. Its own positioned
+            box, because `inviteMenu` anchors `right:0` against whatever wraps this
+            button — it has to be this wrapper and not the bar itself, or the sheet
+            opens off the button that spawned it. */}
+        {showsActions && <span className={styles.rosterInviteAnchor} data-testid="canvas-roster-invite">
+          <CanvasSessionActions variant="roster" surface={surface} handlers={handlers} />
+          {inviteMenu}
+        </span>}
       </CanvasBarGroup>
     </>,
     /* The doors out — Invite, Publish, ••• — behind their own divider so the group
