@@ -31,12 +31,19 @@ const OUT = join(API_ROOT, 'src', 'application', 'runtime', 'generated', 'agentR
  * keywords removed, because the runner is ONE file — the declarations become
  * top-level bindings in that file rather than a module's exports.
  *
- * Only a leading `export ` on a declaration is stripped (anchored per line); nothing
- * else about the source is rewritten, so what runs on the runner is what you read in
- * `agentRelay.mjs`.
+ * Line endings are normalised to LF first. The module is stored LF in git, but a
+ * Windows checkout with `core.autocrlf=true` hands this script CRLF, which would be
+ * baked into the string as `\r\n` escapes — making the generated file a function of
+ * WHICH MACHINE ran the generator: `--check` passes for the author and fails in CI,
+ * and the runner ships CRLF for no reason. Normalising makes the artifact depend on
+ * the module's content and nothing else.
+ *
+ * Beyond that, only a leading `export ` on a declaration is stripped (anchored per
+ * line); nothing else about the source is rewritten, so what runs on the runner is
+ * what you read in `agentRelay.mjs`.
  */
 function toInline(source) {
-  return source.replace(/^export /gm, '');
+  return source.replace(/\r\n/g, '\n').replace(/^export /gm, '');
 }
 
 function render(source) {

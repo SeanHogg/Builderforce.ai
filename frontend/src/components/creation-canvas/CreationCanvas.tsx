@@ -20,7 +20,7 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasSocialIcon, CleanLayoutIcon, DepthIcon, DropToLayersIcon, FitViewIcon, LayerGuidesIcon, MarqueeSelectIcon, MinimapIcon, MoreActionsIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
+import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasSocialIcon, CleanLayoutIcon, DepthIcon, DisclosureIcon, DropToLayersIcon, FitViewIcon, LayerGuidesIcon, MarqueeSelectIcon, MinimapIcon, MoreActionsIcon, ProveIdeaIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
 import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
 import { canvasSurfaceDefinition, readCanvasSurface, writeCanvasSurface, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
@@ -1184,6 +1184,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [shareOpen, setShareOpen] = useState(initialShareOpen);
   const [accountGate, setAccountGate] = useState<AccountGate | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  /** Whether the Make it real menu is open. Its own state and not `moreOpen`'s: the two
+   *  sheets sit at opposite ends of the bar and each closes the other, which a shared
+   *  flag could not express. */
+  const [realOpen, setRealOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [templateSearch, setTemplateSearch] = useState('');
   const [templateKind, setTemplateKind] = useState<CreationObjectKind | 'all'>('all');
@@ -11848,7 +11852,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // sheet that stays open over the panel it just opened is a sheet in the way. Wrapping
     // once here is what keeps that true for an action added later.
     const act = (run: () => void, active?: boolean): CanvasSessionActionHandler =>
-      ({ run: () => { setMoreOpen(false); run(); }, active });
+      ({ run: () => { setMoreOpen(false); setRealOpen(false); run(); }, active });
     return {
       undo: act(undo),
       redo: act(redo),
@@ -11999,27 +12003,77 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * is answered the same way now, kept a visual step apart — a divider, not a border of
    * its own — from the glyphs beside it.
    */
-  const handoffChrome = (
-      <div
-        // Nothing left to carry: the row is now a plain group inside `.commandBar`,
-        // which is already inside `.canvasShell` and already has every token this row's
-        // menus read. There is nothing to escape into any more, so there is nothing to
-        // re-declare the palette for.
-        className={styles.handoffGroup}
-        data-testid="canvas-handoff"
-      >
-          {/* Publish — put the result where strangers can reach it. The only worded
-              action left in this corner, and it is worded for the reason it always
-              was: a glyph acts on the board, a word opens somewhere else. */}
-          <CanvasSessionActions variant="handoff" surface={surface} collapsed={barCollapsed} handlers={sessionActionHandlers} />
-          {/* "Make this a project" used to sit HERE, worded, between Publish and the
-              overflow — three doors-out abreast in the corner of a bar that already
-              carries the roster, the clusters and the add-object circles. It is a
-              once-per-board act (a board becomes one project, ever), so it does not
-              earn permanent width beside the actions someone presses all day: it is a
-              row in the ••• sheet below, which is where the rest of the once-in-a-while
-              session errands already live. */}
-          {canvasChromeShows('actions', barCollapsed) && <button className={`${styles.secondaryButton} ${styles.iconAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} title={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}><MoreActionsIcon /></button>}
+  /**
+   * MAKE IT REAL — the ONE worded control on the bar, and every door out beneath it.
+   *
+   * The bar used to carry two worded buttons side by side: *Make it real* opened the
+   * proof picker and *Publish* opened the release lifecycle. Two words at the same weight
+   * that both mean "ship it" read as a fork, and nothing on the bar said which fork was
+   * which — so the doors are rows under one trigger now. `chrome: 'door'` in
+   * `canvasSessionActions.ts` is what files an action here, so a door added later lands
+   * in this menu without this file being edited.
+   *
+   * The two rows that are NOT registry actions are here for the same reason the registry
+   * ones are: *Make this a project* is a door out (a board becomes one project, ever) and
+   * self-gates to nothing on a local board or for a viewer; *Export* is the door that
+   * needs no server at all. Both used to be filed in the ••• sheet under headings
+   * ("Create and view", "Session tools") that grouped them with things they have nothing
+   * to do with.
+   *
+   * It closes the REACH group on the bar, because putting the result in front of people
+   * is what Reach means and a door out is the last thing you do in it.
+   */
+  const makeItRealChrome = (
+      <div className={styles.handoffGroup} data-testid="canvas-handoff">
+          <button
+            type="button"
+            className={styles.sessionActionLabelled}
+            data-testid="canvas-make-it-real"
+            aria-expanded={realOpen}
+            aria-haspopup="menu"
+            title={t('proveThisIdeaTitle')}
+            onClick={() => { setRealOpen((value) => !value); setMoreOpen(false); setShareOpen(false); }}
+          ><ProveIdeaIcon /><span>{t('proveThisIdea')}</span><i aria-hidden><DisclosureIcon /></i></button>
+          {realOpen && <div className={styles.moreMenu} data-testid="canvas-make-it-real-menu" role="menu" aria-label={t('proveThisIdea')}>
+            <CanvasSessionActions variant="doors" surface={surface} collapsed={barCollapsed} handlers={sessionActionHandlers} />
+            {/* Turn the board into a project. Self-gating: a local board, a viewer, and
+                a board that is not yet an app and cannot become one all render nothing,
+                so the sheet asks it nothing and the section never holds a dead row. The
+                sheet closes when the drawer it opened is dismissed, not when the row is
+                pressed — closing on press would unmount the drawer with it. */}
+            <CanvasAppPanel
+              sessionId={persistence === 'server' ? sessionId : null}
+              onOpenChange={(panelOpen) => { if (!panelOpen) setRealOpen(false); }}
+            />
+            <button onClick={() => { exportSession(); setRealOpen(false); }}><span aria-hidden>↓</span>{t('exportCanvas')}</button>
+          </div>}
+      </div>
+  );
+
+  /**
+   * THE BOARD MENU — the ••• sheet, and the one group on the bar that names no stage.
+   *
+   * Everything in here is done to the BOARD rather than to the work: how you are looking
+   * at it, what it is made of, where its history went. That is why the group has a
+   * caption of its own instead of a stage's — a control that answers no stage's question
+   * must not be given a stage's name, which is how the old `Tools` shelf formed.
+   *
+   * ── WHY THE VIEW COMMANDS ARE IN HERE AND NOT IN A CORNER PILL ──────────────────
+   * Zoom, fit, arrange, the mini map and the outline are not a stage of anything — they
+   * move the viewport, they do not advance the work — so they cannot be captioned by the
+   * arc, and a sixth caption invented for them is what the whole regroup was undoing.
+   * The obvious alternative was a small floating pill in the bottom-right corner, the way
+   * every drawing tool does it. It was rejected: a second floating panel over one canvas
+   * is the exact thing the left-hand rail was deleted for, and it would have put "what
+   * can I do here" back into two places with nothing saying why.
+   *
+   * They are drawn as a TROUGH of glyphs rather than as menu rows, and pressing one does
+   * NOT dismiss the sheet — zoom is a control you press repeatedly, and a menu that
+   * closes under the second press is a menu you cannot zoom with.
+   */
+  const boardMenuChrome = (
+      <span className={styles.handoffGroup} data-testid="canvas-board-menu">
+          <button type="button" className={`${styles.secondaryButton} ${styles.iconAction}`} aria-expanded={moreOpen} aria-haspopup="menu" aria-label={t('moreActions')} title={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); setRealOpen(false); }}><MoreActionsIcon /></button>
           {/* NO SAVE BUTTON HERE. A guest board is kept by taking an account, and the
               header already offers exactly that — its CTA becomes "Keep your work" as
               soon as this browser holds a local board (`MarketingHeader`). Carrying a
@@ -12040,20 +12094,42 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                   screen with no undo and no way to share. */}
               <CanvasSessionActions variant="menu" surface={surface} handlers={sessionActionHandlers} />
             </div>
+            {/* HOW YOU ARE LOOKING AT IT. React Flow owns the viewport, so the host owns
+                what these do; they are drawn as a trough of glyphs rather than as rows
+                because they are a set you press repeatedly, and none of them closes the
+                sheet for the same reason. */}
+            <span className={styles.moreMenuHeading}>{t('barGroup.view')}</span>
+            <div className={styles.moreMenuTools} role="group" aria-label={t('canvasViewControls')}>
+              <button type="button" className={styles.sessionActionButton} onClick={zoomInAction} aria-label={t('zoomIn')} title={t('zoomIn')}><ZoomInIcon /></button>
+              <button type="button" className={styles.sessionActionButton} onClick={zoomOutAction} aria-label={t('zoomOut')} title={t('zoomOut')}><ZoomOutIcon /></button>
+              <button type="button" className={styles.sessionActionButton} onClick={fitViewAction} aria-label={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')} title={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')}>{threeDControls ? <ResetViewIcon /> : <FitViewIcon />}</button>
+              <button type="button" className={styles.sessionActionButton} onClick={cleanLayout} aria-label={t('arrangeObjects')} title={t('arrangeObjects')}><CleanLayoutIcon /></button>
+              {/* WHAT THE BOARD ALONE HAS. A mini map is a map of the flat board, and pan vs
+                  marquee is a decision about dragging on one; neither means anything on a
+                  surface that has no board, so these two are the only view commands that read
+                  the surface at all. */}
+              {surfaceDef.showsBoard && <>
+                <button type="button" className={styles.sessionActionButton} onClick={() => setMinimapOpen((open) => !open)} aria-pressed={minimapOpen} aria-label={minimapOpen ? tCommands('hideMiniMap') : tCommands('showMiniMap')} title={minimapOpen ? tCommands('hideMiniMap') : tCommands('showMiniMap')}><MinimapIcon /></button>
+                <button type="button" className={styles.sessionActionButton} onClick={() => setCanvasGesture((current) => (current === 'select' ? 'pan' : 'select'))} aria-pressed={canvasGesture === 'select'} aria-label={t('canvasGestureToggle')} title={canvasGesture === 'select' ? t('canvasGestureSelectActive') : t('canvasGesturePanActive')}><MarqueeSelectIcon /></button>
+              </>}
+              {/* WHAT THE SCENE ADDS while it is up. These were the last commands living on the
+                  bottom-left rail; with the rail gone they are contributed here, beside the
+                  zoom and reset that already switch to the scene's own camera. */}
+              {threeDControls && <>
+                <button type="button" className={styles.sessionActionButton} onClick={threeDControls.toggleDepth} aria-pressed={threeDControls.depthMode !== 'flow'} aria-label={tCommands('threeD.depthGroup')} title={threeDControls.depthMode !== 'flow' ? tCommands('threeD.depthGroupActive') : tCommands('threeD.depthGroupInactive')}><DepthIcon /></button>
+                <button type="button" className={styles.sessionActionButton} onClick={threeDControls.toggleLayers} aria-pressed={threeDControls.layersVisible} aria-label={tCommands('threeD.layerGuides')} title={threeDControls.layersVisible ? tCommands('threeD.layerGuidesActive') : tCommands('threeD.layerGuidesInactive')}><LayerGuidesIcon /></button>
+                {threeDControls.dropToLayers && <button type="button" className={styles.sessionActionButton} onClick={threeDControls.dropToLayers} aria-label={tCommands('threeD.dropToLayers')} title={tCommands('threeD.dropToLayers')}><DropToLayersIcon /></button>}
+              </>}
+              {/* WHAT EVERY SURFACE HAS. This canvas's files and its readable outline are about
+                  the SESSION, not about which way it is being read. They used to be gated on
+                  the board here and drawn on the corner rail everywhere else — one control in
+                  two places, and neither of them where you last saw it. */}
+              <button type="button" className={styles.sessionActionButton} onClick={() => toggleDockPanel('files')} aria-pressed={dockPanel === 'files'} aria-label={tFiles('title')} title={tFiles('title')}><CanvasFilesIcon /></button>
+              <button type="button" className={styles.sessionActionButton} onClick={() => toggleDockPanel('outline')} aria-pressed={dockPanel === 'outline'} aria-label={t('canvasOutline')} title={t('canvasOutline')}><AccessibleOutlineIcon /></button>
+            </div>
             <span className={styles.moreMenuHeading}>{t('createAndView')}</span>
-            {/* Turn the board into a project. Self-gating: a local board, a viewer, and
-                a board that is not yet an app and cannot become one all render nothing,
-                so the sheet asks it nothing and the section never holds a dead row. The
-                sheet closes when the drawer it opened is dismissed, not when the row is
-                pressed — closing on press would unmount the drawer with it. */}
-            <CanvasAppPanel
-              sessionId={persistence === 'server' ? sessionId : null}
-              onOpenChange={(panelOpen) => { if (!panelOpen) setMoreOpen(false); }}
-            />
             <button onClick={() => { setTemplateOpen(true); setMoreOpen(false); }}><span aria-hidden><Icon source="▦" size="1em" /></span>{t('templates')}</button>
             <button onClick={() => { setConversationOpen((value) => !value); setMoreOpen(false); }}><span aria-hidden><Icon source="◌" size="1em" /></span>{t('conversation')}</button>
-            <button aria-pressed={drawingMode} onClick={() => { setDrawing((current) => current ? null : readDrawingPreferences()); setMoreOpen(false); }}><span aria-hidden>⌁</span>{drawingMode ? t('stopDrawing') : t('draw')}</button>
-            <button onClick={() => { setPresentMode((value) => !value); setMoreOpen(false); }}><span aria-hidden><Icon source="▶" size="1em" /></span>{presentMode ? t('exitPresentation') : t('present')}</button>
             {/* Errands against a connected account, kept off the rail. Each one
                 opens the SAME dock panel its rail button used to, drawn with the
                 same glyph, so this is a move rather than a second entry point. */}
@@ -12063,7 +12139,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             <button aria-pressed={dockPanel === 'ads'} onClick={() => { if (connectedAccountGate(tAds('title'))) toggleDockPanel('ads'); setMoreOpen(false); }}><span aria-hidden><CanvasAdsIcon /></span>{tAds('title')}</button>
             <span className={styles.moreMenuHeading}>{t('sessionTools')}</span>
             <button onClick={() => { openHistory(); setMoreOpen(false); }}><span aria-hidden>↶</span>{t('history')}</button>
-            <button onClick={() => { exportSession(); setMoreOpen(false); }}><span aria-hidden>↓</span>{t('exportCanvas')}</button>
             <button onClick={() => { sectionTour.openOffer(); setMoreOpen(false); }}><span aria-hidden>?</span>{t('tutorial')}</button>
             <button onClick={() => { setShowHidden((value) => !value); setMoreOpen(false); }}><span aria-hidden>◉</span>{showHidden ? t('hideHidden') : t('showHidden')}</button>
             <button onClick={() => { createBranch(); setMoreOpen(false); }}><span aria-hidden>⑂</span>{t('branch')}</button>
@@ -12100,7 +12175,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             {!!serverTemplates.length && <><h4>{t('savedAccount')}</h4>{serverTemplates.map((template) => <button key={template.id} onClick={() => applyServerTemplate(template)}><b>{template.name}</b><small>{template.visibility === 'tenant' ? t('sharedWithTenant') : t('private')} · {template.category}</small><span>{template.description}</span></button>)}</>}
             {!!framePresets.length && <><h4>{t('reusableFrames')}</h4>{framePresets.map((preset) => <button key={preset.id} onClick={() => addFramePreset(preset)}><b>{preset.name}</b><small><span>{t('privateCustomFrame')}</span> · {t('thisDevice')}</small></button>)}</>}
           </div>}
-      </div>
+      </span>
   );
 
   return (
@@ -12225,7 +12300,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         collapsed={barCollapsed}
         onToggleCollapse={() => setBarCollapsed(!barCollapsed)}
         handlers={sessionActionHandlers}
-        handoff={handoffChrome}
+        makeItReal={makeItRealChrome}
+        boardMenu={boardMenuChrome}
         inviteMenu={inviteMenu}
         // The board's Run takes this canvas to the surface that runs it. Offered only
         // when the App surface would actually have something to open — the SAME question
@@ -12262,38 +12338,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // Moving around the board, folded out of the left-edge rail. The rail was the
         // last toolbar competing with this bar, and it split "what can I do to this
         // canvas" across two floating elements with nothing saying why.
-        // The BUTTONS, not the group: `CanvasCommandBar` wraps them in the one captioned
-        // `CanvasBarGroup` every other set on the bar goes through, so the name above them
-        // and the trough around them are decided in the same place for all of them. React
-        // Flow owns the viewport, so the host still owns what the buttons DO.
-        view={<>
-          <button type="button" className={styles.sessionActionButton} onClick={zoomInAction} aria-label={t('zoomIn')} title={t('zoomIn')}><ZoomInIcon /></button>
-          <button type="button" className={styles.sessionActionButton} onClick={zoomOutAction} aria-label={t('zoomOut')} title={t('zoomOut')}><ZoomOutIcon /></button>
-          <button type="button" className={styles.sessionActionButton} onClick={fitViewAction} aria-label={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')} title={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')}>{threeDControls ? <ResetViewIcon /> : <FitViewIcon />}</button>
-          <button type="button" className={styles.sessionActionButton} onClick={cleanLayout} aria-label={t('arrangeObjects')} title={t('arrangeObjects')}><CleanLayoutIcon /></button>
-          {/* WHAT THE BOARD ALONE HAS. A mini map is a map of the flat board, and pan vs
-              marquee is a decision about dragging on one; neither means anything on a
-              surface that has no board, so these two are the only view commands that read
-              the surface at all. */}
-          {surfaceDef.showsBoard && <>
-            <button type="button" className={styles.sessionActionButton} onClick={() => setMinimapOpen((open) => !open)} aria-pressed={minimapOpen} aria-label={minimapOpen ? tCommands('hideMiniMap') : tCommands('showMiniMap')} title={minimapOpen ? tCommands('hideMiniMap') : tCommands('showMiniMap')}><MinimapIcon /></button>
-            <button type="button" className={styles.sessionActionButton} onClick={() => setCanvasGesture((current) => (current === 'select' ? 'pan' : 'select'))} aria-pressed={canvasGesture === 'select'} aria-label={t('canvasGestureToggle')} title={canvasGesture === 'select' ? t('canvasGestureSelectActive') : t('canvasGesturePanActive')}><MarqueeSelectIcon /></button>
-          </>}
-          {/* WHAT THE SCENE ADDS while it is up. These were the last commands living on the
-              bottom-left rail; with the rail gone they are contributed here, beside the
-              zoom and reset that already switch to the scene's own camera. */}
-          {threeDControls && <>
-            <button type="button" className={styles.sessionActionButton} onClick={threeDControls.toggleDepth} aria-pressed={threeDControls.depthMode !== 'flow'} aria-label={tCommands('threeD.depthGroup')} title={threeDControls.depthMode !== 'flow' ? tCommands('threeD.depthGroupActive') : tCommands('threeD.depthGroupInactive')}><DepthIcon /></button>
-            <button type="button" className={styles.sessionActionButton} onClick={threeDControls.toggleLayers} aria-pressed={threeDControls.layersVisible} aria-label={tCommands('threeD.layerGuides')} title={threeDControls.layersVisible ? tCommands('threeD.layerGuidesActive') : tCommands('threeD.layerGuidesInactive')}><LayerGuidesIcon /></button>
-            {threeDControls.dropToLayers && <button type="button" className={styles.sessionActionButton} onClick={threeDControls.dropToLayers} aria-label={tCommands('threeD.dropToLayers')} title={tCommands('threeD.dropToLayers')}><DropToLayersIcon /></button>}
-          </>}
-          {/* WHAT EVERY SURFACE HAS. This canvas's files and its readable outline are about
-              the SESSION, not about which way it is being read. They used to be gated on
-              the board here and drawn on the corner rail everywhere else — one control in
-              two places, and neither of them where you last saw it. */}
-          <button type="button" className={styles.sessionActionButton} onClick={() => toggleDockPanel('files')} aria-pressed={dockPanel === 'files'} aria-label={tFiles('title')} title={tFiles('title')}><CanvasFilesIcon /></button>
-          <button type="button" className={styles.sessionActionButton} onClick={() => toggleDockPanel('outline')} aria-pressed={dockPanel === 'outline'} aria-label={t('canvasOutline')} title={t('canvasOutline')}><AccessibleOutlineIcon /></button>
-        </>}
         onTogglePrompt={presentMode || surfaceDef.brainIsSurface ? undefined : () => setPromptPlacement(toggledCanvasPromptPlacement(promptPlacement))}
         promptOpen={effectivePromptPlacement !== 'closed'}
         // The always-on seats, folded out of the shell's footer band and into the one

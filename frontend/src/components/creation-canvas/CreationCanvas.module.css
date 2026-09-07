@@ -312,7 +312,21 @@
 /* A folded bar keeps only STATUS (`canvasChrome.ts`), so what is left is the roster and
    whatever the runtime is reporting — one row of faces that names itself. A caption over
    it would be the fold spending the height it was pressed to reclaim. */
-.commandBar[data-collapsed='true'] .barGroupCaption { display:none; }
+.commandBar[data-collapsed='true'] /* THE CAPTION IS A STAGE, so it wears that stage's dot in that stage's hue — the same
+   `--stage-*` tokens the left rail's `.nav-stage__dot` uses. Five rules rather than one
+   because a custom property cannot be built from an attribute value; the alternative was
+   an inline style per group, which puts the palette back into the component. */
+.barGroup[data-stage] .barGroupCaption::before {
+  content:''; width:5px; height:5px; flex:none; border-radius:50%;
+  background:var(--bar-stage-hue,var(--text-muted));
+}
+.barGroup[data-stage='idea'] { --bar-stage-hue:var(--stage-idea); }
+.barGroup[data-stage='make'] { --bar-stage-hue:var(--stage-make); }
+.barGroup[data-stage='run'] { --bar-stage-hue:var(--stage-run); }
+.barGroup[data-stage='measure'] { --bar-stage-hue:var(--stage-measure); }
+.barGroup[data-stage='reach'] { --bar-stage-hue:var(--stage-reach); }
+.barGroupCaption {
+  display:flex; align-items:center; gap:5px; display:none; }
 
 /* Run is the only control on this bar that STARTS something, so it is the only one with
    a fill. Positive rather than brand: the accent is already spent on "which surface am I
@@ -542,6 +556,20 @@
 .moreMenu button[data-wide='true'] { grid-column:1 / -1; }
 .moreMenu button:hover,.moreMenu button:focus-visible { outline:none; background:var(--canvas-hover); color:var(--canvas-accent); }.moreMenu button:hover > span,.moreMenu button:focus-visible > span { background:color-mix(in srgb,var(--canvas-accent) 24%,var(--canvas-panel)); color:var(--canvas-accent); }
 .moreMenuHeading { composes: chromeHeading; grid-column:1 / -1; margin:5px 5px 1px; }.moreMenuHeading:first-child { margin-top:1px; }
+/* A SET OF GLYPHS inside the sheet, not a column of rows. The view commands (zoom, fit,
+   arrange, mini map, outline) live here now — they are not a stage of the arc, so they
+   cannot be captioned by one on the bar, and a second floating pill in the corner would
+   have put "what can I do here" back into two places. They keep the trough shape they had
+   on the bar so a set still reads as a set, and they wrap rather than overflow at the
+   sheet's fixed width. */
+.moreMenuTools {
+  grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:2px; padding:2px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel-muted);
+}
+/* Undo the sheet's row chrome for these: `.moreMenu button` makes every child a
+   full-width flex row with a 22px glyph chip, which is right for a named errand and wrong
+   for a zoom control. */
+.moreMenuTools button { width:auto; padding:0; }
 .moreMenu label { grid-column:1 / -1; display:flex; align-items:center; justify-content:space-between; margin-top:3px; border-top:1px solid var(--canvas-line); border-radius:0; cursor:default; }.moreMenu label > span { display:flex; align-items:center; gap:8px; }.moreMenu label i { width:22px; height:22px; display:grid; place-items:center; border-radius:var(--radius-sm); font-style:normal; }
 .moreMenu select { max-width:105px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); padding:4px; background:var(--canvas-panel); color:var(--canvas-ink); font:inherit; }
 /* Native option lists are painted by the OS and inherit nothing from the control,

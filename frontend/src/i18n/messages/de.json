@@ -22713,24 +22713,15 @@
     "founderMetricLive": "Live",
     "founderMetricRefreshed": "Kennzahl aktualisiert: {title}",
     "founderTriggerEvaluated": "Auslöser ausgewertet: {title}",
-    "sessionActionCluster": {
-      "run": "Workflow ausführen",
-      "history": "Leinwandverlauf",
-      "inspect": "Leinwand-Werkzeuge",
-      "live": "Live und Aufnahme",
-      "session": "Teilen und veröffentlichen"
-    },
     "barGroup": {
-      "run": "Workflow",
-      "history": "Verlauf",
-      "inspect": "Werkzeuge",
-      "live": "Live",
-      "session": "Teilen",
-      "view": "Ansicht",
-      "add": "Hinzufügen",
-      "people": "Personen",
-      "peopleLabel": "Personen auf dieser Leinwand",
-      "handoffLabel": "Veröffentlichen und weitere Aktionen"
+      "board": "Board",
+      "boardLabel": "Dieses Board",
+      "ideaLabel": "Idee — etwas aufs Board legen",
+      "makeLabel": "Bauen — formen, was auf dem Board liegt",
+      "measureLabel": "Messen — sehen, wie es läuft",
+      "reachLabel": "Reichweite — teilen und aus dem Board herausbringen",
+      "runLabel": "Betreiben — starten oder laufend zeigen",
+      "view": "Ansicht"
     },
     "moreMenuSessionActions": "Diese Leinwand",
     "templateCategoryAutomation": "Automatisierungen",
@@ -23600,7 +23591,8 @@
     "selectSession": "{title} auswählen",
     "filterByFolder": "Nur diesen Ordner zeigen",
     "clearFolderFilter": "Alle Ordner zeigen",
-    "unfiledFolder": "Kein Ordner"
+    "unfiledFolder": "Kein Ordner",
+    "proveIt": "Beweisen"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",

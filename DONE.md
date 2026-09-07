@@ -1,3 +1,64 @@
+## ✅ RESOLVED 2026-09-07 — The `Deploy API` failure whose own remedy did nothing: a drift guard that measured the author's line endings
+
+`check:agent-relay` failed the API deploy at `ed2d3d2d6` with a message naming its own
+fix — "Fix: cd api && node scripts/gen-agent-relay-source.mjs". Running it changed
+nothing: the guard passed locally, on the same commit CI was failing.
+
+**The generated file was not stale; it was Windows.** `gen-agent-relay-source.mjs` bakes
+`container/agentRelay.mjs` into the Worker bundle as a string, because the GitHub Actions
+runner is a single file served over HTTP with no filesystem to import from. The module is
+stored LF in git, but a Windows checkout with `core.autocrlf=true` hands the generator
+CRLF — and `JSON.stringify` turned those 256 line endings into 256 `\r\n` escapes inside
+the committed artifact. CI checks out LF, regenerates with `\n`, and the two never match.
+The guard was comparing the author's checkout settings, not the module's content, so it
+could only ever pass on the machine that last wrote the file and fail on every other one.
+
+**Fixed at the generator**, the one place that can make the artifact reproducible:
+`toInline()` normalises CRLF → LF before stripping `export`, so the output is a pure
+function of what `agentRelay.mjs` says. Regenerated: the committed file now carries zero
+`\r\n` escapes and `--check` agrees on both line-ending conventions. The runner also
+stops shipping CRLF for no reason.
+
+Swept the sibling generators for the same exposure — `gen-consolidation-migration.mjs`
+renders DDL from parsed Drizzle (source line endings never reach the output) and
+`gen-brand-paths.mjs` reads path strings from an installed package, and neither runs a
+`--check` in a CI chain. `gen-agent-relay-source.mjs` was the only guard that measured
+the machine instead of the code.
+
+`api/scripts/gen-agent-relay-source.mjs`, `api/src/application/runtime/generated/agentRelaySource.ts`.
+Verified: `node ../scripts/run-checks.mjs scripts/checks.manifest.mjs` → 31/31.
+
+## ✅ RESOLVED 2026-09-07 — The Creations library is the ONE place sessions and folders are managed
+
+`/create` had the sessions, and a second slide-out reached from a caret in the sidebar
+("Sessions & folders", `components/session-management/*`) had the folder CRUD, the folder →
+Project tie and the session → Project tie. Two surfaces for one job: whoever found one never
+learned the other existed, and neither could do what the other did.
+
+**Consolidated.** `components/session-management/` is deleted. Its capabilities moved onto the
+library, where the sessions already are:
+
+- `CreationFolderBar` — the ONE folder control. It filters the library (All / Unfiled / each
+  folder with its count) AND renames, deletes, creates and ties a folder to a Project. The group
+  headings and the folder chip on each card toggle the SAME filter through the same handler,
+  keyed by folder **id** so a rename cannot drop the filter.
+- `SessionProjectField` — a session's own Project ties, inside the session's editor panel.
+- The sidebar caret now goes to `/create` instead of opening a second surface.
+
+**And the UX that made the actions invisible.** The `⋯` menu is gone: `SessionActionBar` renders
+every action on the card (bottom) and on the row (right), labels appearing beside the icons once
+the bar is wide enough — its own container query, not a caller-passed variant. The date moved out
+of the far-right column into the meta line with the rest of the session's facts. "Move to folder"
+lists the folders that exist instead of asking for a name from memory. Each tile carries a
+checkbox, and `SessionBulkBar` merges, archives/restores and deletes the checked sessions —
+single-session and bulk paths call the SAME three primitives, so they cannot drift.
+
+`SessionManagementControls` and the `sessionManagePanel` / dead `canvasLibrary.*Session*` catalog
+keys are deleted; the existing translations were carried into `creationFolders` rather than
+re-authored. `DashboardCreationLauncher` split out of `DashboardCreationSessions` (create-new and
+browse-existing are two jobs). 22/22 frontend guards green; new tests cover the action bar, the
+folder picker and the tile.
+
 ## ✅ RESOLVED 2026-09-07 — One dispatch table for every image surface; delegation everywhere; sub-agents that write
 
 Three Gap Register entries, closed together because they had one root cause: the two

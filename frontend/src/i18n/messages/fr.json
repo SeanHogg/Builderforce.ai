@@ -22713,24 +22713,15 @@
     "founderMetricLive": "En direct",
     "founderMetricRefreshed": "Indicateur actualisé : {title}",
     "founderTriggerEvaluated": "Déclencheur évalué : {title}",
-    "sessionActionCluster": {
-      "run": "Exécuter le workflow",
-      "history": "Historique de la toile",
-      "inspect": "Outils de la toile",
-      "live": "Direct et enregistrement",
-      "session": "Partager et publier"
-    },
     "barGroup": {
-      "run": "Workflow",
-      "history": "Historique",
-      "inspect": "Outils",
-      "live": "Direct",
-      "session": "Partager",
-      "view": "Vue",
-      "add": "Ajouter",
-      "people": "Personnes",
-      "peopleLabel": "Personnes sur cette toile",
-      "handoffLabel": "Publier et autres actions"
+      "board": "Tableau",
+      "boardLabel": "Ce tableau",
+      "ideaLabel": "Idée — posez quelque chose sur le tableau",
+      "makeLabel": "Créer — façonnez ce qui est sur le tableau",
+      "measureLabel": "Mesurer — voyez où il en est",
+      "reachLabel": "Diffuser — partagez-le, et faites-le sortir d’ici",
+      "runLabel": "Exécuter — lancez-le, ou montrez-le en marche",
+      "view": "Affichage"
     },
     "moreMenuSessionActions": "Cette toile",
     "templateCategoryAutomation": "Automatisations",
@@ -23600,7 +23591,8 @@
     "selectSession": "Sélectionner {title}",
     "filterByFolder": "Afficher uniquement ce dossier",
     "clearFolderFilter": "Afficher tous les dossiers",
-    "unfiledFolder": "Aucun dossier"
+    "unfiledFolder": "Aucun dossier",
+    "proveIt": "Prouvez-le"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",

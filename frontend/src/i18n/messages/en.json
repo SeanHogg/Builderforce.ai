@@ -22713,24 +22713,15 @@
     "founderMetricLive": "Live",
     "founderMetricRefreshed": "Metric refreshed: {title}",
     "founderTriggerEvaluated": "Trigger evaluated: {title}",
-    "sessionActionCluster": {
-      "run": "Run workflow",
-      "history": "Canvas history",
-      "inspect": "Canvas tools",
-      "live": "Live and recording",
-      "session": "Share and publish"
-    },
     "barGroup": {
-      "run": "Workflow",
-      "history": "History",
-      "inspect": "Tools",
-      "live": "Live",
-      "session": "Share",
-      "view": "View",
-      "add": "Add",
-      "people": "People",
-      "peopleLabel": "People on this canvas",
-      "handoffLabel": "Publish and more actions"
+      "board": "Board",
+      "boardLabel": "This board",
+      "ideaLabel": "Idea — put something on the board",
+      "makeLabel": "Make — shape what is on the board",
+      "measureLabel": "Measure — read how it is doing",
+      "reachLabel": "Reach — share it, and take it out of here",
+      "runLabel": "Run — start it, or show it running",
+      "view": "View"
     },
     "moreMenuSessionActions": "This canvas",
     "templateCategoryAutomation": "Automations",
@@ -23600,7 +23591,8 @@
     "selectSession": "Select {title}",
     "filterByFolder": "Show only this folder",
     "clearFolderFilter": "Show every folder",
-    "unfiledFolder": "No folder"
+    "unfiledFolder": "No folder",
+    "proveIt": "Prove it"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",

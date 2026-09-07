@@ -22713,24 +22713,15 @@
     "founderMetricLive": "实时",
     "founderMetricRefreshed": "指标已刷新：{title}",
     "founderTriggerEvaluated": "触发条件已评估：{title}",
-    "sessionActionCluster": {
-      "run": "运行工作流",
-      "history": "画布历史",
-      "inspect": "画布工具",
-      "live": "通话与录制",
-      "session": "共享与发布"
-    },
     "barGroup": {
-      "run": "工作流",
-      "history": "历史",
-      "inspect": "工具",
-      "live": "通话",
-      "session": "共享",
-      "view": "视图",
-      "add": "添加",
-      "people": "成员",
-      "peopleLabel": "此画布上的成员",
-      "handoffLabel": "发布与更多操作"
+      "board": "画板",
+      "boardLabel": "此画板",
+      "ideaLabel": "构想 — 在画板上放置内容",
+      "makeLabel": "构建 — 塑造画板上的内容",
+      "measureLabel": "衡量 — 查看进展如何",
+      "reachLabel": "触达 — 分享它，并将它带出这里",
+      "runLabel": "运行 — 启动它，或演示运行中的它",
+      "view": "视图"
     },
     "moreMenuSessionActions": "此画布",
     "templateCategoryAutomation": "自动化",
@@ -23600,7 +23591,8 @@
     "selectSession": "选择{title}",
     "filterByFolder": "仅显示此文件夹",
     "clearFolderFilter": "显示全部文件夹",
-    "unfiledFolder": "未归入文件夹"
+    "unfiledFolder": "未归入文件夹",
+    "proveIt": "验证它"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
