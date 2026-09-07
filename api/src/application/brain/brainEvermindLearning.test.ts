@@ -112,8 +112,10 @@ describe('learnFromPersistedTurns (consolidated learn-on-persist path)', () => {
 
   it('seeds an UNSEEDED project head on its first teachable turn, then learns from that turn (chat #101)', async () => {
     // brainChats.projectId → children (none) → head(42) at v0; after seeding the gate
-    // re-resolves: children (none) → head(42) at v1.
-    const db = gateDb([[{ projectId: 42 }], [], [head({ version: 0 })], [], [head({ version: 1 })]]);
+    // re-resolves. Only the HEAD is re-read: the child-grouping lookup is cached under a
+    // plain key, while the head key carries the version token the seeder bumps — so the
+    // queue holds one more head, not another children row.
+    const db = gateDb([[{ projectId: 42 }], [], [head({ version: 0 })], [head({ version: 1 })]]);
     // The real seeder writes the row AND invalidates the head cache; the mock does the
     // second half so the gate's re-read sees v1 rather than the cached v0.
     const ensureSeeded = vi.fn(async (e: Env, _db: unknown, tenantId: number, projectId: number) => {

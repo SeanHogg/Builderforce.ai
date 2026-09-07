@@ -2,7 +2,7 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
-## [2026.9.24] — The prompt cache pays out on a tool loop, and search finds the ripgrep VS Code ships
+## [2026.9.30] — The prompt cache pays out on a tool loop, and search finds the ripgrep VS Code ships
 
 - **The prompt cache now actually hits on a tool loop.** Anthropic caches the request prefix — tools first, then the system prompt, then the conversation — and the gateway has marked the tools and system blocks for months. Two things kept the cache from paying out. The advertised tool list was re-ordered whenever the run called a tool for the first time (the "already used" pass moved it ahead of its neighbours), and a re-ordered tools block invalidates everything cached behind it, so the ~13k-token prefix was re-billed at full price on most turns. The order is now the catalog's own, whichever reason a tool was kept. And nothing marked the conversation itself, so the growing transcript — 24k tokens by the end of a long run — was re-sent at full price every turn; the latest turn now carries the breakpoint, so each turn reads the previous one's prefix at a tenth of the price.
 - **Compacting the transcript no longer costs a frontier-model answer.** The memory note the run writes when its history outgrows the window was requested with the run's full output ceiling and, on a thinking model, its reasoning depth. It is a utility call: bounded to a short answer with thinking off.

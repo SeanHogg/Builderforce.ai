@@ -62,7 +62,7 @@ loop scenario (`brainRunStore.test.ts`), memory-tool pin (`localWorkspaceTools.t
 `brainEvermindLearning.test.ts` (seed-then-learn, no-store stays not-seeded, sibling build
 untouched), `promptCaching.test.ts` (latest-turn breakpoint, direct-shape marker),
 `anthropicCaching.test.ts` (three breakpoints on a tool-loop body). VSIX 2026.9.23 carries the
-loop/search/memory/Evermind fixes (cut 09:34 by a concurrent session); 2026.9.24 adds the cache-
+loop/search/memory/Evermind fixes (cut 09:34 by a concurrent session); 2026.9.30 adds the cache-
 prefix stability, the bounded summarizer and the `ripgrep-universal` probe (CHANGELOG, packaged).
 
 **Also closed — Memory-first Phase E (stale roadmap item).** The item asked to collapse the VSIX
