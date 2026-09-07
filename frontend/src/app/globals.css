@@ -1745,7 +1745,11 @@ html[data-theme='light'] .nebula {
 }
 
 /* Round chevron handle that collapses/expands the sidebar. Pinned to the top
-   and straddling the right divider so it bridges the sidebar/content border. */
+   and straddling the right divider so it bridges the sidebar/content border.
+   ONE rule for both states: the handle that collapses the rail must be the
+   handle that expands it again, in the SAME place — moving it to the foot of
+   the collapsed rail meant hunting for it after every collapse. Only the
+   chevron inside flips direction. */
 .nav-collapse-toggle {
   position: absolute;
   top: 16px;
@@ -2103,8 +2107,10 @@ html[data-theme='light'] .nebula {
   border-color: color-mix(in srgb, var(--warning) 40%, transparent);
 }
 
+/* Bottom padding matches the expanded rail: the collapse handle no longer
+   moves down here, so there is nothing left to reserve room for. */
 .nav.collapsed {
-  padding: 14px 10px 68px;
+  padding: 14px 10px 14px;
 }
 
 .nav.collapsed .nav-section-label {
@@ -2154,22 +2160,6 @@ html[data-theme='light'] .nebula {
 .nav.collapsed .nav-item:focus-visible::after {
   opacity: 1;
   transform: translate(0, -50%);
-}
-
-.nav.collapsed .nav-collapse-toggle {
-  top: auto;
-  right: 11px;
-  bottom: 16px;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
-  box-shadow: none;
-}
-
-.nav.collapsed .nav-collapse-toggle:hover {
-  background: var(--accent-subtle);
-  border-color: var(--border-accent);
-  transform: none;
 }
 
 .nav.collapsed .nav-item-label {

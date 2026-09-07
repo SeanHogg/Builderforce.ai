@@ -837,7 +837,16 @@ export class LlmProxyService {
     // ONE rule, and it must see the REGISTERED refs too: an OpenRouter connection
     // contributes no BYO vendor, so a vendor-only test would let a stale caller default
     // lead over the connection the tenant ranked #1 (see explicitModelPreemptsByo).
-    const callerLeads = hasCallerModel
+    // A FREE tenant's soft hint on a FUNDED floor model never leads. The hint is the
+    // canvas/Brain soft-pin ("keep the continuations of one turn on the model that
+    // began it"), and when turn 1 landed on the direct-Anthropic floor because nothing
+    // else fit the request, honouring the pin put fifteen more completions on our
+    // CLAUDE_API_KEY without the free pool being asked once (measured: session
+    // bf886fc1, 16 of 16 completions on `claude-sonnet-5`, account "shared", plan
+    // free). The floor stays reachable — it joins the chain BEHIND the plan pool as the
+    // fallback it is — so nothing is refused; the free coders get first refusal.
+    const hintIsFundedFloor = fundedFloorHintDemoted(hasCallerModel ? callerModel as string : undefined, this.isPro);
+    const callerLeads = hasCallerModel && !hintIsFundedFloor
       && explicitModelPreemptsByo(callerModel as string, connectedByo, this.openRouterConnectionModels);
     // Demote any connected vendor we KNOW is currently unhealthy out of the LEAD
     // position (it stays in the seed — see `byoAutoSeedModels`). Two independent
@@ -897,7 +906,7 @@ export class LlmProxyService {
       ? [callerModel as string, ...byoSeeds.filter((m) => m !== callerModel)]
       : byoSeeds;
     const basePool: readonly string[] = (hasCallerModel && !callerLeads && !fittedPool.includes(callerModel as string))
-      ? [callerModel as string, ...fittedPool]
+      ? (hintIsFundedFloor ? [...fittedPool, callerModel as string] : [callerModel as string, ...fittedPool])
       : fittedPool;
     const seed: readonly string[] = seedHead.length > 0
       ? [...seedHead, ...basePool.filter((m) => !seedHead.includes(m))]
@@ -2393,6 +2402,18 @@ export function applyExcludedModels(candidates: string[], exclude: unknown): str
   if (excluded.size === 0) return candidates;
   const kept = candidates.filter((model) => !excluded.has(canonicalModelId(model)));
   return kept.length > 0 ? kept : candidates;
+}
+
+/**
+ * Should a NON-STRICT caller `model` hint stay OUT of the chain's lead because it names
+ * a model Builderforce funds on its own key ({@link isPaidOverflowModel}) and the
+ * caller is on the free plan? True ⇒ the hint joins the chain BEHIND the plan pool
+ * instead of ahead of it, so the free coders are tried first and the funded floor is
+ * still the fallback it was designed to be. A paid/teams/override caller, a plan-pool
+ * model, or no hint at all leads exactly as before. Pure + unit-testable.
+ */
+export function fundedFloorHintDemoted(callerModel: string | undefined, isPro: boolean): boolean {
+  return !!callerModel && !isPro && isPaidOverflowModel(callerModel);
 }
 
 /**

@@ -68,6 +68,7 @@
     "build:windows": "set \"PATH=C:\\Program Files\\Git\\bin;%PATH%\" && pnpm build",
     "canvas:a2ui:bundle": "bash scripts/bundle-a2ui.sh",
     "check": "pnpm format:check && pnpm typecheck && pnpm lint",
+    "check:dead-exports": "node scripts/check-dead-exports.mjs",
     "check:docs": "node --import tsx scripts/check-docs.ts",
     "check:loc": "node --import tsx scripts/check-ts-max-loc.ts --max 500",
     "builderforce:rpc": "node scripts/run-node.mjs agent --mode rpc --json",

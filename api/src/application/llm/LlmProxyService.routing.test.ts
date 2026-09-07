@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   reorderPoolByShape,
   reorderPoolForQuality,
+  fundedFloorHintDemoted,
   isLowSchemaCeilingModel,
   isQualityCriticalUseCase,
   type ChatCompletionRequest,
@@ -87,5 +88,26 @@ describe('reorderPoolForQuality — quality tier (Feature 2)', () => {
     // Without strictSchema the within-tier input order is preserved.
     expect(reorderPoolForQuality([GEMINI_PRO, CLAUDE]))
       .toEqual([GEMINI_PRO, CLAUDE]);
+  });
+});
+
+/**
+ * A free-plan canvas turn landed on the funded direct-Anthropic floor on its first
+ * completion (nothing else fit a 541-tool request) and the canvas then soft-pinned it —
+ * a NON-strict `model` hint — for fifteen more completions. The hint used to lead the
+ * chain verbatim, so the free pool was never asked again. It now leads only when it is
+ * not a model Builderforce funds on its own key for a caller who is not paying.
+ */
+describe('fundedFloorHintDemoted — a free plan\'s soft pin on a funded floor model', () => {
+  it('keeps the direct-Anthropic floor out of the lead for a free-plan caller', () => {
+    expect(fundedFloorHintDemoted('claude-sonnet-5', false)).toBe(true);
+    expect(fundedFloorHintDemoted('claude-opus-5', false)).toBe(true);
+  });
+
+  it('leaves a paid plan, a plan-pool model and an absent hint exactly as before', () => {
+    expect(fundedFloorHintDemoted('claude-sonnet-5', true)).toBe(false);
+    expect(fundedFloorHintDemoted(QWEN_FREE, false)).toBe(false);
+    expect(fundedFloorHintDemoted(CLAUDE, false)).toBe(false); // OpenRouter-routed Sonnet is a Pro plan-pool model, not the funded floor
+    expect(fundedFloorHintDemoted(undefined, false)).toBe(false);
   });
 });

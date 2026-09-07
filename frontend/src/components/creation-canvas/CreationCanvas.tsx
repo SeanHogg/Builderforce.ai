@@ -5859,17 +5859,24 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     description: 'Read every object and relationship on the creation canvas — the WHOLE board, regardless of what the user has selected. Use this whenever you are about to say something is not on the canvas.',
     parameters: { type: 'object', properties: {}, additionalProperties: false },
     run: () => {
+      // LIVE, and including this turn's staged proposals. The memo captured `nodes` when
+      // the turn began, so a second loop inside the same turn — the Brain synthesis that
+      // follows an invited agent's contribution — was told the board held 24 objects
+      // while the first loop's build sat on it as the 25th, and duly created a second
+      // one (session bf886fc1). `stage.nodes()` is what every authoring tool already
+      // reads for "what is here", so this reads the same thing.
+      const board = stage.nodes();
       // "Every object" means every object the reader is CLEARED for. The withheld ones
       // still reach the model as inventory rows, so the promise this tool exists to keep
       // — never claim something is absent — survives the gate.
-      const gate = aiContextGate(nodes);
+      const gate = aiContextGate(board);
       return {
       scope: resolvedScopeMode,
-      scopeNote: scopeNote('canvas', nodes.length, nodes.length),
+      scopeNote: scopeNote('canvas', board.length, board.length),
       ...(gate.note ? { confidentialityNote: gate.note } : {}),
-      boardInventory: boardInventory(nodes, scopedNodeIds),
-      objects: ((board) => gate.visible.map((node) => { const definition = creationObjectDefinition(node.data.kind); const dimensions = canvasNodeDimensions(node); return { id: node.id, ...definition.contextAdapter(node.data, board), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, ...dimensions, hidden: node.hidden === true, locked: node.data.placementLocked === true, inScope: scopedNodeIds.has(node.id) }; }))(specBoardOf(nodes)),
-      connections: edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
+      boardInventory: boardInventory(board, scopedNodeIds),
+      objects: ((spec) => gate.visible.map((node) => { const definition = creationObjectDefinition(node.data.kind); const dimensions = canvasNodeDimensions(node); return { id: node.id, ...definition.contextAdapter(node.data, spec), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, ...dimensions, hidden: node.hidden === true, locked: node.data.placementLocked === true, inScope: scopedNodeIds.has(node.id) }; }))(specBoardOf(board)),
+      connections: stage.edges().map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
       };
     },
   }, {
@@ -5887,7 +5894,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     },
     run: (raw: unknown) => {
       const args = raw as { objectId?: string; name?: string };
-      const inventory = boardInventory(nodes, scopedNodeIds);
+      // Live board plus this turn's staged additions — same reasoning as
+      // canvas_read_snapshot above: an object another loop of this turn just added
+      // must be findable, or the model re-creates it.
+      const board = stage.nodes();
+      const inventory = boardInventory(board, scopedNodeIds);
       const match = args.objectId
         ? inventory.find((entry) => entry.id === args.objectId) ?? null
         : findInInventory(inventory, args.name ?? '');
@@ -5896,7 +5907,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // writes is grounded in what IS there rather than in what it expected.
         return { found: false, boardInventory: inventory, message: 'No object on this board matches that id or name. The full inventory is included — do not ask the user to upload something listed in it.' };
       }
-      const node = nodes.find((candidate) => candidate.id === match.id);
+      const node = board.find((candidate) => candidate.id === match.id);
       if (!node) return { found: false, boardInventory: inventory };
       // The object is HERE and you may not read it. Saying so plainly is the whole
       // point: a refusal that looked like a miss would send the model back to
@@ -5910,8 +5921,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const definition = creationObjectDefinition(node.data.kind);
       return {
         found: true,
-        object: { id: node.id, ...definition.contextAdapter(node.data, specBoardOf(nodes)), mutableFields: definition.mutableFields, actions: definition.actions },
-        connections: edges
+        object: { id: node.id, ...definition.contextAdapter(node.data, specBoardOf(board)), mutableFields: definition.mutableFields, actions: definition.actions },
+        connections: stage.edges()
           .filter((edge) => edge.source === node.id || edge.target === node.id)
           .map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
       };
@@ -9251,6 +9262,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const evaluateCanvas = useCallback((promptOverride?: string) => {
     const requestText = (promptOverride ?? prompt).trim();
     if (!requestText || thinking) return;
+    // A tenant board with no tenant token cannot run a turn: the request would leave
+    // without an Authorization header and come back 401 "Missing or malformed
+    // Authorization header" — which is exactly what one signed-in user's diagnostics
+    // recorded (session bf886fc1), on a board that had been working minutes earlier.
+    // The token store is the value the transport authorizes with, so asking it here
+    // predicts the call exactly; the answer is the same account prompt every other
+    // tenant action raises, in the viewer's language, instead of a raw auth error
+    // written into the transcript and filed as a support ticket.
+    if (persistence === 'server' && !getStoredTenantToken()) {
+      requireAccount('brain_turn', t('gateBrainTurnTitle'), t('gateBrainTurnBody'));
+      return;
+    }
     /**
      * Only a turn the user just typed empties the composer. A replay, a queued turn
      * flushing, or an object-initiated request carries its own text — clearing on
@@ -9300,22 +9323,35 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNodes((current) => current.map((node) => node.data.kind === 'chat' ? { ...node, data: { ...node.data, trace: [] } } : node));
       setProposedChanges([]);
       const request = requestText;
-      // Restricted objects are stripped of DETAIL here and keep their inventory row —
-      // see `aiContextGate` for why withholding is not the same as hiding.
-      const aiGate = aiContextGate(scopedNodes);
-      const snapshot = JSON.stringify({
-        sessionId, scope: resolvedScopeMode, selectedObjectIds: effectiveSelectedIds,
-        // A scoped turn used to send ONLY the scoped objects, with nothing saying
-        // the view was partial — so the model answered "that file is not anywhere
-        // on the canvas" about a file that was on the canvas, and asked the user
-        // to upload it again. The inventory is identity-only (cheap) and always
-        // complete, so an absence claim is never available to be made.
-        scopeNote: scopeNote(resolvedScopeMode, nodes.length, scopedNodes.length),
-        boardInventory: boardInventory(nodes, scopedNodeIds),
-        ...(aiGate.note ? { confidentialityNote: aiGate.note } : {}),
-        objects: ((board) => aiGate.visible.map((node) => { const definition = creationObjectDefinition(node.data.kind); const dimensions = canvasNodeDimensions(node); return { id: node.id, ...definition.contextAdapter(node.data, board), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, ...dimensions, hidden: node.hidden === true, locked: node.data.placementLocked === true }; }))(specBoardOf(nodes)),
-        connections: scopedEdges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
-      });
+      // The board as ONE loop of this turn sees it. A function rather than a value,
+      // because a turn can run more than one loop — the invited agents first, then the
+      // Brain synthesis — and the synthesis must see what the agents just put on the
+      // board. Built once from the turn-start `nodes`, it showed the synthesis the
+      // board the agents had already changed as if they had not, and the synthesis
+      // re-made their objects (session bf886fc1: the same app built twice). Anything
+      // added since the turn began is in scope for a later loop whatever the selection
+      // was — it is this turn's own work.
+      const startIds = new Set(nodes.map((node) => node.id));
+      const turnSnapshot = (board: readonly CreationFlowNode[]): string => {
+        const scoped = board.filter((node) => scopedNodeIds.has(node.id) || !startIds.has(node.id));
+        const scopedIds = new Set(scoped.map((node) => node.id));
+        // Restricted objects are stripped of DETAIL here and keep their inventory row —
+        // see `aiContextGate` for why withholding is not the same as hiding.
+        const aiGate = aiContextGate(scoped);
+        return JSON.stringify({
+          sessionId, scope: resolvedScopeMode, selectedObjectIds: effectiveSelectedIds,
+          // A scoped turn used to send ONLY the scoped objects, with nothing saying
+          // the view was partial — so the model answered "that file is not anywhere
+          // on the canvas" about a file that was on the canvas, and asked the user
+          // to upload it again. The inventory is identity-only (cheap) and always
+          // complete, so an absence claim is never available to be made.
+          scopeNote: scopeNote(resolvedScopeMode, board.length, scoped.length),
+          boardInventory: boardInventory(board, scopedIds),
+          ...(aiGate.note ? { confidentialityNote: aiGate.note } : {}),
+          objects: ((spec) => aiGate.visible.map((node) => { const definition = creationObjectDefinition(node.data.kind); const dimensions = canvasNodeDimensions(node); return { id: node.id, ...definition.contextAdapter(node.data, spec), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, ...dimensions, hidden: node.hidden === true, locked: node.data.placementLocked === true }; }))(specBoardOf(board)),
+          connections: stage.edges().filter((edge) => scopedIds.has(edge.source) && scopedIds.has(edge.target)).map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
+        });
+      };
       clearComposer();
       const connectedAgentNodes = nodes.filter((node) => node.data.kind === 'agent' && (
         effectiveSelectedIds.includes(node.id)
@@ -9336,8 +9372,22 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const groupConversation = connectedAgentNodes.length
           ? [...historicalConversation, { role: 'user' as const, content: request }]
           : historicalConversation;
+        /** Specialist replies actually gathered this turn — what decides whether the
+         *  Brain runs as a synthesis or simply answers the request. */
+        let contributions = 0;
         const canonicalAgents = connectedAgentNodes.flatMap((agent) => {
-          const ref = agent.data.resourceId?.match(/^agent:(.+)$/)?.[1];
+          // Two ways a card names a REAL agent: a canonical `agent:<id>` resource, or the
+          // `ide_agents.id` a seated built-in teammate carries (`cmo-t14`, see
+          // provisionBuiltinAgents / seatTeammate). The second was not read, so on a
+          // signed-in board an @CMO fell through to the local-drafts branch below — a
+          // full browser tool loop per seat, each free to build, then a synthesis that
+          // could not see what they had built. Measured (session bf886fc1): the same
+          // app provisioned twice, every competitor card twice, four-minute turns. An
+          // @-addressed agent executes in ITS runtime, which is this path.
+          const ref = agent.data.resourceId?.match(/^agent:(.+)$/)?.[1]
+            ?? (agent.data.builtinAgent === true && typeof agent.data.agentRef === 'string' && agent.data.agentRef.trim()
+              ? agent.data.agentRef.trim()
+              : undefined);
           return ref ? [{ ref, name: agent.data.title || 'Specialist agent', role: typeof agent.data.role === 'string' ? agent.data.role : undefined }] : [];
         });
         if (persistence === 'server' && canonicalAgents.length) {
@@ -9357,9 +9407,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 authoredBy: { kind: 'agent', ref: agent.ref, name: agent.name },
               }, `${requestMessageId}:agent:${agent.ref}`);
               groupConversation.push({ role: 'assistant', content: `${agent.name}: ${message.content}` });
+              contributions += 1;
               setActiveAgentIds((current) => {
                 const next = new Set(current);
-                const canvasAgent = connectedAgentNodes.find((candidate) => candidate.data.resourceId === `agent:${agent.ref}`);
+                const canvasAgent = connectedAgentNodes.find((candidate) => candidate.data.resourceId === `agent:${agent.ref}` || candidate.data.agentRef === agent.ref);
                 if (canvasAgent) next.delete(canvasAgent.id);
                 return next;
               });
@@ -9370,15 +9421,22 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             const detail = describeTurnError(error, 'noticeAgentGroupFailed');
             appendTimeline('system', t('noticeAgentGroupTurnFailed', { reason: detail }), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:agent-group-error`);
           }
-        } else if (connectedAgentNodes.length) {
+        } else if (persistence !== 'server' && connectedAgentNodes.length) {
           // Guest drafts cannot call the tenant workforce runtime. Keep ideation
           // useful, but do not present these local personas as canonical agents.
+          //
+          // GUESTS ONLY, now explicitly. A signed-in board whose agent cards carry no
+          // runtime ref used to land here too, and this branch is a full tool loop per
+          // card with the whole canvas vocabulary: on a tenant board that meant an
+          // "invited specialist" building the user's app before Brain did. A card
+          // without a runtime behind it is a card; the agents that can answer are the
+          // canonical ones above.
           for (const agent of connectedAgentNodes) {
             const name = agent.data.title || 'Draft specialist';
             const ref = agent.id;
             try {
               const contribution = await runCreationCanvasAi({
-                prompt: 'Contribute a specialist perspective to the latest request.', canvasSnapshot: snapshot,
+                prompt: 'Contribute a specialist perspective to the latest request.', canvasSnapshot: turnSnapshot(stage.nodes()),
                 guestTurnId: requestMessageId,
                 guestTurnInput: request,
                 persistence, canvasActions, notices: canvasNotices, routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
@@ -9393,6 +9451,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               if (contribution.trim()) {
                 appendTimeline('assistant', contribution.trim(), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], authoredBy: { kind: 'agent', ref, name } }, `${requestMessageId}:draft-agent:${agent.id}`);
                 groupConversation.push({ role: 'assistant', content: `${name}: ${contribution.trim()}` });
+                contributions += 1;
               }
             } catch (error) {
               // Brain synthesis still runs with the available transcript — unless the
@@ -9410,10 +9469,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         }
         throwIfStopped();
         return runCreationCanvasAi({
-          prompt: connectedAgentNodes.length
+          // A synthesis only when there is something to synthesize. Agents that were
+          // connected but produced nothing (no runtime, or a failed group turn) leave the
+          // Brain answering the request itself, against the transcript it actually has.
+          prompt: contributions > 0
             ? `Synthesize the invited agents' perspectives and complete the user's requested outcome. Resolve disagreements, make the final Canvas changes, and state what was actually created.`
             : request,
-          canvasSnapshot: snapshot, persistence, canvasActions, notices: canvasNotices,
+          // The board as it is NOW — after the invited agents' work landed on it — not
+          // as it was when the turn began. See `turnSnapshot`.
+          canvasSnapshot: turnSnapshot(stage.nodes()), persistence, canvasActions, notices: canvasNotices,
           guestTurnId: requestMessageId,
           guestTurnInput: request,
           // The session's mode + the project the ticket would be filed against, so a
@@ -9454,7 +9518,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             if (event.category === 'tool' && event.label) turnToolCalls.current.add(event.label);
             setBrainTrace((current) => [...current, event]);
           },
-          conversation: groupConversation,
+          conversation: contributions > 0 ? groupConversation : historicalConversation,
           signal: runAbort.signal,
         });
       };
@@ -9581,7 +9645,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       clearComposer();
       setNotice(t('noticeEvaluationAdded'));
     }, 850);
-  }, [appendTimeline, canvasActions, canvasNotices, confirm, currentUserId, describeTurnError, disableBrainModel, effectiveSelectedIds, edges, evermindProjectId, lastTurnProvenance, members, memoryEnabled, modelSelection, nodes, openNodeInspector, persistence, prompt, recordBrainCompletion, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, setNotice, stage, t, thinking, timeline, title]);
+  }, [appendTimeline, canvasActions, canvasNotices, confirm, currentUserId, describeTurnError, disableBrainModel, effectiveSelectedIds, edges, evermindProjectId, lastTurnProvenance, members, memoryEnabled, modelSelection, nodes, openNodeInspector, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, setNotice, stage, t, thinking, timeline, title]);
 
   useEffect(() => {
     if (!hydrated.current || modelComparisonStarted.current || comparisonModelIds.length < 2) return;

@@ -45,6 +45,40 @@ export interface LabelAgreement {
   unlabelled: number;
 }
 
+const text = (value: unknown): string => (typeof value === 'string' ? value.trim() : typeof value === 'number' ? String(value) : '');
+
+/**
+ * The `samples` rows a `labelSet` card holds, as typed samples.
+ *
+ * ONE reader for the persisted shape, shared by the card's derived `agreement` meter
+ * and the `promote` act: the two used to be the only consumers of {@link labelAgreement}
+ * and {@link promoteToGoldenSet}, and each re-describing `{id, text}` rows is how the
+ * meter and the promotion come to disagree about which rows exist.
+ */
+export function readLabelSamples(data: Record<string, unknown>): LabelSample[] {
+  const raw = data.samples;
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== 'object') return [];
+    const row = item as Record<string, unknown>;
+    const id = text(row.id);
+    return id ? [{ id, text: text(row.text) }] : [];
+  });
+}
+
+/** The `labels` rows a `labelSet` card holds — what each reviewer actually chose. */
+export function readLabelRecords(data: Record<string, unknown>): LabelRecord[] {
+  const raw = data.labels;
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== 'object') return [];
+    const row = item as Record<string, unknown>;
+    const sampleId = text(row.sampleId);
+    const answer = text(row.answer);
+    return sampleId && answer ? [{ sampleId, reviewer: text(row.reviewer) || 'reviewer', answer }] : [];
+  });
+}
+
 /**
  * Deterministically sample rows for review.
  *

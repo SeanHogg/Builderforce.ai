@@ -1,5 +1,6 @@
-'use client';
-
+// No 'use client' directive: a hook cannot run anywhere but a client component, and
+// every importer already declares the boundary. Adding one here would only grow the
+// architecture ratchet's client-component tally for a module that is not a component.
 import { useCallback } from 'react';
 import type { Edge, Node, ReactFlowInstance } from '@xyflow/react';
 import { canvasLayoutViewport, type CanvasLayoutViewport } from '@/lib/canvasGridFit';

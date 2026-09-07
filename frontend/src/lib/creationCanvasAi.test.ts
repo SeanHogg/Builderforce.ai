@@ -18,7 +18,10 @@ vi.mock('@/lib/brain/runtime', () => ({ brainConfig: { transport: {} } }));
 vi.mock('@/lib/brain/guestRuntime', () => ({ guestBrainConfig: { transport: {} } }));
 vi.mock('@/lib/guestRoomApi', () => ({ ensureGuestToken: mocks.ensureGuestToken }));
 
-const { runCreationCanvasAi, MAX_CANVAS_TOOL_TURNS, CanvasRunAbortedError, isCanvasRunAborted } = await import('./creationCanvasAi');
+const {
+  runCreationCanvasAi, MAX_CANVAS_TOOL_TURNS, MAX_CANVAS_BUILD_TURNS, CANVAS_BUILD_RESPONSE_TOKENS, CANVAS_TOOL_LIMIT,
+  CanvasRunAbortedError, isCanvasRunAborted,
+} = await import('./creationCanvasAi');
 
 /**
  * Runtime notices come from the CATALOG now, not from string literals in the runner, so
@@ -795,6 +798,121 @@ describe('runCreationCanvasAi', () => {
   // STOP. The composer's Stop button aborts the run: the signal reaches the model
   // stream, and the loop refuses to spend another round-trip or run another tool
   // after the user has said stop.
+  /**
+   * "create app" on a signed-in board (session bf886fc1, ui 2026.9.13): three
+   * `canvas_write_build_file` calls ran with NO arguments and failed "A path is
+   * required." — each the tail of a response that hit the 3,200-token ceiling, handed
+   * to dispatch as `args: {}` — and a turn that had provisioned a workspace and written
+   * five files ended "I couldn't prepare any canvas changes from that request".
+   */
+  describe('building an app', () => {
+    const writeTool = (run: (args: unknown) => unknown) => ({
+      name: 'canvas_write_build_file', description: 'Write a file', parameters: { type: 'object' }, mutates: true, run,
+    });
+
+    it('refuses a tool call the output limit cut off instead of running it with empty arguments, and tells the model to send less', async () => {
+      const run = vi.fn(() => ({ ok: true, applied: true, path: 'src/a.js' }));
+      mocks.streamChatCompletion
+        .mockResolvedValueOnce({
+          text: '', finishReason: 'length',
+          toolCalls: [
+            { id: 'c1', name: 'canvas_write_build_file', args: JSON.stringify({ path: 'src/a.js', content: 'export const a = 1;' }) },
+            // The JSON never closed — this is what a truncated call looks like on the wire.
+            { id: 'c2', name: 'canvas_write_build_file', args: '{"path":"src/b.js","content":"export const b' },
+          ],
+        })
+        .mockResolvedValueOnce({ text: 'Both files are in place.', toolCalls: [], finishReason: 'stop' });
+      const onTrace = vi.fn();
+
+      const answer = await runTurn({ prompt: 'create app', canvasSnapshot: '{"objects":[]}', persistence: 'local', onTrace, canvasActions: [writeTool(run)] });
+
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(run).toHaveBeenCalledWith({ path: 'src/a.js', content: 'export const a = 1;' });
+      expect(answer).toBe('Both files are in place.');
+      const transcript = mocks.streamChatCompletion.mock.calls[1][0].messages as Array<{ role: string; content: string }>;
+      const toolRows = transcript.filter((row) => row.role === 'tool');
+      expect(toolRows).toHaveLength(2);
+      expect(toolRows[1].content).toContain('cut off by the output limit');
+      expect(toolRows[1].content).toContain('NOT executed');
+      // Once per round, after the complete calls ran: the narrower remedy, not "answer again".
+      expect(transcript.at(-1)).toMatchObject({ role: 'system' });
+      expect(transcript.at(-1)!.content).toContain('ONE file or ONE object per response');
+      expect(onTrace).toHaveBeenCalledWith(expect.objectContaining({ category: 'error', label: 'canvas_write_build_file (cut off by the output limit)' }));
+    });
+
+    it('names unparseable arguments as the reason when the response was not cut off', async () => {
+      const run = vi.fn(() => ({ ok: true, applied: true }));
+      mocks.streamChatCompletion
+        .mockResolvedValueOnce({ text: '', finishReason: 'tool_calls', toolCalls: [{ id: 'c1', name: 'canvas_write_build_file', args: '{path: src/a.js}' }] })
+        .mockResolvedValueOnce({ text: 'Retried.', toolCalls: [], finishReason: 'stop' });
+
+      await runTurn({ prompt: 'create app', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [writeTool(run)] });
+
+      expect(run).not.toHaveBeenCalled();
+      const transcript = mocks.streamChatCompletion.mock.calls[1][0].messages as Array<{ role: string; content: string }>;
+      expect(transcript.find((row) => row.role === 'tool')!.content).toContain('not valid JSON');
+    });
+
+    it('counts a committed workspace write as canvas work and widens the output ceiling for the rest of the turn', async () => {
+      const run = vi.fn(() => ({ ok: true, applied: true }));
+      mocks.streamChatCompletion
+        .mockResolvedValueOnce({ text: '', finishReason: 'tool_calls', toolCalls: [{ id: 'c1', name: 'canvas_create_build', args: JSON.stringify({ title: 'NutriPlan', modality: 'designer' }) }] })
+        .mockResolvedValueOnce({ text: '', toolCalls: [], finishReason: 'stop' })
+        .mockResolvedValueOnce({ text: '', toolCalls: [], finishReason: 'stop' });
+      const onUnanswered = vi.fn();
+
+      const answer = await runTurn({
+        prompt: 'create app', canvasSnapshot: '{"objects":[]}', persistence: 'local', onUnanswered,
+        canvasActions: [{ name: 'canvas_create_build', description: 'Create a build', parameters: { type: 'object' }, mutates: true, run }],
+      });
+
+      expect(mocks.streamChatCompletion.mock.calls[0][0].maxTokens).toBe(3_200);
+      expect(mocks.streamChatCompletion.mock.calls[1][0].maxTokens).toBe(CANVAS_BUILD_RESPONSE_TOKENS);
+      // A build IS a canvas change: never "I couldn't prepare any canvas changes".
+      expect(answer).toBe(NOTICES.addedToCanvas);
+      expect(onUnanswered).not.toHaveBeenCalled();
+    });
+
+    it('gives a build turn the code step budget, and says so when it runs out mid-work', async () => {
+      const run = vi.fn(() => ({ ok: true, applied: true, path: 'src/x.js' }));
+      mocks.streamChatCompletion.mockResolvedValue({
+        text: '', finishReason: 'tool_calls',
+        toolCalls: [{ id: 'c', name: 'canvas_write_build_file', args: JSON.stringify({ path: 'src/x.js', content: '// more' }) }],
+      });
+
+      const answer = await runTurn({ prompt: 'create app', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [writeTool(run)] });
+
+      expect(MAX_CANVAS_BUILD_TURNS).toBeGreaterThan(MAX_CANVAS_TOOL_TURNS);
+      expect(mocks.streamChatCompletion).toHaveBeenCalledTimes(MAX_CANVAS_BUILD_TURNS);
+      expect(run).toHaveBeenCalledTimes(MAX_CANVAS_BUILD_TURNS);
+      expect(answer).toBe(NOTICES.stepsExhausted);
+    });
+
+    /**
+     * The same session advertised 541 tools on every completion (~120K tokens of
+     * schema), which no free coder's window holds — so a FREE-plan turn skipped its
+     * whole pool and ran 16 of 16 completions on the funded `claude-sonnet-5` floor.
+     */
+    it('advertises at most CANVAS_TOOL_LIMIT tools per completion, always including the ones the prompt names', async () => {
+      mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'ok', toolCalls: [], finishReason: 'stop' });
+      const filler = Array.from({ length: 150 }, (_, index) => ({
+        name: `canvas_filler_tool_${index}`, description: 'Unrelated to anything the user said', parameters: { type: 'object' }, run: () => ({ ok: true }),
+      }));
+      const named = ['canvas_add_object', 'canvas_read_object', 'canvas_read_snapshot'].map((name) => ({
+        name, description: 'Named by the system prompt', parameters: { type: 'object' }, run: () => ({ ok: true }),
+      }));
+      const onCompletion = vi.fn();
+
+      await runTurn({ prompt: 'hello', canvasSnapshot: '{"objects":[]}', persistence: 'local', onCompletion, canvasActions: [...filler, ...named] });
+
+      const advertised = (mocks.streamChatCompletion.mock.calls[0][0].tools as Array<{ function: { name: string } }>).map((tool) => tool.function.name);
+      expect(advertised.length).toBeLessThanOrEqual(CANVAS_TOOL_LIMIT);
+      expect(advertised.length).toBeLessThan(150);
+      for (const tool of named) expect(advertised).toContain(tool.name);
+      expect(onCompletion).toHaveBeenCalledWith(expect.objectContaining({ toolsAdvertised: advertised.length }));
+    });
+  });
+
   describe('when the user stops the run', () => {
     // The stream receives the turn's OWN signal, not the caller's, because the stall
     // watchdog has to be able to abandon a silent provider without the user pressing

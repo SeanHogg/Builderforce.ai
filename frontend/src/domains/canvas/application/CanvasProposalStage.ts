@@ -39,8 +39,17 @@
 import type { Edge } from '@xyflow/react';
 import type { CreationConnectionKind } from '@builderforce/creation-canvas-contract';
 import type { CanvasLayoutViewport } from '@/lib/canvasGridFit';
+import { patchWithProvenance, type Actor } from '@/lib/canvasApprovalGate';
 import type { CanvasObject, CanvasObjectData, CreationObjectKind } from '../domain/canvasObject';
 import type { ProposedCanvasChange } from '../domain/canvasChange';
+
+/**
+ * Who a turn's patches are attributed to when the caller does not say. A tool
+ * turn is the Brain acting on the board, and `ref: 'brain'` is the actor the data
+ * room's own approval requests already use — so a trail written here reads the
+ * same as one written there.
+ */
+export const BRAIN_ACTOR: Actor = { kind: 'brain', ref: 'brain', name: 'Brain' };
 
 /**
  * The committed board, read live. A function rather than a value because a
@@ -98,6 +107,10 @@ export class CanvasProposalStage {
     private readonly board: CanvasStageBoard,
     private readonly factory: CanvasObjectFactory,
     private readonly nextId: ChangeIdFactory = () => crypto.randomUUID(),
+    /** Who this turn's patches are attributed to in each object's provenance trail. */
+    private readonly actor: Actor = BRAIN_ACTOR,
+    /** Injectable clock so a test can assert the stamped `at`. */
+    private readonly now: () => string = () => new Date().toISOString(),
   ) {}
 
   /** Board objects PLUS everything staged this turn. The only object view tools get. */
@@ -187,8 +200,30 @@ export class CanvasProposalStage {
     this.buffer.push({ id: this.nextId(), type: 'object.add', label, node });
   }
 
+  /**
+   * Stage a patch — WITH its provenance. Every attributed field the patch moves
+   * (see `ATTRIBUTED_FIELDS`) extends the object's trail, attributed to this
+   * stage's actor and sourced from the change's own label, so an approver reads
+   * "Brain moved plannedTotal from 120,000 to 150,000 — Rebalance the Q3 budget"
+   * rather than an empty ledger under a changed number. The comparison is against
+   * the object AS IT STANDS THIS TURN — the board value plus every patch already
+   * staged for it — so two patches to one field in one turn record two moves, and
+   * the second does not overwrite the first's entry.
+   */
   updateObject(label: string, objectId: string, patch: Partial<CanvasObjectData>): void {
-    this.buffer.push({ id: this.nextId(), type: 'object.update', label, objectId, patch });
+    const before = this.current(objectId);
+    const stamped = before ? patchWithProvenance(before, patch, this.actor, this.now(), label) : patch;
+    this.buffer.push({ id: this.nextId(), type: 'object.update', label, objectId, patch: stamped });
+  }
+
+  /** An object's data as it stands this turn: committed data plus staged patches, in order. */
+  private current(objectId: string): Record<string, unknown> | null {
+    const base = this.object(objectId);
+    if (!base) return null;
+    return this.buffer.reduce<Record<string, unknown>>(
+      (data, change) => (change.type === 'object.update' && change.objectId === objectId ? { ...data, ...change.patch } : data),
+      { ...base.data },
+    );
   }
 
   deleteObject(label: string, objectId: string): void {

@@ -1,5 +1,7 @@
-'use client';
-
+// No 'use client' directive: this is only ever rendered by `CreationCanvas`, which is
+// already a client component, so the boundary is inherited and a second declaration here
+// would only add another file to the architecture ratchet's client-component tally — the
+// same reason `CanvasSessionActions` and `CanvasCommandBar` omit it.
 import { forwardRef, useCallback, useImperativeHandle, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { SectionTour, type SectionTourStep } from '@/components/onboarding/SectionTour';
@@ -10,7 +12,7 @@ import type { CanvasWalkthroughStop } from '@/lib/canvasWalkthrough';
 function escapeSelectorValue(value: string): string {
   return typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
     ? CSS.escape(value)
-    : value.replace(/["\]/g, '\$&');
+    : value.replace(/["\\]/g, '\\$&');
 }
 
 /**

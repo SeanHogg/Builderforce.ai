@@ -28,6 +28,23 @@ export const RESEARCH_TOOL_NAMES = new Set(['builtin_web_search', 'builtin_web_f
  */
 export const NON_AUTHORING_TOOL_NAMES = new Set([...RESEARCH_TOOL_NAMES, 'canvas_read_snapshot']);
 
+/**
+ * Did this tool outcome change the canvas?
+ *
+ * Two shapes say yes, and they are deliberately different words: `proposed: true` is
+ * a change STAGED for the review step (every `canvas_add_object`-style tool), and
+ * `applied: true` is a change that already COMMITTED (the build workspace tools —
+ * a provisioned project and a written file are not proposals). The runner used to
+ * read only the first, so a turn that built a working app was reported as having
+ * prepared no canvas changes at all. ONE predicate, so no caller reads one word
+ * and forgets the other.
+ */
+export function toolOutcomeChangedCanvas(outcome: unknown): boolean {
+  if (!outcome || typeof outcome !== 'object') return false;
+  const result = outcome as { proposed?: unknown; applied?: unknown };
+  return result.proposed === true || result.applied === true;
+}
+
 export function isNarrowSearchResult(value: unknown): boolean {
   return !!value && typeof value === 'object'
     && (value as { coverage?: unknown }).coverage === 'encyclopedic';

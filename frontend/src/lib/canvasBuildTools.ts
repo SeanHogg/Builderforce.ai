@@ -287,6 +287,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
           const files = await workspaceFiles(build.binding.storageProjectId).catch(() => []);
           return {
             ok: true,
+            applied: true,
             object: { id: build.objectId, kind: 'build', title: build.title },
             modality,
             files: files.map((file) => file.path),
@@ -412,7 +413,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
         try {
           await saveFile(resolved.build.binding.storageProjectId, path, content);
           ctx.onFilesChanged?.(resolved.build.binding.storageProjectId, [path]);
-          return { ok: true, path, bytes: content.length };
+          return { ok: true, applied: true, path, bytes: content.length };
         } catch (error) {
           return { error: error instanceof Error ? error.message : `"${path}" could not be written.` };
         }
@@ -457,7 +458,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
         try {
           await saveFile(resolved.build.binding.storageProjectId, path, edit.next);
           ctx.onFilesChanged?.(resolved.build.binding.storageProjectId, [path]);
-          return { ok: true, path, replacements: edit.replacements };
+          return { ok: true, applied: true, path, replacements: edit.replacements };
         } catch (error) {
           return { error: error instanceof Error ? error.message : `"${path}" could not be written.` };
         }
@@ -540,7 +541,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
         try {
           await restoreFileVersion(resolved.build.binding.storageProjectId, path, at);
           ctx.onFilesChanged?.(resolved.build.binding.storageProjectId, [path]);
-          return { ok: true, path, restoredFrom: new Date(at).toISOString() };
+          return { ok: true, applied: true, path, restoredFrom: new Date(at).toISOString() };
         } catch (error) {
           return { error: error instanceof Error ? error.message : `"${path}" could not be restored.` };
         }
@@ -548,6 +549,25 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
     },
   ];
 }
+
+/**
+ * The build tools that COMMIT to a workspace the moment they return — no proposal,
+ * no review step. They answer `applied: true` (the committed twin of the staging
+ * tools' `proposed: true`) so the turn runner counts them as canvas work.
+ *
+ * Measured why that matters (session `bf886fc1`, ui 2026.9.13, "create app"): a turn
+ * provisioned a workspace and wrote five files, and because none of that was a
+ * *proposal* the runner concluded nothing had happened — the user read "I couldn't
+ * prepare any canvas changes from that request" above a working app, the act-now
+ * ladder nagged a model that had already acted, and the step budget sized for
+ * authoring one card ran out mid-file.
+ */
+export const CANVAS_BUILD_WORKSPACE_WRITE_TOOLS: ReadonlySet<string> = new Set([
+  'canvas_create_build',
+  'canvas_write_build_file',
+  'canvas_edit_build_file',
+  'canvas_restore_build_file',
+]);
 
 /** Every tool name this module contributes. Used by the guest-boundary contract. */
 export const CANVAS_BUILD_TOOL_NAMES = [

@@ -31,6 +31,10 @@ export interface CanvasNotices {
   addedToCanvas: string;
   /** The turn produced neither an answer nor a change. */
   noAnswer: string;
+  /** The turn changed the canvas and was still working when its step budget ran out.
+   *  Distinct from `addedToCanvas`: the work is real but not finished, and the user
+   *  is told how to resume it rather than left to guess whether it is complete. */
+  stepsExhausted: string;
   /** The model provider accepted the request and then went silent, so the turn was
    *  abandoned rather than left spinning. Distinct from `noAnswer`: nothing is wrong
    *  with what was asked, and retrying is the right next move. */
@@ -60,6 +64,7 @@ export function canvasNoticesFrom(t: CanvasNoticeTranslator): CanvasNotices {
   return {
     addedToCanvas: t('addedToCanvas'),
     noAnswer: t('noAnswer'),
+    stepsExhausted: t('stepsExhausted'),
     providerStalled: t('providerStalled'),
     toolError: (detail) => t('toolError', { detail }),
     answeredWithoutCanvasChange: (answer) => `${answer}\n\n${t('answeredWithoutChange')}`,

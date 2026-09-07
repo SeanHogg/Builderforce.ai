@@ -10,6 +10,7 @@ import {
   type ChatCompletionMessage,
   type EvermindRecallResult,
   type ChatMode,
+  selectToolsForTurn,
   turnInterruption,
 } from '@seanhogg/builderforce-brain-embedded';
 import { brainConfig } from '@/lib/brain/runtime';
@@ -31,8 +32,10 @@ import {
   requestedPagesForTurn,
   requestsCanvasMutation,
   snapshotHasTabularRows,
+  toolOutcomeChangedCanvas,
   unverifiedCreationClaim,
 } from '@/lib/canvasTurnOutcome';
+import { CANVAS_BUILD_WORKSPACE_WRITE_TOOLS } from '@/lib/canvasBuildTools';
 import { founderCanvasSystemPrompt } from '@/lib/founderCanvasPrompt';
 import { CANVAS_STREAM_STALL_MS, CanvasStreamStalledError, streamBoundedByActivity } from '@/lib/canvasStreamWatchdog';
 import { canvasModeDirective } from '@/lib/canvasModeDirective';
@@ -176,6 +179,68 @@ const MAX_NARROW_SEARCHES = 2;
  * former 1,600-token ceiling. The durable result still belongs in Canvas objects;
  * this prevents the user-facing handoff from ending in the middle of a sentence. */
 const CANVAS_RESPONSE_TOKENS = 3_200;
+
+/**
+ * The output ceiling once a turn is WRITING CODE. 3,200 tokens was sized for the prose
+ * handoff and for authoring one card; a source file routinely runs 1,500 tokens and a
+ * model asked to build an app sends two or three per response. Measured (session
+ * `bf886fc1`, ui 2026.9.13): three of eight completions ended `finishReason: "length"`,
+ * each mid-way through a `canvas_write_build_file` whose JSON never closed. A ceiling is
+ * a cap, not a spend — the model is billed for what it emits — so raising it only for
+ * turns that have already committed to a workspace costs nothing on ordinary turns.
+ * Raised, not unbounded: 8K sits under every vendor's own limit in the coding pool.
+ */
+export const CANVAS_BUILD_RESPONSE_TOKENS = 8_192;
+
+/**
+ * The step budget once a turn is writing code. One file is one step, and the seeded
+ * starter project needs list → read → several writes before it is the user's app, so
+ * the eight steps sized for research-then-author ran out with the app half-written and
+ * the runner reporting that nothing had happened. Sixteen is enough for a small app
+ * with room for a diagnostics read; a bigger one continues on the next turn, and the
+ * `stepsExhausted` notice tells the user exactly that.
+ */
+export const MAX_CANVAS_BUILD_TURNS = 16;
+
+/**
+ * How many tools one canvas completion advertises.
+ *
+ * A signed-in board carried 541 definitions (116 canvas tools plus the tenant's whole
+ * MCP catalog) on every request — roughly 120K tokens of schema before the board or the
+ * conversation was counted. No free coder's window holds that, so a FREE-plan turn
+ * skipped its entire pool and landed on the funded direct-Anthropic floor on the first
+ * completion, then soft-pinned it for the rest of the turn (measured: 16 of 16
+ * completions on `claude-sonnet-5`, account "shared"). The standalone Brain has trimmed
+ * per turn since its catalog passed ~300 (`brain-embedded/selectTools`); the canvas now
+ * uses the SAME selector. Tools the system prompt NAMES are always advertised, tools
+ * this turn already CALLED are never dropped, and the rest are chosen by relevance to
+ * the request. 96: the canvas prompt names ~50 tools itself, and this stays under the
+ * ~128 mark where providers degrade.
+ */
+export const CANVAS_TOOL_LIMIT = 96;
+
+/** The tool result a call that arrived with unusable arguments gets INSTEAD of being run. */
+const TRUNCATED_CALL_RESULT = 'This tool call was cut off by the output limit before its arguments were complete, so it was NOT executed. Re-issue it in your next response as ONE call with complete JSON — one file or one object per response, never several.';
+const MALFORMED_CALL_RESULT = 'This tool call\'s arguments were not valid JSON, so it was NOT executed. Re-issue it with strictly valid JSON: no comments, no trailing commas, no unescaped newlines or quotes inside string values.';
+
+/** Pushed once after a round whose LAST call was cut off while the complete ones ran —
+ * the whole-response directive below would be false here (most of the response was
+ * used), and the remedy is narrower: smaller responses, not a different action. */
+const TRUNCATED_ROUND_DIRECTIVE = 'Your previous response hit the output limit. The complete tool calls in it were executed; the call it was cut off inside was discarded and must be re-sent. From here on send ONE file or ONE object per response.';
+
+/**
+ * Every `canvas_*` / `builtin_*` tool the assembled system prompt tells the model to
+ * call. Per-turn selection keeps these ahead of everything else: a prompt that says
+ * "call canvas_read_object" while the tool is absent leaves the model no honest move.
+ */
+function promptNamedTools(messages: readonly ChatCompletionMessage[]): Set<string> {
+  const names = new Set<string>();
+  for (const message of messages) {
+    if (message.role !== 'system' || typeof message.content !== 'string') continue;
+    for (const match of message.content.matchAll(/\b(?:canvas|builtin)_[a-z0-9_]+\b/g)) names.add(match[0]);
+  }
+  return names;
+}
 
 /** Act-now escalations before the turn stops asking a stalled model to author. */
 const MAX_MUTATION_RECOVERIES = 2;
@@ -438,7 +503,9 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     return answer;
   };
   let finalText = '';
-  let proposedCanvasMutation = false;
+  /** A tool this turn STAGED (`proposed: true`) or COMMITTED (`applied: true`) a canvas
+   *  change — see `toolOutcomeChangedCanvas`. */
+  let canvasChanged = false;
   let executiveRequestRecoveryUsed = false;
   /** Act-now escalations spent on a model that answered in prose instead of calling a
    *  canvas tool. Two: the first re-states the command, the second runs with research
@@ -510,7 +577,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   // "I described a canvas change but did not make one." Only enforce this contract
   // when the user's request actually asked Canvas to create or update something.
   const verified = (answer: string): string =>
-    unverifiedCreationClaim(notices, answer, proposedCanvasMutation, hasTabularData, mutationRequested) ?? answer;
+    unverifiedCreationClaim(notices, answer, canvasChanged, hasTabularData, mutationRequested) ?? answer;
   const requestedPages = requestedPagesForTurn(options);
   let documentWords: number | null = requestedPages == null ? null : documentWordsInSnapshot(options.canvasSnapshot);
   let documentWordCountExact = false;
@@ -527,11 +594,27 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   /** Whether THIS round-trip ran in the reserved authoring phase — set per turn by the
    *  model port, read by dispatch to refuse research calls. */
   let authoringOnly = false;
+  /** How the LAST completion ended, read by dispatch so a call whose arguments never
+   *  parsed is refused with the reason that matches — cut off, or mis-encoded. */
+  let lastTurnInterruption: ReturnType<typeof turnInterruption> = null;
+  /** Set when dispatch discarded an unusable call this round, so the follow-up
+   *  directive is pushed once per round rather than once per call. */
+  let discardedCallThisRound = false;
+  /** Tools this turn has called so far — pinned through per-turn selection so a
+   *  multi-step task never loses a tool mid-flight. */
+  const toolsUsedThisTurn = new Set<string>();
+  const requiredTools = promptNamedTools(messages);
+  /** Set once a workspace write commits: the turn is BUILDING, so it gets the code
+   *  output ceiling and the code step budget from then on. */
+  let buildTurn = false;
+  /** The kernel reads this object every iteration, which is what lets a build turn
+   *  widen its own budget the moment its first workspace write commits. */
+  const budget = { stepCap: MAX_CANVAS_TOOL_TURNS };
   const loop = await runAgentLoop<ChatCompletionMessage>({
     messages,
     codec: openAiChatCodec<ChatCompletionMessage>(),
     signal: options.signal,
-    budget: { stepCap: MAX_CANVAS_TOOL_TURNS },
+    budget,
     ports: {
       complete: async (ctx) => {
         const turn = ctx.step;
@@ -541,8 +624,8 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         // three turns before the reserved window it never reaches. Having already ignored
         // an explicit act-now directive is the stronger signal of the two, so it arms the
         // same phase: research and re-reads withdrawn, authoring tools only.
-        authoringOnly = mutationRequested && !proposedCanvasMutation
-          && (mutationRecoveries > 0 || MAX_CANVAS_TOOL_TURNS - turn <= RESERVED_AUTHORING_TURNS);
+        authoringOnly = mutationRequested && !canvasChanged
+          && (mutationRecoveries > 0 || budget.stepCap - turn <= RESERVED_AUTHORING_TURNS);
         if (authoringOnly && !authoringDirectiveIssued) {
           authoringDirectiveIssued = true;
           messages.push({
@@ -553,14 +636,24 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         const availableActions = authoringOnly
           ? actions.filter((action) => !NON_AUTHORING_TOOL_NAMES.has(action.name))
           : actions;
+        // Per-turn selection (see CANVAS_TOOL_LIMIT). The query is the user's request
+        // plus the latest exchange, so a follow-up ("now add a budget screen") still
+        // scores the tools its wording names.
+        const recent = (options.conversation ?? []).slice(-2).map((message) => message.content).join('\n');
+        const selection = selectToolsForTurn(specsFor(availableActions), {
+          query: `${options.prompt}\n${recent}`,
+          limit: CANVAS_TOOL_LIMIT,
+          pinned: toolsUsedThisTurn,
+          required: requiredTools,
+        });
         let result: CanvasTurn;
         try {
           result = await streamBoundedByActivity(streamChatCompletion, {
             transport,
             messages,
-            tools: specsFor(availableActions),
+            tools: selection.tools,
             tool_choice: 'auto',
-            maxTokens: CANVAS_RESPONSE_TOKENS,
+            maxTokens: buildTurn ? CANVAS_BUILD_RESPONSE_TOKENS : CANVAS_RESPONSE_TOKENS,
             reasoning: { level: 'low' },
             model: activeModel,
             modelStrict: activeModelStrict,
@@ -604,10 +697,11 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
           resolvedVendor: result.resolvedVendor ?? null,
           account: result.account ?? null,
           routingMode: options.routingMode ?? 'auto',
-          toolsAdvertised: availableActions.length,
+          toolsAdvertised: selection.tools.length,
           toolCalls: result.toolCalls.map((call) => call.name),
           finishReason: result.finishReason,
         });
+        lastTurnInterruption = turnInterruption(result.finishReason);
         if (result.toolCalls.length && result.resolvedModel && !toolCallingModels.includes(result.resolvedModel)) {
           toolCallingModels.push(result.resolvedModel);
         }
@@ -630,6 +724,25 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         const toolStartedAt = Date.now();
         const action = byName.get(call.name);
         const args: unknown = call.args;
+        // A call whose arguments never parsed is NOT run. The kernel hands it over with
+        // `args: {}` and `malformed: true` (its policy: never abort a run on bad JSON),
+        // and running it anyway is how three `canvas_write_build_file` calls executed
+        // with no path and failed "A path is required." — each one the tail of a
+        // response that hit the output ceiling. The model is told which of the two
+        // things happened, because the remedies are opposites: send less, or encode
+        // correctly. Not recorded as a tool error — the tool never ran.
+        if (call.malformed) {
+          discardedCallThisRound = true;
+          const truncated = lastTurnInterruption === 'truncated';
+          const outcome = { error: truncated ? TRUNCATED_CALL_RESULT : MALFORMED_CALL_RESULT };
+          options.onTrace?.({
+            ts: new Date().toISOString(), category: 'error', isError: true, durationMs: 0,
+            label: truncated ? `${call.name} (cut off by the output limit)` : `${call.name} (unparseable arguments)`,
+            args: { arguments: call.raw.arguments.slice(0, 200) }, result: outcome,
+          });
+          return { data: outcome, isError: true };
+        }
+        toolsUsedThisTurn.add(call.name);
         const words = call.name === 'canvas_add_object' ? authoredDocumentWords(args) : null;
         if (words != null) {
           documentWords = Math.max(documentWords ?? 0, words);
@@ -652,9 +765,17 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
           try { outcome = await action.run(args); } catch (error) { outcome = { error: error instanceof Error ? error.message : 'Tool failed' }; }
         }
         if (call.name === 'builtin_web_search' && isNarrowSearchResult(outcome)) narrowSearches += 1;
+        if (toolOutcomeChangedCanvas(outcome)) {
+          canvasChanged = true;
+          if (!buildTurn && CANVAS_BUILD_WORKSPACE_WRITE_TOOLS.has(call.name)) {
+            // The turn is writing code from here on (see CANVAS_BUILD_RESPONSE_TOKENS
+            // and MAX_CANVAS_BUILD_TURNS). Widened once; never narrowed back.
+            buildTurn = true;
+            budget.stepCap = Math.max(budget.stepCap, MAX_CANVAS_BUILD_TURNS);
+          }
+        }
         if (outcome && typeof outcome === 'object') {
-          const result = outcome as { proposed?: unknown; error?: unknown };
-          if (result.proposed === true) proposedCanvasMutation = true;
+          const result = outcome as { error?: unknown };
           if (typeof result.error === 'string' && result.error.trim()
             && !(NON_AUTHORING_TOOL_NAMES.has(call.name) && (authoringOnly || narrowSearches >= MAX_NARROW_SEARCHES))) {
             lastToolError = result.error.trim();
@@ -669,7 +790,19 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       // A stopped run must not START another tool. One already in flight is left to
       // settle (its own transport owns the cancellation); nothing after it runs.
       beforeDispatch: () => { throwIfStopped(); return undefined; },
-      afterToolCalls: () => { finalText = ''; return undefined; },
+      afterToolCalls: () => {
+        finalText = '';
+        // The complete calls in a cut-off round already ran and the discarded one got
+        // its own result above; say once, for the round, how to stop it recurring.
+        if (discardedCallThisRound) {
+          discardedCallThisRound = false;
+          messages.push({
+            role: 'system',
+            content: lastTurnInterruption === 'truncated' ? TRUNCATED_ROUND_DIRECTIVE : MALFORMED_TOOL_CALL_DIRECTIVE,
+          });
+        }
+        return undefined;
+      },
       onNoToolCalls: async (_ctx, turn) => {
         const result = turn.meta as CanvasTurn;
         // An INTERRUPTED turn is not a turn the model chose to end. Truncation at the
@@ -741,7 +874,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         // Rung 3 is what the measured 2026-08-14 failure needed and never got: the only
         // tool-calling model in that turn WAS the stalled one, so rung 2 was a no-op and
         // the loop went straight from rung 1 to giving up, four turns early.
-        if (!options.participant && !proposedCanvasMutation && mutationRequested
+        if (!options.participant && !canvasChanged && mutationRequested
           && (byName.has('canvas_add_object') || byName.has('canvas_update_object'))) {
           if (mutationRecoveries === 0 || (
             !switchToProvenModel(
@@ -771,7 +904,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
           if (mutationRecoveries === 0) return { action: 'continue' };
           return { action: 'stop', ok: false };
         }
-        if (!options.participant && !proposedCanvasMutation && !executiveRequestRecoveryUsed
+        if (!options.participant && !canvasChanged && !executiveRequestRecoveryUsed
           && isExecutiveTeammateRequest(options.prompt) && byName.has('canvas_add_object')) {
           executiveRequestRecoveryUsed = true;
           messages.push({ role: 'assistant', content: result.text || finalText });
@@ -802,7 +935,10 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   }
   const trailing = stripSpeakerLabel(finalText, speakerLabels).trim();
   if (trailing && !echoesEarlierAnswer(trailing, options.conversation, speakerLabels)) return finish(verified(trailing));
-  if (proposedCanvasMutation) return finish(notices.addedToCanvas);
+  // The board changed and the model never got to say so. Two cases, two sentences: the
+  // loop ran out of steps mid-work (a build that needs another turn to finish), or it
+  // simply ended on a tool call.
+  if (canvasChanged) return finish(loop.exhausted ? notices.stepsExhausted : notices.addedToCanvas);
   // From here down the string is a RUNTIME NOTICE, not something the model said. The
   // caller is told so it can record it as a failed turn instead of writing it into the
   // transcript as an assistant reply for the next turn to copy.

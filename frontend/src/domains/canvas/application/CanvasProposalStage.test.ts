@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { Edge } from '@xyflow/react';
-import { CanvasProposalStage, type CanvasObjectFactory } from './CanvasProposalStage';
+import { BRAIN_ACTOR, CanvasProposalStage, type CanvasObjectFactory } from './CanvasProposalStage';
 import type { CanvasObject, CreationObjectKind } from '../domain/canvasObject';
 
 function object(id: string, kind = 'note'): CanvasObject {
@@ -137,5 +137,65 @@ describe('CanvasProposalStage', () => {
 
     expect(stage.size).toBe(0);
     expect(stage.nodes().map((node) => node.id)).toEqual(['committed']);
+  });
+});
+
+describe('CanvasProposalStage provenance', () => {
+  const at = '2026-09-07T12:00:00.000Z';
+  const budget = (): CanvasObject => ({ ...object('b1', 'budget'), data: { kind: 'budget' as CreationObjectKind, title: 'Q3', plannedTotal: 120000 } });
+  function stageWithClock(nodes: CanvasObject[]) {
+    let counter = 0;
+    return new CanvasProposalStage({ nodes: () => nodes, edges: () => [] }, factory, () => `id-${++counter}`, BRAIN_ACTOR, () => at);
+  }
+
+  it('stamps an attributed field move on the staged patch, attributed to the Brain and sourced from the label', () => {
+    const stage = stageWithClock([budget()]);
+    stage.updateObject('Rebalance the Q3 budget', 'b1', { plannedTotal: 150000 });
+
+    const [change] = stage.list();
+    if (change?.type !== 'object.update') throw new Error('expected an object.update');
+    expect(change.patch.plannedTotal).toBe(150000);
+    expect(change.patch.provenance).toEqual([{
+      id: `plannedTotal:${at}`,
+      field: 'plannedTotal',
+      from: '120,000',
+      to: '150,000',
+      at,
+      by: BRAIN_ACTOR,
+      source: 'Rebalance the Q3 budget',
+    }]);
+  });
+
+  it('leaves a patch untouched when it moves nothing attributed', () => {
+    const stage = stageWithClock([budget()]);
+    stage.updateObject('Rename', 'b1', { title: 'Q3 (final)' });
+    stage.updateObject('Restate', 'b1', { plannedTotal: 120000 });
+
+    for (const change of stage.list()) {
+      if (change.type !== 'object.update') throw new Error('expected an object.update');
+      expect('provenance' in change.patch).toBe(false);
+    }
+  });
+
+  it('extends, never overwrites, the trail across two patches to one field in one turn', () => {
+    const stage = stageWithClock([budget()]);
+    stage.updateObject('First pass', 'b1', { plannedTotal: 130000 });
+    stage.updateObject('Second pass', 'b1', { plannedTotal: 150000 });
+
+    const second = stage.list()[1];
+    if (second?.type !== 'object.update') throw new Error('expected an object.update');
+    expect(second.patch.provenance).toHaveLength(2);
+    expect((second.patch.provenance as Array<{ from: string; to: string }>).map((e) => `${e.from}→${e.to}`)).toEqual(['120,000→130,000', '130,000→150,000']);
+  });
+
+  it('attributes to the injected actor when a caller names one', () => {
+    let counter = 0;
+    const human = { kind: 'human' as const, ref: 'user:7', name: 'Ada' };
+    const stage = new CanvasProposalStage({ nodes: () => [budget()], edges: () => [] }, factory, () => `id-${++counter}`, human, () => at);
+    stage.updateObject('Approve', 'b1', { plannedTotal: 1 });
+
+    const [change] = stage.list();
+    if (change?.type !== 'object.update') throw new Error('expected an object.update');
+    expect((change.patch.provenance as Array<{ by: unknown }>)[0]?.by).toEqual(human);
   });
 });

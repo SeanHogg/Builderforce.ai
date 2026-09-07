@@ -7,6 +7,7 @@ import {
   summarizeWorkspace,
   workspacePathArg,
   CANVAS_BUILD_TOOL_NAMES,
+  CANVAS_BUILD_WORKSPACE_WRITE_TOOLS,
   type BoundCanvasBuild,
 } from './canvasBuildTools';
 import { ACCOUNT_REQUIRED_CANVAS_TOOLS } from '@builderforce/creation-canvas-contract';
@@ -159,5 +160,19 @@ describe('workspacePathArg', () => {
     expect(workspacePathArg(undefined)).toBe('');
     expect(workspacePathArg(42)).toBe('');
     expect(workspacePathArg('   ')).toBe('');
+  });
+});
+
+describe('the workspace write set', () => {
+  // The turn runner widens its output ceiling and step budget the moment one of THESE
+  // commits, and counts them as canvas work. A build tool that writes but is missing
+  // here would leave a turn reporting "nothing happened" over a working app again.
+  it('names only build tools, and only the ones that commit to the workspace', () => {
+    for (const name of CANVAS_BUILD_WORKSPACE_WRITE_TOOLS) {
+      expect(CANVAS_BUILD_TOOL_NAMES).toContain(name);
+    }
+    expect([...CANVAS_BUILD_WORKSPACE_WRITE_TOOLS].sort()).toEqual([
+      'canvas_create_build', 'canvas_edit_build_file', 'canvas_restore_build_file', 'canvas_write_build_file',
+    ]);
   });
 });

@@ -307,6 +307,31 @@ export function appendProvenance(data: Record<string, unknown>, entries: readonl
   return [...readProvenance(data), ...entries].slice(-200);
 }
 
+/**
+ * THE write half, in one call: the patch a caller is about to apply, with the
+ * object's provenance trail extended by every attributed field it moves.
+ *
+ * `provenanceForPatch` and `appendProvenance` were exported, tested and applied by
+ * nothing — every attributed figure on a budget, invoice or cap table could be
+ * changed by a tool with no record of who moved it, while the READ half rendered an
+ * empty trail as if nothing had. Callers apply patches in one place each (the
+ * proposal stage for a tool turn), so this is the one primitive they share rather
+ * than each re-composing the pair. A patch that moves no attributed field comes
+ * back untouched: writing an unchanged `provenance` array on every edit would make
+ * every object.update a provenance write.
+ */
+export function patchWithProvenance<P extends Record<string, unknown>>(
+  before: Record<string, unknown>,
+  patch: P,
+  by: Actor,
+  at: string,
+  source?: string,
+): P | (P & { provenance: ProvenanceEntry[] }) {
+  const kind = typeof before.kind === 'string' ? before.kind : '';
+  const entries = provenanceForPatch(kind, before, patch, by, at, source);
+  return entries.length ? { ...patch, provenance: appendProvenance(before, entries) } : patch;
+}
+
 // ── The gate ──────────────────────────────────────────────────────────────────────
 
 export type GateVerdict =

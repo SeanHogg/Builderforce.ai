@@ -19,6 +19,7 @@
  */
 
 import { registerSpecObjectSet, SOURCES_FIELD, SUMMARY_FIELD, type SpecObjectSpec } from './specObjects';
+import { labelAgreement, readLabelRecords, readLabelSamples } from './canvasLabelSet';
 
 /** English fallbacks the palette shows before `creationCanvas.dataScience.label.*`
  *  resolves, matching how every other vocabulary declares its pair. */
@@ -295,6 +296,10 @@ export const DATA_SCIENCE_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         label: 'agreement',
         hint: 'Share of multiply-labelled samples where reviewers chose the same answer. Low agreement invalidates the set rather than the reviewers.',
         derived: true,
+        // COMPUTED from the labels, never stored: a stored percentage is a number the
+        // next label silently contradicts. `null` (nothing double-labelled yet) becomes
+        // `undefined` so the meter stays hidden rather than reading as 0% agreement.
+        derive: (data) => labelAgreement(readLabelSamples(data), readLabelRecords(data)).agreement ?? undefined,
       },
       SUMMARY_FIELD,
     ],
