@@ -22,7 +22,11 @@ import { ideSystemPromptBase } from "./idePersona";
  * Both are assertions here rather than a convention.
  */
 describe("the local workspace tools are always advertised", () => {
-  const coreNames = new Set(CORE_TOOLS.map((t) => t.name));
+  // Every shared definition this client can advertise, not just the core set:
+  // delegation (`spawn_agent`) is registered alongside the core tools rather than in
+  // them, and a guard that only knew about `CORE_TOOLS` would read a correctly pinned
+  // tool as a pin matching nothing.
+  const coreNames = new Set([...CORE_TOOLS, ...SUBAGENT_TOOLS].map((t) => t.name));
 
   it("pins only tools that really exist in the shared definitions", () => {
     for (const name of LOCAL_WORKSPACE_TOOLS) expect(coreNames.has(name)).toBe(true);
