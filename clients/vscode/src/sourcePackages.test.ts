@@ -80,10 +80,15 @@ describe('source-only shared packages', () => {
     expect(replacements.length).toBe(sourcePackages.length);
   });
 
+  // 60s, not vitest's default 5: this one walks every source-only package's file
+  // tree to build the graph, and on a cold filesystem cache that is comfortably
+  // past five seconds (measured ~5.1s locally on a cold run, ~3s warm). A guard
+  // that fails on cache temperature teaches people to re-run CI rather than to
+  // read it, which is the opposite of what a cycle guard is for.
   it('has no import cycle between source-only packages', async () => {
     // A cycle cannot be split later without breaking every consumer at once, and
     // it makes the closure the tsconfig guard computes unbounded in practice.
     const graph = await sourcePackageGraph(repoRoot);
     expect(graph.cycles()).toEqual([]);
-  });
+  }, 60_000);
 });

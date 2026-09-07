@@ -34,6 +34,9 @@
  *   pre-Brain purpose belonged. The three files that pushed this guard red
  *   (`AgentBenchmarkPanel`, `agentBenchmarkApi`, `canvasGridFit`) left the
  *   closure with it, as leaves of the registry rather than as a special case.
+ *   The recorded line count is 90120 rather than 90106: the same 310 files, with
+ *   the fourteen lines of comment the same pass added inside `lib/rbac.ts`. No
+ *   edge moved — a raise this guard cares about is a new FILE, and there is none.
  *
  *   482 → 483 files (2026-09-06) — `domains/guest/application/guestWall.ts`,
  *   the transport's record of "a read on this route was refused for want of a

@@ -5,17 +5,19 @@ let lifecycleHandler:
   | ((evt: { stream?: string; runId: string; data?: { phase?: string } }) => void)
   | undefined;
 
-// `agent.wait` answers `pending`, not a terminal status: `registerSubagentRun` fires
-// the wait as fire-and-forget, and a terminal answer ends every run as soon as the
-// microtask queue drains. These tests drive completion through `lifecycleHandler`
-// on purpose — a gateway that also completed the run raced that, and the registry's
-// reads now await a snapshot rather than reading the map synchronously, so the race
-// is one the assertions no longer win.
+// What `agent.wait` answers, per test. `registerSubagentRun` fires the wait as
+// fire-and-forget, so a TERMINAL answer (the `timeout` default these announce/cleanup
+// tests rely on) ends every run as soon as the microtask queue drains. The registry's
+// reads used to be synchronous and won that race; they now await a snapshot, so a
+// test that asserts a freshly-registered run is ACTIVE has to say the run is still
+// running — that is what `pending` is for.
+const mockWaitStatus = { value: "timeout" };
+
 vi.mock("../gateway/call.js", () => ({
   callGateway: vi.fn(async (opts: unknown) => {
     const request = opts as { method?: string };
     if (request.method === "agent.wait") {
-      return { status: "pending" };
+      return { status: mockWaitStatus.value };
     }
     return {};
   }),
@@ -58,6 +60,7 @@ describe("subagent registry steer restarts", () => {
   afterEach(async () => {
     announceSpy.mockReset();
     announceSpy.mockResolvedValue(true);
+    mockWaitStatus.value = "timeout";
     lifecycleHandler = undefined;
     mod.resetSubagentRegistryForTests({ persist: false });
   });
@@ -173,6 +176,8 @@ describe("subagent registry steer restarts", () => {
 
   it("marks killed runs terminated and inactive", async () => {
     const childSessionKey = "agent:main:subagent:killed";
+    // The run must still be RUNNING for "kill it" to mean anything.
+    mockWaitStatus.value = "pending";
 
     mod.registerSubagentRun({
       runId: "run-killed",
@@ -184,7 +189,7 @@ describe("subagent registry steer restarts", () => {
     });
 
     expect(await mod.isSubagentSessionRunActive(childSessionKey)).toBe(true);
-    const updated = mod.markSubagentRunTerminated({
+    const updated = await mod.markSubagentRunTerminated({
       childSessionKey,
       reason: "manual kill",
     });

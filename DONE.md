@@ -1,3 +1,206 @@
+## ✅ RESOLVED 2026-09-07 — The frontend deploy's guard chain, red for two passes on files nobody would edit, and the six type errors waiting behind it
+
+Two register bullets described this and both named the same blocker: the failing files belonged to
+another session's in-flight work, and the architecture ratchet's contract is that a raise must be
+argued for NAMED files. That session's work is committed now, so the files could be read and the
+blocker was gone. Everything below was closed in one pass; `pnpm run check` is 22/22 and
+`tsgo --noEmit` is clean.
+
+**1. `check:root-closure` — 490 files / 122,335 lines against a 487 / 121,640 baseline. Cut to 310 /
+90,106 instead of raised.** The three files that pushed it red (`AgentBenchmarkPanel`,
+`agentBenchmarkApi`, `lib/canvasGridFit`) were symptoms; the closure diff against the last green
+commit traced every one of them through `allComponents.ts`, and `allComponents` into the root layout
+through a single static import: `ConditionalAppShell` → `WidgetBrainBridge`. That bridge renders
+null. It exists only to register `list_widgets` / `pin_widget` / `show_widget` /
+`answer_with_widgets`, but it calls `listComponents()`, so the edge dragged the entire app-wide
+component registry — every insights lens, the catalog, workforce, the canvas command set — into the
+first paint of every route, marketing pages included. It is now `dynamic(…, { ssr: false })` beside
+`ResumeWorkBridge` and the other render-null bridges in the same file, which is where a component
+with no markup and no pre-Brain purpose belonged. **180 modules and 32,229 lines out of every first
+paint**, and the three red files left with it as leaves of the registry rather than as special
+cases. Argued in `check-root-closure.mjs`'s changelog; baseline re-recorded.
+
+**2. `check:architecture` — `production files over 800 lines: new violation lib/creationCanvasAi.ts`
+(968 lines). Split into three modules, each with one reason to change.**
+`lib/canvasAiSystemPrompt.ts` holds the system-message stack and `promptNamedTools` (which reads that
+stack, so a tool named in a new paragraph needs no second edit); `lib/canvasAiTurnBudget.ts` holds
+every step cap, token ceiling and recovery directive, each with the measurement that set it;
+`lib/canvasAiErrors.ts` holds `CanvasRunAbortedError`, `GuestAiUnavailableError` and
+`isCanvasRunAborted`. The runner keeps the loop. Every importer was migrated rather than served a
+re-export — `CreationCanvas.tsx`, `modelComparison.ts` and both suites — and
+`modelComparison.test.ts` dropped its `vi.mock('@/lib/creationCanvasAi')` stub entirely, because
+reading one `instanceof` no longer means importing the whole turn engine. 968 → 707 lines.
+
+**3. `check:architecture` — `'use client' files: 960 exceeds baseline 953`. Raised to 959 with the
+per-file argument the guard's contract requires, and one file tightened.** Every unargued module from
+commit `448debcb1` was read: `app/import/*` and its three submit hooks (a dropzone reading
+`DataTransfer`, a mapping table and field input holding the user's choices), `components/mcp/*` (a
+hook owning the surface's mutation and error state, a form holding a draft, a gallery opening a
+`SlideOutPanel` behind `useConfirm`), and six panels that each fetch on mount and hold their own
+loading state. `components/inbox/InboxClient.tsx` is a MOVE of `app/inbox/InboxClient.tsx`, not an
+addition. `app/import/ImportProgressBar.tsx` is the tightening inside the raise: props in, markup
+out, no state, no handler, no browser API — its directive marked nothing and is gone, which is why
+six files cost six points and not seven.
+
+**4. `check:design-scale` — `offScaleFontSizes: 3527` against 3526.** `AgentBenchmarkPanel`'s stat
+value typed `fontSize: 20` instead of naming a role. It is `var(--font-size-section)` now, matching
+`askWidget` and `workforceHealthWidget` — the two other frameless stat headlines inside a panel that
+already has a title. `WidgetStat` stays the page-title-sized variant for a widget whose whole body IS
+one number, so the comment says which is which.
+
+**5. Six type errors, all from the same commit, that would have failed `cf-build` the moment the
+guards went green.** `McpServersGallery` default-imported `SlideOutPanel`, which has only a named
+export. `useMcpServers` passed `Tenant.id` (a string) to a client typed `tenantId: number` — narrowed
+at the consumer with `Number(...)`, the convention `BillingClient` already sets. `mcpExtensionsApi`
+and `observabilityExportApi` each hoisted a JSON-body helper typed `RequestInit`, whose `headers` is
+`HeadersInit` and not the `Record<string, string>` `RequestOptions` takes; both now return
+`RequestOptions` and drop the redundant `Content-Type`, because `apiRequest` already sets it for any
+non-self-typed body. `hubWidgets` registered `AgentBenchmarkPanel` (`{ windowDays }`) as a
+`ComponentType<ComponentSurfaceProps>` — the panel takes `days` now, which also means it honours the
+dashboard's period selector instead of always reading 30. `lib/rbac.ts`'s `useAccountType()` restated
+the account-type union and had not gained `'guest'`; it reads `AuthUser['accountType']` now, and the
+`useIsLinkGuest()` hook that follows from it replaced `GuestCollaboratorNotice`'s hand-read of
+`auth.user.accountType` — the exact re-derivation that file's own docstring forbids.
+
+**6. Two canvas-turn tests that commit `9f5f68f85` left failing, and the user-facing regression
+behind them.** That commit made an exhausted loop answer `notices.stepsExhausted` instead of
+`notices.addedToCanvas` without updating the assertions. `loop.exhausted` is the wrong
+discriminator: it is equally true of a turn that authored everything it was asked for on its LAST
+step, and the notice then tells a user holding a finished website and its comparison document that
+the work is half-done and to say "continue" — which is what the website-redesign test, named
+"finishes the exact request instead of exhausting the turn", was asserting against. The condition is
+`loop.exhausted && buildTurn` now: a build workspace is written one file per step, so hitting the cap
+there really does mean a part-written app, and that is the case the notice's own docstring was
+written for. 50/50 in both suites.
+
+**7. Housekeeping the same run turned up.** `TrackerSurface` had gone 1 → 2 react-hooks warnings:
+`useEffect(load, [api])` declared half its dependencies, since the failure message comes from
+`tTracker`. `load` is a `useCallback` over `[api, tTracker]` now. Ten further modules from the same
+commits carry the repo-wide `set-state-in-effect` pattern (the ~673 pre-existing sites the ratchet
+exists to shrink) with no baseline row, so they are recorded — the ratchet's list is only meaningful
+when a file that has a warning is in it. `blogOgCards.test.ts` was red on three unrendered cards;
+`node scripts/gen-blog-og.mjs` regenerated them. Frontend suite: 4,201 passed, 0 failed.
+
+## ✅ RESOLVED 2026-09-07 — Five "blocked" register bullets re-read against HEAD: three were already closed, two were the wire-or-retire pair, and the runtime scan found a silent config-wipe bug
+
+The six bullets under the domain index all named a blocker. Re-read against the tree as it stands
+today, the blockers had moved: the api-typecheck bullet was closed by another session while this pass
+ran (see the "Three red CI jobs" entry above), three more were closed by commits nobody moved the
+entry for, and the two genuinely open ones were the wire-or-retire pair the owner has already ruled
+on. The ruling was restated during this pass — "the dead modules, if they have functionality, you
+should be adding that capability back into the application" — so nothing here was deleted for being
+unreferenced.
+
+**1. `brainEvermindLearning` first-turn seeding (`STALE — closed by later commits`).** The chat #101
+test — 'seeds an UNSEEDED project head on its first teachable turn, then learns from that turn' —
+passes at HEAD, along with the other seven in the file (8/8). The mechanism is the one the bullet
+hoped for: `invalidateProjectEvermindHead` bumps the `project_evermind:<t>:<p>` version key, the
+read-through core deletes the L1 entry whether or not a KV binding exists, and the next
+`getProjectEvermindHead` mints a fresh token and re-reads. The children lookup stays under its plain
+key, which is why the test's queue holds one extra head row and not another children row.
+
+**2. Three orphan schema tables (`STALE — retired/wired by later commits`).** `team_memory` was
+superseded by `agent_memory` (migration 0442 folded its rows in) and DROPPED by migration 1131 — the
+one retirement case the ruling allows, a live twin. `vulnerability_findings` has
+`application/security/vulnerabilityFindings.ts`, `vulnerabilityFindingRoutes.ts` mounted under
+`/vuln-scans/:scanId/findings`, migration 1132's fingerprint, and the frontend
+`VulnerabilityFindingsPanel` reached through the vulnerability-scans tracker config's row action.
+`audit_report_runs` has `application/finops/auditReportRuns.ts`, `auditReportRunRoutes.ts` mounted
+under `/finops/audit-report/{export,runs}`, and `AuditReportRunsList` rendered inside `FinopsLens`.
+
+**3. 158 test-only exports (`re-scanned: 4 genuinely unwired — BUILT here`).** A fresh reference scan
+over `frontend/src`, `api/src`, `packages`, `clients/vscode/{src,webview/src}` (test files excluded
+as consumers) shows the category-(c) list has collapsed: `evaluateFormula`, `normalizeJoinSpec`,
+`scopeChangeEffect`, `percentBalance`, `resumeTemplateFromDescriptor`, `convertDiagramSource`, the
+`canvasChrome` slot helpers, `evaluateGate`/`readProvenance`, `computeMetric`, `ATS_LABELLED_*`,
+`EMBEDDED_CAPABILITY_KEYS`, every `routeMarketing` reader, `declaredRoleSkillTokens`,
+`isStageSettled`/`isTerminalDispatch`, `emptyPlanVerdict`, `toolCatalog`,
+`specSetGuidance`/`specReadableFields` and the academic library (6 production importers) all have
+production consumers now. Eleven more (`INTEGRATION_SURFACES`, `isEarningKind`,
+`registeredOutputKinds`, `normalizeMetricDefinitions`, `parseMetricOperand`, `metricSlug`,
+`actionIsGated`, `fieldIsAttributed`, `describeValue`, `teaserDestinationIds`, `destinationPitchKey`)
+are in-file helpers called by their own module's public function and exported only so a test can pin
+them — category (a) seams, kept. `founderObjectSpec` no longer exists under that name; the founder
+vocabulary registers through `registerSpecObjectSet`. That left exactly FOUR exports with no
+production consumer, in two features, both built:
+
+- **`labelSet` agreement + promotion** (`canvasLabelSet.promoteToGoldenSet` / `labelAgreement`). The
+  spec already declared an `agreement` meter and a `promote` action; neither reached the board. The
+  meter is now a `derive` on the spec field (lib/dataScienceObjects.ts) — computed from the labels on
+  every render, never stored, hidden while nothing is double-labelled rather than reading as 0%. The
+  action is `promoteLabelSetAct` in the new `domains/dataScience/application/dataScienceActs.ts`,
+  registered in the canvas card-act list: it promotes the unanimously-labelled samples into a
+  `dataset` (columns `id, text, answer`, the reproducibility envelope from `datasetObjectData`,
+  `sourceLabelSetId` back to the labels) placed beside the card and joined by a `data` edge, and
+  refuses BY NAME — how many contested, how many unlabelled — when nothing was agreed. A contested
+  sample is excluded, never resolved by majority. `readLabelSamples`/`readLabelRecords` are the ONE
+  reader of the persisted rows, shared by the meter and the act. Seven catalog keys in all five
+  locales.
+- **Approval-gate WRITE half** (`canvasApprovalGate.provenanceForPatch` / `appendProvenance`). The
+  read half rendered trails; nothing wrote one, so every attributed figure a tool moved (a budget's
+  `plannedTotal`, an invoice's `amount`, a cap table's `companyRef`) changed with an empty ledger
+  under it. `patchWithProvenance()` is the one write primitive, and `CanvasProposalStage.updateObject`
+  — the single place a tool turn stages a patch — now stamps every attributed move with the stage's
+  actor (`BRAIN_ACTOR`, the same `{kind:'brain', ref:'brain'}` the data room's approval requests
+  already use), the timestamp, and the change's own label as `source`. The comparison is against the
+  object as it stands THIS TURN (board plus earlier staged patches), so two moves of one field in one
+  turn record two entries rather than the second overwriting the first. A patch that moves nothing
+  attributed is returned untouched. Actor and clock are injectable; `CreationCanvas.tsx` needed no
+  edit.
+
+**4. `agent-runtime/` dead-export scan (`BUILT — scanner, ratchet, and ten modules wired`).**
+`agent-runtime/scripts/check-dead-exports.mjs` (wired as `pnpm check:dead-exports`) counts what the
+`src/`-only scan could not: `test/`, `extensions/`, `ui/`, the 30 extension entry files, and the
+published surface resolved from `package.json` `exports`/`bin` (`src/index.ts`, `src/entry.ts`,
+`src/plugin-sdk/index.ts`, `src/plugin-sdk/account-id.ts`, followed transitively through
+`export *`/`export {} from` chains). Over 4,162 files and 9,001 exports the roadmap's "1,611" resolves
+to 399 published-SDK-surface, 6,178 consumed-in-src, 31 consumed by extensions/ui, 34 test seams, 643
+test-only and 1,716 unreferenced — and the headline is that ~85% of "unreferenced" are
+**over-exported internals still called inside their own file**, a visibility nit, not dead
+functionality. Only TEN whole-dead modules existed. Per the ruling, nine were WIRED and one retired:
+
+- `infra/persona-export-sync.ts` — persona sync now runs from `gateway/server-startup.ts`.
+- `providers/github-copilot-models.ts` — Copilot ships its own default catalog through
+  `models-config.providers.ts` (the native registry bundles none).
+- `memory/headers-fingerprint.ts` — `fingerprintHeaderNames` now drives
+  `memory/manager-embedding-ops.ts`, so a changed embedding provider invalidates the index.
+- `agents/llama-stream.ts` — KEPT and wired as its own provider: it runs a local GGUF by path with no
+  server, which `ollama-stream.ts` (the Ollama-server twin) cannot do. Reached from
+  `embedded-runner/run/attempt.ts` via `BUILDERFORCE_AGENTS_LLAMA_MODEL_PATH`.
+- `auto-reply/reply/commands-ptt.ts` — `/ptt` is registered in `commands-registry.data.ts` and
+  dispatched from `commands-core.ts`, with its args menu.
+- `hooks/plugin-hooks.ts` — `registerPluginHooksFromDir` is called by `plugins/loader.ts` and
+  re-exported on the plugin SDK, so plugin-contributed hooks run where built-in hooks run.
+- `browser/client-actions-state.ts` — all 15 wrappers reached: cookies, local/session storage,
+  offline, extra headers, HTTP credentials, geolocation + permissions, media/timezone/locale and
+  device emulation, added to the browser tool as a lookup table
+  (`agents/tools/browser-tool.state-actions.ts`) rather than new branches in the tool's switch.
+- `line/rich-menu.ts` — rich menus are created/set from `line/rich-menu-startup.ts` on channel start
+  and exposed to the agent through the LINE extension's own tool/command.
+- `line/http-registry.ts` — RETIRED: superseded by the plugin SDK's `registerPluginHttpRoute`, which
+  `extensions/line` already used. Nothing references it.
+
+**5. The historical `git_sync_latest` attribution (`CLOSED as unrecoverable`).** The entry itself
+recorded that every future occurrence answers itself (both halves stamp a source hash, the report
+names the extension host, `posixShellReport()` prints the routed shell). The one thing left — the
+original machine's installed VSIX build — was never captured and cannot be. That is a fact, not work
+in flight, so it leaves the register.
+
+**The bug the scan turned up: every `models.json` the runtime wrote was `{"providers":{}}`.**
+`normalizeProviders` became async in commit `634dc1200`, and NEITHER call site in
+`agents/models-config.ts` was ever awaited — `git log -S "await normalizeProviders"` returns nothing.
+`JSON.stringify(Promise)` is `{}`, so the runtime resolved every provider (Copilot, Ollama,
+builderforcellm, Bedrock, the lot), serialised a Promise over them, and wrote an empty provider map,
+with no error anywhere. The background Ollama-discovery writer had the same defect and would replace
+a good file minutes after startup. Both are awaited now, and the Copilot e2e test that had been
+failing on it passes. Four stale `subagent-registry` tests from the same async conversion were fixed
+too: `isSubagentSessionRunActive`/`markSubagentRunTerminated` are awaited, and a mocked gateway that
+answered a TERMINAL status marked every run ended as soon as the microtask queue drained (the
+registry's reads used to be synchronous and won that race), so the tests that assert a freshly
+registered run is ACTIVE now say `pending`.
+
+**Verify.** Frontend: `pnpm --filter builderforce-frontend exec vitest run src/domains/dataScience src/domains/canvas/application/CanvasProposalStage.test.ts src/lib/canvasLabelSet.test.ts src/lib/canvasApprovalGate.test.ts` (49 pass) and `npx tsgo --noEmit` (0 errors). Runtime: `cd agent-runtime && npx tsgo --noEmit` (0 errors), `node scripts/check-dead-exports.mjs` (ratchet OK), `npx vitest run --config vitest.unit.config.ts src/agents/` (714 pass, 3 known failures — see the register), `npx vitest run --config vitest.e2e.config.ts src/agents/models-config.auto-injects-github-copilot-provider-token-is.e2e.test.ts src/agents/tools/browser-tool.e2e.test.ts` (23 pass). Api: `cd api && npx tsgo --noEmit` (0), `npm run check` (schema/signature-duplication/tenant-scope/silent-catches all green).
+
 ## ✅ RESOLVED 2026-09-07 — "Create app" on a signed-in canvas built the app twice, reported that nothing happened, and ran a free tenant on the funded Claude floor
 
 The report: a Creation Canvas diagnostic from a FREE-plan tenant (session `bf886fc1`, `ui`/`api`

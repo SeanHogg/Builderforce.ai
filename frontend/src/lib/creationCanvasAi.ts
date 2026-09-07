@@ -692,7 +692,17 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   // The board changed and the model never got to say so. Two cases, two sentences: the
   // loop ran out of steps mid-work (a build that needs another turn to finish), or it
   // simply ended on a tool call.
-  if (canvasChanged) return finish(loop.exhausted ? notices.stepsExhausted : notices.addedToCanvas);
+  //
+  // `loop.exhausted` alone is NOT the discriminator, and reading it as one is a
+  // regression this line already shipped once. Exhausted means "the cap stopped the
+  // model", which is equally true of a turn that authored everything it was asked for
+  // on its LAST step — and `stepsExhausted` then tells a user holding a finished
+  // website and its comparison document that the work is half-done and to say
+  // "continue". `buildTurn` is the case the notice was written for and says so in its
+  // own docstring (see MAX_CANVAS_BUILD_TURNS): a workspace is written one file per
+  // step, so hitting the cap there really does mean a part-written app. Everywhere
+  // else, a changed board at the cap is a delivered board.
+  if (canvasChanged) return finish(loop.exhausted && buildTurn ? notices.stepsExhausted : notices.addedToCanvas);
   // From here down the string is a RUNTIME NOTICE, not something the model said. The
   // caller is told so it can record it as a failed turn instead of writing it into the
   // transcript as an assistant reply for the next turn to copy.

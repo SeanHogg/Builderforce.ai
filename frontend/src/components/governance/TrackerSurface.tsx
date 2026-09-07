@@ -7,7 +7,7 @@ import { useFormat } from '@/i18n/useFormat';
 
 import { Select } from '@/components/Select';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { segmentTrackerClient, type TrackerRow } from '@/lib/builderforceApi';
 
 /**
@@ -79,11 +79,14 @@ export function TrackerSurface({ title, apiBase, fields, rowAction }: TrackerSur
   const [saving, setSaving] = useState(false);
   const [actionRow, setActionRow] = useState<TrackerRow | null>(null);
 
-  const load = () => {
+  // `useCallback`, not a bare closure passed straight to `useEffect`: the failure
+  // message comes from `tTracker`, so the effect depends on the translator as well
+  // as the client, and `useEffect(load, [api])` declared only half of that.
+  const load = useCallback(() => {
     setLoading(true);
     api.list().then(setRows).catch(() => setError(tTracker('loadFailed'))).finally(() => setLoading(false));
-  };
-  useEffect(load, [api]);
+  }, [api, tTracker]);
+  useEffect(() => { load(); }, [load]);
 
   const openAdd = () => {
     setEditingId(null);
