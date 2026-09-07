@@ -573,12 +573,48 @@ export const invoices = pgTable('invoices', {
   paidAt:        timestamp('paid_at'),
   notes:         text('notes'),
   createdBy:     varchar('created_by', { length: 64 }),
+  /** Who ISSUED it, from the session. Separate from `createdBy` for the same
+   *  reason `bills.approvedBy` is separate from its creator: drafting a document
+   *  and standing behind the one that left the building are two acts, and only
+   *  the second is attested. */
+  issuedBy:      varchar('issued_by', { length: 64 }),
+  /** Where the issued document was delivered, and when. Null on an invoice that
+   *  was issued without a recipient — legitimate for one handed over in person,
+   *  and the reason delivery is not inferred from `issuedAt`. */
+  sentTo:        varchar('sent_to', { length: 320 }),
+  sentAt:        timestamp('sent_at'),
+  /** The credential for the PUBLIC document page — the customer has no
+   *  Builderforce account, so the token IS the authorisation. Only its hash is
+   *  stored, exactly as `form_recipients.token_hash` and the signature parties
+   *  do; the plaintext is returned once, by `issueInvoice`. */
+  documentTokenHash: varchar('document_token_hash', { length: 64 }),
+  /** FO-C4 — the hosted checkout the customer pays through, minted against the
+   *  tenant's OWN connected merchant account. Null when the workspace has not
+   *  onboarded one: an issued invoice is still a real invoice, it simply has to
+   *  be paid by bank transfer. */
+  paymentLinkUrl:    text('payment_link_url'),
+  paymentSessionId:  varchar('payment_session_id', { length: 160 }),
+  /**
+   * How hard the collections ladder may work this one (FO-C5).
+   *
+   * 'off'    — never chased by the sweep.
+   * 'notify' — the DEFAULT. The sweep records the step that is due and tells the
+   *            workspace; nothing leaves the building unattended. This is the
+   *            same line `runTriggerSweep` draws when it refuses to perform a
+   *            trigger's `thenDo`: the board says what happened, a person acts.
+   * 'auto'   — the tenant has explicitly delegated the chase, so the sweep sends
+   *            the email itself.
+   */
+  collectionMode: varchar('collection_mode', { length: 16 }).notNull().default('notify'),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('uq_invoices_reference').on(t.tenantId, t.reference),
   index('idx_invoices_status').on(t.tenantId, t.status, t.dueAt),
   index('idx_invoices_customer').on(t.tenantId, t.customerRef, t.status),
+  /** The collections sweep's own read: overdue, chaseable, oldest first. */
+  index('idx_invoices_collection').on(t.tenantId, t.collectionMode, t.status, t.dueAt),
+  uniqueIndex('uq_invoices_document_token').on(t.documentTokenHash),
 ]);
 
 /**
@@ -663,6 +699,120 @@ export const invoiceLineItems = pgTable('invoice_line_items', {
   createdAt:   timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   index('idx_invoice_line_items_invoice').on(t.tenantId, t.documentKind, t.invoiceRef, t.position),
+]);
+
+/**
+ * One rung of the collections ladder, actually climbed (FO-C5).
+ *
+ * `invoice.collection` was authored prose under a hint that says "collections
+ * work with no record is collections work that gets done twice or not at all".
+ * This is that record, and the shape of it is the whole design:
+ *
+ * **`(tenant, invoice_ref, step)` is UNIQUE.** A ladder rung can be climbed once
+ * per invoice, and a second attempt collides in the DATABASE rather than in a
+ * check somebody remembered to write — the same argument `bills`' vendor
+ * reference makes, and the same one `ledger_entries.reference` makes about a
+ * replayed webhook. That is what makes the sweep safe to run twice in a day, to
+ * force-run from the operator control, and to retry after a partial failure: it
+ * cannot chase the same customer twice for the same rung.
+ *
+ * `outcome` is the other half. A row written by a workspace in `notify` mode is
+ * `pending` — the rung is DUE and nothing has left the building — and becomes
+ * `sent` when a person (or an `auto` workspace's sweep) actually sends it. So a
+ * pending row is a worklist item rather than a lie, and turning the ladder up to
+ * `auto` later does not skip the rungs it recorded while it was quiet.
+ */
+export const collectionActions = pgTable('collection_actions', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull(),
+  /** `invoices.reference` — the same natural key the lines resolve to. */
+  invoiceRef: varchar('invoice_ref', { length: 64 }).notNull(),
+  /** Which rung: the index into the declared ladder. Stored rather than derived
+   *  because it is what the unique index keys on, which is the point. */
+  step:       integer('step').notNull(),
+  /** A label for the rung, denormalised so a ladder that is later re-tuned does
+   *  not rewrite the history of what was actually sent. */
+  stepLabel:  varchar('step_label', { length: 64 }).notNull().default(''),
+  /** 'email' — reaches the customer. 'internal' — a worklist entry for us. */
+  channel:    varchar('channel', { length: 16 }).notNull().default('email'),
+  /** 'pending' | 'sent' | 'failed' | 'skipped'. */
+  outcome:    varchar('outcome', { length: 16 }).notNull().default('pending'),
+  detail:     text('detail'),
+  /** Who did it — a user id, or 'system' when the sweep climbed the rung. */
+  actorRef:   varchar('actor_ref', { length: 64 }).notNull().default('system'),
+  actedAt:    timestamp('acted_at').notNull().defaultNow(),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_collection_actions_step').on(t.tenantId, t.invoiceRef, t.step),
+  index('idx_collection_actions_invoice').on(t.tenantId, t.invoiceRef, t.step),
+  index('idx_collection_actions_outcome').on(t.tenantId, t.outcome, t.actedAt),
+]);
+
+/**
+ * A pay run that HAPPENED, read back from the payroll provider that ran it.
+ *
+ * ── WHY THIS IS A READ AND NOT AN ENGINE ────────────────────────────────────
+ * `connectors/defaults/payroll.ts` argues at length that this platform must
+ * never calculate payroll: a mistaken push is somebody's salary, and the tax
+ * tables are a full-time job in every jurisdiction. Nothing here calculates
+ * anything. Every column is a figure a provider returned, or a total of the
+ * lines it returned, and `source` names which provider said so — so the largest
+ * line on a forecast is money that actually left rather than a number somebody
+ * typed.
+ *
+ * `(tenant, source, external_ref)` is UNIQUE, which is what makes re-hydration
+ * idempotent: syncing the same period twice updates one row rather than
+ * doubling the burn.
+ *
+ * NO per-employee table. A pay-run line is a description, a quantity, a rate and
+ * an amount, which is `invoice_line_items` exactly — the file's own argument for
+ * why one line table serves both directions applies a third time, and a
+ * `pay_run_line_items` copy is the per-feature duplicate §0 forbids. The
+ * discriminator is `document_kind = 'pay_run'`.
+ */
+export const payRuns = pgTable('pay_runs', {
+  id:            serial('id').primaryKey(),
+  tenantId:      integer('tenant_id').notNull(),
+  objectId:      uuid('object_id').references(() => objects.id, { onDelete: 'set null' }),
+  /** The connector manifest key that produced it: 'gusto' | 'rippling' | … —
+   *  or 'manual' for a run entered by hand from a bureau's PDF, which is the
+   *  honest state of most small companies outside the US. */
+  source:        varchar('source', { length: 48 }).notNull(),
+  /** The provider's own id for the run. The natural key the lines resolve to and
+   *  the half of the uniqueness that makes a re-sync an update. */
+  externalRef:   varchar('external_ref', { length: 96 }).notNull(),
+  /** Our own reference — what `invoice_line_items.invoice_ref` carries. Derived
+   *  from `source` and `externalRef` and stored, because the lines join on it. */
+  reference:     varchar('reference', { length: 64 }).notNull(),
+  currency:      varchar('currency', { length: 8 }).notNull().default('USD'),
+  /** 'processed' | 'open' | 'cancelled' — the provider's own state. Only a
+   *  processed run is money that left, so only a processed run reaches burn. */
+  status:        varchar('status', { length: 16 }).notNull().default('processed'),
+  periodStart:   timestamp('period_start'),
+  periodEnd:     timestamp('period_end'),
+  /** The date the money left. What the burn month is keyed on — NOT the period,
+   *  because a period that straddles a month boundary would otherwise land its
+   *  cost in the wrong one. */
+  paidAt:        timestamp('paid_at'),
+  /** Gross pay, employer taxes, and the two added together. All three stored
+   *  because all three are figures the provider RETURNED — deriving the total
+   *  would silently drop anything a provider bills that is neither (benefits,
+   *  the provider's own fee), and the total is the one that is burn. */
+  grossAmount:   numeric('gross_amount', { precision: 16, scale: 2 }),
+  employerTaxes: numeric('employer_taxes', { precision: 16, scale: 2 }),
+  totalCost:     numeric('total_cost', { precision: 16, scale: 2 }).notNull(),
+  employeeCount: integer('employee_count').notNull().default(0),
+  /** When this row was last read back from the provider. A pay run whose sync is
+   *  a month old is still a fact; saying WHEN it was read is what stops it being
+   *  mistaken for a live one. */
+  syncedAt:      timestamp('synced_at').notNull().defaultNow(),
+  notes:         text('notes'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_pay_runs_external').on(t.tenantId, t.source, t.externalRef),
+  uniqueIndex('uq_pay_runs_reference').on(t.tenantId, t.reference),
+  index('idx_pay_runs_paid').on(t.tenantId, t.status, t.paidAt),
 ]);
 
 /** A stored way to pay. The token never touches this table — the secret lives in

@@ -5,7 +5,7 @@
  */
 import { useTranslations } from 'next-intl';
 import { ViewportDesktopIcon, ViewportMobileIcon, ViewportTabletIcon } from '@/components/canvas/CanvasCommands';
-import { CANVAS_VIEWPORTS, type CanvasViewport } from '@/lib/canvasViewport';
+import { CANVAS_VIEWPORTS, type CanvasViewport } from '@builderforce/creation-canvas-contract';
 import styles from './CreationCanvas.module.css';
 
 /**

@@ -728,7 +728,7 @@ export async function quarantineProjectEvermind(
     .catch((error) => { /* best-effort */ 
       reportCaughtError(error, { source: "application/llm/projectEvermind.ts", operation: "quarantineProjectEvermind" });
     });
-  await bumpCacheVersion(env, versionKey(tenantId, projectId)).catch((error) => { /* best-effort */ 
+  await invalidateProjectEvermindHead(env, tenantId, projectId).catch((error) => { /* best-effort */ 
     reportCaughtError(error, { source: "application/llm/projectEvermind.ts", operation: "quarantineProjectEvermind" });
   });
 }

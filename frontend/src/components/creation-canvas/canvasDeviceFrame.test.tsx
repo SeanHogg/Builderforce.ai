@@ -6,7 +6,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations'))
   .realCatalogIntlMock((await import('@/i18n/messages/en.json')).default as Record<string, unknown>));
 
-import { CANVAS_VIEWPORT_WIDTHS } from '@/lib/canvasViewport';
+import { CANVAS_VIEWPORT_WIDTHS } from '@builderforce/creation-canvas-contract';
 import { canvasWebsiteDocument, CANVAS_WEBSITE_FRAME_SANDBOX } from '@/lib/canvasWebsite';
 import { CanvasAppSurface } from './CanvasAppSurface';
 import { CanvasSiteSurface } from './CanvasSiteSurface';

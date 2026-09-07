@@ -21,6 +21,7 @@ import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import styles from './CreationCanvas.module.css';
 import type { CreationNodeData } from './types';
+import { fieldsMayCross } from '@/lib/canvasConfidentiality';
 import { exportActionsFor, pdfExportStrategy, type CanvasExportAction } from '@/lib/canvasExports';
 import { diagramNotation } from '@/lib/diagramNotations';
 import { canvasDiagram, canvasSlides } from '@/lib/canvasDocuments';
@@ -61,8 +62,16 @@ const AVAILABILITY: Partial<Record<CanvasExportAction, (data: CreationNodeData) 
  * One filter, two readers, so a heading can never sit above an empty row.
  */
 export function canvasExportActionsFor(data: CreationNodeData): readonly CanvasExportAction[] {
+  // A restricted object offers NO format. An export writes a file that leaves the
+  // board's access control entirely, and `restricted` was defined as "never leaves the
+  // board" — so the row is empty rather than showing buttons that will refuse. The
+  // runner refuses too (`exportArtifact`), because the AI and drag-out paths never
+  // pass through this row.
+  if (!fieldsMayCross(data, 'export')) return NO_EXPORT_ACTIONS;
   return exportActionsFor(data.kind).filter((action) => AVAILABILITY[action]?.(data) ?? true);
 }
+
+const NO_EXPORT_ACTIONS: readonly CanvasExportAction[] = [];
 
 /**
  * One glyph per format, declared beside the formats themselves.

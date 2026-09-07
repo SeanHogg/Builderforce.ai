@@ -3,7 +3,7 @@ import {
   canvasWebPageUrl, hasWebPageProbe, isLocalWebPageUrl, isMixedContentFrame, isWebPageKind,
   normalizeWebPageUrl, webPageHost,
 } from './canvasWebPage';
-import { CANVAS_VIEWPORT_WIDTHS, canvasViewport } from './canvasViewport';
+import { CANVAS_VIEWPORT_WIDTHS, canvasViewport } from '@builderforce/creation-canvas-contract';
 import type { CreationNodeData } from '@/components/creation-canvas/types';
 
 const page = (data: Partial<CreationNodeData>): CreationNodeData => ({ kind: 'browser', title: 'Page', ...data });

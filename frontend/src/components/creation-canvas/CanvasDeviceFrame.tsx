@@ -5,7 +5,7 @@
  */
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { observeResizeOnAnimationFrame } from '@/lib/observeResize';
-import { CANVAS_VIEWPORT_WIDTHS, type CanvasViewport } from '@/lib/canvasViewport';
+import { CANVAS_VIEWPORT_WIDTHS, type CanvasViewport } from '@builderforce/creation-canvas-contract';
 import styles from './CreationCanvas.module.css';
 
 /**

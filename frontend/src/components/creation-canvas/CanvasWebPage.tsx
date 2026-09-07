@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl';
 import type { CreationNodeData } from './types';
 import styles from './CreationCanvas.module.css';
 import { brain } from '@/lib/builderforceApi';
-import { canvasViewport } from '@/lib/canvasViewport';
+import { canvasViewport } from '@builderforce/creation-canvas-contract';
 import {
   canvasWebPageUrl, hasWebPageProbe, isLocalWebPageUrl, isMixedContentFrame, normalizeWebPageUrl,
   webPageHost,

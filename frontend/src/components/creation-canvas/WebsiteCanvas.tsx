@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { useTranslations } from 'next-intl';
 import ReactMarkdown from 'react-markdown';
 import { MARKDOWN_REHYPE_PLUGINS, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdownPipeline';
-import type { CanvasViewport } from '@/lib/canvasViewport';
+import type { CanvasViewport } from '@builderforce/creation-canvas-contract';
 import {
   CANVAS_WEBSITE_FRAME_SANDBOX,
   canvasWebsiteDocument,

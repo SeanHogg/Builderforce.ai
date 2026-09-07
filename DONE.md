@@ -1,3 +1,59 @@
+## ✅ RESOLVED 2026-09-07 — VSIX: the run loop stopped lying about what the model could see, `search_code` stopped saying "not found" for things that exist, runs recall project memory, and an unseeded Evermind seeds itself
+
+**Symptom (measured, chat #101, VSIX 2026.9.20).** "Add the % complete to the chat list" ran 26 turns
+and 44 tool calls, 50% of them revisiting a target already read (`sessionsTree.ts` ×5,
+`search_code` on the VSIX src ×6, 10 exact duplicates), and finished with ZERO mutating calls.
+Evermind reported `not-seeded` on every turn (v0, "connected", learned 0). Prompt peak 40k tokens.
+
+**Root causes — four, all in the tool contract the model was handed, none in the model.**
+
+1. *The exact-repeat stub outlived the result it pointed at.* `brainRunStore` answers a repeated
+   read-only call with "the result is already in the conversation above". Auto-compaction
+   (over the 24k-token history budget) had summarised that result into the memory note, so the
+   stub pointed at nothing; the model read it as "I lack the file", asked again, got the stub
+   again — five times for one file. Fixed: `ReadCoverage` now keeps each successful read's
+   result and the transcript message that carried it (`cacheResult`/`cachedResult`), and the
+   loop RE-SERVES it (re-trimmed to budget, marked "Replayed from this run's read cache") when
+   `stillInWorkingContext()` says the carrying message is gone. Counted as a visit, so the
+   circling advisory still escalates.
+2. *`search_code` with a FILE scope reported "the term is not referenced there".* The walker
+   `readdir`'d the file, the throw was swallowed, and the tool phrased zero matches +
+   `truncated:false` as proof of absence — it said `BfBrainChat` was absent from `bfApi.ts`,
+   which declares it. Fixed: a file scope searches that file (`workspaceSearch.ts`).
+3. *An unscoped search of the multi-checkout workspace returned `total:0, truncated:true` after
+   6–13s.* The walk read every file itself and stopped at 4,000. Fixed: ripgrep first
+   (`ripgrep.ts` finds VS Code's bundled `@vscode/ripgrep`, else `rg` on PATH), ignore-aware and
+   uncapped; the bounded walk survives only as the fallback. `localCapabilities.ts` now only
+   resolves the scope and delegates (search internals moved out of it).
+4. *Memory was write-only inside a run, and absent from the panel's run.* `remember_fact` existed
+   but nothing could recall mid-run; `recallProjectFacts` was a dead import. The webview run also
+   never received the api run-context block (facts / PRD / governance / prior lessons) the
+   native participant carries. Fixed: `recall_facts` tool (cognition.ts), both memory tools
+   pinned per turn (`PROJECT_MEMORY_TOOLS`), `PROJECT_MEMORY_DIRECTIVE` rides the active-project
+   directive on both surfaces, and `BrainRunHostPorts.runContext` feeds the loop's
+   `augmentSystemPrompt` from `fetchRunContextSection`.
+5. *Learning was gated on a seed nobody performed.* Project #11 predates starter-Evermind
+   provisioning on create, so the learn gate returned `not-seeded` forever. Fixed: the gate
+   seeds the surface project's starter base on the first teachable turn via an injectable
+   `BrainLearnGateDeps.ensureSeeded` (default `provisionDefaultProjectEvermind`), then
+   re-resolves targets. `invalidateProjectEvermindHead()` is now the ONE head-cache
+   invalidation (nine inline `bumpCacheVersion(versionKey…)` calls migrated).
+
+**Tests added.** brain-embedded: replay cache (`readCoverage.test.ts`), replay-after-compaction
+loop scenario (`brainRunStore.test.ts`), memory-tool pin (`localWorkspaceTools.test.ts`). VSIX:
+`workspaceSearch.test.ts` (parser, file scope, walk, ripgrep parity when present),
+`brainRunHost.test.ts` (run-context port). api: `brainEvermindLearning.test.ts` (seed-then-learn,
+no-store stays not-seeded, sibling build untouched). VSIX bumped to 2026.9.23 (CHANGELOG).
+
+**Also closed — Memory-first Phase E (stale roadmap item).** The item asked to collapse the VSIX
+native `runAgent` onto the shared `brain-embedded` loop with host tools, persistence, approvals,
+policy gates, backstops and memory hooks. That is what `clients/vscode/src/nativeBrainRun.ts`
+already is ("this module OWNS NO LOOP" — it hands everything to `runBrainLoop`, including the
+`evermind` hooks and the memory-first short-circuit), and `nativeBrainRun.test.ts` drives it
+against the real loop. The entry was removed from the roadmap as done. Original text:
+
+> - ⛔ **Memory-first Phase E — collapse VSIX native `runAgent` onto `brain-embedded` `runLoop`:** inject host file tools, `persistence`, `approve()`, policy gates, code-change backstops and the memory hooks so the native `@builderforce` participant gets the memory-first short-circuit from the SHARED loop (per the operator's "collapse then add once" decision — do NOT add memory to `runAgent` separately). The native surface is left WORKING until it can be driven live. *Blocker: it rewrites the entire native tool/approval/streaming/backstop path; the 7 checks in PRD §2.5 are verifiable only in a live extension host.* → [PRD-evermind-panel-and-native-loop-consolidation.md](PRD-evermind-panel-and-native-loop-consolidation.md) Feature 2.
+
 ## ✅ RESOLVED 2026-09-07 — VSIX: the agent files its own ticket, has a verb for cleaning up after a merge, and stops fighting cmd.exe
 
 **Symptom (reported).** Three things the editor agent "should have done automatically" and did not,
