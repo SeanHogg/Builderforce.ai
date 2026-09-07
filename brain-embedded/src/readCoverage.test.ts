@@ -197,6 +197,33 @@ describe('ReadCoverage · the exact-repeat guard', () => {
   });
 });
 
+describe('ReadCoverage · the replay cache', () => {
+  it('holds nothing for a read that never succeeded', () => {
+    const cov = new ReadCoverage();
+    cov.cacheResult('read_file', { path: CSS }, { result: { ok: true }, anchor: {} });
+    expect(cov.cachedResult('read_file', { path: CSS })).toBeNull();
+  });
+
+  it('hands back the result and anchor of a recorded read, keyed like the exact guard', () => {
+    const cov = new ReadCoverage();
+    const anchor = { role: 'tool' };
+    cov.record('read_file', { path: CSS, offset: 1 });
+    cov.cacheResult('read_file', { path: CSS, offset: 1 }, { result: { ok: true, content: 'body' }, anchor });
+    // Key order must not matter — the same fingerprint the exact guard uses.
+    const hit = cov.cachedResult('read_file', { offset: 1, path: CSS });
+    expect(hit?.anchor).toBe(anchor);
+    expect(hit?.result).toEqual({ ok: true, content: 'body' });
+  });
+
+  it('is forgotten together with the exact guard when the file is edited', () => {
+    const cov = new ReadCoverage();
+    cov.record('read_file', { path: CSS });
+    cov.cacheResult('read_file', { path: CSS }, { result: { ok: true }, anchor: {} });
+    cov.invalidate('edit_file', { path: CSS });
+    expect(cov.cachedResult('read_file', { path: CSS })).toBeNull();
+  });
+});
+
 describe('revisitAdvisory', () => {
   const visit = (count: number) => ({
     count,

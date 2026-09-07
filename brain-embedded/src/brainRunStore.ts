@@ -43,9 +43,9 @@ import { chatErrorAction, type ChatErrorAction } from './chatError';
 import { withProvenanceMetadata, type ProvenanceAccount } from './provenance';
 import { selectToolsForTurn } from './selectTools';
 import { routerToolSpecs, isRouterTool, handleRouterCall } from './toolRouter';
-import { setLastResolvedModel } from './lastResolvedModel';
+import { setLastResolvedModel, withObservedModel, forgetResolvedModels } from './lastResolvedModel';
 import { isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, linkedTicketsToComplete, isReadOnlyPlatformTool } from './chatWorkLinking';
-import { isCodeChangeTool, canChangeCodeHere, localToolsIn } from './localWorkspaceTools';
+import { isCodeChangeTool, canChangeCodeHere, localToolsIn, memoryToolsIn } from './localWorkspaceTools';
 import { shippedToBaseBranch } from './shipVerification';
 import { toolActivity, activityTarget, type BrainRunActivity } from './runActivity';
 import { ReadCoverage, revisitAdvisory, withAdvisory } from './readCoverage';
@@ -799,6 +799,21 @@ function tokenBounded(w: ChatCompletionMessage[]): ChatCompletionMessage[] {
   return trimmed;
 }
 
+/**
+ * Is a transcript message still part of what the model sees? False once auto-compaction
+ * has folded it into the memory note, or the drop-oldest window has let it fall off the
+ * front. Deliberately conservative: it judges against the CURRENT transcript (which has
+ * grown since the last working set was built), so it can only ever call a message gone a
+ * turn early — a needless replay costs tokens, a stub for a vanished result costs the run.
+ */
+function stillInWorkingContext(c: RunCell, anchor: unknown): boolean {
+  const convo = c.transcript;
+  const idx = convo.indexOf(anchor as ChatCompletionMessage);
+  if (idx < 0) return false;
+  if (c.compactMemo) return idx >= compactTailStart(convo, COMPACT_TAIL_TURNS);
+  return windowed(convo).includes(convo[idx]!);
+}
+
 // ---------------------------------------------------------------------------
 // Auto-compaction — summarize the bulky MIDDLE instead of dropping it.
 //
@@ -976,6 +991,7 @@ async function buildWorkingTranscript(
  */
 export function resetBrainRunStore(): void {
   cells.clear();
+  forgetResolvedModels();
 }
 
 /** Number of run cells currently retained in memory (diagnostics/tests). */
@@ -1679,6 +1695,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   const alwaysAdvertised = [
     ...toolNamesMentionedIn(systemPrompt),
     ...localToolsIn(catalogToolNames),
+    // The project-memory pair (recall before re-reading; remember what was learned) is
+    // the cheapest tool in the catalog and the first one relevance would drop.
+    ...memoryToolsIn(catalogToolNames),
   ];
 
   // Evermind learning + reconciliation provenance for a completed turn. Extracted so
@@ -1845,7 +1864,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     const requested = activeModel ?? 'default';
     // Record what ACTUALLY served this turn so `builtin_session_current_model` can
     // report the exact model (an MCP call is a separate request and can't see it).
-    setLastResolvedModel(result.resolvedModel);
+    // Keyed by CHAT: runs are concurrent on a host that owns them, so one slot would
+    // let this chat's tool call answer with the model that served a different one.
+    setLastResolvedModel(chatId, result.resolvedModel);
     if (requested !== 'default' && resolved !== 'default' && resolved !== requested) {
       pushTrace(c, {
         ts: nowIso(),
@@ -2000,6 +2021,36 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         const isReadTool = isDedupableRead(tc.name);
         if (isReadTool) {
           if (readCoverage.isRepeat(tc.name, args)) {
+            // The stub below is only honest while the earlier result is still in the
+            // WORKING context. Once auto-compaction has summarized it away, "it is
+            // above you" points at nothing — the model reads that as "I lack the
+            // file", asks again, gets the stub again, and circles (chat #101: five
+            // stubbed re-reads of one file, zero edits). So the run keeps what each
+            // read returned and, when the carrying message has left the window,
+            // RE-SERVES it from memory: no disk read, no lie, and the model can act.
+            const cached = readCoverage.cachedResult(tc.name, args);
+            if (cached && !stillInWorkingContext(c, cached.anchor)) {
+              const replayNote = `Replayed from this run's read cache: this exact ${tc.name} call succeeded earlier in the run, but its result was compressed out of the working context, so here it is again — served from memory, not re-read. Act on it now; do not request it again.`;
+              // A replay is still the model going back to the same target, so it
+              // counts as a visit and carries the circling advisory when it earns one.
+              const visit = readCoverage.record(tc.name, args);
+              const target = visit ? activityTarget(args) : undefined;
+              const revisit = visit && target ? revisitAdvisory(tc.name, target, visit) : null;
+              const replayed = trimToolResult(tc.name, cached.result ?? null, { advisory: revisit ? `${replayNote}\n\n${revisit}` : replayNote });
+              const message: ChatCompletionMessage = { role: 'tool', tool_call_id: tc.id, content: replayed.content };
+              convo.push(message);
+              readCoverage.cacheResult(tc.name, args, { result: cached.result, anchor: message });
+              pushTrace(c, {
+                ts: nowIso(),
+                category: 'tool',
+                label: tc.name,
+                args,
+                result: { replayed: true, note: replayNote },
+                resultBytes: replayed.bytes,
+                truncated: replayed.truncated,
+              });
+              continue;
+            }
             const stub = {
               note: `Duplicate ${tc.name} call — identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping).`,
             };
@@ -2017,7 +2068,11 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         setActivity(c, toolActivity(tc.name, args, iter, Date.now()));
         let out: unknown;
         try {
-          out = await runTool(tc.name, args);
+          // The ONE place a tool call is told which model is serving THIS chat (see
+          // `lastResolvedModel.ts`). Applied here rather than in a relay because this is
+          // the only layer that knows both the conversation and the call — which is what
+          // makes it work on every surface, instead of only the one relay that had a copy.
+          out = await runTool(tc.name, withObservedModel(chatId, tc.name, args));
         } catch (e) {
           const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
           out = { ok: false, error: message };
@@ -2099,7 +2154,11 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         // its continuation offset intact, instead of sliced mid-line with the paging
         // fields (which sit after the content) thrown away. See `toolResultBudget.ts`.
         const trimmedOut = trimToolResult(tc.name, out ?? null, { advisory });
-        convo.push({ role: 'tool', tool_call_id: tc.id, content: trimmedOut.content });
+        const toolMessage: ChatCompletionMessage = { role: 'tool', tool_call_id: tc.id, content: trimmedOut.content };
+        convo.push(toolMessage);
+        // Keep what a successful read returned, anchored to the message that carries
+        // it, so an exact repeat can be replayed once compaction removes that message.
+        if (isReadTool && !isFailedToolResult(out)) readCoverage.cacheResult(tc.name, args, { result: out ?? null, anchor: toolMessage });
         pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
           category: 'tool',

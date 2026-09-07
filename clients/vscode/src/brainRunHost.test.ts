@@ -253,6 +253,31 @@ describe("two chats at once", () => {
     expect(fast.calls).toHaveLength(1);
   });
 
+  it("tells each chat's tool calls which model served THAT chat", async () => {
+    // `builtin_session_current_model` is answered from the client, because an MCP call is
+    // a separate request that cannot see which model the gateway picked. While that was
+    // one process-wide slot, the chat that finished LAST answered for both — the tool
+    // that exists to be authoritative about the conversation, confidently naming another
+    // one's model. It also never reached the editor at all: the shaping lived in the web
+    // relay, and the VSIX has its own.
+    const a = freshChatId();
+    const b = freshChatId();
+    const asked = toolDef("builtin_session_current_model", { remote: true });
+    const host = createBrainRunHost(
+      ports({
+        tools: [asked],
+        script: (ctx) => {
+          const mine = ctx.messages.some((m) => m.role === "user" && String(m.content).includes("grok"));
+          if (ctx.messages.some((m) => m.role === "tool")) return { text: "Told you." };
+          return { resolvedModel: mine ? "xai-oauth/grok-4.5" : "direct/minimax/MiniMax-M1", toolCalls: [{ name: "builtin_session_current_model", args: {} }] };
+        },
+      }),
+    );
+    await start(a, host, { userTurn: "which model are you? grok maybe" });
+    await start(b, host, { userTurn: "which model are you?" });
+    expect(asked.calls).toEqual([{ model: "xai-oauth/grok-4.5" }, { model: "direct/minimax/MiniMax-M1" }]);
+  });
+
   it("relays each chat's frames under its own id, so a panel can tell them apart", async () => {
     const a = freshChatId();
     const b = freshChatId();

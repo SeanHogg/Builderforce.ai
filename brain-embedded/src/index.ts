@@ -201,7 +201,7 @@ export type { GitShortStatus } from './shipVerification';
 // run loop attaches once a read starts circling. Exported for tests and for any surface
 // that wants to report the same coverage picture.
 export { ReadCoverage, revisitAdvisory, withAdvisory, REVISIT_NUDGE_AT, REVISIT_HARD_AT } from './readCoverage';
-export type { ReadVisit } from './readCoverage';
+export type { ReadVisit, CachedRead } from './readCoverage';
 export { FailureTally, failureReason, repeatedFailureAdvisory, FAILURE_NUDGE_AT, FAILURE_HARD_AT } from './repeatedFailure';
 // What one tool result may cost the MODEL transcript, and how it is cut down: a generic
 // head slice for list results, LINE-paged windows with an intact continuation offset for
@@ -353,9 +353,10 @@ export type { ModelIdentityContext, RoutedProduct } from './modelIdentity';
 export { ratedTurnContext, ratedTurnTool } from './turnRating';
 export type { RatableMessage, RatedTurnContext } from './turnRating';
 
-// The model the last completion actually resolved to — what `builtin_session_current_model`
-// is answered with, and what a host can show as "running on X".
-export { getLastResolvedModel, setLastResolvedModel } from './lastResolvedModel';
+// The model a chat's last completion actually resolved to — what
+// `builtin_session_current_model` is answered with, and what a host can show as
+// "running on X". Keyed by chat, because runs are concurrent.
+export { getLastResolvedModel, setLastResolvedModel, withObservedModel, forgetResolvedModels } from './lastResolvedModel';
 
 // Shared data shapes
 export type { BrainChat, BrainMessage, BrainModality, ChatInputAttachment, EvermindLearnOutcome, EvermindLearnTarget } from './types';

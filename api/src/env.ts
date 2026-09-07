@@ -94,12 +94,15 @@ export interface Env {
    *  a Worker SECRET (not committed config) so the id isn't exposed in the repo.
    *  Set via `wrangler secret put CLOUDFLARE_ACCOUNT_ID`. */
   CLOUDFLARE_ACCOUNT_ID?: string;
+<<<<<<< Updated upstream
   /** Broad Cloudflare ACCOUNT API token. Deployed as a Worker secret since before any
    *  code read it — declared here as of 2026-08-19 so the value an operator already
    *  provisioned is reachable. Used as the middle fallback for live-page capture: an
    *  account-scoped token commonly carries `Browser Rendering:Edit`, where a Workers AI
    *  token does not. Set via `wrangler secret put CLOUDFLARE_ACCOUNT_API_TOKEN`. */
   CLOUDFLARE_ACCOUNT_API_TOKEN?: string;
+=======
+>>>>>>> Stashed changes
   /** Cloudflare Browser Rendering token — scoped `Browser Rendering:Edit`. Powers the
    *  live-page CAPTURE behind `/api/creative/screenshot` (a redesign's "before" shot).
    *  Falls back to {@link CLOUDFLARE_AI_API_TOKEN} when a single account-wide token

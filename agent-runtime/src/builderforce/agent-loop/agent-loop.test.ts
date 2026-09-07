@@ -187,7 +187,13 @@ describe("native Agent loop", () => {
         ? String(tailMessage.content ?? "")
         : "";
       expect(tail).toContain("nothing was actually run");
-      expect(tail).toContain("pick a different model");
+      // NOT "pick a different model": that advice was withdrawn from the shared notice
+      // (efaa85925) because a runtime rejecting every request upstream looks identical
+      // from inside the loop, and no model change fixes it. The notice now names both
+      // possibilities and points at the log that separates them. `agent-stall` updated
+      // its own assertion; this duplicate was left asserting the deleted sentence.
+      expect(tail).not.toContain("pick a different model");
+      expect(tail).toContain("check your runtime or gateway log");
     });
 
     /**

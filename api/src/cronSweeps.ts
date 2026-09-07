@@ -245,8 +245,13 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       + 'postings created since it last ran, and notify the seeker. The half that was '
       + 'missing: the alerts were stored and managed but nothing ever ran them, so '
       + '`last_run_at`/`result_count` were always null.',
+<<<<<<< Updated upstream
     run: async ({ env, db }) => {
       const r = await runJobAlertSweep(env, db);
+=======
+    run: async ({ env }) => {
+      const r = await runJobAlertSweep(env, buildDatabase(env));
+>>>>>>> Stashed changes
       return r.matched > 0 || r.failed > 0
         ? `alerts=${r.evaluated} matched=${r.matched} notified=${r.notified}${r.failed ? ` failed=${r.failed}` : ''}`
         : null;

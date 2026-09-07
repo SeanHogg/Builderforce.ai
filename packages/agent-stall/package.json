@@ -1,9 +1,9 @@
 {
   "name": "@builderforce/agent-stall",
-  "version": "2026.7.7",
+  "version": "2026.9.22",
   "private": true,
   "type": "module",
-  "description": "Runtime-agnostic detection + recovery for an agent turn that ends without making a tool call it should have made — whether it promised one, wrote one as prose, or reported that the results were missing. Shared by the Brain run loop (browser) and the on-prem/cloud agent loop (Node).",
+  "description": "Runtime-agnostic detection + recovery for an agent turn that ends without making a tool call it should have made — whether it promised one, wrote one as prose, reported that the results were missing, or handed the remaining commands to the user to run. Shared by the Brain run loop (browser) and the on-prem/cloud agent loop (Node).",
   "exports": {
     ".": "./src/index.ts"
   },

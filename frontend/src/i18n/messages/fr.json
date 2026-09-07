@@ -23086,6 +23086,7 @@
         "buyerOwner": "Leur responsable"
       }
     },
+<<<<<<< Updated upstream
     "exportRestricted": "Restreint — cette carte ne peut pas être exportée",
     "imageCapturedStatus": "Capturée",
     "imageCapturedValidation": "Page en direct rendue et capturée depuis {url}",
@@ -23539,6 +23540,9 @@
     "approveAgentActionTitle": "Approuver l’action de l’agent",
     "approveAgentActionBody": "Un agent de la session veut exécuter {action}.",
     "approveAgentActionConfirm": "Approuver"
+=======
+    "exportRestricted": "Restreint — cette carte ne peut pas être exportée"
+>>>>>>> Stashed changes
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",

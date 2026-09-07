@@ -5,9 +5,25 @@ import {
   isUnscopedMutationTool,
   canChangeCodeHere,
   localToolsIn,
+  memoryToolsIn,
+  isProjectMemoryTool,
   CODE_CHANGE_TOOLS,
   LOCAL_WORKSPACE_TOOLS,
+  PROJECT_MEMORY_TOOLS,
 } from './localWorkspaceTools';
+
+describe('the project memory toolset', () => {
+  it('pins the recall/remember pair out of a catalog, and nothing else', () => {
+    expect(memoryToolsIn(['read_file', 'recall_facts', 'builtin_tasks_list', 'remember_fact'])).toEqual(['recall_facts', 'remember_fact']);
+  });
+
+  it('keeps memory tools OUT of the workspace set — they read no file and need no folder', () => {
+    for (const name of PROJECT_MEMORY_TOOLS) {
+      expect(isProjectMemoryTool(name)).toBe(true);
+      expect(isLocalWorkspaceTool(name)).toBe(false);
+    }
+  });
+});
 
 describe('the local workspace toolset', () => {
   it('recognises the workspace file tools that change code', () => {

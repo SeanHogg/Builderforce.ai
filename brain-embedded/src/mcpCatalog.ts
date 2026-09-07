@@ -16,7 +16,6 @@
 
 import type { BrainAction } from './BrainActionsContext';
 import type { BrainTransport } from './streamChatCompletion';
-import { getLastResolvedModel } from './lastResolvedModel';
 // Deterministic JSON for the dedupe key (object key order can vary per call) — shared
 // with the run loop's read-repeat guard, so both fingerprint arguments the same way.
 import { stableStringify } from './stableStringify';
@@ -58,28 +57,6 @@ const recentCreates = new Map<string, { at: number; result: Promise<unknown> }>(
 
 function nowMs(): number {
   return typeof Date !== 'undefined' ? Date.now() : 0;
-}
-
-/** The catalog tool that reports which model is serving the conversation. */
-const CURRENT_MODEL_TOOL = 'session.current_model';
-
-/**
- * Supply the model the LAST turn actually resolved to as the `model` argument of
- * `session.current_model`.
- *
- * An MCP call is a SEPARATE request from the completion, so the server cannot see which
- * model answered this chat — only the client can (it reads the `x-builderforce-model`
- * response header, recorded by the run store). Without this the tool falls back to the
- * plan default and the assistant answers "probably X" instead of the exact model. The
- * model's own argument wins if it explicitly asked about a specific id.
- */
-function withObservedModel(tool: string, args: unknown): unknown {
-  if (tool !== CURRENT_MODEL_TOOL) return args;
-  const observed = getLastResolvedModel();
-  if (!observed) return args;
-  const supplied = (args ?? {}) as Record<string, unknown>;
-  if (typeof supplied.model === 'string' && supplied.model.trim()) return args;
-  return { ...supplied, model: observed };
 }
 
 /** A create-like tool whose double-fire should be collapsed (by flat name or `domain.create`). */
@@ -146,7 +123,7 @@ export function mcpActionsFrom(
         const res = await fetch(`${transport.baseUrl}/llm/v1/mcp/call`, {
           method: 'POST',
           headers,
-          body: JSON.stringify({ extensionId: entry.extensionId, tool: entry.tool, arguments: withObservedModel(entry.tool, args) }),
+          body: JSON.stringify({ extensionId: entry.extensionId, tool: entry.tool, arguments: args }),
         });
         const body = (await res.json().catch(() => ({}))) as { result?: unknown; error?: string };
         const out = !res.ok ? { error: body.error ?? `MCP call failed (${res.status})` } : (body.result ?? body);

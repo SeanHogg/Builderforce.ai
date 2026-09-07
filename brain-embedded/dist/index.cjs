@@ -117,6 +117,7 @@ __export(src_exports, {
   filterMentionCandidates: () => filterMentionCandidates,
   filterModelItems: () => filterModelItems,
   findTools: () => findTools,
+  forgetResolvedModels: () => forgetResolvedModels,
   formatBrainDiagnostics: () => formatBrainDiagnostics,
   formatBrainProvenance: () => formatBrainProvenance,
   formatChatDiagnostics: () => formatChatDiagnostics,
@@ -235,6 +236,7 @@ __export(src_exports, {
   useToolConfirmationGate: () => useToolConfirmationGate,
   withAdvisory: () => withAdvisory,
   withDirectedMetadata: () => withDirectedMetadata,
+  withObservedModel: () => withObservedModel,
   withProvenanceMetadata: () => withProvenanceMetadata,
   workItemLinkFromCreate: () => workItemLinkFromCreate
 });
@@ -1053,16 +1055,6 @@ function getMcpToolStatus() {
   return status;
 }
 
-// src/lastResolvedModel.ts
-var lastResolvedModel;
-function setLastResolvedModel(model) {
-  const trimmed = typeof model === "string" ? model.trim() : "";
-  if (trimmed) lastResolvedModel = trimmed;
-}
-function getLastResolvedModel() {
-  return lastResolvedModel;
-}
-
 // src/stableStringify.ts
 function stableStringify(value) {
   if (value == null || typeof value !== "object") return JSON.stringify(value) ?? "null";
@@ -1076,15 +1068,6 @@ var CREATE_DEDUPE_MS = 8e3;
 var recentCreates = /* @__PURE__ */ new Map();
 function nowMs() {
   return typeof Date !== "undefined" ? Date.now() : 0;
-}
-var CURRENT_MODEL_TOOL = "session.current_model";
-function withObservedModel(tool, args) {
-  if (tool !== CURRENT_MODEL_TOOL) return args;
-  const observed = getLastResolvedModel();
-  if (!observed) return args;
-  const supplied = args ?? {};
-  if (typeof supplied.model === "string" && supplied.model.trim()) return args;
-  return { ...supplied, model: observed };
 }
 function isCreateTool(name, tool) {
   return /(^|_)create($|_)/.test(name) || tool.endsWith(".create");
@@ -1120,7 +1103,7 @@ function mcpActionsFrom(entries, transport, onToolResult) {
         const res = await fetch(`${transport.baseUrl}/llm/v1/mcp/call`, {
           method: "POST",
           headers,
-          body: JSON.stringify({ extensionId: entry.extensionId, tool: entry.tool, arguments: withObservedModel(entry.tool, args) })
+          body: JSON.stringify({ extensionId: entry.extensionId, tool: entry.tool, arguments: args })
         });
         const body = await res.json().catch(() => ({}));
         const out = !res.ok ? { error: body.error ?? `MCP call failed (${res.status})` } : body.result ?? body;
@@ -3003,6 +2986,35 @@ function handleRouterCall(catalog, name, args) {
   return { dispatch: { name: target, args: a.args ?? {} } };
 }
 
+// src/lastResolvedModel.ts
+var MAX_CHATS = 64;
+var byChat = /* @__PURE__ */ new Map();
+function setLastResolvedModel(chatId, model) {
+  const trimmed = typeof model === "string" ? model.trim() : "";
+  if (!trimmed) return;
+  byChat.delete(chatId);
+  byChat.set(chatId, trimmed);
+  if (byChat.size > MAX_CHATS) {
+    const oldest = byChat.keys().next();
+    if (!oldest.done) byChat.delete(oldest.value);
+  }
+}
+function getLastResolvedModel(chatId) {
+  return byChat.get(chatId);
+}
+function forgetResolvedModels() {
+  byChat.clear();
+}
+var CURRENT_MODEL_TOOLS = /* @__PURE__ */ new Set(["session.current_model", "builtin_session_current_model"]);
+function withObservedModel(chatId, tool, args) {
+  if (!CURRENT_MODEL_TOOLS.has(tool)) return args;
+  const observed = getLastResolvedModel(chatId);
+  if (!observed) return args;
+  const supplied = args ?? {};
+  if (typeof supplied.model === "string" && supplied.model.trim()) return args;
+  return { ...supplied, model: observed };
+}
+
 // src/shipVerification.ts
 var BASE_BRANCHES = /* @__PURE__ */ new Set(["main", "master"]);
 function parseGitShortStatus(output) {
@@ -3638,6 +3650,7 @@ ${summary}`;
 }
 function resetBrainRunStore() {
   cells.clear();
+  forgetResolvedModels();
 }
 function subscribeRunStore(listener) {
   storeListeners.add(listener);
@@ -4148,7 +4161,7 @@ ${continuationDirective()}`;
     accrueProviderCap(c, result.providerCap);
     const resolved = result.resolvedModel ?? activeModel ?? "default";
     const requested = activeModel ?? "default";
-    setLastResolvedModel(result.resolvedModel);
+    setLastResolvedModel(chatId, result.resolvedModel);
     if (requested !== "default" && resolved !== "default" && resolved !== requested) {
       pushTrace(c, {
         ts: nowIso(),
@@ -4272,7 +4285,7 @@ ${continuationDirective()}`;
         setActivity(c, toolActivity(tc.name, args, iter, Date.now()));
         let out;
         try {
-          out = await runTool(tc.name, args);
+          out = await runTool(tc.name, withObservedModel(chatId, tc.name, args));
         } catch (e) {
           const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
           out = { ok: false, error: message };
@@ -5684,6 +5697,7 @@ function artifactRoutePath(kind, ref, projectId) {
   filterMentionCandidates,
   filterModelItems,
   findTools,
+  forgetResolvedModels,
   formatBrainDiagnostics,
   formatBrainProvenance,
   formatChatDiagnostics,
@@ -5802,6 +5816,7 @@ function artifactRoutePath(kind, ref, projectId) {
   useToolConfirmationGate,
   withAdvisory,
   withDirectedMetadata,
+  withObservedModel,
   withProvenanceMetadata,
   workItemLinkFromCreate
 });

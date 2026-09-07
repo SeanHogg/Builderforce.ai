@@ -1142,10 +1142,16 @@ export const freelancerEngagements = pgTable('freelancer_engagements', {
 export const engagementMilestones = pgTable('engagement_milestones', {
   id:                varchar('id', { length: 36 }).primaryKey(),
   tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+<<<<<<< Updated upstream
   /** `job_postings.id` — hiring’s, so an id (§3). FK in migration 0924. */
   jobId:             varchar('job_id', { length: 36 }),
   engagementId:      varchar('engagement_id', { length: 36 }).references(() => freelancerEngagements.id, { onDelete: 'cascade' }),
   proposalId:        varchar('proposal_id', { length: 36 }),
+=======
+  jobId:             varchar('job_id', { length: 36 }).references(() => jobPostings.id, { onDelete: 'cascade' }),
+  engagementId:      varchar('engagement_id', { length: 36 }).references(() => freelancerEngagements.id, { onDelete: 'cascade' }),
+  proposalId:        varchar('proposal_id', { length: 36 }).references(() => jobProposals.id, { onDelete: 'set null' }),
+>>>>>>> Stashed changes
   /** Denormalised from the engagement with a single writer (the accept path): a
    *  release must pay whoever was engaged at the time, not whoever is engaged now. */
   freelancerUserId:  varchar('freelancer_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),

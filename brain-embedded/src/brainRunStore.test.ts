@@ -518,6 +518,49 @@ describe('what the model is handed for a large read (chat #99, the loop that nev
     expect(String(handed.content).split('\n').every((l) => /^line \d+ x+$/.test(l))).toBe(true);
   });
 
+  it('re-serves an exact re-read from the run cache once compaction has removed its result (chat #101)', async () => {
+    const executed: string[] = [];
+    /** The tool messages the model was handed on each tool-bearing turn. */
+    const handed: string[][] = [];
+    let turn = 0;
+    const readOf = (i: number) => JSON.stringify({ path: `f${i}.ts` });
+    await startRun(4703, {
+      resolvedSystemPrompt: 'sys',
+      tools: TOOLS,
+      runTool: async (_name, args) => {
+        const path = String((args as { path: string }).path);
+        executed.push(path);
+        return { ok: true, path, content: bigContent, truncated: false, totalLines: 800, offset: 1 };
+      },
+      stream: async (opts) => {
+        // A tool-less completion is the compaction summarizer (or the forced final).
+        if (opts.tools === undefined) return { text: 'Compressed memory of the earlier reads.', toolCalls: [], finishReason: 'stop' };
+        turn += 1;
+        handed.push(opts.messages.filter((m) => m.role === 'tool').map((m) => String(m.content)));
+        // Seven big reads push the transcript past the history budget; the eighth turn
+        // asks for the FIRST file again, whose result has by then been compacted away.
+        if (turn <= 7) return { text: '', toolCalls: [{ id: `c${turn}`, name: 'read_file', args: readOf(turn) }], finishReason: 'tool_calls' };
+        if (turn === 8) return { text: '', toolCalls: [{ id: 'c8', name: 'read_file', args: readOf(1) }], finishReason: 'tool_calls' };
+        return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
+      },
+      persistence,
+      userTurn: 'fix the deep link',
+      maxIterations: 12,
+    });
+    // The disk was read once per file — the repeat was answered from the cache.
+    expect(executed).toEqual(['f1.ts', 'f2.ts', 'f3.ts', 'f4.ts', 'f5.ts', 'f6.ts', 'f7.ts']);
+    expect(getRunTrace(4703).some((e) => e.label === 'context.compacted')).toBe(true);
+    // And what the model saw on the turn after was the CONTENT, not a stub pointing at
+    // a message it could no longer see.
+    const afterReplay = handed[8] ?? [];
+    const replayed = afterReplay.find((m) => m.includes('Replayed from this run'));
+    expect(replayed).toBeDefined();
+    const parsed = JSON.parse(replayed!) as { content: string; path: string; note: string };
+    expect(parsed.path).toBe('f1.ts');
+    expect(parsed.content.startsWith('line 1 ')).toBe(true);
+    expect(afterReplay.some((m) => m.includes('already in the conversation above'))).toBe(false);
+  });
+
   it('still stubs an exact re-read after an unrelated ticket write (the dedupe used to be wiped)', async () => {
     const executed: string[] = [];
     let turn = 0;

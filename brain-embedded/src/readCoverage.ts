@@ -76,11 +76,34 @@ export interface ReadVisit {
 /** Distinct argument sets remembered per target — enough to quote back, not a log. */
 const MAX_REMEMBERED_ARGS = 8;
 
+/**
+ * What a successful read RETURNED, kept so an exact repeat can be answered from memory.
+ *
+ * The exact-repeat stub tells the model "the result is already in the conversation
+ * above" — which stops being true the moment auto-compaction summarizes that result
+ * away. Measured on chat #101: a file read once, compacted out of the working context,
+ * then requested again five times, and every one of those answered with a stub pointing
+ * at content the model could no longer see. It read the stub as "I lack the file",
+ * asked again, and the run ended with 50% of its calls revisiting old ground and not
+ * one edit made. The cache is what lets the loop re-serve the result instead — without
+ * touching the disk, and without a stub that lies.
+ *
+ * `anchor` is the transcript message the result was handed to the model in (opaque
+ * here; the run loop decides whether that message is still in the working context).
+ */
+export interface CachedRead {
+  /** The tool's UNTRIMMED result — the loop re-trims it to the budget on replay. */
+  result: unknown;
+  anchor: unknown;
+}
+
 /** One successful read this run has already made, by its canonical fingerprint. */
 interface ExactRead {
   tool: string;
   /** The file/search target the read was about, or null for a target-less platform read. */
   target: string | null;
+  /** What it returned, once the loop has handed it to the model (see {@link CachedRead}). */
+  cached?: CachedRead;
 }
 
 /**
@@ -103,6 +126,21 @@ export class ReadCoverage {
    */
   isRepeat(tool: string, args: unknown): boolean {
     return this.exact.has(ReadCoverage.exactKey(tool, args));
+  }
+
+  /**
+   * Keep what a SUCCESSFUL read returned, with the transcript message that carried it,
+   * so an exact repeat can be replayed once that message has left the working context.
+   * A no-op for a read that was never recorded (a failure has nothing to replay).
+   */
+  cacheResult(tool: string, args: unknown, cached: CachedRead): void {
+    const read = this.exact.get(ReadCoverage.exactKey(tool, args));
+    if (read) read.cached = cached;
+  }
+
+  /** The cached result of an exact earlier read, or null when none is held. */
+  cachedResult(tool: string, args: unknown): CachedRead | null {
+    return this.exact.get(ReadCoverage.exactKey(tool, args))?.cached ?? null;
   }
 
   /**

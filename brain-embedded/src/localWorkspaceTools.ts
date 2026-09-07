@@ -104,8 +104,24 @@ export const UNSCOPED_MUTATION_TOOLS: ReadonlySet<string> = new Set([
   'git_cleanup_merged',
 ]);
 
+/**
+ * The PROJECT MEMORY tools an editor host offers beside the workspace tools — the
+ * run's `memory_recall` / `memory_remember` twins against the shared project facts
+ * store. Pinned for the same reason the workspace tools are: "recall what a prior run
+ * learned before re-reading the codebase" shares no word stem with most requests, so
+ * relevance alone drops exactly the tool that would have saved the re-read. Not part of
+ * {@link LOCAL_WORKSPACE_TOOLS} because they touch no file and need no workspace (they
+ * work in a chat with no folder open), so the read guards must not treat them as
+ * workspace reads.
+ */
+export const PROJECT_MEMORY_TOOLS: ReadonlySet<string> = new Set(['recall_facts', 'remember_fact']);
+
 export function isLocalWorkspaceTool(name: string): boolean {
   return LOCAL_WORKSPACE_TOOLS.has(name);
+}
+
+export function isProjectMemoryTool(name: string): boolean {
+  return PROJECT_MEMORY_TOOLS.has(name);
 }
 
 export function isCodeChangeTool(name: string): boolean {
@@ -136,4 +152,9 @@ export function canChangeCodeHere(toolNames: readonly string[]): boolean {
  */
 export function localToolsIn(toolNames: readonly string[]): string[] {
   return toolNames.filter(isLocalWorkspaceTool);
+}
+
+/** The project memory tools this run actually has, out of a catalog — always advertised. */
+export function memoryToolsIn(toolNames: readonly string[]): string[] {
+  return toolNames.filter(isProjectMemoryTool);
 }

@@ -3,10 +3,10 @@
 **Symptom (reported).** "In the VSIX you should be able to switch between chats and have them
 execute in parallel without impacting each other." Alongside it, a real run to review: 98 turns, 99
 tool calls, 54m45s, **46% of targeted calls revisiting ground already covered** (`search_code` on one
-directory ×6, `list_files` on one folder ×5), **14 EXACT duplicate calls**, `git_status` failing three
+directory x6, `list_files` on one folder x5), **14 EXACT duplicate calls**, `git_status` failing three
 times with the identical remedy, and the requested change never landed.
 
-**Root causes — three, all "a per-thing signal was stored as a global".**
+**Root causes — four, all "a per-thing signal was stored as a global".**
 
 1. *The Auto-mode switch was host-global.* `BrainRunHost.setAutoApprove(on)` wrote the gate flag for
    EVERY live run and, when turned on, called `resolveRunConfirm(chatId, true)` for every one of them.
@@ -23,8 +23,17 @@ times with the identical remedy, and the requested change never landed.
    (read, read, typecheck, read, read, typecheck) never reached the nudge at 3 or the hard stop at 5,
    so the guard was off for exactly the runs that do real work. Separately, `ReadCoverage` records only
    SUCCESSES by design, which left an identical FAILING call with no pushback whatsoever.
+4. *The recorder behind `builtin_session_current_model` was process-global, and its shaper lived in the
+   wrong layer.* An MCP call is a separate request, so only the client knows which model the gateway
+   picked; `lastResolvedModel` held one string for the whole process, so under the concurrency above
+   chat A's "what model are you running on?" could be answered with the model that served chat B — a
+   wrong answer, stated with total confidence, about the one subject that tool exists to be
+   authoritative on. Worse, the shaping that applied it lived inside the WEB relay
+   (`mcpCatalog.withObservedModel`), and the editor relays platform tools through its own
+   `platformTools.ts`, so in the VSIX the tool never received the value at all and fell back to the
+   plan default.
 
-**Fix (brain-embedded 2026.9.5 · VSIX 2026.9.21).**
+**Fix (brain-embedded 2026.9.6 · VSIX 2026.9.22).**
 - `setAutoApprove(chatId, on)` — the switch moves the chat whose panel it was flipped in, and no other.
   `HostRunContext` gains `chatId`, and `setHostRunContext` posts on a change of CHAT as well as of the
   switch, so a chat parked on a confirm is answered when the user returns to it with Auto already on
@@ -42,20 +51,26 @@ times with the identical remedy, and the requested change never landed.
   it is an instruction. A changed argument starts a fresh count, so following the remedy is never
   nagged; a success clears the tally. Wired at both failure sites in the run loop (the thrown case and
   the `isFailedToolResult` case), recorded as its own `tools.repeat_failure_guard` trace step.
+- `lastResolvedModel.ts` is keyed by chat (`setLastResolvedModel(chatId, model)` /
+  `getLastResolvedModel(chatId)`), bounded to 64 conversations with least-recently-active eviction and
+  cleared by `resetBrainRunStore`. The shaper `withObservedModel(chatId, tool, args)` moved beside the
+  value it reads and is applied ONCE, by the run loop, immediately before `runTool` — the only layer
+  that knows both the conversation and the call. The web relay's copy is DELETED, so there is one
+  implementation instead of one per relay, and every surface running the shared loop gets it without
+  its relay knowing the tool exists. It matches both name forms (`session.current_model` and the flat
+  `builtin_session_current_model` the loop dispatches on), and a model that supplied its own `model`
+  argument keeps it — it is then looking something up, not introspecting.
 - Dead code removed on the way: `ReadCoverage.repeated()` had no production caller (the diagnostics
   block derives revisits from the trace, in `runProgress.ts`), so it and its assertions are gone
   rather than a matching one being added to `FailureTally`.
 
-**Verification.** `brain-embedded` 42 files / 496 tests green; VSIX 26 files / 286 tests green plus
-`tsgo`+`tsc` across all four projects. New tests: two chats in flight at once against one scripted
-gateway (the second starts AND finishes inside the first's blocked tool call, neither sees the other's
-turns), one chat's Auto switch leaving another's paused call paused, the guard counting across a
-`run_command` while excusing the first read after it, and the driver taking a tool count only from its
-own chat.
-
-**Not fixed — see the Gap Register.** `builtin_session_current_model` in the VSIX still cannot name the
-model that answered; the shared recorder is process-global and would be wrong under the concurrency
-this pass just made safe.
+**Verification.** `brain-embedded` 43 files / 513 tests green with `tsgo`+`tsc` clean; VSIX 26 files /
+296 tests green. New tests: two chats in flight at once against one scripted gateway (the second
+starts AND finishes inside the first's blocked tool call, and neither sees the other's turns); one
+chat's Auto switch leaving another chat's paused call paused; the revisit guard counting across a
+`run_command` while excusing the first read after it; the driver taking a tool count only from its own
+chat; and two chats' `builtin_session_current_model` calls each receiving the model that actually
+served them, through the real host loop.
 
 ## ✅ RESOLVED 2026-09-06 — VSIX: the "uncommitted changes" block above the ticket rail pushed the rail under the header; it is now a "Changes (N)" pill IN the rail
 

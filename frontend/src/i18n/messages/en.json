@@ -23086,6 +23086,7 @@
         "buyerOwner": "Their owner"
       }
     },
+<<<<<<< Updated upstream
     "exportRestricted": "Restricted — this card cannot be exported",
     "imageCapturedStatus": "Captured",
     "imageCapturedValidation": "Live page rendered and captured from {url}",
@@ -23539,6 +23540,9 @@
     "approveAgentActionTitle": "Approve agent action",
     "approveAgentActionBody": "A session agent wants to run {action}.",
     "approveAgentActionConfirm": "Approve"
+=======
+    "exportRestricted": "Restricted — this card cannot be exported"
+>>>>>>> Stashed changes
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
