@@ -18,7 +18,7 @@ Authenticated UI work is never a standalone page: it registers a destination or 
 
 > Declared as spec data in two places and ratcheted by `frontend/scripts/check-methodology.mjs`. **This roadmap uses that vocabulary and no other.**
 >
-> **THE ARC — `Idea → Make → Run → Measure` (→ Reach → Expand).** Where you are. Owned by `STAGES` in [navGroups.ts](./frontend/src/lib/navGroups.ts). (Renamed from `Market` — it collided with the Marketplace commerce surface; `Growth` was considered next but collided with the existing CMO destination at `/growth`.)
+> **THE ARC — `Idea → Make → Run → Measure → Reach`.** FIVE stages, plus `admin`, which is not a stage of the work. Where you are. Owned by `STAGES` in [navGroups.ts](./frontend/src/lib/navGroups.ts), and shown WHOLE in both navigations — the signed-in rail and the marketing header's Product ▾ menu (`PRODUCT_STAGES`). (`Expand` is gone: it held exactly one row, the sales programme, which folded into Reach. `Reach` was renamed from `Market` — it collided with the Marketplace commerce surface; `Growth` was considered next but collided with the existing CMO destination at `/growth`.)
 >
 > **THE LOOP — `Read → Prove → Build`.** How you cross from Idea into Make. Owned by [application/realization/](./api/src/application/realization/), which declares **eight proof forms** — `demo-video`, `clickable-prototype`, `smoke-test`, `wizard-of-oz`, `poc`, `pilot`, `phone-line`, `live-system`. A ninth is a registry entry, never a branch.
 >

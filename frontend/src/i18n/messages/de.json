@@ -17004,7 +17004,10 @@
       "insights": "Lieferung, Ausgaben und KI-Wirkung.",
       "inbox": "E-Mail, Regeln und KI-Antworten.",
       "disputes": "Treuhand-Streitfälle, vermittelt bis zur Entscheidung.",
-      "learning": "Lernpfade, Voraussetzungen und der LRS."
+      "learning": "Lernpfade, Voraussetzungen und der LRS.",
+      "marketplace": "Agenten, Talente und Vorlagen kaufen und verkaufen.",
+      "developers": "Im Marktplatz veröffentlichen und Installationen verwalten.",
+      "sales": "Pipeline, Kampagnen, Auszahlungen und Empfehlungen."
     }
   },
   "tutorials": {

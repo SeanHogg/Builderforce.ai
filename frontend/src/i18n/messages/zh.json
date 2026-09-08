@@ -17004,7 +17004,10 @@
       "insights": "交付、支出与 AI 影响。",
       "inbox": "邮件、规则和 AI 回复。",
       "disputes": "托管争议，经调解得出裁决。",
-      "learning": "学习路径、先修条件与 LRS。"
+      "learning": "学习路径、先修条件与 LRS。",
+      "marketplace": "买卖智能体、人才与模板。",
+      "developers": "发布到市场并管理已安装项。",
+      "sales": "管道、营销活动、结算与推荐。"
     }
   },
   "tutorials": {

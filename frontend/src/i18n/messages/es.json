@@ -17004,7 +17004,10 @@
       "insights": "Entrega, gasto e impacto de la IA.",
       "inbox": "Correo, reglas y respuestas con IA.",
       "disputes": "Disputas de depósito, mediadas hasta una resolución.",
-      "learning": "Rutas, requisitos previos y el LRS."
+      "learning": "Rutas, requisitos previos y el LRS.",
+      "marketplace": "Compra y vende agentes, talento y plantillas.",
+      "developers": "Publica en el mercado y gestiona las instalaciones.",
+      "sales": "Pipeline, campañas, pagos y referidos."
     }
   },
   "tutorials": {

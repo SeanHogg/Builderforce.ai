@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import en from '@/i18n/messages/en.json';
 import { BRAND } from '@/lib/content';
 import {
-  NAV_GROUPS
+  NAV_GROUPS,
+  STAGES
 } from '@/lib/navGroups';
 import {
   LEARN_COLUMNS,
@@ -66,6 +67,22 @@ describe('the marketing header renders the registry, not a raw key', () => {
         const title = copyAt(`nav.${face.titleKey}`);
         expect(screen.getAllByText(title).length, `${face.group.id} is missing from the ${stage} column`).toBeGreaterThan(0);
       }
+    }
+  });
+
+  it('shows every stage of the arc, not a hand-kept subset of it', () => {
+    // Reported from the running app: the header's Product menu stopped at
+    // Measure while the left panel showed a fifth stage, REACH — so Marketplace,
+    // Developers and the Sales Hub were places the product had and the menu
+    // never mentioned. `PRODUCT_STAGES` is a projection of `STAGES`, and the
+    // only row it may drop is `admin` (your own settings are not a stage of the
+    // work, and `railHidden` already keeps them out of the rail too).
+    expect([...PRODUCT_STAGES]).toEqual(STAGES.filter((stage) => stage !== 'admin'));
+
+    renderWithCopy(<MarketingHeader />);
+    for (const id of ['marketplace', 'developers', 'sales']) {
+      const group = NAV_GROUPS.find((row) => row.id === id)!;
+      expect(screen.getAllByText(copyAt(`nav.${group.labelKey}`)).length, `${id} is missing from Reach`).toBeGreaterThan(0);
     }
   });
 

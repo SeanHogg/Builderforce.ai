@@ -17004,7 +17004,10 @@
       "insights": "Delivery, spend and AI impact.",
       "inbox": "Email, rules and AI replies.",
       "disputes": "Escrow disputes, mediated to a ruling.",
-      "learning": "Paths, prerequisites and the LRS."
+      "learning": "Paths, prerequisites and the LRS.",
+      "marketplace": "Buy and sell agents, talent and templates.",
+      "developers": "Publish to the marketplace and manage installs.",
+      "sales": "Pipeline, campaigns, payouts and referrals."
     }
   },
   "tutorials": {

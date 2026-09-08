@@ -1,3 +1,36 @@
+## ✅ RESOLVED 2026-09-07 — the marketing header's Product menu was missing REACH, the arc's last stage
+
+Reported from the running app: the header's Product ▾ menu showed IDEA · MAKE · RUN ·
+MEASURE while the left panel showed five stages. `PRODUCT_STAGES` in
+[publicDestinations.ts](./frontend/src/lib/publicDestinations.ts) was a hand-kept subset
+of `STAGES` — written when the arc's last stage was still called `market`, and justified
+in its own comment by "the storefront has its own top-level link". That reasoning was
+never complete and stopped being true at all when `expand` folded into `reach`: the
+marketplace is ONE of three rows under Reach, and the other two — **Developers**
+(publishing to the marketplace) and the **Sales Hub** (every account's own pipeline,
+opened to all account types) — were advertised nowhere on the public site. Somebody read
+the menu, learned an arc that ended at Measure, signed up, and found a fifth stage.
+
+`PRODUCT_STAGES` is now `idea · make · run · measure · reach`, dropping only `admin`
+(already `railHidden`, and your own settings are not a stage of the work). Everything
+downstream is a projection, so the column, its stage dot (`--stage-reach`), its track
+count and `/features` all followed with no other change.
+
+- Three new one-liners under `marketingNav.tagline.*` (marketplace / developers / sales),
+  translated in all five catalogs — not English copies.
+- `publicMenus.test.tsx` gains the assertion that would have caught it and will catch the
+  next stage: `PRODUCT_STAGES` must EQUAL `STAGES` minus `admin`, and the three Reach rows
+  must render. A subset can no longer be kept by hand without a red test.
+- [ROADMAP.md](./ROADMAP.md)'s arc line still read `Idea → Make → Run → Measure (→ Reach →
+  Expand)` — corrected to the five stages `STAGES` actually declares.
+- Found and fixed on the way through: `useCreationLibrary`'s `sessions` was typed
+  `CreationSessionSummary[]` while the hook returns either page state or the shared
+  readonly empty constant, so `tsgo --noEmit` was RED on main (TS4104). Now `readonly`;
+  every consumer only reads it.
+
+Verified: `publicMenus` + `destinations/registry` + `messages` tests (144), `pnpm
+check:destinations`, `pnpm check:i18n-keys`, and a clean `tsgo --noEmit`.
+
 ## ✅ RESOLVED 2026-09-07 — chat and canvas are the same thing, in both places that still said otherwise
 
 The product has held since the surface registry landed that a chat is the canvas's

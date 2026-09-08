@@ -223,11 +223,20 @@ export function columnOf(column: Placement): PublicDestination[] {
 /**
  * The stages the public Product ▾ menu shows.
  *
- * Idea → Make → Run → Measure: the same arc, in the same order, as the left
- * panel. Market and Admin are left out on purpose — the storefront has its own
- * top-level link and nobody browses a product's settings before signing up.
+ * Idea → Make → Run → Measure → Reach: the WHOLE arc, in the same order, as the
+ * left panel. Only `admin` is left out — nobody browses a product's settings
+ * before signing up, and Settings is not a stage of the work anyway
+ * (`railHidden`).
+ *
+ * REACH was left out too, from when the arc's last stage was still called
+ * `market` and the storefront's own top-level link was taken as covering it. It
+ * does not: the marketplace is one of three rows under Reach, and the other two
+ * — Developers (publishing to it) and the Sales Hub (every account's own
+ * pipeline) — were advertised nowhere. A visitor read the menu, learned an arc
+ * that stopped at Measure, signed up and found a fifth stage. The menu is the
+ * rail or it is a second navigation list; there is no third option.
  */
-export const PRODUCT_STAGES = ['idea', 'make', 'run', 'measure'] as const;
+export const PRODUCT_STAGES = ['idea', 'make', 'run', 'measure', 'reach'] as const;
 
 /**
  * One row of the public Product menu — a RAIL destination, wearing whichever

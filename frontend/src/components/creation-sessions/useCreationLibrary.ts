@@ -57,8 +57,10 @@ export interface CreationLibrarySurface {
    *  on screen, so the picker is never short a name. */
   folderOptions: string[];
   projects: Project[];
-  /** The raw sessions, for the merge picker (which can only target a real session). */
-  sessions: CreationSessionSummary[];
+  /** The raw sessions, for the merge picker (which can only target a real session).
+   *  Readonly: the hook hands out either its own page state or the shared empty
+   *  constant, and a caller that could push into either would be mutating one. */
+  sessions: readonly CreationSessionSummary[];
 }
 
 export function useCreationLibrary(): CreationLibrarySurface {

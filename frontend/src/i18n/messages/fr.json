@@ -17004,7 +17004,10 @@
       "insights": "Livraison, dépenses et impact de l’IA.",
       "inbox": "E-mails, règles et réponses IA.",
       "disputes": "Les litiges de séquestre, médiés jusqu'à une décision.",
-      "learning": "Parcours, prérequis et le LRS."
+      "learning": "Parcours, prérequis et le LRS.",
+      "marketplace": "Achetez et vendez agents, talents et modèles.",
+      "developers": "Publiez sur la place de marché et gérez les installations.",
+      "sales": "Pipeline, campagnes, paiements et parrainages."
     }
   },
   "tutorials": {
