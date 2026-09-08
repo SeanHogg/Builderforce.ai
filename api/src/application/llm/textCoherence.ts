@@ -9,6 +9,7 @@
 import {
   detectLatinLanguage,
   isCodeishToken,
+  isFunctionWord,
   scoreEnglishWordiness,
 } from './wordLexicon';
 
@@ -51,7 +52,7 @@ const FAILURE_DETAIL: Record<CoherenceFailure, string> = {
   'empty': 'the model returned nothing',
   'replacement-chars': 'the output contains Unicode replacement characters (broken token decoding)',
   'repetition': 'the decoder is stuck repeating the same word or phrase',
-  'dominant-token': 'one word dominates the output — the head has collapsed onto a single token',
+  'dominant-token': 'the output recycles a handful of words — the head has collapsed onto part of its vocabulary',
   'unbalanced-delimiters': 'the output closes brackets it never opened',
   'no-function-words': 'the output has no recognisable function words in any supported language',
   'non-words': 'most of the content words are not real words — the head is emitting invented tokens',
@@ -95,18 +96,13 @@ export function assessTextCoherence(text: string, opts: CoherenceOptions = {}): 
   }
   if (rep >= 3 && rep / words.length > 0.06) return fail('repetition');
 
-  // 3) Dominant-token collapse: an under-trained head that overfit its corpus
-  //    fixates on ONE content word and sprays it ("commit … commit … commit",
-  //    ~15× in the observed sample). Count per token (length ≥ 3 so function words
-  //    "the"/"in"/"a" can't trip it); if one word is both frequent in absolute
-  //    terms AND a large share of the reply, it's degenerate. The dual gate (≥5
-  //    occurrences AND >15%) spares a legitimately commit-heavy answer — that
-  //    stays either below the count floor (short) or below the share (long).
-  const freq = new Map<string, number>();
-  for (const w of words) if (w.length >= 3) freq.set(w, (freq.get(w) ?? 0) + 1);
-  let maxCount = 0;
-  for (const c of freq.values()) if (c > maxCount) maxCount = c;
-  if (maxCount >= 5 && maxCount / words.length > 0.15) return fail('dominant-token');
+  // 3) Content-word collapse: an under-trained head that overfit its corpus stops
+  //    reaching for new words and recycles a handful ("update update the file update
+  //    the file update"). Judged on CONTENT words only — grammar is supposed to repeat,
+  //    and the length proxy this replaces (any token of 3+ letters) counted `the`,
+  //    `and`, `was` and `not` as content, which is why its floors had to be set so high
+  //    that they stopped meaning anything on a short reply.
+  if (collapsedVocabulary(words)) return fail('dominant-token');
 
   // 4) Orphaned closing delimiters. The checks above key on REPETITION, so they miss
   //    the other failure mode of an under-trained byte-BPE head: fluent-shaped text made
@@ -197,6 +193,43 @@ export function isServableText(text: string | null | undefined, opts: CoherenceO
     return { coherent: false, failure: 'empty', detail: `the model returned less than ${EVERMIND_ANSWER_MIN_CHARS} characters` };
   }
   return assessTextCoherence(t, opts);
+}
+
+/**
+ * Has the head stopped reaching for new words? Two independent shapes of the same
+ * failure, measured over CONTENT words (see {@link isFunctionWord}) so that ordinary
+ * grammar cannot trip either one:
+ *
+ *  - **Too few distinct words for the length.** A reply whose content vocabulary is at
+ *    most half its content tokens is recycling, not composing. This is what works on a
+ *    SHORT reply, where any absolute occurrence floor is out of reach: `update update
+ *    the file update the file update` is 7 content tokens drawn from 2 words.
+ *  - **One word taking most of the reply.** The long-form shape, where enough distinct
+ *    words survive to clear the diversity bar but one of them still dominates — the
+ *    observed `commit … commit … commit` sample sprayed it ~15 times.
+ *
+ * The dominance arm is measured against CONTENT tokens and needs a body of them, which
+ * is what spares a legitimately repetitive real answer: "every commit on that branch is
+ * a merge commit, so the commit history reads as one commit per pull request" says
+ * `commit` five times and is a perfectly good sentence — the previous rule, which
+ * measured against ALL tokens with a fixed floor of 5 occurrences, rejected it.
+ */
+function collapsedVocabulary(words: readonly string[]): boolean {
+  const freq = new Map<string, number>();
+  let tokens = 0;
+  for (const w of words) {
+    if (w.length < 3 || isFunctionWord(w)) continue;
+    tokens++;
+    freq.set(w, (freq.get(w) ?? 0) + 1);
+  }
+  // Below this there is no vocabulary to have collapsed — a handful of content words is
+  // a terse answer, and every ratio over it is noise.
+  if (tokens < 5) return false;
+  if (freq.size / tokens <= 0.5) return true;
+
+  let maxCount = 0;
+  for (const c of freq.values()) if (c > maxCount) maxCount = c;
+  return tokens >= 12 && maxCount / tokens > 0.4;
 }
 
 /** How many closing brackets appear with no opener before them. Pure counting — a

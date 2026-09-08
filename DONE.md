@@ -1,3 +1,52 @@
+## ✅ RESOLVED 2026-09-07 — the chat rendered unstyled because the build emitted six stylesheets and the shell loads one
+
+**A regression I shipped**, in VSIX `2026.9.36`–`2026.9.38`. Reported as "did you fuck
+up the UI/UX of the chat?" — with a screenshot of an unstyled textarea, a composer whose
+buttons stacked vertically, and a jammed header.
+
+### What happened
+
+`renderWebviewHtml` writes a single `<link rel="stylesheet" href="…/index.css">`. That
+was safe while the chat bundle set `inlineDynamicImports: true`, which forces one CSS
+asset. Merging the two Vite configs kept the CANVAS config, which code-splits — so every
+async chunk carrying CSS emitted its own file and Vite de-duplicated the names by
+counting: `index.css`, `index2.css` … `index6.css`.
+
+The shell still loaded only the first. **The chat's entire stylesheet was in
+`index6.css` and was never fetched.**
+
+Fixed with `cssCodeSplit: false` — a webview reads from local disk, so there is nothing
+to save by splitting, and one sheet also makes the cascade order deterministic between
+`globals.css`, the shared brain-ui stylesheet and this package's own.
+
+### The second fault, found while fixing the first
+
+`.bf-app` — the chat surface's root — had been given `position:absolute; inset:0` so it
+could cover the board. That made the component un-renderable anywhere else: the
+standalone fallback, which exists *precisely* for when the board cannot be drawn,
+inherited a box positioned against a board that was not there. Placement moved to a
+`.bf-canvas-chat-surface` wrapper the seam supplies, and `.bf-app` went back to plain
+flow layout. The degrade notice stopped being an overlay covering the header it was
+explaining and became a row above it.
+
+### Why it shipped
+
+Every check that ran was blind to it. `tsc` type-checks, `vitest` runs units, and the
+extension-host integration test proves the webview boots and its first message reaches
+the host. **None of them look at a pixel**, and a stylesheet that is never fetched breaks
+none of them. "Tests pass" was treated as "it works" on a bundler change whose entire
+risk surface was rendering.
+
+`src/webviewAssets.test.ts` closes that gap against the BUILT ARTIFACT — the only place
+the invariant is observable without rendering: exactly one stylesheet, and it must carry
+`.bf-app`, `.bf-header` and `.bf-canvas-chat-surface`. Both halves matter, because a
+single sheet holding the wrong styles fails identically. **Verified by breaking it**: the
+guard fails on the exact shipped state (a stripped `index.css` plus a second `.css`) and
+passes on the fix.
+
+Shipped in `2026.9.39`: 357 tests passing (up from 354), 7 integration tests in a real
+VS Code 1.136.1 extension host, packaged and installed by absolute path.
+
 ## ✅ RESOLVED 2026-09-08 — The readiness gate was grading gibberish as usable, and the audit that would have fixed it reported 108 dead ends
 
 Reported from the VS Code sidebar against project Evermind v10165: the test bench said
@@ -79,6 +128,47 @@ gate and then gets refused by the producer — which would have made the run rep
 `brain-ui` typecheck clean and `dist` rebuilt; the VS Code webview bundle rebuilt so the
 sidebar the report came from carries the change. Deleted `__scratch_probe.test.ts`, a
 committed scratch file that wrote to disk during test runs.
+
+### The structural signals now cover short output on their own
+
+Logged as a residual on the first pass and closed on the second — logging it was the
+wrong call, and measuring it showed the entry was half wrong about what was broken.
+Against 26 fixtures (degenerate and legitimate, short and paragraph-length, EN/ES):
+
+- The example the entry itself named — `the build the build the build…` — was **already
+  caught**, by the bigram arm of the repetition check.
+- The real hole was one the entry did not name: `update update the file update the file
+  update` **passed everything**. Four occurrences could not reach a floor of five.
+- And the rule was ALSO rejecting a real answer: *"every commit on that branch is a merge
+  commit, so the commit history reads as one commit per pull request…"* said `commit`
+  five times in a paragraph and was refused — by the very floor whose comment claimed it
+  would spare exactly that sentence.
+
+Both ends came from one mistake: `length >= 3` as a proxy for "content word", which
+classifies `the`, `and`, `for`, `was` and `not` as content. Repetition is what function
+words are FOR, so the floors had to be set high enough to absorb them, and that is what
+put them out of reach of a short reply.
+
+`dominant-token` is now **content-word collapse**, measured over content words via a new
+`isFunctionWord` predicate built from the same `FUNCTION_WORDS` table the language vote
+uses — so the two can never disagree, and a collapsed SPANISH head is caught by the same
+check rather than falling through an English-only one. Two arms: content vocabulary at
+most half the content tokens (works at any length — `update/file` is 7 tokens drawn from
+2 words), or one word over 40% of a body of at least 12 content tokens (the long form;
+the observed `commit`-sprayed sample sits at 43%, the legitimate one at 28%).
+
+The third floor the entry named — `words.length >= 25` on the no-function-words check —
+**stays, and the measurement is why**: `Finish audit panel, wire export, rerun readiness
+check, deploy frontend, update docs.` is a real answer of 12 Latin words with an
+`anyShare` of exactly **0.000**. At probe length that signal cannot tell a list from
+gibberish, so lowering it would reject real answers. It is no longer load-bearing — the
+collapse and invented-word checks cover short output — and that is the resolution rather
+than a tuning.
+
+The probe's 80-token budget was left alone deliberately: `forward()` recomputes the whole
+sequence per token, so generating a paragraph to suit the old calibration would cost
+roughly six times the CPU in a DO alarm to work around a gate that now grades correctly
+at the length it is actually given.
 
 **This does not un-break the existing model.** v10165 has 18,864 contributions learned
 under the old rules and a held-out loss that regressed 2.4716 → 2.7073; the fixes stop

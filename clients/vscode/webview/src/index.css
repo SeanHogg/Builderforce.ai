@@ -57,15 +57,18 @@ body {
 }
 
 /* Shown when the board could not be drawn and the panel fell back to the
-   conversation. Above the chat surface (which is `position:absolute`), so it needs
-   its own layer — and its own opaque ground, or the board's half-painted remains
-   would read through it. */
+   conversation. It is a ROW ABOVE the chat, not an overlay: the chat below it is
+   working, and covering its header with the notice explaining why the board is
+   missing would take away the thing that still works. */
+.bf-degraded-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
 .bf-canvas-degraded {
-  position: absolute;
-  z-index: 8;
-  top: 0;
-  right: 0;
-  left: 0;
+  flex: none;
   padding: 8px 14px;
   border-bottom: 1px solid var(--bf-border);
   background: var(--bf-warning-bg);
@@ -76,19 +79,27 @@ body {
 .bf-app {
   display: flex;
   flex-direction: column;
+  height: 100%;
   min-height: 0;
-  /* THE CHAT SURFACE'S BOX. It is no longer the whole webview: it is one surface of
-     the canvas, mounted through `CreationCanvas`'s `hostSurfaces` slot, and the
-     router that renders it supplies no box of its own — each surface owns its own
-     (the web's `.chatSurface` does exactly this). So it covers the board the same
-     way, above the React Flow pane and below the floating chrome, and paints an
-     opaque ground so the board does not read through the transcript.
+}
 
-     `--canvas-top-chrome-space` is the band the session pill and command bar
-     occupy; reserving it here is what keeps the first message from opening
-     underneath them. There is no `--composer-space` to reserve at the foot: this
-     surface brings its own composer, and the canvas's is stood down while it is on
-     screen (see `hostOwnsSurface` in `CreationCanvas`). */
+/**
+ * WHERE the chat surface sits when it is mounted as a surface OF the canvas.
+ *
+ * This is the placement's concern, not the chat's — which is why it is a wrapper the
+ * seam supplies (`hostSurfaces` in `WorkspaceApp`) rather than properties on
+ * `.bf-app`. Putting them on `.bf-app` made the chat un-renderable anywhere else: the
+ * standalone fallback, which exists precisely for when the board CANNOT be drawn,
+ * inherited a box positioned against a board that was not there.
+ *
+ * It covers the React Flow pane and sits below the floating chrome, exactly as the
+ * web's own `.chatSurface` does, and paints an opaque ground so the board does not
+ * read through the transcript. `--canvas-top-chrome-space` is the band the session
+ * pill and command bar occupy; reserving it keeps the first message from opening
+ * underneath them. Nothing is reserved at the foot: this surface brings its own
+ * composer and the canvas's is stood down while it is on screen (`hostOwnsSurface`).
+ */
+.bf-canvas-chat-surface {
   position: absolute;
   z-index: 7;
   inset: 0;

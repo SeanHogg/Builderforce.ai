@@ -101,6 +101,79 @@ const COHERENT_SAMPLES: Array<[string, string]> = [
   ],
 ];
 
+/**
+ * VOCABULARY COLLAPSE — a head that stops reaching for new words and recycles a
+ * handful. Distinct from invented-word output: every token here is a REAL word, so the
+ * lexicon has nothing to object to and only a structural signal can catch it.
+ *
+ * These are asserted at BOTH lengths against their legitimate twins below, because the
+ * rule this replaced got both ends wrong: its occurrence floor (5) was out of reach for
+ * a probe-length reply, and measuring the share against ALL tokens rejected a real
+ * answer that used one word five times in a paragraph.
+ */
+const COLLAPSED_VOCABULARY: Array<[string, string]> = [
+  ['one pair alternating', 'the build the build the build the build the build'],
+  ['one word sprayed non-periodically', 'branch the commit branch update branch the branch commit branch'],
+  ['two content words, seven tokens', 'update update the file update the file update the file'],
+  ['three content words recycled', 'the ticket the ticket status the ticket status the ticket the status'],
+  [
+    'one word dominating a paragraph',
+    'The commit was a commit that the commit made, and the commit history commit shows the commit '
+    + 'again because the commit branch commit was merged into the commit main commit after the commit '
+    + 'review commit finished and the commit landed.',
+  ],
+  [
+    // The content-word rule reads every supported language, so a collapsed Spanish head
+    // is caught by the same check rather than falling through to an English-only one.
+    'collapsed in spanish',
+    'El modelo el modelo del proyecto el modelo aprende el modelo y el modelo guarda el modelo otra vez el modelo.',
+  ],
+];
+
+/**
+ * Real answers that REPEAT a word on purpose — the false positives the rule above must
+ * not produce. The last one failed before this pass: `commit` five times in a paragraph
+ * tripped an occurrence floor that its own comment claimed would spare it.
+ */
+const LEGITIMATELY_REPETITIVE: Array<[string, string]> = [
+  ['a word used three times in a short answer', 'The build failed, so I fixed the build and the build is green now.'],
+  ['a noun carried through a short instruction', 'Merge the branch, delete the branch, then update the ticket on the branch board.'],
+  ['a subject repeated across two clauses', 'I made one commit, pushed the commit, and the commit is now on main.'],
+  [
+    'a word used five times in a paragraph',
+    'Every commit on that branch is a merge commit, so the commit history reads as one commit per '
+    + 'pull request rather than per change. That is why the commit count looks low.',
+  ],
+];
+
+describe('assessTextCoherence — vocabulary collapse (real words, no new ones)', () => {
+  it.each(COLLAPSED_VOCABULARY)('rejects %s', (_label, sample) => {
+    const v = assessTextCoherence(sample);
+    expect(v.coherent).toBe(false);
+    expect(['dominant-token', 'repetition']).toContain(v.failure);
+  });
+
+  it.each(LEGITIMATELY_REPETITIVE)('accepts %s', (_label, sample) => {
+    const v = assessTextCoherence(sample);
+    expect(v.failure).toBeNull();
+    expect(v.coherent).toBe(true);
+  });
+
+  it('leaves a terse answer alone rather than reading it as collapsed', () => {
+    // Under five content words there is no vocabulary to have collapsed, and every
+    // ratio over that handful is noise.
+    expect(assessTextCoherence('Yes, the deploy finished and the site is live.').coherent).toBe(true);
+  });
+
+  it('does not read a bare list as a language failure', () => {
+    // 12 Latin-script words, ZERO function words in any supported language. This is why
+    // the no-function-words check keeps its 25-word floor: at probe length a real list
+    // answer is indistinguishable from gibberish BY THAT SIGNAL, and the collapse and
+    // invented-word checks are what cover short output instead.
+    expect(assessTextCoherence('Finish audit panel, wire export, rerun readiness check, deploy frontend, update docs.').coherent).toBe(true);
+  });
+});
+
 describe('assessTextCoherence — structural signals', () => {
   it('rejects replacement characters from broken byte-BPE decoding', () => {
     const v = assessTextCoherence('The build failed because the ��� handler could not decode the payload.');

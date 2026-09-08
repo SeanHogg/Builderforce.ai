@@ -303,6 +303,22 @@ export function detectLatinLanguage(words: readonly string[], text: string): Lan
   return { language: best, share, anyShare, latin, englishLeads };
 }
 
+/** Every supported language's function words in one set, built from the SAME table the
+ *  language vote uses so the two can never disagree about what a function word is. */
+const ANY_FUNCTION_WORD: ReadonlySet<string> = new Set(Object.values(FUNCTION_WORDS).flat());
+
+/**
+ * Is this token a function word in ANY supported Latin-script language?
+ *
+ * Used to tell CONTENT words from grammar. Repetition is what function words are FOR
+ * ("the … the … the"), so counting them as evidence of a collapsed head is a category
+ * error — and the length-based proxy that stood in for this (any token of 3+ letters)
+ * quietly classified `the`, `and`, `for`, `was` and `not` as content.
+ */
+export function isFunctionWord(word: string): boolean {
+  return ANY_FUNCTION_WORD.has(word.toLowerCase());
+}
+
 /** Tokens that are legitimately not words: identifiers, paths, urls, numbers, versions. */
 const CODEISH = /[0-9_@#$/\\<>{}[\]|`~^*+=]|::|\.\w|--/u;
 

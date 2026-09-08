@@ -161,6 +161,23 @@ export default defineConfig({
   },
   build: {
     outDir: path.resolve(HERE, '../media/webview'),
+    /**
+     * ONE stylesheet.
+     *
+     * The HTML shell loads exactly one `<link>` (`renderWebviewHtml` → `index.css`),
+     * which is all a webview needs — it reads from local disk, so there is nothing to
+     * save by splitting. With splitting ON, every async chunk that carries CSS emits
+     * its own file and Vite de-duplicates the names by counting: `index.css`,
+     * `index2.css` … `index6.css`. The shell still loaded only the first, so whichever
+     * styles landed in the others were simply never applied — which is how the chat
+     * surface came out with an unstyled textarea and a vertically stacked composer.
+     *
+     * A single sheet also makes the cascade ORDER deterministic, which matters here:
+     * the frontend's `globals.css`, the shared brain-ui stylesheet and this package's
+     * own `index.css` all define overlapping ground, and "which file won" must not
+     * depend on which chunk happened to load first.
+     */
+    cssCodeSplit: false,
     emptyOutDir: true,
     sourcemap: false,
     // 1.6 MB of canvas is expected; the warning is noise that hides real ones.

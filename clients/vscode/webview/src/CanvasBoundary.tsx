@@ -52,10 +52,10 @@ export class CanvasBoundary extends Component<
   render(): ReactNode {
     if (!this.state.failed) return this.props.children;
     return (
-      <>
+      <div className="bf-degraded-shell">
         <div className="bf-canvas-degraded" role="status">{this.props.notice}</div>
         {this.props.fallback}
-      </>
+      </div>
     );
   }
 }

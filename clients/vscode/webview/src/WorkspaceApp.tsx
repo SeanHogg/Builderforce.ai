@@ -179,7 +179,11 @@ function WorkspaceScreen({ init }: { init: InitData }) {
                   // exactly as the signed-out chat transcript already did.
                   persistence={session!.durable === false ? 'local' : 'server'}
                   initialSurface={sanitizeCanvasSurface(init.surface)}
-                  hostSurfaces={{ chat }}
+                  // WRAPPED, because where the conversation sits is the canvas's
+                  // business and not the chat's: the same component also renders
+                  // standalone when no board could be drawn, and it must not carry a
+                  // box positioned against a board that is not there.
+                  hostSurfaces={{ chat: <div className="bf-canvas-chat-surface">{chat}</div> }}
                 />
               </CanvasBoundary>
             ) : chat}
