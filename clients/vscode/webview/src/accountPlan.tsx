@@ -44,7 +44,7 @@ const UPGRADE_PATHS: Record<UpgradeTarget, string> = {
 /**
  * Open the web app at the page that actually fixes the block. The host owns the
  * browser (and the web base URL), so this goes over the bridge — see the
- * `open.web` case in `brainWebview.ts`.
+ * `open.web` case in `builderforcePanel.ts`.
  */
 export function openUpgrade(target: UpgradeTarget): void {
   post('open.web', { path: UPGRADE_PATHS[target] });

@@ -9,7 +9,7 @@ import type { BrainChat } from '@seanhogg/builderforce-brain-embedded';
  * project from the IDE selection, not from the chat. The result is a chat that reports
  * "Learning · Connected" and silently trains nothing, every turn.
  *
- * Extracted from `App.tsx` so the rule is testable without mounting the webview, and
+ * Extracted from the chat surface so the rule is testable without mounting the webview, and
  * because the version that lived inline had a defect this signature makes hard to
  * repeat: it decided from the component's `chats` array, which is fetched with
  * `?projectId=<active>` and filtered SERVER-side as `project_id = <active>`. A

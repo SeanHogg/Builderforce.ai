@@ -462,7 +462,7 @@ export async function rememberProjectFact(
  * The project-Evermind memory hooks for a run loop, bound to one project — the host
  * half of "recall → memory-first answer → cache the answer".
  *
- * This is the SAME three endpoints the webview Brain calls (`App.tsx`'s `evermind`
+ * This is the SAME three endpoints the webview Brain calls (`chat/VsCodeChatSurface.tsx`'s `evermind`
  * memo); the native chat participant reaches them through the extension's own
  * JWT-exchanging `authed` helper instead of the webview's bearer fetch. Every hook is
  * best-effort: a failure resolves to null / no-op and the loop simply runs the model,
@@ -830,7 +830,7 @@ export async function postBrainMessages(
  * participant's self-heal: when the server reports the chat is `not-attached` but the
  * IDE has an active project, bind it so the NEXT turn trains that project's Evermind
  * (parity with the webview App's adopt-on-open — see `adoptedProjectRef` in
- * `webview/src/App.tsx`). Both are gated on the IDE having a project SELECTED: with no
+ * `webview/src/chat/VsCodeChatSurface.tsx`). Both are gated on the IDE having a project SELECTED: with no
  * selection there is nothing to adopt and the chat stays global by design.
  * Best-effort; swallows errors.
  */

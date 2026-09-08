@@ -2,7 +2,7 @@
  * `next-intl` shim for the VS Code canvas bundle.
  *
  * The Creation Canvas is ONE implementation compiled for two surfaces (see
- * `vite.canvas.config.ts`). On the web it runs inside Next.js; here it runs in a
+ * `vite.config.ts`). On the web it runs inside Next.js; here it runs in a
  * plain Vite bundle, and `next-intl` cannot be imported because its entry pulls
  * in Next's server runtime.
  *

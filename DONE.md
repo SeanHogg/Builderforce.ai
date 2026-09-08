@@ -1,3 +1,94 @@
+## ✅ RESOLVED 2026-09-07 — chat and canvas are the same thing, in both places that still said otherwise
+
+The product has held since the surface registry landed that a chat is the canvas's
+**zero-object surface** — `frontend/src/lib/canvasSurfaces.ts` says so in as many words
+("Chat first: it is the zero-object case of the canvas"), and `CanvasSurfaceRouter`
+already dispatches surfaces as nodes a host assembles. Two surfaces had not caught up:
+the Create library drew a canvas and a workflow as different classes of object, and the
+VS Code extension made them different TABS.
+
+### `/create` — one library, kind as a facet
+
+The page rendered creation-session tiles and then, underneath, a **second and flatter
+row shape** for builds, workflows, Brain conversations, projects and agents. That
+division was never real: every one of those rows calls a `…/open` endpoint that
+MATERIALISES a creation session and lands on the same `/create/<id>` board. The only
+difference was whether the session row existed yet.
+
+The cost was ordering — sections come before recency, so a build touched an hour ago sat
+below a canvas nobody had opened since March, and no arrangement of the page could say
+otherwise. Now there is ONE recency-ordered list, the kind is a filter beside the folder
+filter (`CreationLibraryFacetBar`, self-gating below two facets), and the folder
+*headings* went with the sections for the same reason — the folder bar already filters
+in one press and each tile still carries its folder chip.
+
+| was | now |
+| --- | --- |
+| `components/dashboard/DashboardCreationSessions.tsx` (307 lines: 6 fetches + mapping + selection + every write + render) | `creation-sessions/CreationLibraryPanel.tsx` (render) + `useCreationLibrary` (reads) + `useCreationLibraryActions` (writes) |
+| `DashboardCreationLauncher.tsx` — two numbered "steps", its own quota fetch, its own `creating` flag | `CreationStarterPanel.tsx` — ONE grid of starters as data, sharing `useCreateCanvas` with the library |
+| an inline `Set` deciding whether a record appears twice | `domains/canvas/domain/creationLibrary.ts` — pure, 9 tests |
+| `session: CreationSessionSummary` on the tile | `item: CreationLibraryItem` — one tile for both cases |
+
+`resourceRef.ts` moved to `packages/creation-canvas-contract/` (its real shared home —
+the API *writes* `resource_type`/`resource_id`, the canvas *resolves* cards back from
+them) and gained `formatResourceRef`. All seven hand-rolled `` `${type}:${id}` `` copies
+were migrated, three in the frontend and four in `creationSessionRoutes.ts`. The null
+case is why it exists: `` `${null}:${null}` `` is the valid-looking key `"null:null"`,
+which every record-less card was sharing inside a dedupe `Set`.
+
+Also fixed on the way through: `useModalityCopy`'s resolvers were unmemoized while the
+library maps every item through them; the library's `loading` was a separate flag that
+could clear while the sessions on screen belonged to neither query, and is now derived
+from the page's own request key; and the remembered card/table choice moved to
+`useSyncExternalStore` (`libraryViewPreference.ts`) instead of a `setState` in an effect
+that flashed the wrong layout.
+
+### VS Code — one panel, chat as a surface of it
+
+The extension had **two of everything**: two Vite bundles, two PostCSS/Tailwind
+pipelines, two HTML shells, two panels, two commands, and a 2,066-line `App.tsx` chat
+god-component beside `CanvasScreen.tsx`. `builderforce.openChat` and
+`builderforce.openCreateCanvas` now reveal the SAME panel and differ only in the surface
+they open at; revealing one while the other is up re-points it rather than opening a
+second tab.
+
+The seam is one optional prop. `CreationCanvas` takes `hostSurfaces`, and the editor
+supplies exactly one entry — `chat` — because its runs execute in the **extension host**
+(`brainRunHost.ts`) so they survive the tab closing and their tools reach the real
+workspace. That runtime cannot be reached from a shared web component and should not be:
+the web has no extension host to talk to. Everything else on screen is the web canvas,
+unmodified. A host-supplied surface also owns its own input, so the canvas composer
+stands down while one is on screen (`hostOwnsSurface`) rather than offering a second,
+quieter way to start a differently-behaving run.
+
+| deleted | replaced by |
+| --- | --- |
+| `webview/src/App.tsx` (2,066 lines) | `chat/VsCodeChatSurface.tsx` + `chatLabels` / `chatTrace` / `ChatMenu` / `useGlobalRunState` / `chatPreferences` / `tokenClaims` |
+| `webview/src/canvas/CanvasScreen.tsx`, `canvas/main.tsx` | `WorkspaceApp.tsx` — init gate, `init.view` routing, `ChatRuntimeProvider`, the canvas |
+| `src/brainWebview.ts` + `src/creationCanvasPanel.ts` | `src/builderforcePanel.ts` + `src/canvasHostActions.ts` (the capture switch, holding no panel state) |
+| `webview/vite.config.ts` + `vite.canvas.config.ts`, two postcss/tailwind configs, `canvas.html` | one of each |
+| `assetDir: "webview" | "canvas"` on `renderWebviewHtml` | nothing — there is one bundle |
+
+`src/workspaceSession.ts` answers the question chat never had to ask before: WHICH
+board. It is remembered per workspace so "Open Chat" twice returns to the same
+conversation, falls back to the most recently touched session, and mints a local id when
+signed out — because an on-device model runs on the user's own hardware and gating them
+out of it would be absurd.
+
+**The old split's one real argument** — a chat panel should not pay to parse xyflow — is
+answered by dissolving it: there is no chat panel, only a board opened at its chat
+surface. Optional heavy features (Evermind engines, voice studio, mermaid, the 3D world)
+stay code-split. Removing the duplicate `media/canvas/` output halved the artifact:
+**12.13 MB → 6.26 MB**, 254 files → 139.
+
+Verified: `pnpm type-check`, `pnpm test` (345 passing), `pnpm test:integration` (7
+passing in a REAL VS Code 1.136.1 extension host, including "the shipped webview boots
+and its first message reaches the host"), `vsce package`, and installed by absolute path
+— `builderforce.builderforce-ai@2026.9.36` confirmed via `--list-extensions`. Frontend:
+21/22 guards (the 22nd, `check:design-scale`, was already red at HEAD — see ROADMAP),
+`creationLibrary` + `CreationSessionTile` suites green, api + frontend `type-check`
+green.
+
 ## ✅ RESOLVED 2026-09-07 — the dependency arrow points inward again: the inner-layer ratchet reaches zero, the enrichment cache gets a vendor, and the agent-runtime contract can no longer drift
 
 Five codebase-review items from the 2026-09-05 pass. Three are closed outright; two —

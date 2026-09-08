@@ -16,7 +16,7 @@ import path from 'node:path';
  * namespace on the web and the next build picks it up.
  *
  * Build-time only (it reads the filesystem) — used by the `bf-canvas-messages`
- * plugin in `vite.canvas.config.ts` and by `messageNamespaces.test.ts`.
+ * plugin in `vite.config.ts` and by `messageNamespaces.test.ts`.
  */
 
 /** Resolve an import specifier the way the canvas Vite config does. */
