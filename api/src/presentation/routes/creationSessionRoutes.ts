@@ -5,6 +5,7 @@
  * (projects, workflows, agents, sites, tasks, …) remain referenced by type/id.
  */
 import { Hono, type Context } from 'hono';
+import { parseOptionalBody, z } from './requestBody';
 import {
   cleanCommentAnchor, creationKindForModality, creationSessionSearchStatus, describeClaimBatchFailure,
   distinctIdCounts, durableCreationGraph, sanitizeClaimConnectionIds,
@@ -63,6 +64,7 @@ import { TenantBillingStatus, TenantPlan } from '../../domain/shared/types';
 import { notify } from '../../application/notifications/notify';
 import {
   isConfidentialityLevel,
+  formatResourceRef,
   isCreationConnectionKind,
   isCreationObjectKind,
   projectPublicResumeFamily,
@@ -154,45 +156,171 @@ import { loadProjectInTenant } from '../../application/project/projectOwnership'
 type SessionRole = SharedSessionRole;
 const ROLE_RANK = SESSION_ROLE_RANK;
 
-type CreateSessionBody = { title?: string; description?: string; initialPrompt?: string; projectIds?: number[] };
-type PatchSessionBody = { title?: string; description?: string | null; folderId?: string | null; status?: string; preview?: unknown; mode?: string };
-type SaveGraphBody = { objects?: GraphObjectInput[]; connections?: GraphConnectionInput[]; viewport?: unknown; expectedRevision?: number };
-type InviteBody = { userId?: string; email?: string; role?: string; expiresInHours?: number };
-type CommentBody = { body?: string; objectId?: string | null; parentCommentId?: string | null; mentions?: string[]; anchor?: unknown };
-type ResumeShareBody = { expiresAt?: string | null; maxUses?: number | null };
-type ProspectShareBody = {
-  objectId?: string | null; label?: string; expiresAt?: string | null;
-  sellerName?: string; sellerCompany?: string; accentColor?: string;
-  allowControlRequest?: boolean; message?: string;
-};
-type CanvasCommand = { type?: string; [key: string]: unknown };
-type CommandsBody = { commands?: CanvasCommand[]; atomic?: boolean };
-type PinBody = { pinned?: boolean };
-type CheckpointBody = { label?: string };
-type WatchBody = { state?: string };
-type LockBody = { action?: 'acquire' | 'renew' | 'release'; leaseSeconds?: number };
-type TemplateBody = { name?: string; description?: string; category?: string; visibility?: string; graph?: unknown };
-type BranchBody = { title?: string };
-type MergeBody = { sourceSessionId?: string; resolutions?: Record<string, 'source' | 'target'> };
-type ClaimSessionBody = SaveGraphBody & { clientSessionId?: string; title?: string; initialPrompt?: string; timeline?: Array<{ clientMessageId?: string; role?: string; body?: string; metadata?: unknown; createdAt?: string }> };
-type MemberBody = { role?: string };
-type ExpandProjectBody = { lens?: 'everything' | 'delivery' | 'metrics' | 'customer-feedback' };
-type TimelineBody = { clientMessageId?: string; role?: 'user' | 'assistant' | 'system'; body?: string; metadata?: unknown };
-type OutcomeBody = {
-  correlationId?: string;
-  action?: string;
-  phase?: 'started' | 'succeeded' | 'failed' | 'validated' | 'reused';
-  actorType?: 'user' | 'agent' | 'brain' | 'system';
-  actorRef?: string;
-  projectId?: number;
-  metricKey?: string;
-  metricValue?: number;
-  unit?: string;
-  artifactId?: string;
-  durationMs?: number;
-  costUsdMillicents?: number;
-  metadata?: unknown;
-};
+/**
+ * Request bodies — ONE declaration each, validating AND typing.
+ *
+ * These were hand-written `type XBody = { … }` aliases read back through
+ * `c.req.json<XBody>().catch(() => ({} as XBody))`: a type assertion with a shrug
+ * attached, so a client that sent `{"projectIds": "7"}` reached `.map()` inside
+ * the handler and died as a 500. Every field stays OPTIONAL exactly as it was —
+ * these endpoints genuinely accept an empty body — but a field that IS sent must
+ * now be the shape the handler already assumed. See `requestBody.ts`.
+ *
+ * The TS types are `z.infer`red, so the schema and the type cannot drift.
+ */
+/**
+ * The graph's two node shapes, matching `GraphObjectInput` / `GraphConnectionInput`.
+ *
+ * The REQUIRED fields are required here too, which is the point: a saved graph whose
+ * edge is missing `sourceObjectId` used to reach the writer and fail on a NOT NULL
+ * constraint as a 500. `canvasData` / `content` / `metadata` stay open — they are
+ * per-kind payloads the object registry owns, not this route's business.
+ */
+const zGraphObject = z.object({
+  id: z.string(),
+  kind: z.string(),
+  resourceType: z.string().nullable().optional(),
+  resourceId: z.string().nullable().optional(),
+  resourceRevision: z.string().nullable().optional(),
+  canvasData: z.unknown().optional(),
+  content: z.unknown().optional(),
+});
+const zGraphConnection = z.object({
+  id: z.string(),
+  sourceObjectId: z.string(),
+  targetObjectId: z.string(),
+  kind: z.string().optional(),
+  label: z.string().nullable().optional(),
+  metadata: z.unknown().optional(),
+});
+const zGraphObjects = z.array(zGraphObject);
+const zGraphConnections = z.array(zGraphConnection);
+
+const CreateSessionBody = z.object({
+  title: z.string().optional(),
+  description: z.string().optional(),
+  initialPrompt: z.string().optional(),
+  projectIds: z.array(z.number()).optional(),
+});
+const PatchSessionBody = z.object({
+  title: z.string().optional(),
+  description: z.string().nullable().optional(),
+  folderId: z.string().nullable().optional(),
+  status: z.string().optional(),
+  preview: z.unknown().optional(),
+  mode: z.string().optional(),
+});
+const SaveGraphBody = z.object({
+  objects: zGraphObjects.optional(),
+  connections: zGraphConnections.optional(),
+  viewport: z.unknown().optional(),
+  expectedRevision: z.number().optional(),
+});
+const InviteBody = z.object({
+  userId: z.string().optional(),
+  email: z.string().optional(),
+  role: z.string().optional(),
+  expiresInHours: z.number().optional(),
+});
+const CommentBody = z.object({
+  body: z.string().optional(),
+  objectId: z.string().nullable().optional(),
+  parentCommentId: z.string().nullable().optional(),
+  mentions: z.array(z.string()).optional(),
+  anchor: z.unknown().optional(),
+});
+const ResumeShareBody = z.object({
+  expiresAt: z.string().nullable().optional(),
+  maxUses: z.number().nullable().optional(),
+});
+const ProspectShareBody = z.object({
+  objectId: z.string().nullable().optional(),
+  label: z.string().optional(),
+  expiresAt: z.string().nullable().optional(),
+  sellerName: z.string().optional(),
+  sellerCompany: z.string().optional(),
+  accentColor: z.string().optional(),
+  allowControlRequest: z.boolean().optional(),
+  message: z.string().optional(),
+});
+/** A command carries its own open payload — the command registry validates the rest. */
+const CanvasCommand = z.looseObject({ type: z.string().optional() });
+const CommandsBody = z.object({
+  commands: z.array(CanvasCommand).optional(),
+  atomic: z.boolean().optional(),
+});
+const PinBody = z.object({ pinned: z.boolean().optional() });
+const CheckpointBody = z.object({ label: z.string().optional() });
+const WatchBody = z.object({ state: z.string().optional() });
+const LockBody = z.object({
+  action: z.enum(['acquire', 'renew', 'release']).optional(),
+  leaseSeconds: z.number().optional(),
+});
+const TemplateBody = z.object({
+  name: z.string().optional(),
+  description: z.string().optional(),
+  category: z.string().optional(),
+  visibility: z.string().optional(),
+  graph: z.unknown().optional(),
+});
+const BranchBody = z.object({ title: z.string().optional() });
+const MergeBody = z.object({
+  sourceSessionId: z.string().optional(),
+  resolutions: z.record(z.string(), z.enum(['source', 'target'])).optional(),
+});
+const ClaimSessionBody = SaveGraphBody.extend({
+  clientSessionId: z.string().optional(),
+  title: z.string().optional(),
+  initialPrompt: z.string().optional(),
+  timeline: z.array(z.object({
+    clientMessageId: z.string().optional(),
+    role: z.string().optional(),
+    body: z.string().optional(),
+    metadata: z.unknown().optional(),
+    createdAt: z.string().optional(),
+  })).optional(),
+});
+const MemberBody = z.object({ role: z.string().optional() });
+const ExpandProjectBody = z.object({
+  lens: z.enum(['everything', 'delivery', 'metrics', 'customer-feedback']).optional(),
+});
+const TimelineBody = z.object({
+  clientMessageId: z.string().optional(),
+  role: z.enum(['user', 'assistant', 'system']).optional(),
+  body: z.string().optional(),
+  metadata: z.unknown().optional(),
+});
+const OutcomeBody = z.object({
+  correlationId: z.string().optional(),
+  action: z.string().optional(),
+  phase: z.enum(['started', 'succeeded', 'failed', 'validated', 'reused']).optional(),
+  actorType: z.enum(['user', 'agent', 'brain', 'system']).optional(),
+  actorRef: z.string().optional(),
+  projectId: z.number().optional(),
+  metricKey: z.string().optional(),
+  metricValue: z.number().optional(),
+  unit: z.string().optional(),
+  artifactId: z.string().optional(),
+  durationMs: z.number().optional(),
+  costUsdMillicents: z.number().optional(),
+  metadata: z.unknown().optional(),
+});
+
+/** A checkpoint label, a resolve toggle and the two ad-hoc bodies that had no alias. */
+const LabelBody = z.object({ label: z.unknown().optional() });
+const ResolvedBody = z.object({ resolved: z.boolean().optional() });
+const ProjectIdBody = z.object({ projectId: z.number().optional() });
+const PresenceBody = z.object({
+  revision: z.number().optional(),
+  viewport: z.unknown().optional(),
+  cursor: z.unknown().optional(),
+  selection: z.unknown().optional(),
+  typing: z.boolean().optional(),
+  followingUserId: z.string().nullable().optional(),
+});
+
+type CanvasCommand = z.infer<typeof CanvasCommand>;
+type ExpandProjectBody = z.infer<typeof ExpandProjectBody>;
 
 const BUILT_IN_TEMPLATE_IDS = ['campaign', 'product-discovery', 'data-story', 'stand-up', 'model-build', 'executive-review'] as const;
 
@@ -668,7 +796,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/templates', async (c) => {
     const { tenantId, segmentId } = scope(c);
     const userId = c.get('userId') as string;
-    const body = await c.req.json<TemplateBody>().catch(() => ({} as TemplateBody));
+    const body = await parseOptionalBody(c, TemplateBody);
     const graph = parseTemplateGraph(body.graph);
     const name = cleanTitle(body.name, 'Untitled template').slice(0, 160);
     if (!graph) return c.json({ error: 'A valid template graph is required' }, 400);
@@ -711,7 +839,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/claim', async (c) => {
     const { tenantId, segmentId } = scope(c);
     const userId = c.get('userId') as string;
-    const body = await c.req.json<ClaimSessionBody>().catch(() => ({} as ClaimSessionBody));
+    const body = await parseOptionalBody(c, ClaimSessionBody);
     const clientSessionId = typeof body.clientSessionId === 'string' ? body.clientSessionId.trim().slice(0, 80) : '';
     if (!/^local-[0-9a-f-]{36}$/i.test(clientSessionId)) return c.json({ error: 'A valid local Session id is required' }, 400);
     const [prior] = await db.select({ sessionId: creationSessionClaims.serverSessionId }).from(creationSessionClaims).where(and(eq(creationSessionClaims.userId, userId), eq(creationSessionClaims.clientSessionId, clientSessionId))).limit(1);
@@ -835,7 +963,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:id/convert-to-app', async (c) => {
     const access = await requireSession(c, 'editor');
     if (!access) return c.json({ error: 'Session not found or not editable' }, 404);
-    const body = await c.req.json<{ label?: unknown }>().catch(() => ({}) as never);
+    const body = await parseOptionalBody(c, LabelBody);
     const result = await convertSessionToApp(db, c.env, {
       tenantId: access.session.tenantId,
       userId: c.get('userId') as string,
@@ -851,7 +979,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/', async (c) => {
     const { tenantId, segmentId } = scope(c);
     const userId = c.get('userId') as string;
-    const body = await c.req.json<CreateSessionBody>().catch(() => ({} as CreateSessionBody));
+    const body = await parseOptionalBody(c, CreateSessionBody);
     const requestKey = c.req.header('Idempotency-Key')?.trim().slice(0, 128) || '';
     const requestClaimId = requestKey ? `request:${requestKey}` : '';
     if (requestClaimId) {
@@ -967,7 +1095,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:id/outcomes', async (c) => {
     const access = await requireSession(c, 'viewer');
     if (!access) return c.json({ error: 'Session not found' }, 404);
-    const body = await c.req.json<OutcomeBody>().catch(() => ({} as OutcomeBody));
+    const body = await parseOptionalBody(c, OutcomeBody);
     const correlationId = typeof body.correlationId === 'string' ? body.correlationId.trim().slice(0, 128) : '';
     const action = normalizeOutcomeAction(body.action);
     if (!correlationId || !action || !isOutcomePhase(body.phase)) return c.json({ error: 'correlationId, action, and a valid phase are required' }, 400);
@@ -1254,7 +1382,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:id/timeline', async (c) => {
     const access = await requireSession(c, 'editor');
     if (!access) return c.json({ error: 'Session not found or prompting is not allowed' }, 404);
-    const input = await c.req.json<TimelineBody>().catch(() => ({} as TimelineBody));
+    const input = await parseOptionalBody(c, TimelineBody);
     const clientMessageId = typeof input.clientMessageId === 'string' ? input.clientMessageId.trim().slice(0, 128) : '';
     const role = input.role === 'assistant' || input.role === 'system' ? input.role : 'user';
     const body = typeof input.body === 'string' ? input.body.trim().slice(0, 50_000) : '';
@@ -1336,7 +1464,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (!UUID_RE.test(objectId)) return c.json({ error: 'Invalid object id' }, 400);
     const registered = await ensureResumeObject(db, c.env, access, objectId);
     if (!registered) return c.json({ error: 'Only a public resume can be shared' }, 409);
-    const body = await c.req.json<ResumeShareBody>().catch(() => ({} as ResumeShareBody));
+    const body = await parseOptionalBody(c, ResumeShareBody);
     const expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
     if (expiresAt && (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date())) return c.json({ error: 'Expiry must be in the future' }, 400);
     const maxUses = body.maxUses == null ? null : Math.floor(body.maxUses);
@@ -1382,7 +1510,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:id/prospect-shares', async (c) => {
     const access = await requireSession(c, 'editor');
     if (!access) return c.json({ error: 'Session not found' }, 404);
-    const body = await c.req.json<ProspectShareBody>().catch(() => ({} as ProspectShareBody));
+    const body = await parseOptionalBody(c, ProspectShareBody);
 
     const objectId = typeof body.objectId === 'string' && body.objectId.trim() ? body.objectId.trim() : null;
     if (objectId && !UUID_RE.test(objectId)) return c.json({ error: 'Invalid object id' }, 400);
@@ -1476,7 +1604,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:id/comments', async (c) => {
     const access = await requireSession(c, 'commenter');
     if (!access) return c.json({ error: 'Session not found or comments are not allowed' }, 404);
-    const body = await c.req.json<CommentBody>().catch(() => ({} as CommentBody));
+    const body = await parseOptionalBody(c, CommentBody);
     const content = typeof body.body === 'string' ? body.body.trim() : '';
     if (!content || content.length > 5_000) return c.json({ error: 'Comment must be between 1 and 5,000 characters' }, 400);
     const objectId = body.objectId || null;
@@ -1524,7 +1652,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (!access) return c.json({ error: 'Session not found or comments are not allowed' }, 404);
     const commentId = c.req.param('commentId');
     if (!UUID_RE.test(commentId)) return c.json({ error: 'Invalid comment id' }, 400);
-    const body: { resolved?: boolean } = await c.req.json<{ resolved?: boolean }>().catch(() => ({}));
+    const body = await parseOptionalBody(c, ResolvedBody);
     if (typeof body.resolved !== 'boolean') return c.json({ error: 'resolved is required' }, 400);
     const userId = c.get('userId') as string;
     const [updated] = await db.update(creationSessionComments).set({
@@ -1539,7 +1667,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.patch('/:id', async (c) => {
     const access = await requireSession(c, 'editor');
     if (!access) return c.json({ error: 'Session not found or not editable' }, 404);
-    const body = await c.req.json<PatchSessionBody>().catch(() => ({} as PatchSessionBody));
+    const body = await parseOptionalBody(c, PatchSessionBody);
     const patch: Partial<typeof creationSessions.$inferInsert> = { updatedBy: c.get('userId') as string, updatedAt: new Date(), lastActivityAt: new Date() };
     if (body.title !== undefined) patch.title = cleanTitle(body.title);
     if (body.description !== undefined) patch.description = body.description == null ? null : String(body.description).slice(0, 2_000);
@@ -1584,7 +1712,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:id/projects', async (c) => {
     const access = await requireSession(c, 'editor');
     if (!access) return c.json({ error: 'Session not found or not editable' }, 404);
-    const body: { projectId?: number } = await c.req.json<{ projectId?: number }>().catch(() => ({}));
+    const body = await parseOptionalBody(c, ProjectIdBody);
     const projectId = Number(body.projectId);
     if (!Number.isInteger(projectId) || projectId <= 0) return c.json({ error: 'Invalid project id' }, 400);
     const projectSegment = access.session.segmentId == null ? isNull(projects.segmentId) : eq(projects.segmentId, access.session.segmentId);
@@ -1643,7 +1771,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const access = await requireSession(c, 'owner');
     if (!access) return c.json({ error: 'Session not found or membership is not editable' }, 404);
     const targetUserId = c.req.param('userId');
-    const body = await c.req.json<MemberBody>().catch(() => ({} as MemberBody));
+    const body = await parseOptionalBody(c, MemberBody);
     const role = cleanRole(body.role);
     if (!role) return c.json({ error: 'A valid role is required' }, 400);
     const [target] = await db.select({ role: creationSessionMembers.role }).from(creationSessionMembers).where(and(
@@ -1687,7 +1815,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:id/pin', async (c) => {
     const access = await requireSession(c);
     if (!access) return c.json({ error: 'Session not found' }, 404);
-    const body = await c.req.json<PinBody>().catch(() => ({} as PinBody));
+    const body = await parseOptionalBody(c, PinBody);
     if (typeof body.pinned !== 'boolean') return c.json({ error: 'pinned is required' }, 400);
     await db.update(creationSessionMembers).set({ pinned: body.pinned }).where(and(
       eq(creationSessionMembers.sessionId, access.session.id), eq(creationSessionMembers.userId, c.get('userId') as string),
@@ -1698,7 +1826,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.patch('/:id/watch', async (c) => {
     const access = await requireSession(c);
     if (!access) return c.json({ error: 'Session not found' }, 404);
-    const body = await c.req.json<WatchBody>().catch(() => ({} as WatchBody));
+    const body = await parseOptionalBody(c, WatchBody);
     if (body.state !== 'all' && body.state !== 'mentions' && body.state !== 'muted') {
       return c.json({ error: 'state must be all, mentions, or muted' }, 400);
     }
@@ -1714,7 +1842,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (!access) return c.json({ error: 'Session not found or not editable' }, 404);
     const objectId = c.req.param('objectId');
     if (!UUID_RE.test(objectId)) return c.json({ error: 'Invalid object id' }, 400);
-    const body = await c.req.json<LockBody>().catch(() => ({} as LockBody));
+    const body = await parseOptionalBody(c, LockBody);
     const action = body.action ?? 'acquire';
     const userId = c.get('userId') as string;
     const now = new Date();
@@ -1799,7 +1927,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:id/merge', async (c) => {
     const targetAccess = await requireSession(c, 'editor');
     if (!targetAccess) return c.json({ error: 'Target session not found or not editable' }, 404);
-    const body = await c.req.json<MergeBody>().catch(() => ({} as MergeBody));
+    const body = await parseOptionalBody(c, MergeBody);
     const sourceId = body.sourceSessionId ?? '';
     if (!UUID_RE.test(sourceId) || sourceId === targetAccess.session.id) return c.json({ error: 'A different source session is required' }, 400);
     const userId = c.get('userId') as string;
@@ -1818,8 +1946,17 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(and(eq(creationSessionProjectLinks.sessionId, targetAccess.session.id), copyableLinkFilter)),
       db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(and(eq(creationSessionProjectLinks.sessionId, sourceId), copyableLinkFilter)),
     ]);
-    const targetResources = new Set(targetObjects.flatMap((object) => object.resourceType && object.resourceId ? [`${object.resourceType}:${object.resourceId}`] : []));
-    const acceptedSourceObjects = sourceObjects.filter((object) => !object.resourceType || !object.resourceId || !targetResources.has(`${object.resourceType}:${object.resourceId}`));
+    // One ref format, shared with the canvas that resolves cards back by it
+    // (`formatResourceRef`) — a hand-written `${type}:${id}` here answered
+    // "null:null" for every card WITHOUT a record, collapsing them to one key.
+    const targetResources = new Set(targetObjects.flatMap((object) => {
+      const ref = formatResourceRef(object.resourceType, object.resourceId);
+      return ref ? [ref] : [];
+    }));
+    const acceptedSourceObjects = sourceObjects.filter((object) => {
+      const ref = formatResourceRef(object.resourceType, object.resourceId);
+      return !ref || !targetResources.has(ref);
+    });
     const idMap = new Map(acceptedSourceObjects.map((object) => [object.id, crypto.randomUUID()]));
     const copiedObjects = acceptedSourceObjects.map((object) => {
       const canvasData = object.canvasData && typeof object.canvasData === 'object' && !Array.isArray(object.canvasData)
@@ -1862,7 +1999,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (!access) return c.json({ error: 'Session not found or not editable' }, 404);
     const quota = await sessionQuota(c, access.session.tenantId);
     if (!quota.allowed) return c.json(creationSessionQuotaError(quota), 402);
-    const body = await c.req.json<BranchBody>().catch(() => ({} as BranchBody));
+    const body = await parseOptionalBody(c, BranchBody);
     const userId = c.get('userId') as string;
     const [objects, connections, projectLinks, timeline] = await Promise.all([
       db.select().from(creationSessionObjects).where(eq(creationSessionObjects.sessionId, access.session.id)),
@@ -1922,8 +2059,14 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       db.select().from(creationSessionObjects).where(eq(creationSessionObjects.sessionId, access.session.id)),
       db.select().from(creationSessionConnections).where(eq(creationSessionConnections.sessionId, access.session.id)),
     ]);
-    const existingResources = new Set(storedObjects.filter((object) => object.resourceType && object.resourceId).map((object) => `${object.resourceType}:${object.resourceId}`));
-    if (templateGraph.objects.some((object) => object.resourceType && object.resourceId && existingResources.has(`${object.resourceType}:${object.resourceId}`))) {
+    const existingResources = new Set(storedObjects.flatMap((object) => {
+      const ref = formatResourceRef(object.resourceType, object.resourceId);
+      return ref ? [ref] : [];
+    }));
+    if (templateGraph.objects.some((object) => {
+      const ref = formatResourceRef(object.resourceType, object.resourceId);
+      return ref !== null && existingResources.has(ref);
+    })) {
       return c.json({ error: 'This template contains a resource already on the Canvas', code: 'DUPLICATE_RESOURCE' }, 409);
     }
     const idMap = new Map(templateGraph.objects.map((object) => [object.id, crypto.randomUUID()]));
@@ -1969,7 +2112,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.put('/:id/graph', async (c) => {
     const access = await requireSession(c, 'editor');
     if (!access) return c.json({ error: 'Session not found or not editable' }, 404);
-    const body = await c.req.json<SaveGraphBody>().catch(() => ({} as SaveGraphBody));
+    const body = await parseOptionalBody(c, SaveGraphBody);
     const objects = Array.isArray(body.objects) ? body.objects : [];
     const connections = Array.isArray(body.connections) ? body.connections : [];
     const error = validCreationGraph(objects, connections);
@@ -2030,7 +2173,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (!Number.isInteger(match) || match !== access.session.canvasRevision) {
       return c.json({ error: 'Session changed', code: 'REVISION_CONFLICT', revision: access.session.canvasRevision }, 409);
     }
-    const body = await c.req.json<CommandsBody>().catch(() => ({} as CommandsBody));
+    const body = await parseOptionalBody(c, CommandsBody);
     const commands = Array.isArray(body.commands) ? body.commands.slice(0, 500) : [];
     if (!commands.length) return c.json({ error: 'At least one command is required' }, 400);
 
@@ -2259,7 +2402,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:id/checkpoints', async (c) => {
     const access = await requireSession(c, 'editor');
     if (!access) return c.json({ error: 'Session not found or not editable' }, 404);
-    const body = await c.req.json<CheckpointBody>().catch(() => ({} as CheckpointBody));
+    const body = await parseOptionalBody(c, CheckpointBody);
     const label = typeof body.label === 'string' ? body.label.trim().slice(0, 120) : '';
     if (!label) return c.json({ error: 'Checkpoint name is required' }, 400);
     const [objects, connections] = await Promise.all([
@@ -2285,7 +2428,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:id/invite', async (c) => {
     const access = await requireSession(c, 'owner');
     if (!access) return c.json({ error: 'Session not found or not shareable' }, 404);
-    const body = await c.req.json<InviteBody>().catch(() => ({} as InviteBody));
+    const body = await parseOptionalBody(c, InviteBody);
     const role = cleanRole(body.role ?? 'editor');
     const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
     if ((!body.userId && !email) || !role) return c.json({ error: 'A userId or email and role are required' }, 400);
@@ -2432,7 +2575,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:id/presence', async (c) => {
     const access = await requireSession(c);
     if (!access) return c.json({ error: 'Session not found' }, 404);
-    const body: { revision?: number; viewport?: unknown; cursor?: unknown; selection?: unknown; typing?: boolean; followingUserId?: string | null } = await c.req.json<{ revision?: number; viewport?: unknown; cursor?: unknown; selection?: unknown; typing?: boolean; followingUserId?: string | null }>().catch(() => ({}));
+    const body = await parseOptionalBody(c, PresenceBody);
     const now = new Date();
     const revision = Number.isFinite(body.revision) ? Math.max(0, Math.floor(body.revision!)) : access.session.canvasRevision;
     const viewport = body.viewport && typeof body.viewport === 'object' ? body.viewport : access.session.viewport;
@@ -2480,7 +2623,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (!access) return c.json({ error: 'Session not found' }, 404);
     const projectId = Number(c.req.param('projectId'));
     if (!Number.isInteger(projectId) || projectId <= 0) return c.json({ error: 'Invalid project id' }, 400);
-    const body = await c.req.json<ExpandProjectBody>().catch(() => ({} as ExpandProjectBody));
+    const body = await parseOptionalBody(c, ExpandProjectBody);
     const lens = ['delivery', 'metrics', 'customer-feedback'].includes(String(body.lens))
       ? body.lens as NonNullable<ExpandProjectBody['lens']>
       : 'everything';

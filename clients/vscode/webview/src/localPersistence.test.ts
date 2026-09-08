@@ -128,7 +128,10 @@ describe("signed-out chat store", () => {
  * source level, the same way `modelRouting.test.ts` guards the routing seam.
  */
 describe("the panel is wired to it", () => {
-  const app = readFileSync(join(__dirname, "App.tsx"), "utf8");
+  // `App.tsx` until the chat/canvas merge: the panel's root moved to `WorkspaceApp`
+  // when chat became a SURFACE of the one canvas, and the runtime moved with it into
+  // `ChatRuntimeProvider` there. Same wiring, same assertions, one file along.
+  const app = readFileSync(join(__dirname, "WorkspaceApp.tsx"), "utf8");
 
   it("uses the session store when signed out and the gateway when signed in", () => {
     expect(app).toContain("createInMemoryPersistence");

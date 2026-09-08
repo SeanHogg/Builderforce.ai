@@ -29,7 +29,7 @@
 
 import type { BrainChat, CreationSessionSummary, WorkflowDefinitionSummary } from '@/lib/builderforceApi';
 import type { IdeProject, Project, PublishedAgent } from '@/lib/types';
-import { formatResourceRef } from './resourceRef';
+import { formatResourceRef } from '@builderforce/creation-canvas-contract';
 
 /**
  * What KIND of thing an item is — the library's one facet.
@@ -54,10 +54,16 @@ export interface CreationLibraryPreviewObject {
   status?: string;
 }
 
+/**
+ * The records the library can open. A closed union rather than a string, so the one
+ * place that turns a record into a session (each type has its own `…/open` endpoint)
+ * is exhaustive by the compiler instead of by a default branch nobody revisits.
+ */
+export type CreationLibraryResourceType = 'ideProject' | 'workflow' | 'chat' | 'project' | 'agent';
+
 /** How an item that has no session yet is opened. */
 export interface CreationLibraryResource {
-  /** `ideProject` | `workflow` | `chat` | `project` | `agent` — the API's vocabulary. */
-  type: string;
+  type: CreationLibraryResourceType;
   id: string | number;
 }
 
@@ -233,7 +239,7 @@ export function creationLibraryItems(input: CreationLibraryInput): CreationLibra
   const query = input.query ?? '';
   const records = !input.includeRecords ? [] : [
     ...input.builds
-      .filter((build) => !represented.has(`ideProject:${build.id}`))
+      .filter((build) => !represented.has(formatResourceRef('ideProject', build.id)!))
       .map((build) => recordItem('build', { type: 'ideProject', id: build.id }, {
         title: build.name,
         subtitle: input.describe.build(build),
@@ -242,7 +248,7 @@ export function creationLibraryItems(input: CreationLibraryInput): CreationLibra
         projectIds: build.containerProjectId ? [build.containerProjectId] : [],
       })),
     ...input.workflows
-      .filter((workflow) => !represented.has(`workflow:${workflow.id}`))
+      .filter((workflow) => !represented.has(formatResourceRef('workflow', workflow.id)!))
       .map((workflow) => recordItem('workflow', { type: 'workflow', id: workflow.id }, {
         title: workflow.name,
         subtitle: input.describe.workflow(workflow),
@@ -250,7 +256,7 @@ export function creationLibraryItems(input: CreationLibraryInput): CreationLibra
         projectIds: workflow.projectId ? [workflow.projectId] : [],
       })),
     ...input.chats
-      .filter((chat) => !represented.has(`chat:${chat.id}`))
+      .filter((chat) => !represented.has(formatResourceRef('chat', chat.id)!))
       .map((chat) => recordItem('chat', { type: 'chat', id: chat.id }, {
         title: chat.title,
         subtitle: input.describe.chat(chat),
@@ -259,7 +265,7 @@ export function creationLibraryItems(input: CreationLibraryInput): CreationLibra
         projectIds: chat.projectId ? [chat.projectId] : [],
       })),
     ...input.projects
-      .filter((project) => !represented.has(`project:${project.id}`))
+      .filter((project) => !represented.has(formatResourceRef('project', project.id)!))
       .map((project) => recordItem('project', { type: 'project', id: project.id }, {
         title: project.name,
         subtitle: input.describe.project(project),
@@ -267,7 +273,7 @@ export function creationLibraryItems(input: CreationLibraryInput): CreationLibra
         lastActivityAt: project.updatedAt ?? project.updated_at ?? null,
       })),
     ...input.agents
-      .filter((agent) => !represented.has(`agent:${agent.id}`))
+      .filter((agent) => !represented.has(formatResourceRef('agent', agent.id)!))
       .map((agent) => recordItem('agent', { type: 'agent', id: agent.id }, {
         title: agent.name,
         subtitle: input.describe.agent(agent),

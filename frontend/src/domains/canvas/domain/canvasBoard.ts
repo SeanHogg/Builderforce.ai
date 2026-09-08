@@ -27,12 +27,11 @@
  */
 
 import type { Edge } from '@xyflow/react';
-import { isCreationObjectKind } from '@builderforce/creation-canvas-contract';
+import { formatResourceRef, isCreationObjectKind, parseResourceRef } from '@builderforce/creation-canvas-contract';
 import { edgeVisuals, readConnectionStyle } from '@/lib/canvasConnectionStyle';
 import { CANVAS_BOARD_INVARIANTS_BY_KEY, type CanvasBoardInvariantKey } from '@/lib/canvas/boundedContexts';
 import { specRefKey } from '@/lib/specObjects';
 import { canvasPlacementFlags, type CanvasObject, type CanvasObjectData, type CreationObjectKind } from './canvasObject';
-import { parseResourceRef } from './resourceRef';
 
 /**
  * The board. Objects and the connections between them, and nothing else — a
@@ -110,7 +109,9 @@ function objectFromPersisted(object: PersistedCanvasObject): CanvasObject {
     data: {
       kind: object.kind as CreationObjectKind,
       title: object.kind,
-      ...(object.resourceType && object.resourceId ? { resourceId: `${object.resourceType}:${object.resourceId}` } : {}),
+      // `formatResourceRef` answers null for a card with no record, which is what
+      // keeps `resourceId` absent rather than the string "null:null".
+      ...(() => { const ref = formatResourceRef(object.resourceType, object.resourceId); return ref ? { resourceId: ref } : {}; })(),
       ...content,
     } as CanvasObjectData,
   };

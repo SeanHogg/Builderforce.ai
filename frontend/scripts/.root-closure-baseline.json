@@ -158,7 +158,6 @@
     "domains/canvas/domain/authoredColors.ts",
     "domains/canvas/domain/canvasBoard.ts",
     "domains/canvas/domain/canvasObject.ts",
-    "domains/canvas/domain/resourceRef.ts",
     "domains/canvas/infrastructure/localCanvasStore.ts",
     "domains/guest/application/guestRead.ts",
     "domains/guest/application/guestWall.ts",

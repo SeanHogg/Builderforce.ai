@@ -1,0 +1,984 @@
+import * as vscode from "vscode";
+import { autoApproveDefault } from "./permissionMode";
+import { listLocalModels, localModelOptions } from "./localModels";
+import { artifactRoutePath } from "@seanhogg/builderforce-brain-embedded";
+import { BUILD_ID, BUILT_AT } from "./buildInfo";
+import { posixShellReport } from "./posixShell";
+import { getTenantJwt, getCurrentUserId } from "./bfApi";
+import type { BrainRunHost, WebviewRunStart } from "./brainRunHost";
+import { authorizeLocalEndpoint, getBaseUrl, getWebBaseUrl, getLocalModelsConfig, SECRET_KEY, fetchPersonalityBlock, fetchLimbicBlock, getSessionTabMode, type SessionTabMode } from "./gateway";
+import { attentionFor, sessionTabIcon, sessionTabPrefix } from "./attention";
+import { getGroundingWithHistory } from "./grounding";
+import { getEditorContext, getEditorContextLive, watchEditorContext } from "./editorContext";
+import { detectPendingChanges, watchPendingChanges } from "./gitChanges";
+import { setSelectedModel, setSelectedModelPool } from "./modelState";
+import { resolveModelRoute } from "./modelRouting";
+import { resolveLocalChatEndpoint } from "./localModels";
+import { modelChoiceLabels } from "./modelChoiceLabels";
+import { getSelectedProject } from "./projectState";
+import { getProjectNames } from "./projectNames";
+import { WebviewPanelBase, type WebviewInbound } from "./webviewShared";
+import { canvasLabels, captureFromEditor, isLightTheme, navigateFromCanvas, openCapturedFile } from "./canvasHostActions";
+import { workspaceCanvasSession, type WorkspaceCanvasSession } from "./workspaceSession";
+
+/** Inbound messages unique to the Brain panel (the shared cases live in the base). */
+interface BrainInbound extends WebviewInbound {
+  name?: string;
+  text?: string;
+  prompt?: string;
+  args?: Record<string, unknown>;
+  /** For `open.artifact`: the linked work item to reveal (kind = ChatTicketService
+   *  ticket kind; ref = task id as text or a UUID; projectId scopes the board). */
+  kind?: string;
+  ref?: string;
+  projectId?: number;
+  /** For `run.start`: the serializable half of the run request (see `brainRunHost.ts`). */
+  run?: WebviewRunStart;
+  /** For `run.confirm`: the human's answer to the paused tool call. */
+  ok?: boolean;
+  /** For `run.autoApprove`: the panel's Auto-mode switch (with `chatId`, the chat it
+   *  was flipped in — it applies to that conversation's run and no other). */
+  on?: boolean;
+  /** For `session.meta`: the chat this panel is showing (id + current title), so a
+   *  per-session tab can name itself and bind to the chat it was opened for. */
+  chatId?: number;
+  title?: string;
+  /** For `open.web`: a path on the web app to open in the browser (the host owns the
+   *  web base URL), e.g. the pricing or billing page behind an upgrade click. */
+  path?: string;
+  /** For `changes.open`: the ABSOLUTE path of the uncommitted file whose diff to
+   *  open. The webview only echoes back a path the host itself sent it. */
+  changePath?: string;
+  /** For `changes.open`: that file's git status, so an untracked file opens as a
+   *  file rather than as a diff against nothing. */
+  changeStatus?: string;
+  /** `canvas.capture` — which editor capture to perform. */
+  action?: string;
+  /** `canvas.openFile` — where in the revealed file to put the selection. */
+  range?: { startLine: number; startColumn: number; endLine: number; endColumn: number };
+  /** `canvas.i18nError` — the lookup failure the board degraded past. */
+  message?: string;
+  /** For `model.set`: the composer's model choice — 'auto' (gateway routes),
+   *  'byo_pool' (the tenant's connected accounts in priority order), or 'model'
+   *  with `model` set to the id to pin. */
+  mode?: string;
+  model?: string;
+  /** For `llm.fetch`: the request the host performs against a local model runtime on
+   *  the webview's behalf. `url` is fenced to the configured on-device endpoints. */
+  url?: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string | null;
+}
+
+/** A work item to auto-link to the chat the intent opens, so the conversation is
+ *  tied to (and has context on) the item that spawned it. `kind` is a
+ *  ChatTicketService ticket kind (task | epic | gap | objective | initiative |
+ *  portfolio | roadmap | spec | retro | poker); `ref` is the item id (task id as text,
+ *  else a UUID). */
+export interface IntentTicket {
+  kind: string;
+  ref: string;
+  title?: string;
+  projectId?: number;
+}
+
+/** A host-driven request to the singleton Brain panel (mirror of the webview type). */
+export interface BrainIntent {
+  kind: "new" | "focus" | "task" | "seed";
+  chatId?: number;
+  /** For 'seed': a prompt pre-filled into a fresh chat (editor entry points). */
+  text?: string;
+  task?: { id: number; key?: string; title: string; taskType?: "task" | "epic" | "gap"; projectId?: number; dispatched?: boolean };
+  /** Auto-link this work item to the chat once it's created (task/roadmap/etc.). For
+   *  a 'seed' intent this also forces the chat to be created eagerly so the link
+   *  lands (an editor-entry 'seed' with no ticket stays lazy). */
+  ticket?: IntentTicket;
+}
+
+/** Host callbacks so the Brain panel can keep the sidebar trees live. */
+export interface BuilderForcePanelHooks {
+  /** A chat was created / renamed / had activity — refresh the Sessions sidebar. */
+  onChatsChanged?: () => void;
+  /** A platform (catalog) write happened in the chat — refresh Project & Tasks. */
+  onPlatformWrite?: (toolName: string) => void;
+  /**
+   * The host that EXECUTES this panel's runs. The agent loop lives in the extension
+   * host (see `brainRunHost.ts`), so closing or switching away from the tab never
+   * ends a run; the panel starts runs, watches them, and re-attaches when reopened.
+   */
+  runHost?: BrainRunHost;
+}
+
+/**
+ * Localized UI strings handed to the bundled React webview. The webview ships no
+ * i18n stack of its own (next-intl is web-only), so the host translates here via
+ * `vscode.l10n` (editor display language) and forwards the bundle through `init`.
+ * Keys are the webview's namespace; the l10n lookup is keyed off the English message.
+ */
+function buildLabels(): Record<string, string> {
+  const t = vscode.l10n.t;
+  return {
+    // <BrainTimeline> (shared transcript UI)
+    "tl.thinking": t("Thinking…"),
+    // The ANIMATED in-flight row (<LiveActivity>) — the ONLY thing on screen while a
+    // long tool call runs, so every phase line is localized like any other visible
+    // string. `{tool}` / `{target}` / `{step}` / `{elapsed}` are substituted by the
+    // renderer, not by l10n.
+    "tl.liveStarting": t("Starting…"),
+    "tl.liveWriting": t("Writing the reply…"),
+    "tl.liveTool": t("Running {tool}"),
+    "tl.liveAwaiting": t("Waiting for you to approve {tool}"),
+    "tl.liveFinishing": t("Wrapping up…"),
+    "tl.liveOn": t(" on {target}"),
+    "tl.liveStep": t("step {step}"),
+    "tl.liveSlow": t("Still working — {elapsed} elapsed"),
+    "tl.liveAria": t("Current activity"),
+    "tl.thoughtFor": t("Thought for {duration}"),
+    "tl.thought": t("Thought"),
+    "tl.you": t("You"),
+    "tl.assistant": "BuilderForce",
+    "tl.input": t("Input"),
+    "tl.output": t("Output"),
+    "tl.error": t("Error"),
+    "tl.loading": t("Loading…"),
+    "tl.empty": t("Ask BuilderForce to build or change something."),
+    "tl.copy": t("Copy"),
+    "tl.copied": t("Copied"),
+    "tl.replay": t("Send again"),
+    "tl.rateUp": t("Good response"),
+    "tl.rateDown": t("Bad response"),
+    "tl.apply": t("Apply"),
+    "tl.createFile": t("Create file"),
+    "tl.preview": t("Preview"),
+    // Run milestones + agent dispatch render as system ACTIVITY lines in the shared
+    // transcript, composed client-side from each message's structured metadata. The
+    // server records the FACTS in one language; these templates are what make the line
+    // readable in the editor's. `{…}` are substituted by the renderer, not by l10n.
+    "tl.activityStarted": t("{agent} started working on {kind} #{ref}"),
+    "tl.activityCompleted": t("{agent} finished {kind} #{ref}"),
+    "tl.activityCompletedWithLane": t("{agent} finished {kind} #{ref} — moved to {lane}"),
+    "tl.activityFailed": t("{agent}'s run on {kind} #{ref} failed"),
+    "tl.activityPaused": t("{agent} paused on {kind} #{ref} — waiting on a human answer"),
+    "tl.activityPausedWithQuestion": t("{agent} paused on {kind} #{ref} — needs an answer: {question}"),
+    "tl.activityResumed": t("{agent} resumed work on {kind} #{ref}"),
+    "tl.activityCancelled": t("{agent}'s run on {kind} #{ref} was cancelled"),
+    "tl.activityDispatched": t("{agent} was assigned to {kind} #{ref}"),
+    // Composer + chrome
+    "app.signInPrompt": t("Sign in to BuilderForce to start."),
+    "app.signIn": t("Sign in"),
+    "app.summarizeNeedsAccount": t("Summarizing a chat needs a BuilderForce account. This conversation is only on this machine."),
+    "app.beta": t("beta"),
+    "app.newChat": t("New chat"),
+    "app.conversation": t("Conversation"),
+    "app.rename": t("Rename chat"),
+    "app.renamePlaceholder": t("Chat name"),
+    "app.noProject": t("No project"),
+    // Account tier chip + the actionable half of an entitlement error. The chip
+    // says which plan funds this chat (and what allowance is left on a metered
+    // one); the banner buttons take the user to the page that unblocks the turn.
+    "app.planFreeHint": t("You are on the Free plan — chats run on the included BuilderForce models. Click to see plans and upgrade."),
+    "app.planPaidHint": t("Your workspace is on the {plan} plan. Click to manage your plan."),
+    "app.planTokensLeft": t("{count} tokens left"),
+    "app.planNoTokens": t("no tokens left"),
+    "app.upgrade": t("Upgrade"),
+    "app.upgradeToPlan": t("Upgrade to {plan}"),
+    "app.addCard": t("Add a card"),
+    "app.copyChat": t("Copy chat diagnostics (plan + usage + identity + Evermind state + transcript)"),
+    // A copy that FAILED must read differently from one that never ran — the button
+    // used to swallow every rejection, so a broken export looked like a dead control.
+    "app.copyFailed": t("Could not build the chat diagnostics report."),
+    // Pending ask_user question, restated at the composer so a blocked chat is
+    // answerable without hunting back through the transcript for its card.
+    "app.askPending": t("Answer needed"),
+    "app.askJumpTo": t("Show in conversation"),
+    // Consolidate + Fork — rows in the composer's `/` menu (they act on the CHAT,
+    // not the next turn), grouped there under the existing `app.conversation` heading.
+    "app.sessionUnavailable": t("Available once this chat has a few messages and no run in flight"),
+    "app.consolidate": t("Consolidate"),
+    "app.consolidateHint": t("Summarize this chat into a compact context the rest of the conversation builds on"),
+    "app.consolidating": t("Consolidating…"),
+    "app.fork": t("Fork"),
+    "app.forkHint": t("Summarize this chat and continue in a new one from that summary"),
+    "app.forking": t("Forking…"),
+    "app.forkTitle": t("Fork of {title}"),
+    // Per-chat project-Evermind memory switch
+    "app.memory": t("Memory"),
+    "app.memoryOnHint": t("Memory on — this chat recalls and learns from the project Evermind"),
+    "app.memoryOffHint": t("Memory off — this chat is a scratch space (no recall, no learning)"),
+    "app.memoryUnavailable": t("This chat has no project memory to recall from — link it to a project first"),
+    "app.diagnostics": t("Run connection diagnostics"),
+    "app.attachImage": t("Attach image"),
+    "app.remove": t("Remove"),
+    // Composer toolbar (Claude-style + / menus, auto mode, dictation)
+    "app.add": t("Add"),
+    "app.options": t("Options"),
+    // Chat | Work — the CONVERSATION's mode (migration 0409), not an editor setting.
+    // The same chat opened on the web reads the same mode, which is the whole point:
+    // one conversation means one thing on every surface.
+    // The "Changes (N)" pill in the ticket rail — the chat's own "this turn left
+    // code on disk" signal — and the drawer it opens. The pill word is the SAME
+    // source string as the Changes sidebar's title, and the status words are the
+    // ones `pendingChangesTree.ts` renders, so one catalog entry serves both.
+    "changes.pill": t("Changes"),
+    "changes.summary": t("{count} uncommitted changes"),
+    "changes.summaryOne": t("1 uncommitted change"),
+    "changes.hint": t("Changed in your workspace and not committed yet."),
+    "changes.review": t("Review"),
+    "changes.staged": t("staged"),
+    "changes.status.modified": t("modified"),
+    "changes.status.added": t("added"),
+    "changes.status.deleted": t("deleted"),
+    "changes.status.renamed": t("renamed"),
+    "changes.status.untracked": t("new"),
+    "changes.status.conflict": t("conflict"),
+    "changes.status.typechange": t("type changed"),
+    "app.mode": t("Mode"),
+    "app.modeChat": t("Chat"),
+    "app.modeChatHint": t("Just answer — read and reason as much as needed, but do not open or dispatch board work"),
+    "app.modeWork": t("Work"),
+    "app.modeWorkHint": t("Turn what we agree into tracked work — open the ticket, staff it, and dispatch an agent to run it"),
+    "app.uploadFile": t("Upload from computer"),
+    "app.uploading": t("Uploading…"),
+    "app.addContext": t("Add context"),
+    "app.browseWeb": t("Browse the web"),
+    "app.on": t("On"),
+    "app.off": t("Off"),
+    "app.effort": t("Effort"),
+    "app.effortQuick": t("Quick"),
+    "app.effortBalanced": t("Balanced"),
+    "app.effortThorough": t("Thorough"),
+    // What each Effort level actually does. `{answer}` is the level's max answer
+    // tokens, substituted client-side (same convention as `app.forkTitle`'s
+    // `{title}`); `app.effortDescThinking` is appended only when Thinking is on,
+    // with `{thinking}` = the level's thinking budget.
+    "app.effortDesc.quick": t("Fastest and cheapest — short, direct answers. Up to {answer} answer tokens."),
+    "app.effortDesc.balanced": t("The default — normal depth. Up to {answer} answer tokens."),
+    "app.effortDesc.thorough": t("Deepest and slowest — exhaustive, verifies its work. Up to {answer} answer tokens."),
+    "app.effortDescThinking": t("+ {thinking} thinking tokens."),
+    "app.thinking": t("Thinking"),
+    // Thinking toggle description — `{budget}` is the current effort's thinking budget.
+    "app.thinkingOnDesc": t("The model reasons before answering, with a {budget}-token thinking budget at this effort. Slower, better on hard problems."),
+    "app.thinkingOffDesc": t("Off — the model answers directly. Turn on for a reasoning pass before the answer."),
+    // The `/` menu's own chrome. The model ROWS' copy (categories, funding lines,
+    // Auto/Pool/Evermind naming) is not here: it is shared with the host's
+    // `Change model` QuickPick and travels as `init.modelLabels`
+    // (see `modelChoiceLabels.ts`), so the two pickers cannot word the same row
+    // differently.
+    "app.model": t("Model"),
+    "app.modelInUse": t("Model in use"),
+    "app.searchModels": t("Search models…"),
+    "app.filterModels": t("Filter models"),
+    "app.noModels": t("No matching models"),
+    "app.all": t("All"),
+    "app.modelLocked": t("Model choice needs a paid plan or a connected provider account."),
+    "app.accountSettings": t("Account settings"),
+    "app.autoMode": t("Auto mode"),
+    "app.autoModeHint": t("Auto-approve tool actions without asking"),
+    "app.pickModel": t("Change model"),
+    "app.dictate": t("Dictate"),
+    "app.stopDictation": t("Stop dictation"),
+    "app.working": t("Working…"),
+    "app.send": t("Send"),
+    "app.stop": t("Stop"),
+    // Queue-while-running: messages composed during an in-flight run are queued and
+    // drained one per completed run instead of being dropped.
+    "app.queueSend": t("Queue message — sends when the current run finishes"),
+    "app.queuedLabel": t("Queued messages"),
+    "app.queuedHint": t("Queued — sends when the run finishes"),
+    "app.placeholder": t("Ask BuilderForce to build or change something…"),
+    "app.confirmRun": t("Run {name}?"),
+    "app.approve": t("Approve"),
+    "app.cancel": t("Cancel"),
+    "app.always": t("Always"),
+    "app.dismiss": t("Dismiss"),
+    "app.reconnect": t("Reconnect"),
+    "app.byoUnused": t("Your connected {provider} account couldn’t be used this run (its token looks expired or revoked), so it ran on the shared model pool instead of your own model. Reconnect it in the web app under Settings ▸ API Keys."),
+    "app.byoOtherWorkspace": t("Your {provider} account is connected in a DIFFERENT workspace, so this run used the shared model pool instead of your own model. Switch to that workspace, or connect it in this one under Settings ▸ API Keys."),
+    "app.taskSeed": t("Let's work on {task}."),
+    "app.taskSeedDispatched": t("I just dispatched {task} to run on the platform. Check the latest execution's status and trace, then help me follow up."),
+  };
+}
+
+/**
+ * The unified BuilderForce Brain — a bundled React webview (the SAME
+ * <BrainTimeline> + brain-embedded core the web app uses), so the chat experience
+ * is identical on the web and in VS Code, backed by the same server-side `/api/brain`
+ * conversations. This is the ONE chat surface in the editor: the Sessions sidebar
+ * and task commands all drive it (there is no separate legacy chat panel).
+ *
+ * The React app reaches the gateway/API directly (CORS allows the
+ * `vscode-webview://` origin) — including the shared MCP tool catalog. Two things
+ * only the privileged host can do cross a typed postMessage bridge:
+ *   - local file tools (read/list/write/edit/delete) run here against the workspace
+ *   - the tenant token is minted/refreshed here from the stored editor key
+ */
+export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
+  /** The single reused panel (`sessionTabs:reuse` — the default). */
+  private static reused: BuilderForcePanel | undefined;
+  /** `sessionTabs:perSession`: one panel per chat id, so sessions are switchable tabs. */
+  private static readonly byChat = new Map<number, BuilderForcePanel>();
+  /** perSession panels for a chat that has no server id yet (a 'new'/'seed' intent);
+   *  each re-keys itself into {@link byChat} once the webview reports its chat. */
+  private static readonly unassigned = new Set<BuilderForcePanel>();
+  private static hooks: BuilderForcePanelHooks = {};
+
+  /** Wire host callbacks once (from `activate`) so the panel can refresh the trees. */
+  static configure(hooks: BuilderForcePanelHooks): void {
+    BuilderForcePanel.hooks = hooks;
+  }
+
+  /** Every live Brain panel, whichever registry holds it. */
+  private static allPanels(): BuilderForcePanel[] {
+    return [
+      ...(BuilderForcePanel.reused ? [BuilderForcePanel.reused] : []),
+      ...BuilderForcePanel.byChat.values(),
+      ...BuilderForcePanel.unassigned,
+    ];
+  }
+
+  /**
+   * Open (or reveal) the Brain on `intent`. In `reuse` mode one panel is kept and the
+   * intent switches the conversation inside it. In `perSession` mode each session gets
+   * its own tab: focusing a session that is already open reveals ITS tab rather than
+   * stealing another one, so the user can switch between chats like editor tabs.
+   */
+  /**
+   * Reveal the workspace panel, at the surface the entry asked for.
+   *
+   * `builderforce.openChat` asks for `chat` and `builderforce.openCreateCanvas` asks
+   * for `graph`; both land on the SAME panel, because a chat and a canvas are the
+   * same board read two ways (`frontend/src/lib/canvasSurfaces.ts`). An already-open
+   * panel is switched rather than duplicated — opening your chat while your board is
+   * up must not leave you with two tabs holding one session.
+   */
+  static async open(
+    ctx: vscode.ExtensionContext,
+    intent?: BrainIntent,
+    opts?: { surface?: "chat" | "graph"; sessionId?: string },
+  ): Promise<void> {
+    const mode = getSessionTabMode();
+    const surface = opts?.surface ?? "chat";
+    const session = await workspaceCanvasSession(ctx, opts?.sessionId);
+
+    if (mode === "reuse") {
+      if (BuilderForcePanel.reused) {
+        BuilderForcePanel.reused.panel.reveal();
+        BuilderForcePanel.reused.switchTo(surface, session);
+        if (intent) BuilderForcePanel.reused.sendIntent(intent);
+        return;
+      }
+      BuilderForcePanel.reused = new BuilderForcePanel(ctx, intent, mode, surface, session);
+      return;
+    }
+
+    // perSession: an already-open session just comes forward — never duplicated, and
+    // never switched out from under another tab.
+    if (intent?.kind === "focus" && intent.chatId != null) {
+      const open = BuilderForcePanel.byChat.get(intent.chatId);
+      if (open) {
+        open.panel.reveal();
+        return;
+      }
+    }
+    const panel = new BuilderForcePanel(ctx, intent, mode, surface, session);
+    if (intent?.kind === "focus" && intent.chatId != null) {
+      panel.ownChatId = intent.chatId;
+      BuilderForcePanel.byChat.set(intent.chatId, panel);
+      panel.applyTabStatus();
+    } else {
+      // 'new'/'seed'/'task' — the chat id only exists once the webview creates it.
+      BuilderForcePanel.unassigned.add(panel);
+    }
+  }
+
+  /**
+   * Point an OPEN panel at a (possibly different) surface or board.
+   *
+   * Re-pushing init is the whole mechanism: the webview reads `surface` as the entry's
+   * request and the canvas honours it above its own stored preference (see
+   * `initialSurface` in `CreationCanvas`). That is why "Open Chat" reaches a panel
+   * already showing a board instead of opening a second one.
+   */
+  private switchTo(surface: "chat" | "graph", session: WorkspaceCanvasSession): void {
+    this.surfaceRequest = surface;
+    this.session = session;
+    void this.sendInit();
+  }
+
+  /** Re-push init (token/grounding/model/labels) to every open panel — e.g. after sign-in. */
+  static refresh(): void {
+    for (const panel of BuilderForcePanel.allPanels()) void panel.sendInit();
+  }
+
+  /**
+   * Repaint every per-session tab's live status. Called from the SAME handlers that
+   * already repaint the trees on an attention change, so tabs ride the one existing
+   * poller + local-run overlay — no second timer, no extra fetch.
+   */
+  static refreshTabStatus(): void {
+    for (const panel of BuilderForcePanel.byChat.values()) panel.applyTabStatus();
+    for (const panel of BuilderForcePanel.unassigned) panel.applyTabStatus();
+  }
+
+  /** Which surface the LAST entry asked for. Not readonly: revealing an open panel
+   *  from the other command re-points it rather than opening a second tab. */
+  private surfaceRequest: "chat" | "graph" = "chat";
+  /** Intent captured at construction, flushed once the webview signals `ready`. */
+  private pendingIntent?: BrainIntent;
+  /** The chat this panel is bound to (perSession); undefined until the webview reports one. */
+  private ownChatId?: number;
+  /** The bound chat's title — the per-session tab's label. */
+  private chatTitle = "";
+  /** Stops relaying the host's runs to this panel (set while the webview is attached). */
+  private detachRuns?: () => void;
+
+  private constructor(
+    ctx: vscode.ExtensionContext,
+    intent: BrainIntent | undefined,
+    private readonly mode: SessionTabMode,
+    surface: "chat" | "graph",
+    /** The board this panel is working in, resolved before construction. */
+    private session: WorkspaceCanvasSession,
+  ) {
+    super(ctx, { viewType: "builderforce.workspace", title: "BuilderForce", htmlTitle: "BuilderForce" });
+    this.surfaceRequest = surface;
+    // The canvas picks its palette from the editor theme; re-push init so a theme
+    // switch is reflected without reopening the panel.
+    this.disposables.push(vscode.window.onDidChangeActiveColorTheme(() => void this.sendInit()));
+    this.pendingIntent = intent;
+    // Keep the React app's editor context live: whenever the active file, selection,
+    // or open tabs change, push a fresh snapshot so the agent always knows what the
+    // user is looking at (the same context seeded in `init`).
+    this.disposables.push(watchEditorContext(() => this.pushEditorContext()));
+    // Keep the chat's pending-changes bar live: a stage, a commit, a checkout or one
+    // of this panel's own mutating tools changes what is waiting for review, and the
+    // conversation is where the user is looking when it happens.
+    this.disposables.push(watchPendingChanges(() => void this.pushPendingChanges()));
+  }
+
+  protected async onMessage(msg: BrainInbound): Promise<void> {
+    switch (msg.type) {
+      case "ready":
+        // Watch the host-owned runs from this panel: a reopened tab is brought up to
+        // date on every live run the moment it asks. Re-attached on each `ready` (a
+        // webview reload is a fresh mirror), never twice at once.
+        this.detachRuns?.();
+        this.detachRuns = BuilderForcePanel.hooks.runHost?.attach({ post: (m) => this.post(m) });
+        await this.sendInit();
+        if (this.pendingIntent) {
+          this.sendIntent(this.pendingIntent);
+          this.pendingIntent = undefined;
+        }
+        break;
+      // The run verbs, forwarded to the host-owned loop. `run.start` is fire-and-forget
+      // here: the host answers with `run.settled` / `run.failed` when the loop ends,
+      // which can be minutes later — far past any request timeout.
+      case "run.start":
+        if (msg.run && typeof msg.run.chatId === "number") void BuilderForcePanel.hooks.runHost?.start(msg.run);
+        break;
+      case "run.stop":
+        if (typeof msg.chatId === "number") BuilderForcePanel.hooks.runHost?.stop(msg.chatId);
+        break;
+      case "run.confirm":
+        if (typeof msg.chatId === "number") BuilderForcePanel.hooks.runHost?.confirm(msg.chatId, msg.ok === true);
+        break;
+      case "run.clearError":
+        if (typeof msg.chatId === "number") BuilderForcePanel.hooks.runHost?.clearError(msg.chatId);
+        break;
+      // Scoped to the chat the panel is showing: several chats run at once out in the
+      // host, and a switch flipped in one must not answer a confirm parked in another.
+      case "run.autoApprove":
+        if (typeof msg.chatId === "number") BuilderForcePanel.hooks.runHost?.setAutoApprove(msg.chatId, msg.on === true);
+        break;
+      // ── The canvas half of the protocol ──────────────────────────────────
+      // Delegated to `canvasHostActions`, which holds no panel state: this panel
+      // already owns run lifecycle, chat registry, tab status and editor context,
+      // and absorbing ~250 lines of capture switch would make it the file everyone
+      // has to edit.
+      case "canvas.capture":
+        // A cancelled capture answers null — the canvas treats that as "no change".
+        try {
+          this.respond(msg.id, true, await captureFromEditor(msg.action));
+        } catch (error) {
+          // Capture failures are user-facing ("open a file first"), so they belong in
+          // the editor's own notification channel, not swallowed into the webview.
+          const detail = error instanceof Error ? error.message : String(error);
+          void vscode.window.showWarningMessage(detail);
+          this.respond(msg.id, false, undefined, detail);
+        }
+        break;
+      case "canvas.openFile":
+        if (msg.path) await openCapturedFile(msg.path, msg.range);
+        break;
+      case "canvas.navigate":
+        if (msg.path) {
+          navigateFromCanvas(msg.path, (sessionId) => {
+            void BuilderForcePanel.open(this.ctx, undefined, { surface: "graph", sessionId });
+          });
+        }
+        break;
+      case "canvas.i18nError":
+        // A missing key renders as the key rather than blanking the board; log it so
+        // the gap is visible instead of silently shipping raw identifiers.
+        console.warn(`[builderforce] canvas i18n: ${typeof msg.message === "string" ? msg.message : ""}`);
+        break;
+      case "chats.changed":
+        BuilderForcePanel.hooks.onChatsChanged?.();
+        break;
+      case "platform.write":
+        BuilderForcePanel.hooks.onPlatformWrite?.(typeof msg.name === "string" ? msg.name : "");
+        break;
+      // The webview switched to (or created / renamed) the chat it is showing. A
+      // per-session tab binds to that chat here: it re-keys itself under the new id
+      // and names the tab after the conversation.
+      case "session.meta":
+        this.bindSession(
+          typeof msg.chatId === "number" ? msg.chatId : undefined,
+          typeof msg.title === "string" ? msg.title : undefined,
+        );
+        break;
+      // Triage: the webview built a full transcript (turns + tool I/O + errors);
+      // the privileged host writes it to the clipboard reliably (a sandboxed
+      // webview can't), so a "No response" turn can be pasted out to debug.
+      case "copy":
+        await vscode.env.clipboard.writeText(typeof msg.text === "string" ? msg.text : "");
+        void vscode.window.showInformationMessage(vscode.l10n.t("Chat diagnostics copied to clipboard."));
+        break;
+      // Open a linked work item (clicked in the ChatTicketsPanel) in its own view:
+      // a task/epic/gap deep-links to its detail drawer (assignee/status/PRD) in the
+      // web portal; strategy tiers + specs open the web page they live on.
+      case "open.artifact":
+        this.openArtifact(
+          typeof msg.kind === "string" ? msg.kind : "",
+          typeof msg.projectId === "number" ? msg.projectId : undefined,
+          typeof msg.ref === "string" ? msg.ref : undefined,
+        );
+        break;
+      // Open a web-app page in the browser — the account chip and the error
+      // banner's Upgrade / Add-a-card buttons. The webview supplies only the PATH;
+      // the host owns the base URL (setting-driven, `getWebBaseUrl`), and the path
+      // is constrained to a same-origin absolute path so a compromised webview
+      // can't turn this into an open redirect.
+      case "open.web": {
+        const path = typeof msg.path === "string" ? msg.path : "";
+        if (/^\/[^/\\]/.test(path)) {
+          void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}${path}`));
+        }
+        break;
+      }
+      // The chat's pending-changes bar: open ONE changed file's diff, or take the
+      // user to the full Changes list. Both go through the same commands the sidebar
+      // uses, so "open" and "review" mean exactly one thing across the extension.
+      case "changes.open":
+        if (typeof msg.changePath === "string" && msg.changePath) {
+          void vscode.commands.executeCommand("builderforce.openChange", {
+            path: msg.changePath,
+            status: typeof msg.changeStatus === "string" ? msg.changeStatus : "modified",
+          });
+        }
+        break;
+      case "changes.review":
+        void vscode.commands.executeCommand("builderforce.reviewChanges");
+        break;
+      // Run the existing connection-diagnostics command (opens the output channel).
+      case "diagnose":
+        void vscode.commands.executeCommand("builderforce.diagnose");
+        break;
+      // Composer `/` menu → account settings.
+      case "settings":
+        void vscode.commands.executeCommand("builderforce.openSettings");
+        break;
+      // Composer `/` menu → model choice. The panel owns the LIST (it reads the same
+      // gateway surface the QuickPick does), but the CHOICE is host state: it drives
+      // BOTH editor chat surfaces and outlives this panel, so it is set here. Setting
+      // it fires onModelChange → refresh() → a fresh `init`, which is how the menu
+      // learns what the pick actually resolved to (entitlement may drop a pin).
+      case "model.set":
+        if (msg.mode === "byo_pool") setSelectedModelPool();
+        else setSelectedModel(msg.mode === "model" && typeof msg.model === "string" ? msg.model : undefined);
+        break;
+      // Composer `+` menu → "Add context": pick a workspace file (or the active
+      // editor selection) and hand its text back so the webview attaches it.
+      case "context.pick": {
+        const picked = await this.pickContext();
+        this.respond(msg.id, true, picked);
+        break;
+      }
+      // Per-turn LIMBIC parity: the webview can't call the gateway's affective
+      // endpoint with the user's personality directly, so it round-trips the turn's
+      // text here. We fetch the fresh affect + PERSONALITY block (signed-in user's
+      // id → their tone) so the next turn runs under the SAME limbic layer as the
+      // native participant + cloud/on-prem agents. Best-effort: '' on any failure so
+      // the run proceeds unaugmented.
+      case "fetchLimbic": {
+        let block = "";
+        try {
+          const userId = (await getCurrentUserId(this.ctx.secrets)) ?? undefined;
+          block = await fetchLimbicBlock(
+            this.ctx.secrets,
+            typeof msg.text === "string" ? msg.text : "",
+            userId ? { userId } : undefined,
+          );
+        } catch {
+          /* affective layer is best-effort — never blocks the turn */
+        }
+        this.respond(msg.id, true, { block });
+        break;
+      }
+      // A completion the HOST performs for the webview against a runtime on this
+      // machine. See `hostFetch` in vscodeBridge.ts for why it cannot be done in the
+      // webview (plain-HTTP localhost is CSP-blocked there, and the runtime would have
+      // to allow the `vscode-webview://` origin by CORS besides).
+      case "llm.fetch": {
+        void this.proxyLocalFetch(msg);
+        break;
+      }
+      case "llm.abort": {
+        const controller = typeof msg.id === "string" ? this.localFetches.get(msg.id) : undefined;
+        controller?.abort();
+        break;
+      }
+    }
+  }
+
+  /** In-flight host-performed fetches, so the webview can cancel one it started. */
+  private readonly localFetches = new Map<string, AbortController>();
+
+  /**
+   * Perform one webview-requested fetch against a LOCAL runtime and stream the response
+   * back frame by frame.
+   *
+   * The destination is fenced to the configured on-device endpoints, exactly the
+   * "the host, not the caller, names the origin" rule the agent host's egress relay
+   * applies: the webview is our own bundle, but a proxy that forwards any URL it is
+   * handed is a same-origin request forwarder into the user's machine, and it would
+   * outlive whatever we currently believe the webview can be made to send.
+   *
+   * Bytes are decoded with a STREAMING decoder so a multi-byte character split across
+   * two network chunks is not corrupted on its way through postMessage.
+   */
+  private async proxyLocalFetch(msg: BrainInbound): Promise<void> {
+    const id = typeof msg.id === "string" ? msg.id : "";
+    if (!id) return;
+    const url = typeof msg.url === "string" ? msg.url : "";
+    const send = (type: string, payload: Record<string, unknown>): void => {
+      void this.panel.webview.postMessage({ type, id, ...payload });
+    };
+
+    const match = resolveLocalChatEndpoint(getLocalModelsConfig(), url);
+    if (!match) {
+      send("llm.error", { error: `refused: ${url} is not a configured local model endpoint` });
+      return;
+    }
+    // Resolved here, per request, rather than carried in the panel's init payload: a Kimi
+    // token read fifteen minutes ago is no longer valid, and a credential the webview was
+    // handed once would be exactly that.
+    const authorized = await authorizeLocalEndpoint(match.provider, match.endpoint);
+    if (!authorized.ok) {
+      send("llm.error", { error: authorized.detail });
+      return;
+    }
+    const endpoint = authorized.endpoint;
+
+    const controller = new AbortController();
+    this.localFetches.set(id, controller);
+    try {
+      // The HOST attaches the credential, and does so LAST so a caller-supplied
+      // `authorization` can never override it — the panel composes the request but must
+      // neither see this machine's Kimi bearer nor be able to aim one somewhere else.
+      // An on-device engine has no token and the header stays absent, exactly as before.
+      const { authorization: _drop, Authorization: _dropCased, ...callerHeaders } = msg.headers ?? {};
+      const res = await fetch(url, {
+        method: msg.method ?? "POST",
+        headers: {
+          ...callerHeaders,
+          ...(endpoint.token ? { authorization: `Bearer ${endpoint.token}` } : {}),
+        },
+        ...(typeof msg.body === "string" ? { body: msg.body } : {}),
+        signal: controller.signal,
+      });
+      const headers: Record<string, string> = {};
+      res.headers.forEach((value, key) => { headers[key] = value; });
+      send("llm.open", { status: res.status, statusText: res.statusText, headers });
+
+      const reader = res.body?.getReader();
+      if (!reader) {
+        send("llm.end", {});
+        return;
+      }
+      const decoder = new TextDecoder();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const text = decoder.decode(value, { stream: true });
+        if (text) send("llm.chunk", { text });
+      }
+      const tail = decoder.decode();
+      if (tail) send("llm.chunk", { text: tail });
+      send("llm.end", {});
+    } catch (e) {
+      send("llm.error", { error: e instanceof Error ? e.message : String(e) });
+    } finally {
+      this.localFetches.delete(id);
+    }
+  }
+
+  /**
+   * Reveal a linked work item the user opened from the ChatTicketsPanel.
+   *
+   * The routing TABLE is shared (`artifactRoutePath`, brain-embedded) — this host once
+   * carried its own copy of the same switch, and the two drifted. Here we only decide
+   * WHICH deployment the path is opened against, which is host state the shared module
+   * must not know about.
+   */
+  private openArtifact(kind: string, projectId?: number, ref?: string): void {
+    const path = artifactRoutePath(kind, ref ?? null, projectId ?? null);
+    void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}${path}`));
+  }
+
+  /**
+   * Let the user attach workspace context to a message: the active editor's
+   * selection, an already-open file, or any file chosen from disk. Returns the
+   * relative path + text (or null if cancelled) — the webview attaches it through
+   * the same upload pipeline as a dropped file, so the model gets the content.
+   */
+  private async pickContext(): Promise<{ path: string; text: string } | null> {
+    // Note: the discriminator is `ctxKind`, not `kind` — `QuickPickItem.kind` is
+    // reserved by VS Code (separator vs default), so reusing it collapses to never.
+    type Item = vscode.QuickPickItem & { ctxKind: "selection" | "doc" | "browse"; uri?: vscode.Uri };
+    const editor = vscode.window.activeTextEditor;
+    const items: Item[] = [];
+    if (editor && !editor.selection.isEmpty) {
+      items.push({
+        label: "$(selection) " + vscode.l10n.t("Active selection"),
+        description: vscode.workspace.asRelativePath(editor.document.uri),
+        ctxKind: "selection",
+      });
+    }
+    for (const doc of vscode.workspace.textDocuments) {
+      if (doc.uri.scheme !== "file" || doc.isUntitled) continue;
+      items.push({ label: "$(file) " + vscode.workspace.asRelativePath(doc.uri), ctxKind: "doc", uri: doc.uri });
+    }
+    items.push({ label: "$(search) " + vscode.l10n.t("Choose a file…"), ctxKind: "browse" });
+
+    const pick = await vscode.window.showQuickPick(items, {
+      placeHolder: vscode.l10n.t("Add context from your workspace"),
+    });
+    if (!pick) return null;
+
+    if (pick.ctxKind === "selection" && editor) {
+      return { path: vscode.workspace.asRelativePath(editor.document.uri), text: editor.document.getText(editor.selection) };
+    }
+    let uri = pick.uri;
+    if (!uri) {
+      const chosen = await vscode.window.showOpenDialog({
+        canSelectMany: false,
+        defaultUri: vscode.workspace.workspaceFolders?.[0]?.uri,
+      });
+      uri = chosen?.[0];
+    }
+    if (!uri) return null;
+    try {
+      const doc = await vscode.workspace.openTextDocument(uri);
+      return { path: vscode.workspace.asRelativePath(uri), text: doc.getText() };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Post a host-driven intent to the React app (new / focus / task). */
+  private sendIntent(intent: BrainIntent): void {
+    void this.panel.webview.postMessage({ type: "intent", intent });
+  }
+
+  /**
+   * Bind this panel to the chat its webview is showing. In perSession mode the panel
+   * re-keys itself in the registry — this is how a tab opened for a BRAND-NEW chat
+   * (which has no id until the webview creates it server-side) becomes switchable and
+   * starts tracking its own live status. In reuse mode only the title is recorded.
+   */
+  private bindSession(chatId: number | undefined, title: string | undefined): void {
+    if (title !== undefined) this.chatTitle = title;
+    if (this.mode === "perSession" && chatId !== this.ownChatId) {
+      if (this.ownChatId != null && BuilderForcePanel.byChat.get(this.ownChatId) === this) {
+        BuilderForcePanel.byChat.delete(this.ownChatId);
+      }
+      this.ownChatId = chatId;
+      if (chatId != null) {
+        // Another tab already holds this chat (e.g. the webview navigated onto it) —
+        // it loses the key so exactly one tab owns a session.
+        BuilderForcePanel.byChat.set(chatId, this);
+        BuilderForcePanel.unassigned.delete(this);
+      } else {
+        BuilderForcePanel.unassigned.add(this);
+      }
+    }
+    this.applyTabStatus();
+  }
+
+  /**
+   * Paint this tab with its chat's title + live status, so a user juggling sessions
+   * sees which one is working and which one needs an answer WITHOUT opening it —
+   * the same signal the Sessions row shows, off the same {@link attentionFor} map.
+   * Reuse mode keeps the product title (its one tab is not a single session).
+   */
+  private applyTabStatus(): void {
+    if (this.mode !== "perSession") return;
+    const state = this.ownChatId != null ? attentionFor("chat", this.ownChatId) : undefined;
+    const name = this.chatTitle.trim() || "BuilderForce";
+    this.panel.title = `${sessionTabPrefix(state)}${name}`;
+    this.panel.iconPath = sessionTabIcon(this.ctx.extensionUri, state);
+  }
+
+  /** Push the current editor context (active file / selection / open tabs) to the
+   *  React app so its ambient system channel stays in sync as the user navigates. */
+  /**
+   * Push the live editor context (active file / selection / open tabs / workspace
+   * root / git) to the React app. Driven by `watchEditorContext`, which now also
+   * fires on repository state changes, so a branch checkout re-pushes the branch the
+   * agent is told it is working on.
+   */
+  private pushEditorContext(): void {
+    const editorContext = getEditorContext();
+    void this.panel.webview.postMessage({
+      type: "editorContext",
+      editorContext,
+      // Mirrored at the top level so consumers reading workspace/git state off the
+      // init payload see the same fields on every update.
+      workspaceRoot: editorContext?.workspaceRoot,
+      git: editorContext?.git,
+    });
+  }
+
+  /**
+   * Push the workspace's uncommitted work to the React app, so the chat states that a
+   * turn left code on disk instead of leaving the transcript as the only record of it.
+   * Same read the Changes sidebar renders — one count, two surfaces.
+   */
+  private async pushPendingChanges(): Promise<void> {
+    const pendingChanges = await detectPendingChanges();
+    void this.panel.webview.postMessage({ type: "pendingChanges", pendingChanges });
+  }
+
+  /** Hand the React app its config: gateway URL, tenant token, model, grounding, tools, labels. */
+  private async sendInit(): Promise<void> {
+    const signedIn = !!(await this.ctx.secrets.get(SECRET_KEY));
+    const token = signedIn ? ((await getTenantJwt(this.ctx.secrets)) ?? null) : null;
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    // Awaited (not peeked) so the FIRST turn already knows the repo — the whole
+    // point of shipping this: the agent must not open a chat asking where the code is.
+    const editorContext = await getEditorContextLive();
+    // `projectId → name` for every project, so the header can name the project an
+    // existing chat belongs to (best-effort; falls back to "No project").
+    const projectNames: Record<string, string> = {};
+    if (signedIn) {
+      try {
+        for (const [id, name] of await getProjectNames(this.ctx.secrets)) projectNames[String(id)] = name;
+      } catch {
+        /* names are best-effort */
+      }
+    }
+    // The signed-in user's PERSONALITY-only directive block — fetched once per
+    // session (cached in the gateway helper) and injected into the webview's
+    // ambient system channel, so the Brain chat's tone reflects the user. The
+    // webview can't bundle the shared compiler (--no-dependencies), so the host
+    // fetches the compiled block from the gateway. '' when the user has no
+    // profile (a no-op) or offline.
+    let personalityBlock = "";
+    if (signedIn) {
+      try {
+        const userId = (await getCurrentUserId(this.ctx.secrets)) ?? undefined;
+        personalityBlock = await fetchPersonalityBlock(this.ctx.secrets, userId ? { userId } : undefined);
+      } catch {
+        /* personality is best-effort — never blocks init */
+      }
+    }
+    // The SAME seam every other AI surface routes through, so the panel cannot drift
+    // onto a different model (or a different transport) from the chat participant.
+    const modelChoice = await resolveModelRoute(this.ctx.secrets);
+    void this.panel.webview.postMessage({
+      type: "init",
+      baseUrl: getBaseUrl(),
+      // The installed build, for the diagnostics report (a stale VSIX explains a
+      // surprising share of "this was already fixed" reports).
+      extensionVersion: this.ctx.extension.packageJSON.version as string,
+      // …and the ARTIFACT identity the version cannot carry: two VSIXes can share a
+      // version and differ in code, so the source hash is what actually answers
+      // "did you get the fix?". See `buildInfo.ts`.
+      buildId: BUILD_ID,
+      builtAt: BUILT_AT,
+      // Whether THIS machine routes POSIX scripts to a real shell. The `git_sync_latest`
+      // / `git_undo` / `git_redo` tools are sh scripts; without a POSIX shell they reach
+      // `cmd.exe` and fail with a message naming neither the cause nor a remedy, and a
+      // report of that failure could not say whether the guard against it was even
+      // present. Now it travels with every copied diagnostics report.
+      posixShell: posixShellReport(),
+      token,
+      // Manual pick > active project's Evermind pin > configured default. Sending the
+      // `project_evermind:<id>` pin lets the gateway serve the project's CURRENT learned
+      // model on every completion (auto-following learning bumps mid-session).
+      model: modelChoice.model,
+      modelStrict: modelChoice.modelStrict,
+      routingMode: modelChoice.routingMode,
+      // Present only for an on-device model: switches the panel onto the host-proxied
+      // transport, and lets it render without an account.
+      ...(modelChoice.local
+        ? { localRoute: { baseUrl: modelChoice.local.endpoint.baseUrl, model: modelChoice.local.model } }
+        : {}),
+      // The standing "apply edits without asking?" instruction. The panel's Auto-mode
+      // switch overrides it live, but the SETTING is what it starts from — the panel
+      // used to default this off in its own code and never consult the setting, so
+      // changing the setting moved the participant and left the panel asking.
+      autoApproveDefault: autoApproveDefault(),
+      // The models this MACHINE can serve, in the shared builder's row shape. The
+      // composer's menu is built from the gateway catalogue, which by definition cannot
+      // know about them — so without this the panel offered no way to pick one and the
+      // feature existed only in the command palette.
+      localModels: localModelOptions(await listLocalModels(getLocalModelsConfig())),
+      grounding: await getGroundingWithHistory(root),
+      // Live editor context (active file / selection / open tabs). Seeds the React
+      // app's ambient system channel; refreshed via `editorContext` messages below.
+      editorContext,
+      signedIn,
+      hasWorkspace: !!root,
+      // WHERE THE CODE IS: the absolute root the local file tools resolve against,
+      // and the repository detected for it (branch / owner-repo / dirty state).
+      // `hasWorkspace` is kept — other consumers read it.
+      workspaceRoot: root,
+      git: editorContext?.git,
+      // What is uncommitted RIGHT NOW. Seeds the chat's pending-changes bar so a panel
+      // opened after the edits still says they are waiting; refreshed via
+      // `pendingChanges` messages below.
+      pendingChanges: await detectPendingChanges(),
+      // The sidebar's active project — injected into the system prompt (so the
+      // Brain scopes platform tools without asking for a projectId) AND used to
+      // scope newly-created chats. Re-pushed on project change via refresh().
+      project: getSelectedProject(),
+      projectNames,
+      // Static personality tone for the chat's system prompt (see above).
+      personalityBlock,
+      // BOTH label sets: one panel renders the chat surface AND the board, so both
+      // have to be present whichever surface it opens at.
+      labels: { ...buildLabels(), ...canvasLabels() },
+      // The model rows' copy, shared verbatim with the host's `Change model` QuickPick.
+      modelLabels: modelChoiceLabels(),
+      // The board this panel is working in, and which of its surfaces the entry asked
+      // for. Together these are what used to be the difference between two panels.
+      session: { id: this.session.id, title: this.session.title, webOrigin: getWebBaseUrl(), durable: this.session.durable },
+      surface: this.surfaceRequest,
+      colorTheme: isLightTheme() ? "light" : "dark",
+    });
+  }
+
+  protected onDispose(): void {
+    // The run itself lives in the host and carries on; only this VIEW of it goes.
+    this.detachRuns?.();
+    this.detachRuns = undefined;
+    if (BuilderForcePanel.reused === this) BuilderForcePanel.reused = undefined;
+    if (this.ownChatId != null && BuilderForcePanel.byChat.get(this.ownChatId) === this) {
+      BuilderForcePanel.byChat.delete(this.ownChatId);
+    }
+    BuilderForcePanel.unassigned.delete(this);
+  }
+}

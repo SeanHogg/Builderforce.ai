@@ -19213,7 +19213,7 @@
     "starterProductDiscovery": "产品发现",
     "starterProductDiscoveryDescription": "将客户反馈汇总为需求功能、可视化模型稿和交付路线图。",
     "createTypeTitle": "你想创建什么？",
-    "createTypeSubtitle": "从 Builder 类型或引导模板开始。它会作为对象在新画布中打开，你可以继续添加工作流、数据、人员和 Brain。",
+    "createTypeSubtitle": "以下每一项都会打开同一个画布，唯一的区别是它开场时提出的请求。进入后即可添加工作流、数据、成员和 Brain。",
     "existingCreations": "你现有的创作",
     "existingCreationsSubtitle": "在画布中打开现有的项目、智能体、网站、应用、Evermind、LLM、语音、视频、工作流或 Brain 会话。",
     "loadingCreations": "正在加载创作…",
@@ -20567,12 +20567,6 @@
     },
     "teammateSeated": "已加入此画布",
     "launcherEyebrow": "创建",
-    "createByTypeTitle": "按类型创建",
-    "createByTypeSubtitle": "选择你想创建的内容类型。",
-    "guidedTemplateTitle": "使用引导模板",
-    "guidedTemplateSubtitle": "从一个完整、已连接的工作流开始。",
-    "guidedTemplatesLabel": "引导模板",
-    "useTemplate": "使用模板",
     "comingSoon": "即将推出",
     "createAction": "创建",
     "blankCanvas": "从空白画布开始",
@@ -23675,7 +23669,19 @@
     "filterByFolder": "仅显示此文件夹",
     "clearFolderFilter": "显示全部文件夹",
     "unfiledFolder": "未归入文件夹",
-    "proveIt": "验证它"
+    "proveIt": "验证它",
+    "facetLabel": "按类型筛选",
+    "facetAll": "全部",
+    "facet": {
+      "canvas": "画布",
+      "build": "构建",
+      "workflow": "工作流",
+      "chat": "对话",
+      "project": "项目",
+      "agent": "智能体"
+    },
+    "blankCanvasTagline": "一块空白画板。说出你的需求，它便成形。",
+    "startersLabel": "开始方式"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",

@@ -1,0 +1,263 @@
+.launcher {
+  padding: 4px 0 0;
+  min-width: 0;
+  container-type: inline-size;
+  container-name: creation-launcher;
+}
+
+/* Named separately from `.launcher` so the session library's own breakpoints
+   key off ITS rendered width — this component is dropped into a wide board
+   panel and a ~300px slide-out sidebar column alike, and a `@media` query
+   would only ever see the browser viewport, not either of those. */
+.sessionsRoot {
+  min-width: 0;
+  margin-bottom: 40px;
+  container-type: inline-size;
+  container-name: creation-sessions;
+}
+
+.launcherHeader {
+  margin-bottom: 18px;
+}
+
+.launcherHeader h2 {
+  margin: 3px 0 0;
+  font-size: var(--font-size-section);
+  line-height: 1.25;
+  letter-spacing: -.02em;
+}
+
+.launcherHeader p {
+  max-width: 760px;
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
+  line-height: 1.55;
+}
+
+.eyebrow {
+  color: var(--coral-bright);
+  font-size: var(--font-size-eyebrow);
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+/* ONE grid of ways to start. It used to be two bordered panels with step
+   numbers, which said the choices were a sequence; they are alternatives that
+   all do the same thing with a different opening prompt, so they are one grid.
+   `auto-fill` + `minmax` is what lets the same markup be a 5-across gallery in
+   a board panel and a single column in a ~300px sidebar. */
+.starterGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.starterCard {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--surface-raised) 82%, transparent);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform .12s ease, border-color .12s ease, background .12s ease, box-shadow .12s ease;
+}
+
+/* The blank canvas is the zero-prompt case and leads the grid, so it is marked
+   rather than merely first — a reader scanning a wrapped grid should still be
+   able to find it. */
+.starterCard[data-blank='true'] {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--coral-bright) 45%, var(--border-subtle));
+}
+
+.starterIcon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+}
+
+.cardCopy {
+  display: block;
+  min-width: 0;
+}
+
+.cardCopy strong {
+  display: block;
+  margin-top: 9px;
+  font-size: var(--font-size-small);
+}
+
+.cardCopy > span {
+  display: -webkit-box;
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--font-size-eyebrow);
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.cardAction {
+  display: flex;
+  width: 100%;
+  margin-top: auto;
+  padding-top: 9px;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: var(--font-size-field-label);
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.cardAction b {
+  color: var(--coral-bright);
+  font-size: var(--font-size-card-title);
+}
+
+.quotaWarning {
+  margin: 12px 0 0;
+  color: var(--warning-text, var(--warning));
+  font-size: var(--font-size-small);
+}
+
+.starterCard:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--coral-bright) 58%, var(--border-subtle));
+  background: color-mix(in srgb, var(--surface-raised) 94%, var(--coral-bright));
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .12);
+  transform: translateY(-2px);
+}
+
+.starterCard:focus-visible {
+  outline: 2px solid var(--coral-bright);
+  outline-offset: 2px;
+}
+
+.starterCard:disabled {
+  opacity: .52;
+  cursor: not-allowed;
+}
+
+@container creation-launcher (max-width: 380px) {
+  /* One column rather than a wrapped grid of half-width cards: the sidebar
+     column this lands in is narrower than one card's comfortable measure. */
+  .starterGrid { grid-template-columns: 1fr; }
+  .starterCard { padding: 12px; }
+}
+
+/* ---------------------------------------------------------------------------
+   The library — header, filters and the two views.
+   Everything below was inline `style={{…}}` on the component until the tiles
+   moved into `components/creation-sessions`; a stylesheet is what lets the
+   card and list layouts differ by one `data-view` attribute instead of by a
+   ternary on every property.
+   ------------------------------------------------------------------------ */
+.libraryHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.libraryIntro {
+  min-width: 0;
+}
+
+.libraryIntro h2 {
+  margin: 0;
+  font-size: var(--font-size-section);
+}
+
+.libraryIntro p {
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
+}
+
+.libraryControls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.librarySelect,
+.librarySearch {
+  min-height: var(--control-md);
+  padding: 9px 11px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.librarySearch {
+  flex: 1 1 160px;
+  min-width: 140px;
+  max-width: 310px;
+}
+
+.quotaNotice {
+  margin: -7px 0 14px;
+  color: var(--warning);
+  font-size: var(--font-size-small);
+}
+
+.libraryState {
+  padding: 36px;
+  color: var(--text-secondary);
+}
+
+.emptyLibrary {
+  display: block;
+  width: 100%;
+  min-height: 220px;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-xl);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.emptyLibrary strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-primary);
+  font-size: var(--font-size-lede);
+}
+
+.libraryGrid {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.libraryGrid[data-view='card'] {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-4);
+}
+
+.libraryGrid[data-view='table'] {
+  grid-template-columns: 1fr;
+}
+
+.loadMore {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-4);
+}

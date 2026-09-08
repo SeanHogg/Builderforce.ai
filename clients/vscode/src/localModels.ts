@@ -139,7 +139,7 @@ export function localModelsUrl(baseUrl: string): string {
  * The endpoint `url` belongs to, or null when this machine serves no such endpoint.
  *
  * The destination fence for the webview's host-performed fetch (`llm.fetch` in
- * `brainWebview.ts`), and — since it returns the ENDPOINT rather than a boolean — also
+ * `builderforcePanel.ts`), and — since it returns the ENDPOINT rather than a boolean — also
  * the place the host learns which credential that destination takes. Those two answers
  * must come from one lookup: a fence that says "allowed" and a separate lookup that says
  * "and here is the token" can disagree, and the disagreement would either leak a

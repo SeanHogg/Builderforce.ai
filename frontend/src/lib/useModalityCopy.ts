@@ -11,6 +11,7 @@
  * display — they call the resolver here.
  */
 
+import { useCallback, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { getModality, MODALITIES, RIGHT_TAB_ICONS, type ModalityDef, type ProjectModality, type RightTab } from './modality';
 
@@ -18,7 +19,10 @@ import { getModality, MODALITIES, RIGHT_TAB_ICONS, type ModalityDef, type Projec
  *  with `label` / `tagline` / `runLabel` replaced by their localized catalog values. */
 export function useModalityCopy(): (id: ProjectModality | string | null | undefined) => ModalityDef {
   const t = useTranslations('ide');
-  return (id) => {
+  // Stable across renders: `useTranslations` already memoizes `t`, so the resolver
+  // can too — and callers memoize LISTS on it (the Create library maps every item
+  // through this), which a fresh closure each render would silently defeat.
+  return useCallback((id) => {
     const m = getModality(id);
     return {
       ...m,
@@ -26,7 +30,7 @@ export function useModalityCopy(): (id: ProjectModality | string | null | undefi
       tagline: t(`modality.${m.id}.tagline`),
       runLabel: t(`modality.${m.id}.runLabel`),
     };
-  };
+  }, [t]);
 }
 
 /**
@@ -36,11 +40,11 @@ export function useModalityCopy(): (id: ProjectModality | string | null | undefi
  */
 export function useRightTabLabels(): (tab: RightTab) => string {
   const t = useTranslations('ide');
-  return (tab) => `${RIGHT_TAB_ICONS[tab]} ${t(`rightTab.${tab}`)}`;
+  return useCallback((tab: RightTab) => `${RIGHT_TAB_ICONS[tab]} ${t(`rightTab.${tab}`)}`, [t]);
 }
 
 /** The full modality list (registry order) with localized copy — for choosers/filters. */
 export function useLocalizedModalities(): ModalityDef[] {
   const copy = useModalityCopy();
-  return MODALITIES.map((m) => copy(m.id));
+  return useMemo(() => MODALITIES.map((m) => copy(m.id)), [copy]);
 }

@@ -19213,7 +19213,7 @@
     "starterProductDiscovery": "Découverte produit",
     "starterProductDiscoveryDescription": "Synthétisez les retours clients en fonctionnalités demandées, maquettes visuelles et feuille de route de livraison.",
     "createTypeTitle": "Que voulez-vous créer ?",
-    "createTypeSubtitle": "Commencez par un type Builder ou un modèle guidé. Il s’ouvre comme Objet dans un nouveau Canevas où ajouter Flux, données, personnes et Brain.",
+    "createTypeSubtitle": "Chacune de ces options ouvre le même canevas : seule change la demande qu'il porte à l'ouverture. Ajoutez workflows, données, personnes et Brain une fois à l'intérieur.",
     "existingCreations": "Vos créations existantes",
     "existingCreationsSubtitle": "Ouvrez un Projet, un Agent, un Site, une App, un Evermind, un LLM, une Voix, une Vidéo, un Flux ou une session Brain dans son Canevas.",
     "loadingCreations": "Chargement des créations…",
@@ -20567,12 +20567,6 @@
     },
     "teammateSeated": "Sur ce tableau",
     "launcherEyebrow": "Créer",
-    "createByTypeTitle": "Créer par type",
-    "createByTypeSubtitle": "Choisissez le type de chose que vous voulez créer.",
-    "guidedTemplateTitle": "Utiliser un modèle guidé",
-    "guidedTemplateSubtitle": "Démarrez avec un flux de travail complet et connecté.",
-    "guidedTemplatesLabel": "Modèles guidés",
-    "useTemplate": "Utiliser le modèle",
     "comingSoon": "Bientôt disponible",
     "createAction": "Créer",
     "blankCanvas": "Commencer avec un canvas vierge",
@@ -23675,7 +23669,19 @@
     "filterByFolder": "Afficher uniquement ce dossier",
     "clearFolderFilter": "Afficher tous les dossiers",
     "unfiledFolder": "Aucun dossier",
-    "proveIt": "Prouvez-le"
+    "proveIt": "Prouvez-le",
+    "facetLabel": "Filtrer par type",
+    "facetAll": "Tout",
+    "facet": {
+      "canvas": "Canevas",
+      "build": "Builds",
+      "workflow": "Workflows",
+      "chat": "Conversations",
+      "project": "Projets",
+      "agent": "Agents"
+    },
+    "blankCanvasTagline": "Un tableau vide. Dites ce que vous voulez et il prend forme.",
+    "startersLabel": "Façons de démarrer"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",

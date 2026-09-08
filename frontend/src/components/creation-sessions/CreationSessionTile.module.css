@@ -56,6 +56,16 @@
   box-shadow: var(--shadow-xs);
 }
 
+/* The mark a record draws where its board would be. Same box as `.previewEmpty`,
+   so a grid of mixed items keeps one preview height in both layouts. */
+.previewIcon {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+
 .previewEmpty {
   position: absolute;
   inset: 0;

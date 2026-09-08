@@ -11,25 +11,25 @@ export function makeNonce(): string {
 }
 
 /**
- * The shared HTML shell for the bundled-React webview panels (Brain / Project 360 /
- * project pages / the Creation Canvas). Identical CSP (`default-src 'none'`, a
- * nonce'd module script, and the gateway origin allowed in `connect-src` with an
- * `https:` fallback) and asset wiring across all of them — only the `<title>`, the
- * asset directory and the canvas's extra capabilities differ per surface.
+ * The shared HTML shell for the bundled-React webview panels (the workspace —
+ * board and chat — plus Project 360 and the project pages). Identical CSP
+ * (`default-src 'none'`, a nonce'd module script, and the gateway origin allowed in
+ * `connect-src` with an `https:` fallback) and asset wiring across all of them, so
+ * only the `<title>` differs.
  *
- * `assetDir` selects which bundle to load: `webview` (the Brain app) or `canvas`
- * (the Creation Canvas, built separately because it pulls in xyflow/xlsx/mermaid
- * and the chat panel should not pay for them).
+ * There is ONE bundle now. `assetDir` used to choose between a chat bundle and a
+ * canvas bundle; the two merged when chat became a SURFACE of the board rather than
+ * a place of its own, so there is nothing left to choose between. The capabilities
+ * the board needs are therefore always granted: any panel can now BE the board.
  */
 export function renderWebviewHtml(
   webview: vscode.Webview,
   ctx: vscode.ExtensionContext,
-  opts: { title: string; assetDir?: "webview" | "canvas"; codeSplit?: boolean; richMedia?: boolean },
+  opts: { title: string },
 ): string {
   const nonce = makeNonce();
-  const dir = opts.assetDir ?? "webview";
   const asset = (f: string) =>
-    webview.asWebviewUri(vscode.Uri.joinPath(ctx.extensionUri, "media", dir, f));
+    webview.asWebviewUri(vscode.Uri.joinPath(ctx.extensionUri, "media", "webview", f));
   // The React app fetches the gateway/API directly; allow that origin in connect-src.
   let apiOrigin = "https://api.builderforce.ai";
   try {
@@ -38,12 +38,10 @@ export function renderWebviewHtml(
     /* keep default */
   }
   // A nonce authorises the ENTRY script only — it does not extend to modules that
-  // script imports. The canvas bundle is code-split (the Evermind engines, the
-  // voice studio and mermaid load on demand), so its chunks must be allowed by
-  // origin or every lazy feature dies at the import.
-  const scriptSrc = opts.codeSplit
-    ? `'nonce-${nonce}' ${webview.cspSource} 'wasm-unsafe-eval'`
-    : `'nonce-${nonce}'`;
+  // script imports. The bundle is code-split (the board's own dependencies, the
+  // Evermind engines, the voice studio and mermaid load on demand), so its chunks
+  // must be allowed by origin or every lazy feature dies at the import.
+  const scriptSrc = `'nonce-${nonce}' ${webview.cspSource} 'wasm-unsafe-eval'`;
   const csp = [
     `default-src 'none'`,
     `img-src ${webview.cspSource} https: data: blob:`,
@@ -52,20 +50,18 @@ export function renderWebviewHtml(
     `font-src ${webview.cspSource} data:`,
     `connect-src ${apiOrigin} https: blob: data:`,
     // The canvas renders generated artefacts: website/mockup previews in frames,
-    // audio + video deliverables, and WebGPU/WASM training in a worker.
-    ...(opts.richMedia
-      ? [
-          // `https:` carries the canvas Web page panel, which frames an arbitrary
-          // address the user typed or dropped; the allowlist alternative cannot
-          // express "any page". Frames are sandboxed and cross-origin. The
-          // loopback origins are what make a `service` object — the dev server
-          // running in this very editor — previewable, which the deployed web
-          // app cannot do at all (a https page may not frame http).
-          `frame-src ${webview.cspSource} https: http://localhost:* http://127.0.0.1:* blob: data:`,
-          `media-src ${webview.cspSource} https: blob: data:`,
-          `worker-src ${webview.cspSource} blob:`,
-        ]
-      : []),
+    // audio + video deliverables, and WebGPU/WASM training in a worker. Always
+    // granted now that every panel can be the board.
+    //
+    // `https:` carries the canvas Web page panel, which frames an arbitrary address
+    // the user typed or dropped; the allowlist alternative cannot express "any
+    // page". Frames are sandboxed and cross-origin. The loopback origins are what
+    // make a `service` object — the dev server running in this very editor —
+    // previewable, which the deployed web app cannot do at all (a https page may
+    // not frame http).
+    `frame-src ${webview.cspSource} https: http://localhost:* http://127.0.0.1:* blob: data:`,
+    `media-src ${webview.cspSource} https: blob: data:`,
+    `worker-src ${webview.cspSource} blob:`,
   ].join("; ");
   return `<!DOCTYPE html>
 <html lang="en">

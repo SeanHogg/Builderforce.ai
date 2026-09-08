@@ -14,6 +14,11 @@
     "ignoreDeprecations": "6.0",
     "types": ["react", "react-dom", "node"]
   },
-  "include": ["src", "vite.config.ts"],
-  "exclude": ["src/canvas", "src/shims"]
+  // The editor's OWN code, checked strictly. Everything that compiles FRONTEND
+  // sources — the root screen, the entry, the canvas host port and the Next shims —
+  // is the other project's (see tsconfig.canvas.json): those files are written
+  // against `frontend/tsconfig.json`'s options, and checking them here reported this
+  // project's lint preferences as errors in files this package does not own.
+  "include": ["src"],
+  "exclude": ["src/canvas", "src/shims", "src/WorkspaceApp.tsx", "src/main.tsx"]
 }

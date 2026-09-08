@@ -1,7 +1,7 @@
 # Files that still write the project-in-tenant gate inline (count per file).
 # This list may only SHRINK — see scripts/check-project-ownership.mjs.
 # Regenerate with: node scripts/check-project-ownership.mjs --update
-application/creation/creationSessionFolderRouteService.ts 1
-application/creation/creationSessionRouteService.ts 4
 application/pmo/planningSpine.ts 1
 application/swimlane/canonicalBoard.ts 1
+presentation/routes/creationSessionFolderRoutes.ts 1
+presentation/routes/creationSessionRoutes.ts 4

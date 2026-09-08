@@ -22,7 +22,7 @@
 
 import { meetingsApi, ceremonySessionsApi } from '@/lib/builderforceApi';
 import { actionItemTitle, parseMeetingMinutes } from '@/lib/meetings/meetingMinutes';
-import { resourceIdOfType } from '@/domains/canvas/domain/resourceRef';
+import { resourceIdOfType } from '@builderforce/creation-canvas-contract';
 import { actEdge, type CardAct } from '@/domains/canvas/application/CardAct';
 import type { CanvasObject, CreationObjectKind } from '@/domains/canvas/domain/canvasObject';
 

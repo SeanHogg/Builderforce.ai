@@ -5,6 +5,7 @@
  * own identity, rename, and optional Project tie), not a session sub-resource.
  */
 import { Hono, type Context } from 'hono';
+import { parseOptionalBody, z } from './requestBody';
 import { and, eq, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { scope } from './segmentTrackerRoutes';
@@ -13,7 +14,12 @@ import { scopedToSegment } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import type { HonoEnv } from '../../env';
 
-type FolderBody = { name?: string; projectId?: number | null };
+/** ONE declaration, validating AND typing — the assertion it replaces was not a
+ *  check at all; see requestBody.ts. */
+const FolderBody = z.object({
+  name: z.string().optional(),
+  projectId: z.number().nullable().optional(),
+});
 
 function cleanFolderName(input: unknown): string | null {
   const name = typeof input === 'string' ? input.trim().slice(0, 120) : '';
@@ -60,7 +66,7 @@ export function createCreationSessionFolderRoutes(db: Db): Hono<HonoEnv> {
   router.post('/', async (c) => {
     const { tenantId, segmentId } = scope(c);
     const userId = c.get('userId') as string;
-    const body: FolderBody = await c.req.json<FolderBody>().catch(() => ({}));
+    const body = await parseOptionalBody(c, FolderBody);
     const name = cleanFolderName(body.name);
     if (!name) return c.json({ error: 'A folder name is required' }, 400);
     let projectId: number | null = null;
@@ -85,7 +91,7 @@ export function createCreationSessionFolderRoutes(db: Db): Hono<HonoEnv> {
     const folder = await requireFolder(c);
     if (!folder) return c.json({ error: 'Folder not found' }, 404);
     const { tenantId, segmentId } = scope(c);
-    const body: FolderBody = await c.req.json<FolderBody>().catch(() => ({}));
+    const body = await parseOptionalBody(c, FolderBody);
     const patch: Partial<typeof creationSessionFolders.$inferInsert> = { updatedAt: new Date() };
     if (body.name !== undefined) {
       const name = cleanFolderName(body.name);

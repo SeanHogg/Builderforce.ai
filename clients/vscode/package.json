@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.9.34",
+  "version": "2026.9.35",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -786,9 +786,9 @@
     "postinstall": "node ../../scripts/ensure-linked-deps.mjs",
     "vscode:prepublish": "node esbuild.mjs --production && tsc -p ./ && pnpm run build:webview",
     "compile": "node esbuild.mjs && tsc -p ./ && pnpm run build:webview",
-    "build:webview": "vite build --config webview/vite.config.ts && pnpm run build:canvas",
+    "build:webview": "node ../../scripts/ensure-linked-deps.mjs ../../frontend && vite build --config webview/vite.config.ts",
     "watch": "node esbuild.mjs --watch",
-    "watch:webview": "vite build --watch --config webview/vite.config.ts",
+    "watch:webview": "node ../../scripts/ensure-linked-deps.mjs ../../frontend && vite build --watch --config webview/vite.config.ts",
     "type-check": "tsgo -p ./ && tsgo -p webview/tsconfig.json && tsgo -p harness/tsconfig.json && tsgo -p test-integration/tsconfig.json && tsc -p ./ && tsc -p webview/tsconfig.json && tsc -p harness/tsconfig.json && tsc -p test-integration/tsconfig.json",
     "typecheck": "pnpm run type-check",
     "package": "node vsce-platform.mjs package",
@@ -799,9 +799,7 @@
     "test:watch": "vitest",
     "test:integration": "node esbuild.mjs && node esbuild.mjs --integration && node out-integration/runTests.cjs",
     "harness": "node esbuild.mjs --harness && node out/harness.cjs",
-    "probe": "node esbuild.mjs --harness && node out/harness.cjs probe",
-    "build:canvas": "node ../../scripts/ensure-linked-deps.mjs ../../frontend && vite build --config webview/vite.canvas.config.ts",
-    "watch:canvas": "vite build --watch --config webview/vite.canvas.config.ts"
+    "probe": "node esbuild.mjs --harness && node out/harness.cjs probe"
   },
   "devDependencies": {
     "@builderforce/creation-canvas-contract": "link:../../packages/creation-canvas-contract",

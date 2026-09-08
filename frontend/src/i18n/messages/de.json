@@ -19213,7 +19213,7 @@
     "starterProductDiscovery": "Produktentdeckung",
     "starterProductDiscoveryDescription": "Fasse Kundenfeedback zu gewünschten Funktionen, visuellen Mockups und einer Liefer-Roadmap zusammen.",
     "createTypeTitle": "Was möchtest du erstellen?",
-    "createTypeSubtitle": "Starte mit einem Builder-Typ oder einer geführten Vorlage. Sie öffnet sich als Objekt in einem neuen Canvas, wo du Workflows, Daten, Personen und Brain hinzufügen kannst.",
+    "createTypeSubtitle": "Jede dieser Optionen öffnet dieselbe Canvas — der einzige Unterschied ist, worum sie beim Öffnen bittet. Workflows, Daten, Personen und Brain fügst du drinnen hinzu.",
     "existingCreations": "Deine bestehenden Kreationen",
     "existingCreationsSubtitle": "Öffne ein Projekt, einen Agenten, eine Website, App, Evermind, ein LLM, Voice, Video, einen Workflow oder eine Brain-Session in ihrem Canvas.",
     "loadingCreations": "Kreationen werden geladen…",
@@ -20567,12 +20567,6 @@
     },
     "teammateSeated": "Auf diesem Board",
     "launcherEyebrow": "Erstellen",
-    "createByTypeTitle": "Nach Typ erstellen",
-    "createByTypeSubtitle": "Wählen Sie, welche Art von Sache Sie erstellen möchten.",
-    "guidedTemplateTitle": "Geführte Vorlage verwenden",
-    "guidedTemplateSubtitle": "Starten Sie mit einem vollständigen, verbundenen Workflow.",
-    "guidedTemplatesLabel": "Geführte Vorlagen",
-    "useTemplate": "Vorlage verwenden",
     "comingSoon": "Demnächst",
     "createAction": "Erstellen",
     "blankCanvas": "Mit einem leeren Canvas beginnen",
@@ -23675,7 +23669,19 @@
     "filterByFolder": "Nur diesen Ordner zeigen",
     "clearFolderFilter": "Alle Ordner zeigen",
     "unfiledFolder": "Kein Ordner",
-    "proveIt": "Beweisen"
+    "proveIt": "Beweisen",
+    "facetLabel": "Nach Art filtern",
+    "facetAll": "Alles",
+    "facet": {
+      "canvas": "Canvases",
+      "build": "Builds",
+      "workflow": "Workflows",
+      "chat": "Unterhaltungen",
+      "project": "Projekte",
+      "agent": "Agenten"
+    },
+    "blankCanvasTagline": "Eine leere Fläche. Sag, was du willst, und es nimmt Gestalt an.",
+    "startersLabel": "Wege zum Start"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",

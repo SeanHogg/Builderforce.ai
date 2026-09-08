@@ -1,3 +1,256 @@
+## ✅ RESOLVED 2026-09-07 — the dependency arrow points inward again: the inner-layer ratchet reaches zero, the enrichment cache gets a vendor, and the agent-runtime contract can no longer drift
+
+Five codebase-review items from the 2026-09-05 pass. Three are closed outright; two —
+the god modules and the VS Code client — had their DUPLICATION and CORRECTNESS halves
+closed and their file-size halves carried forward with the sequencing blocker replaced
+by a demonstrated pattern (see ROADMAP).
+
+### `check:application-layering` is no longer a ratchet — it is a rule
+
+The baseline is **empty**. All eleven inner-layer → presentation imports are gone, and
+the guard's success line now reads "no application/domain/infrastructure file imports
+presentation." The first re-introduced import fails the build; there is no debt list
+left to hide in.
+
+Four of them were shared symbols that simply lived in the wrong layer, and each got an
+application-layer owner that BOTH the route and the non-HTTP caller now import:
+
+| symbol | was | now |
+| --- | --- | --- |
+| `dispatchCloudRunForTask` (+ `startDispatchedExecution`, `getDispatchTargets`, `dispatchToAgentHost`) | `presentation/routes/runtimeRoutes` | `application/runtime/dispatchCloudRun.ts` |
+| `dispatchTaskFinalize` | `presentation/routes/taskRoutes` | `application/task/taskFinalize.ts` |
+| `persistProbe` | `presentation/routes/adminRoutes` | `application/llm/vendorProbeStore.ts` |
+| `fireAddressedTrigger` | `presentation/routes/workflowTriggerRoutes` | `application/workflow/fireAddressedTrigger.ts` |
+
+The dispatcher move is the load-bearing one: 869 lines of run-creation, backpressure and
+executor orchestration that six application modules were reaching into a route file for.
+Nothing in it ever needed a request — it takes `env`, `db`, the runtime service and a
+`waitUntil`, exactly as its non-HTTP callers always supplied them. `runtimeRoutes.ts`
+fell 2,782 → 1,977 as a side effect, which is the point the review made: the route file
+could not be split while application code depended on its interior.
+
+**The other two were not shared symbols at all — they were routers filed under
+`application/`.** `creationSessionRouteService.ts` (2,949 lines) and
+`creationSessionFolderRouteService.ts` mounted `authMiddleware`, took a Hono `Context`
+and called `relayToRoom`; that is a presentation module wherever the folder says it
+lives. They moved to `presentation/routes/creationSessionRoutes.ts` and
+`creationSessionFolderRoutes.ts`, and the request-free rules that had accreted above the
+router — `pgFailureDetail`, `distinctIdCounts`, `describeClaimBatchFailure`,
+`durableCreationGraph`, `sanitizeClaimConnectionIds`, `cleanCommentAnchor`,
+`creationKindForModality`, `creationSessionSearchStatus` — stayed behind in
+`application/creation/creationSessionModel.ts` (185 lines), which is where their real
+consumers already were: the marketplace listing projection, the public `/api/v1` canvas
+service and the claim-failure tests.
+
+**Moving them into the watched layer surfaced 26 raw `c.req.json<T>()` reads that no
+guard had ever seen**, because `check-unvalidated-bodies` only scans `src/presentation`.
+The guard refused to raise its baseline, correctly, so all 26 were migrated instead. Each
+hand-written `type XBody = { … }` became a zod schema whose TS type is `z.infer`red, so
+the two cannot drift, and `requestBody.ts` gained the primitive the sites actually
+needed: **`parseOptionalBody`** — an absent or unparseable body parses as `{}` (so the
+schema still decides what "empty" means and a required field still refuses), while a body
+that IS present is validated exactly as `parseBody` would. That is the honest third case
+between "must have a body" and `.catch(() => ({} as XBody))`, which was a type assertion
+with a shrug attached. The graph schemas are the ones that matter: a saved canvas whose
+edge was missing `sourceObjectId` used to reach the writer and fail on a NOT NULL
+constraint as a 500.
+
+### The enrichment cache has a vendor to cache
+
+`agent/aiOperations.cacheLookup` / `cacheStore` (PRD 19 §9) shipped complete, correct and
+**callerless**, so `cacheSavings` could only ever report zero. The blocker was real — no
+enrichment vendor adapter existed. There is one now.
+
+`dataProviderCatalog` gained a third `ProviderFamily`, `enrichment`, with three person-
+lookup vendors (Clearbit, People Data Labs, Apollo.io) that connect, test and store a
+credential through the exact same path every other integration does. Each declares its
+own **`callCostCents`** beside its request, because that price IS the saving and guessing
+it at the call site is how `cost_cents_avoided` stays a nought.
+
+`application/enrichment/enrichContact.ts` is the port, and the ORDER is the contract:
+cache first, credential second, vendor last. A hit never decrypts a credential and never
+leaves the building — which is the only observation that distinguishes a working cache
+from "cached, but we called the vendor anyway", and it is what the tests assert by
+counting `fetch` calls. Three vendor payloads fold onto ONE `EnrichedPerson`, so switching
+vendors cannot silently stop populating half the contact tables, and everything written
+lands at `confidence: 'inferred'` — never `verified`, because `compensationBenchmark`
+reports the confidence MIX beside every median precisely so a recruiter can tell a
+vendor's guess from a candidate's own number.
+
+An empty answer is deliberately NOT cached: a contact enriched the day before the vendor
+indexed them would otherwise stay unknown for the whole 30-day TTL. A vendor's 402
+survives as a 402 rather than collapsing into a 502, because out-of-credit is the one
+refusal an operator can act on.
+
+Live end to end: migration 1147 adds the enum labels, the vendors appear in the existing
+Integrations connect form, `POST /api/revenue-intel/contacts/:ref/enrich` (MANAGER — every
+miss spends real money) fills the ticket, and `GET /api/revenue-intel/enrichment-savings`
+is the read the table was built for.
+
+### The agent-runtime API contract can no longer drift silently
+
+`api/src/openapi/schema.ts` and `agent-runtime/src/infra/api-contract.ts` declare ONE wire
+format twice on purpose — the agent host takes no runtime dependency on the Worker
+package. `scripts/check-api-contract-mirror.mjs` now compares all 14 interfaces
+member-for-member, normalising away comments, quote style and whitespace, and tolerating
+exactly ONE declared difference: the SDK's `agentNode` vocabulary for the platform's
+`agentHost` (renaming it there is an SDK-breaking change, not a mirror fix).
+
+It found the drift on its first run. **`ApprovalDecisionMessage.responseText` — the field
+the entire "answer a question" flow rides on — was declared on the sending side and
+missing from the receiving side's declaration.** The relay handled it at runtime, so it
+worked; nothing said it was supposed to. Both copies now also declare `reviewNote` and
+`reviewedBy`, which `approvalRoutes` has been sending all along and neither copy admitted.
+Wired into `npm test`, and verified to fail on an introduced rename.
+
+### The VS Code client: two REST clients became one, twice over
+
+**`/api/brain`.** Implemented method-for-method in `frontend/src/lib/builderforceApi.ts`
+and again in `clients/vscode/webview/src/persistence.ts`, already drifted on `deleteChat`'s
+and `markChatRead`'s return types. It is now `createBrainRestPersistence` in
+brain-embedded, and the hosts inject the only three things that genuinely differ: how an
+authenticated call is made, the gateway origin, and — the difference that made a shared
+implementation look impossible — the multipart upload, because the webview's
+`authedFetch` always sets `application/json` and would strip the boundary. The factory's
+return type is deliberately precise rather than widened to `BrainPersistenceAdapter`, which
+is what lets ONE definition serve both a strict adapter and the web's richer client.
+
+**`ChatTicketsAdapter`.** The same story with a worse ending: the VS Code copy's
+`runTicket` never invited the agent into the chat and never passed `chatId` to
+`run-now`, so **a ticket dispatched from a VS Code chat ran invisibly** — narrating
+nowhere, unreachable from the conversation that asked for it. `createChatTicketsRestAdapter`
+in brain-ui is now the one implementation; `chatId` moved onto the `runTicket` signature
+because the panel knows it and the adapter needs it; the run-permission probe stays
+injected, because neither the package nor the gateway response can read a tenant role.
+
+**The host bridge.** `token.refresh`, `signin` and the `response` reply were implemented
+twice — once in `WebviewPanelBase` (the editor panels) and once in `EvermindViewProvider`
+(the sidebar view, which cannot extend that base) — and had diverged on whether a
+successful response carries an `error` key. `webviewHostBridge.ts` is now the one answer,
+written as functions over a `vscode.Webview` rather than a base class, and a success
+carries no `error` key on either surface.
+
+**The protocol is typed.** `post(type: string, …)` accepted any string and every host
+dispatched with a `default` that did nothing, so a name that existed on one side only was
+a permanent silent no-op that nothing could observe. `src/bridgeProtocol.ts` names all 31
+messages, grouped by which host answers them; `post`/`request` take that union, and
+`assertHandled` lets a host prove its switch is exhaustive over its own slice. Both
+directions verified to fail the build on an introduced typo. No new package: the webview
+already imports host modules directly, and a workspace package would have added four more
+places for the wiring to be incomplete.
+
+**The Sessions view has a refresh button.** `builderforce.refreshSessions` was registered,
+fired internally after auth and chat writes, and contributed nowhere — the one view a
+person most often needs to repaint was the only view without one. Contributed, localized
+in all five catalogs, placed at `navigation@3`. And `openChat`/`openBrain` no longer list
+the same action twice in the palette: `openBrain` is the contributed one, `openChat` stays
+registered as a back-compat alias for anyone whose keybinding names it, and all three ids
+(with `editorChat`) now map from ONE handler.
+
+### `cloudAgentEngine.ts`: 4,117 → 2,685, and the op chain is a dispatch table
+
+Five modules under `application/runtime/cloudAgent/`, in dependency order:
+`agent.ts` (who a run executes as), `routing.ts` (which model, and what it may cost),
+`prd.ts` (what the run is told, and how what it writes lands in the repo),
+`runContext.ts` (what a resumed image run knows about itself, plus the two liveness
+signals every op needs), and `containerOps.ts`.
+
+`handleContainerOp` was a **546-line `if (op === …)` chain** — fourteen unrelated
+operations sharing one function body, one scope and one set of locals. It is now
+`OP_HANDLERS`, a table of fourteen named handlers, and `handleContainerOp` is nine lines.
+Three ops (`llm`, `spawn`, `finalize`) drive the run and would close an import cycle if
+they reached back for the engine's primitives, so they receive `ContainerOpEngine` — a
+narrow typed port of exactly four functions. Every other op needs nothing from the engine,
+which is precisely the boundary the split makes visible. The `ask_human` contract test now
+asserts a real entry in the table rather than a string in an `if` branch, which is
+stronger: a handler that exists but is not REGISTERED is exactly the failure the table
+exists to make impossible.
+
+### Also fixed, found on the way
+
+- **`vscodeRoutes` `GET /tenants` was never actually asserted.** Its test passed `{}` as
+  the database, so `landPendingInvitations` threw `db.select is not a function` and the
+  route answered 500 — the test file already had the right `makeDb` helper; this one case
+  just did not use it.
+- **`check-unvalidated-bodies`' enum-parity twin.** `dataProviderCatalog.test.ts` read
+  migration `0412` by name to prove every catalog provider has a storage label, so the
+  third family had to edit the test to pass it. It now scans every migration that alters
+  `integration_provider` — the failure mode inverted: it would have gone green on a
+  provider the enum could not store, as long as whoever added it remembered the file list.
+- **`fakeDb` gained `transaction`**, so a service that wraps its writes in one
+  (`setExperience` clears the other current roles before inserting) is exercised rather
+  than crashing on a missing method.
+- Dead documentation removed at four extraction seams: doc comments for functions deleted
+  in earlier passes, still sitting above unrelated code in `runtimeRoutes`, `taskRoutes`,
+  `adminRoutes` and `creationSessionRoutes`.
+
+**Verified:** `api` typecheck + 9,695 tests green; 31/32 guards pass (the one failure is
+`check:silent-catches`, +2 from an untracked `CreationLibraryPanel.tsx` created by a
+concurrent session — not this pass, and its baseline was deliberately not raised).
+frontend, brain-embedded (529), brain-ui (100) and the VS Code client (345) typecheck and
+test green. Versions bumped: api/frontend 2026.9.20, VSIX 2026.9.35, brain-embedded
+2026.9.10, brain-ui 2026.9.3.
+
+## ✅ RESOLVED 2026-09-07 — a standup in the room is a standup on the record: it attaches to the active project, or to none, and you can walk them all
+
+**The blocker, and the decision that cleared it.** The `room` surface shipped earlier the
+same day recording nothing, logged as blocked on a product decision: a creation session
+attaches to MANY projects while a ceremony session is keyed by ONE, so "which project is
+this standup for" had no derivable answer. The operator answered it: a standup just happens,
+like a meeting — it is about the ACTIVE project, or about no project at all, and if it is
+about none you may pick one during the standup or walk through all of them.
+
+**One resolver, four answers, one place.** `lib/canvas/standupProject.ts` declares the
+precedence in the order a person says it out loud: what the meeting itself chose (including
+choosing NO project, which is a real answer), then the project you are working in (the
+global scope switcher), then the project this board names, then nothing. The distinction
+between "nobody has chosen in here" (`undefined`) and "somebody chose no project" (`null`)
+is the whole reason the input shape exists — collapsing them would make an explicit
+All Projects silently fall back to the scope it was overriding, and the picker would appear
+not to work.
+
+**It replaced a second answer, not just filled a hole.** `startStandup` — the `standup`
+canvas object's action — resolved its project as "the first project node on the board",
+which meant a standup started while scoped into a project could be filed against a different
+one, and a board with no project node could not start one at all. It now reads the same
+resolver. Two answers to one question became one.
+
+**Attendance is the endpoint that already existed.** No new table, no new endpoint, no new
+domain: `useRoomStandup` joins an ALREADY-RUNNING standup automatically (a latecomer walks
+in and is recorded without pressing anything — that is what "a standup just happens" means
+for everyone but the first person) and beats `ceremonySessionsApi.heartbeat` every 60s,
+matched deliberately to `CeremonyStage`'s own cadence because two surfaces recording the
+same person at two rates is two answers to "how long were they there", and those durations
+feed the ceremony rollup. Opening the room does NOT create a ceremony row — if it did,
+every glance at the circle would file a standup that never happened and the cadence numbers
+would count it — so starting one is a deliberate press by the first person.
+
+**Walking the projects is the picker, stepped.** "Go through all the projects" is what a
+standup DOES, not a feature it needs, so the two step buttons move the same picker. The ring
+is `[none, …projects]` and it CYCLES: coming back around to the unassociated slot is
+meaningful — the team has been through everything and is talking about the company again.
+A project deleted mid-walk behaves as "not in the ring" and the walk restarts rather than
+throwing.
+
+**The choice is local to the meeting.** Picking a project in the room does not move the
+global scope switcher, which persists per tenant and reflects into the URL — writing to it
+would mean walking the projects during a standup silently re-scoped Tasks, Planning and
+Insights for everyone's next navigation, and left them wherever the meeting finished. The
+room seeds from the scope and then keeps its own answer.
+
+**No second toolbar.** The controls are published into the ONE session bar through
+`canvasSurfaceActions` (`controls` for what you press, `status` for what the room reports),
+which is the seam that exists precisely to stop a surface drawing its own row 40px under the
+host's. `RoomStandupBar` owns its project choice, its ceremony binding and its own data
+access, and `CanvasRoomSurface` hands it the roster and learns nothing about either.
+
+**Verified.** `tsgo --noEmit` clean; 69 tests green across `standupProject.test.ts`,
+`roomSeating.test.ts`, `livePresence.test.ts` and `canvasSurfaces.test.tsx`;
+`check:design-tokens` and the React-hooks ratchet pass; 14 room strings + 14 standup strings
+in all five catalogs. The status read is a deliberate uncached liveness poll (one request /
+30s, only while the room is open with a project attached) — caching it would answer with
+the state that made it worth asking.
+
 ## ✅ RESOLVED 2026-09-07 — an invited teammate can actually join: the workspace-list endpoint every client calls now lands the invitation
 
 **The gap.** Inviting somebody who did not yet have an account recorded a pending

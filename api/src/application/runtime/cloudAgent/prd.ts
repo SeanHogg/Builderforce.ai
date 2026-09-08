@@ -36,7 +36,7 @@ import type { PrdUpdateResult, PrdWriteCapability } from '@builderforce/agent-to
 import type { Env } from '../../../env';
 import type { Db } from '../../../infrastructure/database/connection';
 
-async function recordTaskFileChange(
+export async function recordTaskFileChange(
   db: Db,
   tenantId: number,
   taskId: number,
@@ -381,7 +381,7 @@ export function buildPrdCapability(
 
 /** The commit subject a run's own write lands under, so a repo history says which
  *  ticket and which agent produced the change. */
-function agentCommitMessage(verb: string, path: string, taskId: number, agentLabel: string, suffix = ''): string {
+export function agentCommitMessage(verb: string, path: string, taskId: number, agentLabel: string, suffix = ''): string {
   return `${verb} ${path} — task #${taskId} (${agentLabel})${suffix}`;
 }
 

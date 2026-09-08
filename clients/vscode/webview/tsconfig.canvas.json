@@ -1,7 +1,7 @@
 {
   // The CANVAS project.
   //
-  // This bundle compiles the frontend's own sources (see vite.canvas.config.ts),
+  // This bundle compiles the frontend's own sources (see vite.config.ts),
   // so it must typecheck them under the options they are WRITTEN against —
   // `frontend/tsconfig.json`. Checking them under the Brain webview's stricter
   // project reported that project's lint preferences (`noUnusedLocals`) and its
@@ -50,7 +50,12 @@
     "src/canvas",
     "src/shims",
     "src/vscodeBridge.ts",
-    "vite.canvas.config.ts",
+    // The root screen and the entry: they mount the frontend's `<CreationCanvas>`
+    // and reach it through `@/*`, so they are checked under the options that source
+    // is written against — the same reason `src/canvas` is here.
+    "src/WorkspaceApp.tsx",
+    "src/main.tsx",
+    "vite.config.ts",
     // The frontend's ambient module declarations. Pulled in explicitly because a
     // `.d.ts` nobody imports is never loaded, and the canvas compiles frontend
     // sources that rely on them.

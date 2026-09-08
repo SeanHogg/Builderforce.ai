@@ -45,6 +45,7 @@ import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveActorFromContext } from '../../application/activity/activityLog';
+import { parseBody, z, zNonEmptyString } from './requestBody';
 import {
   ContactProfileError,
   addEducation,
@@ -85,6 +86,15 @@ import {
   type EntityKind,
   type ProspectStatus,
 } from '../../application/sales/revenueIntelligence';
+
+/** The enrichment ask. `email` is required because it IS the vendor's lookup key —
+ *  and the cache key — so an absent one must be a 400, never a lookup that spends
+ *  money on nothing. `provider` names a specific connected vendor; omitted, the
+ *  port picks the workspace's. */
+const EnrichBody = z.object({
+  email: zNonEmptyString,
+  provider: zNonEmptyString.optional(),
+});
 
 const handle = async (run: () => Promise<Response>): Promise<Response> => {
   try {
@@ -143,7 +153,7 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
    * the gate is on the ask rather than on the outcome.
    */
   router.post('/contacts/:ref/enrich', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>().catch((): Record<string, unknown> => ({}));
+    const body = await parseBody(c, EnrichBody);
     const env = c.env as Env & { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
     return Response.json(await enrichContact({
       db,
@@ -152,8 +162,8 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
       env: c.env as Env,
     }, {
       contactRef: c.req.param('ref'),
-      email: str(body.email) ?? '',
-      ...(str(body.provider) ? { provider: str(body.provider)! } : {}),
+      email: body.email,
+      ...(body.provider ? { provider: body.provider } : {}),
     }));
   }));
 

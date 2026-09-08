@@ -92,6 +92,10 @@ export * from './marketing';
 // used to live inside `marketing.ts` and to serve exactly one hardcoded reading; a
 // deployment, a holiday and an on-call shift are the same shape and were unreachable.
 export * from './calendar';
+// A card's RESOURCE REF (`"<type>:<id>"`) — the string that says which real record a
+// board card stands for. Shared because the API WRITES the two halves and the canvas
+// RESOLVES cards back from them; see resourceRef.ts.
+export * from './resourceRef';
 export * from './slug';
 // Least squares and the trailing mean — the arithmetic every forecast shares.
 export * from './series';

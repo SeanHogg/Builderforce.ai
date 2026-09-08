@@ -30,6 +30,26 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   968 → 972 (`useClientFiles`, 2026-09-07) — the Create library stopped being two
+ *   lists and one god component. `components/dashboard/DashboardCreationSessions.tsx`
+ *   (307 lines) fetched six endpoints, mapped them, owned the selection, performed
+ *   every write AND rendered the grid; `DashboardCreationLauncher.tsx` separately
+ *   re-fetched the same session quota. Both are DELETED (-2). What replaces them is
+ *   the decomposition the no-god-classes rule asks for: `CreationLibraryPanel` and
+ *   `CreationStarterPanel` (presentation), `CreationLibraryFacetBar` (a self-gating
+ *   shared control), and three hooks — `useCreationLibrary` (reads),
+ *   `useCreationLibraryActions` (writes), `useCreateCanvas` (the ONE start path both
+ *   panels now share) — for +6, net +4.
+ *
+ *   Every one of the six holds React state or an effect, so none of them COULD be a
+ *   Server Component; the count rises because the work was split, not because more of
+ *   the app moved to the client. It went the other way on the parts that could move:
+ *   the mapping those hooks feed is `domains/canvas/domain/creationLibrary.ts`, a pure
+ *   module with no directive and its own tests, holding the dedupe rule that used to
+ *   be an untestable inline `Set` inside the deleted component. The hooks carry their
+ *   own directive rather than inheriting one for the reason argued at 967 → 968: a
+ *   consumer must not be the thing that discovers a module has no boundary.
+ *
  *   967 → 968 (`useClientFiles`, 2026-09-07) — `components/PanelCloseButton.tsx`,
  *   the ONE dismiss control every slide-out panel now renders. Argued on the
  *   "808 → 868" terms: it is a shared reuse surface (seven importers on the day it

@@ -59,7 +59,11 @@ describe('vscodeRoutes — workspace (tenant) management', () => {
 
   it('GET /tenants lists the signed-in user\'s workspaces', async () => {
     const ts = makeTenantService();
-    const res = await createVscodeRoutes({} as any, ts as any).request('/tenants', undefined, ENV);
+    // A real `db`, not `{}`: the handler lands any pending invitation BEFORE listing
+    // (so a teammate invited by email sees the workspace on their first look), and
+    // that read goes to the database. With an empty stub it threw `db.select is not a
+    // function` and the route answered 500 — the endpoint was never actually asserted.
+    const res = await createVscodeRoutes(makeDb([]) as any, ts as any).request('/tenants', undefined, ENV);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ tenants: WORKSPACES });
     expect(ts.listTenantsForUser).toHaveBeenCalledWith(USER);

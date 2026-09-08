@@ -20,6 +20,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CONTAINER_AGENT_TOOLS, CONTAINER_SURFACE_CAPS } from './cloudAgentTools';
+import { OP_HANDLERS } from './cloudAgent/containerOps';
 
 // `fileURLToPath(import.meta.url)` (a STRING argument) rather than the usual
 // `new URL('.', import.meta.url)`: this repo's DOM + node lib mix makes the global
@@ -34,6 +35,9 @@ const containerImage = read('container/server.mjs');
 const relayModule = read('container/agentRelay.mjs');
 const actionsRunner = read('src/application/runtime/githubActionsRunner.ts');
 const engine = read('src/application/runtime/cloudAgentEngine.ts');
+// The container op protocol is a DISPATCH TABLE now, not an `if (op === …)` chain
+// inside the engine — so the op's implementation is asserted where it actually lives.
+const containerOps = read('src/application/runtime/cloudAgent/containerOps.ts');
 
 describe('container/agentRelay.mjs — the pause, implemented once for both images', () => {
   it('handles the ask_human tool by posting the ask_human op', () => {
@@ -60,15 +64,19 @@ describe('ask_human is wired end to end on the redispatch surfaces', () => {
   });
 
   it('the Worker implements the op the images call', () => {
-    expect(engine).toContain("if (op === 'ask_human')");
+    // A real entry in the op table — a stronger assertion than the old string match
+    // on an `if (op === …)` branch: a handler that exists but is not REGISTERED is
+    // precisely the failure the table exists to make impossible, and `OP_HANDLERS`
+    // is the only thing `handleContainerOp` will dispatch through.
+    expect(OP_HANDLERS.ask_human).toBeTypeOf('function');
     // It must PARK the row: an op that only opened a question would leave the run
     // looking live while its process has already exited, and the orphan reaper would
     // kill it within the surface's silence ceiling.
-    expect(engine).toMatch(/set\(\{ status: 'paused'/);
+    expect(containerOps).toMatch(/set\(\{ status: 'paused'/);
     // And it must go through the shared primitive, not a private copy — that is what
     // gives the container the same approval + needs-attention routing + resume record
     // the durable surface gets.
-    expect(engine).toContain('pauseExecutionForQuestion');
+    expect(containerOps).toContain('pauseExecutionForQuestion');
   });
 
   for (const [label, source] of [

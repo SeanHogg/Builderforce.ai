@@ -19213,7 +19213,7 @@
     "starterProductDiscovery": "Product discovery",
     "starterProductDiscoveryDescription": "Synthesize customer feedback into requested features, visual mockups, and a delivery roadmap.",
     "createTypeTitle": "What do you want to create?",
-    "createTypeSubtitle": "Start with a Builder type or guided template. It opens as an Object in a new Canvas, where you can add Workflows, data, people, and Brain.",
+    "createTypeSubtitle": "Every one of these opens the same Canvas — the only difference is what it opens by asking for. Add Workflows, data, people and Brain once you are in.",
     "existingCreations": "Your existing creations",
     "existingCreationsSubtitle": "Open an existing Project, Agent, Website, App, Evermind, LLM, Voice, Video, Workflow, or Brain session inside its Canvas.",
     "loadingCreations": "Loading creations…",
@@ -20567,12 +20567,6 @@
     },
     "teammateSeated": "On this board",
     "launcherEyebrow": "Create",
-    "createByTypeTitle": "Create by type",
-    "createByTypeSubtitle": "Choose the kind of thing you want to make.",
-    "guidedTemplateTitle": "Use a guided template",
-    "guidedTemplateSubtitle": "Start with a complete, connected workflow.",
-    "guidedTemplatesLabel": "Guided templates",
-    "useTemplate": "Use template",
     "comingSoon": "Coming soon",
     "createAction": "Create",
     "blankCanvas": "Start with a blank canvas",
@@ -23675,7 +23669,19 @@
     "filterByFolder": "Show only this folder",
     "clearFolderFilter": "Show every folder",
     "unfiledFolder": "No folder",
-    "proveIt": "Prove it"
+    "proveIt": "Prove it",
+    "facetLabel": "Filter by kind",
+    "facetAll": "Everything",
+    "facet": {
+      "canvas": "Canvases",
+      "build": "Builds",
+      "workflow": "Workflows",
+      "chat": "Conversations",
+      "project": "Projects",
+      "agent": "Agents"
+    },
+    "blankCanvasTagline": "An empty board. Say what you want and it takes shape.",
+    "startersLabel": "Ways to start"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",

@@ -13,7 +13,7 @@ const SESSION_TYPE = "builderforce";
  *
  * ## Decision: the two per-tab surfaces do NOT converge (recorded 2026-08-20)
  *
- * The open question was whether this and the stable `BrainWebview` per-session tabs
+ * The open question was whether this and the stable `BuilderForcePanel` per-session tabs
  * (`sessionTabs:perSession`) should collapse into one implementation if VS Code ever
  * promotes `chatSessionsProvider` to stable. They should not, and the reason is that they
  * were never two implementations of one thing:
@@ -22,7 +22,7 @@ const SESSION_TYPE = "builderforce";
  *    served by {@link createBuilderForceHandler}, the exact handler the stable
  *    `@builderforce` participant uses. There is no duplicated loop, tool wiring, model
  *    resolution or persistence here to converge — that consolidation already happened.
- *  - `BrainWebview` is a different SURFACE, not a second copy of this one. It carries what
+ *  - `BuilderForcePanel` is a different SURFACE, not a second copy of this one. It carries what
  *    the native chat UI has no contract for: the Evermind console, the model picker, the
  *    creation canvas, per-chat project attachment, diagnostics capture. Retiring it to
  *    gain a native tab would delete features, not duplication.

@@ -54,7 +54,7 @@ import { CanvasNodeDeleteButton } from './CanvasNodeDeleteButton';
 import { controlLabels, readGameControls } from '@/lib/gamePoster';
 import { canvasBuildBinding } from '@/lib/canvasBuild';
 import { canvasWebPageUrl, WEB_PAGE_KINDS } from '@/lib/canvasWebPage';
-import { canvasViewport } from '@builderforce/creation-canvas-contract';
+import { canvasViewport, resourceIdOfType } from '@builderforce/creation-canvas-contract';
 import { formatBytes } from '@/lib/formatBytes';
 import { dashboardWidgetsPatch, readDashboardWidgets } from '@/lib/canvasDashboard';
 import { PIPELINE_MAX_CARDS_PER_CELL, cardProbabilityPercent, cardsAt, pipelineTotals, readPipelineModel, stageTotals } from '@/lib/canvasSalesPipeline';
@@ -116,7 +116,6 @@ import { useFormat } from "@/i18n/useFormat";
  *  exported because this file uses the name itself — `export … from` re-exports
  *  without binding anything in local scope. */
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
-import { resourceIdOfType } from '@/domains/canvas/domain/resourceRef';
 import { CeremonyOutcome } from '@/components/ceremony/CeremonyOutcome';
 export type CreationFlowNode = CanvasObject;
 

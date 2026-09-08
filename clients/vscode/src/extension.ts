@@ -5,7 +5,7 @@ import { BuilderForceAuthProvider } from "./auth";
 import * as bfApi from "./bfApi";
 import { initActivity, trackVsix } from "./activity";
 import { BoardPanel } from "./boardPanel";
-import { BrainWebview } from "./brainWebview";
+import { BuilderForcePanel } from "./builderforcePanel";
 import { Project360Panel } from "./project360Panel";
 import { ProjectPagePanel, projectPageChoices } from "./projectPagePanel";
 import { registerChatParticipant } from "./chatParticipant";
@@ -36,7 +36,6 @@ import { MeetingsController, joinMeetingInBrowser, joinMeetingNative, openMeetin
 import { PendingChangesController } from "./pendingChangesTree";
 import { posixShellReport } from "./posixShell";
 import { buildIdentityReport } from "./buildIdentityReport";
-import { CreationCanvasPanel } from "./creationCanvasPanel";
 import { initErrorReporter, reportExtensionError, surfaceError } from "./errorReporter";
 
 /** Pull a numeric Brain chat id out of a Sessions tree item or a raw id argument. */
@@ -149,6 +148,10 @@ export function activate(context: vscode.ExtensionContext): void {
     managerStatus,
     vscode.commands.registerCommand(OPEN_MANAGER_CMD, () =>
       vscode.env.openExternal(vscode.Uri.parse(`${appUrl()}/projects?tab=manager`))),
+    // "Create on Canvas" makes a NEW board from a prompt and opens the workspace at
+    // its graph. "Open Chat" opens the SAME panel at its chat surface — one panel,
+    // two entries, because a chat is the board with its graph stood down (see
+    // `frontend/src/lib/canvasSurfaces.ts`).
     vscode.commands.registerCommand("builderforce.openCreateCanvas", async () => {
       const prompt = await vscode.window.showInputBox({
         title: vscode.l10n.t("Create on Canvas"),
@@ -159,7 +162,7 @@ export function activate(context: vscode.ExtensionContext): void {
       try {
         const session = await bfApi.createCreationSession(context.secrets, prompt);
         trackVsix("navigation", { ref: `creation-session:${session.id}` });
-        CreationCanvasPanel.open(context, session.id, session.title);
+        await BuilderForcePanel.open(context, undefined, { surface: "graph", sessionId: session.id });
       } catch (error) {
         surfaceError(error, "command:openCreateCanvas",
           vscode.l10n.t("Could not create a Canvas session: {0}", (error as Error).message));
@@ -173,24 +176,23 @@ export function activate(context: vscode.ExtensionContext): void {
           description: new Date(session.lastActivityAt).toLocaleString(),
           session,
         })), { title: vscode.l10n.t("Open Creation Session"), placeHolder: vscode.l10n.t("Choose a shared canvas") });
-        if (picked) CreationCanvasPanel.open(context, picked.session.id, picked.session.title);
+        if (picked) await BuilderForcePanel.open(context, undefined, { surface: "graph", sessionId: picked.session.id });
       } catch (error) {
         surfaceError(error, "command:openCreationSession",
           vscode.l10n.t("Could not open Creation Sessions: {0}", (error as Error).message));
       }
     }),
-    vscode.commands.registerCommand("builderforce.openCreationSessionItem", (session: bfApi.BfCreationSessionSummary) => {
-      CreationCanvasPanel.open(context, session.id, session.title);
-    }),
+    vscode.commands.registerCommand("builderforce.openCreationSessionItem", (session: bfApi.BfCreationSessionSummary) =>
+      BuilderForcePanel.open(context, undefined, { surface: "graph", sessionId: session.id })),
     attention.onDidChange(() => {
       tree.refresh(); projects.refresh(); inbox.refresh(); updateManagerStatus();
       // Per-session chat tabs show the same live status as the Sessions rows, off the
       // same map — repaint them on the same signal (no second poller).
-      BrainWebview.refreshTabStatus();
+      BuilderForcePanel.refreshTabStatus();
     }),
     // The host-owned Brain loop reports its running / awaiting chats (the server can't
     // see them) — repaint the Sessions tree so they light up in lockstep.
-    onLocalRunsChange(() => { tree.refresh(); BrainWebview.refreshTabStatus(); }),
+    onLocalRunsChange(() => { tree.refresh(); BuilderForcePanel.refreshTabStatus(); }),
     // Switching the active project re-scopes the attention query.
     onProjectChange(() => attention.refresh()),
   );
@@ -213,7 +215,7 @@ export function activate(context: vscode.ExtensionContext): void {
     },
   });
   context.subscriptions.push({ dispose: () => runHost.dispose() });
-  BrainWebview.configure({
+  BuilderForcePanel.configure({
     runHost,
     onChatsChanged: () => { tree.refresh(); attention.refresh(); },
     onPlatformWrite: () => {
@@ -298,19 +300,19 @@ export function activate(context: vscode.ExtensionContext): void {
     // Work Inbox entry points — each hands the unified Brain a job to do with its
     // shared platform + git tools (one Brain, one tool catalog; no bespoke dashboards).
     vscode.commands.registerCommand("builderforce.reviewPullRequests", () =>
-      BrainWebview.open(context, {
+      BuilderForcePanel.open(context, {
         kind: "seed",
         text: vscode.l10n.t("Review my open pull requests: use repos.list_pull_requests to list them, summarize each PR's status and any failing CI checks, and flag anything stale or blocked so I can triage."),
       }),
     ),
     vscode.commands.registerCommand("builderforce.fixErrors", () =>
-      BrainWebview.open(context, {
+      BuilderForcePanel.open(context, {
         kind: "seed",
         text: vscode.l10n.t("Show my unresolved production errors using quality.list_error_groups (most impactful first). For the top one, get its details with quality.get_error_group, then search_code/read_file the culprit and propose a fix."),
       }),
     ),
     vscode.commands.registerCommand("builderforce.openPullRequest", () =>
-      BrainWebview.open(context, {
+      BuilderForcePanel.open(context, {
         kind: "seed",
         text: vscode.l10n.t("Review my current changes with git_status and git_diff, then commit them on a new branch, push, and open a pull request. Confirm the branch name and PR title with me first."),
       }),
@@ -319,11 +321,11 @@ export function activate(context: vscode.ExtensionContext): void {
     // Internal: repaint the server-backed Sessions list (after auth / chat writes).
     vscode.commands.registerCommand("builderforce.refreshSessions", () => tree.refresh()),
     vscode.commands.registerCommand("builderforce.newSession", () =>
-      BrainWebview.open(context, { kind: "new" }),
+      BuilderForcePanel.open(context, { kind: "new" }),
     ),
     vscode.commands.registerCommand("builderforce.openSession", (id: number | string) => {
       const chatId = chatIdOf(id);
-      BrainWebview.open(context, chatId != null ? { kind: "focus", chatId } : { kind: "new" });
+      BuilderForcePanel.open(context, chatId != null ? { kind: "focus", chatId } : { kind: "new" });
     }),
     vscode.commands.registerCommand("builderforce.selectProject", () => selectProject(context, projects)),
     vscode.commands.registerCommand("builderforce.createProject", () => createProject(context, projects)),
@@ -381,7 +383,7 @@ export function activate(context: vscode.ExtensionContext): void {
       // ticket kind; everything else is a plain task).
       const projectId = getSelectedProject()?.id;
       const ticketKind = t.taskType === "epic" ? "epic" : t.taskType === "gap" ? "gap" : "task";
-      BrainWebview.open(context, {
+      BuilderForcePanel.open(context, {
         kind: "task",
         task: { id: t.id, key: t.key, title: t.title, taskType: t.taskType, projectId },
         ticket: { kind: ticketKind, ref: String(t.id), title: t.title, projectId },
@@ -453,7 +455,7 @@ export function activate(context: vscode.ExtensionContext): void {
       try {
         await bfApi.deleteBrainChat(context.secrets, id);
         tree.refresh();
-        BrainWebview.open(context, { kind: "new" });
+        BuilderForcePanel.open(context, { kind: "new" });
       } catch (e) {
         surfaceError(e, "command:deleteSession", `BuilderForce: could not delete chat (${(e as Error).message}).`);
       }
@@ -486,7 +488,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // still names it. Only `openBrain` is contributed to the palette — the two
     // palette entries for one action were the duplication, not the ids.
     ...["builderforce.openBrain", "builderforce.openChat", "builderforce.editorChat"].map((id) =>
-      vscode.commands.registerCommand(id, () => BrainWebview.open(context)),
+      vscode.commands.registerCommand(id, () => BuilderForcePanel.open(context)),
     ),
     vscode.commands.registerCommand("builderforce.signIn", () => signIn(context)),
     vscode.commands.registerCommand("builderforce.signOut", () => signOut(context, auth)),
@@ -503,19 +505,19 @@ export function activate(context: vscode.ExtensionContext): void {
     // prompt (and new-chat scoping) tracks the current project without a reopen, and
     // re-labels the Sessions header to show which project's chats are in view.
     onProjectChange(() => {
-      BrainWebview.refresh();
+      BuilderForcePanel.refresh();
       evermindView?.refresh();
       sessionsView.description = getSelectedProject()?.name;
     }),
     // A manual model pick re-pushes Brain init so an open chat switches immediately
     // (parity with project change; the native participant re-resolves per turn).
-    onModelChange(() => BrainWebview.refresh()),
+    onModelChange(() => BuilderForcePanel.refresh()),
     // Changing the permission setting has to reach an ALREADY-OPEN panel. The
     // participant re-reads it per turn, so without this the two surfaces disagree for
     // as long as the panel stays open — which is the whole failure this seam exists to
     // prevent, just delayed.
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration(PERMISSION_MODE_SETTING)) BrainWebview.refresh();
+      if (e.affectsConfiguration(PERMISSION_MODE_SETTING)) BuilderForcePanel.refresh();
       // Local-model settings changed: re-discover the Kimi Code install on the next read.
       if (e.affectsConfiguration("builderforce.localModels")) invalidateKimiInstallMemo();
     }),
@@ -872,7 +874,7 @@ async function runTask(
     // the unified Brain seeded for this task so the user can follow up / steer it.
     bfApi.invalidateTasks(getSelectedProject()?.id);
     projects.refresh();
-    BrainWebview.open(context, {
+    BuilderForcePanel.open(context, {
       kind: "task",
       task: { id: task.id, key: task.key, title: task.title, projectId: getSelectedProject()?.id, dispatched: true },
     });
@@ -1026,7 +1028,7 @@ async function signIn(context: vscode.ExtensionContext): Promise<void> {
   void syncSignedInContext(context); // reveal the feature views
   bfApi.clearJwt();
   clearPlatformToolsCache();
-  BrainWebview.refresh();
+  BuilderForcePanel.refresh();
   evermindView?.refresh();
   void vscode.commands.executeCommand("builderforce.refreshSessions");
   void vscode.commands.executeCommand("builderforce.refreshInbox");
@@ -1074,7 +1076,7 @@ async function signOut(
   setGroundingSummary(undefined);
   setSelectedProject(undefined);
   vscode.window.showInformationMessage("BuilderForce: signed out.");
-  BrainWebview.refresh();
+  BuilderForcePanel.refresh();
   evermindView?.refresh();
   void vscode.commands.executeCommand("builderforce.refreshSessions");
   void vscode.commands.executeCommand("builderforce.refreshInbox");

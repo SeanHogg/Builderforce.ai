@@ -19213,7 +19213,7 @@
     "starterProductDiscovery": "Descubrimiento de producto",
     "starterProductDiscoveryDescription": "Sintetiza comentarios de clientes en funciones solicitadas, maquetas visuales y una hoja de ruta de entrega.",
     "createTypeTitle": "¿Qué quieres crear?",
-    "createTypeSubtitle": "Empieza con un tipo de Builder o una plantilla guiada. Se abre como un Objeto en un nuevo Lienzo, donde puedes añadir Flujos, datos, personas y Brain.",
+    "createTypeSubtitle": "Todas estas opciones abren el mismo lienzo; lo único que cambia es lo que pide al abrirse. Añade flujos de trabajo, datos, personas y Brain una vez dentro.",
     "existingCreations": "Tus creaciones existentes",
     "existingCreationsSubtitle": "Abre un Proyecto, Agente, Sitio, App, Evermind, LLM, Voz, Vídeo, Flujo o sesión de Brain dentro de su Lienzo.",
     "loadingCreations": "Cargando creaciones…",
@@ -20567,12 +20567,6 @@
     },
     "teammateSeated": "En este lienzo",
     "launcherEyebrow": "Crear",
-    "createByTypeTitle": "Crear por tipo",
-    "createByTypeSubtitle": "Elige el tipo de cosa que quieres hacer.",
-    "guidedTemplateTitle": "Usar una plantilla guiada",
-    "guidedTemplateSubtitle": "Empieza con un flujo de trabajo completo y conectado.",
-    "guidedTemplatesLabel": "Plantillas guiadas",
-    "useTemplate": "Usar plantilla",
     "comingSoon": "Próximamente",
     "createAction": "Crear",
     "blankCanvas": "Empezar con un lienzo en blanco",
@@ -23675,7 +23669,19 @@
     "filterByFolder": "Mostrar solo esta carpeta",
     "clearFolderFilter": "Mostrar todas las carpetas",
     "unfiledFolder": "Sin carpeta",
-    "proveIt": "Demuéstralo"
+    "proveIt": "Demuéstralo",
+    "facetLabel": "Filtrar por tipo",
+    "facetAll": "Todo",
+    "facet": {
+      "canvas": "Lienzos",
+      "build": "Compilaciones",
+      "workflow": "Flujos de trabajo",
+      "chat": "Conversaciones",
+      "project": "Proyectos",
+      "agent": "Agentes"
+    },
+    "blankCanvasTagline": "Un tablero vacío. Di lo que quieres y toma forma.",
+    "startersLabel": "Formas de empezar"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",

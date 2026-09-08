@@ -44,7 +44,7 @@ import {
   CONNECTION_ENDS, CONNECTION_LINES, CONNECTION_ROUTERS, DEFAULT_CONNECTION_STYLE,
   edgeVisuals, readConnectionStyle, type ConnectionStyle,
 } from '@/lib/canvasConnectionStyle';
-import { CanvasSurfaceRouter } from './CanvasSurfaceRouter';
+import { CanvasSurfaceRouter, type CanvasSurfaceNodes } from './CanvasSurfaceRouter';
 import { CanvasFacilitateSurface } from './CanvasFacilitateSurface';
 import { publishPoll, setPollState } from '@/lib/pollApi';
 import { pollJoinUrl, pollPublishBody } from '@/lib/pollObject';
@@ -128,7 +128,7 @@ import {
 } from '@/domains/canvas/application/MaterializeDataset';
 import { CanvasProposalStage } from '@/domains/canvas/application/CanvasProposalStage';
 import { CARD_ACTS } from '@/domains/canvas/application/cardActs';
-import { parseResourceRef } from '@/domains/canvas/domain/resourceRef';
+import { formatResourceRef, parseResourceRef } from '@builderforce/creation-canvas-contract';
 import { canvasPlacementFlags } from '@/domains/canvas/domain/canvasObject';
 import { CardActProvider, useCardActRunnerFor, type CardActBoardBinding } from './cardActRunner';
 import { KindDetailsActions } from './KindDetailsActions';
@@ -989,7 +989,7 @@ export function projectEvermindNodePatch(head: ProjectEvermindHead, activity: Pr
   };
 }
 
-function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialBuildOpen = false, initialBuildChatId, initialBuildTicket, initialPrompt, initialPresent = false, initialModelComparisonIds = [], stageActive = true }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialBuildChatId?: number | null; initialBuildTicket?: { kind: string; ref: string } | null; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean }) {
+function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialBuildOpen = false, initialBuildChatId, initialBuildTicket, initialPrompt, initialPresent = false, initialModelComparisonIds = [], stageActive = true, hostSurfaces, initialSurface }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialBuildChatId?: number | null; initialBuildTicket?: { kind: string; ref: string } | null; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean; hostSurfaces?: CanvasSurfaceNodes; initialSurface?: CanvasSurfaceId }) {
   const fmt = useFormat();
   const t = useTranslations('creationCanvas');
   /**
@@ -1131,7 +1131,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * models side by side is to read the results in depth.
    */
   const comparisonModelIds = useMemo(() => normalizeModelComparisonIds(initialModelComparisonIds), [initialModelComparisonIds]);
-  const [surface, setSurfaceState] = useState<CanvasSurfaceId>(comparisonModelIds.length >= 2 ? 'scene3d' : 'graph');
+  const [surface, setSurfaceState] = useState<CanvasSurfaceId>(comparisonModelIds.length >= 2 ? 'scene3d' : initialSurface ?? 'graph');
   /**
    * The object an object-scoped surface is about. Null for every board surface but one,
    * and the reason a surface can be `page` at all: a page is a page OF something.
@@ -1992,7 +1992,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    */
   useEffect(() => {
     if (comparisonModelIds.length >= 2) return;
-    setSurfaceState(readCanvasSurface());
+    // An ENTRY that named a surface outranks the stored preference: "open my chat" has
+    // to open the chat even for someone whose last visit left them on the board. The
+    // preference is where you were, not what you just asked for — the same precedence
+    // the comparison case above already asserts.
+    setSurfaceState(initialSurface ?? readCanvasSurface());
     // Mount only: this restores a preference, and re-running it would drag the visitor
     // back out of whatever surface they have since switched to.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4145,7 +4149,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           ...expanded.resources.slice(0, 24).map((item, index): CreationFlowNode => ({
             id: crypto.randomUUID(), type: 'creation',
             position: { x: project.position.x + 390 + (index % 3) * 300, y: project.position.y - 180 + Math.floor(index / 3) * 190 },
-            data: { kind: item.kind as CreationObjectKind, title: item.title, status: item.status, subtitle: item.subtitle ?? undefined, ...(item.kind === 'task' ? taskDetails.get(String(item.resourceId)) : undefined), resourceId: `${item.resourceType}:${item.resourceId}`, workflowExecutable: item.workflowExecutable, resourceSubtype: item.resourceSubtype },
+            data: { kind: item.kind as CreationObjectKind, title: item.title, status: item.status, subtitle: item.subtitle ?? undefined, ...(item.kind === 'task' ? taskDetails.get(String(item.resourceId)) : undefined), resourceId: formatResourceRef(item.resourceType, item.resourceId) ?? undefined, workflowExecutable: item.workflowExecutable, resourceSubtype: item.resourceSubtype },
           })),
           ...expanded.generated.map((item, index): CreationFlowNode => ({
             id: crypto.randomUUID(), type: 'creation', position: { x: project.position.x + 390 + index * 370, y: project.position.y - 430 },
@@ -11827,9 +11831,22 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // the last row of — so the preference is untouched and the prompt floats until the panel
   // comes back, rather than being drawn into a panel that is not there.
   const brainDockDrawn = brainSurfaceOpen && brainPlacement === 'docked' && !surfaceDef.brainIsSurface;
-  const effectivePromptPlacement: CanvasPromptPlacement = surfaceDef.brainIsSurface
-    ? 'float'
-    : promptPlacement === 'docked' && !brainDockDrawn ? 'float' : promptPlacement;
+  /**
+   * A surface the EMBEDDING HOST supplies owns its whole centre, input included.
+   *
+   * The composer is wired to `evaluateCanvas`, which runs the turn in THIS browser
+   * context. A host that replaces a surface does so precisely because its runtime is
+   * somewhere this component cannot reach — in VS Code the run executes in the
+   * extension host so it survives the tab closing — so a composer pointing at the
+   * in-page runtime would be a second, quieter way to start a turn that behaves
+   * differently from the one the reader can see. The host brings its own.
+   */
+  const hostOwnsSurface = !!hostSurfaces?.[surface];
+  const effectivePromptPlacement: CanvasPromptPlacement = hostOwnsSurface
+    ? 'closed'
+    : surfaceDef.brainIsSurface
+      ? 'float'
+      : promptPlacement === 'docked' && !brainDockDrawn ? 'float' : promptPlacement;
   const promptInBrainPanel = effectivePromptPlacement === 'docked';
   const composer = !presentMode && effectivePromptPlacement !== 'closed' && <div
     // Measured ONLY while it floats over the board. In the Brain panel it is that panel's
@@ -12704,6 +12721,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             back. Adding a runtime is a key here plus an entry in `canvasSurfaces.ts`. */}
         <CanvasSurfaceRouter
           surface={surface}
+          hostSurfaces={hostSurfaces}
           surfaces={{
             // Additive fork, not a growing conditional inside `Canvas3DView` itself
             // (SRP: that component stays "project the board"; the generator panel owns
@@ -14334,10 +14352,10 @@ function ActivityInspector({ sessionId, objectId, data, persistence, role, membe
   </div>;
 }
 
-export function CreationCanvas({ sessionId, persistence = 'server', initialFocusId, initialShareOpen, initialBuildOpen, initialBuildChatId, initialBuildTicket, initialPrompt, initialPresent, initialModelComparisonIds, stageActive = true }: { sessionId: string; persistence?: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialBuildChatId?: number | null; initialBuildTicket?: { kind: string; ref: string } | null; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean }) {
+export function CreationCanvas({ sessionId, persistence = 'server', initialFocusId, initialShareOpen, initialBuildOpen, initialBuildChatId, initialBuildTicket, initialPrompt, initialPresent, initialModelComparisonIds, stageActive = true, hostSurfaces, initialSurface }: { sessionId: string; persistence?: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialBuildChatId?: number | null; initialBuildTicket?: { kind: string; ref: string } | null; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean; /** Surfaces the embedding host implements itself — see `CanvasSurfaceRouter`. VS Code supplies `chat`, whose runs execute in the extension host. */ hostSurfaces?: CanvasSurfaceNodes; /** The surface this ENTRY asked for, above the stored preference — what "open my chat" means. */ initialSurface?: CanvasSurfaceId }) {
   // The 3D scene publishes its view commands to the canvas rail rather than
   // carrying a toolbar of its own, so both live under one provider — and the app
   // surface publishes ITS controls into the session bar for the same reason, which
   // is what leaves this canvas with one bar instead of one per runtime.
-  return <ReactFlowProvider><Canvas3DControlsProvider><CanvasSurfaceActionsProvider><CanvasInner sessionId={sessionId} persistence={persistence} initialFocusId={initialFocusId} initialShareOpen={initialShareOpen} initialBuildOpen={initialBuildOpen} initialBuildChatId={initialBuildChatId} initialBuildTicket={initialBuildTicket} initialPrompt={initialPrompt} initialPresent={initialPresent} initialModelComparisonIds={initialModelComparisonIds} stageActive={stageActive} /></CanvasSurfaceActionsProvider></Canvas3DControlsProvider></ReactFlowProvider>;
+  return <ReactFlowProvider><Canvas3DControlsProvider><CanvasSurfaceActionsProvider><CanvasInner sessionId={sessionId} persistence={persistence} initialFocusId={initialFocusId} initialShareOpen={initialShareOpen} initialBuildOpen={initialBuildOpen} initialBuildChatId={initialBuildChatId} initialBuildTicket={initialBuildTicket} initialPrompt={initialPrompt} initialPresent={initialPresent} initialModelComparisonIds={initialModelComparisonIds} stageActive={stageActive} hostSurfaces={hostSurfaces} initialSurface={initialSurface} /></CanvasSurfaceActionsProvider></Canvas3DControlsProvider></ReactFlowProvider>;
 }

@@ -23,8 +23,8 @@ import { InsightStat } from '@/components/dashboard/InsightStat';
 import { PulseSubmitCard } from '@/components/insights/PulseWidget';
 import { buildInsightDelta } from '@/components/dashboard/metricFormat';
 import { cumulativeDailySeries, dailyCounts } from '@/components/dashboard/seriesFromTimestamps';
-import { DashboardCreationLauncher } from '@/components/dashboard/DashboardCreationLauncher';
-import { DashboardCreationSessions } from '@/components/dashboard/DashboardCreationSessions';
+import { CreationLibraryPanel } from '@/components/creation-sessions/CreationLibraryPanel';
+import { CreationStarterPanel } from '@/components/creation-sessions/CreationStarterPanel';
 import { DashboardIdeasTab } from '@/components/dashboard/DashboardIdeasTab';
 import { DashboardQualityTab } from '@/components/dashboard/DashboardQualityTab';
 import { DashboardKnowledgeTab } from '@/components/dashboard/DashboardKnowledgeTab';
@@ -274,7 +274,7 @@ export default function DashboardPage() {
     { id: 'dashboard-pulse', title: t('panel.pulse'), subtitle: t('panel.pulseSubtitle'), icon: '♡', content: <PulseSubmitCard /> },
     ...(activeTab === 'ideas' ? [{
       id: 'dashboard-create', title: t('panel.create'), subtitle: t('panel.createSubtitle'), icon: '✦',
-      content: <DashboardCreationLauncher />,
+      content: <CreationStarterPanel />,
     } satisfies WorkspaceCanvasPanel] : []),
     {
       id: activeTab === 'ideas' ? 'dashboard-artifacts' : `dashboard-view-${activeTab}`,
@@ -293,7 +293,7 @@ export default function DashboardPage() {
           {activeTab === 'ideas' && <>
             <ActRail />
             <DashboardIdeasTab limit={6} />
-            <DashboardCreationSessions />
+            <CreationLibraryPanel />
           </>}
           {activeTab === 'projects' && <ProjectsContent limit={6} viewAllHref="/projects" />}
           {activeTab === 'business' && <BusinessTab />}

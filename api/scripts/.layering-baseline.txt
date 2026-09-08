@@ -30,6 +30,8 @@ presentation/routes/ceremonyRoutes.ts
 presentation/routes/chatRoutes.ts
 presentation/routes/contributorRoutes.ts
 presentation/routes/costForecastRoutes.ts
+presentation/routes/creationSessionFolderRoutes.ts
+presentation/routes/creationSessionRoutes.ts
 presentation/routes/dashboardRoutes.ts
 presentation/routes/dashboardsRoutes.ts
 presentation/routes/demoRoutes.ts

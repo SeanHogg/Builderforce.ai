@@ -30,9 +30,29 @@ export type CanvasSurfaceNodes = Partial<Record<CanvasSurfaceId, ReactNode>>;
 export interface CanvasSurfaceRouterProps {
   surface: CanvasSurfaceId;
   surfaces: CanvasSurfaceNodes;
+  /**
+   * Surfaces the EMBEDDING host supplies, taking precedence over the canvas's own.
+   *
+   * ── WHY A HOST GETS TO REPLACE ONE ───────────────────────────────────────────
+   * The canvas assembles every surface from its own state, which is right on the web
+   * and wrong in exactly one place: VS Code. There, chat is not a transcript the
+   * webview owns — runs execute in the EXTENSION HOST so they survive the tab being
+   * closed, and the tools they call reach the workspace's real files. That runtime
+   * cannot be reached from inside this component, and it must not be: the web has no
+   * extension host to talk to.
+   *
+   * So the host hands in the node for `chat` and the canvas renders it where its own
+   * would have gone. Everything else — the board behind it, the surface switcher, the
+   * `showsBoard`/`brainIsSurface` rules, the composer — is unchanged and shared, which
+   * is the point: the editor gets ONE surface implemented differently, not a second
+   * canvas.
+   *
+   * Absent (the web) this is `undefined` and nothing changes.
+   */
+  hostSurfaces?: CanvasSurfaceNodes;
 }
 
 /** Renders the active surface, or nothing when the board itself is the surface. */
-export function CanvasSurfaceRouter({ surface, surfaces }: CanvasSurfaceRouterProps): ReactNode {
-  return surfaces[surface] ?? null;
+export function CanvasSurfaceRouter({ surface, surfaces, hostSurfaces }: CanvasSurfaceRouterProps): ReactNode {
+  return hostSurfaces?.[surface] ?? surfaces[surface] ?? null;
 }

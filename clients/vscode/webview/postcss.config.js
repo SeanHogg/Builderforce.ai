@@ -1,10 +1,15 @@
-const path = require('path');
-
-// Vite runs from the extension root, so point Tailwind at THIS folder's config
-// (otherwise it falls back to an empty content set and emits no utilities).
+/**
+ * PostCSS for THE webview bundle — there is only one now.
+ *
+ * Tailwind scans the frontend sources this bundle compiles as well as the editor's
+ * own `src/`; otherwise every utility class in those components is purged and the
+ * board renders unstyled. The chat panel used to have a second, narrower config,
+ * but its content globs were a strict subset of these, so it was redundant rather
+ * than different.
+ */
 module.exports = {
   plugins: {
-    tailwindcss: { config: path.join(__dirname, 'tailwind.config.js') },
+    tailwindcss: { config: require('path').join(__dirname, 'tailwind.config.js') },
     autoprefixer: {},
   },
 };

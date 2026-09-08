@@ -74,6 +74,33 @@ export async function parseBody<T>(c: BodyContext, schema: z.ZodType<T>): Promis
 }
 
 /**
+ * Read and validate a body that may legitimately be ABSENT.
+ *
+ * Some endpoints mean something with no body at all: `PATCH /:id/pin` toggles,
+ * `POST /:id/checkpoint` takes an optional label, `POST /:id/watch` defaults its
+ * state. Those handlers were all written as
+ * `await c.req.json<XBody>().catch(() => ({} as XBody))` — a type assertion with
+ * a shrug attached, which is exactly the pattern {@link parseBody} exists to end,
+ * except that swapping in `parseBody` would ALSO start rejecting the empty body
+ * they deliberately accept.
+ *
+ * So this is the honest third case: an absent or unparseable body yields the
+ * schema's own parse of `{}` (so the schema still decides what "empty" means, and
+ * a schema with a required field still refuses), while a body that IS present is
+ * validated exactly as {@link parseBody} would. The tolerance stays; the type
+ * assertion goes.
+ */
+export async function parseOptionalBody<T>(c: BodyContext, schema: z.ZodType<T>): Promise<T> {
+  let raw: unknown;
+  try {
+    raw = await c.req.json();
+  } catch {
+    raw = {};
+  }
+  return admit(schema, raw ?? {}, 'body');
+}
+
+/**
  * Validate the query string. Every value arrives as a string, so schemas use
  * `z.coerce.number()` / {@link zQueryInt} for numerics and `z.enum` for choices.
  */

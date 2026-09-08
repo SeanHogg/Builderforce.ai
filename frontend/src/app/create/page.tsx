@@ -4,8 +4,8 @@ import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
-import { DashboardCreationLauncher } from '@/components/dashboard/DashboardCreationLauncher';
-import { DashboardCreationSessions } from '@/components/dashboard/DashboardCreationSessions';
+import { CreationLibraryPanel } from '@/components/creation-sessions/CreationLibraryPanel';
+import { CreationStarterPanel } from '@/components/creation-sessions/CreationStarterPanel';
 import { PendingDraftsNotice } from '@/components/workspace/PendingDraftsNotice';
 import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 import { Button } from '@/components/ui';
@@ -62,10 +62,10 @@ export default function CanvasLibraryPage() {
       {isAuthenticated ? (
         <div className={styles.layout}>
           <div className={styles.creationsColumn}>
-            <DashboardCreationSessions />
+            <CreationLibraryPanel />
           </div>
           <aside className={styles.launcherColumn}>
-            <DashboardCreationLauncher />
+            <CreationStarterPanel />
           </aside>
         </div>
       ) : (

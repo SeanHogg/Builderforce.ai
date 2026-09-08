@@ -4,7 +4,7 @@ import * as path from "node:path";
 
 /**
  * Guards the recorded decision in `chatSessions.ts`: the proposed-API chat tab and the
- * stable `BrainWebview` session tabs stay as they are because they are NOT two
+ * stable `BuilderForcePanel` session tabs stay as they are because they are NOT two
  * implementations of one thing — this file is a registration adapter over the SAME
  * handler the `@builderforce` participant uses.
  *

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { readSourcePackages } from '../../../scripts/sourcePackages.mjs';
 import { sourcePackageGraph } from '../../../scripts/sourcePackageGraph.mjs';
-import canvasConfig from '../webview/vite.canvas.config';
+import webviewConfig from '../webview/vite.config';
 
 /**
  * The source-only shared packages (`packages/*` whose `exports` point at `src/`)
@@ -25,8 +25,11 @@ import canvasConfig from '../webview/vite.canvas.config';
  * edges, and no stale keys — now live in `scripts/check-source-package-graph.mjs`,
  * which DISCOVERS its projects instead of listing them; the list this file used
  * to keep named three and there are nine. What stays here is the one thing a node
- * guard cannot read: the canvas bundle's own vite config, which is TypeScript and
- * has to be imported to be inspected.
+ * guard cannot read: the webview bundle's own vite config, which is TypeScript and
+ * has to be imported to be inspected. (There used to be two configs — a chat bundle
+ * and a canvas bundle — and this only ever checked the canvas one, because it was
+ * the one compiling frontend source. They are now one config, so it checks the only
+ * one there is.)
  */
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '../../..');
@@ -56,7 +59,7 @@ describe('source-only shared packages', () => {
     // The bundle compiles `frontend/src` outside the frontend's own resolution,
     // so a package the web resolves through tsconfig `paths` reaches rollup as a
     // bare specifier and fails the release build unless it is aliased here.
-    const alias = canvasConfig.resolve?.alias;
+    const alias = webviewConfig.resolve?.alias;
     expect(Array.isArray(alias)).toBe(true);
 
     const aliased = (alias as { find: string | RegExp; replacement: string }[]).filter(
@@ -67,7 +70,7 @@ describe('source-only shared packages', () => {
   });
 
   it('aliases the canvas bundle at package source, not at a copy', () => {
-    const alias = canvasConfig.resolve?.alias as { find: string | RegExp; replacement: string }[];
+    const alias = webviewConfig.resolve?.alias as { find: string | RegExp; replacement: string }[];
     const replacements = alias
       .map((entry) => entry.replacement)
       .filter((replacement) => replacement.split(sep).includes('packages'));
