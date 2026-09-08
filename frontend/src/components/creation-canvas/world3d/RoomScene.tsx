@@ -178,7 +178,9 @@ function WallPanel({ panel, palette, onSelect }: WallPanelProps) {
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
-            fontSize: 13,
+            // A caption under a wall panel is DOM over the canvas, not geometry,
+            // so it reads the app's own scale — the same as the peer name plate.
+            fontSize: 'var(--font-size-small)',
             lineHeight: 1.4,
             color: 'var(--text-primary, #f5f5f5)',
             textShadow: '0 1px 2px rgba(0,0,0,.35)',

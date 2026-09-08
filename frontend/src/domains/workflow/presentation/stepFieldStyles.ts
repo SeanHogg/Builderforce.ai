@@ -18,7 +18,10 @@ import type { CSSProperties } from 'react';
 export const inputStyle: CSSProperties = {
   width: '100%',
   padding: '7px 9px',
-  fontSize: 12.5,
+  // The SAME role `.input` names in `StepConfigForm.module.css` — these styles
+  // exist to look like the fields above and below them, and a hand-typed size is
+  // exactly how that stops being true.
+  fontSize: 'var(--font-size-small)',
   border: '1px solid var(--border-subtle)',
   borderRadius: 'var(--radius-sm)',
   background: 'var(--bg-deep)',
@@ -35,14 +38,16 @@ export const optionStyle: CSSProperties = {
 };
 
 export const labelStyle: CSSProperties = {
-  fontSize: 11.5,
+  // `.field` — same role, same weight, same colour.
+  fontSize: 'var(--font-size-eyebrow)',
   fontWeight: 600,
   color: 'var(--text-secondary)',
   display: 'block',
 };
 
 export const hintStyle: CSSProperties = {
-  fontSize: 11,
+  // `.identity small` — the module's own hint role.
+  fontSize: 'var(--font-size-eyebrow)',
   color: 'var(--text-muted)',
   marginTop: 4,
   lineHeight: 1.5,

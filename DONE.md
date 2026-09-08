@@ -1,3 +1,26 @@
+## ✅ RESOLVED 2026-09-07 — `check:design-scale` is green, and the deploy is unblocked
+
+The frontend deploy failed on `pnpm check` (21/22 guards). The register entry that
+predicted this said two of the five offenders needed a judgement their author owned;
+looking at each one, only ONE of them actually did.
+
+| offender | call |
+| --- | --- |
+| `lib/canvas/roomSeating.ts` — `ROOM_PALETTES` | **Exempt, with the reason written down.** Every value is handed to a `meshStandardMaterial`, a `<fog>` or a light; three.js parses a colour *string*, so `var(--floor)` reaches it as a failed parse and paints black. It joins the `world3d/*.tsx` entry it belongs beside — it is a `.ts` only because the seating maths next to it is pure. |
+| `CanvasRoomSurface.module.css` — 1 hex, `border-radius: 999px`, 13 typed sizes | **Fix.** This is the DOM chrome *around* the canvas, not the scene. The hex fallbacks went (the tree carries zero), `999px` became `--radius-full`, and the sizes took the same four-way mapping every earlier entry in that guard's changelog describes finding: 11 = eyebrow, 12/13 = small, 15 = body, the fallback heading = card-title. |
+| `PeerAvatar.tsx` `borderRadius: 4` / `fontSize: 13`, `RoomScene.tsx` `fontSize: 13` | **Fix.** Both are drei `<Html>` — real elements over the canvas, which is what `PeerAvatar`'s own header says ("why the name is DOM and not geometry"): so the plate and the panel caption read `--radius-sm` and `--font-size-small` like any other caption. The `world3d` colour exemption never covered their radii or their type. |
+| `stepFieldStyles.ts` — `12.5` / `11.5` / `11` | **Not a judgement at all.** Those four styles exist to match the fields above and below them, and `StepConfigForm.module.css` — the module they sit inside — already names `--font-size-small` on `.input`, `--font-size-eyebrow` on `.field` and `.identity small`. The inline copies had drifted off the roles they were written to mirror. Restoring them is the file's stated purpose, not a re-sizing of a dense node body. |
+
+`offScaleFontSizes` 3,506 → **3,487**, with the changelog entry the guard asks for. −19 of
+that fall is not this work: the chat/canvas merge deleted `DashboardCreationSessions` and
+the two import wizards without the floor following them down, so the ratchet had been
+sitting slack and would have failed on the *next* green run anyway. The per-file tally was
+re-recorded green (`RATCHET_WRITE_TALLY=1`), dropping 19 stale entries that would otherwise
+have buried the real offender in every future diff.
+
+Verified: **22/22 guards** (`pnpm check`), a clean `tsgo --noEmit`, and 1,004 tests across
+the canvas + workflow suites.
+
 ## ✅ RESOLVED 2026-09-07 — the marketing header's Product menu was missing REACH, the arc's last stage
 
 Reported from the running app: the header's Product ▾ menu showed IDEA · MAKE · RUN ·

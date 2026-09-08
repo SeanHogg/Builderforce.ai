@@ -207,8 +207,23 @@ const BASELINE = {
    * `RolePreviewBar` the TopBar had absorbed, the `CanvasSwitcher` the sidebar had
    * absorbed, `RosterNav` and `ProjectList` went with their typed sizes; the new
    * set-password panel names its roles from the start.
+   *
+   * 3,506 -> 3,487: the room's own type ramp, plus the drift the chat/canvas merge
+   * left behind. The merge deleted `DashboardCreationSessions` and the two import
+   * wizards without the floor following them down (-19 of the fall is theirs, and
+   * the ratchet had been sitting slack because of it). The rest is the ROOM
+   * surface, which shipped with the same four-way mapping every entry above
+   * describes finding: `CanvasRoomSurface.module.css`'s thirteen literals were 11 =
+   * eyebrow, 12/13 = small, 15 = body, and the fallback heading = card-title; the
+   * two drei `Html` overlays (`PeerAvatar`, `RoomScene`) are DOM over the canvas,
+   * not geometry, so their `13` is small like any other caption. And
+   * `stepFieldStyles.ts`'s 12.5 / 11.5 / 11 turned out not to be a judgement about
+   * dense node bodies at all: those four styles exist to match `.input`, `.field`
+   * and `.identity small` in `StepConfigForm.module.css`, which name
+   * `--font-size-small` and `--font-size-eyebrow` — the inline copies had simply
+   * drifted off the roles they were written to mirror.
    */
-  offScaleFontSizes: 3506,
+  offScaleFontSizes: 3487,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.
@@ -346,6 +361,17 @@ const COLOUR_EXEMPT = [
   // each prop — see `PROP_KIND_DEFAULTS` in the contract — so these are its
   // defaults, not the shell's theme.
   /^components\/creation-canvas\/world3d\/[^/]+\.tsx$/,
+  // The SAME scene's palette, one file up the import: `ROOM_PALETTES` is the
+  // room's light and dark art direction, and every value in it is handed to a
+  // `meshStandardMaterial`, a `<fog>` or a light in `RoomScene`/`CanvasRoomSurface`
+  // — three.js parses a colour STRING, so `var(--floor)` reaches it as a failed
+  // parse and paints black. It is a `.ts` rather than a `.tsx` only because the
+  // seating maths it sits beside is pure; the exemption is for the same reason as
+  // the entry above, not a second one. Note what is NOT exempt with it: the DOM
+  // chrome around the canvas (`CanvasRoomSurface.module.css`) and the drei `Html`
+  // overlays inside it are real elements, they read real tokens, and they are held
+  // to the same rule as every other surface.
+  /^lib\/canvas\/roomSeating\.ts$/,
 
   // ---- Colour the AUTHOR picks, persisted as data -----------------------
   // The value is written into the object and rendered back as-is, and the

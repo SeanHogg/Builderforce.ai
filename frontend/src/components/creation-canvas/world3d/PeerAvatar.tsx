@@ -62,8 +62,10 @@ export function PeerAvatar({ position, yaw, color, label, live }: PeerAvatarProp
             display: 'block',
             whiteSpace: 'nowrap',
             padding: '2px 7px',
-            borderRadius: 4,
-            fontSize: 13,
+            // The plate is real DOM (`Html`), so the app's own scale reaches it —
+            // which is the whole reason the name is not geometry. See the header.
+            borderRadius: 'var(--radius-sm)',
+            fontSize: 'var(--font-size-small)',
             lineHeight: 1.4,
             fontWeight: 500,
             background: 'var(--surface, #1a1a1a)',
