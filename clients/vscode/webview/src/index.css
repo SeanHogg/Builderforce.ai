@@ -56,6 +56,23 @@ body {
   padding: 24px;
 }
 
+/* Shown when the board could not be drawn and the panel fell back to the
+   conversation. Above the chat surface (which is `position:absolute`), so it needs
+   its own layer — and its own opaque ground, or the board's half-painted remains
+   would read through it. */
+.bf-canvas-degraded {
+  position: absolute;
+  z-index: 8;
+  top: 0;
+  right: 0;
+  left: 0;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--bf-border);
+  background: var(--bf-warning-bg);
+  color: var(--bf-text);
+  font-size: var(--vscode-font-size, 13px);
+}
+
 .bf-app {
   display: flex;
   flex-direction: column;

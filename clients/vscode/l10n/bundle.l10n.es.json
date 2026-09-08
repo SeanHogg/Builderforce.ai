@@ -546,5 +546,8 @@
   "{count} uncommitted changes": "{count} cambios sin confirmar",
   "{input} input / {output} output per 1M tokens + $0.01 per request": "{input} de entrada / {output} de salida por 1 M de tokens + $0.01 por solicitud",
   "● Live": "● En vivo",
-  "Recent": "Recientes"
+  "Recent": "Recientes",
+  "The board could not be drawn. The conversation is still here.": "No se pudo dibujar el tablero. La conversación sigue aquí.",
+  "BuilderForce: the board could not be drawn ({0}). The conversation is still available.": "BuilderForce: no se pudo dibujar el tablero ({0}). La conversación sigue disponible.",
+  "BuilderForce: could not load your Canvas sessions ({0}). Showing a local board — your conversation is unaffected.": "BuilderForce: no se pudieron cargar tus sesiones de Canvas ({0}). Se muestra un tablero local; tu conversación no se ve afectada."
 }

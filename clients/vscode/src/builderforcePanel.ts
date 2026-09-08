@@ -56,8 +56,11 @@ interface BrainInbound extends WebviewInbound {
   action?: string;
   /** `canvas.openFile` — where in the revealed file to put the selection. */
   range?: { startLine: number; startColumn: number; endLine: number; endColumn: number };
-  /** `canvas.i18nError` — the lookup failure the board degraded past. */
+  /** `canvas.i18nError` / `canvas.error` — what went wrong. */
   message?: string;
+  /** `canvas.error` — where it went wrong, for the report. */
+  stack?: string;
+  componentStack?: string;
   /** For `model.set`: the composer's model choice — 'auto' (gateway routes),
    *  'byo_pool' (the tenant's connected accounts in priority order), or 'model'
    *  with `model` set to the id to pin. */
@@ -517,6 +520,15 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
             void BuilderForcePanel.open(this.ctx, undefined, { surface: "graph", sessionId });
           });
         }
+        break;
+      // The board could not be drawn. It is reported HERE because a webview's console
+      // is not somewhere anyone looks, and "the canvas doesn't load" is otherwise a
+      // report with nothing attached to it.
+      case "canvas.error":
+        console.error(`[builderforce] canvas failed to render: ${typeof msg.message === "string" ? msg.message : ""}`, msg.stack, msg.componentStack);
+        void vscode.window.showWarningMessage(
+          vscode.l10n.t("BuilderForce: the board could not be drawn ({0}). The conversation is still available.", typeof msg.message === "string" ? msg.message : "unknown error"),
+        );
         break;
       case "canvas.i18nError":
         // A missing key renders as the key rather than blanking the board; log it so

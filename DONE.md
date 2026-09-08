@@ -1,3 +1,153 @@
+## ✅ RESOLVED 2026-09-08 — The readiness gate was grading gibberish as usable, and the audit that would have fixed it reported 108 dead ends
+
+Reported from the VS Code sidebar against project Evermind v10165: the test bench said
+**WOULD SERVE, 2 of 3 usable** over three samples an operator could read as nonsense,
+and a knowledge audit of 108 findings applied **0 corrected, 0 removed, 108 could not
+be applied** with no reason given. Four separate defects, in two subsystems.
+
+### The gate said "usable" about this
+
+```
+. rame shatd inf the brand te mis . I se me shelse se see branch branch sareated the branch
+w. The - shade sade se ush what - dard se gote shaterelrede ushot shatush ushing al
+```
+
+Both cleared `assessTextCoherence`. Measured on the real samples, the lexical half of
+the gate never ran on either one, for two different reasons:
+
+| defect | what happened |
+| --- | --- |
+| **The language guard let a repeated fragment decide the vote.** `detectLatinLanguage` compared raw function-word HIT counts. Gibberish sprays short tokens that happen to be Spanish or French function words: `se`/`te`/`mis` **tied** Spanish with English on the first sample, so no language won and the text was passed unexamined; `se`/`al` **won outright** on the second, so an English-prompted reply was judged Spanish and the English lexicon was skipped by design. | A win now needs `MIN_DISTINCT_FUNCTION_WORDS` (3) DIFFERENT markers, not three hits of the same one — the shortest real Spanish and French replies observed clear that comfortably. And the lexicon is gated on the new `LanguageVerdict.englishLeads` rather than on English winning outright: "no language won" describes gibberish at least as often as prose, and treating that ambiguity as a reason to judge nothing was the hole. |
+| **The scorer ignored 3-letter tokens**, so probe-length text fell below its own evidence floor and returned `scored: false` — read downstream as coherent. 80 generated tokens is ~15–18 words; the samples scored 8, 9 and 10 eligible against a floor of 10. | `scoreEnglishWordiness` now judges exactly what `isKnownEnglishWord` is willing to judge (≥3 characters, its own cutoff). Measured both ways on real text, this RAISES the unknown share of gibberish and LOWERS it for genuine English, because 3-letter English words are almost all in the lexicon. |
+
+The separation after the fix, on the samples that prompted this: gibberish scores
+0.54 / 0.67 / 0.82 unknown, real English answers of the same length 0.14 / 0.14 / 0.23,
+against a 0.50 threshold. All three probe samples are now regression fixtures in
+`textCoherence.test.ts` alongside five SHORT real answers (EN/ES/FR) that must keep
+passing — the fix has to separate the two classes, not reject everything short.
+
+This gate is also what `assessLMCoherence` uses to decide whether a freshly-merged
+version may be promoted to serve, so the blindness was on the promote path, not only
+in the operator's test bench.
+
+### "108 could not be applied", with no reason and no way back
+
+`applyKnowledgeRepairs` refuses a frozen model, and the frozen model was the whole
+explanation — but nothing carried it to the operator:
+
+- **The reason was dropped on the floor.** `analyzeSkipped(count)` rendered a bare
+  count. It now takes the server's distinct reasons (deduplicated — 108 findings
+  blocked by one frozen head is one fact) and renders as a warning rather than a
+  success line with 0s in it, in all five catalogs.
+- **The audit was thrown away with it.** `EvermindAnalyzer.apply` cleared the analysis
+  unconditionally, including the findings that were skipped and the ones never
+  selected — so an audit that costs frontier tokens had to be re-bought to retry a
+  condition the operator can clear with one toggle. It now keeps exactly what still
+  needs fixing.
+- **The freeze blocked more than it had to.** Teaching a correction is a weight update
+  a frozen Evermind cannot absorb, so those findings are genuinely stuck. Forgetting is
+  not — it removes a memory from the recall index and touches no weights. The blanket
+  refusal left an operator whose model was quarantined FOR emitting junk unable to
+  purge that junk, which is most of what an audit of a broken head finds
+  (`unusable`/`redundant` never carry a correction). Frozen heads now purge those and
+  skip only the re-teaches.
+
+### The model was being trained on its own scratchpad
+
+The contributions behind v10165 are almost entirely `<think>` blocks — a frontier
+coder's private working-out, several truncated mid-sentence by the 8k transport cap,
+taught as if each were the ANSWER to the user's question
+(`<think>The user is right - I should have: 1. Deleted the branch…`). Nothing stripped
+them: `evaluateBrainLearnGate` takes the assistant turn's raw content and the only
+filter was a 20-character minimum.
+
+New `learnableText.ts` (pure, dependency-free) strips reasoning blocks — including an
+UNCLOSED opener, which is the common case precisely because of that 8k cap — and
+`dispatchProjectEvermindLearnText`, the unified producer every text contribution
+funnels through, now teaches the answer or refuses the turn with
+`nothing to learn — the turn was reasoning scratchpad with no answer`. The brain chat,
+the incident learner and the analyzer's own re-teach all inherit it from that one seam.
+
+`evaluateBrainLearnGate` measures its `MIN_TEACH_CHARS` bar against the same stripped
+answer, so a turn that is mostly scratchpad and two words of reply no longer clears the
+gate and then gets refused by the producer — which would have made the run report
+"learned" for a contribution that never happened.
+
+**Verification.** `api` typecheck clean; `textCoherence` 27, new `wordLexicon` 7, new
+`learnableText` 6, `evermindAnalyzer` 17, `projectEvermind` 32; the full
+`application/llm` + `application/brain` suites green. `frontend` typecheck clean;
+`brain-ui` typecheck clean and `dist` rebuilt; the VS Code webview bundle rebuilt so the
+sidebar the report came from carries the change. Deleted `__scratch_probe.test.ts`, a
+committed scratch file that wrote to disk during test runs.
+
+**This does not un-break the existing model.** v10165 has 18,864 contributions learned
+under the old rules and a held-out loss that regressed 2.4716 → 2.7073; the fixes stop
+new scratchpad going in and stop a broken head being called servable, they do not
+retroactively clean what is already merged. Reseeding from the starter base and
+reconnecting learning is what starts a clean history.
+
+## ✅ RESOLVED 2026-09-07 — the sidebar tree stopped splitting "Creation Sessions" from "Chats", and the conversation stopped depending on the board
+
+Two follow-ups to the chat/canvas merge, both found by the operator looking at the
+shipped extension rather than at the diff.
+
+### The Sessions tree was the same mistake in a third place (VSIX `2026.9.37`)
+
+The panel merged, `/create` merged — and the sidebar still listed **Recent Creation
+Sessions · Pinned · Shared · Running · Chats**. Four of those are facets of one list.
+The fifth was a different SOURCE with its own row shape and its own command, sitting as
+a peer of the other four. Since the panel merge both rows reveal the SAME panel and
+differ only in the surface it opens at, so it was two names for one destination, one
+above the other in the same tree.
+
+- `src/sessionsLibrary.ts` — **new, pure, no `vscode` import**, 9 tests. Boards and
+  conversations become ONE recency-ordered list; a conversation a board already holds a
+  card for gets no row (the same dedupe the web applies, from the same implementation).
+- The groups are now `Recent` / `Pinned` / `Shared` / `Running` — facets over that one
+  list. "Chats" is gone; "Recent Creation Sessions" is just "Recent", because it no
+  longer lists only creation sessions.
+- ONE cache for ONE list: expanding all four groups was two requests per group and four
+  lists that could disagree about what was newest. Now two requests, shared.
+- `BfCreationSessionSummary.preview.objects` gained `resourceType`/`resourceId`. The API
+  has always sent them (`buildPreview` in `creationGraphWriter.ts`); the editor's type
+  was simply narrower than the payload, and the dedupe needs them.
+- **Caught while wiring it:** the row-level context commands (rename, delete) are handed
+  the tree NODE, and `chatIdOf` read `item.id` — which a row wrapper does not have, so
+  renaming a conversation from the sidebar would have silently done nothing. Fixed with
+  `chatOfSessionNode`, so the tree keeps its shape private and the failure cannot return.
+
+**DRY:** the ordering, dedupe and facet vocabulary moved to
+`packages/creation-canvas-contract/src/creationLibrary.ts`, shared by the web library
+and the tree. Three surfaces were about to hold three answers to "which of these two
+rows is newer".
+
+### The conversation no longer depends on the board (VSIX `2026.9.38`)
+
+Reported: *"the canvas doesn't load. Keep the chat."*
+
+Making chat a surface of the canvas was right, but it made the conversation depend on
+things the conversation does not need — a resolved creation session, a reachable
+gateway, a graph that parses. `WorkspaceScreen` had two early returns that replaced the
+WHOLE screen with a one-line message, so a session that would not resolve left someone
+staring at "No Creation Session is open." with a working agent behind it, unreachable.
+
+- `CanvasBoundary` (the one thing React still needs a class for) catches a board failure
+  and falls back to the chat surface with a notice, instead of unmounting the panel.
+- `boardReady` gates the canvas; the chat renders either way. **The chat is the floor.**
+- Both silent degrades now REPORT: `canvas.error` from the webview (the host raises a
+  warning and logs the stacks) and a warning from `workspaceCanvasSession` when it falls
+  back to a local board. A signed-in user handed an empty local board is exactly what
+  "the canvas doesn't load" looks like, and nothing anywhere was saying so.
+
+The underlying board-render fault is **not** closed — see ROADMAP; it needs the failure
+text from an interactive editor, which this session cannot open. What is closed is that
+it can no longer take the conversation with it, and that it now names itself.
+
+Verified: `pnpm type-check`, `pnpm test` (354 passing, up from 345), `pnpm
+test:integration` (7 passing in a real VS Code 1.136.1 extension host), packaged and
+installed by absolute path — `builderforce.builderforce-ai@2026.9.38` confirmed. All
+five l10n bundles carry the new strings with real translations.
+
 ## ✅ RESOLVED 2026-09-07 — `check:design-scale` is green, and the deploy is unblocked
 
 The frontend deploy failed on `pnpm check` (21/22 guards). The register entry that

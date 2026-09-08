@@ -80,9 +80,19 @@ export async function workspaceCanvasSession(
     const created = await bfApi.createCreationSession(ctx.secrets, "");
     await remember(ctx, created.id);
     return { id: created.id, title: created.title, durable: true };
-  } catch {
+  } catch (error) {
     // Offline, or the gateway is refusing. A local board still renders and still runs
-    // an on-device model, which beats a panel that says nothing at all.
+    // an on-device model, which beats a panel that says nothing at all — but the
+    // degrade is REPORTED rather than silent: a signed-in user handed an empty local
+    // board sees exactly what "the canvas doesn't load" looks like, with nothing
+    // anywhere saying the session lookup was refused.
+    console.error("[builderforce] could not resolve a Canvas session; falling back to a local board", error);
+    void vscode.window.showWarningMessage(
+      vscode.l10n.t(
+        "BuilderForce: could not load your Canvas sessions ({0}). Showing a local board — your conversation is unaffected.",
+        error instanceof Error ? error.message : String(error),
+      ),
+    );
     return localSession(ctx);
   }
 }

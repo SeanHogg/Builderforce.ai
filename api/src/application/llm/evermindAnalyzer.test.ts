@@ -270,7 +270,7 @@ describe('applyKnowledgeRepairs — write-through repair', () => {
     mocks.head.mockResolvedValue({ version: 3, mode: 'offline-frozen' });
     const out = await applyKnowledgeRepairs(env, db, 7, 42, [
       { id: 5, verdict: 'unusable', issue: 'a stack trace, not knowledge', excerpt: '…', source: 'frontier' },
-      { id: 6, verdict: 'redundant', issue: 'duplicate of 5', excerpt: '…', source: 'local' },
+      { id: 6, verdict: 'redundant', issue: 'duplicate of 5', excerpt: '…', source: 'coherence-gate' },
     ]);
     expect(mocks.learnText).not.toHaveBeenCalled();
     expect(mocks.forget).toHaveBeenCalledWith(env, 7, 42, [5, 6]);

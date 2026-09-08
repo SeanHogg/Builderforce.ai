@@ -38,6 +38,7 @@ import { invalidateModelSurface } from './modelOptions';
 import { createPersistence } from './persistence';
 import { createInMemoryPersistence } from './localPersistence';
 import { installHostRunDriver } from './hostRunDriver';
+import { CanvasBoundary } from './CanvasBoundary';
 import { buildIdeSystemPrompt } from './systemPrompt';
 import { rewriteToLocalUrl } from '../../src/localModels';
 import { onHostMessage } from './vscodeBridge';
@@ -139,15 +140,19 @@ function WorkspaceScreen({ init }: { init: InitData }) {
     if (session?.title) document.title = session.title;
   }, [session?.title]);
 
-  if (!session) {
-    return <div className="bf-center">{init.labels['canvas.noSession'] ?? 'No Creation Session is open.'}</div>;
-  }
-  // A local route runs on this machine with no account, so it has no tenant token to
-  // wait for — holding the whole screen on one would gate the user out of their own
-  // hardware, which is the case the sign-in gate above deliberately lets through.
-  if (!tokenReady && !init.localRoute) {
-    return <div className="bf-center">{init.labels['canvas.connecting'] ?? 'Connecting…'}</div>;
-  }
+  /**
+   * THE CHAT IS THE FLOOR — everything below decides whether a BOARD can also be
+   * drawn, and none of it may take the conversation down.
+   *
+   * The board needs a resolved creation session and a tenant token; the conversation
+   * needs neither (it runs against the extension host, and on a local route against a
+   * model on this machine). These used to be early returns that replaced the whole
+   * screen with a one-line message, which meant a gateway blip or an unresolved
+   * session left someone staring at "No Creation Session is open." with a working
+   * agent sitting behind it, unreachable.
+   */
+  const chat = <VsCodeChatSurface init={init} />;
+  const boardReady = !!session && (tokenReady || !!init.localRoute);
 
   return (
     <IntlProvider
@@ -162,15 +167,22 @@ function WorkspaceScreen({ init }: { init: InitData }) {
       <ChatRuntimeProvider init={init}>
         <ToastProvider>
           <ConfirmProvider>
-            <CreationCanvas
-              sessionId={session.id}
-              // A board with no account behind it cannot be written to the gateway —
-              // every read would 401 — so it persists in this panel, exactly as the
-              // signed-out chat transcript already did.
-              persistence={session.durable === false ? 'local' : 'server'}
-              initialSurface={sanitizeCanvasSurface(init.surface)}
-              hostSurfaces={{ chat: <VsCodeChatSurface init={init} /> }}
-            />
+            {boardReady ? (
+              <CanvasBoundary
+                fallback={chat}
+                notice={init.labels['canvas.degraded'] ?? 'The board could not be drawn. The conversation is still here.'}
+              >
+                <CreationCanvas
+                  sessionId={session!.id}
+                  // A board with no account behind it cannot be written to the
+                  // gateway — every read would 401 — so it persists in this panel,
+                  // exactly as the signed-out chat transcript already did.
+                  persistence={session!.durable === false ? 'local' : 'server'}
+                  initialSurface={sanitizeCanvasSurface(init.surface)}
+                  hostSurfaces={{ chat }}
+                />
+              </CanvasBoundary>
+            ) : chat}
           </ConfirmProvider>
         </ToastProvider>
       </ChatRuntimeProvider>

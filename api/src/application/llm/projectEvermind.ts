@@ -37,6 +37,7 @@ import { projectEvermind, ideAgents, ideProjects } from '../../infrastructure/da
 import { aggregateProjectPsychometric } from '../persona/psychometricCatalog';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { stripReasoningScratchpad } from './learnableText';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { rankEvermindRecall, hashRecallPrompt, type RankedRecall } from './evermindRecall';
 import type { RecordedSkipReason } from './evermindTeacher';
@@ -790,8 +791,18 @@ export async function dispatchProjectEvermindLearnText(
   weight?: number,
   prompt?: string | null,
 ): Promise<LearnDispatchResult> {
-  const trimmed = (text ?? '').trim();
-  if (trimmed.length < 20) return { ok: false, status: 400, body: { error: 'text too short' } };
+  // Teach the ANSWER, never the working-out. Every producer funnels through here, so
+  // this is the one place that has to know that a frontier turn can carry a `<think>`
+  // block — and adapting the head on deliberation, often truncated mid-sentence by the
+  // 8k cap below, is what filled a project's recall ring with half-thoughts.
+  const trimmed = stripReasoningScratchpad(text ?? '');
+  if (trimmed.length < 20) {
+    return {
+      ok: false,
+      status: 400,
+      body: { error: trimmed.length === 0 && (text ?? '').trim().length >= 20 ? 'nothing to learn — the turn was reasoning scratchpad with no answer' : 'text too short' },
+    };
+  }
   const promptTrimmed = (prompt ?? '').trim();
   const stub = coordinatorStub(env, tenantId, projectId);
   if (!stub) return { ok: false, status: 503, body: { error: 'concurrent learning not configured (no coordinator binding)' } };

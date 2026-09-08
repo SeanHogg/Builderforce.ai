@@ -20,6 +20,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { brainChats, brainChatMessages } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { resolveEvermindTargets, isLiveLearnTarget, dispatchProjectEvermindLearnText, provisionDefaultProjectEvermind } from '../llm/projectEvermind';
+import { stripReasoningScratchpad } from '../llm/learnableText';
 
 /** A one-line assistant turn is not a teaching signal; require some substance. */
 const MIN_TEACH_CHARS = 40;
@@ -130,9 +131,14 @@ export async function evaluateBrainLearnGate(
   inserted: ReadonlyArray<TurnMessage>,
   deps: BrainLearnGateDeps = DEFAULT_GATE_DEPS,
 ): Promise<BrainLearnGate> {
-  const assistant = [...inserted].reverse().find(
-    (m) => m.role === 'assistant' && typeof m.content === 'string' && m.content.trim().length >= MIN_TEACH_CHARS,
-  )?.content ?? null;
+  // Judge teachability on the ANSWER, not the raw turn. The producer teaches the reply
+  // with its `<think>` blocks removed (see `learnableText`), so a turn that is mostly
+  // scratchpad and two words of answer clears a raw length check and is then refused
+  // downstream — and the run step would have reported "learned" for a contribution that
+  // never happened. Same primitive on both sides keeps the gate's answer honest.
+  const assistant = [...inserted].reverse()
+    .map((m) => (m.role === 'assistant' && typeof m.content === 'string' ? stripReasoningScratchpad(m.content) : ''))
+    .find((answer) => answer.length >= MIN_TEACH_CHARS) ?? null;
   if (!assistant) return { outcome: { learned: false, version: 0, reason: 'too-short' }, projectId: null, contributedProjectIds: [], assistant: null };
 
   const [chat] = await db

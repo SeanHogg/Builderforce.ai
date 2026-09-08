@@ -3467,6 +3467,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
 function RepairOutcome({ t, repair }) {
   const applied = repair.corrected + repair.forgotten > 0;
   const reasons = [...new Set(repair.skipped.map((s) => s.reason))].join("; ");
+  if (!applied && !reasons) return null;
   return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
     "p",
     {

@@ -69,12 +69,16 @@ export const EVERMIND_HOST_MESSAGES = [
   'evermind.copyText',
 ] as const;
 
-/** The Creation Canvas panel. */
+/** The canvas surface of the workspace panel. */
 export const CANVAS_HOST_MESSAGES = [
   'canvas.capture',
   'canvas.navigate',
   'canvas.openFile',
   'canvas.i18nError',
+  // The board threw and the panel fell back to the conversation. Reported to the HOST
+  // because a webview's console is not somewhere anyone looks, which is how a board
+  // that fails to draw becomes a bug report reading only "it doesn't load".
+  'canvas.error',
 ] as const;
 
 /** Every message the webview may send to a host. */

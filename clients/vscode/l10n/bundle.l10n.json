@@ -546,5 +546,8 @@
   "{count} uncommitted changes": "{count} uncommitted changes",
   "{input} input / {output} output per 1M tokens + $0.01 per request": "{input} input / {output} output per 1M tokens + $0.01 per request",
   "● Live": "● Live",
-  "Recent": "Recent"
+  "Recent": "Recent",
+  "The board could not be drawn. The conversation is still here.": "The board could not be drawn. The conversation is still here.",
+  "BuilderForce: the board could not be drawn ({0}). The conversation is still available.": "BuilderForce: the board could not be drawn ({0}). The conversation is still available.",
+  "BuilderForce: could not load your Canvas sessions ({0}). Showing a local board — your conversation is unaffected.": "BuilderForce: could not load your Canvas sessions ({0}). Showing a local board — your conversation is unaffected."
 }

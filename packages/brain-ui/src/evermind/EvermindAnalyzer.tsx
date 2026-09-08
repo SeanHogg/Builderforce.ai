@@ -193,6 +193,9 @@ function RepairOutcome({ t, repair }: { t: EvermindConsoleLabels; repair: Evermi
   const applied = repair.corrected + repair.forgotten > 0;
   // Collapse identical reasons — 108 findings blocked by one frozen model is one fact.
   const reasons = [...new Set(repair.skipped.map((s) => s.reason))].join('; ');
+  // Selecting only `ok` rows changes nothing and blocks nothing — there is no outcome
+  // to report, and an empty warning box would read as a problem.
+  if (!applied && !reasons) return null;
   return (
     <p
       // A repair that changed nothing reads as the warning it is, in the same box the

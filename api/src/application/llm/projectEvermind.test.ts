@@ -12,6 +12,7 @@ import {
   extractMemoriesToEvermind,
   QUARANTINE_FAILURE_STREAK,
   reseedProjectEvermind,
+  dispatchProjectEvermindLearnText,
   PROJECT_EVERMIND_MODEL_PREFIX,
   type ProjectEvermindRecentEntry,
   type EvermindServeReadiness,
@@ -384,5 +385,53 @@ describe('reseedProjectEvermind (the repair door for a head trained into gibberi
       tokenizer: { vocab: { a: 0 }, merges: [] },
     });
     expect(puts[0]).toBe('evermind/project/7/31/v1/model.evermind');
+  });
+});
+
+/**
+ * The unified text producer is the ONE place every contribution passes through, so it
+ * is where the "teach the answer, not the working-out" rule has to hold — the brain
+ * chat, the incident learner and the analyzer's re-teach all inherit it from here.
+ */
+describe('dispatchProjectEvermindLearnText — what actually reaches the coordinator', () => {
+  /** Captures the body posted to the coordinator DO. */
+  function captureEnv() {
+    const posted: Array<Record<string, unknown>> = [];
+    const env = {
+      PROJECT_EVERMIND: {
+        idFromName: (n: string) => n,
+        get: () => ({
+          fetch: async (_url: string, init: { body: string }) => {
+            posted.push(JSON.parse(init.body) as Record<string, unknown>);
+            return { ok: true, status: 200, json: async () => ({ queued: true }) };
+          },
+        }),
+      },
+    } as unknown as Env;
+    return { env, posted };
+  }
+
+  it('teaches the answer with the reasoning block removed', async () => {
+    const { env, posted } = captureEnv();
+    const res = await dispatchProjectEvermindLearnText(
+      env, 7, 42,
+      '<think>Let me check the git log before answering.</think> Both the API and the frontend are on main, and the fixes are deployed.',
+    );
+    expect(res.ok).toBe(true);
+    expect(posted[0]?.['text']).toBe('Both the API and the frontend are on main, and the fixes are deployed.');
+  });
+
+  it('refuses a turn that was only scratchpad, and says so', async () => {
+    // Long enough to clear the old length check, so before the strip this was learned
+    // verbatim — deliberation taught as if it were the answer.
+    const { env, posted } = captureEnv();
+    const res = await dispatchProjectEvermindLearnText(
+      env, 7, 42,
+      '<think>The user is right - I should have deleted the branch and updated the ticket. Let me do both now.',
+    );
+    expect(res.ok).toBe(false);
+    expect(res.status).toBe(400);
+    expect(String(res.body['error'])).toMatch(/scratchpad/i);
+    expect(posted).toEqual([]);
   });
 });

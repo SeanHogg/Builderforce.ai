@@ -546,5 +546,8 @@
   "{count} uncommitted changes": "{count} 项未提交的更改",
   "{input} input / {output} output per 1M tokens + $0.01 per request": "每 100 万 token {input} 输入 / {output} 输出，另加每次请求 $0.01",
   "● Live": "● 进行中",
-  "Recent": "最近"
+  "Recent": "最近",
+  "The board could not be drawn. The conversation is still here.": "无法绘制画板。对话仍然可用。",
+  "BuilderForce: the board could not be drawn ({0}). The conversation is still available.": "BuilderForce：无法绘制画板（{0}）。对话仍然可用。",
+  "BuilderForce: could not load your Canvas sessions ({0}). Showing a local board — your conversation is unaffected.": "BuilderForce：无法加载你的 Canvas 会话（{0}）。正在显示本地画板 — 你的对话不受影响。"
 }
