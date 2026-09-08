@@ -560,7 +560,11 @@ export interface EvermindConsoleLabels {
   analyzeApplied: (corrected: number, forgotten: number, version: number) => string;
   /** Coverage line shown when the audit reviewed only part of the history. */
   analyzeCoverage: (analyzed: number, total: number) => string;
-  analyzeSkipped: (count: number) => string;
+  /** Why some findings could not be applied. The REASONS come from the server (it is
+   *  the only thing that knows whether learning is frozen or the coordinator refused),
+   *  so only the frame around them is localized — a bare count told an operator nothing
+   *  and hid a remedy that is one toggle away. */
+  analyzeSkipped: (count: number, reasons: string) => string;
   // Tabs — the console's four working surfaces (state stays outside the strip).
   tabsLabel: string;
   tabTeach: string;
@@ -756,7 +760,7 @@ export const DEFAULT_EVERMIND_LABELS: EvermindConsoleLabels = {
     `${corrected} corrected and re-taught, ${forgotten} removed from recall (already-learned influence is superseded by the correction, not erased). Model is now at v${version}.`,
   analyzeCoverage: (analyzed, total) =>
     `Reviewed the ${analyzed} most recent of ${total} memories — run again to continue through the rest.`,
-  analyzeSkipped: (count) => `${count} could not be applied.`,
+  analyzeSkipped: (count, reasons) => `${count} could not be applied: ${reasons}`,
   tabsLabel: 'Evermind controls',
   tabTeach: 'Teach',
   tabTest: 'Test',

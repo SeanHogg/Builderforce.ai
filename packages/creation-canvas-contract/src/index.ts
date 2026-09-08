@@ -96,6 +96,12 @@ export * from './calendar';
 // board card stands for. Shared because the API WRITES the two halves and the canvas
 // RESOLVES cards back from them; see resourceRef.ts.
 export * from './resourceRef';
+// The CREATION LIBRARY's rules — what "everything you have made" is as ONE list, how
+// it is ordered and deduped, and the facet vocabulary. Shared because three surfaces
+// draw that list (the web library, the VS Code Sessions tree, and the panel its rows
+// open) and all three were sectioning it differently; see creationLibrary.ts.
+export * from './creationLibrary';
+
 export * from './slug';
 // Least squares and the trailing mean — the arithmetic every forecast shares.
 export * from './series';

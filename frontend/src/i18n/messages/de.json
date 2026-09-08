@@ -10827,7 +10827,7 @@
     "analyzeApplyCta": "{count} ausgewählte beheben",
     "analyzeApplying": "Behebe…",
     "analyzeApplied": "{corrected} korrigiert und neu gelernt, {forgotten} aus dem Abruf entfernt (bereits gelernter Einfluss wird durch die Korrektur ersetzt, nicht gelöscht). Modell ist jetzt v{version}.",
-    "analyzeSkipped": "{count} konnten nicht angewendet werden.",
+    "analyzeSkipped": "{count} konnten nicht angewendet werden: {reasons}",
     "tabsLabel": "Evermind-Steuerung",
     "tabTeach": "Beibringen",
     "tabTest": "Testen",

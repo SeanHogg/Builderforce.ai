@@ -23,6 +23,40 @@ const GIBBERISH_SAMPLES = [
   + 'that crandy uponter of lorbid stension.',
 ];
 
+/**
+ * VERBATIM readiness-probe output from a real quarantined head (project Evermind
+ * v10165). The probe generates 80 tokens, so these are ~15-18 words — an order of
+ * magnitude shorter than the samples above, and TWO of the three were graded "usable"
+ * by the gate while the operator was reading obvious gibberish.
+ *
+ * Two distinct defects produced that, both fixed:
+ *  - the language guard let short accidental fragments decide the vote. `se`/`te`/`mis`
+ *    tied Spanish with English on the second sample (so NO language won and the lexicon
+ *    was skipped) and `se`/`al` won it outright on the third (so an English-prompted
+ *    reply was judged "Spanish" and skipped);
+ *  - the scorer ignored 3-letter tokens, which on text this short dropped it below its
+ *    own evidence floor and made it decline to score at all.
+ */
+const PROBE_GIBBERISH_SAMPLES: Array<[string, string]> = [
+  ['ties spanish on se/te/mis', '. rame shatd inf the brand te mis . I se me shelse se see branch branch sareated the branch'],
+  ['reads as spanish on se/al', 'w. The - shade sade se ush what - dard se gote shaterelrede ushot shatush ushing al'],
+  ['already refused', '. isshat sodhouse what shat sharet me dainferid the shatl the ersadhoomadh. somed seare'],
+];
+
+/**
+ * SHORT real answers — the same length as the probe samples above. These are the
+ * false positives the length-sensitive thresholds exist to prevent, so they are
+ * asserted alongside them: the fix must separate the two classes, not just reject
+ * everything short.
+ */
+const SHORT_COHERENT_SAMPLES: Array<[string, string]> = [
+  ['short status answer', 'The build is green and the last two tickets are merged. Nothing is blocked right now.'],
+  ['short recent-work answer', 'We shipped the canvas placer and fixed the guest wall. Next up is the invite link flow.'],
+  ['short todo answer', 'Left to do: finish the audit panel, wire the export, and rerun the readiness check.'],
+  ['short spanish answer', 'El modelo ya está actualizado y funciona bien.'],
+  ['short french answer', 'Le modèle est mis à jour et fonctionne bien.'],
+];
+
 /** Real answers that MUST pass — jargon-dense, technical, multilingual, and code. */
 const COHERENT_SAMPLES: Array<[string, string]> = [
   [
@@ -102,6 +136,17 @@ describe('assessTextCoherence — invented-word detection (the P2 gap)', () => {
     },
   );
 
+  it.each(PROBE_GIBBERISH_SAMPLES)(
+    'rejects readiness-probe gibberish that %s',
+    (_label, sample) => {
+      // Graded with the probe's own prompt as context, exactly as the readiness suite
+      // does — the context escape must not rescue text this bad.
+      const v = assessTextCoherence(sample, { context: 'Summarize the current status of the project.' });
+      expect(v.coherent).toBe(false);
+      expect(v.failure).toBe('non-words');
+    },
+  );
+
   it('rejects a long Latin-script passage with no function words in any language', () => {
     const sample = Array.from({ length: 40 }, (_, i) => `zolvek${i}mir plandor vestik`).join(' ');
     const v = assessTextCoherence(sample);
@@ -111,6 +156,12 @@ describe('assessTextCoherence — invented-word detection (the P2 gap)', () => {
 
 describe('assessTextCoherence — must not mis-reject real answers', () => {
   it.each(COHERENT_SAMPLES)('accepts %s', (_label, sample) => {
+    const v = assessTextCoherence(sample);
+    expect(v.failure).toBeNull();
+    expect(v.coherent).toBe(true);
+  });
+
+  it.each(SHORT_COHERENT_SAMPLES)('accepts %s', (_label, sample) => {
     const v = assessTextCoherence(sample);
     expect(v.failure).toBeNull();
     expect(v.coherent).toBe(true);

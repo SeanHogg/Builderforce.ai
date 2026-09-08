@@ -581,7 +581,17 @@ export interface BfCreationSessionSummary {
   pinned?: boolean;
   unread?: boolean;
   collaboratorCount?: number;
-  preview?: { objects?: Array<{ status?: string }> } | null;
+  /**
+   * The board's card face, as `buildPreview` writes it
+   * (`api/src/application/creation/creationGraphWriter.ts`).
+   *
+   * `resourceType` / `resourceId` were always in the payload and were simply not
+   * declared here. They are what says WHICH record a card stands for, and the
+   * sessions list needs them: a chat this board already holds a card for must not
+   * also get a row of its own, because both open the same panel on the same
+   * conversation. See `sessionsLibrary.ts`.
+   */
+  preview?: { objects?: Array<{ status?: string; resourceType?: string | null; resourceId?: string | null }> } | null;
 }
 
 export async function listCreationSessions(secrets: vscode.SecretStorage): Promise<BfCreationSessionSummary[]> {

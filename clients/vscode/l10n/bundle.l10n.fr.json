@@ -85,7 +85,6 @@
   "Chat": "Chat",
   "Chat diagnostics copied to clipboard.": "Diagnostic de la conversation copié dans le presse-papiers.",
   "Chat name": "Nom de la conversation",
-  "Chats": "Chats",
   "Check": "Vérifier",
   "Check knowledge": "Vérifier les connaissances",
   "Check what it has learned": "Vérifier ce qu’il a appris",
@@ -321,7 +320,6 @@
   "Ready": "Prêt",
   "Rebuild index": "Reconstruire l’index",
   "Rebuild recall index": "Reconstruire l’index de rappel",
-  "Recent Creation Sessions": "Sessions de création récentes",
   "Recently learned": "Appris récemment",
   "Reconnect": "Reconnecter",
   "Refresh": "Actualiser",
@@ -547,5 +545,6 @@
   "{count} tokens left": "{count} jetons restants",
   "{count} uncommitted changes": "{count} modifications non validées",
   "{input} input / {output} output per 1M tokens + $0.01 per request": "{input} en entrée / {output} en sortie par million de tokens + $0,01 par requête",
-  "● Live": "● En direct"
+  "● Live": "● En direct",
+  "Recent": "Récents"
 }

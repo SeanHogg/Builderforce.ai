@@ -10827,7 +10827,7 @@
     "analyzeApplyCta": "Corriger {count} sélectionnés",
     "analyzeApplying": "Correction…",
     "analyzeApplied": "{corrected} corrigées et réapprises, {forgotten} retirées du rappel (l'influence déjà apprise est remplacée par la correction, pas effacée). Le modèle est désormais en v{version}.",
-    "analyzeSkipped": "{count} n’ont pas pu être appliqués.",
+    "analyzeSkipped": "{count} n’ont pas pu être appliqués : {reasons}",
     "tabsLabel": "Commandes Evermind",
     "tabTeach": "Enseigner",
     "tabTest": "Tester",

@@ -27,7 +27,7 @@ import { buildModelItems, modelCategoryLabel, type ChatModelSelection, type Mode
 import { getSelectedProject, initProjectState, onProjectChange, setSelectedProject } from "./projectState";
 import { invalidateProjectNames } from "./projectNames";
 import { ProjectsTreeProvider } from "./projectsTree";
-import { SessionsTreeProvider } from "./sessionsTree";
+import { SessionsTreeProvider, chatOfSessionNode, type SessionTreeNode } from "./sessionsTree";
 import { InboxTreeProvider } from "./inboxTree";
 import { AttentionPoller, onLocalRunsChange, managerAttention } from "./attention";
 import { createVsCodeRunHost } from "./brainRunHostPorts";
@@ -39,11 +39,28 @@ import { buildIdentityReport } from "./buildIdentityReport";
 import { initErrorReporter, reportExtensionError, surfaceError } from "./errorReporter";
 
 /** Pull a numeric Brain chat id out of a Sessions tree item or a raw id argument. */
-function chatIdOf(item: bfApi.BfBrainChat | number | string | undefined): number | undefined {
+/**
+ * Which conversation a command argument means.
+ *
+ * The sidebar hands these commands a TREE NODE, and that node is no longer a bare
+ * chat: conversations and boards are one list now, so a row wraps its source. The
+ * node case goes through `chatOfSessionNode` rather than being unwrapped here, so the
+ * tree keeps its own shape private and this stays "read an id from whatever I was
+ * given".
+ */
+function chatIdOf(item: bfApi.BfBrainChat | number | string | SessionTreeNode | undefined): number | undefined {
   if (item == null) return undefined;
   if (typeof item === "number") return item;
   if (typeof item === "string") return Number(item) || undefined;
-  return typeof item.id === "number" ? item.id : undefined;
+  const fromNode = chatOfSessionNode(item);
+  if (fromNode) return fromNode.id;
+  return typeof (item as bfApi.BfBrainChat).id === "number" ? (item as bfApi.BfBrainChat).id : undefined;
+}
+
+/** The title to seed a rename with, from either shape. */
+function chatTitleOf(item: bfApi.BfBrainChat | number | string | SessionTreeNode | undefined): string {
+  if (!item || typeof item !== "object") return "";
+  return chatOfSessionNode(item)?.title ?? (item as bfApi.BfBrainChat).title ?? "";
 }
 
 type TaskNode = { kind: "task"; task: bfApi.BfTask };
@@ -449,7 +466,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       if (project) ProjectPagePanel.open(context, pick.view, project.id, project.name);
     }),
-    vscode.commands.registerCommand("builderforce.deleteSession", async (item: bfApi.BfBrainChat | string) => {
+    vscode.commands.registerCommand("builderforce.deleteSession", async (item: bfApi.BfBrainChat | string | SessionTreeNode) => {
       const id = chatIdOf(item);
       if (id == null) return;
       try {
@@ -460,14 +477,14 @@ export function activate(context: vscode.ExtensionContext): void {
         surfaceError(e, "command:deleteSession", `BuilderForce: could not delete chat (${(e as Error).message}).`);
       }
     }),
-    vscode.commands.registerCommand("builderforce.renameSession", async (item: bfApi.BfBrainChat | string) => {
+    vscode.commands.registerCommand("builderforce.renameSession", async (item: bfApi.BfBrainChat | string | SessionTreeNode) => {
       const id = chatIdOf(item);
       if (id == null) return;
-      const current = typeof item === "object" ? item.title : "";
+      const current = chatTitleOf(item);
       const title = await vscode.window.showInputBox({
         title: vscode.l10n.t("Rename chat"),
         prompt: vscode.l10n.t("New chat name"),
-        value: current ?? "",
+        value: current,
         ignoreFocusOut: true,
       });
       if (title === undefined) return;

@@ -2962,7 +2962,7 @@ var DEFAULT_EVERMIND_LABELS = {
   analyzeApplying: "Fixing\u2026",
   analyzeApplied: (corrected, forgotten, version) => `${corrected} corrected and re-taught, ${forgotten} removed from recall (already-learned influence is superseded by the correction, not erased). Model is now at v${version}.`,
   analyzeCoverage: (analyzed, total) => `Reviewed the ${analyzed} most recent of ${total} memories \u2014 run again to continue through the rest.`,
-  analyzeSkipped: (count) => `${count} could not be applied.`,
+  analyzeSkipped: (count, reasons) => `${count} could not be applied: ${reasons}`,
   tabsLabel: "Evermind controls",
   tabTeach: "Teach",
   tabTest: "Test",
@@ -3400,9 +3400,12 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
     setApplying(true);
     setError(null);
     try {
-      setRepair(await onApply(picked));
-      onAnalysis(null);
-      onRepaired?.();
+      const result = await onApply(picked);
+      setRepair(result);
+      const unresolved = new Set(result.skipped.map((s) => s.id));
+      const remaining = analysis.findings.filter((f) => unresolved.has(f.id) || !selected.has(f.id));
+      onAnalysis(remaining.length > 0 ? { ...analysis, findings: remaining } : null);
+      if (result.corrected + result.forgotten > 0) onRepaired?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : t.errorGeneric);
     } finally {
@@ -3440,10 +3443,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
       ] })
     ] }),
     error && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error }),
-    repair && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("p", { style: { margin: 0, fontSize: "0.76rem", color: C.accent }, role: "status", children: [
-      t.analyzeApplied(repair.corrected, repair.forgotten, repair.version),
-      repair.skipped.length > 0 ? ` ${t.analyzeSkipped(repair.skipped.length)}` : ""
-    ] }),
+    repair && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(RepairOutcome, { t, repair }),
     analysis?.warning && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { style: warnBox, role: "note", children: analysis.warning }),
     analysis && findings.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { style: italic, children: t.analyzeClean(analysis.analyzed) }),
     analysis?.truncated && typeof analysis.total === "number" && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { style: italic, children: t.analyzeCoverage(analysis.analyzed, analysis.total) }),
@@ -3463,6 +3463,22 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
       )) })
     ] })
   ] });
+}
+function RepairOutcome({ t, repair }) {
+  const applied = repair.corrected + repair.forgotten > 0;
+  const reasons = [...new Set(repair.skipped.map((s) => s.reason))].join("; ");
+  return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
+    "p",
+    {
+      style: applied ? { margin: 0, fontSize: "0.76rem", color: C.accent } : warnBox,
+      role: "status",
+      children: [
+        applied ? t.analyzeApplied(repair.corrected, repair.forgotten, repair.version) : "",
+        applied && reasons ? " " : "",
+        reasons ? t.analyzeSkipped(repair.skipped.length, reasons) : ""
+      ]
+    }
+  );
 }
 function FindingRow({
   t,

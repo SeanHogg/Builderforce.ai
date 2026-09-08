@@ -1,32 +1,60 @@
 import * as vscode from "vscode";
-import { BfBrainChat, type BfCreationSessionSummary, listBrainChats, listAgentPool, listCreationSessions } from "./bfApi";
+import { BfBrainChat, listBrainChats, listAgentPool, listCreationSessions } from "./bfApi";
 import { SECRET_KEY } from "./gateway";
 import { getSelectedProject, onProjectChange } from "./projectState";
 import { getProjectNames, projectLabel } from "./projectNames";
 import { attentionFor, attentionIcon, attentionDescriptionPrefix } from "./attention";
+import { sessionsLibraryGroup, sessionsLibraryRows, type SessionsLibraryGroup, type SessionsLibraryRow } from "./sessionsLibrary";
 
 /**
- * The sidebar history list (Activity Bar → BuilderForce → Sessions). Each item is a
- * server-side Brain conversation — the SAME unified `/api/brain` chats the in-editor
- * Brain webview and the web app share. Clicking one opens (or focuses) the Brain
- * panel on that conversation; there is no separate local session store.
+ * The sidebar list (Activity Bar → BuilderForce → Sessions): everything this
+ * workspace has made, in ONE recency-ordered list.
  *
- * The list keys off the active project (projectState): with a project selected it shows
- * only that project's chats; with none selected it shows every chat, each labelled with
- * the project it belongs to so the mixed list stays legible.
+ * ── WHY THERE IS NO LONGER A "CHATS" GROUP ───────────────────────────────────
+ * There used to be five groups — Recent Creation Sessions, Pinned, Shared, Running,
+ * and Chats. Four of those are facets of one list. The fifth was a different SOURCE
+ * with its own row shape and its own command, sitting as a peer of the other four,
+ * which said a conversation and a board were different kinds of place.
+ *
+ * They are not, and since the panel merge they are not even different DESTINATIONS:
+ * both rows reveal the same panel (`BuilderForcePanel`) and differ only in the
+ * surface it opens at — chat for a conversation, the board for a canvas. So the kind
+ * is a property of a row, the groups are facets, and which rows exist is decided by
+ * `sessionsLibrary.ts` using the SAME ordering and dedupe rules the web's `/create`
+ * library uses. A chat a board already holds a card for gets no row of its own.
+ *
+ * The list keys off the active project (projectState): with a project selected it
+ * shows only that project's work; with none selected it shows everything, each
+ * conversation labelled with the project it belongs to so the mixed list stays
+ * legible.
  */
-type CreationGroupKind = "recent" | "pinned" | "shared" | "running" | "chats";
-type CreationGroup = { nodeType: "group"; kind: CreationGroupKind; label: string };
-type CreationItem = { nodeType: "creation"; session: BfCreationSessionSummary };
-export type SessionTreeNode = BfBrainChat | CreationGroup | CreationItem;
+type CreationGroup = { nodeType: "group"; kind: SessionsLibraryGroup; label: string };
+type CreationItem = { nodeType: "item"; row: SessionsLibraryRow };
+export type SessionTreeNode = CreationGroup | CreationItem;
+
+/**
+ * The conversation a sidebar row means, or undefined for a board row.
+ *
+ * The row-level context commands (rename, delete) are handed the tree NODE, and the
+ * node stopped being a bare `BfBrainChat` when conversations and boards became one
+ * list. Exported so `extension.ts` reads the shape through this module rather than
+ * reaching into it — and so a rename silently doing nothing (which is what reading a
+ * `.id` that no longer exists would have caused) is impossible to reintroduce.
+ */
+export function chatOfSessionNode(node: unknown): BfBrainChat | undefined {
+  if (!node || typeof node !== "object") return undefined;
+  const candidate = node as Partial<CreationItem>;
+  if (candidate.nodeType !== "item" || !candidate.row) return undefined;
+  return candidate.row.source.kind === "chat" ? candidate.row.source.chat : undefined;
+}
 
 export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTreeNode> {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
-  // Short-lived cache so an expand + a refresh storm don't refetch per render.
-  private cache: { ts: number; chats: BfBrainChat[] } | undefined;
-  private creationCache: { ts: number; sessions: BfCreationSessionSummary[] } | undefined;
+  // ONE short-lived cache for ONE list, so expanding all four groups is two requests
+  // rather than eight — and so the four groups cannot disagree about what is newest.
+  private rowCache: { ts: number; rows: SessionsLibraryRow[] } | undefined;
   private static readonly TTL = 5_000;
 
   // Set during getChildren so getTreeItem can decide how to label each row: when the
@@ -45,22 +73,21 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
 
   /** Drop the cache and repaint (call after create / rename / delete / invite / sign-in). */
   refresh(): void {
-    this.cache = undefined;
-    this.creationCache = undefined;
+    this.rowCache = undefined;
     this.poolLoaded = false;
     this._onDidChangeTreeData.fire();
   }
 
   getTreeItem(node: SessionTreeNode): vscode.TreeItem {
-    if ("nodeType" in node && node.nodeType === "group") {
+    if (node.nodeType === "group") {
       const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.Expanded);
       item.id = `creation-group:${node.kind}`;
       item.contextValue = "builderforceSessionGroup";
-      item.iconPath = new vscode.ThemeIcon(node.kind === "running" ? "loading~spin" : node.kind === "pinned" ? "pinned" : node.kind === "shared" ? "organization" : node.kind === "chats" ? "comment-discussion" : "history");
+      item.iconPath = new vscode.ThemeIcon(node.kind === "running" ? "loading~spin" : node.kind === "pinned" ? "pinned" : node.kind === "shared" ? "organization" : "history");
       return item;
     }
-    if ("nodeType" in node && node.nodeType === "creation") {
-      const session = node.session;
+    if (node.row.source.kind === "canvas") {
+      const session = node.row.source.session;
       const item = new vscode.TreeItem(session.title || vscode.l10n.t("Untitled Session"), vscode.TreeItemCollapsibleState.None);
       item.id = `creation:${session.id}`;
       item.description = `${relativeTime(session.lastActivityAt)}${session.collaboratorCount && session.collaboratorCount > 1 ? ` · ${vscode.l10n.t("{0} people", session.collaboratorCount)}` : ""}`;
@@ -70,7 +97,9 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
       item.command = { command: "builderforce.openCreationSessionItem", title: vscode.l10n.t("Open Creation Session"), arguments: [session] };
       return item;
     }
-    const chat = node;
+    // A conversation. Same panel, opened at its chat surface — which is why this row
+    // sits in the same list as the boards rather than under a heading of its own.
+    const chat = node.row.source.chat;
     const item = new vscode.TreeItem(chat.title || `Chat ${chat.id}`, vscode.TreeItemCollapsibleState.None);
     item.id = String(chat.id);
     const time = relativeTime(chat.updatedAt);
@@ -123,45 +152,64 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
   async getChildren(element?: SessionTreeNode): Promise<SessionTreeNode[]> {
     if (!(await this.secrets.get(SECRET_KEY))) return [];
     if (!element) {
+      // FACETS of one list, not sources. "Recent" is the list; the other three are
+      // readings of it. There is no "Chats" group: a conversation is a row in the
+      // same list, because it opens the same panel (see the module header).
       return [
-        { nodeType: "group", kind: "recent", label: vscode.l10n.t("Recent Creation Sessions") },
+        { nodeType: "group", kind: "all", label: vscode.l10n.t("Recent") },
         { nodeType: "group", kind: "pinned", label: vscode.l10n.t("Pinned") },
         { nodeType: "group", kind: "shared", label: vscode.l10n.t("Shared") },
         { nodeType: "group", kind: "running", label: vscode.l10n.t("Running") },
-        { nodeType: "group", kind: "chats", label: vscode.l10n.t("Chats") },
       ];
     }
-    if (!("nodeType" in element) || element.nodeType !== "group") return [];
-    if (element.kind !== "chats") {
-      if (!this.creationCache || Date.now() - this.creationCache.ts >= SessionsTreeProvider.TTL) {
-        this.creationCache = { ts: Date.now(), sessions: await listCreationSessions(this.secrets) };
-      }
-      const sessions = this.creationCache.sessions;
-      const filtered = element.kind === "pinned" ? sessions.filter((session) => session.pinned)
-        : element.kind === "shared" ? sessions.filter((session) => (session.collaboratorCount ?? 1) > 1)
-        : element.kind === "running" ? sessions.filter((session) => session.preview?.objects?.some((object) => object.status?.toLowerCase() === "running"))
-        : sessions.slice(0, 20);
-      return filtered.map((session) => ({ nodeType: "creation" as const, session }));
-    }
-    if (!this.cache || Date.now() - this.cache.ts >= SessionsTreeProvider.TTL) {
-      this.cache = { ts: Date.now(), chats: await listBrainChats(this.secrets) };
-    }
+    if (element.nodeType !== "group") return [];
 
-    // Resolve participant names ONCE (and only when a chat has any) — a single
-    // stable pool fetch, not a per-row call, so the roster costs no N+1.
-    if (!this.poolLoaded && this.cache.chats.some((c) => (c.participants?.length ?? 0) > 0)) {
+    const rows = await this.rows();
+    return sessionsLibraryGroup(rows, element.kind).map((row) => ({ nodeType: "item" as const, row }));
+  }
+
+  /**
+   * The whole list, built once per refresh and shared by all four groups.
+   *
+   * Built ONCE on purpose: the groups are four readings of one list, so fetching per
+   * group would be the same two requests four times over — and worse, four lists that
+   * could disagree about what is newest if a write landed between them.
+   */
+  private async rows(): Promise<SessionsLibraryRow[]> {
+    if (this.rowCache && Date.now() - this.rowCache.ts < SessionsTreeProvider.TTL) return this.rowCache.rows;
+
+    const [sessions, chats] = await Promise.all([
+      listCreationSessions(this.secrets),
+      listBrainChats(this.secrets),
+    ]);
+
+    // Resolve participant names ONCE (and only when a chat has any) — a single stable
+    // pool fetch, not a per-row call, so the roster costs no N+1.
+    if (!this.poolLoaded && chats.some((c) => (c.participants?.length ?? 0) > 0)) {
       this.poolLoaded = true;
       const pool = await listAgentPool(this.secrets);
       this.agentNames = new Map(pool.map((a) => [a.ref, a.name]));
     }
 
+    // The active project scopes the CONVERSATIONS, as it always has. Boards are not
+    // scoped by it: a canvas carries its project links on its cards rather than in one
+    // column, so filtering them on a single id would hide boards that do belong.
     const project = getSelectedProject();
     this.filtered = !!project;
-    if (project) return this.cache.chats.filter((c) => c.projectId === project.id);
-
+    const scopedChats = project ? chats.filter((c) => c.projectId === project.id) : chats;
     // Unfiltered: resolve project names for the per-row labels (best-effort, cached).
-    this.projectNameById = await getProjectNames(this.secrets);
-    return this.cache.chats;
+    if (!project) this.projectNameById = await getProjectNames(this.secrets);
+
+    const rows = sessionsLibraryRows({
+      sessions,
+      chats: scopedChats,
+      // "Running" means the same thing for a conversation as for a board. The host
+      // already polls this (`attentionFor`); passing it in is what keeps the list
+      // builder pure.
+      runningChatIds: new Set(scopedChats.filter((c) => attentionFor("chat", c.id) === "running").map((c) => c.id)),
+    });
+    this.rowCache = { ts: Date.now(), rows };
+    return rows;
   }
 }
 

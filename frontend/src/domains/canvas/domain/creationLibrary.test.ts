@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { BrainChat, CreationSessionSummary, WorkflowDefinitionSummary } from '@/lib/builderforceApi';
 import type { IdeProject, Project, PublishedAgent } from '@/lib/types';
-import { compareLibraryItems, creationLibraryFacetCounts, creationLibraryItems, type CreationLibraryInput } from './creationLibrary';
+import { compareCreationLibraryEntries } from '@builderforce/creation-canvas-contract';
+import { creationLibraryFacetCounts, creationLibraryItems, type CreationLibraryInput } from './creationLibrary';
 
 function session(overrides: Partial<CreationSessionSummary> = {}): CreationSessionSummary {
   return {
@@ -139,7 +140,7 @@ describe('creationLibraryItems', () => {
   });
 });
 
-describe('compareLibraryItems', () => {
+describe('compareCreationLibraryEntries', () => {
   it('falls back to the title when neither item reports a timestamp', () => {
     const items = creationLibraryItems(input({ agents: [
       { id: 'b', name: 'Zed' } as PublishedAgent,
@@ -147,7 +148,7 @@ describe('compareLibraryItems', () => {
     ] }));
 
     expect(items.map((item) => item.title)).toEqual(['Ada', 'Zed']);
-    expect(compareLibraryItems(items[0], items[1])).toBeLessThan(0);
+    expect(compareCreationLibraryEntries(items[0], items[1])).toBeLessThan(0);
   });
 });
 

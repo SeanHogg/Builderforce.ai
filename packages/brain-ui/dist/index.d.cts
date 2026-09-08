@@ -1817,7 +1817,11 @@ interface EvermindConsoleLabels {
     analyzeApplied: (corrected: number, forgotten: number, version: number) => string;
     /** Coverage line shown when the audit reviewed only part of the history. */
     analyzeCoverage: (analyzed: number, total: number) => string;
-    analyzeSkipped: (count: number) => string;
+    /** Why some findings could not be applied. The REASONS come from the server (it is
+     *  the only thing that knows whether learning is frozen or the coordinator refused),
+     *  so only the frame around them is localized — a bare count told an operator nothing
+     *  and hid a remedy that is one toggle away. */
+    analyzeSkipped: (count: number, reasons: string) => string;
     tabsLabel: string;
     tabTeach: string;
     tabTest: string;

@@ -10827,7 +10827,7 @@
     "analyzeApplyCta": "Fix {count} selected",
     "analyzeApplying": "Fixing…",
     "analyzeApplied": "{corrected} corrected and re-taught, {forgotten} removed from recall (already-learned influence is superseded by the correction, not erased). Model is now at v{version}.",
-    "analyzeSkipped": "{count} could not be applied.",
+    "analyzeSkipped": "{count} could not be applied: {reasons}",
     "tabsLabel": "Evermind controls",
     "tabTeach": "Teach",
     "tabTest": "Test",

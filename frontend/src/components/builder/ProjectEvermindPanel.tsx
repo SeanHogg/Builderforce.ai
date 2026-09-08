@@ -246,7 +246,7 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
     analyzeApplyCta: (count) => t('analyzeApplyCta', { count }),
     analyzeApplying: t('analyzeApplying'),
     analyzeApplied: (corrected, forgotten, version) => t('analyzeApplied', { corrected, forgotten, version }),
-    analyzeSkipped: (count) => t('analyzeSkipped', { count }),
+    analyzeSkipped: (count, reasons) => t('analyzeSkipped', { count, reasons }),
     // Tabs
     tabsLabel: t('tabsLabel'),
     tabTeach: t('tabTeach'),

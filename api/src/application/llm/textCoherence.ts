@@ -156,12 +156,15 @@ function assessVocabulary(t: string, words: string[], opts: CoherenceOptions): C
   //    identify a language for — the case the dictionary check below can't reach.
   if (words.length >= 25 && lang.anyShare < 0.04) return fail('no-function-words');
 
-  // 6) Invented-word share. English-only, and only when English UNAMBIGUOUSLY won the
-  //    function-word vote — a Spanish/French/German/Portuguese/Italian reply is never
-  //    measured against an English lexicon. The scorer additionally forgives any token
-  //    that echoes the prompt or recurs in the text, so jargon-dense real answers pass
-  //    while each-word-different gibberish does not.
-  if (lang.language !== 'en') return pass();
+  // 6) Invented-word share. English-only: a reply that votes decisively for Spanish,
+  //    French, German, Portuguese or Italian is never measured against an English
+  //    lexicon. Everything else — English wins, or nothing wins and English still
+  //    leads — IS measured, because "no language won" describes gibberish at least as
+  //    often as it describes prose, and passing it unjudged was the hole that let
+  //    invented-word output through. The scorer additionally forgives any token that
+  //    echoes the prompt or recurs in the text, so jargon-dense real answers pass while
+  //    each-word-different gibberish does not.
+  if (!lang.englishLeads) return pass();
   const score = scoreEnglishWordiness(coreWords.filter(Boolean), rawTokens.filter((_, i) => !!coreWords[i]), opts.context);
   if (score.scored && score.unknown >= 5 && score.unknownShare >= 0.5) {
     return {

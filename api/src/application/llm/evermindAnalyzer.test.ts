@@ -251,19 +251,37 @@ describe('applyKnowledgeRepairs — write-through repair', () => {
     expect(out).toMatchObject({ corrected: 0, forgotten: 0 });
   });
 
-  it('refuses to repair a FROZEN model rather than silently doing nothing', async () => {
+  it('cannot re-teach a correction into a FROZEN model, and says which one and why', async () => {
     mocks.head.mockResolvedValue({ version: 3, mode: 'offline-frozen' });
     const out = await applyKnowledgeRepairs(env, db, 7, 42, [finding]);
     expect(mocks.learnText).not.toHaveBeenCalled();
+    // The memory keeps its (wrong) knowledge: forgetting it with no correction taught
+    // would leave a hole rather than a fix.
     expect(mocks.forget).not.toHaveBeenCalled();
+    expect(out.skipped[0]).toMatchObject({ id: 1 });
     expect(out.skipped[0]?.reason).toMatch(/frozen/i);
+  });
+
+  it('still purges junk from a FROZEN model — forgetting is not a weight update', async () => {
+    // The case an operator actually hits: the model was quarantined FOR emitting junk,
+    // so learning is frozen, and the audit is mostly `unusable` rows with no correction
+    // to teach. Those need no learning to remove, and refusing them left the operator
+    // unable to clear the very noise that broke the model.
+    mocks.head.mockResolvedValue({ version: 3, mode: 'offline-frozen' });
+    const out = await applyKnowledgeRepairs(env, db, 7, 42, [
+      { id: 5, verdict: 'unusable', issue: 'a stack trace, not knowledge', excerpt: '…', source: 'frontier' },
+      { id: 6, verdict: 'redundant', issue: 'duplicate of 5', excerpt: '…', source: 'local' },
+    ]);
+    expect(mocks.learnText).not.toHaveBeenCalled();
+    expect(mocks.forget).toHaveBeenCalledWith(env, 7, 42, [5, 6]);
+    expect(out.skipped).toEqual([]);
   });
 
   it('does NOT forget a memory whose correction failed to re-teach', async () => {
     // Forgetting here would destroy the old knowledge and put nothing in its place.
     mocks.learnText.mockResolvedValue({ ok: false, status: 503, body: { error: 'coordinator unavailable' } });
     const out = await applyKnowledgeRepairs(env, db, 7, 42, [finding]);
-    expect(mocks.forget).toHaveBeenCalledWith(env, 7, 42, []);
+    expect(mocks.forget).not.toHaveBeenCalled();
     expect(out.skipped[0]).toMatchObject({ id: 1, reason: 'coordinator unavailable' });
   });
 });

@@ -89,11 +89,17 @@ export function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, 
     if (picked.length === 0) return;
     setApplying(true); setError(null);
     try {
-      setRepair(await onApply(picked));
-      // The repaired memories are gone from the ring, so the stale audit must not
-      // linger offering to fix them again.
-      onAnalysis(null);
-      onRepaired?.();
+      const result = await onApply(picked);
+      setRepair(result);
+      // Keep exactly what still needs fixing. A repaired memory is gone from the ring
+      // and must not be offered again — but a SKIPPED one was never touched, and an
+      // unselected one was never even attempted. Discarding the whole audit threw both
+      // away along with the frontier tokens that bought it, which is how "108 could not
+      // be applied" became a dead end instead of a retry.
+      const unresolved = new Set(result.skipped.map((s) => s.id));
+      const remaining = analysis.findings.filter((f) => unresolved.has(f.id) || !selected.has(f.id));
+      onAnalysis(remaining.length > 0 ? { ...analysis, findings: remaining } : null);
+      if (result.corrected + result.forgotten > 0) onRepaired?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : t.errorGeneric);
     } finally {
@@ -141,12 +147,7 @@ export function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, 
 
       {error && <p style={{ margin: 0, fontSize: '0.76rem', color: C.danger }} role="alert">{error}</p>}
 
-      {repair && (
-        <p style={{ margin: 0, fontSize: '0.76rem', color: C.accent }} role="status">
-          {t.analyzeApplied(repair.corrected, repair.forgotten, repair.version)}
-          {repair.skipped.length > 0 ? ` ${t.analyzeSkipped(repair.skipped.length)}` : ''}
-        </p>
-      )}
+      {repair && <RepairOutcome t={t} repair={repair} />}
 
       {/* A partial audit (the frontier reviewer was unreachable) still reports what the
           local coherence screen found — but says so, rather than implying a clean bill. */}
@@ -179,6 +180,31 @@ export function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, 
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * What the apply actually did. Two independent facts, each shown only when it happened:
+ * what changed, and what did not and WHY. A repair where everything was skipped is not
+ * a success line with a footnote — the reasons ARE the message, and they carry the
+ * remedy (reconnect learning) the operator would otherwise have to guess at.
+ */
+function RepairOutcome({ t, repair }: { t: EvermindConsoleLabels; repair: EvermindKnowledgeRepair }) {
+  const applied = repair.corrected + repair.forgotten > 0;
+  // Collapse identical reasons — 108 findings blocked by one frozen model is one fact.
+  const reasons = [...new Set(repair.skipped.map((s) => s.reason))].join('; ');
+  return (
+    <p
+      // A repair that changed nothing reads as the warning it is, in the same box the
+      // partial-audit notice uses — one tone for "this did not fully work", theme
+      // tokens on both sides.
+      style={applied ? { margin: 0, fontSize: '0.76rem', color: C.accent } : warnBox}
+      role="status"
+    >
+      {applied ? t.analyzeApplied(repair.corrected, repair.forgotten, repair.version) : ''}
+      {applied && reasons ? ' ' : ''}
+      {reasons ? t.analyzeSkipped(repair.skipped.length, reasons) : ''}
+    </p>
   );
 }
 

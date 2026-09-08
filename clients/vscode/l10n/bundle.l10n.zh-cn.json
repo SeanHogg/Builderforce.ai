@@ -85,7 +85,6 @@
   "Chat": "聊天",
   "Chat diagnostics copied to clipboard.": "对话诊断信息已复制到剪贴板。",
   "Chat name": "对话名称",
-  "Chats": "聊天",
   "Check": "检查",
   "Check knowledge": "检查知识",
   "Check what it has learned": "检查它学到了什么",
@@ -321,7 +320,6 @@
   "Ready": "就绪",
   "Rebuild index": "重建索引",
   "Rebuild recall index": "重建回忆索引",
-  "Recent Creation Sessions": "最近的创作会话",
   "Recently learned": "最近学到的内容",
   "Reconnect": "重新连接",
   "Refresh": "刷新",
@@ -547,5 +545,6 @@
   "{count} tokens left": "剩余 {count} 个令牌",
   "{count} uncommitted changes": "{count} 项未提交的更改",
   "{input} input / {output} output per 1M tokens + $0.01 per request": "每 100 万 token {input} 输入 / {output} 输出，另加每次请求 $0.01",
-  "● Live": "● 进行中"
+  "● Live": "● 进行中",
+  "Recent": "最近"
 }

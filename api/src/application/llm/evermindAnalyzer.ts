@@ -344,15 +344,15 @@ export async function applyKnowledgeRepairs(
   const skipped: Array<{ id: number; reason: string }> = [];
   const actionable = findings.filter((f) => ACTIONABLE.has(f.verdict));
   if (actionable.length === 0) return { corrected: 0, forgotten: 0, merged: 0, version: head.version, skipped };
-  if (head.mode !== 'connected') {
-    return {
-      corrected: 0,
-      forgotten: 0,
-      merged: 0,
-      version: head.version,
-      skipped: actionable.map((f) => ({ id: f.id, reason: 'learning is frozen — set this Evermind to Connected before applying fixes' })),
-    };
-  }
+
+  // A frozen model blocks HALF the repair, not all of it. Teaching a correction is a
+  // weight update, which a frozen Evermind cannot absorb — those findings are genuinely
+  // stuck until learning is reconnected. Forgetting is not: it removes the memory from
+  // the recall index and touches no weights, so `unusable` and `redundant` findings
+  // (which never carry a correction) can still be purged. Refusing those too left an
+  // operator whose model was quarantined FOR emitting junk unable to clear that junk,
+  // and reported the whole audit as inapplicable.
+  const frozen = head.mode !== 'connected';
 
   // Re-teach corrections first, serialized: the coordinator is a single DO that adapts
   // each exemplar in its alarm, so concurrency here only contends on the same lock.
@@ -360,6 +360,10 @@ export async function applyKnowledgeRepairs(
   for (const f of actionable) {
     const correction = f.correction?.trim();
     if (!correction) continue;
+    if (frozen) {
+      skipped.push({ id: f.id, reason: 'learning is frozen — set this Evermind to Connected to re-teach corrections' });
+      continue;
+    }
     const res = await dispatchProjectEvermindLearnText(env, tenantId, projectId, correction, undefined, f.prompt ?? undefined);
     if (res.ok) { corrected++; continue; }
     const err = res.body['error'];
@@ -369,8 +373,12 @@ export async function applyKnowledgeRepairs(
   // Then forget every bad memory in one call — including the ones just corrected, whose
   // replacement is already queued. This is the "replace" half of write-through: the old
   // knowledge must not survive alongside its correction.
-  const forgetIds = actionable.filter((f) => !skipped.some((s) => s.id === f.id)).map((f) => f.id);
-  const forget = await forgetProjectEvermindMemories(env, tenantId, projectId, forgetIds);
+  const skippedIds = new Set(skipped.map((s) => s.id));
+  const forgetIds = actionable.filter((f) => !skippedIds.has(f.id)).map((f) => f.id);
+  // Nothing survived the skip list — don't spend a coordinator round trip saying so.
+  const forget = forgetIds.length > 0
+    ? await forgetProjectEvermindMemories(env, tenantId, projectId, forgetIds)
+    : { body: {} as Record<string, unknown> };
   const forgotten = typeof forget.body['forgotten'] === 'number' ? (forget.body['forgotten'] as number) : 0;
 
   // Merge now so the corrections are real weights, not a queue entry.

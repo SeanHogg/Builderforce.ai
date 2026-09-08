@@ -10827,7 +10827,7 @@
     "analyzeApplyCta": "修复选中的 {count} 项",
     "analyzeApplying": "修复中…",
     "analyzeApplied": "已纠正并重新学习 {corrected} 条，从召回中移除 {forgotten} 条（已学习的影响由纠正取代，而非被抹除）。模型现已升至 v{version}。",
-    "analyzeSkipped": "有 {count} 项无法应用。",
+    "analyzeSkipped": "有 {count} 项无法应用：{reasons}",
     "tabsLabel": "Evermind 控制项",
     "tabTeach": "教学",
     "tabTest": "测试",

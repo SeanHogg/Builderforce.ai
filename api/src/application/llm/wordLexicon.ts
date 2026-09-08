@@ -228,7 +228,28 @@ export interface LanguageVerdict {
   anyShare: number;
   /** True when the text is predominantly Latin-script (so the guard even applies). */
   latin: boolean;
+  /**
+   * True when English is the LEADING candidate — no other supported language scored
+   * strictly more function-word hits. This, not {@link language}, is what gates the
+   * English lexicon, because the two things it must separate are "a genuine Spanish
+   * reply" and "English-shaped gibberish", and only the former votes decisively for
+   * another language. Gibberish sprays short tokens that happen to be Spanish or
+   * French function words (`se`, `te`, `al`, `mis`), which is enough to TIE the vote
+   * or squeak past English — and treating that ambiguity as "not English, don't
+   * judge it" is exactly how invented-word output escapes the dictionary.
+   */
+  englishLeads: boolean;
 }
+
+/**
+ * How many DISTINCT function words a language needs before it wins outright. Raw hit
+ * counts are not enough: two occurrences of `se` plus one `al` outvoted English on a
+ * real gibberish sample, so the passage was measured against no lexicon at all.
+ * Genuine prose in any of these languages uses many different function words (the
+ * shortest real Spanish/French replies observed still clear 3), while gibberish
+ * repeats the same one or two accidental fragments.
+ */
+const MIN_DISTINCT_FUNCTION_WORDS = 3;
 
 /**
  * Decide which supported Latin-script language a text is in, by function-word vote.
@@ -237,17 +258,20 @@ export interface LanguageVerdict {
  */
 export function detectLatinLanguage(words: readonly string[], text: string): LanguageVerdict {
   const latin = latinLetterShare(text) >= 0.6;
-  if (!latin || words.length === 0) return { language: null, share: 0, anyShare: 0, latin };
+  if (!latin || words.length === 0) return { language: null, share: 0, anyShare: 0, latin, englishLeads: false };
 
   const counts = new Map<string, number>();
+  const distinct = new Map<string, number>();
   const anyHit = new Set<number>();
   for (const [lang, list] of Object.entries(FUNCTION_WORDS)) {
     const set = new Set(list);
     let hits = 0;
+    const seen = new Set<string>();
     words.forEach((w, i) => {
-      if (set.has(w)) { hits++; anyHit.add(i); }
+      if (set.has(w)) { hits++; seen.add(w); anyHit.add(i); }
     });
     counts.set(lang, hits);
+    distinct.set(lang, seen.size);
   }
   let best: string | null = null;
   let bestHits = 0;
@@ -258,10 +282,25 @@ export function detectLatinLanguage(words: readonly string[], text: string): Lan
   }
   const share = bestHits / words.length;
   const anyShare = anyHit.size / words.length;
-  // A win must be both present (≥8% of tokens) and unambiguous (strictly beats the
-  // runner-up) — "in/an/no/de" are shared across languages, so a tie decides nothing.
-  if (!best || share < 0.08 || bestHits <= runnerUp) return { language: null, share, anyShare, latin };
-  return { language: best, share, anyShare, latin };
+  // English leads unless some other language beat it on EVIDENCE — more hits AND enough
+  // different function words to be a language rather than one repeated fragment. A tie
+  // counts as a lead, and so does losing to a single token sprayed three times: see
+  // {@link LanguageVerdict.englishLeads}.
+  const englishHits = counts.get('en') ?? 0;
+  const englishLeads = [...counts].every(([lang, hits]) => (
+    lang === 'en'
+    || hits <= englishHits
+    || (distinct.get(lang) ?? 0) < MIN_DISTINCT_FUNCTION_WORDS
+  ));
+  // A win must be present (≥8% of tokens), unambiguous (strictly beats the runner-up)
+  // — "in/an/no/de" are shared across languages, so a tie decides nothing — and backed
+  // by enough DIFFERENT function words to be a language rather than a repeated fragment.
+  const decisive = !!best
+    && share >= 0.08
+    && bestHits > runnerUp
+    && (distinct.get(best) ?? 0) >= MIN_DISTINCT_FUNCTION_WORDS;
+  if (!decisive) return { language: null, share, anyShare, latin, englishLeads };
+  return { language: best, share, anyShare, latin, englishLeads };
 }
 
 /** Tokens that are legitimately not words: identifiers, paths, urls, numbers, versions. */
@@ -317,8 +356,14 @@ export function scoreEnglishWordiness(
   let eligible = 0;
   let unknown = 0;
   words.forEach((w, i) => {
-    // Short words are function words or abbreviations — never evidence of gibberish.
-    if (w.length < 4) return;
+    // Judge exactly the words the lexicon is willing to judge. {@link isKnownEnglishWord}
+    // already forgives everything under 3 characters outright, so excluding 3-letter
+    // tokens on top of that discarded a third of the tokens in a short reply and left
+    // the probe-length samples below the evidence floor — unscoreable, hence "coherent".
+    // Measured on real samples, including them RAISES the unknown share of gibberish and
+    // LOWERS it for genuine English (3-letter English words are almost all in the
+    // lexicon), so it widens the margin in both directions.
+    if (w.length < 3) return;
     const raw = rawTokens[i] ?? w;
     if (isCodeishToken(raw)) return;
     eligible++;
