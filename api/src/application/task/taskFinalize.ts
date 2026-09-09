@@ -8,6 +8,7 @@
  * request: the board PATCH and the manager both already hand it `env`, `db`, the
  * tenant and the ticket. Both now import it from here.
  */
+import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { resolveDefaultRepoForTask } from '../repos/resolveDefaultRepo';
 import { openTaskPullRequest } from '../repos/openTaskPullRequest';
@@ -83,7 +84,7 @@ export async function dispatchTaskFinalize(
   // `!githubPrUrl` check below is just a cheap pre-filter, not the guard.
   if (task.assignedAgentRef && task.gitBranch && !task.githubPrUrl) {
     const e = env as unknown as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
-    const secret = e.INTEGRATION_ENCRYPTION_SECRET ?? e.JWT_SECRET ?? '';
+    const secret = integrationCredentialSecret(e);
     try {
       const res = await openTaskPullRequest(db, secret, tenantId, taskId, { branch: task.gitBranch, title }, env);
       // Uniform PR observability: emit a TASK-scoped `pr_opened` event (no live

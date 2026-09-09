@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * repoDelivery — "is this repo's build green, and how many pulls are open",
@@ -363,7 +364,7 @@ const PROBE_INTERVAL_SEC = 5 * 60;
  */
 export async function runRepoDeliverySweep(env: Env): Promise<RepoDeliverySweepResult> {
   const db = buildDatabase(env as unknown as Parameters<typeof buildDatabase>[0]);
-  const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+  const secret = integrationCredentialSecret(env);
   const cutoff = new Date(Date.now() - PROBE_INTERVAL_SEC * 1000);
 
   const due = await db
@@ -463,7 +464,7 @@ export async function refreshRepoDelivery(
   tenantId: number,
   repoId: string,
 ): Promise<void> {
-  const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+  const secret = integrationCredentialSecret(env);
   const resolved = await resolveRepoCredential(db, secret, tenantId, repoId);
   if (isResolveError(resolved)) return;
   const verdict = await probeRepoDelivery(env, db, secret, tenantId, repoId);

@@ -10,6 +10,17 @@
 export { BrainTimeline, DEFAULT_TIMELINE_LABELS } from './BrainTimeline';
 export type { BrainTimelineProps, BrainTimelineLabels, MessageRating } from './BrainTimeline';
 
+// ONE settled tool step — outcome, subject, and (for a shell call) the command and
+// its terminal output. Rendered by the timeline; exported with its own narrow label
+// contract so a surface can show a single step outside a transcript, and so the
+// command/terminal derivation is testable without a DOM.
+export { ToolStep } from './ToolStep';
+export type { ToolStepLabels, ToolStepNode } from './ToolStep';
+export { toolStepView, commandOf, shellOutcomeOf, toolPreview } from './toolStepView';
+export type { ToolStepView, CommandRun, ToolPreview } from './toolStepView';
+export { CopyButton } from './CopyButton';
+export type { CopyLabels } from './CopyButton';
+
 // The ANIMATED in-flight row — what the run is doing right now. Rendered by the
 // timeline; exported for surfaces (a status bar, a dock header) that want the same
 // indicator without the transcript around it.
@@ -18,8 +29,6 @@ export type { LiveActivityProps, LiveActivityLabels } from './LiveActivity';
 
 export { Markdown } from './Markdown';
 export type { MarkdownProps, MarkdownLabels } from './Markdown';
-export { splitThinkSegments, answerTextOf } from './thinkBlocks';
-export type { ThinkSegment } from './thinkBlocks';
 
 export {
   QuestionCard,
@@ -137,10 +146,10 @@ export type {
 export {
   buildTimeline,
   buildSettledTimeline,
+  strandedReplyKey,
   streamingNode,
   attachmentsOf,
   formatDuration,
-  formatPayload,
 } from './timelineModel';
 export type { TimelineNode, TimelineImage, BuildTimelineInput } from './timelineModel';
 

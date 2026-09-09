@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Repo activity sweep — the cron-driven producer that makes "connect a repo →
@@ -79,7 +80,7 @@ export async function syncRepoActivity(
 /** Poll + ingest every due connected GitHub repo. Safe on every cron tick. */
 export async function runRepoActivitySweep(env: Env): Promise<RepoActivitySweepResult> {
   const db = buildDatabase(env as unknown as Parameters<typeof buildDatabase>[0]);
-  const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET;
+  const secret = integrationCredentialSecret(env);
   const now = new Date();
   const cutoff = new Date(now.getTime() - SYNC_INTERVAL_SEC * 1000);
 

@@ -15,8 +15,7 @@ import { useTranslations } from 'next-intl';
 
 import type { Formatter } from '@/i18n/format';
 import { useFormat } from '@/i18n/useFormat';
-import { useChatActivityLabels } from '@/i18n/useChatActivityLabels';
-import { useLiveActivityLabels } from '@/i18n/useLiveActivityLabels';
+import { useBrainTimelineLabels } from '@/i18n/useBrainTimelineLabels';
 import Link from 'next/link';
 import { BrainTimeline, Avatar, PendingQuestionBanner, selectPendingAskUser, askUserAnchorId } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
@@ -213,8 +212,6 @@ export function BrainPanel({
   const fmt = useFormat();
   const isPage = variant === 'page';
   const tTimeline = useTranslations('brain.timeline');
-  const activityLabels = useChatActivityLabels();
-  const liveLabels = useLiveActivityLabels();
   const tCommon = useTranslations('common');
   const tRepo = useTranslations('repoContext');
   const tBrain = useTranslations('brain');
@@ -562,7 +559,11 @@ export function BrainPanel({
   // steps). Bound to the chat's project (falling back to the pinned/viewing one a
   // new chat will be created under, so learning + recall stay on the same model).
   const evermindProjectId = chats.activeChat?.projectId ?? pinnedProjectId ?? viewingProjectId ?? null;
-  const evermind = useMemo(() => projectBrainMemoryHooks(evermindProjectId), [evermindProjectId]);
+  // Chat-tiered recall: this conversation's own memories first, the project's after.
+  const evermind = useMemo(
+    () => projectBrainMemoryHooks(evermindProjectId, chats.activeChatId),
+    [evermindProjectId, chats.activeChatId],
+  );
 
   // Self-heal Evermind learning scope (web parity with the VS Code webview). The server's
   // chat→Evermind learn gate keys on `brain_chats.projectId`: a project-less chat NEVER
@@ -916,55 +917,10 @@ export function BrainPanel({
   // <ChatTicketsPanel> so they don't get a fresh object/closure every render —
   // otherwise the memo never skips and the transcript re-parses markdown on
   // every keystroke/streaming token (mirrors the VS Code webview App.tsx).
-  const timelineLabels = useMemo(() => ({
-    thinking: tTimeline('thinking'),
-    // Copy for the ANIMATED in-flight row — the only thing on screen while a long
-    // tool call runs. From the SHARED hook, so the panel and the canvas dock can
-    // never word the same running step differently.
-    live: liveLabels,
-    thoughtFor: tTimeline('thoughtFor'),
-    thought: tTimeline('thought'),
-    you: tTimeline('you'),
-    assistant: tTimeline('assistant'),
-    input: tTimeline('input'),
-    output: tTimeline('output'),
-    error: tTimeline('error'),
-    loading: tTimeline('loading'),
-    empty: tTimeline('empty'),
-    copy: tTimeline('copy'),
-    copied: tTimeline('copied'),
-    replay: tTimeline('replay'),
-    rateUp: tTimeline('rateUp'),
-    rateDown: tTimeline('rateDown'),
-    apply: tTimeline('apply'),
-    createFile: tTimeline('createFile'),
-    preview: tTimeline('preview'),
-    askSubmit: tTimeline('askSubmit'),
-    askAnswered: tTimeline('askAnswered'),
-    accountOwn: tTimeline('accountOwn'),
-    accountShared: tTimeline('accountShared'),
-    accountByoUnused: tTimeline('accountByoUnused'),
-    ranOnEvermind: tTimeline('ranOnEvermind'),
-    recallTitle: tTimeline('recallTitle'),
-    recallHint: tTimeline('recallHint'),
-    learnTitle: tTimeline('learnTitle'),
-    learnHint: tTimeline('learnHint'),
-    learnSkippedTitle: tTimeline('learnSkippedTitle'),
-    learnSkippedHint: tTimeline('learnSkippedHint'),
-    learnSkipReason: {
-      'not-attached': tTimeline('learnSkipReasonNotAttached'),
-      'not-seeded': tTimeline('learnSkipReasonNotSeeded'),
-      frozen: tTimeline('learnSkipReasonFrozen'),
-    },
-    learnTargetContributed: tTimeline('learnTargetContributed'),
-    learnTargetSkipped: tTimeline('learnTargetSkipped'),
-    reconcileTitle: tTimeline('reconcileTitle'),
-    reconcileHint: tTimeline('reconcileHint'),
-    // Run milestones / agent dispatch render as system ACTIVITY lines composed from the
-    // message's structured metadata — see useChatActivityLabels for why these are
-    // templates rather than sentences.
-    activity: activityLabels,
-  }), [tTimeline, activityLabels, liveLabels]);
+  // Every string the shared transcript renders, from the ONE web-side bundle — the
+  // same one the Canvas dock mounts, so a step can never be worded differently in
+  // the two places the same conversation is read.
+  const timelineLabels = useBrainTimelineLabels();
 
   const timelineApplyCode = useMemo(
     () => (hasTool('apply_code_to_active_file')

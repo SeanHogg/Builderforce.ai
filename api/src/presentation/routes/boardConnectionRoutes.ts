@@ -13,6 +13,7 @@
  * GET    /api/board-connections/:id/links  List external ticket links
  */
 
+import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { Hono } from 'hono';
 import { and, desc, eq } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
@@ -176,7 +177,7 @@ export function createBoardConnectionRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(boardConnections.id, id), eq(boardConnections.tenantId, tenantId)));
     if (!conn) return c.json({ error: 'Connection not found' }, 404);
 
-    const secret = c.env.INTEGRATION_ENCRYPTION_SECRET ?? c.env.JWT_SECRET;
+    const secret = integrationCredentialSecret(c.env);
     const loaded = await loadConnectionCredentials(db, tenantId, conn.credentialId, secret);
     if (!loaded) return c.json({ error: 'Failed to load connection credentials' }, 400);
 

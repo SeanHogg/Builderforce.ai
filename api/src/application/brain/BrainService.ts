@@ -33,7 +33,7 @@ import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
 import { listBuiltinTools, callBuiltinTool, CLOUD_AGENT_PLATFORM_TOOLS, CHAT_SCOPED_AGENT_TOOLS } from '../llm/builtinMcpService';
 import { shouldRecoverStalledTurn, isExhaustedStall, stallShape, stallRecoveryNudge, stallExhaustedNotice, modelFailoverNotice, chooseStallFailover, MAX_ANNOUNCEMENT_RECOVERIES, MAX_MODEL_FAILOVERS, type ModelFallbackSurface } from '@builderforce/agent-stall';
-import { runAgentLoop, openAiChatCodec, readOpenAiToolCalls } from '@builderforce/agent-loop';
+import { runAgentLoop, openAiChatCodec, readOpenAiToolCalls, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock } from '@builderforce/agent-loop';
 import {
   BRAIN_ORIGIN, TEAM_ORIGIN, MANAGER_ORIGIN, ACCESSIBLE_ORIGINS,
   resolveChatAccess, syncPendingMemberships as syncPendingMembershipsShared,
@@ -43,73 +43,6 @@ import { normalizeChatMode, resolveChatMode, NEW_CHAT_MODE } from './chatMode';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { loadProjectInTenant } from '../project/projectOwnership';
-
-/**
- * A conversational-only tool: when the agent needs the USER to make a decision to
- * proceed, it calls `ask_user` with labelled options instead of asking in prose.
- * The reply's shared <QuestionCard> (brain-ui) renders the options as clickable
- * buttons and the user's choice comes back as their next message. A schema-validated
- * tool call is far more reliable than asking a weak model to hand-format the JSON in
- * prose — the exact failure the operator hit (questions rendered as unactionable text).
- *
- * NOT a platform action (autonomous cloud agents have no live user), so it is injected
- * only here in the Brain reply loop and intercepted as a TERMINAL turn — the loop stops
- * and the reply carries the canonical ```ask-user block {@link askUserBlock} builds.
- */
-const ASK_USER_TOOL = 'ask_user';
-const ASK_USER_TOOL_SPEC = {
-  type: 'function',
-  function: {
-    name: ASK_USER_TOOL,
-    description:
-      'Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user\'s next message. Do NOT use it for questions you can answer yourself from the code or context.',
-    parameters: {
-      type: 'object',
-      properties: {
-        question: { type: 'string', description: 'The single, specific question to ask.' },
-        options: {
-          type: 'array',
-          description: '2–6 distinct, mutually-exclusive choices (unless multiSelect).',
-          items: {
-            type: 'object',
-            properties: {
-              label: { type: 'string', description: 'Short choice text (1–5 words).' },
-              description: { type: 'string', description: 'Optional one-line explanation of this choice.' },
-            },
-            required: ['label'],
-          },
-        },
-        multiSelect: { type: 'boolean', description: 'Allow choosing more than one option. Default false.' },
-      },
-      required: ['question', 'options'],
-    },
-  },
-} as const;
-
-/** Build the canonical fenced block the shared brain-ui `parseAskUser` reads. Kept in
- *  sync with `serializeAskUser` in @seanhogg/builderforce-brain-ui (no UI dep here). */
-function askUserBlock(args: unknown): string | null {
-  const o = (args ?? {}) as Record<string, unknown>;
-  const question = typeof o.question === 'string' ? o.question.trim() : '';
-  const optionsIn = Array.isArray(o.options) ? o.options : [];
-  const options = optionsIn
-    .map((it) => {
-      if (typeof it === 'string') return it.trim() ? { label: it.trim() } : null;
-      if (it && typeof it === 'object') {
-        const rec = it as Record<string, unknown>;
-        const label = typeof rec.label === 'string' ? rec.label.trim() : '';
-        const description = typeof rec.description === 'string' ? rec.description.trim() : undefined;
-        return label ? { label, ...(description ? { description } : {}) } : null;
-      }
-      return null;
-    })
-    .filter((x): x is { label: string; description?: string } => !!x);
-  // Needs a prompt + at least two choices to be a meaningful card; else let the caller
-  // fall back to normal prose so the question is never swallowed.
-  if (!question || options.length < 2) return null;
-  const payload = { question, options, multiSelect: o.multiSelect === true };
-  return ['```ask-user', JSON.stringify(payload), '```'].join('\n');
-}
 
 // ---------------------------------------------------------------------------
 // DTOs

@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * githubActionsRoutes — the GitHub Actions agent execution surface.
@@ -57,8 +58,7 @@ import {
   loadContainerRunContext,
   markCloudExecutionRunning,
   prepareCloudRun,
-  gitSecret,
-} from '../../application/runtime/cloudAgentEngine';
+  } from '../../application/runtime/cloudAgentEngine';
 import { resolveTicketRepoContext } from '../../application/repos/commitFileAsPendingChange';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { CONTAINER_MAX_STEPS } from '../../application/runtime/cloudAgentTools';
@@ -208,7 +208,7 @@ export function createGitHubActionsRoutes(db: Db, runtimeService: RuntimeService
       // actions/checkout has already cloned, and the workflow's GITHUB_TOKEN
       // (contents: write) is what authorises the push — so no credential of
       // ours ever reaches the runner.
-      const repo = await resolveTicketRepoContext(db, gitSecret(env), ctx.tenantId, ctx.taskId);
+      const repo = await resolveTicketRepoContext(db, integrationCredentialSecret(env), ctx.tenantId, ctx.taskId);
 
       await markCloudExecutionRunning(runtimeService, body.executionId).catch((error) => {
         reportCaughtError(error, { source: "presentation/routes/githubActionsRoutes.ts", operation: "createGitHubActionsRoutes" });

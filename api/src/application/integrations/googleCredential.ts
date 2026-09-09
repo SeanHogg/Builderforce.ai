@@ -6,6 +6,7 @@
  * decrypt hiccup degrades to "not connected".
  */
 
+import { integrationCredentialSecret } from './integrationCredentialSecret';
 import { and, eq } from 'drizzle-orm';
 import { integrationCredentials } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
@@ -22,7 +23,7 @@ export async function loadGoogleCredential(
   provider: GoogleProvider,
 ): Promise<GoogleOAuthCreds | null> {
   try {
-    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET;
+    const secret = integrationCredentialSecret(env);
     if (!secret) return null;
     const [row] = await db
       .select({ credentialsEnc: integrationCredentials.credentialsEnc, iv: integrationCredentials.iv })

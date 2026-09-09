@@ -39,6 +39,7 @@
  * decision an operator makes, not a default a service ships with.
  */
 
+import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
@@ -158,7 +159,7 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
     return Response.json(await enrichContact({
       db,
       tenantId: tenant(c),
-      encryptionSecret: env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '',
+      encryptionSecret: integrationCredentialSecret(env),
       env: c.env as Env,
     }, {
       contactRef: c.req.param('ref'),

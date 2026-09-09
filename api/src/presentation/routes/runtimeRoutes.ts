@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -32,7 +33,7 @@ import { notifyExecutionSubscribers } from '../../application/runtime/executionE
 import { broadcastExecutionEvent, executionRoomName } from '../../infrastructure/relay/broadcastRoom';
 import { relayToRoom } from './realtimeRelay';
 import {
-  markCloudExecutionRunning, gitSecret, recordCloudToolEvent, recordPrdDirective,
+  markCloudExecutionRunning, recordCloudToolEvent, recordPrdDirective,
   handleContainerOp, loadContainerRunContext, resolveCloudAgent, agentAllowsHostExecution, DEFAULT_CLOUD_REF,
 } from '../../application/runtime/cloudAgentEngine';
 import { resolveDefaultCloudAgentRef, UNATTRIBUTED_RUN_MESSAGE } from '../../application/runtime/defaultCloudAgent';
@@ -409,7 +410,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const run = await loadContainerRunContext(c.env as Env, db, executionId);
     if (!run) return c.json({ error: 'execution not found' }, 404);
     if (!(await authorizeExecutionPrincipal(db, run.tenantId, executionId))) return c.json({ error: 'run credential expired or revoked' }, 403);
-    const resolved = await resolveTicketRepoContext(db, gitSecret(c.env as Env), run.tenantId, run.taskId);
+    const resolved = await resolveTicketRepoContext(db, integrationCredentialSecret(c.env as Env), run.tenantId, run.taskId);
     if (!resolved.ok) return c.json({ error: resolved.reason }, 400);
     const proxied = await executeGitProxy({
       repo: resolved.ctx, token: resolved.ctx.token, subPath, method,
@@ -1478,7 +1479,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       tenantId: c.get('tenantId'),
       executionId: id,
       actor: await resolveActorFromContext(c.env, db, c as unknown as Context<HonoEnv>),
-      secret: gitSecret(c.env),
+      secret: integrationCredentialSecret(c.env),
     });
     if (!outcome.reverted) {
       return c.json({ error: outcome.reason, refusal: outcome.refusal }, 409);
@@ -1767,7 +1768,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const env = c.env as Env;
     const tenantId = c.get('tenantId');
 
-    const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskId);
+    const repo = await resolveTicketRepoContext(db, integrationCredentialSecret(env), tenantId, taskId);
     if (!repo.ok) {
       return c.json({ bound: false, reason: repo.reason, path, current: null, base: null });
     }
@@ -1826,7 +1827,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   router.get('/tasks/:taskId/repo-status', async (c) => {
     const taskId = Number(c.req.param('taskId'));
     if (!Number.isFinite(taskId)) return c.json({ bound: false, hasCredential: false, reason: 'invalid task' }, 400);
-    const r = await resolveTicketRepoContext(db, gitSecret(c.env as Env), c.get('tenantId'), taskId);
+    const r = await resolveTicketRepoContext(db, integrationCredentialSecret(c.env as Env), c.get('tenantId'), taskId);
     if (r.ok) {
       return c.json({ bound: true, hasCredential: true, repo: `${r.ctx.owner}/${r.ctx.repo}`, base: r.ctx.base });
     }
@@ -1853,7 +1854,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const env = c.env as Env;
     const tenantId = c.get('tenantId');
 
-    const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskId);
+    const repo = await resolveTicketRepoContext(db, integrationCredentialSecret(env), tenantId, taskId);
     if (!repo.ok) return c.json({ ok: false, reason: repo.reason, files: [] });
     const ctx = repo.ctx;
 

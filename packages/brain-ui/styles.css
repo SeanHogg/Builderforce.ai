@@ -384,6 +384,18 @@
   flex-basis: 100%;
 }
 
+/* A reply RESCUED from the model's reasoning because the run ended inside it (see
+   `strandedReplyKey`). The note explains the first-person planning voice the reader
+   is about to see; it must not compete with the reply, so it is muted and small —
+   and, like every other colour here, it comes from a token so both themes read. */
+.bf-tl__rescued {
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: var(--bf-text-muted, #8a8a8a);
+  margin-bottom: 4px;
+  overflow-wrap: anywhere;
+}
+
 /* Per-message icon action (copy / send again). */
 .bf-tl__act {
   flex: 0 0 auto;
@@ -755,14 +767,31 @@
 }
 
 .bf-tl__tool-name {
+  flex: 0 0 auto;
+  white-space: nowrap;
   font-family: var(--bf-font-mono, ui-monospace, monospace);
   font-weight: 600;
   color: var(--bf-text, #e6e6e6);
 }
 
 .bf-tl__tool-dur {
+  flex: 0 0 auto;
   color: var(--bf-text-muted, #8a8a8a);
   font-size: 0.72rem;
+}
+
+/* The concrete subject of the call — the file, the query, the command line — so a
+   run's steps can be skimmed without opening any of them. It is the element that
+   gives way first on a narrow panel: the tool name and the outcome must survive. */
+.bf-tl__tool-subject {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--bf-font-mono, ui-monospace, monospace);
+  font-size: 0.74rem;
+  color: var(--bf-text-muted, #8a8a8a);
 }
 
 .bf-tl__tool-caret {
@@ -867,6 +896,58 @@
   color: var(--bf-text, #e6e6e6);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* ---- shell step: the command, then what it printed ----
+   A `run_command` call used to render as two JSON blobs behind a caret. These make
+   it read as the terminal exchange it is: a prompt line carrying the command, and
+   the combined stdout/stderr below it. Colours come from the same `--bf-*` tokens as
+   everything else, so both themes are covered by the host's variable map. */
+.bf-tl__cmd-in {
+  border-color: var(--bf-accent, #7aa2f7);
+  color: var(--bf-text, #e6e6e6);
+  white-space: pre-wrap;
+}
+
+.bf-tl__cmd-prompt {
+  user-select: none;
+  margin-right: 8px;
+  font-weight: 700;
+  color: var(--bf-accent, #7aa2f7);
+}
+
+/* Terminal output is read top-down and is often long: it scrolls in its own box
+   rather than pushing the rest of the conversation off screen. */
+.bf-tl__cmd-out {
+  max-height: 320px;
+}
+
+.bf-tl__cmd-out--error {
+  border-color: var(--bf-error, rgba(229, 83, 75, 0.5));
+}
+
+/* The exit code, shown only when it is non-zero — a `0` on every green step is
+   noise, a `1` is the whole story. */
+.bf-tl__cmd-exit {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  background: color-mix(in srgb, var(--bf-error, #e5534b) 18%, transparent);
+  color: var(--bf-error, #e5534b);
+}
+
+/* A command that printed nothing says so, rather than leaving an empty frame that
+   reads as a rendering failure. */
+.bf-tl__cmd-empty {
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px dashed var(--bf-border, rgba(128, 128, 128, 0.25));
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-style: italic;
+  color: var(--bf-text-muted, #8a8a8a);
 }
 
 /* ---- markdown ---- */

@@ -8,7 +8,7 @@ import { useTranslations } from 'next-intl';
 import { MermaidDiagram } from './MermaidDiagram';
 import { downloadText } from '@/lib/download';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
-import { splitThinkSegments } from '@seanhogg/builderforce-brain-ui';
+import { splitReasoningSegments } from '@builderforce/agent-loop';
 
 /** Fences whose content is a file the user will want to keep, → its extension. */
 const SAVEABLE_FENCE: Record<string, { ext: string; mime: string }> = {
@@ -53,7 +53,7 @@ export function ChatMessageContent({
 }: ChatMessageContentProps) {
   const router = useRouter();
   const t = useTranslations('chatMessage');
-  const segments = splitThinkSegments(content);
+  const segments = splitReasoningSegments(content);
   const components: Components = {
     code({ node, className, children, ...props }) {
       const raw = String(children ?? '');

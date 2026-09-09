@@ -38,5 +38,9 @@
     }
   },
   "include": ["src/**/*", "ui/**/*", "extensions/**/*"],
-  "exclude": ["node_modules", "dist"]
+  // Bundler + test-runner configs are build TOOLING, not application code: they import
+  // repo scripts that ship no declarations (`scripts/sourcePackages.mjs`). The root
+  // `vitest.config.ts` was already outside this program by virtue of living above
+  // `src/`; the control UI's are inside `ui/**` and need saying so.
+  "exclude": ["node_modules", "dist", "**/vite.config.ts", "**/vitest.*.config.ts", "**/vitest.config.ts"]
 }

@@ -8,7 +8,8 @@
  * output it carried, and paste it somewhere to triage.
  */
 
-import { buildTimeline, formatPayload, formatDuration, splitThinkSegments } from '@seanhogg/builderforce-brain-ui';
+import { buildTimeline, formatDuration, strandedReplyKey, toolStepView } from '@seanhogg/builderforce-brain-ui';
+import { splitReasoningSegments } from '@builderforce/agent-loop';
 import {
   computeBrainDiagnostics,
   detectUnbackedTicketClaim,
@@ -91,6 +92,10 @@ function fenced(label: string, payload: string, budget: PayloadBudget, lines: st
 /** Serialize the live conversation into a Markdown transcript. */
 export function buildTranscript(input: TranscriptInput): string {
   const nodes = buildTimeline({ messages: input.messages, trace: input.trace, streamingText: '', isRunning: false });
+  // The reply the transcript surface RESCUED from its own reasoning, if any — read from
+  // the same predicate the UI renders with, so this report can never describe reasoning
+  // as hidden when the reader was in fact shown it as the reply.
+  const stranded = strandedReplyKey(nodes, false);
   // The live `trace` only covers the CURRENT session — a reopened or resumed chat
   // has none of the earlier run's steps in memory, only their durable `role:'tool'`
   // rows. The timeline already reconstructs those; the diagnostics block used the
@@ -171,28 +176,53 @@ export function buildTranscript(input: TranscriptInput): string {
         // mangled in the report when it had rendered fine, and — worse — hid the
         // opposite case: a model that seals its answer inside the block ships the
         // user a fragment, which is only visible once the two are separated.
-        const parts = splitThinkSegments(node.text || '');
+        const parts = splitReasoningSegments(node.text || '');
         const answer = parts.filter((p) => p.kind === 'answer').map((p) => p.content).join('\n\n').trim();
         const thoughts = parts.filter((p) => p.kind === 'thought').map((p) => p.content).join('\n\n').trim();
-        lines.push(answer || '(no response)');
-        // Reasoning is kept, clearly marked as not-the-reply — it is often where a
-        // failing turn explains itself.
-        if (thoughts) lines.push('', `<details><summary>model reasoning (not shown to the user)</summary>\n\n${thoughts}\n\n</details>`);
+        // This turn ended the run from inside its `<think>` block, so the surface showed
+        // the reasoning AS the reply. The report says so, rather than printing
+        // "(no response)" over a turn the reader could in fact read.
+        const rescued = node.key === stranded ? thoughts : '';
+        if (rescued) {
+          lines.push("_(reply recovered from the model's reasoning — the turn ended without a separate reply)_", '', rescued);
+        } else {
+          lines.push(answer || '(no response)');
+          // Reasoning is kept, clearly marked as not-the-reply — it is often where a
+          // failing turn explains itself.
+          if (thoughts) lines.push('', `<details><summary>model reasoning (not shown to the user)</summary>\n\n${thoughts}\n\n</details>`);
+        }
         break;
       }
       case 'thinking':
         lines.push(`_thought for ${formatDuration(node.durationMs)}_`);
         break;
-      case 'tool':
+      case 'tool': {
         // The DURATION rides on the heading. A reader scanning the transcript for
         // "where did the time go" should not have to cross-reference the diagnostics
         // block to find the one step that took a minute.
         lines.push(
           `### Tool: ${node.label}${node.durationMs != null ? ` (${formatDuration(node.durationMs)})` : ''}${node.isError ? ' — ERROR' : ''}`,
         );
-        fenced('Input', formatPayload(node.args), budget, lines);
-        fenced('Output', formatPayload(node.result), budget, lines);
+        // The SAME view-model the timeline renders from, so a pasted report shows a
+        // shell step the way the reader saw it — the command line and what it printed,
+        // not `{"command":…}` above `{"ok":true,"stdout":…}`. The residual panels below
+        // still carry anything the terminal view did not account for.
+        const view = toolStepView(node);
+        if (view.command) {
+          fenced('Command', `$ ${view.command.command}`, budget, lines);
+          fenced(
+            view.command.exitCode != null && view.command.exitCode !== 0
+              ? `Output (exit ${view.command.exitCode})`
+              : 'Output',
+            view.command.output || '(no output)',
+            budget,
+            lines,
+          );
+        }
+        fenced('Input', view.argsText, budget, lines);
+        fenced('Output', view.resultText, budget, lines);
         break;
+      }
       case 'error':
         lines.push(`### Error: ${node.label}`, node.message);
         break;

@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * githubActionsDispatch — queue an agent run onto a repo's GitHub Actions runners.
@@ -28,10 +29,6 @@ import type { Env } from '../../env';
 /** Just the workflow file's basename — the dispatch endpoint keys on it. */
 const WORKFLOW_FILE = AGENT_WORKFLOW_PATH.split('/').pop() as string;
 
-function credentialSecret(env: Env): string {
-  return env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
-}
-
 export type ActionsDispatchResult =
   | { ok: true; queued: true }
   | { ok: false; code: string; reason: string };
@@ -55,7 +52,7 @@ export async function githubActionsAvailable(
     env,
     workflowPresenceKey(tenantId, repoId),
     async () => {
-      const auth = await resolveRepoAuth(env, db, credentialSecret(env), tenantId, repoId);
+      const auth = await resolveRepoAuth(env, db, integrationCredentialSecret(env), tenantId, repoId);
       if (!auth.ok || auth.auth.repo.provider !== 'github') return false;
 
       const res = await githubRequest<{ path: string }>({
@@ -89,7 +86,7 @@ export async function ensureAgentWorkflow(
   tenantId: number,
   repoId: string,
 ): Promise<{ ok: true; created: boolean } | { ok: false; code: string; reason: string }> {
-  const auth = await resolveRepoAuth(env, db, credentialSecret(env), tenantId, repoId);
+  const auth = await resolveRepoAuth(env, db, integrationCredentialSecret(env), tenantId, repoId);
   if (!auth.ok) return { ok: false, code: 'unresolved', reason: auth.error };
   if (auth.auth.repo.provider !== 'github') {
     return { ok: false, code: 'unsupported', reason: `provider '${auth.auth.repo.provider}' has no Actions` };
@@ -159,7 +156,7 @@ export async function dispatchGithubActionsRun(
   const defaultRepo = await resolveDefaultRepoForTask(db, args.tenantId, args.taskId);
   if (!defaultRepo) return { ok: false, code: 'no_repo', reason: 'no repository linked to this task' };
 
-  const auth = await resolveRepoAuth(env, db, credentialSecret(env), args.tenantId, defaultRepo.repoId);
+  const auth = await resolveRepoAuth(env, db, integrationCredentialSecret(env), args.tenantId, defaultRepo.repoId);
   if (!auth.ok) return { ok: false, code: 'unresolved', reason: auth.error };
   if (auth.auth.repo.provider !== 'github') {
     return { ok: false, code: 'unsupported', reason: `provider '${auth.auth.repo.provider}' has no Actions` };

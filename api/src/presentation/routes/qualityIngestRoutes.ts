@@ -13,6 +13,7 @@
  * Bodies run through the source adapter (adapters.ts) → canonical events → ingestEngine.
  */
 
+import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { Hono } from 'hono';
 import { and, asc, eq, gt, or, sql } from 'drizzle-orm';
 import { errorCollectors, errorCollectorIntegrations, errorMappingRules, projects } from '../../infrastructure/database/schema';
@@ -323,7 +324,7 @@ export function createQualityIngestRoutes(db: Db): Hono<HonoEnv> {
     if (integration.secretEnc && integration.secretIv && adapter.verify) {
       const blob = await decryptCredentials(
         integration.secretEnc, integration.secretIv,
-        (c.env.INTEGRATION_ENCRYPTION_SECRET ?? c.env.JWT_SECRET) as string, col.tenantId,
+        (integrationCredentialSecret(c.env)) as string, col.tenantId,
       );
       const secret = typeof blob?.secret === 'string' ? blob.secret : '';
       const ok = secret ? await adapter.verify(rawBody, (n) => c.req.header(n), secret) : false;

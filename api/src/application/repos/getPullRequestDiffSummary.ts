@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { and, desc, eq } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -145,7 +146,7 @@ export async function getPullRequestDiffSummary(
     };
   }
 
-  const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET;
+  const secret = integrationCredentialSecret(env);
   const resolved = await resolveRepoCredential(db, secret, args.tenantId, pr.repoId);
   if (isResolveError(resolved)) throw new Error(resolved.error);
   if (resolved.repo.provider !== 'github') throw new Error(`Diff summary is not implemented for provider '${resolved.repo.provider}'`);

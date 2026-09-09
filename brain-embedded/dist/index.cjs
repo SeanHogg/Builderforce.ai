@@ -23,6 +23,8 @@ __export(src_exports, {
   ADDRESSED_TO_META_KEY: () => ADDRESSED_TO_META_KEY,
   API_VERSION_PROBE_TIMEOUT_MS: () => API_VERSION_PROBE_TIMEOUT_MS,
   API_VERSION_TTL_MS: () => API_VERSION_TTL_MS,
+  ASK_USER_TOOL: () => ASK_USER_TOOL,
+  ASK_USER_TOOL_SPEC: () => ASK_USER_TOOL_SPEC,
   AUTHORED_BY_META_KEY: () => AUTHORED_BY_META_KEY,
   BASE_BRANCHES: () => BASE_BRANCHES,
   BUILDERFORCE_PRODUCT_NAME: () => BUILDERFORCE_PRODUCT_NAME,
@@ -76,6 +78,8 @@ __export(src_exports, {
   announcesUntakenAction: () => announcesUntakenAction,
   applyRemoteRun: () => applyRemoteRun,
   artifactRoutePath: () => artifactRoutePath,
+  askUserAnchorId: () => askUserAnchorId,
+  askUserBlock: () => askUserBlock,
   attachEvermindLearn: () => attachEvermindLearn,
   brainRequestError: () => brainRequestError,
   buildBrainTriageReport: () => buildBrainTriageReport,
@@ -97,6 +101,7 @@ __export(src_exports, {
   classifyModelFunding: () => classifyModelFunding,
   clearRunError: () => clearRunError,
   codeChangeFile: () => codeChangeFile,
+  coerceAskUserPayload: () => coerceAskUserPayload,
   composeEvermindHooks: () => composeEvermindHooks,
   computeBrainDiagnostics: () => computeBrainDiagnostics,
   computeRunProgress: () => computeRunProgress,
@@ -173,6 +178,7 @@ __export(src_exports, {
   nextFallbackModel: () => nextFallbackModel,
   normalizeChatMode: () => normalizeChatMode,
   onDeviceMemoryHooks: () => onDeviceMemoryHooks,
+  parseAskUser: () => parseAskUser,
   parseByoUnresolved: () => parseByoUnresolved,
   parseChatActivity: () => parseChatActivity,
   parseDirectedRecipient: () => parseDirectedRecipient,
@@ -207,7 +213,9 @@ __export(src_exports, {
   runProgressVerdict: () => runProgressVerdict,
   savePendingPrompt: () => savePendingPrompt,
   scopeToConsolidation: () => scopeToConsolidation,
+  selectPendingAskUser: () => selectPendingAskUser,
   selectToolsForTurn: () => selectToolsForTurn,
+  serializeAskUser: () => serializeAskUser,
   setLastResolvedModel: () => setLastResolvedModel,
   setMcpToolStatus: () => setMcpToolStatus,
   shippedToBaseBranch: () => shippedToBaseBranch,
@@ -219,6 +227,7 @@ __export(src_exports, {
   stepSig: () => stepSig,
   stopRun: () => stopRun,
   streamChatCompletion: () => streamChatCompletion,
+  stripAskUser: () => stripAskUser,
   subscribeRun: () => subscribeRun,
   subscribeRunStore: () => subscribeRunStore,
   subscribeToChatMessages: () => subscribeToChatMessages,
@@ -851,13 +860,13 @@ async function prepareImageDataUrl(file) {
 }
 
 // src/evermindMemory.ts
-function projectMemoryHooks(projectId, request) {
+function projectMemoryHooks(projectId, request, chatId) {
   const json = { "Content-Type": "application/json" };
   return {
     recall: (query) => request(`/api/projects/${projectId}/evermind/recall`, {
       method: "POST",
       headers: json,
-      body: JSON.stringify({ query })
+      body: JSON.stringify({ query, ...chatId != null ? { chatId } : {} })
     }).catch(() => null),
     answer: (query, opts) => request(
       `/api/projects/${projectId}/answer?query=${encodeURIComponent(query)}&tools=${opts.toolsAvailable ? "1" : "0"}`
@@ -2255,7 +2264,7 @@ function memoryToolsIn(toolNames) {
 }
 
 // src/runActivity.ts
-var TARGET_KEYS = ["path", "file", "filePath", "glob", "query", "q", "search", "url", "name", "title", "id"];
+var TARGET_KEYS = ["path", "file", "filePath", "command", "cmd", "glob", "query", "q", "search", "url", "name", "title", "id"];
 var MAX_DETAIL = 72;
 function shortenTarget(value, max = MAX_DETAIL) {
   const v = value.replace(/\s+/g, " ").trim();
@@ -2868,6 +2877,52 @@ function getRunDriver() {
   return installed;
 }
 
+// src/toolVocabulary.ts
+var EQUIVALENCE_CLASSES = [
+  // The work item itself. `ticket` is the product's word and `task` is the catalog's;
+  // this one class is what makes every `tasks.*` tool reachable from a ticket question.
+  ["task", "ticket", "issue", "story", "backlog", "todo"],
+  // The board and its geography.
+  ["kanban", "board", "lane", "swimlane", "column", "card"],
+  // Source control.
+  ["repo", "repository", "codebase", "git"],
+  ["branch", "commit", "merge", "rebase"],
+  ["pr", "pull", "pullrequest"],
+  // People. `member` is the catalog's word; the rest are what users type.
+  ["member", "teammate", "colleague", "people", "person", "staff"],
+  // Conversations.
+  ["chat", "conversation", "thread"],
+  // Delivery planning. `epic` stays OUT of the objective class on purpose — see the
+  // header: objectives/OKRs and epics are different entities with different tools.
+  ["epic", "feature"],
+  ["objective", "okr", "keyresult"],
+  // Runs.
+  ["execution", "run", "dispatch"]
+];
+var SYNONYMS = (() => {
+  const map = /* @__PURE__ */ new Map();
+  for (const group of EQUIVALENCE_CLASSES) {
+    for (const term of group) {
+      const existing = map.get(term) ?? [];
+      for (const other of group) if (!existing.includes(other)) existing.push(other);
+      map.set(term, existing);
+    }
+  }
+  return map;
+})();
+function synonymsFor(stem2) {
+  return SYNONYMS.get(stem2) ?? [];
+}
+function expandWithSynonyms(stems) {
+  const expanded = /* @__PURE__ */ new Set();
+  for (const stem2 of stems) {
+    for (const synonym of synonymsFor(stem2)) {
+      if (!stems.has(synonym)) expanded.add(synonym);
+    }
+  }
+  return expanded;
+}
+
 // src/selectTools.ts
 var DEFAULT_TOOL_LIMIT = 64;
 var STOP_WORDS = /* @__PURE__ */ new Set([
@@ -2933,15 +2988,23 @@ function stem(word) {
   if (word.length > 2 && word.endsWith("s")) return word.slice(0, -1);
   return word;
 }
-function scoreTool(tool, queryStems) {
+var NAME_HIT = 10;
+var NAME_SYNONYM_HIT = 7;
+var DESCRIPTION_HIT = 1;
+function scoreTool(tool, queryStems, synonymStems) {
   const name = (tool.function?.name ?? "").toLowerCase();
   const description = (tool.function?.description ?? "").toLowerCase();
   if (!name) return 0;
   let score = 0;
   const nameStems = new Set(tokenize(name).map(stem));
-  for (const s of nameStems) if (queryStems.has(s)) score += 10;
+  for (const s of nameStems) {
+    if (queryStems.has(s)) score += NAME_HIT;
+    else if (synonymStems.has(s)) score += NAME_SYNONYM_HIT;
+  }
   const descStems = new Set(tokenize(description).map(stem));
-  for (const s of descStems) if (queryStems.has(s)) score += 1;
+  for (const s of descStems) {
+    if (queryStems.has(s) || synonymStems.has(s)) score += DESCRIPTION_HIT;
+  }
   return score;
 }
 function selectToolsForTurn(tools, options) {
@@ -2953,6 +3016,7 @@ function selectToolsForTurn(tools, options) {
   const required = new Set(options.required ?? []);
   const pinned = new Set(options.pinned ?? []);
   const queryStems = new Set(tokenize(options.query).map(stem));
+  const synonymStems = expandWithSynonyms(queryStems);
   const chosen = [];
   const taken = /* @__PURE__ */ new Set();
   const take = (tool) => {
@@ -2969,7 +3033,7 @@ function selectToolsForTurn(tools, options) {
     if (chosen.length >= limit) break;
     if (pinned.has(tool.function?.name ?? "")) take(tool);
   }
-  const scored = tools.map((tool, index) => ({ tool, index, score: scoreTool(tool, queryStems) })).filter((e) => e.score > 0).sort((a, b) => b.score - a.score || a.index - b.index);
+  const scored = tools.map((tool, index) => ({ tool, index, score: scoreTool(tool, queryStems, synonymStems) })).filter((e) => e.score > 0).sort((a, b) => b.score - a.score || a.index - b.index);
   for (const entry of scored) {
     if (chosen.length >= limit) break;
     take(entry.tool);
@@ -3145,6 +3209,234 @@ function openAiChatCodec(serialize = defaultToolRowSerializer) {
       return row;
     }
   };
+}
+
+// ../packages/agent-loop/src/reasoning.ts
+var REASONING_TAG = "think(?:ing)?|thought|antthinking|scratchpad|reasoning";
+var QUICK_TAG_RE = new RegExp(`<\\s*/?\\s*(?:${REASONING_TAG}|final)\\b`, "i");
+var FINAL_TAG_RE = /<\s*\/?\s*final\b[^<>]*>/gi;
+var REASONING_TAG_RE = new RegExp(`<\\s*(/?)\\s*(?:${REASONING_TAG})\\b[^<>]*>`, "gi");
+function findCodeRegions(text) {
+  const regions = [];
+  const fencedRe = /(^|\n)(```|~~~)[^\n]*\n[\s\S]*?(?:\n\2(?:\n|$)|$)/g;
+  for (const match of text.matchAll(fencedRe)) {
+    const lead = match[1] ?? "";
+    const start = (match.index ?? 0) + lead.length;
+    regions.push({ start, end: start + match[0].length - lead.length });
+  }
+  const inlineRe = /`+[^`]+`+/g;
+  for (const match of text.matchAll(inlineRe)) {
+    const start = match.index ?? 0;
+    const end = start + match[0].length;
+    const insideFenced = regions.some((r) => start >= r.start && end <= r.end);
+    if (!insideFenced) regions.push({ start, end });
+  }
+  regions.sort((a, b) => a.start - b.start);
+  return regions;
+}
+function isInsideCode(pos, regions) {
+  return regions.some((r) => pos >= r.start && pos < r.end);
+}
+function scanReasoning(text) {
+  const regions = findCodeRegions(text);
+  const spans = [];
+  let kind = "answer";
+  let start = 0;
+  let contentStart = 0;
+  REASONING_TAG_RE.lastIndex = 0;
+  for (const match of text.matchAll(REASONING_TAG_RE)) {
+    const idx = match.index ?? 0;
+    if (isInsideCode(idx, regions)) continue;
+    const isClose = match[1] === "/";
+    if (kind === "thought" && !isClose) continue;
+    const after = idx + match[0].length;
+    spans.push({ kind, start, contentStart, contentEnd: idx, end: isClose ? after : idx, unterminated: false });
+    kind = isClose ? "answer" : "thought";
+    start = isClose ? after : idx;
+    contentStart = after;
+  }
+  spans.push({
+    kind,
+    start,
+    contentStart,
+    contentEnd: text.length,
+    end: text.length,
+    unterminated: kind === "thought"
+  });
+  return spans;
+}
+function splitReasoningSegments(text) {
+  if (!text) return [];
+  if (!QUICK_TAG_RE.test(text)) return [{ kind: "answer", content: text }];
+  const cleaned = unwrapFinalTags(text);
+  const segments = segmentsOf(cleaned, scanReasoning(cleaned));
+  if (segments.length === 0) return [{ kind: "answer", content: text }];
+  return promoteSwallowedAnswer(segments);
+}
+function segmentsOf(text, spans) {
+  const out = [];
+  for (const span of spans) {
+    const content = text.slice(span.contentStart, span.contentEnd).trim();
+    if (content) out.push({ kind: span.kind, content });
+  }
+  return out;
+}
+function unwrapFinalTags(text) {
+  FINAL_TAG_RE.lastIndex = 0;
+  if (!FINAL_TAG_RE.test(text)) {
+    FINAL_TAG_RE.lastIndex = 0;
+    return text;
+  }
+  FINAL_TAG_RE.lastIndex = 0;
+  const regions = findCodeRegions(text);
+  const cuts = [];
+  for (const match of text.matchAll(FINAL_TAG_RE)) {
+    const start = match.index ?? 0;
+    if (!isInsideCode(start, regions)) cuts.push({ start, length: match[0].length });
+  }
+  let out = text;
+  for (let i = cuts.length - 1; i >= 0; i--) {
+    const cut = cuts[i];
+    out = out.slice(0, cut.start) + out.slice(cut.start + cut.length);
+  }
+  return out;
+}
+var MAX_FRAGMENT_CHARS = 40;
+var REPLY_OPENER = /^[A-Z0-9#*\-_>`[|("']/;
+function isFragment(text) {
+  return text.length > 0 && text.length <= MAX_FRAGMENT_CHARS && !REPLY_OPENER.test(text);
+}
+function promoteSwallowedAnswer(segments) {
+  const answers = segments.filter((s) => s.kind === "answer");
+  if (answers.length === 0) return segments;
+  const answerText = answers.map((s) => s.content).join(" ").trim();
+  if (!isFragment(answerText)) return segments;
+  const thoughts = segments.filter((s) => s.kind === "thought");
+  const richest = thoughts.reduce(
+    (best, s) => !best || s.content.length > best.content.length ? s : best,
+    null
+  );
+  if (!richest || richest.content.length <= answerText.length) return segments;
+  const promoted = [{ kind: "answer", content: `${richest.content} ${answerText}`.trim() }];
+  for (const s of thoughts) if (s !== richest) promoted.unshift(s);
+  return promoted;
+}
+function answerTextOf(content) {
+  return splitReasoningSegments(content).filter((s) => s.kind === "answer").map((s) => s.content).join("\n\n").trim();
+}
+function thoughtTextOf(content) {
+  return splitReasoningSegments(content).filter((s) => s.kind === "thought").map((s) => s.content).join("\n\n").trim();
+}
+function detailsText(details) {
+  if (!Array.isArray(details)) return "";
+  return details.map((d) => {
+    const item = d;
+    return item && (item.type === void 0 || item.type === "reasoning.text") && typeof item.text === "string" ? item.text : "";
+  }).filter(Boolean).join("\n");
+}
+function splitVendorReasoning(message) {
+  const rawContent = typeof message?.content === "string" ? message.content : "";
+  const inlineThought = thoughtTextOf(rawContent);
+  const content = inlineThought ? answerTextOf(rawContent) : rawContent;
+  const structured = [
+    typeof message?.reasoning_content === "string" ? message.reasoning_content : "",
+    typeof message?.reasoning === "string" ? message.reasoning : "",
+    detailsText(message?.reasoning_details)
+  ].map((s) => s.trim()).filter(Boolean);
+  const reasoning = [...structured, ...inlineThought ? [inlineThought] : []].join("\n\n").trim();
+  return { content, reasoning };
+}
+function canonicalReasoningText(content, reasoning) {
+  const answer = (content ?? "").trim();
+  const thought = (reasoning ?? "").trim();
+  if (!thought) return answer;
+  return answer ? `<think>${thought}</think>
+
+${answer}` : `<think>${thought}</think>`;
+}
+
+// ../packages/agent-loop/src/index.ts
+var ASK_USER_TOOL = "ask_user";
+var ASK_USER_TOOL_SPEC = {
+  type: "function",
+  function: {
+    name: ASK_USER_TOOL,
+    description: "Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose \u2014 the UI renders your options as clickable buttons and the choice returns as the user's next message. Do NOT use it for questions you can answer yourself from the code or context.",
+    parameters: {
+      type: "object",
+      properties: {
+        question: { type: "string", description: "The single, specific question to ask." },
+        options: {
+          type: "array",
+          description: "2\u20136 distinct, mutually-exclusive choices (unless multiSelect).",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "Short choice text (1\u20135 words)." },
+              description: { type: "string", description: "Optional one-line explanation of this choice." }
+            },
+            required: ["label"]
+          }
+        },
+        multiSelect: { type: "boolean", description: "Allow choosing more than one option. Default false." }
+      },
+      required: ["question", "options"]
+    }
+  }
+};
+var ASK_USER_FENCE = /```ask-user\s*\n([\s\S]*?)\n```/i;
+function coerceAskUserPayload(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw;
+  const question = typeof o.question === "string" ? o.question.trim() : "";
+  const optionsIn = Array.isArray(o.options) ? o.options : [];
+  const options = optionsIn.map((it) => {
+    if (typeof it === "string") return it.trim() ? { label: it.trim() } : null;
+    if (it && typeof it === "object") {
+      const rec = it;
+      const label = typeof rec.label === "string" ? rec.label.trim() : "";
+      const description = typeof rec.description === "string" ? rec.description.trim() : void 0;
+      return label ? { label, ...description ? { description } : {} } : null;
+    }
+    return null;
+  }).filter((x) => !!x);
+  if (!question || options.length < 2) return null;
+  return { question, options, multiSelect: o.multiSelect === true };
+}
+function serializeAskUser(payload) {
+  return ["```ask-user", JSON.stringify(payload), "```"].join("\n");
+}
+function askUserBlock(args) {
+  const payload = coerceAskUserPayload(args);
+  return payload ? serializeAskUser(payload) : null;
+}
+function parseAskUser(text) {
+  if (!text || !text.includes("ask-user")) return null;
+  const body = text.match(ASK_USER_FENCE)?.[1];
+  if (!body) return null;
+  try {
+    return coerceAskUserPayload(JSON.parse(body));
+  } catch {
+    return null;
+  }
+}
+function stripAskUser(text) {
+  if (!text) return text;
+  return text.replace(ASK_USER_FENCE, "").replace(/\n{3,}/g, "\n\n").trim();
+}
+function askUserAnchorId(messageId) {
+  return `bf-ask-${messageId}`;
+}
+function selectPendingAskUser(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (!msg) continue;
+    if (msg.role === "user") return null;
+    if (msg.role !== "assistant") continue;
+    const payload = parseAskUser(msg.content);
+    if (payload) return { payload, messageId: msg.id };
+  }
+  return null;
 }
 
 // src/toolRouter.ts
@@ -4221,10 +4513,16 @@ async function autoLinkCreatedItem(chatId, c, persistence, runTool, toolName, ou
     isError: isFailedToolResult(result)
   });
 }
+function canonicalTurnText(text) {
+  const { content, reasoning } = splitVendorReasoning({ content: text });
+  return canonicalReasoningText(content, reasoning);
+}
 async function runLoop(chatId, c, req) {
   const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, routingMode, pickFallbackModel, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
   const convo = c.transcript;
-  const allTools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0;
+  const canAskUser = !!runTool && (toolSpecs?.length ?? 0) > 0;
+  const catalog = canAskUser ? [...toolSpecs ?? [], ASK_USER_TOOL_SPEC] : toolSpecs;
+  const allTools = catalog && catalog.length > 0 ? catalog : void 0;
   const usedTools = /* @__PURE__ */ new Set();
   const runMode = normalizeChatMode(req.chatMode ?? "work");
   const maxIterations = iterationCap(req.maxIterations);
@@ -4271,7 +4569,7 @@ ${block}`;
       } catch {
         memAnswer = null;
       }
-      const finalText = memAnswer?.text.trim();
+      const finalText = canonicalTurnText(memAnswer?.text ?? "");
       if (finalText) {
         convo.push({ role: "assistant", content: finalText });
         const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText }]);
@@ -4354,7 +4652,11 @@ ${continuationDirective()}`;
     ...localToolsIn(catalogToolNames),
     // The project-memory pair (recall before re-reading; remember what was learned) is
     // the cheapest tool in the catalog and the first one relevance would drop.
-    ...memoryToolsIn(catalogToolNames)
+    ...memoryToolsIn(catalogToolNames),
+    // Asking the user is never off-topic: it is how the run stops when it cannot
+    // proceed, so relevance against the request must not be what decides whether the
+    // agent is allowed to ask. Its one schema is also the cheapest in the catalog.
+    ...canAskUser ? [ASK_USER_TOOL] : []
   ];
   const emitEvermindLearnReconcile = (assistantMsg, finalText) => {
     const learn = assistantMsg?.evermindLearn;
@@ -4396,13 +4698,42 @@ ${continuationDirective()}`;
   const codec = openAiChatCodec((r) => typeof r.data === "string" ? r.data : JSON.stringify(r.data));
   let pendingReplay = null;
   let pendingRun = null;
+  const settleReply = async (rawText, result) => {
+    const text = canonicalTurnText(rawText);
+    convo.push({ role: "assistant", content: text });
+    const meta = provenanceMetadata(result);
+    const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, ...meta ? { metadata: meta } : {} }]);
+    c.streamingText = "";
+    recordAppended(c, assistantMsg);
+    return assistantMsg;
+  };
   const hooks = {
-    beforeToolCalls: async (_ctx, turn) => {
+    beforeToolCalls: async (_ctx, turn, calls) => {
       const { result } = metaOf(turn);
-      const narration = result.text.trim();
+      const askCall = calls.find((tc) => tc.name === ASK_USER_TOOL);
+      if (askCall) {
+        let block = null;
+        try {
+          block = askCall.malformed ? null : askUserBlock(askCall.args);
+        } catch {
+          block = null;
+        }
+        const lead = result.text.trim();
+        const reply = block ? lead ? `${lead}
+
+${block}` : block : lead;
+        if (reply) {
+          const assistantMsg = await settleReply(reply, result);
+          emit(c);
+          emitEvermindLearnReconcile(assistantMsg, reply);
+          onActivity?.(chatId);
+          return { action: "stop", ok: true, output: reply };
+        }
+      }
+      const narration = canonicalTurnText(result.text);
       if (narration) {
         const meta = provenanceMetadata(result);
-        const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: result.text, ...meta ? { metadata: meta } : {} }]);
+        const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: narration, ...meta ? { metadata: meta } : {} }]);
         recordAppended(c, narrationMsg);
       }
       c.streamingText = "";
@@ -4435,6 +4766,9 @@ ${continuationDirective()}`;
           args: { step: iter, via: rawCall.name },
           result: `Called ${call.name} through the tool router (it was not advertised directly this turn).`
         });
+      }
+      if (call.name === ASK_USER_TOOL) {
+        return { result: { data: { error: "ask_user needs { question, options:[{label}] } with 2+ options. Retry or answer in prose." } } };
       }
       const args = call.args;
       attachDeltaToRunTicket(call.name, args, c.deltaTicketId);
@@ -4524,7 +4858,7 @@ ${revisit}` : replayNote });
       if (runTool && shouldRecoverStalledTurn(stallInput)) {
         announcementRecoveries += 1;
         const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
-        const narration = result.text.trim();
+        const narration = canonicalTurnText(result.text);
         if (narration) {
           const meta = provenanceMetadata(result);
           const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: narration, ...meta ? { metadata: meta } : {} }]);
@@ -4544,11 +4878,7 @@ ${revisit}` : replayNote });
         return { action: "continue" };
       }
       const finalText = result.text.trim() || "No response.";
-      convo.push({ role: "assistant", content: finalText });
-      const finalMeta = provenanceMetadata(result);
-      const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText, ...finalMeta ? { metadata: finalMeta } : {} }]);
-      c.streamingText = "";
-      recordAppended(c, assistantMsg);
+      const assistantMsg = await settleReply(finalText, result);
       if (runTool && isExhaustedStall(stallInput)) {
         const next = chooseStallFailover({
           activeModel,
@@ -4817,7 +5147,7 @@ ${revisit}` : replayNote });
         textChars: closing.text.length,
         result: `forced final synthesis (tool budget reached) \xB7 ${closing.text.length} chars \xB7 finish: ${closing.finishReason ?? "\u2014"}`
       });
-      const closingText = closing.text.trim();
+      const closingText = canonicalTurnText(closing.text);
       if (closingText) {
         convo.push({ role: "assistant", content: closingText });
         const meta = provenanceMetadata(closing);
@@ -6054,6 +6384,8 @@ function artifactRoutePath(kind, ref, projectId) {
   ADDRESSED_TO_META_KEY,
   API_VERSION_PROBE_TIMEOUT_MS,
   API_VERSION_TTL_MS,
+  ASK_USER_TOOL,
+  ASK_USER_TOOL_SPEC,
   AUTHORED_BY_META_KEY,
   BASE_BRANCHES,
   BUILDERFORCE_PRODUCT_NAME,
@@ -6107,6 +6439,8 @@ function artifactRoutePath(kind, ref, projectId) {
   announcesUntakenAction,
   applyRemoteRun,
   artifactRoutePath,
+  askUserAnchorId,
+  askUserBlock,
   attachEvermindLearn,
   brainRequestError,
   buildBrainTriageReport,
@@ -6128,6 +6462,7 @@ function artifactRoutePath(kind, ref, projectId) {
   classifyModelFunding,
   clearRunError,
   codeChangeFile,
+  coerceAskUserPayload,
   composeEvermindHooks,
   computeBrainDiagnostics,
   computeRunProgress,
@@ -6204,6 +6539,7 @@ function artifactRoutePath(kind, ref, projectId) {
   nextFallbackModel,
   normalizeChatMode,
   onDeviceMemoryHooks,
+  parseAskUser,
   parseByoUnresolved,
   parseChatActivity,
   parseDirectedRecipient,
@@ -6238,7 +6574,9 @@ function artifactRoutePath(kind, ref, projectId) {
   runProgressVerdict,
   savePendingPrompt,
   scopeToConsolidation,
+  selectPendingAskUser,
   selectToolsForTurn,
+  serializeAskUser,
   setLastResolvedModel,
   setMcpToolStatus,
   shippedToBaseBranch,
@@ -6250,6 +6588,7 @@ function artifactRoutePath(kind, ref, projectId) {
   stepSig,
   stopRun,
   streamChatCompletion,
+  stripAskUser,
   subscribeRun,
   subscribeRunStore,
   subscribeToChatMessages,

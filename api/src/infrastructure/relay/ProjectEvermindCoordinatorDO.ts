@@ -119,6 +119,9 @@ interface PendingEntry {
   prompt?: string;
   /** Optional sample weight (e.g. tokens learned) for the FedAvg merge. */
   weight: number;
+  /** The Brain chat this contribution came from. Carried through the queue so the
+   *  merged memory keeps its provenance — see {@link RecentEntry.chatId}. */
+  chatId?: number;
 }
 
 /** Chunk token ids into fixed-length training windows (min length 2). */
@@ -143,6 +146,9 @@ interface LearnTextBody {
   /** Optional task prompt threaded for teacher distillation (task → ideal answer). */
   prompt?: string;
   weight?: number;
+  /** The Brain chat this contribution came from, when it came from one. Recall uses it
+   *  to put a conversation's OWN memories first — see {@link RecentEntry.chatId}. */
+  chatId?: number;
 }
 
 /** One inspectable record of a contribution the coordinator merged into a version.
@@ -196,6 +202,21 @@ interface RecentEntry {
    *  time from the merged model so recall only has to embed the QUERY. Never returned
    *  to callers — it lives here purely to power {@link ProjectEvermindCoordinatorDO.handleRecall}. */
   emb?: string;
+  /**
+   * The Brain chat that contributed this memory, when one did.
+   *
+   * Recall was scoped to (tenant, project, query) and nothing else, so reopening a
+   * conversation surfaced whatever the WHOLE project had ever learned that matched
+   * lexically — including turns from unrelated chats, which reads to the user as the
+   * assistant "remembering" things that were never said in this conversation. A
+   * memory could not be attributed to its source because nothing recorded one.
+   *
+   * ABSENT on every memory merged before this field existed, and on contributions
+   * that genuinely have no chat (agent task runs, incident post-mortems, imports).
+   * Absent therefore means "project-wide", never "belongs to no chat" — recall must
+   * treat it as a broader TIER, not as a non-match.
+   */
+  chatId?: number;
 }
 
 /** One inspectable record of the ACTUAL training that produced a version — the real
@@ -803,6 +824,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       text: text.slice(0, MAX_TEXT_CHARS),
       ...(prompt ? { prompt } : {}),
       weight: typeof body.weight === 'number' && body.weight > 0 ? body.weight : 1,
+      ...(Number.isInteger(body.chatId) && (body.chatId as number) > 0 ? { chatId: body.chatId } : {}),
     });
     return this.json({ ok: true, queued, contributionId, baseVersion: head.version, ...(dropped ? { dropped } : {}) });
   }
@@ -816,7 +838,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     tenantId: number,
     projectId: number,
     baseVersion: number,
-    entry: { text?: string; prompt?: string; weight: number },
+    entry: { text?: string; prompt?: string; weight: number; chatId?: number },
   ): Promise<{ queued: number; dropped: number; contributionId: number }> {
     await this.state.storage.put(META_KEY, { tenantId, projectId } satisfies CoordMeta);
     const seq = ((await this.state.storage.get<number>(SEQ_KEY)) ?? 0) + 1;
@@ -829,6 +851,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       weight: entry.weight,
       ...(entry.text ? { text: entry.text } : {}),
       ...(entry.prompt ? { prompt: entry.prompt } : {}),
+      ...(entry.chatId != null ? { chatId: entry.chatId } : {}),
     });
     // Cost guard: cap the queue, dropping the OLDEST contributions if a project is
     // firehosing learns faster than the debounce can merge them.
@@ -973,6 +996,9 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
             // Map credits the Neocortex off this flag, not off `kind`.
             fitted: true,
             ...(e.prompt ? { prompt: e.prompt.slice(0, RECENT_PROMPT_CHARS) } : {}),
+            // Provenance survives the merge: without it a memory cannot be attributed
+            // to the conversation that produced it, and recall cannot tier by chat.
+            ...(e.chatId != null ? { chatId: e.chatId } : {}),
             ...(isEcho ? {} : { text: learnedText.slice(0, RECENT_TEXT_CHARS) }),
             distilled: training.distilled,
             ...(training.teacherModel ? { teacherModel: training.teacherModel } : {}),

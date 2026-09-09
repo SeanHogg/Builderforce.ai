@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * handleCiEventOutcome — the PROVIDER-INDEPENDENT half of the CI feedback loop.
@@ -60,7 +61,7 @@ export async function handleCiEventOutcome(
   source: string,
 ): Promise<CiOutcomeResult> {
   const { db, env } = deps;
-  const credSecret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+  const credSecret = integrationCredentialSecret(env);
 
   const res = await ingestRepoCiEvent(db, env, credSecret, evt);
 

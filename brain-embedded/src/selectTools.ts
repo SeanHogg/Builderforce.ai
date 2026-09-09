@@ -23,6 +23,7 @@
  */
 
 import type { BrainToolSpec } from './streamChatCompletion';
+import { expandWithSynonyms } from './toolVocabulary';
 
 /**
  * How many tools to advertise per turn. Comfortably under the ~128 threshold where
@@ -55,23 +56,46 @@ function stem(word: string): string {
   return word;
 }
 
+/** Score for a tool NAME stem the user typed verbatim. */
+const NAME_HIT = 10;
+/**
+ * Score for a tool NAME stem reached through {@link expandWithSynonyms} — a user who
+ * asked about "tickets" matching `builtin_tasks_list`. Deliberately below
+ * {@link NAME_HIT} so a tool the user named exactly always outranks one found by
+ * synonym, while still scoring far above any description match: before this existed,
+ * the whole `tasks_*` domain scored ZERO on a question about tickets and was left out
+ * of the advertised set entirely.
+ */
+const NAME_SYNONYM_HIT = 7;
+/** Score for a description stem. Prose is weak evidence either way, so an exact hit
+ *  and a synonym hit are worth the same here. */
+const DESCRIPTION_HIT = 1;
+
 /**
  * Relevance of one tool to the turn's query terms.
  *
  * The NAME is weighted far above the description: `builtin_tasks_list` matching
  * "tasks" is a much stronger signal than the word appearing somewhere in prose.
+ *
+ * `synonymStems` carries the product-vocabulary expansion (see {@link ./toolVocabulary})
+ * and is disjoint from `queryStems`, so the two loops cannot double-count one word.
  */
-function scoreTool(tool: BrainToolSpec, queryStems: Set<string>): number {
+function scoreTool(tool: BrainToolSpec, queryStems: Set<string>, synonymStems: Set<string>): number {
   const name = (tool.function?.name ?? '').toLowerCase();
   const description = (tool.function?.description ?? '').toLowerCase();
   if (!name) return 0;
 
   let score = 0;
   const nameStems = new Set(tokenize(name).map(stem));
-  for (const s of nameStems) if (queryStems.has(s)) score += 10;
+  for (const s of nameStems) {
+    if (queryStems.has(s)) score += NAME_HIT;
+    else if (synonymStems.has(s)) score += NAME_SYNONYM_HIT;
+  }
 
   const descStems = new Set(tokenize(description).map(stem));
-  for (const s of descStems) if (queryStems.has(s)) score += 1;
+  for (const s of descStems) {
+    if (queryStems.has(s) || synonymStems.has(s)) score += DESCRIPTION_HIT;
+  }
 
   return score;
 }
@@ -124,6 +148,9 @@ export function selectToolsForTurn(
   const required = new Set(options.required ?? []);
   const pinned = new Set(options.pinned ?? []);
   const queryStems = new Set(tokenize(options.query).map(stem));
+  // The product's words reaching the catalog's words. Disjoint from `queryStems` by
+  // construction, so a term is scored as an exact hit or a synonym hit, never both.
+  const synonymStems = expandWithSynonyms(queryStems);
 
   const chosen: BrainToolSpec[] = [];
   const taken = new Set<string>();
@@ -151,7 +178,7 @@ export function selectToolsForTurn(
 
   // 2. Relevance to the turn. Stable sort: equal scores keep catalog order.
   const scored = tools
-    .map((tool, index) => ({ tool, index, score: scoreTool(tool, queryStems) }))
+    .map((tool, index) => ({ tool, index, score: scoreTool(tool, queryStems, synonymStems) }))
     .filter((e) => e.score > 0)
     .sort((a, b) => (b.score - a.score) || (a.index - b.index));
   for (const entry of scored) {

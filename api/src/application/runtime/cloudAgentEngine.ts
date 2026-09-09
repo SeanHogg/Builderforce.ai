@@ -1,4 +1,5 @@
-import { splitReasoning, type ChoiceMessageLike } from '../llm/reasoningContent';
+import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
+import { splitVendorReasoning, type ChoiceMessageLike } from '@builderforce/agent-loop';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 // The engine's identity and model-routing slices now live in their own modules —
 // see cloudAgent/agent.ts for why the original 4,117-line file was broken up.
@@ -134,11 +135,11 @@ import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
 import { submittingUserId } from './dispatcherLabel';
 import { isPremiumCapExhausted } from '../llm/usageLedger';
 import {
-  agentCommitMessage, buildPrdCapability, ensureTaskPrd, gitSecret, loadWorkspaceContext,
+  agentCommitMessage, buildPrdCapability, ensureTaskPrd, loadWorkspaceContext,
   recordPrdDirective, recordTaskFileChange,
   type WorkspaceContext,
 } from './cloudAgent/prd';
-export { ensureTaskPrd, gitSecret, recordPrdDirective } from './cloudAgent/prd';
+export { ensureTaskPrd, recordPrdDirective } from './cloudAgent/prd';
 import {
   containerContextVersionKey, heartbeatExecution, invalidateContainerRunContexts,
   isExecutionCancelled, loadContainerRunContext, type ContainerRunContext,
@@ -223,13 +224,13 @@ export async function recordCloudUsage(
 
 /** Parse the assistant turn (content + reasoning + tool calls) off a gateway
  *  chat-completion response body. One reader for both the in-Worker loop and the
- *  container `llm` op. Reasoning comes through {@link splitReasoning} so every
+ *  container `llm` op. Reasoning comes through {@link splitVendorReasoning} so every
  *  vendor shape (Anthropic thinking, `reasoning_content`, OpenRouter `reasoning`,
  *  inline `<think>`) lands on the same `thinking` timeline row. */
 export function parseLlmChoice(json: unknown): { content: string; reasoning: string; toolCalls: RawToolCall[] } {
   const j = json as { choices?: Array<{ message?: ChoiceMessageLike & { tool_calls?: unknown } }> } | null;
   const choice = j?.choices?.[0]?.message;
-  const { content, reasoning } = splitReasoning(choice);
+  const { content, reasoning } = splitVendorReasoning(choice);
   const toolCalls = Array.isArray(choice?.tool_calls) ? (choice!.tool_calls as RawToolCall[]) : [];
   return { content, reasoning, toolCalls };
 }
@@ -737,7 +738,7 @@ function buildCloudProvider(args: {
   let routerPromise: Promise<TaskRepoRouter> | null = null;
   const repoFor = async (path: string): Promise<TicketRepoContext | null> => {
     if (!repoCtx) return null;
-    routerPromise ??= resolveTaskRepoRouter(db, gitSecret(env), tenantId, taskRow.id, { ctx: repoCtx, reason: repoMiss });
+    routerPromise ??= resolveTaskRepoRouter(db, integrationCredentialSecret(env), tenantId, taskRow.id, { ctx: repoCtx, reason: repoMiss });
     const router = await routerPromise.catch((error) => {
       reportCaughtError(error, { source: 'application/runtime/cloudAgentEngine.ts', operation: 'repoFor', context: { logMessage: '[cloud-write] repo-set resolution failed — routing to the primary repo', details: { tenantId, taskId: taskRow.id, error } } });
       return null;
@@ -990,7 +991,7 @@ async function runCloudToolLoop(
     repoCtx = opts.resume.repoCtx ?? null;
     repoMiss = opts.resume.repoMiss ?? '';
   } else {
-    const repoResolved = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskRow.id);
+    const repoResolved = await resolveTicketRepoContext(db, integrationCredentialSecret(env), tenantId, taskRow.id);
     repoCtx = repoResolved.ok ? repoResolved.ctx : null;
     repoMiss = repoResolved.ok ? '' : repoResolved.reason;
   }
@@ -2122,7 +2123,7 @@ export async function finalizeCloudRun(
   let spanningNote = '';
   if (writtenPaths.size > 0 && !cancelled) {
     const spanning = await openTaskRepoSetPullRequests(
-      db, gitSecret(env), tenantId, taskRow.id, repoCtx?.repoId ?? null,
+      db, integrationCredentialSecret(env), tenantId, taskRow.id, repoCtx?.repoId ?? null,
       {
         title: `Task #${taskRow.id}: ${taskRow.title}`,
         body: `Changes for task #${taskRow.id}, by ${agentLabel} (this ticket spans multiple repositories).
@@ -2381,7 +2382,7 @@ export async function prepareCloudRun(
     // empty binding is visible before any LLM spend) AND what a prior pass already
     // committed to this branch (so a re-run reconciles instead of blindly appending).
     // Best-effort: a clean first run / no repo yields an empty workspace.
-    loadWorkspaceContext(env, db, gitSecret(env), tenantId, taskRow.id),
+    loadWorkspaceContext(env, db, integrationCredentialSecret(env), tenantId, taskRow.id),
     // Procedures THIS workspace approved — including ones an earlier run proposed
     // after producing graded proof. Cached read; only `approved` rows are returned,
     // so a draft never reaches a prompt.

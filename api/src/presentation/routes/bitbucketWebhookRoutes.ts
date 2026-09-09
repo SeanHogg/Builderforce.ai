@@ -11,6 +11,7 @@
  * triggers: Repository push, Pull request (created/updated/merged/declined), Issue,
  * Build status (created/updated) — the last one drives the CI feedback + auto-fix loop.
  */
+import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { Hono } from 'hono';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -149,7 +150,7 @@ export function createBitbucketWebhookRoutes(db: Db, runtimeService: RuntimeServ
         const full = repoNames(p).full;
         if (full) {
           const env = c.env as Env;
-          const credSecret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+          const credSecret = integrationCredentialSecret(env);
           norm.branch = await resolveBitbucketBranchForCommit(db, env, credSecret, full, norm.sha);
         }
       }

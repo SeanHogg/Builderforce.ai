@@ -37,12 +37,17 @@ import { getOnDeviceAnswerMemory } from './semantic-cache';
  * Every leg swallows its own failure and answers "nothing": a memory tier that can fail
  * a turn is worse than no memory tier, and the loop is written to fall through.
  */
-export function projectBrainMemoryHooks(projectId: number | null | undefined): EvermindRunHooks | undefined {
+export function projectBrainMemoryHooks(
+  projectId: number | null | undefined,
+  /** The chat being answered. Makes recall chat-tiered — this conversation's own
+   *  memories first, the project's after. Omit for a chat with no id yet. */
+  chatId?: number | null,
+): EvermindRunHooks | undefined {
   if (projectId == null) return undefined;
   return composeEvermindHooks(
     // The on-device tier is capability-gated inside the loader: no WebGPU, no SSM
     // assets, no worker ⇒ null, and these hooks answer nothing.
     onDeviceMemoryHooks(() => getOnDeviceAnswerMemory()),
-    projectMemoryHooks(projectId, apiRequest),
+    projectMemoryHooks(projectId, apiRequest, chatId),
   );
 }

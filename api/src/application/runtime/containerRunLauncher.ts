@@ -19,10 +19,11 @@
  * failed kickoff means (dispatch degrades to the durable executor; resume leaves
  * the run parked and answerable).
  */
+import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { CONTAINER_MAX_STEPS } from './cloudAgentTools';
 import { previewStepForRun } from './previewDevServer';
 import { containerGitCloneUrl, mintContainerRunToken } from './containerRunToken';
-import { gitSecret, prepareCloudRun, stampExecutionSourceRef } from './cloudAgentEngine';
+import { prepareCloudRun, stampExecutionSourceRef } from './cloudAgentEngine';
 import { resolveTicketRepoContext } from '../repos/commitFileAsPendingChange';
 import type { PausedLoopState } from './executionPause';
 import type { Db } from '../../infrastructure/database/connection';
@@ -73,7 +74,7 @@ export async function launchContainerRun(
       { shell: true },
     );
     const token = await mintContainerRunToken(env.JWT_SECRET, args.executionId);
-    const repo = await resolveTicketRepoContext(db, gitSecret(env), args.tenantId, args.taskRow.id);
+    const repo = await resolveTicketRepoContext(db, integrationCredentialSecret(env), args.tenantId, args.taskRow.id);
     if (repo.ok) await stampExecutionSourceRef(db, args.tenantId, args.executionId, repo.ctx);
     // Clone the ticket's HEAD branch (ctx.branch — where prior runs commit their
     // WIP), not just the base. A container that clones only the base branch starts

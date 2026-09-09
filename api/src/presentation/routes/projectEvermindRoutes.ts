@@ -218,9 +218,14 @@ async function validateCore(env: Env, db: Db, tenantId: number, projectId: numbe
  */
 async function recallCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
-  const body = (await c.req.json<{ query?: unknown }>().catch(() => ({}))) as { query?: unknown };
+  const body = (await c.req.json<{ query?: unknown; chatId?: unknown }>().catch(() => ({}))) as
+    { query?: unknown; chatId?: unknown };
   const query = typeof body.query === 'string' ? body.query : '';
-  return json(await recallProjectEvermindMemory(env, db, tenantId, projectId, query));
+  // The ASKING conversation. Optional: a global chat, or a caller that tracks none,
+  // recalls project-wide exactly as before. When present, this chat's own memories
+  // take precedence over the rest of the project's — see `evermindChatTiering`.
+  const chatId = Number.isInteger(body.chatId) && (body.chatId as number) > 0 ? (body.chatId as number) : null;
+  return json(await recallProjectEvermindMemory(env, db, tenantId, projectId, query, { chatId }));
 }
 
 async function artifactCore(env: Env, db: Db, tenantId: number, projectId: number, versionQ: string | undefined, file: 'model.evermind' | 'tokenizer.json'): Promise<Response> {

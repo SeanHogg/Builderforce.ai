@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Board webhook routes — /api/board-webhooks
@@ -121,7 +122,7 @@ export function createBoardWebhookRoutes(db: Db): Hono<HonoEnv> {
       fields: normalized.fields,
     };
 
-    const secret = c.env.INTEGRATION_ENCRYPTION_SECRET ?? c.env.JWT_SECRET;
+    const secret = integrationCredentialSecret(c.env);
     const loaded = await loadConnectionCredentials(db, conn.tenantId, conn.credentialId, secret);
     const credentials = loaded?.credentials ?? {};
     const baseUrl = loaded?.baseUrl ?? null;

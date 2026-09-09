@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * githubActionsReconcile — close the loop on a dispatch GitHub never turned into a run.
@@ -317,7 +318,7 @@ async function listAgentRuns(
   tenantId: number,
   repoId: string,
 ): Promise<{ runs: ActionsRunView[]; error: { code: string; reason: string } | null }> {
-  const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+  const secret = integrationCredentialSecret(env);
   const auth = await resolveRepoAuth(env, db, secret, tenantId, repoId).catch(() => null);
   if (!auth || !auth.ok) {
     // An unresolvable credential is not a verdict about GitHub — treat it as

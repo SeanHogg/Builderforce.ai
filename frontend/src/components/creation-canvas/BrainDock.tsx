@@ -4,7 +4,7 @@ import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { usePointerResize } from '@/lib/usePointerResize';
 import { Avatar, BrainTimeline } from '@seanhogg/builderforce-brain-ui';
-import { useChatActivityLabels } from '@/i18n/useChatActivityLabels';
+import { useBrainTimelineLabels } from '@/i18n/useBrainTimelineLabels';
 import { useLiveActivityLabels } from '@/i18n/useLiveActivityLabels';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
@@ -139,7 +139,6 @@ export function BrainSurfaceBody({
   // Derived ONCE and shared: the transcript's live node and the footer strip are two
   // views of the same moment, so they must never narrate it in different words.
   const activity = useBrainActivity(running, trace, runStartedAt);
-  const activityLabels = useChatActivityLabels();
   const liveLine = brainActivityLine(activity.live);
   // The dock derives its own phase line off the canvas run trace, so it OVERRIDES the
   // two phases the shared indicator would otherwise word generically — and keeps
@@ -152,7 +151,12 @@ export function BrainSurfaceBody({
     [liveLine],
   );
   const liveLabels = useLiveActivityLabels(liveOverrides);
-  const timelineLabels = useMemo(() => ({
+  // Only the copy the BOARD words differently: who is speaking, what an empty board
+  // says, and the phase line the dock derives itself. Everything else — the tool
+  // steps' Command / Output panels, the change preview, the Evermind memory steps —
+  // comes from the ONE shared transcript bundle, which is how the dock stopped
+  // rendering half its transcript in English on a non-English board.
+  const timelineOverrides = useMemo(() => ({
     you: t('you'),
     assistant: t('brain'),
     empty: t('brainEmpty'),
@@ -168,10 +172,8 @@ export function BrainSurfaceBody({
     replay: t('replayMessage'),
     rateUp: t('rateUp'),
     rateDown: t('rateDown'),
-    // Same activity templates as the Brain panel — one hook, so a milestone can never be
-    // worded one way on the board and another in the panel.
-    activity: activityLabels,
-  }), [liveLine, t, activityLabels, liveLabels]);
+  }), [liveLine, t, liveLabels]);
+  const timelineLabels = useBrainTimelineLabels(timelineOverrides);
   const typingCollaborators = collaborators.filter((member) => member.typing);
   const showPresence = joinedCollaborator != null || typingCollaborators.length > 0;
 

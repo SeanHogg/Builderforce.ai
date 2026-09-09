@@ -22,6 +22,11 @@ export interface RecallScorable {
   weight: number;
   prompt?: string;
   text?: string;
+  /** The Brain chat that contributed this memory, when one did. Carried so recall can
+   *  put a conversation's OWN memories first — see {@link ./evermindChatTiering}.
+   *  Absent means project-wide (a pre-provenance memory, or an agent run), never
+   *  "belongs to no chat". */
+  chatId?: number;
 }
 
 /** A scored recall match — the entry plus its 0..1 relevance to the query. */

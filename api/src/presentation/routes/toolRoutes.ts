@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
@@ -91,7 +92,7 @@ export function createToolRoutes(
     const projectId = Number(body.projectId);
     if (!Number.isFinite(projectId)) return c.json({ error: 'projectId is required' }, 400);
 
-    const secret = (c.env as Env).INTEGRATION_ENCRYPTION_SECRET ?? (c.env as Env).JWT_SECRET ?? '';
+    const secret = integrationCredentialSecret(c.env);
     const outcome = await auditRunner.runAudit(c.env as Env, { tenantId, projectId, auditId, userId, secret });
     if (!outcome) return c.json({ error: 'Unknown audit' }, 404);
 

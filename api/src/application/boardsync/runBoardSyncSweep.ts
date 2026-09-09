@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Board-sync sweep — the cron-driven half of external board synchronization.
@@ -80,7 +81,7 @@ async function engineForConnection(
  */
 export async function runBoardSyncSweep(env: BoardSyncSweepEnv): Promise<BoardSyncSweepResult> {
   const db = buildDatabase(env as unknown as Parameters<typeof buildDatabase>[0]);
-  const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET;
+  const secret = integrationCredentialSecret(env);
   const now = new Date();
 
   const active = await db

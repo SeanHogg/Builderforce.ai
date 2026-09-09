@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Workforce member routes — /api/members
@@ -365,7 +366,7 @@ async function resolveGoogleCalendarCredential(env: Env, db: Db, tenantId: numbe
     .limit(1);
   if (!row) return null;
   const e = env as unknown as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
-  const secret = e.INTEGRATION_ENCRYPTION_SECRET ?? e.JWT_SECRET ?? '';
+  const secret = integrationCredentialSecret(e);
   const creds = await decryptCredentials(row.credentialsEnc, row.iv, secret, tenantId);
   if (!creds) return null;
   return { accessToken: creds.accessToken as string | undefined, refreshToken: creds.refreshToken as string | undefined };

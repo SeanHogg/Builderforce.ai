@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * BuilderForce Agents instance routes – /api/agent-hosts
@@ -1725,7 +1726,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const dispatchId = c.req.param('dispatchId');
     const body = await c.req.json<{ branch: string; base?: string; title?: string; body?: string }>();
     const env = c.env as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
-    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+    const secret = integrationCredentialSecret(env);
 
     const result = await openDispatchPullRequest(db, secret, agentHost.tenantId, dispatchId, body);
     if (!result.ok) return c.json({ error: result.error }, result.status);
@@ -1824,7 +1825,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     if (!Number.isFinite(taskId)) return c.json({ error: 'invalid taskId' }, 400);
     const body = await c.req.json<{ branch: string; base?: string; title?: string; body?: string }>();
     const env = c.env as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
-    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+    const secret = integrationCredentialSecret(env);
 
     const result = await openTaskPullRequest(db, secret, agentHost.tenantId, taskId, body, c.env);
     if (!result.ok) return c.json({ error: result.error }, result.status);

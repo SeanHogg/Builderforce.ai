@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
   DEFAULT_CHAT_ACTIVITY_LABELS,
   activityIcon,
@@ -17,13 +17,21 @@ import {
   type BrainRunActivity,
 } from '@seanhogg/builderforce-brain-embedded';
 import { Markdown } from './Markdown';
-import { answerTextOf } from './thinkBlocks';
+import { answerTextOf, thoughtTextOf } from '@builderforce/agent-loop';
 import { Avatar } from './ParticipantBadge';
 import { parseAskUser, stripAskUser, QuestionCard, askUserAnchorId, DEFAULT_ASK_USER_LABELS } from './askUser';
-import { buildSettledTimeline, formatDuration, formatPayload, streamingNode, type TimelineNode } from './timelineModel';
+import { buildSettledTimeline, formatDuration, strandedReplyKey, streamingNode, type TimelineNode } from './timelineModel';
+import { CopyButton } from './CopyButton';
+import { ToolStep, type ToolStepLabels } from './ToolStep';
 import { LiveActivity, DEFAULT_LIVE_ACTIVITY_LABELS, type LiveActivityLabels } from './LiveActivity';
 
-export interface BrainTimelineLabels {
+/**
+ * Every string the transcript renders. It EXTENDS {@link ToolStepLabels} rather than
+ * restating those five: the tool step is its own component with its own narrow
+ * contract, and a host that passes this bundle satisfies that contract by
+ * construction — which is what keeps the two from drifting apart.
+ */
+export interface BrainTimelineLabels extends ToolStepLabels {
   /** Shown on the live thinking node while a turn streams. */
   thinking: string;
   /**
@@ -36,15 +44,15 @@ export interface BrainTimelineLabels {
   thoughtFor: string;
   /** Summary of a collapsed `<think>` block inside a reply. */
   thought: string;
+  /** Muted note above a reply RESCUED from the model's reasoning — the run ended
+   *  inside its `<think>` block, so the transcript shows the reasoning as the reply
+   *  rather than a collapsed line and nothing else. See `strandedReplyKey`. */
+  replyFromThought: string;
   you: string;
   assistant: string;
-  input: string;
-  output: string;
   error: string;
   loading: string;
   empty: string;
-  copy: string;
-  copied: string;
   /** Per-message "send this again" action — re-asks the model with the same text,
    *  from a user turn or an assistant one. */
   replay: string;
@@ -53,8 +61,6 @@ export interface BrainTimelineLabels {
   rateDown: string;
   apply: string;
   createFile: string;
-  /** Heading for the change preview shown on an edit_file / write_file tool step. */
-  preview: string;
   /** <QuestionCard> copy (ask_user) — carried here so a host passes ONE label bundle. */
   askSubmit: string;
   askAnswered: string;
@@ -109,6 +115,7 @@ export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
   live: DEFAULT_LIVE_ACTIVITY_LABELS,
   thoughtFor: 'Thought for {duration}',
   thought: 'Thought',
+  replyFromThought: "Recovered from the model's reasoning — the turn ended without a separate reply.",
   you: 'You',
   assistant: 'BuilderForce',
   input: 'Input',
@@ -124,6 +131,8 @@ export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
   apply: 'Apply',
   createFile: 'Create file',
   preview: 'Preview',
+  noOutput: 'No output',
+  exitCode: 'Exit {code}',
   askSubmit: DEFAULT_ASK_USER_LABELS.askSubmit,
   askAnswered: DEFAULT_ASK_USER_LABELS.askAnswered,
   accountOwn: 'Your account',
@@ -280,38 +289,6 @@ function dotIcon(kind: TimelineNode['kind'], isError?: boolean): string {
 }
 
 /**
- * Copy `text` to the clipboard, flashing a "Copied" confirmation.
- *
- * THE clipboard button of this package — the tool step's Input / Output / preview
- * panels wear it as a labelled chip, a message wears it as an icon. One
- * implementation, because two would drift on the confirmation timing alone.
- */
-function CopyButton({ text, labels, icon = false }: { text: string; labels: BrainTimelineLabels; icon?: boolean }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      className={icon ? 'bf-tl__act' : 'bf-tl__copy'}
-      title={copied ? labels.copied : labels.copy}
-      aria-label={copied ? labels.copied : labels.copy}
-      data-state={copied ? 'done' : undefined}
-      onClick={(e) => {
-        e.stopPropagation();
-        void navigator.clipboard?.writeText(text).then(
-          () => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          },
-          () => {},
-        );
-      }}
-    >
-      {icon ? <span aria-hidden>{copied ? '✓' : '⧉'}</span> : copied ? labels.copied : labels.copy}
-    </button>
-  );
-}
-
-/**
  * The action row every message carries: copy it, send it again, and — on an
  * assistant reply — say whether it was any good.
  *
@@ -400,112 +377,6 @@ function MessageActions({
   );
 }
 
-type ToolPreview =
-  | { kind: 'edit'; path: string; oldText: string; newText: string }
-  | { kind: 'write'; path: string; content: string };
-
-/** An edit_file / write_file tool call carries the change itself in its args, so we
- *  can render a readable preview (a before/after diff for edits, the new content for
- *  writes) instead of only the raw JSON — detected structurally so it works regardless
- *  of the tool's display label. */
-function toolPreview(args: unknown): ToolPreview | null {
-  if (!args || typeof args !== 'object') return null;
-  const a = args as Record<string, unknown>;
-  const path = typeof a.path === 'string' ? a.path : '';
-  if (typeof a.old_string === 'string' && typeof a.new_string === 'string') {
-    return { kind: 'edit', path, oldText: a.old_string, newText: a.new_string };
-  }
-  if (path && typeof a.content === 'string') {
-    return { kind: 'write', path, content: a.content };
-  }
-  return null;
-}
-
-function DiffLines({ text, sign }: { text: string; sign: '+' | '-' }) {
-  const cls = sign === '+' ? 'bf-tl__diff-add' : 'bf-tl__diff-del';
-  return (
-    <>
-      {text.split('\n').map((line, i) => (
-        <div key={i} className={`bf-tl__diff-line ${cls}`}>
-          <span className="bf-tl__diff-sign" aria-hidden>{sign}</span>
-          <span className="bf-tl__diff-text">{line || ' '}</span>
-        </div>
-      ))}
-    </>
-  );
-}
-
-function ToolStep({
-  node,
-  labels,
-}: {
-  node: Extract<TimelineNode, { kind: 'tool' }>;
-  labels: BrainTimelineLabels;
-}) {
-  const argsText = formatPayload(node.args);
-  const resultText = formatPayload(node.result);
-  const preview = toolPreview(node.args);
-  return (
-    <details className={`bf-tl__tool${node.isError ? ' bf-tl__tool--error' : ''}`}>
-      <summary className="bf-tl__tool-head">
-        <span className="bf-tl__tool-status" aria-hidden>
-          {node.isError ? '✗' : '✓'}
-        </span>
-        <span className="bf-tl__tool-name">{node.label}</span>
-        {node.durationMs != null && <span className="bf-tl__tool-dur">{formatDuration(node.durationMs)}</span>}
-        <span className="bf-tl__tool-caret" aria-hidden>
-          ▸
-        </span>
-      </summary>
-      <div className="bf-tl__tool-body">
-        {preview && (
-          <div className="bf-tl__io">
-            <div className="bf-tl__io-label">
-              <span>{labels.preview}{preview.path ? ` · ${preview.path}` : ''}</span>
-              <CopyButton
-                text={preview.kind === 'edit' ? preview.newText : preview.content}
-                labels={labels}
-              />
-            </div>
-            {preview.kind === 'edit' ? (
-              <div className="bf-tl__diff">
-                <DiffLines text={preview.oldText} sign="-" />
-                <DiffLines text={preview.newText} sign="+" />
-              </div>
-            ) : (
-              <pre className="bf-tl__io-pre">
-                <code>{preview.content}</code>
-              </pre>
-            )}
-          </div>
-        )}
-        {argsText && (
-          <div className="bf-tl__io">
-            <div className="bf-tl__io-label">
-              <span>{labels.input}</span>
-              <CopyButton text={argsText} labels={labels} />
-            </div>
-            <pre className="bf-tl__io-pre">
-              <code>{argsText}</code>
-            </pre>
-          </div>
-        )}
-        {resultText && (
-          <div className="bf-tl__io">
-            <div className="bf-tl__io-label">
-              <span>{labels.output}</span>
-              <CopyButton text={resultText} labels={labels} />
-            </div>
-            <pre className="bf-tl__io-pre">
-              <code>{resultText}</code>
-            </pre>
-          </div>
-        )}
-      </div>
-    </details>
-  );
-}
-
 /**
  * The unified Brain chat transcript: a vertical lineage of gutter dots (joined by
  * a connecting line) where each step is one node — a user turn (with image
@@ -548,6 +419,11 @@ function BrainTimelineInner({
     const streaming = streamingNode(streamingText, isRunning);
     return streaming ? [...settled, streaming] : settled;
   }, [settled, streamingText, isRunning]);
+  // The one reply (if any) whose text is stranded inside its own `<think>` block
+  // because the run ENDED there. Derived over the whole node list — it is a fact about
+  // the turn's position, not its content — so the assistant branch below can render
+  // that turn as a readable reply instead of a muted line the reader cannot see.
+  const stranded = useMemo(() => strandedReplyKey(nodes, isRunning), [nodes, isRunning]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLOListElement>(null);
@@ -656,7 +532,11 @@ function BrainTimelineInner({
             // send-again / rating row, because there is nothing to copy, replay or
             // grade. Six such turns in a row used to cost the editor ~30 rows.
             const answer = answerTextOf(bodyText);
-            if (!answer && bodyText && !card) {
+            // This turn ended the run from inside its reasoning: show the reasoning AS
+            // the reply, with a muted note explaining the first-person voice. Every
+            // other reasoning-only turn still collapses — see `strandedReplyKey`.
+            const rescued = node.key === stranded ? thoughtTextOf(bodyText) : '';
+            if (!answer && bodyText && !card && !rescued) {
               return (
                 <li key={node.key} className="bf-tl__item bf-tl__item--thought">
                   <span className="bf-tl__gutter">
@@ -676,7 +556,8 @@ function BrainTimelineInner({
                 </span>
                 <div className="bf-tl__body">
                   <div className="bf-tl__role">{author ? author.name : assistant}</div>
-                  {bodyText && <div className="bf-tl__bubble">{renderMsg(node.message, 'assistant', bodyText)}</div>}
+                  {rescued && <div className="bf-tl__rescued">{labels.replyFromThought}</div>}
+                  {bodyText && <div className="bf-tl__bubble">{renderMsg(node.message, 'assistant', rescued || bodyText)}</div>}
                   {card && onAnswerQuestion && (
                     <QuestionCard
                       payload={card}
@@ -695,7 +576,7 @@ function BrainTimelineInner({
                       <MessageActions
                         message={node.message}
                         role="assistant"
-                        text={answer}
+                        text={answer || rescued}
                         labels={labels}
                         onReplay={onReplayMessage}
                         onRate={onRateMessage}

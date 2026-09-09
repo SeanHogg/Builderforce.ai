@@ -163,3 +163,24 @@ export interface BuiltinTool {
   mutates: boolean;
   run: (ctx: BuiltinCtx, args: Json) => Promise<unknown>;
 }
+
+/**
+ * The Worker env a tool needs to decrypt credentials or reach an external provider,
+ * or a REFUSAL SENTENCE explaining why this caller cannot run it.
+ *
+ * Every catalog module needs this gate and each had grown its own copy. The gate is
+ * shared; the MESSAGE is not, because "not available in this context" is useless to a
+ * model — it needs to know which capability is missing and what would restore it. So
+ * the domain passes its own sentence and only the check lives in one place.
+ *
+ * Throwing (rather than returning null) is deliberate: the catalog's runner turns a
+ * thrown Error into the tool's error result, so the model reads the sentence verbatim
+ * instead of a `TypeError` on `undefined.AUTH_CACHE_KV` three frames down.
+ */
+export function requireEnv(ctx: BuiltinCtx, unavailableMessage?: string): Env {
+  if (!ctx.env) {
+    throw new Error(unavailableMessage
+      ?? 'This tool requires the worker environment (credential access) and is unavailable in this context');
+  }
+  return ctx.env;
+}

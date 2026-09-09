@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Repo routes – /api/repos
@@ -337,7 +338,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
     const env = c.env as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
-    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+    const secret = integrationCredentialSecret(env);
 
     const resolved = await resolveRepoCredential(db, secret, tenantId, id);
     if (isResolveError(resolved)) {
@@ -372,7 +373,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
     const env = c.env as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
-    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+    const secret = integrationCredentialSecret(env);
 
     const resolved = await resolveRepoCredential(db, secret, tenantId, id);
     if (isResolveError(resolved)) return c.json({ error: resolved.error }, resolved.status);
@@ -583,7 +584,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     let detail: Awaited<ReturnType<typeof getPullRequestDetail>> | null = null;
     if (row.repoId && row.number != null) {
       const env = c.env as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
-      const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+      const secret = integrationCredentialSecret(env);
       const resolved = await resolveRepoCredential(db, secret, tenantId, row.repoId);
       if (!isResolveError(resolved)) {
         detail = await getPullRequestDetail(

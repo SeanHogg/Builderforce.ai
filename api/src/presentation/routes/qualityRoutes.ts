@@ -12,6 +12,7 @@
  * ingest engine's version-token bump (per project + per tenant).
  */
 
+import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { Hono } from 'hono';
 import { and, asc, desc, eq, gte, inArray, lt, or, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
@@ -44,7 +45,7 @@ import { loadProjectInTenant } from '../../application/project/projectOwnership'
 
 /** Encryption secret for sealing webhook/pull credentials (same resolver integrations use). */
 function integrationSecret(env: Env): string {
-  return (env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET) as string;
+  return (integrationCredentialSecret(env)) as string;
 }
 
 /** Default grace window a rotated-out ingest key keeps working for (QUAL-7). */

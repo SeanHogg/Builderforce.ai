@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * githubAlerts — GitHub code-scanning (CodeQL) + Dependabot alerts → SECURITY tickets.
@@ -348,8 +349,7 @@ export async function ingestOpenAlertsForRepo(
   opts: { fetchFn?: typeof fetch } = {},
 ): Promise<AlertIngestResult> {
   const secret =
-    (env as { INTEGRATION_ENCRYPTION_SECRET?: string }).INTEGRATION_ENCRYPTION_SECRET ??
-    (env as { JWT_SECRET?: string }).JWT_SECRET ?? '';
+    integrationCredentialSecret(env);
 
   const auth = await resolveRepoAuth(env, db, secret, tenantId, repoId);
   if (!auth.ok) return { ok: false, code: 'auth', reason: auth.error };

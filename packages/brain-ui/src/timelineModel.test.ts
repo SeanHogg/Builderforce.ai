@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildSettledTimeline } from './timelineModel';
+import { buildSettledTimeline, strandedReplyKey } from './timelineModel';
 import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 
 const msg = (id: number, role: string, content = '', metadata: string | null = null): BrainMessage => ({
@@ -111,5 +111,60 @@ describe('buildSettledTimeline — durable tool/memory step reconstruction', () 
     // Only the user node — no assistant bubble, no tool node from bad metadata.
     expect(nodes).toHaveLength(1);
     expect(nodes[0].kind).toBe('user');
+  });
+});
+
+describe('strandedReplyKey — a reply the run left inside its reasoning', () => {
+  const nodes = (messages: BrainMessage[], trace: BrainTraceEvent[] = []) => buildSettledTimeline(messages, trace);
+
+  it('finds a settled conversation whose last reply has no answer segment', () => {
+    const key = strandedReplyKey(
+      nodes([msg(1, 'user', 'close them'), msg(2, 'assistant', '<think>Should I close them or roadmap them?')]),
+      false,
+    );
+    expect(key).toBe('msg-2');
+  });
+
+  it('leaves a reasoning-only turn alone while the run is still going', () => {
+    const settled = nodes([msg(1, 'user', 'go'), msg(2, 'assistant', '<think>thinking')]);
+    expect(strandedReplyKey(settled, true)).toBeNull();
+  });
+
+  it('leaves a turn alone when the model DID answer outside the block', () => {
+    expect(
+      strandedReplyKey(nodes([msg(1, 'user', 'go'), msg(2, 'assistant', '<think>plan</think>Done.')]), false),
+    ).toBeNull();
+  });
+
+  it('looks past the trailing memory + narration rows a turn is followed by', () => {
+    const settled = nodes([
+      msg(1, 'user', 'go'),
+      msg(2, 'assistant', '<think>Which project should own this?'),
+      msg(3, 'tool', '', stepMeta('learn', 'evermind.learn', { result: { version: 4 } }, '2026-01-02T00:00:00.000Z')),
+      msg(4, 'tool', '', stepMeta('reconcile', 'evermind.reconcile', { result: { count: 1, version: 4 } }, '2026-01-02T00:00:01.000Z')),
+    ]);
+    expect(strandedReplyKey(settled, false)).toBe('msg-2');
+  });
+
+  it('is nothing when a user turn came after — that is a PENDING turn, not a stranded one', () => {
+    const settled = nodes([
+      msg(1, 'assistant', '<think>Which one?'),
+      msg(2, 'user', 'the first'),
+    ]);
+    expect(strandedReplyKey(settled, false)).toBeNull();
+  });
+
+  it('rescues only the LAST reply — an earlier reasoning-only turn stays collapsed', () => {
+    const settled = nodes([
+      msg(1, 'user', 'go'),
+      msg(2, 'assistant', '<think>read the file first'),
+      msg(3, 'assistant', '<think>So: close them, or roadmap them?'),
+    ]);
+    expect(strandedReplyKey(settled, false)).toBe('msg-3');
+  });
+
+  it('is nothing for an empty transcript, and nothing when the last reply is blank', () => {
+    expect(strandedReplyKey([], false)).toBeNull();
+    expect(strandedReplyKey(nodes([msg(1, 'assistant', '   ')]), false)).toBeNull();
   });
 });

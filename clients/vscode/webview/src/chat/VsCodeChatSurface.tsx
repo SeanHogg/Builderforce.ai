@@ -520,8 +520,11 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   const evermind = useMemo(() => {
     if (evermindProjectId == null) return undefined;
     const req = authedFetch(init.baseUrl, getToken, () => void refreshToken());
-    return projectMemoryHooks(evermindProjectId, req);
-  }, [evermindProjectId, init.baseUrl]);
+    // `chatId` makes recall CHAT-TIERED: this conversation's own memories come first,
+    // then the wider project's. Without it a reopened chat recalled anything the
+    // project had ever learned, which reads as remembering things never said here.
+    return projectMemoryHooks(evermindProjectId, req, chatId);
+  }, [evermindProjectId, init.baseUrl, chatId]);
 
   // Per-chat memory switch: whether THIS chat passes the project-Evermind hooks
   // (recall before answering + the learn contribution when the run finishes).

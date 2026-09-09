@@ -139,10 +139,15 @@ function buildLabels(): Record<string, string> {
     "tl.liveAria": t("Current activity"),
     "tl.thoughtFor": t("Thought for {duration}"),
     "tl.thought": t("Thought"),
+    "tl.replyFromThought": t("Recovered from the model's reasoning — the turn ended without a separate reply."),
     "tl.you": t("You"),
     "tl.assistant": "BuilderForce",
     "tl.input": t("Input"),
     "tl.output": t("Output"),
+    // A shell step renders as a terminal exchange — the command, then what it printed.
+    // `{code}` is substituted by the renderer, not by l10n.
+    "tl.noOutput": t("No output"),
+    "tl.exitCode": t("Exit {code}"),
     "tl.error": t("Error"),
     "tl.loading": t("Loading…"),
     "tl.empty": t("Ask BuilderForce to build or change something."),

@@ -12,7 +12,20 @@
     "skipLibCheck": true,
     "noEmit": true,
     "ignoreDeprecations": "6.0",
-    "types": ["react", "react-dom", "node"]
+    "types": ["react", "react-dom", "node"],
+    // The source-only shared packages this project imports. Their `exports` point
+    // straight at TypeScript in `src/`, so plain node resolution finds nothing and
+    // every consumer has to spell the specifier out. The vite build derives its
+    // aliases from `scripts/sourcePackages.mjs` (see `webview/vite.config.ts`);
+    // `paths` cannot import a module, so it is written by hand here — which is why
+    // it is the copy that drifts. Add an entry the moment a webview source imports
+    // a new one, or `tsc --noEmit` fails on a bundle that builds perfectly well.
+    //
+    // No `baseUrl`: TypeScript 6 removed it (TS5102), and without one a `paths`
+    // target resolves relative to THIS file — which is what these already are.
+    "paths": {
+      "@builderforce/agent-loop": ["../../../packages/agent-loop/src/index.ts"]
+    }
   },
   // The editor's OWN code, checked strictly. Everything that compiles FRONTEND
   // sources — the root screen, the entry, the canvas host port and the Next shims —

@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * First-party (built-in) MCP server — exposes the platform's OWN capabilities
@@ -26,6 +27,9 @@ import { type ToolSchema } from '@builderforce/agent-tools';
 import { CREATIVE_CAPABILITIES, creativeOutputFormats, creativeOutputProfile } from '@builderforce/creation-canvas-contract';
 import { advertisedName, BUILTIN_EXTENSION_ID } from './toolNaming';
 import { CAREER_TOOLS } from './careerToolCatalog';
+import { DELIVERY_TOOLS } from './deliveryToolCatalog';
+import { readTicketPendingChanges } from '../task/ticketPendingChangesPort';
+import { decideTicketPendingChanges } from '../task/ticketPendingChanges';
 import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import {
   clampErrorLogLimit,
@@ -40,7 +44,7 @@ import { listCompanies, companyDetail, unassignedProjects } from '../investor/co
 import { r2ProjectStoragePurge } from '../ide/projectStorage';
 import { TaskService } from '../task/TaskService';
 import { summarizeTaskActivity } from '../task/taskActivity';
-import { buildTaskProgressBreakdown } from '../task/taskProgressBreakdown';
+import { buildTaskProgressBreakdown, normalizeTaskPrState } from '../task/taskProgressBreakdown';
 import { addManagerDirective } from '../manager/managerDirectives';
 import { createManagerCoachingTask, getEffectiveManagerPolicy } from '../manager/ManagerService';
 import { salesRevenueForecast } from '../sales/salesPolicy';
@@ -135,7 +139,8 @@ type Json = Record<string, unknown>;
 // this file. Re-exported here so every existing importer is unaffected.
 export type { BuiltinCtx, BuiltinTool } from './builtinToolContext';
 export { replayRoute, resolveReplayAuth } from './builtinToolContext';
-import { replayRoute, type BuiltinCtx, type BuiltinTool } from './builtinToolContext';
+import { replayRoute, requireEnv, type BuiltinCtx, type BuiltinTool } from './builtinToolContext';
+import { maskSecurityTasks } from './builtinTaskVisibility';
 import { taskCreatedHook } from '../task/taskCreationHook';
 import { forLane, laneAgentAssignments, laneAssignmentValues } from '../swimlane/laneAgentAssignments';
 import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
@@ -974,8 +979,30 @@ const CATALOG: BuiltinTool[] = [
       .select({ status: tasks.status })
       .from(tasks)
       .where(eq(tasks.parentTaskId, id));
+    // WHERE THE TICKET'S CODE IS, as a property of the ticket. Without this a caller
+    // asking "does this have pending changes?" had to enumerate branches in a shell and
+    // correlate them back by name, which is what exhausted a VSIX run's context window.
+    // Never throws and never degrades to a false "clean": no env, or a provider that
+    // cannot be reached, both resolve to an explained `unknown`.
+    const branch = typeof visible.gitBranch === 'string' ? visible.gitBranch : null;
+    const pendingChanges = ctx.env
+      ? await readTicketPendingChanges(ctx.env, ctx.db, integrationCredentialSecret(ctx.env), ctx.tenantId, { taskId: id, gitBranch: branch })
+        .catch((error: unknown) => decideTicketPendingChanges({
+          branch,
+          defaultBranch: null,
+          prState: normalizeTaskPrState(pr?.status),
+          commits: { ok: false, code: 'provider_error', reason: error instanceof Error ? error.message : 'delivery state lookup failed' },
+        }))
+      : decideTicketPendingChanges({
+        branch,
+        defaultBranch: null,
+        prState: normalizeTaskPrState(pr?.status),
+        commits: { ok: false, code: 'unsupported', reason: 'the worker environment was not available to compare this branch against its base' },
+      });
+
     return {
       ...visible,
+      pendingChanges,
       progress: buildTaskProgressBreakdown({
         status: String(visible.status ?? ''),
         childStatuses: childRows.map((row) => row.status),
@@ -3168,7 +3195,7 @@ const CATALOG: BuiltinTool[] = [
     parameters: obj({ provider: S, name: S, baseUrl: S, credentials: { type: 'object' } }, ['provider', 'name', 'credentials']),
     run: async (ctx, a) => {
       const env = requireEnv(ctx);
-      const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET;
+      const secret = integrationCredentialSecret(env);
       const { enc, iv } = await encryptCredentials(a.credentials as Record<string, unknown>, secret, ctx.tenantId);
       const [row] = await ctx.db.insert(integrationCredentials).values({ tenantId: ctx.tenantId, provider: str(a.provider) as never, name: str(a.name).trim(), baseUrl: a.baseUrl != null ? str(a.baseUrl) : null, credentialsEnc: enc, iv, isEnabled: true }).returning({ id: integrationCredentials.id, provider: integrationCredentials.provider, name: integrationCredentials.name });
       return row;
@@ -3864,14 +3891,9 @@ const CATALOG: BuiltinTool[] = [
   // of the marketplace (`jobs.search`, `proposals.submit|mine|withdraw`) whose routes
   // have existed all along with no tool in front of them.
   ...CAREER_TOOLS,
+  ...DELIVERY_TOOLS,
 ];
 
-/** Assert the worker env was threaded (tools that decrypt credentials / reach
- *  external providers need it; tests + the no-env path get a clear error). */
-function requireEnv(ctx: BuiltinCtx): Env {
-  if (!ctx.env) throw new Error('This tool requires the worker environment (credential access) and is unavailable in this context');
-  return ctx.env;
-}
 
 /** Persist an integration credential's connectivity-test result. */
 async function markTested(ctx: BuiltinCtx, credentialId: string, ok: boolean): Promise<void> {
@@ -4040,17 +4062,6 @@ async function fireAgentAssignmentHandoff(ctx: BuiltinCtx, task: Task, previousA
  */
 export { advertisedName };
 
-/**
- * Mask (don't drop) the access-restricted SECURITY tickets the MCP caller isn't
- * cleared for — the same surfaced-not-hidden model the HTTP board uses. The caller's
- * role rides in from ctx (a cloud agent runs as MANAGER and sees everything; a human
- * via Brain carries their real role), so this reuses the ONE shared visibility gate.
- */
-async function maskSecurityTasks<T extends Record<string, unknown>>(ctx: BuiltinCtx, rows: T[]): Promise<T[]> {
-  if (!rows.some((r) => r.taskType === TaskType.SECURITY)) return rows;
-  const viewer = { userId: ctx.userId ?? null, role: ctx.role, isAgent: false };
-  return new SecurityTicketAccessService(ctx.db, ctx.env).applyVisibilityForViewer(ctx.tenantId, viewer, rows);
-}
 
 function buildCtx(
   db: Db,

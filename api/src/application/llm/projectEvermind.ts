@@ -37,9 +37,10 @@ import { projectEvermind, ideAgents, ideProjects } from '../../infrastructure/da
 import { aggregateProjectPsychometric } from '../persona/psychometricCatalog';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { stripReasoningScratchpad } from './learnableText';
+import { stripReasoningScratchpad } from '@builderforce/agent-loop';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { rankEvermindRecall, hashRecallPrompt, type RankedRecall } from './evermindRecall';
+import { tierRecallByChat } from './evermindChatTiering';
 import type { RecordedSkipReason } from './evermindTeacher';
 import type { EvermindCoherenceAssessment } from './evermindRuntime';
 
@@ -275,12 +276,15 @@ export async function contributeTextToProjectEverminds(
   text: string,
   weight?: number,
   prompt?: string | null,
+  /** Provenance, forwarded verbatim to every target so a fan-out to a project's IDE
+   *  builds records the same source chat on each. */
+  opts: { chatId?: number | null } = {},
 ): Promise<EvermindContribution[]> {
   if ((text ?? '').trim().length < 20) return [];
   const targets = (await resolveEvermindTargets(env, db, tenantId, projectId)).filter(isLiveLearnTarget);
   await Promise.all(
     targets.map((h) =>
-      dispatchProjectEvermindLearnText(env, tenantId, h.projectId, text, weight, prompt).catch((error) => { /* per-target best-effort */ 
+      dispatchProjectEvermindLearnText(env, tenantId, h.projectId, text, weight, prompt, opts).catch((error) => { /* per-target best-effort */ 
         reportCaughtError(error, { source: "application/llm/projectEvermind.ts", operation: "contributeTextToProjectEverminds" });
       }),
     ),
@@ -790,6 +794,10 @@ export async function dispatchProjectEvermindLearnText(
   text: string,
   weight?: number,
   prompt?: string | null,
+  /** Provenance for the contribution. An options bag rather than a seventh positional:
+   *  only the Brain chat path has a `chatId`, and the other five producers (agent runs,
+   *  incident post-mortems, analyzer corrections, imports) legitimately have none. */
+  opts: { chatId?: number | null } = {},
 ): Promise<LearnDispatchResult> {
   // Teach the ANSWER, never the working-out. Every producer funnels through here, so
   // this is the one place that has to know that a frontier turn can carry a `<think>`
@@ -809,7 +817,14 @@ export async function dispatchProjectEvermindLearnText(
   const res = await stub.fetch('https://coordinator/learn-text', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tenantId, projectId, text: trimmed.slice(0, 8000), ...(promptTrimmed ? { prompt: promptTrimmed.slice(0, 8000) } : {}), ...(weight != null ? { weight } : {}) }),
+    body: JSON.stringify({
+      tenantId,
+      projectId,
+      text: trimmed.slice(0, 8000),
+      ...(promptTrimmed ? { prompt: promptTrimmed.slice(0, 8000) } : {}),
+      ...(weight != null ? { weight } : {}),
+      ...(opts.chatId != null ? { chatId: opts.chatId } : {}),
+    }),
   });
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   return { ok: res.ok, status: res.status, body };
@@ -842,6 +857,9 @@ export interface ProjectEvermindRecentEntry {
   skipDetail?: string;
   /** The pinned teacher model that failed (present on a distillation fault). */
   attemptedTeacherModel?: string;
+  /** The Brain chat that contributed this memory, when one did. Mirrors the DO's
+   *  `RecentEntry.chatId`; absent means project-wide, never "no chat". */
+  chatId?: number;
 }
 
 /** One measured training run the coordinator recorded (mirrors the DO's TrainingPoint).
@@ -1305,12 +1323,18 @@ export async function validateProjectEvermindRecall(
   tenantId: number,
   projectId: number,
   prompt: string,
+  opts: { limit?: number } = {},
 ): Promise<ProjectEvermindValidateResult> {
   const clean = prompt.trim().slice(0, 2000);
+  // The console's Validate wants the top few; reply-time recall wants a POOL wide
+  // enough that chat-tiering has something to promote from (a chat's own memory that
+  // ranks 11th project-wide must still be reachable). The size is part of the cache
+  // key — two callers asking for different depths are different questions.
+  const limit = Math.max(1, Math.trunc(opts.limit ?? DEFAULT_VALIDATE_MATCHES));
   const token = await getCacheVersion(env, versionKey(tenantId, projectId));
   return getOrSetCached(
     env,
-    `project_evermind:validate:${tenantId}:${projectId}:v:${token}:${hashRecallPrompt(clean)}`,
+    `project_evermind:validate:${tenantId}:${projectId}:v:${token}:n${limit}:${hashRecallPrompt(clean)}`,
     async (): Promise<ProjectEvermindValidateResult> => {
       const contrib = await getProjectEvermindContributions(env, db, tenantId, projectId);
       const base = { prompt: clean, version: contrib.version, seeded: contrib.seeded };
@@ -1326,11 +1350,12 @@ export async function validateProjectEvermindRecall(
             const e = byId.get(id);
             return e ? { ...e, score } : null;
           })
-          .filter((m): m is ProjectEvermindValidateMatch => m != null);
+          .filter((m): m is ProjectEvermindValidateMatch => m != null)
+          .slice(0, limit);
         return { ...base, matches, primaryId: matches[0]?.id ?? null, method: 'embedding' };
       }
 
-      const matches = rankEvermindRecall(clean, contrib.recent, { limit: 8 });
+      const matches = rankEvermindRecall(clean, contrib.recent, { limit });
       return { ...base, matches, primaryId: matches[0]?.id ?? null, method: 'lexical' };
     },
     { kvTtlSeconds: 30 },
@@ -1342,6 +1367,9 @@ export interface ProjectEvermindRecallItem {
   id: number;
   text: string;
   score: number;
+  /** Which tier this memory came from: `chat` = contributed by THIS conversation,
+   *  `project` = the wider project (including memories with no chat recorded). */
+  tier: 'chat' | 'project';
 }
 
 /** The reply-time recall payload the Brain run loop consumes (mirrors brain-embedded
@@ -1351,10 +1379,32 @@ export interface ProjectEvermindRecallResult {
   version: number;
   mode: ProjectEvermindMode;
   items: ProjectEvermindRecallItem[];
+  /** How the returned memories split across the two tiers. Surfaced so a recall is
+   *  explainable — "6 from this chat, 2 from the project" — instead of the user having
+   *  to guess why the assistant knows something. Both 0 when nothing was recalled. */
+  tiers: { fromChat: number; fromProject: number };
 }
 
 /** Snippet length for a recalled memory shown in the chat (keeps the prompt block small). */
 const RECALL_SNIPPET_CHARS = 240;
+
+/** Matches the console's Validate preview returns when a caller does not say. */
+const DEFAULT_VALIDATE_MATCHES = 8;
+
+/** Memories a reply-time recall injects into the prompt. Unchanged by tiering — the
+ *  tiers decide WHICH memories fill this budget, never how many. */
+const RECALL_LIMIT = 8;
+
+/**
+ * Candidates ranked before chat-tiering picks {@link RECALL_LIMIT} of them.
+ *
+ * It has to exceed the return budget or tiering cannot do its job: a memory from THIS
+ * chat that ranks below the top 8 project-wide would never enter the pool to be
+ * promoted, and the chat would keep being answered with other conversations' memories
+ * — the exact bug. Wide enough to reach a chat's own history, bounded so the cached
+ * ranking stays small.
+ */
+const RECALL_CANDIDATE_POOL = 32;
 
 /**
  * Recall the project Evermind's learned memories most relevant to `query`, for a
@@ -1370,20 +1420,43 @@ export async function recallProjectEvermindMemory(
   tenantId: number,
   projectId: number,
   query: string,
+  opts: { chatId?: number | null } = {},
 ): Promise<ProjectEvermindRecallResult> {
+  const empty = { fromChat: 0, fromProject: 0 };
   const head = await getProjectEvermindHead(env, db, tenantId, projectId);
-  if (head.version < 1) return { seeded: false, version: 0, mode: head.mode, items: [] };
+  if (head.version < 1) return { seeded: false, version: 0, mode: head.mode, items: [], tiers: empty };
   const clean = query.trim();
-  if (!clean) return { seeded: true, version: head.version, mode: head.mode, items: [] };
-  const validate = await validateProjectEvermindRecall(env, db, tenantId, projectId, clean);
-  const items = validate.matches
+  if (!clean) return { seeded: true, version: head.version, mode: head.mode, items: [], tiers: empty };
+
+  // Rank a WIDE pool project-wide, then let the chat's own memories take precedence
+  // within the reply budget. Ranking stays project-wide on purpose: the tier decides
+  // precedence, not eligibility, so a new chat is still answered from what the project
+  // knows instead of from nothing. See `evermindChatTiering` for the argument in full.
+  const validate = await validateProjectEvermindRecall(
+    env, db, tenantId, projectId, clean, { limit: RECALL_CANDIDATE_POOL },
+  );
+  const usable = validate.matches
     .map((m) => ({
       id: m.id,
       text: ((m.text ?? m.prompt ?? '') as string).replace(/\s+/g, ' ').trim().slice(0, RECALL_SNIPPET_CHARS),
       score: m.score,
+      chatId: m.chatId,
     }))
     .filter((it) => it.text.length > 0);
-  return { seeded: true, version: head.version, mode: head.mode, items };
+
+  const chatId = opts.chatId ?? null;
+  const tiered = tierRecallByChat(usable, chatId, RECALL_LIMIT);
+  const items: ProjectEvermindRecallItem[] = tiered.items.map(({ chatId: source, ...rest }) => ({
+    ...rest,
+    tier: chatId != null && source === chatId ? 'chat' : 'project',
+  }));
+  return {
+    seeded: true,
+    version: head.version,
+    mode: head.mode,
+    items,
+    tiers: { fromChat: tiered.fromChat, fromProject: tiered.fromProject },
+  };
 }
 
 /**

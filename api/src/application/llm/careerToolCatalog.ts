@@ -55,7 +55,8 @@ import { displaySkill, parseResume } from '@builderforce/creation-canvas-contrac
 // ATS, and it arrives through the connector port. See `application/people/`.
 import { headcountPlan, orgReview, performanceReview, teamHealth } from '../people/hrAnalytics';
 import { syncRoster } from '../people/hrmsSync';
-import { replayRoute, type BuiltinCtx, type BuiltinTool } from './builtinToolContext';
+import { replayRoute, requireEnv as requireToolEnv, type BuiltinCtx, type BuiltinTool } from './builtinToolContext';
+import type { Env } from '../../env';
 
 type Json = Record<string, unknown>;
 
@@ -91,10 +92,10 @@ function requireResume(value: unknown, argName = 'resumeText'): string {
  * did not thread it (a guest surface, a unit harness) gets this sentence rather
  * than a `TypeError` on `undefined.AUTH_CACHE_KV` three frames down.
  */
-function requireEnv(ctx: BuiltinCtx) {
-  if (!ctx.env) throw new Error('This tool reads the connected HR system and is not available in this context. Run it from a signed-in workspace session.');
-  return ctx.env;
-}
+const requireEnv = (ctx: BuiltinCtx): Env => requireToolEnv(
+  ctx,
+  'This tool reads the connected HR system and is not available in this context. Run it from a signed-in workspace session.',
+);
 
 /** The review period a cycle tool reads, defaulting to the current calendar year. */
 function reviewPeriod(value: unknown): string {

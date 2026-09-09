@@ -1,3 +1,744 @@
+## ✅ RESOLVED 2026-09-08 — two at-rest credential secrets, resolved in 46 places, one of them under a colliding name
+
+Closed the Gap Register entry opened earlier the same day. The deferral was wrong: it
+claimed the fix needed a product ruling on "which sites are which". It did not — the
+answer is in the code, and the safe refactor preserves every resolved value regardless.
+
+### What was actually there
+
+Two chains, and which one applies is decided by the TABLE holding the ciphertext, never
+by the module asking:
+
+| chain | seals | resolver |
+|---|---|---|
+| `INTEGRATION_ENCRYPTION_SECRET ?? JWT_SECRET` | `integration_credentials` — git provider tokens (via `resolveRepoCredential`), board sync, CI/webhooks, quality + QA ingest, revenue intel, RFP, investor | **new** `application/integrations/integrationCredentialSecret.ts` |
+| `CREDENTIAL_ENCRYPTION_SECRET ?? INTEGRATION_ENCRYPTION_SECRET ?? JWT_SECRET` | `connector_connections`, `tenant_llm_provider_keys`, MFA, SSO client secrets, sealed artifacts | existing `credentialCrypto.credentialSecret` |
+
+Each store was already self-consistent — written and read through the same chain — so
+nothing was broken in production. What WAS dangerous is that the distinction existed
+only as an implicit convention across 42 inline expressions and **three** private helper
+copies under **two** names: `gitSecret` (×2) and — the real trap —
+`publishTaskVerdict.ts`'s local `credentialSecret`, which resolved the **two**-level
+chain while the exported `credentialSecret` of that exact name resolves the **three**-
+level one. A stray auto-import between those two would have derived a different PBKDF2
+key and silently stopped opening repo credentials. A fourth copy
+(`githubActionsDispatch.ts`) turned up during the sweep.
+
+### Why it was safe to do without a ruling
+
+The two chains only diverge once an operator sets `CREDENTIAL_ENCRYPTION_SECRET`, and
+the risky move — collapsing a two-level site onto the three-level resolver — is the one
+thing this pass does **not** do. Every site keeps its own chain; only the duplication
+goes. The helper takes a structural `{ INTEGRATION_ENCRYPTION_SECRET?; JWT_SECRET? }` and
+ends in `?? ''`, which reproduces both call-site shapes byte for byte: the sites that
+carried a `?? ''` tail keep it, and the sites on the full `Env` can never reach it
+because their `JWT_SECRET` is non-optional. **No resolved value changes anywhere.**
+
+`gitSecret` was retired rather than kept as an alias — it was a misnomer for over half
+its callers (board sync, quality, QA, revenue intel and member routes are not git), and
+two names for one value is the problem being fixed. All 7 importing modules migrated.
+
+`webSearchCredential.ts` was the one site left un-mechanised: it reads `env?.` and
+relies on yielding `undefined` when `env` is absent, so it became
+`env ? integrationCredentialSecret(env) : undefined` rather than a bare call that would
+throw.
+
+### The guard
+
+`api/scripts/check-credential-secret.mjs` (wired into `checks.manifest.mjs`, now 33
+guards) fails the build on either an inline chain or a re-declaration of
+`credentialSecret` / `integrationCredentialSecret` / `gitSecret` outside the two owning
+modules. It reads code with comments stripped, so the prose explaining the rule does not
+trip it. Verified to actually FAIL by reintroducing an inline chain in `repoDelivery.ts`
+before restoring it — a guard that cannot fail is not a guard.
+
+This is a guard rather than a lint preference because the failure mode is silent: the
+wrong chain does not throw, it derives a different key and the row simply will not open.
+
+### Verification
+
+46 expressions → 2 owners · 4 private copies → 0 · `gitSecret` references → 0 ·
+one `credentialSecret` left in the tree (the three-level one). `api` **9,826 tests**
+passing, **33/33 guards**, typecheck clean. Six new tests pin both chains, including the
+load-bearing one: `integrationCredentialSecret` must IGNORE
+`CREDENTIAL_ENCRYPTION_SECRET`, because preferring it would re-key every existing repo,
+board and CI credential.
+
+## ✅ RESOLVED 2026-09-08 — The chat transcript shows the commands the agent ran, and what they printed
+
+A `run_command` step rendered like every other tool call: the tool's name, then
+`{"command":"pnpm -w test"}` above `{"ok":true,"exitCode":0,"stdout":"…"}`, both folded
+away behind a caret. That is a transcript of the transport, not of the work — and the
+one question a transcript exists to answer ("did it actually run the build, and what did
+it say?") was the one thing it made hardest to read.
+
+Shell steps now render as the terminal exchange they are, in every surface that mounts
+the shared transcript — the web Brain panel, the Creation Canvas dock and the VS Code
+editor chat — because the change is in the shared component, not in a host.
+
+- `packages/brain-ui/src/toolStepView.ts` — the pure view-model. Detection is
+  STRUCTURAL (an argument named `command`/`cmd`; a result shaped like a `ShellResult`),
+  so it covers `run_command`, a gateway MCP shell tool and the next one, with no
+  allow-list of tool names to maintain. A result handed back as a JSON string is parsed;
+  a bare string is taken as the output verbatim.
+- Nothing is hidden to get there: arguments the command line does not account for (a
+  `cwd`, a timeout) still render as an Input panel, and the raw result JSON is dropped
+  ONLY when every field in it is one the terminal panel already shows.
+- `packages/brain-ui/src/ToolStep.tsx` — the renderer, split out of `BrainTimeline.tsx`
+  (which was 912 lines and is now 778): the header carries the call's SUBJECT so a run's
+  steps read without opening any of them, a shell step opens by default, a non-zero exit
+  code is called out, and a command that printed nothing says so.
+- `packages/brain-ui/src/CopyButton.tsx` — extracted with a two-string label contract,
+  so the tool step and a message share one clipboard implementation.
+- `activityTarget` (`brain-embedded/src/runActivity.ts`) now recognises `command`. The
+  one tool that runs the build and the tests was the only one whose live row read as a
+  bare "Running run_command" while every read named its file.
+- The VS Code copy-transcript (`clients/vscode/webview/src/transcript.ts`) serializes
+  through the same view-model, keeping its own contract that a pasted report matches
+  what the reader saw.
+
+### Two localization faults found on the way, fixed in the same pass
+
+- **The Brain panel's templated strings resolved to their key paths.** `thoughtFor`,
+  `recallTitle`, `learnTitle`, `learnSkippedTitle`, `learnTargetContributed`,
+  `learnTargetSkipped` and `reconcileTitle` all carry ICU arguments that the RENDERER
+  substitutes, and the panel called `t(key)` with no values — the literal-token trick
+  the live-activity and chat-activity bundles already used.
+- **The Canvas dock rendered half its transcript in English.** It built its own label
+  object and named only the messages and the phases, so every tool step's Input/Output,
+  the change preview and every Evermind memory step fell back to the package's English
+  defaults on a board someone was reading in French.
+
+Both are gone because the two bundles are now one: `frontend/src/i18n/useBrainTimelineLabels.ts`
+is THE web-side copy for `<BrainTimeline>`, and the dock passes only the handful of
+strings the board deliberately words differently.
+
+`noOutput` / `exitCode` added to all five web catalogs and all five VS Code l10n
+bundles. Shipped in VSIX `2026.9.42`.
+
+`clients/vscode/webview/tsconfig.json` gained the `paths` entry for
+`@builderforce/agent-loop`: the webview's vite build derives its aliases from
+`scripts/sourcePackages.mjs`, but `paths` cannot import a module and is written by
+hand — so the first webview source to import a source-only package built perfectly
+and failed `tsc --noEmit`.
+
+## ✅ RESOLVED 2026-09-08 — "which tickets have pending code changes?" cost a context window, because nothing on a ticket answered it
+
+Three independent faults, found from one VSIX transcript (chat #103, `2026.9.39`) in
+which the instruction *"Review the open tickets… for tickets that have pending code
+changes"* ran 43 turns, produced 500 KB of tool output with five results truncated, and
+died of context exhaustion without reaching a verdict.
+
+### 1. A ticket could not say where its own code was
+
+Every fact existed — `tasks.gitBranch`, the `pull_requests` row, and
+`listBranchCommits(base, branch)` in `application/repos/branchLifecycle.ts` — and
+nothing composed them, so the only route to an answer was the shell: enumerate 100+
+branches, then `git rev-list main..<branch> --count` per branch, then correlate back to
+tickets by name.
+
+`application/task/ticketPendingChanges.ts` is the PURE rule (branch + PR state + commits
+ahead → verdict), and `ticketPendingChangesPort.ts` gathers the facts behind a cache.
+Six states, of which one is the reason the module earns its keep:
+
+- `abandoned` — commits exist and the PR was **closed without merging**. It reads as
+  finished everywhere else in the product: status `done`, progress 100%, `prState:
+  'closed'`. Measured on this repo: **#61 (1 commit), #65 (17), #58 (21)** are all in
+  exactly that state, and no existing field told them apart from work that landed.
+- `unmerged` (commits, no PR ever opened) · `in_review` (open/draft PR) ·
+  `landed` (merged) · `none` · `unknown`.
+
+`unknown` never degrades to "clean": an unreadable branch, a missing repo binding and a
+provider error all resolve to an explained `unknown`, because the cheap wrong answer
+here is the one that gets a ticket closed on a lie.
+
+It is DERIVED, not a column. The branch is the source of truth for what is unmerged (the
+stance `taskFileChangeFeed` already takes for content), so a stored
+`has_pending_changes` would rot on every push, merge and force-push with no write of
+ours to hang an invalidation on. Cached on a short TTL instead — deliberately NOT a
+version token, because a human pushing from their laptop moves the branch without any
+write of ours, so a token would pin a stale answer with no event that ever cleared it.
+
+The N+1 the shell loop performed by hand is avoided three ways: one batched
+`pull_requests` read; a DB-only prefilter that settles "no branch" and "PR merged" with
+no network at all (on this repo, 100+ branches → ~14 candidates); and bounded
+concurrency over what remains.
+
+Surfaced as `pendingChanges` on `tasks.get`, and as a new
+`tickets.pending_changes` tool in its own catalog module
+(`deliveryToolCatalog.ts` — the career-tools convention, rather than a 4,246th line in
+`builtinMcpService.ts`).
+
+### 2. `tasks.list` existed the whole time; the per-turn trim hid it
+
+`brain-embedded/selectTools` scores a tool by matching the turn's word stems against its
+NAME (+10) and description (+1). The catalog is named in the DOMAIN's vocabulary
+(`tasks.*`); users write in the PRODUCT's ("tickets"). `ticket` and `task` share no
+stem, so **every `tasks_*` tool scored zero** on a question entirely about tasks, and
+lost the 67 advertised slots to `chats_list_tickets` and `manager_stalled_tickets` —
+which won only because the literal string "ticket" is in their names. The model
+concluded it had "no direct list all project tickets tool" and went to the shell.
+
+`toolVocabulary.ts` declares interchangeable terms as equivalence CLASSES (symmetric by
+construction, data not branches), and the scorer weights a synonym name-hit at 7 so an
+exact match still wins. `epic` and `objective` are deliberately in DIFFERENT classes —
+OKRs and delivery epics are separate entities with separate tools here, and folding them
+together would answer an OKR question with epic tooling.
+
+### 3. Recall had no chat dimension at all, so a reopened chat "remembered" other conversations
+
+Reported directly: *"when the chat closed and reopened it recalled information that was
+not part of the chat."* `recallProjectEvermindMemory` was keyed on
+`(tenantId, projectId, query)` and nothing else, and `RecentEntry` carried no chat
+provenance — `dispatchBrainLearn` had `chatId` in hand and never passed it. A project
+Evermind learns from every chat in the project, so recall returned whatever the whole
+project had ever learned that matched lexically.
+
+Provenance now flows end to end: `chatId` on the DO's `LearnTextBody` → `PendingEntry` →
+the merged `RecentEntry`, stamped by the Brain learn path.
+
+Recall is **TIERED, not filtered** (`evermindChatTiering.ts`). Filtering would be worse
+than the bug: an Evermind's most valuable memories have no chat at all — agent run
+outcomes, incident causes, imports — and a brand-new chat has none of its own, so a
+filter gives every first turn an empty memory. Instead the conversation's own memories
+are placed first and are never displaced by a higher-scoring memory from elsewhere, and
+the project fills the remainder. A missing `chatId` means *project-wide*, never *not
+mine*, so nothing learned before this shipped is discarded. Ranking still runs
+project-wide over a 32-candidate pool so a chat's own memory that ranks 11th is still
+reachable to be promoted. Both hosts (web `BrainPanel`, VS Code `VsCodeChatSurface`) pass
+their chat through the one shared `projectMemoryHooks` factory.
+
+### Also fixed in the same pass
+
+- **Every MCP tool throw became HTTP 502**, so `Task '67' not found (HTTP 502)` — a
+  caller could not tell "this id is wrong, move on" from "the relay is down, retry
+  later". `/v1/mcp/call` now runs the canonical `statusOf()` (the one place an error
+  becomes a status, which this route bypassed); a 4xx surfaces as itself and anything
+  unmapped stays 502.
+- **Three duplicated primitives extracted, all callers migrated**: `gitSecret`
+  (2 copies → `application/repos/gitSecret.ts`), `requireEnv` (2 copies →
+  `builtinToolContext.ts`, taking the domain's own refusal sentence so the gate is
+  shared and the message stays specific), and `maskSecurityTasks` (→
+  `builtinTaskVisibility.ts`, so the second ticket-listing catalog reuses the security
+  gate rather than re-implementing an access-control decision).
+
+### Verification
+
+`api` 9,763 tests + 32/32 guards · `brain-embedded` 544 tests · new: 13 pending-changes,
+7 chat-tiering, 9 vocabulary/selection (including a regression test that replays the
+exact failing prompt and asserts `builtin_tasks_list` is advertised). Typecheck clean
+across `api`, `frontend`, `brain-embedded` and the VS Code webview.
+
+## ✅ RESOLVED 2026-08-22 — The points economy lands whole, and the mapping audit that shrank the rest of the hired.video port to zero new tables
+
+**The finding that changed the shape of the work.** PRD 18's remaining tracks were scheduled as a
+SCHEMA port — ~360 tables to create, behaviour on top. They are not. `source-to-target.tsv`, the
+committed coverage map the build already guards, **assigns every remaining hired.video table to a
+primitive this schema owns**, and 362 of 363 targets are written. Re-verified table by table against
+`api/src/infrastructure/database/schema/`. The remaining port is application code and surfaces over
+primitives that exist, not DDL. See [PRD 18 §5a](./specs/builderforce/18-prd-hired-video-port.md) for
+the row-by-row mapping.
+
+**Three claims in the roadmap were stale and are corrected:**
+
+- **"The Studio source lives in an archived repo not checked out here"** — false. `C:\code\hired\hired.video`
+  is present on the build machine with `frontend/lib/studio` intact. T4 is large; it is not blocked.
+- **"Payouts are an env-gated stub"** — false. `PayoutAccountService`, `payoutProviders`,
+  `withdrawalMethods`, `earningsLedger` and escrow milestones are built and ledgered. The
+  `paidCents` escrow-conflation bug `earningsLedger`'s docstring still described as open had already
+  been fixed (`reference not like 'escrow:%'`).
+- **`points_fraud_flags` → `ledger_entry`** was a bad coverage-map row, now `alert_event`. A flag has
+  no amount and no denomination; filing it in the ledger would put non-money rows in the table every
+  balance on this platform sums over.
+
+### The points economy, end to end
+
+hired.video's 10-table gamification aggregate landed as **zero tables**:
+
+| source | lands in |
+|---|---|
+| `user_points_balance`, `points_ledger` | `ledger_entries`, denomination `points` |
+| `points_streaks`, `points_task_streaks`, `points_activity_counters` | one `settings` row per earner |
+| `points_fraud_flags` | `alert_events` + a subject (migration 1106) |
+| `badges`, `user_badges`, `point_redemptions` | already existed with no feature path — now reachable |
+
+- **The rules are DATA** (`pointsCatalog.ts`): 48 actions, each carrying its own payout, daily
+  ceiling, earner facets, streak signal and badge tiers. What it replaces was a forty-arm `switch`
+  spread across three files, so adding an action meant three edits nothing forced you to make
+  together — the failure mode being an action that paid points and silently unlocked nothing.
+  `pointsCatalog.test.ts` now proves every badge slug a rule names exists.
+- **Facets, not a role enum.** The source gated on a `user_role` column this platform does not have
+  and should not grow. `earnerFacets.ts` DERIVES the four facets from facts already stored
+  (`available_for_hire`/`account_type`, an active `tenant_members` seat, `party_roles`). A set, not a
+  choice — so a builder who opted in to for-hire work earns as talent AND as an employer, which the
+  enum could not express.
+- **Idempotency is the database, not a pre-read.** Every award composes
+  `pts:<user>:<action>:<ref>` into `ledger_entries.reference`, unique on (tenant, denomination,
+  reference). A retried webhook, a double-click and a replayed queue message collapse to one row with
+  no read-then-write race. The prefix order is deliberate: the unique btree makes "what has this
+  person earned from this action" an index range scan rather than a jsonb filter.
+- **Blocked attempts write a zero row.** A capped or gated action records an entry worth 0 with the
+  reason, so the activity feed says "daily limit reached" instead of silently omitting the action —
+  the most common complaint logged against the surface this replaces. `pointsAwardCount` excludes
+  zero rows, so a blocked attempt can never trip a badge threshold.
+- **Anti-farming survived the port.** `task.complete.user` pays nothing until a hundred self-authored
+  tickets are closed. `tasks` has no author column, so `taskEarning.ts` derives authorship from the
+  audit log's `task.created` actor — correct for old tickets and new ones alike, where a `created_by`
+  column would backfill NULL for exactly the population a farming check most needs to be right about.
+- **Fraud raises into the existing queue.** `alert_events` gained a subject, a severity and an
+  evidence payload, so a flag reuses the acknowledge/resolve lifecycle and the operator surface
+  instead of standing up a second review queue nobody would remember to work. High severity suspends
+  earning; the flag records why. Two heuristics ship, not the source's five — three of theirs read
+  signals this platform does not collect, and shipping heuristics that can never fire reads as
+  coverage and is not (registered in the gap register).
+- **Redemption is real, and it depletes.** Points buy AI tokens — this platform's own scarce
+  resource, which it already meters. The accounting is closed in three parts: redeem writes an
+  `ai_credits` grant, `resolveTokenLimits` lifts BOTH token caps by the balance, and a daily
+  reconcile sweep debits what each ended month actually drew. That third part is the one that is
+  easy to omit and fatal to omit — without it the lift is permanent and 500 points buy unlimited
+  inference forever, a failure that looks exactly like the feature working. It settles every
+  unsettled month, not just the last, so a missed sweep is caught up rather than forgiven.
+- **The catalog cannot lie.** A reward is advertised as available exactly when a fulfilment adapter
+  is registered for its kind — one function answers both the catalog read and the redeem guard. The
+  source product had two lists, advertised gift cards its rail had refused months earlier, and let
+  people spend points reaching a reward the server then rejected.
+- **Redeem order is intent → debit → fulfil.** A crash anywhere leaves a recoverable `pending` row
+  rather than lost points or a free reward; both steps key off the redemption id, so re-running any
+  of them is a no-op. Cancel refunds as a new ledger row, never by deleting the debit.
+- **Surfaces.** Six self-contained cards (`components/points/`), each reading the shared snapshot and
+  self-hiding — droppable into a second surface with zero edits, composed by `RewardsView` with no
+  state and no branching. Mounted as the Workforce **Rewards** tab; localized into all five catalogs
+  with real translations. Nothing was added to `CreationCanvas.tsx`.
+
+### DRY fix carried in the same pass
+
+`USD_CENTS = 'usd_cents'` was declared in **nine** files — one exported from a feature module and
+eight private copies. A misspelt denomination does not fail; it silently opens a second balance under
+a name no reader queries, so the money is not lost so much as invisible. All nine now import
+`application/kernel/denominations.ts`, which is also where `points`, `ai_credits`, `campaign_credits`
+and `comm_credits` are named.
+
+**Validation.** 25/25 API guards green (including tenant-scope, schema-drift, model-coverage,
+table-adoption), API type-check green on both compilers, 45 tests green across the new catalog and
+the two touched modules, frontend type-check green, ESLint clean on every new file, and 11/13
+frontend guards green — the two red ones being pre-existing ratchet drift in files this pass never
+opened (see the gap register).
+## ✅ RESOLVED 2026-08-22 — The points economy lands whole, and the mapping audit that shrank the rest of the hired.video port to zero new tables
+
+**The finding that changed the shape of the work.** PRD 18's remaining tracks were scheduled as a
+SCHEMA port — ~360 tables to create, behaviour on top. They are not. `source-to-target.tsv`, the
+committed coverage map the build already guards, **assigns every remaining hired.video table to a
+primitive this schema owns**, and 362 of 363 targets are written. Re-verified table by table against
+`api/src/infrastructure/database/schema/`. The remaining port is application code and surfaces over
+primitives that exist, not DDL. See [PRD 18 §5a](./specs/builderforce/18-prd-hired-video-port.md) for
+the row-by-row mapping.
+
+**Three claims in the roadmap were stale and are corrected:**
+
+- **"The Studio source lives in an archived repo not checked out here"** — false. `C:\code\hired\hired.video`
+  is present on the build machine with `frontend/lib/studio` intact. T4 is large; it is not blocked.
+- **"Payouts are an env-gated stub"** — false. `PayoutAccountService`, `payoutProviders`,
+  `withdrawalMethods`, `earningsLedger` and escrow milestones are built and ledgered. The
+  `paidCents` escrow-conflation bug `earningsLedger`'s docstring still described as open had already
+  been fixed (`reference not like 'escrow:%'`).
+- **`points_fraud_flags` → `ledger_entry`** was a bad coverage-map row, now `alert_event`. A flag has
+  no amount and no denomination; filing it in the ledger would put non-money rows in the table every
+  balance on this platform sums over.
+
+### The points economy, end to end
+
+hired.video's 10-table gamification aggregate landed as **zero tables**:
+
+| source | lands in |
+|---|---|
+| `user_points_balance`, `points_ledger` | `ledger_entries`, denomination `points` |
+| `points_streaks`, `points_task_streaks`, `points_activity_counters` | one `settings` row per earner |
+| `points_fraud_flags` | `alert_events` + a subject (migration 1106) |
+| `badges`, `user_badges`, `point_redemptions` | already existed with no feature path — now reachable |
+
+- **The rules are DATA** (`pointsCatalog.ts`): 48 actions, each carrying its own payout, daily
+  ceiling, earner facets, streak signal and badge tiers. What it replaces was a forty-arm `switch`
+  spread across three files, so adding an action meant three edits nothing forced you to make
+  together — the failure mode being an action that paid points and silently unlocked nothing.
+  `pointsCatalog.test.ts` now proves every badge slug a rule names exists.
+- **Facets, not a role enum.** The source gated on a `user_role` column this platform does not have
+  and should not grow. `earnerFacets.ts` DERIVES the four facets from facts already stored
+  (`available_for_hire`/`account_type`, an active `tenant_members` seat, `party_roles`). A set, not a
+  choice — so a builder who opted in to for-hire work earns as talent AND as an employer, which the
+  enum could not express.
+- **Idempotency is the database, not a pre-read.** Every award composes
+  `pts:<user>:<action>:<ref>` into `ledger_entries.reference`, unique on (tenant, denomination,
+  reference). A retried webhook, a double-click and a replayed queue message collapse to one row with
+  no read-then-write race. The prefix order is deliberate: the unique btree makes "what has this
+  person earned from this action" an index range scan rather than a jsonb filter.
+- **Blocked attempts write a zero row.** A capped or gated action records an entry worth 0 with the
+  reason, so the activity feed says "daily limit reached" instead of silently omitting the action —
+  the most common complaint logged against the surface this replaces. `pointsAwardCount` excludes
+  zero rows, so a blocked attempt can never trip a badge threshold.
+- **Anti-farming survived the port.** `task.complete.user` pays nothing until a hundred self-authored
+  tickets are closed. `tasks` has no author column, so `taskEarning.ts` derives authorship from the
+  audit log's `task.created` actor — correct for old tickets and new ones alike, where a `created_by`
+  column would backfill NULL for exactly the population a farming check most needs to be right about.
+- **Fraud raises into the existing queue.** `alert_events` gained a subject, a severity and an
+  evidence payload, so a flag reuses the acknowledge/resolve lifecycle and the operator surface
+  instead of standing up a second review queue nobody would remember to work. High severity suspends
+  earning; the flag records why. Two heuristics ship, not the source's five — three of theirs read
+  signals this platform does not collect, and shipping heuristics that can never fire reads as
+  coverage and is not (registered in the gap register).
+- **Redemption is real, and it depletes.** Points buy AI tokens — this platform's own scarce
+  resource, which it already meters. The accounting is closed in three parts: redeem writes an
+  `ai_credits` grant, `resolveTokenLimits` lifts BOTH token caps by the balance, and a daily
+  reconcile sweep debits what each ended month actually drew. That third part is the one that is
+  easy to omit and fatal to omit — without it the lift is permanent and 500 points buy unlimited
+  inference forever, a failure that looks exactly like the feature working. It settles every
+  unsettled month, not just the last, so a missed sweep is caught up rather than forgiven.
+- **The catalog cannot lie.** A reward is advertised as available exactly when a fulfilment adapter
+  is registered for its kind — one function answers both the catalog read and the redeem guard. The
+  source product had two lists, advertised gift cards its rail had refused months earlier, and let
+  people spend points reaching a reward the server then rejected.
+- **Redeem order is intent → debit → fulfil.** A crash anywhere leaves a recoverable `pending` row
+  rather than lost points or a free reward; both steps key off the redemption id, so re-running any
+  of them is a no-op. Cancel refunds as a new ledger row, never by deleting the debit.
+- **Surfaces.** Six self-contained cards (`components/points/`), each reading the shared snapshot and
+  self-hiding — droppable into a second surface with zero edits, composed by `RewardsView` with no
+  state and no branching. Mounted as the Workforce **Rewards** tab; localized into all five catalogs
+  with real translations. Nothing was added to `CreationCanvas.tsx`.
+
+### DRY fix carried in the same pass
+
+`USD_CENTS = 'usd_cents'` was declared in **nine** files — one exported from a feature module and
+eight private copies. A misspelt denomination does not fail; it silently opens a second balance under
+a name no reader queries, so the money is not lost so much as invisible. All nine now import
+`application/kernel/denominations.ts`, which is also where `points`, `ai_credits`, `campaign_credits`
+and `comm_credits` are named.
+
+**Validation.** 25/25 API guards green (including tenant-scope, schema-drift, model-coverage,
+table-adoption), API type-check green on both compilers, 45 tests green across the new catalog and
+the two touched modules, frontend type-check green, ESLint clean on every new file, and 11/13
+frontend guards green — the two red ones being pre-existing ratchet drift in files this pass never
+opened (see the gap register).
+## ✅ RESOLVED 2026-08-22 — The points economy lands whole, and the mapping audit that shrank the rest of the hired.video port to zero new tables
+
+**The finding that changed the shape of the work.** PRD 18's remaining tracks were scheduled as a
+SCHEMA port — ~360 tables to create, behaviour on top. They are not. `source-to-target.tsv`, the
+committed coverage map the build already guards, **assigns every remaining hired.video table to a
+primitive this schema owns**, and 362 of 363 targets are written. Re-verified table by table against
+`api/src/infrastructure/database/schema/`. The remaining port is application code and surfaces over
+primitives that exist, not DDL. See [PRD 18 §5a](./specs/builderforce/18-prd-hired-video-port.md) for
+the row-by-row mapping.
+
+**Three claims in the roadmap were stale and are corrected:**
+
+- **"The Studio source lives in an archived repo not checked out here"** — false. `C:\code\hired\hired.video`
+  is present on the build machine with `frontend/lib/studio` intact. T4 is large; it is not blocked.
+- **"Payouts are an env-gated stub"** — false. `PayoutAccountService`, `payoutProviders`,
+  `withdrawalMethods`, `earningsLedger` and escrow milestones are built and ledgered. The
+  `paidCents` escrow-conflation bug `earningsLedger`'s docstring still described as open had already
+  been fixed (`reference not like 'escrow:%'`).
+- **`points_fraud_flags` → `ledger_entry`** was a bad coverage-map row, now `alert_event`. A flag has
+  no amount and no denomination; filing it in the ledger would put non-money rows in the table every
+  balance on this platform sums over.
+
+### The points economy, end to end
+
+hired.video's 10-table gamification aggregate landed as **zero tables**:
+
+| source | lands in |
+|---|---|
+| `user_points_balance`, `points_ledger` | `ledger_entries`, denomination `points` |
+| `points_streaks`, `points_task_streaks`, `points_activity_counters` | one `settings` row per earner |
+| `points_fraud_flags` | `alert_events` + a subject (migration 1106) |
+| `badges`, `user_badges`, `point_redemptions` | already existed with no feature path — now reachable |
+
+- **The rules are DATA** (`pointsCatalog.ts`): 48 actions, each carrying its own payout, daily
+  ceiling, earner facets, streak signal and badge tiers. What it replaces was a forty-arm `switch`
+  spread across three files, so adding an action meant three edits nothing forced you to make
+  together — the failure mode being an action that paid points and silently unlocked nothing.
+  `pointsCatalog.test.ts` now proves every badge slug a rule names exists.
+- **Facets, not a role enum.** The source gated on a `user_role` column this platform does not have
+  and should not grow. `earnerFacets.ts` DERIVES the four facets from facts already stored
+  (`available_for_hire`/`account_type`, an active `tenant_members` seat, `party_roles`). A set, not a
+  choice — so a builder who opted in to for-hire work earns as talent AND as an employer, which the
+  enum could not express.
+- **Idempotency is the database, not a pre-read.** Every award composes
+  `pts:<user>:<action>:<ref>` into `ledger_entries.reference`, unique on (tenant, denomination,
+  reference). A retried webhook, a double-click and a replayed queue message collapse to one row with
+  no read-then-write race. The prefix order is deliberate: the unique btree makes "what has this
+  person earned from this action" an index range scan rather than a jsonb filter.
+- **Blocked attempts write a zero row.** A capped or gated action records an entry worth 0 with the
+  reason, so the activity feed says "daily limit reached" instead of silently omitting the action —
+  the most common complaint logged against the surface this replaces. `pointsAwardCount` excludes
+  zero rows, so a blocked attempt can never trip a badge threshold.
+- **Anti-farming survived the port.** `task.complete.user` pays nothing until a hundred self-authored
+  tickets are closed. `tasks` has no author column, so `taskEarning.ts` derives authorship from the
+  audit log's `task.created` actor — correct for old tickets and new ones alike, where a `created_by`
+  column would backfill NULL for exactly the population a farming check most needs to be right about.
+- **Fraud raises into the existing queue.** `alert_events` gained a subject, a severity and an
+  evidence payload, so a flag reuses the acknowledge/resolve lifecycle and the operator surface
+  instead of standing up a second review queue nobody would remember to work. High severity suspends
+  earning; the flag records why. Two heuristics ship, not the source's five — three of theirs read
+  signals this platform does not collect, and shipping heuristics that can never fire reads as
+  coverage and is not (registered in the gap register).
+- **Redemption is real, and it depletes.** Points buy AI tokens — this platform's own scarce
+  resource, which it already meters. The accounting is closed in three parts: redeem writes an
+  `ai_credits` grant, `resolveTokenLimits` lifts BOTH token caps by the balance, and a daily
+  reconcile sweep debits what each ended month actually drew. That third part is the one that is
+  easy to omit and fatal to omit — without it the lift is permanent and 500 points buy unlimited
+  inference forever, a failure that looks exactly like the feature working. It settles every
+  unsettled month, not just the last, so a missed sweep is caught up rather than forgiven.
+- **The catalog cannot lie.** A reward is advertised as available exactly when a fulfilment adapter
+  is registered for its kind — one function answers both the catalog read and the redeem guard. The
+  source product had two lists, advertised gift cards its rail had refused months earlier, and let
+  people spend points reaching a reward the server then rejected.
+- **Redeem order is intent → debit → fulfil.** A crash anywhere leaves a recoverable `pending` row
+  rather than lost points or a free reward; both steps key off the redemption id, so re-running any
+  of them is a no-op. Cancel refunds as a new ledger row, never by deleting the debit.
+- **Surfaces.** Six self-contained cards (`components/points/`), each reading the shared snapshot and
+  self-hiding — droppable into a second surface with zero edits, composed by `RewardsView` with no
+  state and no branching. Mounted as the Workforce **Rewards** tab; localized into all five catalogs
+  with real translations. Nothing was added to `CreationCanvas.tsx`.
+
+### DRY fix carried in the same pass
+
+`USD_CENTS = 'usd_cents'` was declared in **nine** files — one exported from a feature module and
+eight private copies. A misspelt denomination does not fail; it silently opens a second balance under
+a name no reader queries, so the money is not lost so much as invisible. All nine now import
+`application/kernel/denominations.ts`, which is also where `points`, `ai_credits`, `campaign_credits`
+and `comm_credits` are named.
+
+**Validation.** 25/25 API guards green (including tenant-scope, schema-drift, model-coverage,
+table-adoption), API type-check green on both compilers, 45 tests green across the new catalog and
+the two touched modules, frontend type-check green, ESLint clean on every new file, and 11/13
+frontend guards green — the two red ones being pre-existing ratchet drift in files this pass never
+opened (see the gap register).
+## ✅ RESOLVED 2026-08-22 — The points economy lands whole, and the mapping audit that shrank the rest of the hired.video port to zero new tables
+
+**The finding that changed the shape of the work.** PRD 18's remaining tracks were scheduled as a
+SCHEMA port — ~360 tables to create, behaviour on top. They are not. `source-to-target.tsv`, the
+committed coverage map the build already guards, **assigns every remaining hired.video table to a
+primitive this schema owns**, and 362 of 363 targets are written. Re-verified table by table against
+`api/src/infrastructure/database/schema/`. The remaining port is application code and surfaces over
+primitives that exist, not DDL. See [PRD 18 §5a](./specs/builderforce/18-prd-hired-video-port.md) for
+the row-by-row mapping.
+
+**Three claims in the roadmap were stale and are corrected:**
+
+- **"The Studio source lives in an archived repo not checked out here"** — false. `C:\code\hired\hired.video`
+  is present on the build machine with `frontend/lib/studio` intact. T4 is large; it is not blocked.
+- **"Payouts are an env-gated stub"** — false. `PayoutAccountService`, `payoutProviders`,
+  `withdrawalMethods`, `earningsLedger` and escrow milestones are built and ledgered. The
+  `paidCents` escrow-conflation bug `earningsLedger`'s docstring still described as open had already
+  been fixed (`reference not like 'escrow:%'`).
+- **`points_fraud_flags` → `ledger_entry`** was a bad coverage-map row, now `alert_event`. A flag has
+  no amount and no denomination; filing it in the ledger would put non-money rows in the table every
+  balance on this platform sums over.
+
+### The points economy, end to end
+
+hired.video's 10-table gamification aggregate landed as **zero tables**:
+
+| source | lands in |
+|---|---|
+| `user_points_balance`, `points_ledger` | `ledger_entries`, denomination `points` |
+| `points_streaks`, `points_task_streaks`, `points_activity_counters` | one `settings` row per earner |
+| `points_fraud_flags` | `alert_events` + a subject (migration 1106) |
+| `badges`, `user_badges`, `point_redemptions` | already existed with no feature path — now reachable |
+
+- **The rules are DATA** (`pointsCatalog.ts`): 48 actions, each carrying its own payout, daily
+  ceiling, earner facets, streak signal and badge tiers. What it replaces was a forty-arm `switch`
+  spread across three files, so adding an action meant three edits nothing forced you to make
+  together — the failure mode being an action that paid points and silently unlocked nothing.
+  `pointsCatalog.test.ts` now proves every badge slug a rule names exists.
+- **Facets, not a role enum.** The source gated on a `user_role` column this platform does not have
+  and should not grow. `earnerFacets.ts` DERIVES the four facets from facts already stored
+  (`available_for_hire`/`account_type`, an active `tenant_members` seat, `party_roles`). A set, not a
+  choice — so a builder who opted in to for-hire work earns as talent AND as an employer, which the
+  enum could not express.
+- **Idempotency is the database, not a pre-read.** Every award composes
+  `pts:<user>:<action>:<ref>` into `ledger_entries.reference`, unique on (tenant, denomination,
+  reference). A retried webhook, a double-click and a replayed queue message collapse to one row with
+  no read-then-write race. The prefix order is deliberate: the unique btree makes "what has this
+  person earned from this action" an index range scan rather than a jsonb filter.
+- **Blocked attempts write a zero row.** A capped or gated action records an entry worth 0 with the
+  reason, so the activity feed says "daily limit reached" instead of silently omitting the action —
+  the most common complaint logged against the surface this replaces. `pointsAwardCount` excludes
+  zero rows, so a blocked attempt can never trip a badge threshold.
+- **Anti-farming survived the port.** `task.complete.user` pays nothing until a hundred self-authored
+  tickets are closed. `tasks` has no author column, so `taskEarning.ts` derives authorship from the
+  audit log's `task.created` actor — correct for old tickets and new ones alike, where a `created_by`
+  column would backfill NULL for exactly the population a farming check most needs to be right about.
+- **Fraud raises into the existing queue.** `alert_events` gained a subject, a severity and an
+  evidence payload, so a flag reuses the acknowledge/resolve lifecycle and the operator surface
+  instead of standing up a second review queue nobody would remember to work. High severity suspends
+  earning; the flag records why. Two heuristics ship, not the source's five — three of theirs read
+  signals this platform does not collect, and shipping heuristics that can never fire reads as
+  coverage and is not (registered in the gap register).
+- **Redemption is real, and it depletes.** Points buy AI tokens — this platform's own scarce
+  resource, which it already meters. The accounting is closed in three parts: redeem writes an
+  `ai_credits` grant, `resolveTokenLimits` lifts BOTH token caps by the balance, and a daily
+  reconcile sweep debits what each ended month actually drew. That third part is the one that is
+  easy to omit and fatal to omit — without it the lift is permanent and 500 points buy unlimited
+  inference forever, a failure that looks exactly like the feature working. It settles every
+  unsettled month, not just the last, so a missed sweep is caught up rather than forgiven.
+- **The catalog cannot lie.** A reward is advertised as available exactly when a fulfilment adapter
+  is registered for its kind — one function answers both the catalog read and the redeem guard. The
+  source product had two lists, advertised gift cards its rail had refused months earlier, and let
+  people spend points reaching a reward the server then rejected.
+- **Redeem order is intent → debit → fulfil.** A crash anywhere leaves a recoverable `pending` row
+  rather than lost points or a free reward; both steps key off the redemption id, so re-running any
+  of them is a no-op. Cancel refunds as a new ledger row, never by deleting the debit.
+- **Surfaces.** Six self-contained cards (`components/points/`), each reading the shared snapshot and
+  self-hiding — droppable into a second surface with zero edits, composed by `RewardsView` with no
+  state and no branching. Mounted as the Workforce **Rewards** tab; localized into all five catalogs
+  with real translations. Nothing was added to `CreationCanvas.tsx`.
+
+### DRY fix carried in the same pass
+
+`USD_CENTS = 'usd_cents'` was declared in **nine** files — one exported from a feature module and
+eight private copies. A misspelt denomination does not fail; it silently opens a second balance under
+a name no reader queries, so the money is not lost so much as invisible. All nine now import
+`application/kernel/denominations.ts`, which is also where `points`, `ai_credits`, `campaign_credits`
+and `comm_credits` are named.
+
+**Validation.** 25/25 API guards green (including tenant-scope, schema-drift, model-coverage,
+table-adoption), API type-check green on both compilers, 45 tests green across the new catalog and
+the two touched modules, frontend type-check green, ESLint clean on every new file, and 11/13
+frontend guards green — the two red ones being pre-existing ratchet drift in files this pass never
+opened (see the gap register).
+## ✅ RESOLVED 2026-09-08 — a question the agent asked was invisible, so the turn read as "the agent died"
+
+Reported against the VS Code chat with three screenshots: an explicit instruction
+("evaluate each ticket against the roadmap; add it or close it") answered with a
+question the transcript never displayed. The last row of the conversation was a muted
+**"Thought"** line — *"to the user, they think the Agent just died"*.
+
+### What happened
+
+MiniMax-M1 put its whole reply, question included, inside a `<think>` block it never
+closed. Nothing on the way to the transcript strips an UNCLOSED block — every stripper
+needs the closing tag — so the persisted assistant message was reasoning end to end.
+
+`<BrainTimeline>` renders a reasoning-only assistant turn as ONE collapsed line with no
+author header and no actions, and it is right to: mid-run that turn is the model
+thinking before it calls a tool, and six of them in a row used to cost the editor ~30
+rows. The reading breaks at exactly one place — the END of a settled conversation. A run
+that stops on a reasoning-only message has said its last word inside the block, so the
+collapse hid the entire reply.
+
+### The fix
+
+`strandedReplyKey(nodes, isRunning)` (`packages/brain-ui/src/timelineModel.ts`) — the
+fact that tells the two cases apart is not in the content, it is the turn's POSITION and
+whether the run is still going. It walks back to the conversation's last model reply,
+past the tool/memory/narration rows that can sort either side of it, and stops at a user
+turn (a user turn after the reply means a turn is PENDING, not stranded). Nothing is
+stranded while `isRunning`.
+
+That one turn now renders as a reply — header, provenance chip, copy/replay/rate — with
+its reasoning as the body (`thoughtTextOf`) above a muted note explaining the
+first-person voice (`replyFromThought`, localized in all five catalogs + the five VSIX
+l10n bundles). Every other reasoning-only turn still collapses. The triage transcript
+reads the same predicate, so it can no longer print "(no response)" over a turn the
+reader could read.
+
+### And the reason the question was prose in the first place
+
+`ask_user` — the schema-validated question the UI renders as clickable options — was
+advertised ONLY by the api's addressed-agent reply loop. The editor's chat surface
+already rendered `<QuestionCard>`, the pinned "Answer needed" banner and the ❓ session
+badge, and posts the chosen option as the next turn: a fully wired consumer with no
+producer. Every question it could ever receive arrived as prose.
+
+The Brain run store now injects the tool and intercepts the call as TERMINAL
+(`beforeToolCalls` → settle the reply, stop the run), pinned in `alwaysAdvertised` so
+relevance selection cannot drop the one tool that ends a blocked run, and gated on the
+host ALREADY having a catalog — an empty catalog is a fault signal ("zero tools
+advertised" is how a failed tenant tool load is told apart from a model that declined to
+act), and injecting one tool into it would report a broken catalog as a working one.
+Malformed args fall back to prose, or to a corrective tool result naming the schema.
+
+### One contract, not two
+
+The protocol was written twice — the producer's tool schema + block builder in
+`BrainService.ts`, the consumer's parser + serializer in `brain-ui/askUser.tsx` — with
+the same trim rules and the same "a prompt and 2+ options" threshold restated in each.
+Two definitions of one wire format drift silently: the producer accepts a payload the
+renderer then declines, and the question is swallowed. Both are now
+`@builderforce/agent-loop` (which already owned the loop's `finish`/`ask_human`
+signals); `brain-embedded` re-exports it for the React packages, and `askUser.tsx` keeps
+only the card and the banner.
+
+It is declared in that package's `index.ts` rather than a sibling module because
+`brain-embedded` publishes through a declaration rollup that inlines only the module a
+bare specifier resolves to — a sibling `./askUser.js` re-exported from the barrel came
+out as a dangling relative import and every symbol arrived typeless downstream, the same
+trap its `tsup.config.ts` already documents for `@builderforce/agent-stall`.
+
+### One reasoning channel, not four
+
+While fixing the above: the same fact — what a turn SAID versus what it THOUGHT — was
+being decided in FOUR places, and the four disagreed on the two questions that matter.
+
+| where | unclosed block? | tag inside a code fence? | tag vocabulary |
+|---|---|---|---|
+| `api/…/llm/reasoningContent.ts` (gateway) | **ignored** | stripped anyway | `think` |
+| `api/…/llm/learnableText.ts` (Evermind learning) | counted | stripped anyway | 4 tags |
+| `brain-ui/src/thinkBlocks.ts` (transcript) | counted | stripped anyway | `think` |
+| `agent-runtime/…/text/reasoning-tags.ts` (TUI) | tail kept | **protected** | 4 tags + `<final>` |
+| `brain-embedded/src/brainRunStore.ts` (editor + web chat) | — | — | **stripped nothing at all** |
+
+The first row is why the gateway shipped a whole scratchpad through as the answer, and
+the last is why this bug existed: the loop the editor and the web chat both drive stored
+whatever the vendor emitted, so an unclosed block reached the transcript, the answer
+cache and every `learnableText` reader as reply text.
+
+All four now come from `packages/agent-loop/src/reasoning.ts` — ONE scanner over the
+union of the vocabulary (`think`/`thinking`/`thought`/`antthinking`/`scratchpad`/
+`reasoning`, plus `<final>` unwrapping) with the strictly-better answer to both
+questions: an unclosed block counts, and a tag inside a fenced or inline code span is
+CONTENT (a chat about reasoning tags keeps its own example, which only the runner's copy
+used to manage). What genuinely differs between surfaces is what to DO with a stranded
+thought, and those are named policies over the one scan rather than four parsers:
+
+- `answerTextOf` / `thoughtTextOf` / `splitReasoningSegments` — display, including the
+  fragment promotion that rescues an answer sealed inside the block.
+- `stripReasoningScratchpad` — learning, which must NEVER promote: an exemplar is the
+  answer or nothing, and adapting an SSM on half-finished deliberation is how a merged
+  project model came to fail its coherence probe.
+- `stripReasoningTagsFromText` — the runner's plain-text surfaces, `strict`/`preserve`.
+- `splitVendorReasoning` — the four wire shapes (`reasoning_content`, `reasoning`,
+  `reasoning_details[]`, inline tags).
+
+And the behavioural half: `brainRunStore` now persists `canonicalReasoningText` at every
+site that stores model text — one CLOSED block, then the answer — so nothing downstream
+depends on a model closing its own tag. A reasoning-only turn stays reasoning-only; only
+the transcript can decide what to show for one of those, because that depends on whether
+the RUN is over.
+
+Four private copies and their tests are deleted (`reasoningContent.ts`,
+`learnableText.ts`, `thinkBlocks.ts`, `reasoning-tags.ts`); the runner's 39
+fence/`<final>` cases now hold the shared scanner honest, alongside the display,
+learning and vendor contracts, in `agent-loop`'s own suite. The control UI's bundler and
+test runners gained the derived `sourcePackageAliases` set they needed to reach it (the
+source-package-graph guard checks 11 tsconfig projects now, up from 9).
+
+### Verified
+
+`agent-loop` 120, `brain-embedded` 548, `brain-ui` 110, `clients/vscode` 357, api
+`application/{llm,brain,runtime}` 2,030 — all passing, including new coverage for the
+stranded reply (and for a reasoning-only turn that must STILL collapse), the terminal
+`ask_user` turn, the malformed-args fallback, the empty-catalog fault signal, and the
+canonical reasoning a run persists. Typecheck clean across `agent-loop`,
+`brain-embedded`, `brain-ui`, the api, `agent-runtime` and the VSIX host + webview;
+i18n-key, source-package-graph, declared-deps and primitive-duplication guards green.
+VSIX `2026.9.43`.
+
+Six `agent-runtime` unit tests fail on this checkout and are unrelated to this pass —
+policy gates, subagent announce retry, model auth-profile sync, workflow telemetry and
+session forking. None of those files, or anything in their import graphs, touches the
+reasoning module; `git status` shows the only modified files in that package are this
+pass's.
+
 ## ✅ RESOLVED 2026-09-07 — the chat rendered unstyled because the build emitted six stylesheets and the shell loads one
 
 **A regression I shipped**, in VSIX `2026.9.36`–`2026.9.38`. Reported as "did you fuck

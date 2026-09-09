@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -356,7 +357,7 @@ export async function runPrTicketReconciliation(
   let errorCount = 0;
 
   try {
-    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET;
+    const secret = integrationCredentialSecret(env);
     const resolved = await resolveRepoCredential(db, secret, args.tenantId, repo.id);
     if (isResolveError(resolved)) throw new ReconciliationError('CREDENTIAL_RESOLUTION_FAILED', resolved.error, { status: resolved.status });
 

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { splitThinkSegments } from './thinkBlocks';
+import { splitReasoningSegments } from '@builderforce/agent-loop';
 
 export interface MarkdownLabels {
   copy: string;
@@ -89,7 +89,7 @@ function CodeBlock({
  */
 function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateFile, labels }: MarkdownProps) {
   const lab = useMemo(() => ({ ...DEFAULT_LABELS, ...labels }), [labels]);
-  const segments = useMemo(() => splitThinkSegments(content), [content]);
+  const segments = useMemo(() => splitReasoningSegments(content), [content]);
   const components = {
     a({ href, children, ...rest }: React.ComponentProps<'a'>) {
       const target = href ?? '';

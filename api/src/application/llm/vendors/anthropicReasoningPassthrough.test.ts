@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { anthropicModule } from './anthropic';
-import { splitReasoning } from '../reasoningContent';
+import { splitVendorReasoning } from '@builderforce/agent-loop';
 
 /**
  * GAP B1 — the direct-Anthropic normaliser used to keep only `text` and
  * `tool_use` blocks, so extended-thinking output never reached a timeline. It now
  * rides on the OpenAI-shape message as `reasoning_content`, the field every loop
- * reads through `splitReasoning`.
+ * reads through `splitVendorReasoning`.
  */
 const ENDPOINT = 'https://api.anthropic.com/v1/messages';
 const originalFetch = globalThis.fetch;
@@ -35,7 +35,7 @@ describe('direct-Anthropic thinking blocks reach the chat-completion message', (
     const message = (r.raw as Choice).choices[0]!.message;
     expect(message.content).toBe('Renaming the helper.');
     expect(message.reasoning_content).toBe('The failing test names the helper.');
-    expect(splitReasoning(message)).toEqual({ content: 'Renaming the helper.', reasoning: 'The failing test names the helper.' });
+    expect(splitVendorReasoning(message)).toEqual({ content: 'Renaming the helper.', reasoning: 'The failing test names the helper.' });
   });
 
   it('omits reasoning_content when the turn carried no thinking block', async () => {

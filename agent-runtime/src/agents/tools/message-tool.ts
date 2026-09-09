@@ -17,7 +17,7 @@ import { GATEWAY_CLIENT_IDS, GATEWAY_CLIENT_MODES } from "../../gateway/protocol
 import { getToolResult, runMessageAction } from "../../infra/outbound/message-action-runner.js";
 import { normalizeTargetForProvider } from "../../infra/outbound/target-normalization.js";
 import { normalizeAccountId } from "../../routing/session-key.js";
-import { stripReasoningTagsFromText } from "../../shared/text/reasoning-tags.js";
+import { stripReasoningTagsFromText } from "@builderforce/agent-loop";
 import { normalizeMessageChannel } from "../../utils/message-channel.js";
 import { resolveSessionAgentId } from "../agent-scope.js";
 import { listChannelSupportedActions } from "../channel-tools.js";

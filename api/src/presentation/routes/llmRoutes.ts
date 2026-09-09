@@ -1,3 +1,4 @@
+import { isClientError, statusOf } from '../../domain/shared/errors';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * builderforceLLM routes — OpenAI-compatible LLM proxy.
@@ -1927,8 +1928,19 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       );
       return c.json({ result });
     } catch (e) {
-      // Recoverable: hand the model a tool-error result, don't 500 the loop.
-      return c.json({ error: e instanceof Error ? e.message : 'MCP call failed' }, 502);
+      // Recoverable: hand the model a tool-error result, don't 500 the loop — but the
+      // STATUS has to say which KIND of failure it was. Every throw used to become a
+      // flat 502, so a ticket that simply does not exist came back as
+      // `Task '67' not found (HTTP 502)`: a caller could not tell "this id is wrong,
+      // move on" from "the relay is down, retry later", and a real outage looked
+      // identical to a typo. `statusOf` is the one place an error becomes a status, so
+      // a 4xx now surfaces as itself; anything unmapped (500) stays 502, because from
+      // the caller's side it is the relay that failed.
+      const status = statusOf(e);
+      return c.json(
+        { error: e instanceof Error ? e.message : 'MCP call failed' },
+        isClientError(status) ? (status as 400) : 502,
+      );
     }
   });
 

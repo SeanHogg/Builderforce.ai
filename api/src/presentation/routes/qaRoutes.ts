@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Agentic QA routes — /api/qa
@@ -298,7 +299,7 @@ function parseSteps(raw: string | null): QaStep[] {
 /** Key material for encrypting/decrypting credential secrets. Mirrors the
  *  integrations fallback (INTEGRATION_ENCRYPTION_SECRET → JWT_SECRET). */
 function credentialKey(env: Env): string {
-  return env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET;
+  return integrationCredentialSecret(env);
 }
 
 type CredentialRow = typeof qaCredentials.$inferSelect;

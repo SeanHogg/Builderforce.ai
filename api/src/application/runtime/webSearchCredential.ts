@@ -35,6 +35,7 @@
  * is cached — see `cloudWeb.searchWeb`.
  */
 
+import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { and, eq, inArray } from 'drizzle-orm';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { integrationCredentials } from '../../infrastructure/database/schema';
@@ -103,7 +104,7 @@ export async function resolveWebSearchBacking(
   tenantId: number,
 ): Promise<ResolvedWebSearchBacking> {
   try {
-    const secret = env?.INTEGRATION_ENCRYPTION_SECRET ?? env?.JWT_SECRET;
+    const secret = env ? integrationCredentialSecret(env) : undefined;
     if (secret) {
       const rows = await db
         .select({

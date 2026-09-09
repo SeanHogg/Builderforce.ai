@@ -21,6 +21,31 @@ function bigCatalog(): BrainToolSpec[] {
 }
 
 describe('selectToolsForTurn', () => {
+  it('finds the tasks_* domain when the user says "tickets" — the live context-exhaustion bug', () => {
+    // Reproduces the observed failure verbatim. The catalog names the domain `tasks`;
+    // the user asked about `tickets`. Before the vocabulary expansion the two shared
+    // no stem, every builtin_tasks_* tool scored ZERO, and the model concluded it had
+    // no way to list tickets — then enumerated git branches in a shell until its
+    // context window ran out.
+    const query = 'Review the open tickets and the status of each ticket. '
+      + 'For tickets that have pending code changes, determine if the ticket is still applicable.';
+    const sel = selectToolsForTurn(bigCatalog(), { query });
+    const names = sel.tools.map((t) => t.function?.name);
+    expect(names).toContain('builtin_tasks_list');
+    expect(names).toContain('builtin_tasks_get');
+  });
+
+  it('still ranks an EXACT name match above a synonym match', () => {
+    // "tasks" verbatim must not be beaten by a tool reached through the ticket class.
+    const tools = [
+      tool('builtin_tickets_pending_changes', 'pending changes'),
+      tool('builtin_tasks_list', 'list tasks'),
+      ...bigCatalog(),
+    ];
+    const sel = selectToolsForTurn(tools, { query: 'list the tasks', limit: 3 });
+    expect(sel.tools.map((t) => t.function?.name)).toContain('builtin_tasks_list');
+  });
+
   it('leaves a small catalog completely untouched', () => {
     const tools = [tool('a'), tool('b')];
     const sel = selectToolsForTurn(tools, { query: 'anything' });

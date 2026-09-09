@@ -1,7 +1,67 @@
 import * as React from 'react';
 import React__default, { HTMLAttributes, ReactNode } from 'react';
-import { BrainRunActivity, BrainMessage, BrainTraceEvent, ChatActivityLabels, ModelIdentityContext, ChatErrorAction, ModelChoiceLabels, Effort, ChatModelSelection, ChatModelOptions, DirectedRecipient, ChatActivity, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
-export { BUILDERFORCE_PRODUCT_NAME, ChatModelOptions, ChatModelSelection, DEFAULT_MODEL_IDENTITY, MODEL_CATEGORIES, ModelCategory, ModelChoiceLabels, ModelIdentityContext, ModelItem, PROJECT_EVERMIND_MODEL_PREFIX, RoutedProduct, activeModelKey, buildModelItems, byoVendorLabel, displayModelName, filterModelItems, modelCategoryLabel, modelInUse, perMillionUsd, premiumCostLabel, productForPlan, productModelName, revealsModelId } from '@seanhogg/builderforce-brain-embedded';
+import { BrainRunActivity, BrainMessage, BrainTraceEvent, ChatActivityLabels, ModelIdentityContext, AskUserPayload, ChatErrorAction, ModelChoiceLabels, Effort, ChatModelSelection, ChatModelOptions, DirectedRecipient, ChatActivity, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
+export { AskUserOption, AskUserPayload, BUILDERFORCE_PRODUCT_NAME, ChatModelOptions, ChatModelSelection, DEFAULT_MODEL_IDENTITY, MODEL_CATEGORIES, ModelCategory, ModelChoiceLabels, ModelIdentityContext, ModelItem, PROJECT_EVERMIND_MODEL_PREFIX, PendingAskUser, RoutedProduct, activeModelKey, askUserAnchorId, buildModelItems, byoVendorLabel, displayModelName, filterModelItems, modelCategoryLabel, modelInUse, parseAskUser, perMillionUsd, premiumCostLabel, productForPlan, productModelName, revealsModelId, selectPendingAskUser, serializeAskUser, stripAskUser } from '@seanhogg/builderforce-brain-embedded';
+
+/**
+ * THE clipboard button of this package.
+ *
+ * The tool step's Command / Input / Output / preview panels wear it as a labelled
+ * chip; a message wears it as an icon. One implementation, because two would drift
+ * on the confirmation timing alone.
+ *
+ * Its label contract is deliberately NARROW — two strings, not the whole transcript
+ * bundle — so any surface can mount it without owning a `BrainTimelineLabels`.
+ */
+interface CopyLabels {
+    copy: string;
+    copied: string;
+}
+declare function CopyButton({ text, labels, icon }: {
+    text: string;
+    labels: CopyLabels;
+    icon?: boolean;
+}): React.JSX.Element;
+
+/**
+ * ONE settled tool step in the transcript: what the agent ran, and what came back.
+ *
+ * Split out of `BrainTimeline.tsx` because it is its own thing with its own reason to
+ * change — how a call is DISPLAYED — while the timeline's reason to change is how a
+ * conversation is ORDERED. Every surface that mounts the transcript gets this
+ * component, so a shell step reads the same in the web Brain panel, on the Canvas
+ * dock and in the VS Code editor.
+ *
+ * The header is the row you skim: outcome, tool, and the concrete subject — the file,
+ * the query, the command line — so a run's steps can be read without opening any of
+ * them. A shell step then opens by default onto its terminal exchange, because "did
+ * it actually run the tests, and what did they say" is the question a transcript
+ * exists to answer, and a caret is a poor place to keep the answer.
+ */
+interface ToolStepLabels extends CopyLabels {
+    /** Heading for the raw argument panel. */
+    input: string;
+    /** Heading for the result panel — and for a shell step's terminal output. */
+    output: string;
+    /** Heading for the change preview shown on an edit_file / write_file step. */
+    preview: string;
+    /** Shown in place of terminal output when a command printed nothing. */
+    noOutput: string;
+    /** Non-zero exit chip — must contain the literal `{code}` token. */
+    exitCode: string;
+}
+/** The shape this component needs from a timeline tool node. */
+interface ToolStepNode {
+    label: string;
+    args: unknown;
+    result: unknown;
+    isError: boolean;
+    durationMs?: number;
+}
+declare function ToolStep({ node, labels }: {
+    node: ToolStepNode;
+    labels: ToolStepLabels;
+}): React__default.JSX.Element;
 
 /**
  * The in-flight step, animated.
@@ -67,7 +127,13 @@ declare function LiveActivityInner({ activity, isRunning, labels: partial }: Liv
  */
 declare const LiveActivity: React__default.MemoExoticComponent<typeof LiveActivityInner>;
 
-interface BrainTimelineLabels {
+/**
+ * Every string the transcript renders. It EXTENDS {@link ToolStepLabels} rather than
+ * restating those five: the tool step is its own component with its own narrow
+ * contract, and a host that passes this bundle satisfies that contract by
+ * construction — which is what keeps the two from drifting apart.
+ */
+interface BrainTimelineLabels extends ToolStepLabels {
     /** Shown on the live thinking node while a turn streams. */
     thinking: string;
     /**
@@ -80,15 +146,15 @@ interface BrainTimelineLabels {
     thoughtFor: string;
     /** Summary of a collapsed `<think>` block inside a reply. */
     thought: string;
+    /** Muted note above a reply RESCUED from the model's reasoning — the run ended
+     *  inside its `<think>` block, so the transcript shows the reasoning as the reply
+     *  rather than a collapsed line and nothing else. See `strandedReplyKey`. */
+    replyFromThought: string;
     you: string;
     assistant: string;
-    input: string;
-    output: string;
     error: string;
     loading: string;
     empty: string;
-    copy: string;
-    copied: string;
     /** Per-message "send this again" action — re-asks the model with the same text,
      *  from a user turn or an assistant one. */
     replay: string;
@@ -97,8 +163,6 @@ interface BrainTimelineLabels {
     rateDown: string;
     apply: string;
     createFile: string;
-    /** Heading for the change preview shown on an edit_file / write_file tool step. */
-    preview: string;
     /** <QuestionCard> copy (ask_user) — carried here so a host passes ONE label bundle. */
     askSubmit: string;
     askAnswered: string;
@@ -225,6 +289,90 @@ declare function BrainTimelineInner({ messages, trace, streamingText, isRunning,
  */
 declare const BrainTimeline: React__default.MemoExoticComponent<typeof BrainTimelineInner>;
 
+/**
+ * How ONE tool step presents itself — pure, framework-free, and shared by every
+ * surface that mounts the transcript (the web Brain panel, the Canvas dock, the
+ * VS Code webview).
+ *
+ * The transcript used to render every step the same way: the tool's name, then its
+ * arguments as raw JSON and its result as raw JSON, both folded away behind a caret.
+ * For a SHELL step that is the least readable form of the two things a reader
+ * actually wants — the command that ran, and what it printed. `{"command":"pnpm -w
+ * test"}` above `{"ok":true,"exitCode":0,"stdout":"…"}` is a transcript of the
+ * transport, not of the work; every other agent chat shows the command and its
+ * terminal output, because that is what you check when you want to know whether the
+ * agent really ran the build.
+ *
+ * So a command-shaped call gets a {@link CommandRun}: the command on its own line and
+ * the combined stdout/stderr as terminal text, with the exit code called out when it
+ * is non-zero. Detection is STRUCTURAL (an argument named `command`, a result shaped
+ * like a shell result) rather than a list of tool names, so it covers `run_command`,
+ * a gateway MCP shell tool and any future one without an allow-list to maintain.
+ *
+ * Nothing is ever hidden to achieve this: the raw argument JSON is still rendered for
+ * whatever the command line did not already show, and the raw result JSON is dropped
+ * ONLY when every field in it is one the terminal panel already displays.
+ */
+/** A change an edit_file / write_file call carries in its own arguments. */
+type ToolPreview = {
+    kind: 'edit';
+    path: string;
+    oldText: string;
+    newText: string;
+} | {
+    kind: 'write';
+    path: string;
+    content: string;
+};
+/** A shell step, presented as a terminal exchange rather than as two JSON blobs. */
+interface CommandRun {
+    /** The command line that ran. */
+    command: string;
+    /** Combined stdout/stderr (plus any error text), trailing blank lines trimmed. */
+    output: string;
+    /** The process exit code when the result reported one. */
+    exitCode: number | null;
+    /** Whether the call succeeded, from the result's own `ok`, else from the exit code. */
+    ok: boolean;
+    /** True when {@link output} already carries everything the raw result JSON would —
+     *  the only case in which it is safe to stop rendering that JSON as well. */
+    outputComplete: boolean;
+}
+/** Everything a tool step renders, decided once so the renderer only lays it out. */
+interface ToolStepView {
+    /** The concrete thing the call was about, for the collapsed header line. */
+    subject: string | null;
+    command: CommandRun | null;
+    preview: ToolPreview | null;
+    /** Raw argument JSON, minus anything the command line already shows. `''` = omit. */
+    argsText: string;
+    /** Raw result JSON. `''` = the terminal panel already shows all of it. */
+    resultText: string;
+    /** Whether the step opens expanded: a command and a failure both exist to be read. */
+    defaultOpen: boolean;
+}
+/**
+ * The shell command a call ran, or null when it isn't a command-shaped call. Detected
+ * from the ARGUMENTS, so it holds for any tool that takes a command line.
+ */
+declare function commandOf(args: unknown): string | null;
+/**
+ * Read a shell result into the terminal half of a {@link CommandRun}. A result that is
+ * a bare string is taken as its output verbatim — that IS the whole result.
+ */
+declare function shellOutcomeOf(result: unknown): Omit<CommandRun, 'command'>;
+/** An edit_file / write_file tool call carries the change itself in its args, so we
+ *  can render a readable preview (a before/after diff for edits, the new content for
+ *  writes) instead of only the raw JSON — detected structurally so it works regardless
+ *  of the tool's display label. */
+declare function toolPreview(args: unknown): ToolPreview | null;
+/** Decide how one tool step presents itself. */
+declare function toolStepView({ args, result, isError }: {
+    args: unknown;
+    result: unknown;
+    isError: boolean;
+}): ToolStepView;
+
 interface MarkdownLabels {
     copy: string;
     copied: string;
@@ -257,52 +405,6 @@ declare function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateF
  */
 declare const Markdown: React__default.MemoExoticComponent<typeof MarkdownInner>;
 
-interface ThinkSegment {
-    kind: 'answer' | 'thought';
-    content: string;
-}
-/**
- * Split vendor-emitted `<think>…</think>` text without enabling raw HTML.
- * An unclosed block is retained as a thought while a response is streaming, so
- * the literal control tags never break Markdown parsing or swallow the answer.
- */
-declare function splitThinkSegments(content: string): ThinkSegment[];
-/**
- * The reply WITHOUT its reasoning: every `answer` segment joined back together.
- *
- * Empty when the turn was reasoning only — a model that thought and then called a
- * tool without saying anything to the user. The transcript uses that emptiness to
- * decide what a turn deserves: a thought-only turn is a single collapsed line with
- * no author header, no copy / send-again / rating row, and no attribution chip,
- * while copy and replay on a real reply hand back the answer alone, never the
- * `<think>` scaffolding around it.
- */
-declare function answerTextOf(content: string): string;
-
-/**
- * The "ask the user a question" protocol — shared by the web app and the VS Code
- * webview so a clarifying question renders identically as a clickable card on both.
- *
- * The agent emits its question as a fenced ```ask-user block carrying a small JSON
- * payload (produced server-side when the model calls the `ask_user` tool — a
- * schema-validated call is far more reliable than asking a weak model to hand-format
- * JSON in prose). {@link parseAskUser} lifts that payload out of an assistant message
- * and {@link stripAskUser} removes the raw block so the surrounding prose still reads
- * cleanly; <BrainTimeline> renders the payload with <QuestionCard>. If the block is
- * absent or malformed, both degrade gracefully (no card; the fenced block just shows
- * as normal code), so a question is never lost.
- */
-interface AskUserOption {
-    label: string;
-    description?: string;
-}
-interface AskUserPayload {
-    question: string;
-    options: AskUserOption[];
-    /** Allow more than one option to be chosen (checkboxes + submit) instead of a
-     *  single click. */
-    multiSelect?: boolean;
-}
 /** Copy for <QuestionCard> — defaulted in English, overridable per host for i18n. */
 interface AskUserLabels {
     /** Submit button for a multi-select card. */
@@ -315,43 +417,6 @@ interface AskUserLabels {
     askJumpTo: string;
 }
 declare const DEFAULT_ASK_USER_LABELS: AskUserLabels;
-/** Extract the ask-user payload from an assistant message, or null if none/invalid. */
-declare function parseAskUser(text: string): AskUserPayload | null;
-/** Remove the raw ask-user fenced block so the message's prose reads cleanly beside
- *  the rendered card. Collapses the whitespace the removed block leaves behind. */
-declare function stripAskUser(text: string): string;
-/**
- * Serialize a payload into the canonical fenced block the agent runtime emits and
- * {@link parseAskUser} reads. Shared so the producer (server) and consumer (UI) can
- * never drift on the format.
- */
-declare function serializeAskUser(payload: AskUserPayload): string;
-/** The minimal message shape {@link selectPendingAskUser} needs — structural on
- *  purpose, so this module stays free of a brain-embedded import. */
-interface AskUserMessageLike {
-    id: number;
-    role: string;
-    content: string;
-}
-/** An unanswered question and the message carrying it. */
-interface PendingAskUser {
-    payload: AskUserPayload;
-    /** The assistant message the question rides in (lets a host reveal its card). */
-    messageId: number;
-}
-/** The DOM id of a rendered question card. ONE convention, shared by the timeline
- *  that stamps it and any host that scrolls to it — so the two can never drift. */
-declare function askUserAnchorId(messageId: number): string;
-/**
- * The question the conversation is currently BLOCKED on, or null when there is none.
- * Walks back from the newest turn: the last assistant `ask-user` block wins, but a
- * user turn after it means the question was already answered (answering posts the
- * choice as the next user turn), so nothing is pending.
- *
- * Shared so a host never re-derives "is there an open question" — the same predicate
- * drives the pinned banner and any host-side pending affordance.
- */
-declare function selectPendingAskUser(messages: readonly AskUserMessageLike[]): PendingAskUser | null;
 /**
  * A clarifying question rendered as clickable options. Single-select sends the
  * chosen label on click; multi-select collects checkboxes behind a submit button.
@@ -1279,13 +1344,40 @@ declare function buildTimeline(input: BuildTimelineInput): TimelineNode[];
  * step, present only in the messages, still shows.
  */
 declare function buildSettledTimeline(messages: BrainMessage[], trace: BrainTraceEvent[]): TimelineNode[];
+/**
+ * The key of a reply STRANDED inside its own reasoning, or null when there isn't one.
+ *
+ * A reasoning-only assistant message is normally a single collapsed "Thought" line,
+ * and rightly so: the model thought, then called a tool, and never addressed the user.
+ * That reading breaks at exactly one place — the END of a settled conversation. A run
+ * that stops on a reasoning-only message has said its last word inside the `<think>`
+ * block, so collapsing it renders the whole turn as one muted line and shows the
+ * reader NOTHING. Reported verbatim: an explicit instruction answered with a question
+ * the transcript never displayed, its last row a "Thought" — "to the user, they think
+ * the Agent just died".
+ *
+ * A model whose reply lands in the reasoning channel is not rare (an unclosed
+ * `<think>` survives every strip on the way here, because every one of them needs the
+ * closing tag), so the transcript has to be able to end on a readable turn regardless.
+ * `promoteSwallowedAnswer` in `@builderforce/agent-loop` rescues the neighbouring case — a real
+ * answer with only a fragment left outside the block — but deliberately leaves a turn
+ * with NO answer segment alone, because mid-run that turn is either still streaming or
+ * genuinely had nothing to say. This is the fact that tells the two apart, and it is
+ * not in the content: it is the turn's POSITION and whether the run is still going.
+ *
+ * The scan walks back to the conversation's last MODEL reply — past tool steps, memory
+ * rows and runtime narration, which are bookkeeping and can sort either side of it —
+ * and stops at a user turn, because a user turn after the reply means the exchange
+ * moved on and a pending turn (not a stranded one) is what is missing. Nothing is
+ * stranded while `isRunning`: the surface is already showing a live indicator, and the
+ * text is still arriving.
+ */
+declare function strandedReplyKey(nodes: readonly TimelineNode[], isRunning: boolean): string | null;
 /** The trailing live-streaming assistant bubble, or null when nothing is streaming.
  *  Always sorts last (max timestamp), so callers append it after the settled nodes. */
 declare function streamingNode(streamingText: string, isRunning: boolean): TimelineNode | null;
 /** Compact human duration for a "Thought for …" label (e.g. 0s, 2s, 12s). */
 declare function formatDuration(ms: number | undefined): string;
-/** Pretty-print a tool arg/result payload for the IN/OUT panels. */
-declare function formatPayload(value: unknown): string;
 
 /**
  * Shared types for the <EvermindConsole> — the per-project Evermind inspect-and-train
@@ -2222,4 +2314,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, type MessageRating, ParticipantBadge, type PendingAskUser, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, SLOW_AFTER_MS, Sunburst, type SunburstProps, TICKET_KINDS, type ThinkSegment, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, answerTextOf, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, createChatTicketsRestAdapter, evermindLearnedStatus, evermindNextAction, formatDuration, formatElapsed, formatPayload, healthRingColor, initialsOf, parseAskUser, pendingChangesSummary, promptOptionsLabels, resolvePendingChangesLabels, selectPendingAskUser, serializeAskUser, splitThinkSegments, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };
+export { type AgentOptionVM, type AskUserLabels, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CommandRun, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, type MessageRating, ParticipantBadge, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, SLOW_AFTER_MS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, type UseMentionAutocompleteOptions, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, commandOf, createChatTicketsRestAdapter, evermindLearnedStatus, evermindNextAction, formatDuration, formatElapsed, healthRingColor, initialsOf, pendingChangesSummary, promptOptionsLabels, resolvePendingChangesLabels, shellOutcomeOf, strandedReplyKey, streamingNode, toolPreview, toolStepView, useChatParticipants, useMentionAutocomplete };

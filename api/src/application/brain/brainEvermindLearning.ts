@@ -20,7 +20,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { brainChats, brainChatMessages } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { resolveEvermindTargets, isLiveLearnTarget, dispatchProjectEvermindLearnText, provisionDefaultProjectEvermind } from '../llm/projectEvermind';
-import { stripReasoningScratchpad } from '../llm/learnableText';
+import { stripReasoningScratchpad } from '@builderforce/agent-loop';
 
 /** A one-line assistant turn is not a teaching signal; require some substance. */
 const MIN_TEACH_CHARS = 40;
@@ -132,7 +132,7 @@ export async function evaluateBrainLearnGate(
   deps: BrainLearnGateDeps = DEFAULT_GATE_DEPS,
 ): Promise<BrainLearnGate> {
   // Judge teachability on the ANSWER, not the raw turn. The producer teaches the reply
-  // with its `<think>` blocks removed (see `learnableText`), so a turn that is mostly
+  // with its `<think>` blocks removed (see `reasoning.ts`), so a turn that is mostly
   // scratchpad and two words of answer clears a raw length check and is then refused
   // downstream — and the run step would have reported "learned" for a contribution that
   // never happened. Same primitive on both sides keeps the gate's answer honest.
@@ -230,7 +230,10 @@ export async function dispatchBrainLearn(
   // the others or the reply.
   await Promise.all(
     gate.contributedProjectIds.map((pid) =>
-      dispatchProjectEvermindLearnText(env, tenantId, pid, gate.assistant!, undefined, prompt).catch((error) => { /* per-target best-effort */ 
+      // Stamp the SOURCE CHAT on the contribution. Without it a memory could not be
+      // attributed to the conversation that produced it, so reopening a chat recalled
+      // whatever the whole project had ever learned — see `evermindChatTiering`.
+      dispatchProjectEvermindLearnText(env, tenantId, pid, gate.assistant!, undefined, prompt, { chatId }).catch((error) => { /* per-target best-effort */ 
         reportCaughtError(error, { source: "application/brain/brainEvermindLearning.ts", operation: "dispatchBrainLearn" });
       }),
     ),

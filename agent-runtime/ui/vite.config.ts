@@ -1,8 +1,11 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
+import { sourcePackageAliases } from "../../scripts/sourcePackages.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+/** `packages/` lives two levels up — the source-package registry keys off the REPO root. */
+const repoRoot = path.resolve(here, "../..");
 
 function normalizeBase(input: string): string {
   const trimmed = input.trim();
@@ -24,6 +27,12 @@ export default defineConfig(() => {
   return {
     base,
     publicDir: path.resolve(here, "public"),
+    resolve: {
+      // The source-only shared packages (`@builderforce/*`) ship no `dist`, so a
+      // bundler that follows plain node resolution finds nothing. Derived from the
+      // manifests rather than listed, so a new package needs no change here.
+      alias: [...sourcePackageAliases(repoRoot)],
+    },
     optimizeDeps: {
       include: ["lit/directives/repeat.js"],
     },

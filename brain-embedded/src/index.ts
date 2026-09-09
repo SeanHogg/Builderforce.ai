@@ -268,6 +268,24 @@ export {
 } from '@builderforce/agent-stall';
 export type { ModelFallbackSurface } from '@builderforce/agent-stall';
 
+// The ask-user protocol, re-exported from `@builderforce/agent-loop` so a React host
+// (and the shared transcript package layered on top of this one) reaches the ONE
+// definition through the package it already depends on. The loop that PRODUCES a
+// question and the transcript that RENDERS it must agree on the fence and on what
+// counts as a renderable card, or the question is silently swallowed.
+export {
+  ASK_USER_TOOL,
+  ASK_USER_TOOL_SPEC,
+  askUserAnchorId,
+  askUserBlock,
+  coerceAskUserPayload,
+  parseAskUser,
+  selectPendingAskUser,
+  serializeAskUser,
+  stripAskUser,
+} from '@builderforce/agent-loop';
+export type { AskUserMessageLike, AskUserOption, AskUserPayload, AskUserToolSpec, PendingAskUser } from '@builderforce/agent-loop';
+
 // Chat ⇄ work linking — the directive that ties identified work / code changes to
 // the current chat, plus the predicates behind the "a code change is always tied to
 // a ticket" backstop (reused by non-React hosts driving the run loop directly).

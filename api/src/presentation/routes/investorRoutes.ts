@@ -35,6 +35,7 @@
  * same split legal documents, forms, signatures and data rooms already draw.
  */
 
+import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
@@ -114,7 +115,7 @@ export function createInvestorRoutes(
     toolService,
     auditRunner,
     taskService,
-    secret: env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '',
+    secret: integrationCredentialSecret(env),
   });
 
   // ── companies ────────────────────────────────────────────────────────────

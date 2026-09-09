@@ -21,6 +21,7 @@
  *   POST   /brand/extract             derive a palette from a website URL       [developer]
  *   POST   /portfolio-match           rank similar projects for requirements    [viewer]
  */
+import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { Hono } from 'hono';
 import { and, eq, desc } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
@@ -177,7 +178,7 @@ export function createRfpRoutes(db: Db, toolService: ToolService, auditRunner: A
     toolService,
     auditRunner,
     taskService,
-    secret: env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '',
+    secret: integrationCredentialSecret(env),
   });
 
   // Generate a response.

@@ -39,6 +39,7 @@
  * Tagged results throughout, never throws — matching githubClient/publishCheckRun.
  * Annotating a PR must never fail the run that produced the annotation.
  */
+import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { githubRequest, repoPath, resolveRepoAuth, type ResolvedRepoAuth } from './githubClient';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -247,7 +248,7 @@ export async function postRepoPrComment(
   try {
     // Mirrors publishTaskVerdict's credentialSecret: INTEGRATION_ENCRYPTION_SECRET
     // is the real key, JWT_SECRET the legacy fallback for older deployments.
-    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+    const secret = integrationCredentialSecret(env);
     const auth = await resolveRepoAuth(env, db, secret, tenantId, repoId);
     if (!auth.ok) return { ok: false, code: 'unauthorized', reason: auth.error };
     return await postPrIssueComment(auth.auth, prNumber, body, opts);

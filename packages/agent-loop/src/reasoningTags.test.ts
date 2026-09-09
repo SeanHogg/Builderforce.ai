@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { stripReasoningTagsFromText } from "./reasoning-tags.js";
+import { stripReasoningTagsFromText } from "./reasoning";
 
 describe("stripReasoningTagsFromText", () => {
   describe("basic functionality", () => {

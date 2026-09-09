@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * mergeRecordedPullRequest — the server-side "merge + close a recorded PR" core,
@@ -37,7 +38,7 @@ export async function updateRecordedPullRequestBranch(
   }
   const e = env as unknown as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
   const resolved = await resolveRepoCredential(
-    db, e.INTEGRATION_ENCRYPTION_SECRET ?? e.JWT_SECRET ?? '', args.tenantId, row.repoId,
+    db, integrationCredentialSecret(e), args.tenantId, row.repoId,
   );
   if (isResolveError(resolved)) {
     return { ok: false, httpStatus: resolved.status, error: resolved.error, code: 'provider_error' };
@@ -109,7 +110,7 @@ export async function mergeRecordedPullRequest(
   if (row.number == null) return { ok: false, httpStatus: 409, error: 'PR has no provider number yet (still being opened)' };
 
   const e = env as unknown as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
-  const secret = e.INTEGRATION_ENCRYPTION_SECRET ?? e.JWT_SECRET ?? '';
+  const secret = integrationCredentialSecret(e);
   const resolved = await resolveRepoCredential(db, secret, args.tenantId, row.repoId);
   if (isResolveError(resolved)) return { ok: false, httpStatus: resolved.status, error: resolved.error };
 

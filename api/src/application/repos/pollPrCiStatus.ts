@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * pollPrCiStatus — actively fetch a recorded PR's live CI verdict from the provider
@@ -43,8 +44,7 @@ export async function pollPrCiStatus(env: Env, db: Db, tenantId: number, pr: Pol
 
   try {
     const secret =
-      (env as { INTEGRATION_ENCRYPTION_SECRET?: string }).INTEGRATION_ENCRYPTION_SECRET ??
-      (env as { JWT_SECRET?: string }).JWT_SECRET ?? '';
+      integrationCredentialSecret(env);
     const resolved = await resolveRepoCredential(db, secret, tenantId, pr.repoId);
     if (isResolveError(resolved)) return pr.buildStatus;
 

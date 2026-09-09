@@ -18,6 +18,9 @@
 
 /** One learned memory the project's Evermind recalled for the current turn. */
 export interface EvermindRecallItem {
+  /** Which tier this memory came from: `chat` = contributed by THIS conversation,
+   *  `project` = the wider project. Absent from an older api. */
+  tier?: 'chat' | 'project';
   /** Stable id of the learned memory (targets a specific contribution). */
   id: number;
   /** Readable snippet of the learned exemplar (or the task it answered). */
@@ -32,6 +35,9 @@ export interface EvermindRecallItem {
  * the api `recallProjectEvermindMemory` response.
  */
 export interface EvermindRecallResult {
+  /** How the returned memories split between THIS chat and the wider project.
+   *  Absent from an older api that predates chat-tiered recall. */
+  tiers?: { fromChat: number; fromProject: number };
   /** True once the project has a base Evermind (version ≥ 1). */
   seeded: boolean;
   /** Current head version the recall ran against. */
@@ -114,14 +120,27 @@ export type ProjectMemoryRequest = <T>(
  * whether the Evermind SSM leg may run: it cannot call a tool, so on a run that could
  * fetch the real answer it must never pre-empt the model from stale weights.
  */
-export function projectMemoryHooks(projectId: number, request: ProjectMemoryRequest): EvermindRunHooks {
+export function projectMemoryHooks(
+  projectId: number,
+  request: ProjectMemoryRequest,
+  /**
+   * The chat these hooks are bound to, when the host knows it.
+   *
+   * Recall is TIERED on it: this conversation's own memories come first, then the
+   * wider project's. Without it the server ranks project-wide, which is what made a
+   * reopened chat "remember" turns from other conversations. Optional because a global
+   * (project-less) chat and the non-chat callers genuinely have none — those recall
+   * project-wide exactly as before.
+   */
+  chatId?: number | null,
+): EvermindRunHooks {
   const json = { 'Content-Type': 'application/json' };
   return {
     recall: (query: string) =>
       request<EvermindRecallResult>(`/api/projects/${projectId}/evermind/recall`, {
         method: 'POST',
         headers: json,
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({ query, ...(chatId != null ? { chatId } : {}) }),
       }).catch(() => null),
     answer: (query: string, opts: { toolsAvailable: boolean }) =>
       request<{ answer: MemoryFirstAnswer | null }>(

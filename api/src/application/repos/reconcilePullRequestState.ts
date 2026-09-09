@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * reconcilePullRequestState — make our `pull_requests` row agree with the provider.
@@ -77,8 +78,7 @@ export async function reconcilePullRequestState(
 
   try {
     const secret =
-      (env as { INTEGRATION_ENCRYPTION_SECRET?: string }).INTEGRATION_ENCRYPTION_SECRET ??
-      (env as { JWT_SECRET?: string }).JWT_SECRET ?? '';
+      integrationCredentialSecret(env);
     const resolved = await resolveRepoCredential(db, secret, tenantId, pr.repoId);
     if (isResolveError(resolved)) return UNCHECKED;
 

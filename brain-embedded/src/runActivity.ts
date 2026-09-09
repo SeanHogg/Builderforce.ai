@@ -53,8 +53,13 @@ export interface BrainRunActivity {
  * arguments are free-form, so this is a heuristic — but a deliberately narrow
  * one: every key here is a *target* of the work, never an option or a flag, so
  * a wrong guess is impossible rather than merely unlikely.
+ *
+ * `command` is the subject of a SHELL call the way a path is the subject of a read:
+ * without it, the only tool that runs the build and the tests was the one tool that
+ * narrated itself as a bare "Running run_command" — live and in the settled step
+ * header alike — while every read named its file.
  */
-const TARGET_KEYS = ['path', 'file', 'filePath', 'glob', 'query', 'q', 'search', 'url', 'name', 'title', 'id'] as const;
+const TARGET_KEYS = ['path', 'file', 'filePath', 'command', 'cmd', 'glob', 'query', 'q', 'search', 'url', 'name', 'title', 'id'] as const;
 
 /** Longest target we will show inline before eliding the middle. */
 const MAX_DETAIL = 72;

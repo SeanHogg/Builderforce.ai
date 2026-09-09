@@ -308,7 +308,7 @@ function toOpenAIResponse(raw: unknown, model: string): Record<string, unknown> 
   let text = '';
   // Extended-thinking blocks ride on the OpenAI-shape message as
   // `reasoning_content` (the DeepSeek/OpenAI-compatible convention every loop
-  // reads through `splitReasoning`). Before this they were dropped here, which
+  // reads through `splitVendorReasoning`). Before this they were dropped here, which
   // is why no cloud run ever showed a reasoning path. `redacted_thinking` carries
   // no readable text and is skipped.
   const reasoning: string[] = [];

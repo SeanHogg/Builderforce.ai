@@ -68,7 +68,7 @@ import {
   promisesUnfinishedWork,
   continuationDirective,
 } from '@builderforce/agent-stall';
-import { runAgentLoop, openAiChatCodec, type LoopHooks, type LoopPorts, type LoopTurn } from '@builderforce/agent-loop';
+import { runAgentLoop, openAiChatCodec, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock, splitVendorReasoning, canonicalReasoningText, type LoopHooks, type LoopPorts, type LoopTurn } from '@builderforce/agent-loop';
 import {
   formatEvermindMemoryBlock,
   countReconciledMemories,
@@ -1495,10 +1495,50 @@ async function autoLinkCreatedItem(
  */
 export { startRun as runBrainLoop };
 
+/**
+ * A turn's text in the CANONICAL reasoning shape: one closed `<think>` block, then the
+ * answer.
+ *
+ * Every site in this module that persists model text goes through it. The loop used to
+ * store whatever the vendor emitted, and that is how a whole reply — a question the run
+ * was blocked on — reached the transcript inside an UNCLOSED block: every reader
+ * downstream needs the closing tag to recognise reasoning, so without it the scratchpad
+ * IS the message as far as the transcript, the answer cache and Evermind learning are
+ * concerned. Normalizing at the point of persistence means nothing later depends on a
+ * model closing its own tag.
+ *
+ * A reasoning-only turn stays reasoning-only — the block is simply closed. The
+ * transcript decides what to show for one of those, and only it can: whether the reply
+ * is stranded depends on whether the RUN is over (see `strandedReplyKey`).
+ */
+function canonicalTurnText(text: string): string {
+  const { content, reasoning } = splitVendorReasoning({ content: text });
+  return canonicalReasoningText(content, reasoning);
+}
+
 async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promise<void> {
   const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, routingMode, pickFallbackModel, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
   const convo = c.transcript;
-  const allTools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined;
+  // The catalog the model is shown, PLUS the conversational `ask_user` tool.
+  //
+  // `ask_user` is injected here rather than registered as a host action because it is
+  // not an action: nothing executes it. It is a way for the run to END — the loop
+  // intercepts the call as terminal and replies with the question (see
+  // `beforeToolCalls`). Injected only where a tool call can be made at all, because on
+  // a surface with no tool runner an advertised tool is a trap: the model's call would
+  // be discarded and the question lost.
+  //
+  // Before this, only the server-side reply loop offered it, so a question asked in the
+  // editor's chat could only ever arrive as prose — while that very surface rendered
+  // `<QuestionCard>` / `<PendingQuestionBanner>` for a block nothing could produce.
+  //
+  // Gated on the host ALREADY having a catalog, not merely on having a runner. An
+  // empty catalog is a FAULT SIGNAL — "zero tools advertised" is how a failed tenant
+  // tool load is told apart from a model that simply declined to act — and injecting
+  // one tool into it would report a broken catalog as a working one.
+  const canAskUser = !!runTool && (toolSpecs?.length ?? 0) > 0;
+  const catalog = canAskUser ? [...(toolSpecs ?? []), ASK_USER_TOOL_SPEC] : toolSpecs;
+  const allTools = catalog && catalog.length > 0 ? catalog : undefined;
   // Tools this run has actually called — pinned into every later turn's selection
   // so a multi-step task never loses a tool it is mid-way through using.
   const usedTools = new Set<string>();
@@ -1572,7 +1612,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       try {
         memAnswer = await evermind.answer(query, { toolsAvailable: !!allTools && allTools.length > 0 });
       } catch { memAnswer = null; }
-      const finalText = memAnswer?.text.trim();
+      const finalText = canonicalTurnText(memAnswer?.text ?? '');
       if (finalText) {
         convo.push({ role: 'assistant', content: finalText });
         const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: finalText }]);
@@ -1738,6 +1778,10 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     // The project-memory pair (recall before re-reading; remember what was learned) is
     // the cheapest tool in the catalog and the first one relevance would drop.
     ...memoryToolsIn(catalogToolNames),
+    // Asking the user is never off-topic: it is how the run stops when it cannot
+    // proceed, so relevance against the request must not be what decides whether the
+    // agent is allowed to ask. Its one schema is also the cheapest in the catalog.
+    ...(canAskUser ? [ASK_USER_TOOL] : []),
   ];
 
   // Evermind learning + reconciliation provenance for a completed turn. Extracted so
@@ -1812,19 +1856,64 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   /** What dispatch learned about the call it just ran — for the durable step + the read cache. */
   let pendingRun: { out: unknown; toolStart: number; isReadTool: boolean; threw: boolean; bytes?: number; truncated?: boolean } | null = null;
 
+  /**
+   * Commit a turn's text as THE reply of this run: into the model transcript, into
+   * the durable message list (carrying the turn's provenance), and into the mounted
+   * views. Returns the persisted message so the caller can hang the Evermind
+   * learn/reconcile provenance off it.
+   *
+   * Shared by the two ways a run settles — the ordinary no-tool-calls final answer
+   * and a TERMINAL `ask_user` question — because a question is a reply: it must be
+   * attributed, learned from and broadcast exactly like any other, or the surface
+   * that renders it loses the provenance chip and the memory steps for that turn.
+   */
+  const settleReply = async (rawText: string, result: StreamResult) => {
+    const text = canonicalTurnText(rawText);
+    convo.push({ role: 'assistant', content: text });
+    const meta = provenanceMetadata(result);
+    const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: text, ...(meta ? { metadata: meta } : {}) }]);
+    c.streamingText = '';
+    recordAppended(c, assistantMsg);
+    return assistantMsg;
+  };
+
   const hooks: LoopHooks<ChatCompletionMessage> = {
-    beforeToolCalls: async (_ctx, turn) => {
+    beforeToolCalls: async (_ctx, turn, calls) => {
       const { result } = metaOf(turn);
+      // `ask_user` is TERMINAL: the agent is blocked on the user's decision, so the run
+      // settles here and the reply carries any lead-in prose plus the canonical
+      // ```ask-user block the transcript renders as a clickable card. Without this the
+      // editor's chat advertised a question it could never deliver — the card and the
+      // "Answer needed" banner were wired on the surface with nothing able to produce
+      // one, so every question arrived as prose the reader could only re-type.
+      // Malformed args fall through to the prose path below, so a question is never
+      // swallowed by its own formatting.
+      const askCall = calls.find((tc) => tc.name === ASK_USER_TOOL);
+      if (askCall) {
+        let block: string | null = null;
+        try { block = askCall.malformed ? null : askUserBlock(askCall.args); } catch { block = null; }
+        const lead = result.text.trim();
+        const reply = block ? (lead ? `${lead}\n\n${block}` : block) : lead;
+        if (reply) {
+          const assistantMsg = await settleReply(reply, result);
+          emit(c);
+          emitEvermindLearnReconcile(assistantMsg, reply);
+          onActivity?.(chatId);
+          return { action: 'stop', ok: true, output: reply };
+        }
+        // A bare malformed call with no prose: let it dispatch, where `beforeDispatch`
+        // answers with the corrective result telling the model how to retry.
+      }
       // Commit this turn's visible narration as its OWN permanent message block
       // before we clear the streaming buffer for the next iteration. Without
       // this, the narration only lived in the transient `streamingText` bubble,
       // and the next turn's stream reused that same bubble — erasing what the
       // user just read. Each turn that says something now gets a durable block;
       // empty (pure tool-call) turns persist nothing.
-      const narration = result.text.trim();
+      const narration = canonicalTurnText(result.text);
       if (narration) {
         const meta = provenanceMetadata(result);
-        const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: result.text, ...(meta ? { metadata: meta } : {}) }]);
+        const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: narration, ...(meta ? { metadata: meta } : {}) }]);
         recordAppended(c, narrationMsg);
       }
       c.streamingText = '';
@@ -1863,6 +1952,14 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           args: { step: iter, via: rawCall.name },
           result: `Called ${call.name} through the tool router (it was not advertised directly this turn).`,
         });
+      }
+      // `ask_user` never reaches the host's tool runner — it is not a workspace action,
+      // and `beforeToolCalls` has already settled every WELL-FORMED question as the
+      // run's reply. Reached only when the args were malformed AND the model wrote no
+      // prose to fall back on, so the answer is a corrective result: the call is not
+      // left unanswered, and the model is told exactly how to retry.
+      if (call.name === ASK_USER_TOOL) {
+        return { result: { data: { error: 'ask_user needs { question, options:[{label}] } with 2+ options. Retry or answer in prose.' } } };
       }
       const args = call.args;
       // ONE ticket per run. The run opens its own delta ticket on the first edit
@@ -1996,7 +2093,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
         // Keep what the user already watched stream in, as its own durable block —
         // same treatment a narration-before-tool-calls turn gets.
-        const narration = result.text.trim();
+        const narration = canonicalTurnText(result.text);
         if (narration) {
           const meta = provenanceMetadata(result);
           const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: narration, ...(meta ? { metadata: meta } : {}) }]);
@@ -2025,11 +2122,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
 
       // Final text — record in the transcript, persist, broadcast to mounted views.
       const finalText = result.text.trim() || 'No response.';
-      convo.push({ role: 'assistant', content: finalText });
-      const finalMeta = provenanceMetadata(result);
-      const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: finalText, ...(finalMeta ? { metadata: finalMeta } : {}) }]);
-      c.streamingText = '';
-      recordAppended(c, assistantMsg);
+      const assistantMsg = await settleReply(finalText, result);
 
       // This model spent its whole recovery budget still DESCRIBING calls instead of
       // making them — or still handing them to the user. Re-prompting it again is spent — the only remedy that works is a
@@ -2431,7 +2524,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         textChars: closing.text.length,
         result: `forced final synthesis (tool budget reached) · ${closing.text.length} chars · finish: ${closing.finishReason ?? '—'}`,
       });
-      const closingText = closing.text.trim();
+      const closingText = canonicalTurnText(closing.text);
       if (closingText) {
         convo.push({ role: 'assistant', content: closingText });
         const meta = provenanceMetadata(closing);

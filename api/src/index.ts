@@ -7,6 +7,7 @@
  * Layer order (outermost → innermost):
  *   Presentation → Application → Domain ← Infrastructure
  */
+import { integrationCredentialSecret } from './application/integrations/integrationCredentialSecret';
 import { Hono } from 'hono';
 import type { Env, HonoEnv } from './env';
 
@@ -1066,10 +1067,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Registered FIRST so the literal `catalog` segment wins over `/:id` in the
   // authenticated router below.
   app.route('/api/integrations/catalog', createIntegrationCatalogRoutes(db));
-  app.route('/api/integrations',    createIntegrationRoutes(db, env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET));
+  app.route('/api/integrations',    createIntegrationRoutes(db, integrationCredentialSecret(env)));
   // The canvas's read-only view of the SAME connected warehouses — list, schema,
   // and one bounded SELECT. Same credential store, same encryption secret.
-  app.route('/api/data-sources',    createDataSourceRoutes(db, env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET));
+  app.route('/api/data-sources',    createDataSourceRoutes(db, integrationCredentialSecret(env)));
   app.route('/api/connectors',      createConnectorRoutes(db));
   // Templates extend those two: a template IS a guided setup over the connector
   // catalogue that produces a workflow, so it is registered beside them.

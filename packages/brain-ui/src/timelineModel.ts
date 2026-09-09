@@ -10,6 +10,7 @@
  */
 
 import { isStepMessage, parseChatActivity, parseStepMessage, stepSig, type BrainMessage, type ChatActivity, type BrainTraceEvent, type ChatInputAttachment, type EvermindRecallItem, type EvermindLearnTarget, type PersistedStep } from '@seanhogg/builderforce-brain-embedded';
+import { answerTextOf } from '@builderforce/agent-loop';
 
 export interface TimelineImage {
   url: string;
@@ -279,6 +280,47 @@ export function buildSettledTimeline(messages: BrainMessage[], trace: BrainTrace
     .map((node, i) => ({ node, i, rank: rank(node, i) }))
     .sort((a, b) => a.node.ts - b.node.ts || a.rank - b.rank || a.i - b.i)
     .map((e) => e.node);
+}
+
+/**
+ * The key of a reply STRANDED inside its own reasoning, or null when there isn't one.
+ *
+ * A reasoning-only assistant message is normally a single collapsed "Thought" line,
+ * and rightly so: the model thought, then called a tool, and never addressed the user.
+ * That reading breaks at exactly one place — the END of a settled conversation. A run
+ * that stops on a reasoning-only message has said its last word inside the `<think>`
+ * block, so collapsing it renders the whole turn as one muted line and shows the
+ * reader NOTHING. Reported verbatim: an explicit instruction answered with a question
+ * the transcript never displayed, its last row a "Thought" — "to the user, they think
+ * the Agent just died".
+ *
+ * A model whose reply lands in the reasoning channel is not rare (an unclosed
+ * `<think>` survives every strip on the way here, because every one of them needs the
+ * closing tag), so the transcript has to be able to end on a readable turn regardless.
+ * `promoteSwallowedAnswer` in `@builderforce/agent-loop` rescues the neighbouring case — a real
+ * answer with only a fragment left outside the block — but deliberately leaves a turn
+ * with NO answer segment alone, because mid-run that turn is either still streaming or
+ * genuinely had nothing to say. This is the fact that tells the two apart, and it is
+ * not in the content: it is the turn's POSITION and whether the run is still going.
+ *
+ * The scan walks back to the conversation's last MODEL reply — past tool steps, memory
+ * rows and runtime narration, which are bookkeeping and can sort either side of it —
+ * and stops at a user turn, because a user turn after the reply means the exchange
+ * moved on and a pending turn (not a stranded one) is what is missing. Nothing is
+ * stranded while `isRunning`: the surface is already showing a live indicator, and the
+ * text is still arriving.
+ */
+export function strandedReplyKey(nodes: readonly TimelineNode[], isRunning: boolean): string | null {
+  if (isRunning) return null;
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const node = nodes[i];
+    // A live streaming bubble or a user turn: this conversation is mid-exchange.
+    if (node.kind === 'streaming' || node.kind === 'user') return null;
+    if (node.kind !== 'assistant') continue;
+    const text = node.text.trim();
+    return text && !answerTextOf(node.text) ? node.key : null;
+  }
+  return null;
 }
 
 /** The trailing live-streaming assistant bubble, or null when nothing is streaming.

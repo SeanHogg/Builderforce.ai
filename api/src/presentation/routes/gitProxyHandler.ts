@@ -13,6 +13,7 @@
  * executor. `executeGitProxy` owns the upstream fetch; this owns turning a Hono
  * request into its inputs and its result into a Response.
  */
+import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import type { Context } from 'hono';
 import { executeGitProxy } from '../../application/repos/gitProxy';
 import { resolveRepoCredential, isResolveError } from '../../application/repos/resolveRepoCredential';
@@ -41,7 +42,7 @@ export async function handleGitProxyRequest(
   method: 'GET' | 'POST',
 ): Promise<Response> {
   const env = c.env as ProxyEnv;
-  const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+  const secret = integrationCredentialSecret(env);
   const resolved = await resolveRepoCredential(db, secret, tenantId, repoId);
   if (isResolveError(resolved)) return c.json({ error: resolved.error }, resolved.status);
 

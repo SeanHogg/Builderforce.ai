@@ -17,6 +17,7 @@ import {
 } from './brainRunStore';
 import type { BrainStreamFn } from './brainRunStore';
 import type { ChatCompletionMessage } from './streamChatCompletion';
+import { parseAskUser, selectPendingAskUser, answerTextOf, thoughtTextOf } from '@builderforce/agent-loop';
 
 // These tests pin the memory-eviction contract. They assume MAX_CELLS = 50
 // (see brainRunStore.ts); update the literals if that cap changes.
@@ -678,5 +679,209 @@ describe('a turn that hands the user the commands it holds the tools for', () =>
       maxIterations: 6,
     });
     expect(nudges()).toHaveLength(0);
+  });
+});
+
+describe('ask_user — a question is a REPLY, and the run ends on it', () => {
+  const READ_TOOL = [{ type: 'function' as const, function: { name: 'read_file', description: 'read', parameters: {} } }];
+
+  /** Captures what the run persisted, so a test can read the reply the user was shown. */
+  const recorder = () => {
+    const sent: string[] = [];
+    return {
+      sent,
+      persistence: {
+        sendMessages: async (_chatId: number, msgs: Array<{ role: string; content: string }>) => {
+          for (const m of msgs) if (m.role === 'assistant') sent.push(m.content);
+          return [];
+        },
+      },
+    };
+  };
+
+  it('advertises the tool wherever a tool call can be made at all', async () => {
+    const advertised: string[][] = [];
+    const rec = recorder();
+    await startRun(4401, {
+      resolvedSystemPrompt: 'sys',
+      tools: READ_TOOL,
+      runTool: async () => ({ ok: true }),
+      stream: async (opts) => {
+        advertised.push((opts.tools ?? []).map((t) => t.function.name));
+        return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
+      },
+      persistence: rec.persistence,
+      userTurn: 'have a look',
+    });
+    expect(advertised[0]).toContain('ask_user');
+  });
+
+  it('does NOT advertise it into an EMPTY catalog — "zero tools" must stay a fault signal', async () => {
+    const advertised: Array<string[] | undefined> = [];
+    const rec = recorder();
+    await startRun(4405, {
+      resolvedSystemPrompt: 'sys',
+      tools: [],
+      runTool: async () => ({ ok: true }),
+      stream: async (opts) => {
+        advertised.push(opts.tools?.map((t) => t.function.name));
+        return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
+      },
+      persistence: rec.persistence,
+      userTurn: 'have a look',
+    });
+    // A failed tenant tool load is told apart from a model that declined to act by
+    // exactly this number; one injected tool would report it as a working catalog.
+    expect(advertised[0] ?? []).toHaveLength(0);
+  });
+
+  it('does NOT advertise it on a surface with no tool runner — an unrunnable tool is a trap', async () => {
+    const advertised: Array<string[] | undefined> = [];
+    const rec = recorder();
+    await startRun(4402, {
+      resolvedSystemPrompt: 'sys',
+      tools: READ_TOOL,
+      stream: async (opts) => {
+        advertised.push(opts.tools?.map((t) => t.function.name));
+        return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
+      },
+      persistence: rec.persistence,
+      userTurn: 'have a look',
+    });
+    expect(advertised[0] ?? []).not.toContain('ask_user');
+  });
+
+  it('settles the run on the question, carrying the block the transcript renders as a card', async () => {
+    const rec = recorder();
+    let turns = 0;
+    await startRun(4403, {
+      resolvedSystemPrompt: 'sys',
+      tools: READ_TOOL,
+      runTool: async () => {
+        throw new Error('ask_user must never reach the host tool runner');
+      },
+      stream: async () => {
+        turns += 1;
+        return {
+          text: 'Two ways to go.',
+          toolCalls: [{
+            id: 'q1',
+            name: 'ask_user',
+            args: JSON.stringify({ question: 'Close them or roadmap them?', options: [{ label: 'Close' }, { label: 'Roadmap' }] }),
+          }],
+          finishReason: 'tool_calls',
+        };
+      },
+      persistence: rec.persistence,
+      userTurn: 'these tickets are stale',
+    });
+    // ONE turn: the question ends the run rather than looping for a tool result.
+    expect(turns).toBe(1);
+    // ONE reply, carrying the lead-in prose AND the canonical block.
+    expect(rec.sent).toHaveLength(1);
+    expect(rec.sent[0]).toContain('Two ways to go.');
+    expect(parseAskUser(rec.sent[0])?.question).toBe('Close them or roadmap them?');
+    // …and it is the message the "Answer needed" banner blocks the composer on.
+    expect(selectPendingAskUser([{ id: 1, role: 'assistant', content: rec.sent[0] }])).not.toBeNull();
+  });
+
+  it('tells the model how to retry a malformed question instead of swallowing it', async () => {
+    const rec = recorder();
+    const toolResults: string[] = [];
+    let turn = 0;
+    await startRun(4404, {
+      resolvedSystemPrompt: 'sys',
+      tools: READ_TOOL,
+      runTool: async () => ({ ok: true }),
+      stream: async (opts) => {
+        for (const m of opts.messages) if (m.role === 'tool') toolResults.push(String(m.content));
+        turn += 1;
+        // First turn: a bare call with one option and no prose — not a card, and
+        // nothing to fall back on.
+        if (turn === 1) {
+          return {
+            text: '',
+            toolCalls: [{ id: 'q1', name: 'ask_user', args: JSON.stringify({ question: 'Which?', options: ['only one'] }) }],
+            finishReason: 'tool_calls',
+          };
+        }
+        return { text: 'Closing them, then.', toolCalls: [], finishReason: 'stop' };
+      },
+      persistence: rec.persistence,
+      userTurn: 'these tickets are stale',
+    });
+    expect(toolResults.join('\n')).toContain('ask_user needs');
+    expect(rec.sent.at(-1)).toBe('Closing them, then.');
+  });
+});
+
+describe('the reasoning channel a run persists', () => {
+  const recorder = () => {
+    const sent: string[] = [];
+    return {
+      sent,
+      persistence: {
+        sendMessages: async (_chatId: number, msgs: Array<{ role: string; content: string }>) => {
+          for (const m of msgs) if (m.role === 'assistant') sent.push(m.content);
+          return [];
+        },
+      },
+    };
+  };
+
+  const answers = (text: string): { stream: BrainStreamFn } => ({
+    stream: async () => ({ text, toolCalls: [], finishReason: 'stop' }),
+  });
+
+  it('CLOSES a block the model left open, so no later reader depends on the model closing it', async () => {
+    // The reported failure at the storage layer: the whole reply — a question the run
+    // was blocked on — inside a `<think>` that never closed. Stored raw, every reader
+    // that recognises reasoning by its closing tag saw the scratchpad as the message.
+    const rec = recorder();
+    await startRun(4501, {
+      resolvedSystemPrompt: 'sys',
+      ...answers('<think>Both are archived. Close them or roadmap them?'),
+      persistence: rec.persistence,
+      userTurn: 'these tickets are stale',
+    });
+    expect(rec.sent).toEqual(['<think>Both are archived. Close them or roadmap them?</think>']);
+    // Reasoning-only stays reasoning-only — the transcript decides what to show, because
+    // only it knows whether the run is over (see `strandedReplyKey`).
+    expect(answerTextOf(rec.sent[0]!)).toBe('');
+    expect(thoughtTextOf(rec.sent[0]!)).toBe('Both are archived. Close them or roadmap them?');
+  });
+
+  it('separates reasoning from the answer into one canonical block', async () => {
+    const rec = recorder();
+    await startRun(4502, {
+      resolvedSystemPrompt: 'sys',
+      ...answers('First.<thinking>weighing it up</thinking>Then the answer.'),
+      persistence: rec.persistence,
+      userTurn: 'go',
+    });
+    expect(rec.sent[0]).toBe(['<think>weighing it up</think>', '', 'First.', '', 'Then the answer.'].join('\n'));
+  });
+
+  it('leaves a plain reply exactly as written', async () => {
+    const rec = recorder();
+    await startRun(4503, {
+      resolvedSystemPrompt: 'sys',
+      ...answers('Patched the scroll lock.'),
+      persistence: rec.persistence,
+      userTurn: 'fix it',
+    });
+    expect(rec.sent).toEqual(['Patched the scroll lock.']);
+  });
+
+  it('does not touch a reasoning tag inside a code fence — the reply is ABOUT the tag', async () => {
+    const text = ['Strip it like this:', '', '```', '<think>hidden</think>', '```', '', 'That is all.'].join('\n');
+    const rec = recorder();
+    await startRun(4504, {
+      resolvedSystemPrompt: 'sys',
+      ...answers(text),
+      persistence: rec.persistence,
+      userTurn: 'how do I strip reasoning',
+    });
+    expect(rec.sent).toEqual([text]);
   });
 });

@@ -31,16 +31,17 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var src_exports = {};
 __export(src_exports, {
   Avatar: () => Avatar,
-  BUILDERFORCE_PRODUCT_NAME: () => import_builderforce_brain_embedded6.BUILDERFORCE_PRODUCT_NAME,
+  BUILDERFORCE_PRODUCT_NAME: () => import_builderforce_brain_embedded8.BUILDERFORCE_PRODUCT_NAME,
   BrainTimeline: () => BrainTimeline,
   ChatErrorBanner: () => ChatErrorBanner,
   ChatTicketsPanel: () => ChatTicketsPanel,
+  CopyButton: () => CopyButton,
   DEFAULT_ASK_USER_LABELS: () => DEFAULT_ASK_USER_LABELS,
   DEFAULT_CHAT_ERROR_LABELS: () => DEFAULT_CHAT_ERROR_LABELS,
   DEFAULT_CHAT_TICKETS_LABELS: () => DEFAULT_CHAT_TICKETS_LABELS,
   DEFAULT_EVERMIND_LABELS: () => DEFAULT_EVERMIND_LABELS,
   DEFAULT_LIVE_ACTIVITY_LABELS: () => DEFAULT_LIVE_ACTIVITY_LABELS,
-  DEFAULT_MODEL_IDENTITY: () => import_builderforce_brain_embedded6.DEFAULT_MODEL_IDENTITY,
+  DEFAULT_MODEL_IDENTITY: () => import_builderforce_brain_embedded8.DEFAULT_MODEL_IDENTITY,
   DEFAULT_PENDING_CHANGES_LABELS: () => DEFAULT_PENDING_CHANGES_LABELS,
   DEFAULT_PROJECT360_LABELS: () => DEFAULT_PROJECT360_LABELS,
   DEFAULT_PROJECT_LIST_LABELS: () => DEFAULT_PROJECT_LIST_LABELS,
@@ -49,9 +50,9 @@ __export(src_exports, {
   EvermindConsole: () => EvermindConsole,
   HealthRing: () => HealthRing,
   LiveActivity: () => LiveActivity,
-  MODEL_CATEGORIES: () => import_builderforce_brain_embedded6.MODEL_CATEGORIES,
+  MODEL_CATEGORIES: () => import_builderforce_brain_embedded8.MODEL_CATEGORIES,
   Markdown: () => Markdown,
-  PROJECT_EVERMIND_MODEL_PREFIX: () => import_builderforce_brain_embedded6.PROJECT_EVERMIND_MODEL_PREFIX,
+  PROJECT_EVERMIND_MODEL_PREFIX: () => import_builderforce_brain_embedded8.PROJECT_EVERMIND_MODEL_PREFIX,
   ParticipantBadge: () => ParticipantBadge,
   PendingChangesList: () => PendingChangesList,
   PendingQuestionBanner: () => PendingQuestionBanner,
@@ -64,75 +65,147 @@ __export(src_exports, {
   SLOW_AFTER_MS: () => SLOW_AFTER_MS,
   Sunburst: () => Sunburst,
   TICKET_KINDS: () => TICKET_KINDS,
-  activeModelKey: () => import_builderforce_brain_embedded6.activeModelKey,
-  answerTextOf: () => answerTextOf,
-  askUserAnchorId: () => askUserAnchorId,
+  ToolStep: () => ToolStep,
+  activeModelKey: () => import_builderforce_brain_embedded8.activeModelKey,
+  askUserAnchorId: () => import_builderforce_brain_embedded.askUserAnchorId,
   attachmentsOf: () => attachmentsOf,
   avatarColor: () => avatarColor,
-  buildModelItems: () => import_builderforce_brain_embedded6.buildModelItems,
+  buildModelItems: () => import_builderforce_brain_embedded8.buildModelItems,
   buildSettledTimeline: () => buildSettledTimeline,
   buildTimeline: () => buildTimeline,
-  byoVendorLabel: () => import_builderforce_brain_embedded6.byoVendorLabel,
+  byoVendorLabel: () => import_builderforce_brain_embedded8.byoVendorLabel,
+  commandOf: () => commandOf,
   createChatTicketsRestAdapter: () => createChatTicketsRestAdapter,
-  displayModelName: () => import_builderforce_brain_embedded6.displayModelName,
+  displayModelName: () => import_builderforce_brain_embedded8.displayModelName,
   evermindLearnedStatus: () => evermindLearnedStatus,
   evermindNextAction: () => evermindNextAction,
-  filterModelItems: () => import_builderforce_brain_embedded6.filterModelItems,
+  filterModelItems: () => import_builderforce_brain_embedded8.filterModelItems,
   formatDuration: () => formatDuration,
   formatElapsed: () => formatElapsed,
-  formatPayload: () => formatPayload,
   healthRingColor: () => healthRingColor,
   initialsOf: () => initialsOf,
-  modelCategoryLabel: () => import_builderforce_brain_embedded6.modelCategoryLabel,
-  modelInUse: () => import_builderforce_brain_embedded6.modelInUse,
-  parseAskUser: () => parseAskUser,
+  modelCategoryLabel: () => import_builderforce_brain_embedded8.modelCategoryLabel,
+  modelInUse: () => import_builderforce_brain_embedded8.modelInUse,
+  parseAskUser: () => import_builderforce_brain_embedded.parseAskUser,
   pendingChangesSummary: () => pendingChangesSummary,
-  perMillionUsd: () => import_builderforce_brain_embedded6.perMillionUsd,
-  premiumCostLabel: () => import_builderforce_brain_embedded6.premiumCostLabel,
-  productForPlan: () => import_builderforce_brain_embedded6.productForPlan,
-  productModelName: () => import_builderforce_brain_embedded6.productModelName,
+  perMillionUsd: () => import_builderforce_brain_embedded8.perMillionUsd,
+  premiumCostLabel: () => import_builderforce_brain_embedded8.premiumCostLabel,
+  productForPlan: () => import_builderforce_brain_embedded8.productForPlan,
+  productModelName: () => import_builderforce_brain_embedded8.productModelName,
   promptOptionsLabels: () => promptOptionsLabels,
   resolvePendingChangesLabels: () => resolvePendingChangesLabels,
-  revealsModelId: () => import_builderforce_brain_embedded6.revealsModelId,
-  selectPendingAskUser: () => selectPendingAskUser,
-  serializeAskUser: () => serializeAskUser,
-  splitThinkSegments: () => splitThinkSegments,
+  revealsModelId: () => import_builderforce_brain_embedded8.revealsModelId,
+  selectPendingAskUser: () => import_builderforce_brain_embedded.selectPendingAskUser,
+  serializeAskUser: () => import_builderforce_brain_embedded.serializeAskUser,
+  shellOutcomeOf: () => shellOutcomeOf,
+  strandedReplyKey: () => strandedReplyKey,
   streamingNode: () => streamingNode,
-  stripAskUser: () => stripAskUser,
+  stripAskUser: () => import_builderforce_brain_embedded.stripAskUser,
+  toolPreview: () => toolPreview,
+  toolStepView: () => toolStepView,
   useChatParticipants: () => useChatParticipants,
   useMentionAutocomplete: () => useMentionAutocomplete
 });
 module.exports = __toCommonJS(src_exports);
 
 // src/BrainTimeline.tsx
-var import_react4 = __toESM(require("react"), 1);
-var import_builderforce_brain_embedded2 = require("@seanhogg/builderforce-brain-embedded");
+var import_react6 = __toESM(require("react"), 1);
+var import_builderforce_brain_embedded4 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/Markdown.tsx
 var import_react = __toESM(require("react"), 1);
 var import_react_markdown = __toESM(require("react-markdown"), 1);
 var import_remark_gfm = __toESM(require("remark-gfm"), 1);
 
-// src/thinkBlocks.ts
-function splitThinkSegments(content) {
-  if (!/<\/?think\s*>/i.test(content)) return [{ kind: "answer", content }];
-  const segments = [];
-  const tags = /<\/?think\s*>/gi;
-  let kind = "answer";
-  let offset = 0;
-  let match;
-  const push = (end) => {
-    const value = content.slice(offset, end).trim();
-    if (value) segments.push({ kind, content: value });
-  };
-  while ((match = tags.exec(content)) !== null) {
-    push(match.index);
-    kind = match[0].startsWith("</") ? "answer" : "thought";
-    offset = match.index + match[0].length;
+// ../agent-loop/src/reasoning.ts
+var REASONING_TAG = "think(?:ing)?|thought|antthinking|scratchpad|reasoning";
+var QUICK_TAG_RE = new RegExp(`<\\s*/?\\s*(?:${REASONING_TAG}|final)\\b`, "i");
+var FINAL_TAG_RE = /<\s*\/?\s*final\b[^<>]*>/gi;
+var REASONING_TAG_RE = new RegExp(`<\\s*(/?)\\s*(?:${REASONING_TAG})\\b[^<>]*>`, "gi");
+function findCodeRegions(text) {
+  const regions = [];
+  const fencedRe = /(^|\n)(```|~~~)[^\n]*\n[\s\S]*?(?:\n\2(?:\n|$)|$)/g;
+  for (const match of text.matchAll(fencedRe)) {
+    const lead = match[1] ?? "";
+    const start = (match.index ?? 0) + lead.length;
+    regions.push({ start, end: start + match[0].length - lead.length });
   }
-  push(content.length);
-  if (segments.length === 0) return [{ kind: "answer", content }];
+  const inlineRe = /`+[^`]+`+/g;
+  for (const match of text.matchAll(inlineRe)) {
+    const start = match.index ?? 0;
+    const end = start + match[0].length;
+    const insideFenced = regions.some((r) => start >= r.start && end <= r.end);
+    if (!insideFenced) regions.push({ start, end });
+  }
+  regions.sort((a, b) => a.start - b.start);
+  return regions;
+}
+function isInsideCode(pos, regions) {
+  return regions.some((r) => pos >= r.start && pos < r.end);
+}
+function scanReasoning(text) {
+  const regions = findCodeRegions(text);
+  const spans = [];
+  let kind = "answer";
+  let start = 0;
+  let contentStart = 0;
+  REASONING_TAG_RE.lastIndex = 0;
+  for (const match of text.matchAll(REASONING_TAG_RE)) {
+    const idx = match.index ?? 0;
+    if (isInsideCode(idx, regions)) continue;
+    const isClose = match[1] === "/";
+    if (kind === "thought" && !isClose) continue;
+    const after = idx + match[0].length;
+    spans.push({ kind, start, contentStart, contentEnd: idx, end: isClose ? after : idx, unterminated: false });
+    kind = isClose ? "answer" : "thought";
+    start = isClose ? after : idx;
+    contentStart = after;
+  }
+  spans.push({
+    kind,
+    start,
+    contentStart,
+    contentEnd: text.length,
+    end: text.length,
+    unterminated: kind === "thought"
+  });
+  return spans;
+}
+function splitReasoningSegments(text) {
+  if (!text) return [];
+  if (!QUICK_TAG_RE.test(text)) return [{ kind: "answer", content: text }];
+  const cleaned = unwrapFinalTags(text);
+  const segments = segmentsOf(cleaned, scanReasoning(cleaned));
+  if (segments.length === 0) return [{ kind: "answer", content: text }];
   return promoteSwallowedAnswer(segments);
+}
+function segmentsOf(text, spans) {
+  const out = [];
+  for (const span of spans) {
+    const content = text.slice(span.contentStart, span.contentEnd).trim();
+    if (content) out.push({ kind: span.kind, content });
+  }
+  return out;
+}
+function unwrapFinalTags(text) {
+  FINAL_TAG_RE.lastIndex = 0;
+  if (!FINAL_TAG_RE.test(text)) {
+    FINAL_TAG_RE.lastIndex = 0;
+    return text;
+  }
+  FINAL_TAG_RE.lastIndex = 0;
+  const regions = findCodeRegions(text);
+  const cuts = [];
+  for (const match of text.matchAll(FINAL_TAG_RE)) {
+    const start = match.index ?? 0;
+    if (!isInsideCode(start, regions)) cuts.push({ start, length: match[0].length });
+  }
+  let out = text;
+  for (let i = cuts.length - 1; i >= 0; i--) {
+    const cut = cuts[i];
+    out = out.slice(0, cut.start) + out.slice(cut.start + cut.length);
+  }
+  return out;
 }
 var MAX_FRAGMENT_CHARS = 40;
 var REPLY_OPENER = /^[A-Z0-9#*\-_>`[|("']/;
@@ -155,7 +228,10 @@ function promoteSwallowedAnswer(segments) {
   return promoted;
 }
 function answerTextOf(content) {
-  return splitThinkSegments(content).filter((s) => s.kind === "answer").map((s) => s.content).join("\n\n").trim();
+  return splitReasoningSegments(content).filter((s) => s.kind === "answer").map((s) => s.content).join("\n\n").trim();
+}
+function thoughtTextOf(content) {
+  return splitReasoningSegments(content).filter((s) => s.kind === "thought").map((s) => s.content).join("\n\n").trim();
 }
 
 // src/Markdown.tsx
@@ -197,7 +273,7 @@ function CodeBlock({
 }
 function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateFile, labels }) {
   const lab = (0, import_react.useMemo)(() => ({ ...DEFAULT_LABELS, ...labels }), [labels]);
-  const segments = (0, import_react.useMemo)(() => splitThinkSegments(content), [content]);
+  const segments = (0, import_react.useMemo)(() => splitReasoningSegments(content), [content]);
   const components = {
     a({ href, children, ...rest }) {
       const target = href ?? "";
@@ -287,6 +363,7 @@ function ParticipantBadge({ recipient, prefix, size = 16 }) {
 
 // src/askUser.tsx
 var import_react2 = require("react");
+var import_builderforce_brain_embedded = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime3 = require("react/jsx-runtime");
 var DEFAULT_ASK_USER_LABELS = {
   askSubmit: "Send",
@@ -294,55 +371,6 @@ var DEFAULT_ASK_USER_LABELS = {
   askPending: "Answer needed",
   askJumpTo: "Show in conversation"
 };
-var ASK_USER_FENCE = /```ask-user\s*\n([\s\S]*?)\n```/i;
-function coercePayload(raw) {
-  if (!raw || typeof raw !== "object") return null;
-  const o = raw;
-  const question = typeof o.question === "string" ? o.question.trim() : "";
-  const optionsIn = Array.isArray(o.options) ? o.options : [];
-  const options = optionsIn.map((it) => {
-    if (typeof it === "string") return it.trim() ? { label: it.trim() } : null;
-    if (it && typeof it === "object") {
-      const rec = it;
-      const label = typeof rec.label === "string" ? rec.label.trim() : "";
-      const description = typeof rec.description === "string" ? rec.description.trim() : void 0;
-      return label ? { label, ...description ? { description } : {} } : null;
-    }
-    return null;
-  }).filter((x) => !!x);
-  if (!question || options.length < 2) return null;
-  return { question, options, multiSelect: o.multiSelect === true };
-}
-function parseAskUser(text) {
-  if (!text || !text.includes("ask-user")) return null;
-  const m = text.match(ASK_USER_FENCE);
-  if (!m) return null;
-  try {
-    return coercePayload(JSON.parse(m[1]));
-  } catch {
-    return null;
-  }
-}
-function stripAskUser(text) {
-  if (!text) return text;
-  return text.replace(ASK_USER_FENCE, "").replace(/\n{3,}/g, "\n\n").trim();
-}
-function serializeAskUser(payload) {
-  return ["```ask-user", JSON.stringify(payload), "```"].join("\n");
-}
-function askUserAnchorId(messageId) {
-  return `bf-ask-${messageId}`;
-}
-function selectPendingAskUser(messages) {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
-    if (msg.role === "user") return null;
-    if (msg.role !== "assistant") continue;
-    const payload = parseAskUser(msg.content);
-    if (payload) return { payload, messageId: msg.id };
-  }
-  return null;
-}
 function QuestionCard({
   payload,
   labels,
@@ -424,7 +452,7 @@ function PendingQuestionBanner({
 }
 
 // src/timelineModel.ts
-var import_builderforce_brain_embedded = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded2 = require("@seanhogg/builderforce-brain-embedded");
 var LEARN_SKIP_REASONS = ["not-attached", "not-seeded", "frozen"];
 function isLearnSkipReason(v) {
   return typeof v === "string" && LEARN_SKIP_REASONS.includes(v);
@@ -499,7 +527,7 @@ function buildSettledTimeline(messages, trace) {
   const nodes = [];
   const traceStepSigs = /* @__PURE__ */ new Set();
   for (const ev of trace) {
-    if (ev.category !== "llm" && ev.category !== "message") traceStepSigs.add((0, import_builderforce_brain_embedded.stepSig)(ev.category, ev.label, ev.ts));
+    if (ev.category !== "llm" && ev.category !== "message") traceStepSigs.add((0, import_builderforce_brain_embedded2.stepSig)(ev.category, ev.label, ev.ts));
   }
   messages.forEach((message, i) => {
     const ts = parseTs(message.createdAt, i);
@@ -516,14 +544,14 @@ function buildSettledTimeline(messages, trace) {
         text: stripImageRefs(message.content, imageNames),
         images
       });
-    } else if ((0, import_builderforce_brain_embedded.isStepMessage)(message)) {
-      const parsed = (0, import_builderforce_brain_embedded.parseStepMessage)(message.metadata);
+    } else if ((0, import_builderforce_brain_embedded2.isStepMessage)(message)) {
+      const parsed = (0, import_builderforce_brain_embedded2.parseStepMessage)(message.metadata);
       if (!parsed) return;
-      if (traceStepSigs.has((0, import_builderforce_brain_embedded.stepSig)(parsed.step.category, parsed.step.label, parsed.tsIso))) return;
+      if (traceStepSigs.has((0, import_builderforce_brain_embedded2.stepSig)(parsed.step.category, parsed.step.label, parsed.tsIso))) return;
       const node = stepNode(parsed.step, parseTs(parsed.tsIso, ts), `msg-${message.id}`);
       if (node) nodes.push(node);
     } else {
-      const activity = (0, import_builderforce_brain_embedded.parseChatActivity)(message);
+      const activity = (0, import_builderforce_brain_embedded2.parseChatActivity)(message);
       if (activity) {
         nodes.push({
           key: `msg-${message.id}`,
@@ -567,6 +595,17 @@ function buildSettledTimeline(messages, trace) {
   const rank = (n, i) => i < messageNodeCount ? n.order : TRACE_RANK;
   return nodes.map((node, i) => ({ node, i, rank: rank(node, i) })).sort((a, b) => a.node.ts - b.node.ts || a.rank - b.rank || a.i - b.i).map((e) => e.node);
 }
+function strandedReplyKey(nodes, isRunning) {
+  if (isRunning) return null;
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const node = nodes[i];
+    if (node.kind === "streaming" || node.kind === "user") return null;
+    if (node.kind !== "assistant") continue;
+    const text = node.text.trim();
+    return text && !answerTextOf(node.text) ? node.key : null;
+  }
+  return null;
+}
 function streamingNode(streamingText, isRunning) {
   if (!isRunning || !streamingText.trim()) return null;
   return { key: "streaming", kind: "streaming", ts: Number.MAX_SAFE_INTEGER, order: ORDER.streaming, text: streamingText };
@@ -589,9 +628,247 @@ function formatPayload(value) {
   }
 }
 
-// src/LiveActivity.tsx
-var import_react3 = __toESM(require("react"), 1);
+// src/CopyButton.tsx
+var import_react3 = require("react");
 var import_jsx_runtime4 = require("react/jsx-runtime");
+var CONFIRM_MS = 1500;
+function CopyButton({ text, labels, icon = false }) {
+  const [copied, setCopied] = (0, import_react3.useState)(false);
+  return /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+    "button",
+    {
+      type: "button",
+      className: icon ? "bf-tl__act" : "bf-tl__copy",
+      title: copied ? labels.copied : labels.copy,
+      "aria-label": copied ? labels.copied : labels.copy,
+      "data-state": copied ? "done" : void 0,
+      onClick: (e) => {
+        e.stopPropagation();
+        void navigator.clipboard?.writeText(text).then(
+          () => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), CONFIRM_MS);
+          },
+          () => {
+          }
+        );
+      },
+      children: icon ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { "aria-hidden": true, children: copied ? "\u2713" : "\u29C9" }) : copied ? labels.copied : labels.copy
+    }
+  );
+}
+
+// src/ToolStep.tsx
+var import_react4 = require("react");
+
+// src/toolStepView.ts
+var import_builderforce_brain_embedded3 = require("@seanhogg/builderforce-brain-embedded");
+var COMMAND_KEYS = ["command", "cmd"];
+var SHELL_RESULT_KEYS = /* @__PURE__ */ new Set([
+  "ok",
+  "stdout",
+  "stderr",
+  "output",
+  "exitCode",
+  "exit_code",
+  "error",
+  "truncated",
+  "command",
+  "durationMs",
+  "signal",
+  "timedOut"
+]);
+var SHELL_TEXT_KEYS = ["stdout", "output", "stderr", "error"];
+function asRecord(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+function trimTrailingBlank(text) {
+  return text.replace(/\s+$/, "");
+}
+function commandOf(args) {
+  const record = asRecord(args);
+  if (!record) return null;
+  for (const key of COMMAND_KEYS) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+function shellResultRecord(result) {
+  const direct = asRecord(result);
+  if (direct) return direct;
+  if (typeof result === "string") {
+    const text = result.trim();
+    if (text.startsWith("{")) {
+      try {
+        return asRecord(JSON.parse(text));
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+function numberAt(record, key) {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+function shellOutcomeOf(result) {
+  if (result == null) return { output: "", exitCode: null, ok: true, outputComplete: true };
+  const record = shellResultRecord(result);
+  if (!record) {
+    const text = typeof result === "string" ? result : formatPayload(result);
+    return { output: trimTrailingBlank(text), exitCode: null, ok: true, outputComplete: typeof result === "string" };
+  }
+  const parts = [];
+  for (const key of SHELL_TEXT_KEYS) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) parts.push(value);
+  }
+  const exitCode = numberAt(record, "exitCode") ?? numberAt(record, "exit_code");
+  const ok = typeof record.ok === "boolean" ? record.ok : exitCode == null ? true : exitCode === 0;
+  const outputComplete = Object.keys(record).every((key) => SHELL_RESULT_KEYS.has(key));
+  return { output: trimTrailingBlank(parts.join("\n")), exitCode, ok, outputComplete };
+}
+function toolPreview(args) {
+  const a = asRecord(args);
+  if (!a) return null;
+  const path = typeof a.path === "string" ? a.path : "";
+  if (typeof a.old_string === "string" && typeof a.new_string === "string") {
+    return { kind: "edit", path, oldText: a.old_string, newText: a.new_string };
+  }
+  if (path && typeof a.content === "string") {
+    return { kind: "write", path, content: a.content };
+  }
+  return null;
+}
+function residualArgs(args, command) {
+  if (!command) return args;
+  const record = asRecord(args);
+  if (!record) return args;
+  const rest = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (!COMMAND_KEYS.includes(key)) rest[key] = value;
+  }
+  return Object.keys(rest).length > 0 ? rest : null;
+}
+function toolStepView({ args, result, isError }) {
+  const commandLine = commandOf(args);
+  const command = commandLine ? { command: commandLine, ...shellOutcomeOf(result) } : null;
+  return {
+    subject: (0, import_builderforce_brain_embedded3.activityTarget)(args) ?? null,
+    command,
+    preview: toolPreview(args),
+    argsText: formatPayload(residualArgs(args, commandLine)),
+    resultText: command?.outputComplete ? "" : formatPayload(result),
+    // A command is the step a reader opens the transcript to check, and a failure is
+    // the step they need to read at all — neither should cost a click to see.
+    defaultOpen: !!command || isError
+  };
+}
+
+// src/ToolStep.tsx
+var import_jsx_runtime5 = require("react/jsx-runtime");
+function IoPanel({
+  heading,
+  text,
+  labels,
+  extra,
+  className
+}) {
+  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__io", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__io-label", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("span", { children: [
+        heading,
+        extra
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(CopyButton, { text, labels })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("pre", { className: className ? `bf-tl__io-pre ${className}` : "bf-tl__io-pre", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("code", { children: text }) })
+  ] });
+}
+function DiffLines({ text, sign }) {
+  const cls = sign === "+" ? "bf-tl__diff-add" : "bf-tl__diff-del";
+  return /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(import_jsx_runtime5.Fragment, { children: text.split("\n").map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: `bf-tl__diff-line ${cls}`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__diff-sign", "aria-hidden": true, children: sign }),
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__diff-text", children: line || " " })
+  ] }, i)) });
+}
+function ChangePreview({ preview, labels }) {
+  const text = preview.kind === "edit" ? preview.newText : preview.content;
+  if (preview.kind === "write") {
+    return /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(IoPanel, { heading: `${labels.preview}${preview.path ? ` \xB7 ${preview.path}` : ""}`, text, labels });
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__io", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__io-label", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("span", { children: [
+        labels.preview,
+        preview.path ? ` \xB7 ${preview.path}` : ""
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(CopyButton, { text, labels })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__diff", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(DiffLines, { text: preview.oldText, sign: "-" }),
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(DiffLines, { text: preview.newText, sign: "+" })
+    ] })
+  ] });
+}
+function CommandCard({ run, labels }) {
+  const failed = run.exitCode != null && run.exitCode !== 0;
+  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(import_jsx_runtime5.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__io", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__io-label", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { children: labels.input }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(CopyButton, { text: run.command, labels })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("pre", { className: "bf-tl__io-pre bf-tl__cmd-in", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("code", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__cmd-prompt", "aria-hidden": true, children: "$" }),
+        run.command
+      ] }) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__io", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__io-label", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("span", { children: [
+          labels.output,
+          failed && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("em", { className: "bf-tl__cmd-exit", children: labels.exitCode.replace("{code}", String(run.exitCode)) })
+        ] }),
+        run.output && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(CopyButton, { text: run.output, labels })
+      ] }),
+      run.output ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("pre", { className: `bf-tl__io-pre bf-tl__cmd-out${run.ok ? "" : " bf-tl__cmd-out--error"}`, children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("code", { children: run.output }) }) : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "bf-tl__cmd-empty", children: labels.noOutput })
+    ] })
+  ] });
+}
+function ToolStep({ node, labels }) {
+  const view = toolStepView(node);
+  const [open, setOpen] = (0, import_react4.useState)(view.defaultOpen);
+  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(
+    "details",
+    {
+      className: `bf-tl__tool${node.isError ? " bf-tl__tool--error" : ""}`,
+      open,
+      onToggle: (e) => setOpen(e.currentTarget.open),
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("summary", { className: "bf-tl__tool-head", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__tool-status", "aria-hidden": true, children: node.isError ? "\u2717" : "\u2713" }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__tool-name", children: node.label }),
+          view.subject && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__tool-subject", children: view.subject }),
+          node.durationMs != null && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__tool-dur", children: formatDuration(node.durationMs) }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__tool-caret", "aria-hidden": true, children: "\u25B8" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__tool-body", children: [
+          view.command && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(CommandCard, { run: view.command, labels }),
+          view.preview && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ChangePreview, { preview: view.preview, labels }),
+          view.argsText && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(IoPanel, { heading: labels.input, text: view.argsText, labels }),
+          view.resultText && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(IoPanel, { heading: labels.output, text: view.resultText, labels })
+        ] })
+      ]
+    }
+  );
+}
+
+// src/LiveActivity.tsx
+var import_react5 = __toESM(require("react"), 1);
+var import_jsx_runtime6 = require("react/jsx-runtime");
 var SLOW_AFTER_MS = 12e3;
 var TICK_MS = 1e3;
 var DEFAULT_LIVE_ACTIVITY_LABELS = {
@@ -628,14 +905,14 @@ function phaseLine(activity, labels) {
 }
 function LiveActivityInner({ activity, isRunning, labels: partial }) {
   const labels = { ...DEFAULT_LIVE_ACTIVITY_LABELS, ...partial };
-  const [fallbackStart, setFallbackStart] = (0, import_react3.useState)(() => isRunning ? Date.now() : null);
-  (0, import_react3.useEffect)(() => {
+  const [fallbackStart, setFallbackStart] = (0, import_react5.useState)(() => isRunning ? Date.now() : null);
+  (0, import_react5.useEffect)(() => {
     setFallbackStart((prev) => isRunning ? prev ?? Date.now() : null);
   }, [isRunning]);
   const live = activity ?? (isRunning && fallbackStart != null ? { phase: "starting", startedAt: fallbackStart, step: 0 } : null);
-  const [now, setNow] = (0, import_react3.useState)(() => Date.now());
+  const [now, setNow] = (0, import_react5.useState)(() => Date.now());
   const startedAt = live?.startedAt;
-  (0, import_react3.useEffect)(() => {
+  (0, import_react5.useEffect)(() => {
     if (startedAt == null) return;
     setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), TICK_MS);
@@ -645,36 +922,37 @@ function LiveActivityInner({ activity, isRunning, labels: partial }) {
   const elapsed = Math.max(0, now - live.startedAt);
   const slow = elapsed >= SLOW_AFTER_MS;
   const waiting = live.phase === "awaiting";
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(
     "li",
     {
       className: `bf-tl__item bf-tl__item--live bf-tl__item--live-${live.phase}`,
       "aria-live": "polite",
       "aria-label": labels.ariaLabel,
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: `bf-tl__dot ${waiting ? "bf-tl__dot--muted" : "bf-tl__dot--working"}`, "aria-hidden": true, children: PHASE_GLYPH[live.phase] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "bf-tl__body", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "bf-tl__live-head", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: `bf-tl__live-line${waiting ? "" : " bf-tl__live-line--shimmer"}`, children: phaseLine(live, labels) }),
-            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__live-elapsed", children: formatElapsed(elapsed) }),
-            live.step > 0 && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__live-step", children: labels.step.replace("{step}", String(live.step)) })
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: `bf-tl__dot ${waiting ? "bf-tl__dot--muted" : "bf-tl__dot--working"}`, "aria-hidden": true, children: PHASE_GLYPH[live.phase] }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "bf-tl__body", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "bf-tl__live-head", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: `bf-tl__live-line${waiting ? "" : " bf-tl__live-line--shimmer"}`, children: phaseLine(live, labels) }),
+            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "bf-tl__live-elapsed", children: formatElapsed(elapsed) }),
+            live.step > 0 && /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "bf-tl__live-step", children: labels.step.replace("{step}", String(live.step)) })
           ] }),
-          !waiting && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__live-bar", "aria-hidden": true, children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__live-bar-fill" }) }),
-          slow && !waiting && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__live-slow", children: labels.slow.replace("{elapsed}", formatElapsed(elapsed)) })
+          !waiting && /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "bf-tl__live-bar", "aria-hidden": true, children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "bf-tl__live-bar-fill" }) }),
+          slow && !waiting && /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "bf-tl__live-slow", children: labels.slow.replace("{elapsed}", formatElapsed(elapsed)) })
         ] })
       ]
     }
   );
 }
-var LiveActivity = import_react3.default.memo(LiveActivityInner);
+var LiveActivity = import_react5.default.memo(LiveActivityInner);
 
 // src/BrainTimeline.tsx
-var import_jsx_runtime5 = require("react/jsx-runtime");
+var import_jsx_runtime7 = require("react/jsx-runtime");
 var DEFAULT_TIMELINE_LABELS = {
   thinking: "Thinking\u2026",
   live: DEFAULT_LIVE_ACTIVITY_LABELS,
   thoughtFor: "Thought for {duration}",
   thought: "Thought",
+  replyFromThought: "Recovered from the model's reasoning \u2014 the turn ended without a separate reply.",
   you: "You",
   assistant: "BuilderForce",
   input: "Input",
@@ -690,6 +968,8 @@ var DEFAULT_TIMELINE_LABELS = {
   apply: "Apply",
   createFile: "Create file",
   preview: "Preview",
+  noOutput: "No output",
+  exitCode: "Exit {code}",
   askSubmit: DEFAULT_ASK_USER_LABELS.askSubmit,
   askAnswered: DEFAULT_ASK_USER_LABELS.askAnswered,
   accountOwn: "Your account",
@@ -711,7 +991,7 @@ var DEFAULT_TIMELINE_LABELS = {
   learnTargetSkipped: "Skipped {name} (project #{projectId}) \u2014 {reason}",
   reconcileTitle: "Reconciled {count} learned memories in Evermind v{version}",
   reconcileHint: "The answer restated these recalled learnings, so it updates them (write-through cognition).",
-  activity: import_builderforce_brain_embedded2.DEFAULT_CHAT_ACTIVITY_LABELS
+  activity: import_builderforce_brain_embedded4.DEFAULT_CHAT_ACTIVITY_LABELS
 };
 function ProvenanceChip({
   prov,
@@ -721,12 +1001,12 @@ function ProvenanceChip({
   const unused = prov.account === "shared_byo_unused";
   const badge = prov.account === "own" ? labels.accountOwn : unused ? labels.accountByoUnused : prov.account === "shared" ? labels.accountShared : null;
   const variant = prov.account === "own" ? "bf-tl__prov--own" : unused ? "bf-tl__prov--unused" : "bf-tl__prov--shared";
-  const name = (0, import_builderforce_brain_embedded2.displayModelName)(prov.model, identity, { account: prov.account });
+  const name = (0, import_builderforce_brain_embedded4.displayModelName)(prov.model, identity, { account: prov.account });
   const modelTitle = prov.vendor && name === prov.model ? `${name} \xB7 ${prov.vendor}` : name;
-  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: `bf-tl__prov ${variant}`, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__prov-model", title: modelTitle, children: name }),
-    badge && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__prov-badge", children: badge }),
-    prov.evermind ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__prov-evermind", title: labels.ranOnEvermind, children: `\u{1F9E0} Evermind v${prov.evermind.version}` }) : null
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: `bf-tl__prov ${variant}`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__prov-model", title: modelTitle, children: name }),
+    badge && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__prov-badge", children: badge }),
+    prov.evermind ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__prov-evermind", title: labels.ranOnEvermind, children: `\u{1F9E0} Evermind v${prov.evermind.version}` }) : null
   ] });
 }
 function dotIcon(kind, isError) {
@@ -750,31 +1030,6 @@ function dotIcon(kind, isError) {
       return "\u2022";
   }
 }
-function CopyButton({ text, labels, icon = false }) {
-  const [copied, setCopied] = (0, import_react4.useState)(false);
-  return /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
-    "button",
-    {
-      type: "button",
-      className: icon ? "bf-tl__act" : "bf-tl__copy",
-      title: copied ? labels.copied : labels.copy,
-      "aria-label": copied ? labels.copied : labels.copy,
-      "data-state": copied ? "done" : void 0,
-      onClick: (e) => {
-        e.stopPropagation();
-        void navigator.clipboard?.writeText(text).then(
-          () => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          },
-          () => {
-          }
-        );
-      },
-      children: icon ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { "aria-hidden": true, children: copied ? "\u2713" : "\u29C9" }) : copied ? labels.copied : labels.copy
-    }
-  );
-}
 function MessageActions({
   message,
   role,
@@ -789,9 +1044,9 @@ function MessageActions({
     event.stopPropagation();
     onRate?.(message, rating === next ? 0 : next);
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(import_jsx_runtime5.Fragment, { children: [
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(CopyButton, { text, labels, icon: true }),
-    onReplay && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(CopyButton, { text, labels, icon: true }),
+    onReplay && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
       "button",
       {
         type: "button",
@@ -802,11 +1057,11 @@ function MessageActions({
           e.stopPropagation();
           onReplay(message, role);
         },
-        children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { "aria-hidden": true, children: "\u21BB" })
+        children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { "aria-hidden": true, children: "\u21BB" })
       }
     ),
-    onRate && role === "assistant" && /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(import_jsx_runtime5.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+    onRate && role === "assistant" && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
         "button",
         {
           type: "button",
@@ -816,10 +1071,10 @@ function MessageActions({
           "aria-pressed": rating === 1,
           "data-state": rating === 1 ? "done" : void 0,
           onClick: rate(1),
-          children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { "aria-hidden": true, children: "\u{1F44D}" })
+          children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { "aria-hidden": true, children: "\u{1F44D}" })
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
         "button",
         {
           type: "button",
@@ -829,79 +1084,9 @@ function MessageActions({
           "aria-pressed": rating === -1,
           "data-state": rating === -1 ? "done" : void 0,
           onClick: rate(-1),
-          children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { "aria-hidden": true, children: "\u{1F44E}" })
+          children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { "aria-hidden": true, children: "\u{1F44E}" })
         }
       )
-    ] })
-  ] });
-}
-function toolPreview(args) {
-  if (!args || typeof args !== "object") return null;
-  const a = args;
-  const path = typeof a.path === "string" ? a.path : "";
-  if (typeof a.old_string === "string" && typeof a.new_string === "string") {
-    return { kind: "edit", path, oldText: a.old_string, newText: a.new_string };
-  }
-  if (path && typeof a.content === "string") {
-    return { kind: "write", path, content: a.content };
-  }
-  return null;
-}
-function DiffLines({ text, sign }) {
-  const cls = sign === "+" ? "bf-tl__diff-add" : "bf-tl__diff-del";
-  return /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(import_jsx_runtime5.Fragment, { children: text.split("\n").map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: `bf-tl__diff-line ${cls}`, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__diff-sign", "aria-hidden": true, children: sign }),
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__diff-text", children: line || "\xA0" })
-  ] }, i)) });
-}
-function ToolStep({
-  node,
-  labels
-}) {
-  const argsText = formatPayload(node.args);
-  const resultText = formatPayload(node.result);
-  const preview = toolPreview(node.args);
-  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("details", { className: `bf-tl__tool${node.isError ? " bf-tl__tool--error" : ""}`, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("summary", { className: "bf-tl__tool-head", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__tool-status", "aria-hidden": true, children: node.isError ? "\u2717" : "\u2713" }),
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__tool-name", children: node.label }),
-      node.durationMs != null && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__tool-dur", children: formatDuration(node.durationMs) }),
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__tool-caret", "aria-hidden": true, children: "\u25B8" })
-    ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__tool-body", children: [
-      preview && /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__io", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__io-label", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("span", { children: [
-            labels.preview,
-            preview.path ? ` \xB7 ${preview.path}` : ""
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
-            CopyButton,
-            {
-              text: preview.kind === "edit" ? preview.newText : preview.content,
-              labels
-            }
-          )
-        ] }),
-        preview.kind === "edit" ? /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__diff", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(DiffLines, { text: preview.oldText, sign: "-" }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(DiffLines, { text: preview.newText, sign: "+" })
-        ] }) : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("pre", { className: "bf-tl__io-pre", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("code", { children: preview.content }) })
-      ] }),
-      argsText && /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__io", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__io-label", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { children: labels.input }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(CopyButton, { text: argsText, labels })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("pre", { className: "bf-tl__io-pre", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("code", { children: argsText }) })
-      ] }),
-      resultText && /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__io", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__io-label", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { children: labels.output }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(CopyButton, { text: resultText, labels })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("pre", { className: "bf-tl__io-pre", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("code", { children: resultText }) })
-      ] })
     ] })
   ] });
 }
@@ -913,7 +1098,7 @@ function BrainTimelineInner({
   activity,
   loading,
   labels: labelOverrides,
-  modelIdentity = import_builderforce_brain_embedded2.DEFAULT_MODEL_IDENTITY,
+  modelIdentity = import_builderforce_brain_embedded4.DEFAULT_MODEL_IDENTITY,
   assistantName,
   emptyState,
   renderMessage,
@@ -928,22 +1113,23 @@ function BrainTimelineInner({
   onAnswerQuestion,
   autoScroll = true
 }) {
-  const labels = (0, import_react4.useMemo)(() => ({ ...DEFAULT_TIMELINE_LABELS, ...labelOverrides }), [labelOverrides]);
+  const labels = (0, import_react6.useMemo)(() => ({ ...DEFAULT_TIMELINE_LABELS, ...labelOverrides }), [labelOverrides]);
   const assistant = assistantName ?? labels.assistant;
-  const settled = (0, import_react4.useMemo)(() => buildSettledTimeline(messages, trace), [messages, trace]);
-  const nodes = (0, import_react4.useMemo)(() => {
+  const settled = (0, import_react6.useMemo)(() => buildSettledTimeline(messages, trace), [messages, trace]);
+  const nodes = (0, import_react6.useMemo)(() => {
     const streaming = streamingNode(streamingText, isRunning);
     return streaming ? [...settled, streaming] : settled;
   }, [settled, streamingText, isRunning]);
-  const scrollRef = (0, import_react4.useRef)(null);
-  const contentRef = (0, import_react4.useRef)(null);
-  const pinnedRef = (0, import_react4.useRef)(true);
+  const stranded = (0, import_react6.useMemo)(() => strandedReplyKey(nodes, isRunning), [nodes, isRunning]);
+  const scrollRef = (0, import_react6.useRef)(null);
+  const contentRef = (0, import_react6.useRef)(null);
+  const pinnedRef = (0, import_react6.useRef)(true);
   const onScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
     pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   };
-  (0, import_react4.useEffect)(() => {
+  (0, import_react6.useEffect)(() => {
     if (!autoScroll) return;
     const scroller = scrollRef.current;
     const content = contentRef.current;
@@ -956,7 +1142,7 @@ function BrainTimelineInner({
     ro.observe(content);
     return () => ro.disconnect();
   }, [autoScroll]);
-  const renderMsg = (msg, role, text) => renderMessage ? renderMessage(msg, { role, text }) : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+  const renderMsg = (msg, role, text) => renderMessage ? renderMessage(msg, { role, text }) : /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
     Markdown,
     {
       content: text,
@@ -967,69 +1153,71 @@ function BrainTimelineInner({
     }
   );
   const isEmpty = nodes.length === 0 && !loading;
-  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl-scroll", ref: scrollRef, onScroll, children: [
-    loading && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "bf-tl-status", children: labels.loading }),
-    isEmpty && (emptyState ?? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "bf-tl-empty", children: labels.empty })),
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("ol", { className: "bf-tl", ref: contentRef, children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "bf-tl-scroll", ref: scrollRef, onScroll, children: [
+    loading && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl-status", children: labels.loading }),
+    isEmpty && (emptyState ?? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl-empty", children: labels.empty })),
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("ol", { className: "bf-tl", ref: contentRef, children: [
       nodes.map((node) => {
         if (node.kind === "user") {
-          const to = (0, import_builderforce_brain_embedded2.parseDirectedRecipient)(node.message);
-          const author = (0, import_builderforce_brain_embedded2.parseMessageAuthor)(node.message);
-          return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("li", { className: "bf-tl__item bf-tl__item--user", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__dot", children: author ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(Avatar, { name: author.name, kind: author.kind, size: 16 }) : dotIcon("user") }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__body", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__role", style: to ? { display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" } : void 0, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { children: author ? author.name : labels.you }),
-                to && /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("span", { style: { display: "inline-flex", alignItems: "center", gap: 4, opacity: 0.9 }, children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { "aria-hidden": true, style: { opacity: 0.6 }, children: "\u2192" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(Avatar, { name: to.name, kind: to.kind, size: 15 }),
-                  /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { children: to.name })
+          const to = (0, import_builderforce_brain_embedded4.parseDirectedRecipient)(node.message);
+          const author = (0, import_builderforce_brain_embedded4.parseMessageAuthor)(node.message);
+          return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { className: "bf-tl__item bf-tl__item--user", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__dot", children: author ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Avatar, { name: author.name, kind: author.kind, size: 16 }) : dotIcon("user") }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "bf-tl__body", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "bf-tl__role", style: to ? { display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" } : void 0, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: author ? author.name : labels.you }),
+                to && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("span", { style: { display: "inline-flex", alignItems: "center", gap: 4, opacity: 0.9 }, children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { "aria-hidden": true, style: { opacity: 0.6 }, children: "\u2192" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Avatar, { name: to.name, kind: to.kind, size: 15 }),
+                  /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: to.name })
                 ] })
               ] }),
-              node.images.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "bf-tl__images", children: node.images.map((im, i) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("img", { src: im.url, alt: im.name ?? "", className: "bf-tl__image" }, i)) }),
-              node.text && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "bf-tl__bubble bf-tl__bubble--user", children: renderMsg(node.message, "user", node.text) }),
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "bf-tl__actions bf-tl__actions--hover", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(MessageActions, { message: node.message, role: "user", text: node.text, labels, onReplay: onReplayMessage }) })
+              node.images.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl__images", children: node.images.map((im, i) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("img", { src: im.url, alt: im.name ?? "", className: "bf-tl__image" }, i)) }),
+              node.text && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl__bubble bf-tl__bubble--user", children: renderMsg(node.message, "user", node.text) }),
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl__actions bf-tl__actions--hover", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(MessageActions, { message: node.message, role: "user", text: node.text, labels, onReplay: onReplayMessage }) })
             ] })
           ] }, node.key);
         }
         if (node.kind === "assistant") {
-          const author = (0, import_builderforce_brain_embedded2.parseMessageAuthor)(node.message);
-          const card = onAnswerQuestion ? parseAskUser(node.text) : null;
-          const bodyText = card ? stripAskUser(node.text) : node.text;
-          const prov = (0, import_builderforce_brain_embedded2.parseMessageProvenance)(node.message);
+          const author = (0, import_builderforce_brain_embedded4.parseMessageAuthor)(node.message);
+          const card = onAnswerQuestion ? (0, import_builderforce_brain_embedded.parseAskUser)(node.text) : null;
+          const bodyText = card ? (0, import_builderforce_brain_embedded.stripAskUser)(node.text) : node.text;
+          const prov = (0, import_builderforce_brain_embedded4.parseMessageProvenance)(node.message);
           const answer = answerTextOf(bodyText);
-          if (!answer && bodyText && !card) {
-            return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("li", { className: "bf-tl__item bf-tl__item--thought", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("thinking") }) }),
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__body bf-tl__thought-line", children: [
+          const rescued = node.key === stranded ? thoughtTextOf(bodyText) : "";
+          if (!answer && bodyText && !card && !rescued) {
+            return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { className: "bf-tl__item bf-tl__item--thought", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("thinking") }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "bf-tl__body bf-tl__thought-line", children: [
                 renderMsg(node.message, "assistant", bodyText),
-                prov && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ProvenanceChip, { prov, labels, identity: modelIdentity })
+                prov && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(ProvenanceChip, { prov, labels, identity: modelIdentity })
               ] })
             ] }, node.key);
           }
-          return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("li", { className: "bf-tl__item bf-tl__item--assistant", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__dot", children: author ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(Avatar, { name: author.name, kind: author.kind, size: 16 }) : dotIcon("assistant") }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__body", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "bf-tl__role", children: author ? author.name : assistant }),
-              bodyText && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "bf-tl__bubble", children: renderMsg(node.message, "assistant", bodyText) }),
-              card && onAnswerQuestion && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+          return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { className: "bf-tl__item bf-tl__item--assistant", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__dot", children: author ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Avatar, { name: author.name, kind: author.kind, size: 16 }) : dotIcon("assistant") }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "bf-tl__body", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl__role", children: author ? author.name : assistant }),
+              rescued && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl__rescued", children: labels.replyFromThought }),
+              bodyText && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl__bubble", children: renderMsg(node.message, "assistant", rescued || bodyText) }),
+              card && onAnswerQuestion && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
                 QuestionCard,
                 {
                   payload: card,
                   labels: { askSubmit: labels.askSubmit, askAnswered: labels.askAnswered },
                   onAnswer: onAnswerQuestion,
-                  anchorId: askUserAnchorId(node.message.id)
+                  anchorId: (0, import_builderforce_brain_embedded.askUserAnchorId)(node.message.id)
                 }
               ),
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__foot", children: [
-                prov && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ProvenanceChip, { prov, labels, identity: modelIdentity }),
-                /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__actions bf-tl__actions--hover", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "bf-tl__foot", children: [
+                prov && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(ProvenanceChip, { prov, labels, identity: modelIdentity }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "bf-tl__actions bf-tl__actions--hover", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
                     MessageActions,
                     {
                       message: node.message,
                       role: "assistant",
-                      text: answer,
+                      text: answer || rescued,
                       labels,
                       onReplay: onReplayMessage,
                       onRate: onRateMessage,
@@ -1044,41 +1232,41 @@ function BrainTimelineInner({
         }
         if (node.kind === "thinking") {
           const label = labels.thoughtFor.replace("{duration}", formatDuration(node.durationMs));
-          return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("li", { className: "bf-tl__item bf-tl__item--thinking", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("thinking") }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "bf-tl__body", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__thinking", children: label }) })
+          return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { className: "bf-tl__item bf-tl__item--thinking", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("thinking") }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl__body", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__thinking", children: label }) })
           ] }, node.key);
         }
         if (node.kind === "tool") {
-          return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("li", { className: "bf-tl__item bf-tl__item--tool", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: `bf-tl__dot${node.isError ? " bf-tl__dot--error" : ""}`, children: dotIcon("tool", node.isError) }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "bf-tl__body", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ToolStep, { node, labels }) })
+          return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { className: "bf-tl__item bf-tl__item--tool", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: `bf-tl__dot${node.isError ? " bf-tl__dot--error" : ""}`, children: dotIcon("tool", node.isError) }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl__body", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(ToolStep, { node, labels }) })
           ] }, node.key);
         }
         if (node.kind === "error") {
-          return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("li", { className: "bf-tl__item bf-tl__item--error", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__dot bf-tl__dot--error", children: dotIcon("error") }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__body", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "bf-tl__role bf-tl__role--error", children: labels.error }),
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "bf-tl__bubble bf-tl__bubble--error", children: node.message })
+          return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { className: "bf-tl__item bf-tl__item--error", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__dot bf-tl__dot--error", children: dotIcon("error") }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "bf-tl__body", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl__role bf-tl__role--error", children: labels.error }),
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl__bubble bf-tl__bubble--error", children: node.message })
             ] })
           ] }, node.key);
         }
         if (node.kind === "recall") {
           const title = labels.recallTitle.replace("{count}", String(node.count)).replace("{version}", String(node.version));
-          return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("li", { className: "bf-tl__item bf-tl__item--memory", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("recall") }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "bf-tl__body", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("details", { className: "bf-tl__tool bf-tl__memory", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("summary", { className: "bf-tl__tool-head", title: labels.recallHint, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__tool-name", children: title }),
-                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__tool-caret", "aria-hidden": true, children: "\u25B8" })
+          return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { className: "bf-tl__item bf-tl__item--memory", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("recall") }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl__body", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("details", { className: "bf-tl__tool bf-tl__memory", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("summary", { className: "bf-tl__tool-head", title: labels.recallHint, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__tool-name", children: title }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__tool-caret", "aria-hidden": true, children: "\u25B8" })
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "bf-tl__tool-body", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("ol", { className: "bf-tl__memory-list", children: node.items.map((it) => /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("li", { className: "bf-tl__memory-item", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("span", { className: "bf-tl__memory-score", "aria-hidden": true, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl__tool-body", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("ol", { className: "bf-tl__memory-list", children: node.items.map((it) => /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { className: "bf-tl__memory-item", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("span", { className: "bf-tl__memory-score", "aria-hidden": true, children: [
                   Math.round(it.score * 100),
                   "%"
                 ] }),
-                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__memory-text", children: it.text })
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__memory-text", children: it.text })
               ] }, it.id)) }) })
             ] }) })
           ] }, node.key);
@@ -1093,52 +1281,52 @@ function BrainTimelineInner({
               return reasonLabel ? labels.learnTargetSkipped.replace("{name}", tg.name).replace("{projectId}", String(tg.projectId)).replace("{reason}", reasonLabel) : null;
             }).filter((s) => !!s);
             if (lines.length === 0) return null;
-            return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("li", { className: "bf-tl__item bf-tl__item--memory", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("learn") }) }),
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "bf-tl__body", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__memory-line", children: lines.join("; ") }) })
+            return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { className: "bf-tl__item bf-tl__item--memory", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("learn") }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl__body", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__memory-line", children: lines.join("; ") }) })
             ] }, node.key);
           }
           const title = node.skipped ? labels.learnSkippedTitle.replace("{reason}", labels.learnSkipReason[node.skipped]) : labels.learnTitle.replace("{version}", String(node.version));
           const hint = node.skipped ? labels.learnSkippedHint : labels.learnHint;
-          return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("li", { className: "bf-tl__item bf-tl__item--memory", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("learn") }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "bf-tl__body", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__memory-line", title: hint, children: title }) })
+          return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { className: "bf-tl__item bf-tl__item--memory", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("learn") }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl__body", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__memory-line", title: hint, children: title }) })
           ] }, node.key);
         }
         if (node.kind === "activity") {
-          const text = (0, import_builderforce_brain_embedded2.chatActivityText)(node.activity, labels.activity) || node.fallbackText;
-          const tone = (0, import_builderforce_brain_embedded2.activityTone)(node.activity);
-          return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("li", { className: `bf-tl__item bf-tl__item--activity bf-tl__item--activity-${tone}`, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__dot bf-tl__dot--activity", "aria-hidden": true, children: (0, import_builderforce_brain_embedded2.activityIcon)(node.activity) }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__body", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__activity-line", children: text }),
-              node.activity.kind === "milestone" && node.activity.note && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__activity-note", children: node.activity.note })
+          const text = (0, import_builderforce_brain_embedded4.chatActivityText)(node.activity, labels.activity) || node.fallbackText;
+          const tone = (0, import_builderforce_brain_embedded4.activityTone)(node.activity);
+          return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { className: `bf-tl__item bf-tl__item--activity bf-tl__item--activity-${tone}`, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__dot bf-tl__dot--activity", "aria-hidden": true, children: (0, import_builderforce_brain_embedded4.activityIcon)(node.activity) }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "bf-tl__body", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__activity-line", children: text }),
+              node.activity.kind === "milestone" && node.activity.note && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__activity-note", children: node.activity.note })
             ] })
           ] }, node.key);
         }
         if (node.kind === "reconcile") {
           const title = labels.reconcileTitle.replace("{count}", String(node.count)).replace("{version}", String(node.version));
-          return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("li", { className: "bf-tl__item bf-tl__item--memory", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("reconcile") }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "bf-tl__body", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__memory-line", title: labels.reconcileHint, children: title }) })
+          return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { className: "bf-tl__item bf-tl__item--memory", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("reconcile") }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl__body", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__memory-line", title: labels.reconcileHint, children: title }) })
           ] }, node.key);
         }
-        return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("li", { className: "bf-tl__item bf-tl__item--assistant bf-tl__item--streaming", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "bf-tl__dot bf-tl__dot--pulse", children: dotIcon("assistant") }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "bf-tl__body", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "bf-tl__role", children: assistant }),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "bf-tl__bubble", children: renderStreaming ? renderStreaming(node.text) : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(Markdown, { content: node.text, onInternalLink, labels }) })
+        return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { className: "bf-tl__item bf-tl__item--assistant bf-tl__item--streaming", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__dot bf-tl__dot--pulse", children: dotIcon("assistant") }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "bf-tl__body", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl__role", children: assistant }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl__bubble", children: renderStreaming ? renderStreaming(node.text) : /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Markdown, { content: node.text, onInternalLink, labels }) })
           ] })
         ] }, node.key);
       }),
-      isRunning && !(streamingText.trim() && activity?.phase === "writing") && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(LiveActivity, { activity, isRunning, labels: labels.live })
+      isRunning && !(streamingText.trim() && activity?.phase === "writing") && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(LiveActivity, { activity, isRunning, labels: labels.live })
     ] })
   ] });
 }
-var BrainTimeline = import_react4.default.memo(BrainTimelineInner);
+var BrainTimeline = import_react6.default.memo(BrainTimelineInner);
 
 // src/ChatErrorBanner.tsx
-var import_jsx_runtime6 = require("react/jsx-runtime");
+var import_jsx_runtime8 = require("react/jsx-runtime");
 var DEFAULT_CHAT_ERROR_LABELS = {
   reconnect: "Reconnect",
   upgrade: "Upgrade",
@@ -1168,7 +1356,7 @@ function ChatErrorBanner({
     label: plan ? labels.upgradeToPlan.replace("{plan}", plan) : labels.upgrade,
     onClick: onUpgrade
   } : kind === "validate_card" && onValidateCard ? { label: labels.addCard, onClick: onValidateCard } : null;
-  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
     "div",
     {
       className,
@@ -1182,8 +1370,8 @@ function ChatErrorBanner({
         ...style
       },
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { style: { flex: 1, minWidth: 0, overflowWrap: "anywhere" }, children: error }),
-        primary && /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { style: { flex: 1, minWidth: 0, overflowWrap: "anywhere" }, children: error }),
+        primary && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
           "button",
           {
             type: "button",
@@ -1202,7 +1390,7 @@ function ChatErrorBanner({
             children: primary.label
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
           "button",
           {
             type: "button",
@@ -1228,7 +1416,7 @@ function ChatErrorBanner({
 }
 
 // src/PromptPanel.tsx
-var import_jsx_runtime7 = require("react/jsx-runtime");
+var import_jsx_runtime9 = require("react/jsx-runtime");
 function PromptPanel({
   input,
   actions,
@@ -1256,7 +1444,7 @@ function PromptPanel({
     ...dragging ? { borderStyle: "dashed", background: "var(--prompt-panel-drag-bg, var(--surface-interactive, rgba(59,130,246,.1)))" } : null,
     ...style
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
     "div",
     {
       ...rest,
@@ -1264,9 +1452,9 @@ function PromptPanel({
       style: panelStyle,
       children: [
         overlay,
-        status ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-prompt-panel__status", children: status }) : null,
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-prompt-panel__input", style: { display: "flex", width: "100%", minWidth: 0 }, children: input }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+        status ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "bf-prompt-panel__status", children: status }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "bf-prompt-panel__input", style: { display: "flex", width: "100%", minWidth: 0 }, children: input }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
           "div",
           {
             className: "bf-prompt-panel__actions",
@@ -1280,13 +1468,13 @@ function PromptPanel({
 }
 
 // src/promptOptions/PromptOptionsMenu.tsx
-var import_react5 = require("react");
-var import_builderforce_brain_embedded4 = require("@seanhogg/builderforce-brain-embedded");
+var import_react7 = require("react");
+var import_builderforce_brain_embedded6 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/promptOptions/types.ts
-var import_builderforce_brain_embedded3 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded5 = require("@seanhogg/builderforce-brain-embedded");
 var DEFAULT_PROMPT_OPTIONS_LABELS = {
-  ...import_builderforce_brain_embedded3.DEFAULT_MODEL_CHOICE_LABELS,
+  ...import_builderforce_brain_embedded5.DEFAULT_MODEL_CHOICE_LABELS,
   options: "Options",
   mode: "Mode",
   memory: "Memory",
@@ -1322,13 +1510,13 @@ function promptOptionsLabels(overrides) {
 }
 
 // src/promptOptions/PromptOptionsMenu.tsx
-var import_jsx_runtime8 = require("react/jsx-runtime");
-var IconConsolidate = () => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("svg", { width: "13", height: "13", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { d: "M2 5.5 4.5 8 2 10.5M14 5.5 11.5 8 14 10.5M6.5 3v10M9.5 3v10", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round", strokeLinejoin: "round" }) });
-var IconFork = () => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("svg", { width: "13", height: "13", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
-  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("circle", { cx: "4", cy: "3.5", r: "1.5", fill: "currentColor" }),
-  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("circle", { cx: "4", cy: "12.5", r: "1.5", fill: "currentColor" }),
-  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("circle", { cx: "12", cy: "3.5", r: "1.5", fill: "currentColor" }),
-  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { d: "M4 5v6M4 8h4.5A3.5 3.5 0 0 0 12 4.5V5", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round", strokeLinejoin: "round" })
+var import_jsx_runtime10 = require("react/jsx-runtime");
+var IconConsolidate = () => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("svg", { width: "13", height: "13", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("path", { d: "M2 5.5 4.5 8 2 10.5M14 5.5 11.5 8 14 10.5M6.5 3v10M9.5 3v10", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round", strokeLinejoin: "round" }) });
+var IconFork = () => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("svg", { width: "13", height: "13", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
+  /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("circle", { cx: "4", cy: "3.5", r: "1.5", fill: "currentColor" }),
+  /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("circle", { cx: "4", cy: "12.5", r: "1.5", fill: "currentColor" }),
+  /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("circle", { cx: "12", cy: "3.5", r: "1.5", fill: "currentColor" }),
+  /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("path", { d: "M4 5v6M4 8h4.5A3.5 3.5 0 0 0 12 4.5V5", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round", strokeLinejoin: "round" })
 ] });
 var EFFORT_LEVELS = ["quick", "balanced", "thorough"];
 var EFFORT_ICON = { quick: "\u{1F3C3}", balanced: "\u2696\uFE0F", thorough: "\u{1F3AF}" };
@@ -1349,12 +1537,12 @@ function PromptOptionsMenu({
   onAccountSettings,
   className
 }) {
-  const labels = (0, import_react5.useMemo)(() => promptOptionsLabels(labelOverrides), [labelOverrides]);
-  const [open, setOpen] = (0, import_react5.useState)(false);
-  const [query, setQuery] = (0, import_react5.useState)("");
-  const [filter, setFilter] = (0, import_react5.useState)("all");
-  const rootRef = (0, import_react5.useRef)(null);
-  (0, import_react5.useEffect)(() => {
+  const labels = (0, import_react7.useMemo)(() => promptOptionsLabels(labelOverrides), [labelOverrides]);
+  const [open, setOpen] = (0, import_react7.useState)(false);
+  const [query, setQuery] = (0, import_react7.useState)("");
+  const [filter, setFilter] = (0, import_react7.useState)("all");
+  const rootRef = (0, import_react7.useRef)(null);
+  (0, import_react7.useEffect)(() => {
     if (!open) return;
     const onDown = (event) => {
       if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false);
@@ -1369,28 +1557,28 @@ function PromptOptionsMenu({
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
-  const identity = model?.identity ?? import_builderforce_brain_embedded4.DEFAULT_MODEL_IDENTITY;
-  const items = (0, import_react5.useMemo)(() => model ? (0, import_builderforce_brain_embedded4.buildModelItems)(model.options, labels, identity) : [], [model, labels, identity]);
-  const inUse = (0, import_react5.useMemo)(
-    () => model ? (0, import_builderforce_brain_embedded4.modelInUse)(model.selection, items, labels, model.effective, identity) : null,
+  const identity = model?.identity ?? import_builderforce_brain_embedded6.DEFAULT_MODEL_IDENTITY;
+  const items = (0, import_react7.useMemo)(() => model ? (0, import_builderforce_brain_embedded6.buildModelItems)(model.options, labels, identity) : [], [model, labels, identity]);
+  const inUse = (0, import_react7.useMemo)(
+    () => model ? (0, import_builderforce_brain_embedded6.modelInUse)(model.selection, items, labels, model.effective, identity) : null,
     [model, items, labels, identity]
   );
-  const categories = (0, import_react5.useMemo)(
-    () => import_builderforce_brain_embedded4.MODEL_CATEGORIES.filter((category) => items.some((item) => item.category === category)),
+  const categories = (0, import_react7.useMemo)(
+    () => import_builderforce_brain_embedded6.MODEL_CATEGORIES.filter((category) => items.some((item) => item.category === category)),
     [items]
   );
-  const visible = (0, import_react5.useMemo)(() => (0, import_builderforce_brain_embedded4.filterModelItems)(items, labels, query, filter), [items, labels, query, filter]);
+  const visible = (0, import_react7.useMemo)(() => (0, import_builderforce_brain_embedded6.filterModelItems)(items, labels, query, filter), [items, labels, query, filter]);
   if (!mode && !memory && !autoMode && !session && !onEffortChange && !onThinkingChange && !model && !onAccountSettings) return null;
   const canChoose = identity.canChoose;
-  const activeKey = model ? (0, import_builderforce_brain_embedded4.activeModelKey)(model.selection) : "";
+  const activeKey = model ? (0, import_builderforce_brain_embedded6.activeModelKey)(model.selection) : "";
   const activeMode = mode?.choices.find((choice) => choice.value === mode.value);
   const title = [
     labels.options,
     activeMode && `${labels.mode}: ${activeMode.label}`,
     inUse && `${labels.modelInUse}: ${inUse.name}`
   ].filter(Boolean).join(" \xB7 ");
-  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { ref: rootRef, className: ["bf-pmenu", className].filter(Boolean).join(" "), children: [
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { ref: rootRef, className: ["bf-pmenu", className].filter(Boolean).join(" "), children: [
+    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
       "button",
       {
         type: "button",
@@ -1402,19 +1590,19 @@ function PromptOptionsMenu({
         "aria-expanded": open,
         onClick: () => setOpen((value) => !value),
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__slash", "aria-hidden": "true", children: "/" }),
-          activeMode && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "bf-pmenu__mode", children: [
-            activeMode.icon && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { "aria-hidden": "true", children: activeMode.icon }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__slash", "aria-hidden": "true", children: "/" }),
+          activeMode && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__mode", children: [
+            activeMode.icon && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { "aria-hidden": "true", children: activeMode.icon }),
             activeMode.label
           ] }),
-          inUse && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__model", children: inUse.name })
+          inUse && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__model", children: inUse.name })
         ]
       }
     ),
-    open && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "bf-pmenu__pop", role: "menu", children: [
-      mode && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bf-pmenu__group", children: labels.mode }),
-        mode.choices.map((choice) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+    open && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "bf-pmenu__pop", role: "menu", children: [
+      mode && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__group", children: labels.mode }),
+        mode.choices.map((choice) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
           "button",
           {
             type: "button",
@@ -1426,20 +1614,20 @@ function PromptOptionsMenu({
               setOpen(false);
             },
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: choice.icon ?? "" }),
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "bf-pmenu__lbl", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: choice.icon ?? "" }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__lbl", children: [
                 choice.label,
-                choice.hint && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__desc", children: choice.hint })
+                choice.hint && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: choice.hint })
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: choice.value === mode.value ? "\u2713" : "" })
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: choice.value === mode.value ? "\u2713" : "" })
             ]
           },
           choice.value
         ))
       ] }),
-      memory && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
-        mode && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bf-pmenu__sep" }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+      memory && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
+        mode && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__sep" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
           "button",
           {
             type: "button",
@@ -1452,20 +1640,20 @@ function PromptOptionsMenu({
               if (!memory.unavailableReason) memory.onChange(!memory.enabled);
             },
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u{1F9E0}" }),
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "bf-pmenu__lbl", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u{1F9E0}" }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__lbl", children: [
                 labels.memory,
-                (memory.unavailableReason ?? memory.describe?.(memory.enabled)) && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__desc", children: memory.unavailableReason ?? memory.describe?.(memory.enabled) })
+                (memory.unavailableReason ?? memory.describe?.(memory.enabled)) && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: memory.unavailableReason ?? memory.describe?.(memory.enabled) })
               ] }),
-              !memory.unavailableReason && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__hint", children: memory.enabled ? labels.on : labels.off }),
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: memory.enabled && !memory.unavailableReason ? "\u2713" : "" })
+              !memory.unavailableReason && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__hint", children: memory.enabled ? labels.on : labels.off }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: memory.enabled && !memory.unavailableReason ? "\u2713" : "" })
             ]
           }
         )
       ] }),
-      autoMode && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
-        (mode || memory) && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bf-pmenu__sep" }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+      autoMode && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
+        (mode || memory) && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__sep" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
           "button",
           {
             type: "button",
@@ -1474,21 +1662,21 @@ function PromptOptionsMenu({
             className: `bf-pmenu__item${autoMode.enabled ? " is-active" : ""}`,
             onClick: () => autoMode.onChange(!autoMode.enabled),
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u26A1" }),
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "bf-pmenu__lbl", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u26A1" }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__lbl", children: [
                 labels.autoMode,
-                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__desc", children: autoMode.description ?? labels.autoModeHint })
+                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: autoMode.description ?? labels.autoModeHint })
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__hint", children: autoMode.enabled ? labels.on : labels.off }),
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: autoMode.enabled ? "\u2713" : "" })
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__hint", children: autoMode.enabled ? labels.on : labels.off }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: autoMode.enabled ? "\u2713" : "" })
             ]
           }
         )
       ] }),
-      onEffortChange && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
-        (mode || memory || autoMode) && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bf-pmenu__sep" }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bf-pmenu__group", children: labels.effort }),
-        EFFORT_LEVELS.map((level) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+      onEffortChange && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
+        (mode || memory || autoMode) && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__sep" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__group", children: labels.effort }),
+        EFFORT_LEVELS.map((level) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
           "button",
           {
             type: "button",
@@ -1497,20 +1685,20 @@ function PromptOptionsMenu({
             className: `bf-pmenu__item${effort === level ? " is-active" : ""}`,
             onClick: () => onEffortChange(level),
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: EFFORT_ICON[level] }),
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "bf-pmenu__lbl", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: EFFORT_ICON[level] }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__lbl", children: [
                 level === "quick" ? labels.effortQuick : level === "balanced" ? labels.effortBalanced : labels.effortThorough,
-                describeEffort && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__desc", children: describeEffort(level) })
+                describeEffort && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: describeEffort(level) })
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: effort === level ? "\u2713" : "" })
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: effort === level ? "\u2713" : "" })
             ]
           },
           level
         ))
       ] }),
-      onThinkingChange && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
-        (mode || memory || autoMode || onEffortChange) && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bf-pmenu__sep" }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+      onThinkingChange && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
+        (mode || memory || autoMode || onEffortChange) && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__sep" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
           "button",
           {
             type: "button",
@@ -1519,29 +1707,29 @@ function PromptOptionsMenu({
             className: `bf-pmenu__item${thinking ? " is-active" : ""}`,
             onClick: () => onThinkingChange(!thinking),
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u{1F4AD}" }),
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "bf-pmenu__lbl", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u{1F4AD}" }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__lbl", children: [
                 labels.thinking,
-                describeThinking && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__desc", children: describeThinking(!!thinking) })
+                describeThinking && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: describeThinking(!!thinking) })
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__hint", children: thinking ? labels.on : labels.off }),
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: thinking ? "\u2713" : "" })
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__hint", children: thinking ? labels.on : labels.off }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: thinking ? "\u2713" : "" })
             ]
           }
         )
       ] }),
-      model && inUse && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
-        (mode || memory || autoMode || onEffortChange || onThinkingChange) && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bf-pmenu__sep" }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bf-pmenu__group", children: labels.model }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "bf-pmenu__info", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u{1F9E0}" }),
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "bf-pmenu__lbl", children: [
+      model && inUse && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
+        (mode || memory || autoMode || onEffortChange || onThinkingChange) && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__sep" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__group", children: labels.model }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "bf-pmenu__info", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u{1F9E0}" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__lbl", children: [
             inUse.name,
-            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__desc", children: inUse.detail })
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: inUse.detail })
           ] })
         ] }),
-        canChoose ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+        canChoose ? /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
             "input",
             {
               className: "bf-pmenu__search",
@@ -1551,19 +1739,19 @@ function PromptOptionsMenu({
               "aria-label": labels.searchModels
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bf-pmenu__filters", "aria-label": labels.filterModels, children: ["all", ...categories].map((category) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__filters", "aria-label": labels.filterModels, children: ["all", ...categories].map((category) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
             "button",
             {
               type: "button",
               className: `bf-pmenu__filter${filter === category ? " is-active" : ""}`,
               "aria-pressed": filter === category,
               onClick: () => setFilter(category),
-              children: category === "all" ? labels.all : (0, import_builderforce_brain_embedded4.modelCategoryLabel)(category, labels)
+              children: category === "all" ? labels.all : (0, import_builderforce_brain_embedded6.modelCategoryLabel)(category, labels)
             },
             category
           )) }),
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "bf-pmenu__list", role: "listbox", "aria-label": labels.chooseModel, children: [
-            visible.map((item) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "bf-pmenu__list", role: "listbox", "aria-label": labels.chooseModel, children: [
+            visible.map((item) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
               "button",
               {
                 type: "button",
@@ -1576,24 +1764,24 @@ function PromptOptionsMenu({
                   setOpen(false);
                 },
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__optName", children: item.label }),
-                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__optTag", children: (0, import_builderforce_brain_embedded4.modelCategoryLabel)(item.category, labels) }),
-                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__optDetail", children: item.detail })
+                  /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__optName", children: item.label }),
+                  /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__optTag", children: (0, import_builderforce_brain_embedded6.modelCategoryLabel)(item.category, labels) }),
+                  /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__optDetail", children: item.detail })
                 ]
               },
               item.key
             )),
-            !visible.length && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bf-pmenu__empty", children: labels.noModels })
+            !visible.length && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__empty", children: labels.noModels })
           ] })
-        ] }) : /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "bf-pmenu__info", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u{1F512}" }),
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__lbl", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__desc", children: labels.modelLocked }) })
+        ] }) : /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "bf-pmenu__info", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u{1F512}" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__lbl", children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: labels.modelLocked }) })
         ] })
       ] }),
-      session && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bf-pmenu__sep" }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bf-pmenu__group", children: labels.conversation }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+      session && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__sep" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__group", children: labels.conversation }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
           "button",
           {
             type: "button",
@@ -1605,15 +1793,15 @@ function PromptOptionsMenu({
               session.onConsolidate();
             },
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(IconConsolidate, {}) }),
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "bf-pmenu__lbl", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(IconConsolidate, {}) }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__lbl", children: [
                 session.consolidating ? labels.consolidating : labels.consolidate,
-                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__desc", children: session.canConsolidate ? labels.consolidateHint : labels.sessionUnavailable })
+                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: session.canConsolidate ? labels.consolidateHint : labels.sessionUnavailable })
               ] })
             ]
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
           "button",
           {
             type: "button",
@@ -1625,18 +1813,18 @@ function PromptOptionsMenu({
               session.onFork();
             },
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(IconFork, {}) }),
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "bf-pmenu__lbl", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(IconFork, {}) }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__lbl", children: [
                 session.forking ? labels.forking : labels.fork,
-                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__desc", children: session.canConsolidate ? labels.forkHint : labels.sessionUnavailable })
+                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: session.canConsolidate ? labels.forkHint : labels.sessionUnavailable })
               ] })
             ]
           }
         )
       ] }),
-      onAccountSettings && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bf-pmenu__sep" }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+      onAccountSettings && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__sep" }),
+        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
           "button",
           {
             type: "button",
@@ -1647,8 +1835,8 @@ function PromptOptionsMenu({
               onAccountSettings();
             },
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u2699" }),
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__lbl", children: labels.accountSettings })
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u2699" }),
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__lbl", children: labels.accountSettings })
             ]
           }
         )
@@ -1658,10 +1846,10 @@ function PromptOptionsMenu({
 }
 
 // src/index.ts
-var import_builderforce_brain_embedded6 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded8 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/HealthRing.tsx
-var import_jsx_runtime9 = require("react/jsx-runtime");
+var import_jsx_runtime11 = require("react/jsx-runtime");
 function healthRingColor(percent, muted = false) {
   if (muted) return "var(--bf-health-muted, #9ca3af)";
   if (percent >= 100) return "var(--bf-health-done, #16a34a)";
@@ -1677,9 +1865,9 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
   const dash = pct / 100 * c;
   const color = healthRingColor(pct, muted);
   const label = ariaLabel ?? `${pct}% complete`;
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "bf-health-ring", style: { display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 2 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("svg", { width: size, height: size, viewBox: `0 0 ${size} ${size}`, role: "img", "aria-label": label, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { className: "bf-health-ring", style: { display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 2 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("svg", { width: size, height: size, viewBox: `0 0 ${size} ${size}`, role: "img", "aria-label": label, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
         "circle",
         {
           cx: size / 2,
@@ -1690,7 +1878,7 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
           strokeWidth: stroke
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
         "circle",
         {
           cx: size / 2,
@@ -1704,7 +1892,7 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
           transform: `rotate(-90 ${size / 2} ${size / 2})`
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
         "text",
         {
           x: "50%",
@@ -1717,12 +1905,12 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
         }
       )
     ] }),
-    caption ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { style: { fontSize: 10, color: "var(--bf-health-caption, var(--bf-text-muted, #6b7280))", lineHeight: 1 }, children: caption }) : null
+    caption ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { style: { fontSize: 10, color: "var(--bf-health-caption, var(--bf-text-muted, #6b7280))", lineHeight: 1 }, children: caption }) : null
   ] });
 }
 
 // src/pendingChanges/PendingChangesList.tsx
-var import_jsx_runtime10 = require("react/jsx-runtime");
+var import_jsx_runtime12 = require("react/jsx-runtime");
 var DEFAULT_PENDING_CHANGES_LABELS = {
   pill: "Changes",
   summary: "{count} uncommitted changes",
@@ -1778,16 +1966,16 @@ function PendingChangesList({
   const labels = resolvePendingChangesLabels(labelOverrides);
   if (!changes.length) return null;
   const showRepo = new Set(changes.map((c) => c.repo ?? "")).size > 1;
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
     "section",
     {
       className,
       "aria-label": pendingChangesSummary(changes.length, labels),
       style: { fontSize: 12, color: "var(--bf-text, inherit)", ...style },
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "2px 0 6px" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { flex: "1 1 auto", minWidth: 0, color: "var(--bf-text-muted, #8a8a8a)" }, children: labels.hint }),
-          onReview && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "2px 0 6px" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { style: { flex: "1 1 auto", minWidth: 0, color: "var(--bf-text-muted, #8a8a8a)" }, children: labels.hint }),
+          onReview && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
             "button",
             {
               type: "button",
@@ -1807,10 +1995,10 @@ function PendingChangesList({
             }
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, maxHeight: "min(40vh, 280px)", overflowY: "auto" }, children: changes.map((change) => {
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, maxHeight: "min(40vh, 280px)", overflowY: "auto" }, children: changes.map((change) => {
           const { dir, file } = splitPath(change.path);
           const state = change.staged ? `${labels.status[change.status]} \xB7 ${labels.staged}` : labels.status[change.status];
-          return /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
+          return /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
             "button",
             {
               type: "button",
@@ -1831,20 +2019,20 @@ function PendingChangesList({
                 cursor: "pointer"
               },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
                   "span",
                   {
                     "aria-hidden": true,
                     style: { flex: "0 0 auto", width: 6, height: 6, borderRadius: "50%", background: statusColor(change.status) }
                   }
                 ),
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { style: { minWidth: 0, overflowWrap: "anywhere", fontFamily: "var(--bf-font-mono, monospace)" }, children: [
-                  dir && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { opacity: 0.6 }, children: dir }),
-                  /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: file })
+                /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("span", { style: { minWidth: 0, overflowWrap: "anywhere", fontFamily: "var(--bf-font-mono, monospace)" }, children: [
+                  dir && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { style: { opacity: 0.6 }, children: dir }),
+                  /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { children: file })
                 ] }),
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { flex: "1 1 auto" } }),
-                showRepo && change.repo && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { flex: "0 0 auto", color: "var(--bf-text-muted, #8a8a8a)" }, children: change.repo }),
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { style: { flex: "0 0 auto", color: "var(--bf-text-muted, #8a8a8a)" }, children: state })
+                /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { style: { flex: "1 1 auto" } }),
+                showRepo && change.repo && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { style: { flex: "0 0 auto", color: "var(--bf-text-muted, #8a8a8a)" }, children: change.repo }),
+                /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { style: { flex: "0 0 auto", color: "var(--bf-text-muted, #8a8a8a)" }, children: state })
               ]
             }
           ) }, change.id ?? `${change.repo ?? ""}:${change.path}`);
@@ -1855,7 +2043,7 @@ function PendingChangesList({
 }
 
 // src/chatTickets/ChatTicketsPanel.tsx
-var import_react6 = require("react");
+var import_react8 = require("react");
 
 // src/optionStyle.ts
 var nativeOptionStyle = {
@@ -1951,29 +2139,29 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
 };
 
 // src/chatTickets/ChatTicketsPanel.tsx
-var import_jsx_runtime11 = require("react/jsx-runtime");
+var import_jsx_runtime13 = require("react/jsx-runtime");
 var RUNNABLE = new Set(RUNNABLE_KINDS);
 var COLLAPSE_THRESHOLD = 8;
 function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions }) {
-  const [tickets, setTickets] = (0, import_react6.useState)([]);
-  const [agents, setAgents] = (0, import_react6.useState)([]);
-  const [members, setMembers] = (0, import_react6.useState)([]);
-  const [pool, setPool] = (0, import_react6.useState)([]);
-  const [questions, setQuestions] = (0, import_react6.useState)([]);
-  const [panel, setPanel] = (0, import_react6.useState)(null);
+  const [tickets, setTickets] = (0, import_react8.useState)([]);
+  const [agents, setAgents] = (0, import_react8.useState)([]);
+  const [members, setMembers] = (0, import_react8.useState)([]);
+  const [pool, setPool] = (0, import_react8.useState)([]);
+  const [questions, setQuestions] = (0, import_react8.useState)([]);
+  const [panel, setPanel] = (0, import_react8.useState)(null);
   const togglePanel = (key) => setPanel((open) => open === key ? null : key);
   const openExtension = extensions?.find((ext) => ext.key === panel) ?? null;
-  (0, import_react6.useEffect)(() => {
+  (0, import_react8.useEffect)(() => {
     if (panel && !isBuiltinPanel(panel) && !extensions?.some((ext) => ext.key === panel)) setPanel(null);
   }, [panel, extensions]);
-  const [lineageKey, setLineageKey] = (0, import_react6.useState)(null);
-  const [lineage, setLineage] = (0, import_react6.useState)([]);
-  const [runKey, setRunKey] = (0, import_react6.useState)(null);
-  const [msg, setMsg] = (0, import_react6.useState)(null);
-  const [busy, setBusy] = (0, import_react6.useState)(false);
-  const [collapsed, setCollapsed] = (0, import_react6.useState)(null);
-  const userCollapsed = (0, import_react6.useRef)(false);
-  const load = (0, import_react6.useCallback)(async () => {
+  const [lineageKey, setLineageKey] = (0, import_react8.useState)(null);
+  const [lineage, setLineage] = (0, import_react8.useState)([]);
+  const [runKey, setRunKey] = (0, import_react8.useState)(null);
+  const [msg, setMsg] = (0, import_react8.useState)(null);
+  const [busy, setBusy] = (0, import_react8.useState)(false);
+  const [collapsed, setCollapsed] = (0, import_react8.useState)(null);
+  const userCollapsed = (0, import_react8.useRef)(false);
+  const load = (0, import_react8.useCallback)(async () => {
     const [tk, ag, mem, qs] = await Promise.all([
       adapter.listTickets(chatId).catch(() => []),
       adapter.listAgents(chatId).catch(() => []),
@@ -1986,17 +2174,17 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     setQuestions(qs);
     if (!userCollapsed.current) setCollapsed(tk.length > COLLAPSE_THRESHOLD);
   }, [adapter, chatId]);
-  (0, import_react6.useEffect)(() => {
+  (0, import_react8.useEffect)(() => {
     void load();
   }, [load, refreshSignal]);
-  (0, import_react6.useEffect)(() => {
+  (0, import_react8.useEffect)(() => {
     adapter.loadAgentPool().then(setPool).catch(() => setPool([]));
   }, [adapter]);
   const flash = (m) => {
     setMsg(m);
     if (typeof window !== "undefined") window.setTimeout(() => setMsg(null), 3500);
   };
-  const poolName = (0, import_react6.useCallback)((ref) => pool.find((p) => p.ref === ref)?.name ?? ref, [pool]);
+  const poolName = (0, import_react8.useCallback)((ref) => pool.find((p) => p.ref === ref)?.name ?? ref, [pool]);
   const unlink = async (tk) => {
     setBusy(true);
     try {
@@ -2029,14 +2217,14 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       setBusy(false);
     }
   };
-  const agg = (0, import_react6.useMemo)(() => aggregateTicketHealth(tickets), [tickets]);
+  const agg = (0, import_react8.useMemo)(() => aggregateTicketHealth(tickets), [tickets]);
   const isCollapsed = tickets.length > 0 && (collapsed ?? tickets.length > COLLAPSE_THRESHOLD);
   const toggleCollapsed = () => {
     userCollapsed.current = true;
     setCollapsed(!isCollapsed);
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: S.root, children: [
-    tickets.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: S.root, children: [
+    tickets.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
       "button",
       {
         type: "button",
@@ -2045,10 +2233,10 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         title: isCollapsed ? labels.showTickets : labels.hideTickets,
         style: S.ticketsHeader,
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { "aria-hidden": true, style: { ...S.caret, transform: isCollapsed ? "rotate(0deg)" : "rotate(90deg)" }, children: "\u25B8" }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(HealthRing, { percent: agg.pct, size: 22, muted: false, ariaLabel: labels.overallAria(agg.pct) }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { style: S.ticketsCount, children: labels.ticketCount(tickets.length) }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { style: S.ticketsAgg, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { "aria-hidden": true, style: { ...S.caret, transform: isCollapsed ? "rotate(0deg)" : "rotate(90deg)" }, children: "\u25B8" }),
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(HealthRing, { percent: agg.pct, size: 22, muted: false, ariaLabel: labels.overallAria(agg.pct) }),
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: S.ticketsCount, children: labels.ticketCount(tickets.length) }),
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { style: S.ticketsAgg, children: [
             agg.pct,
             "%",
             agg.total > 0 ? ` \xB7 ${agg.done}/${agg.total}` : ""
@@ -2056,22 +2244,22 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         ]
       }
     ),
-    !isCollapsed && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { style: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }, children: tickets.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { style: S.muted, children: labels.none }) : tickets.map((tk) => {
+    !isCollapsed && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }, children: tickets.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: S.muted, children: labels.none }) : tickets.map((tk) => {
       const key = `${tk.kind}:${tk.ref}`;
-      return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: S.chip, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(HealthRing, { percent: tk.progressPct, size: 36, caption: tk.total > 0 ? `${tk.done}/${tk.total}` : void 0, muted: !tk.exists, ariaLabel: labels.ringAria(tk.label, tk.progressPct) }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: { display: "flex", flexDirection: "column", minWidth: 0, maxWidth: 160 }, children: [
-          onOpenTicket && tk.exists ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S.ticketLink, children: tk.label }) : /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { style: S.ticketLabel, title: tk.label, children: tk.label }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { style: S.ticketMeta, children: [
+      return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: S.chip, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(HealthRing, { percent: tk.progressPct, size: 36, caption: tk.total > 0 ? `${tk.done}/${tk.total}` : void 0, muted: !tk.exists, ariaLabel: labels.ringAria(tk.label, tk.progressPct) }),
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", flexDirection: "column", minWidth: 0, maxWidth: 160 }, children: [
+          onOpenTicket && tk.exists ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S.ticketLink, children: tk.label }) : /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: S.ticketLabel, title: tk.label, children: tk.label }),
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { style: S.ticketMeta, children: [
             labels.kind[tk.kind],
             " \xB7 ",
             tk.status,
             tk.linkType === "created" ? ` \xB7 ${labels.spawned}` : ""
           ] })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: { display: "flex", gap: 2 }, children: [
-          onOpenTicket && tk.exists && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S.icon, children: "\u2197" }),
-          RUNNABLE.has(tk.kind) && tk.exists && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", gap: 2 }, children: [
+          onOpenTicket && tk.exists && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S.icon, children: "\u2197" }),
+          RUNNABLE.has(tk.kind) && tk.exists && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
             "button",
             {
               type: "button",
@@ -2083,60 +2271,60 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
               children: "\u25B6"
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", title: labels.lineage, onClick: () => void openLineage(tk), style: S.icon, children: "\u2443" }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", title: labels.unlink, disabled: busy, onClick: () => void unlink(tk), style: S.icon, children: "\u2715" })
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", title: labels.lineage, onClick: () => void openLineage(tk), style: S.icon, children: "\u2443" }),
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", title: labels.unlink, disabled: busy, onClick: () => void unlink(tk), style: S.icon, children: "\u2715" })
         ] }),
-        runKey === key && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("select", { "aria-label": labels.pickAgent, value: "", onChange: (e) => {
+        runKey === key && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("select", { "aria-label": labels.pickAgent, value: "", onChange: (e) => {
           if (e.target.value) void runTicket(tk, e.target.value);
         }, style: S.select, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { style: S.option, value: "", children: labels.pickAgent }),
-          agents.map((a) => /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("option", { style: S.option, value: a.agentRef, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { style: S.option, value: "", children: labels.pickAgent }),
+          agents.map((a) => /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("option", { style: S.option, value: a.agentRef, children: [
             "\u2605 ",
             poolName(a.agentRef)
           ] }, a.id)),
-          pool.filter((p) => !agents.some((a) => a.agentRef === p.ref)).map((p) => /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { style: S.option, value: p.ref, children: p.name }, p.ref))
+          pool.filter((p) => !agents.some((a) => a.agentRef === p.ref)).map((p) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { style: S.option, value: p.ref, children: p.name }, p.ref))
         ] })
       ] }, tk.linkId);
     }) }),
-    lineageKey && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: S.drawer, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("strong", { style: { color: V.text }, children: labels.lineageTitle }),
-      lineage.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { style: { marginLeft: 8, ...S.muted }, children: labels.lineageEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("ul", { style: { margin: "4px 0 0", paddingLeft: 18 }, children: lineage.map((c) => /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("li", { style: { marginBottom: 2 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { style: { fontWeight: c.chatId === chatId ? 700 : 400 }, children: c.title }),
-        c.linkType === "created" ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("em", { style: { color: V.accent, marginLeft: 6 }, children: labels.spawned }) : null,
-        c.isArchived ? /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { style: { marginLeft: 6, ...S.muted }, children: [
+    lineageKey && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: S.drawer, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("strong", { style: { color: V.text }, children: labels.lineageTitle }),
+      lineage.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { marginLeft: 8, ...S.muted }, children: labels.lineageEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("ul", { style: { margin: "4px 0 0", paddingLeft: 18 }, children: lineage.map((c) => /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("li", { style: { marginBottom: 2 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { fontWeight: c.chatId === chatId ? 700 : 400 }, children: c.title }),
+        c.linkType === "created" ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("em", { style: { color: V.accent, marginLeft: 6 }, children: labels.spawned }) : null,
+        c.isArchived ? /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { style: { marginLeft: 6, ...S.muted }, children: [
           "(",
           labels.merged,
           ")"
         ] }) : null
       ] }, c.chatId)) })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { type: "button", onClick: () => togglePanel("link"), style: S.pill(panel === "link"), children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("button", { type: "button", onClick: () => togglePanel("link"), style: S.pill(panel === "link"), children: [
         "\uFF0B ",
         labels.link
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { type: "button", onClick: () => togglePanel("agents"), style: S.pill(panel === "agents"), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("button", { type: "button", onClick: () => togglePanel("agents"), style: S.pill(panel === "agents"), children: [
         "\u{1F465} ",
         labels.agents,
         agents.length ? ` (${agents.length})` : ""
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { type: "button", onClick: () => togglePanel("people"), style: S.pill(panel === "people"), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("button", { type: "button", onClick: () => togglePanel("people"), style: S.pill(panel === "people"), children: [
         "\u{1F464} ",
         labels.people,
         members.length ? ` (${members.length})` : ""
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { type: "button", onClick: () => togglePanel("merge"), style: S.pill(panel === "merge"), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("button", { type: "button", onClick: () => togglePanel("merge"), style: S.pill(panel === "merge"), children: [
         "\u29C9 ",
         labels.merge
       ] }),
-      questions.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("button", { type: "button", onClick: () => togglePanel("questions"), style: S.pill(panel === "questions"), children: [
+      questions.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("button", { type: "button", onClick: () => togglePanel("questions"), style: S.pill(panel === "questions"), children: [
         "\u2753 ",
         labels.questions,
         " (",
         questions.length,
         ")"
       ] }),
-      extensions?.map((ext) => /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
+      extensions?.map((ext) => /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
         "button",
         {
           type: "button",
@@ -2153,10 +2341,10 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         },
         ext.key
       )),
-      msg && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { style: { fontSize: 12, color: V.accent, alignSelf: "center" }, children: msg })
+      msg && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { fontSize: 12, color: V.accent, alignSelf: "center" }, children: msg })
     ] }),
-    openExtension && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { style: S.drawer, children: openExtension.render() }),
-    panel === "link" && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(LinkForm, { search: adapter.searchTickets, projectId, existing: tickets, labels, onLink: async (kind, ref, linkType) => {
+    openExtension && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: S.drawer, children: openExtension.render() }),
+    panel === "link" && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(LinkForm, { search: adapter.searchTickets, projectId, existing: tickets, labels, onLink: async (kind, ref, linkType) => {
       try {
         await adapter.linkTicket(chatId, { kind, ref, linkType });
         await load();
@@ -2164,7 +2352,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         flash(e instanceof Error ? e.message : labels.linkFailed);
       }
     } }),
-    panel === "agents" && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+    panel === "agents" && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
       AgentsSection,
       {
         agents,
@@ -2193,7 +2381,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         busy
       }
     ),
-    panel === "people" && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+    panel === "people" && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
       PeopleSection,
       {
         members,
@@ -2226,7 +2414,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         busy
       }
     ),
-    panel === "merge" && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+    panel === "merge" && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
       MergeSection,
       {
         chatId,
@@ -2246,7 +2434,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         busy
       }
     ),
-    panel === "questions" && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+    panel === "questions" && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
       QuestionsSection,
       {
         questions,
@@ -2265,14 +2453,14 @@ function isBuiltinPanel(key) {
   return BUILTIN_PANELS.has(key);
 }
 function QuestionsSection({ questions, labels, onAnswer }) {
-  const [answers, setAnswers] = (0, import_react6.useState)({});
-  const [sending, setSending] = (0, import_react6.useState)(null);
-  return /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { style: S.drawer, children: questions.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { style: S.muted, children: labels.noQuestions }) : questions.map((q, index) => {
+  const [answers, setAnswers] = (0, import_react8.useState)({});
+  const [sending, setSending] = (0, import_react8.useState)(null);
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: S.drawer, children: questions.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: S.muted, children: labels.noQuestions }) : questions.map((q, index) => {
     const value = answers[q.id] ?? "";
-    return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: { padding: "10px 0", borderBottom: index < questions.length - 1 ? `1px solid ${V.border}` : void 0 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { style: { color: V.text, fontSize: 13, lineHeight: 1.45, whiteSpace: "pre-wrap", marginBottom: 8 }, children: q.description }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "flex-start" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { padding: "10px 0", borderBottom: index < questions.length - 1 ? `1px solid ${V.border}` : void 0 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { color: V.text, fontSize: 13, lineHeight: 1.45, whiteSpace: "pre-wrap", marginBottom: 8 }, children: q.description }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "flex-start" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
           "textarea",
           {
             value,
@@ -2283,7 +2471,7 @@ function QuestionsSection({ questions, labels, onAnswer }) {
             style: { ...S.select, flex: 1, resize: "vertical", minHeight: 54, fontFamily: "inherit" }
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", disabled: !value.trim() || sending === q.id, style: S.pill(true), onClick: () => {
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", disabled: !value.trim() || sending === q.id, style: S.pill(true), onClick: () => {
           setSending(q.id);
           void onAnswer(q.id, value.trim()).finally(() => setSending(null));
         }, children: sending === q.id ? labels.answering : labels.submitAnswer })
@@ -2293,14 +2481,14 @@ function QuestionsSection({ questions, labels, onAnswer }) {
 }
 var SEARCH_LIMIT = 40;
 function LinkForm({ search, projectId, existing, labels, onLink }) {
-  const [kind, setKind] = (0, import_react6.useState)("task");
-  const [ref, setRef] = (0, import_react6.useState)("");
-  const [query, setQuery] = (0, import_react6.useState)("");
-  const [linkType, setLinkType] = (0, import_react6.useState)("linked");
-  const [busy, setBusy] = (0, import_react6.useState)(false);
-  const [results, setResults] = (0, import_react6.useState)([]);
-  const [loading, setLoading] = (0, import_react6.useState)(false);
-  (0, import_react6.useEffect)(() => {
+  const [kind, setKind] = (0, import_react8.useState)("task");
+  const [ref, setRef] = (0, import_react8.useState)("");
+  const [query, setQuery] = (0, import_react8.useState)("");
+  const [linkType, setLinkType] = (0, import_react8.useState)("linked");
+  const [busy, setBusy] = (0, import_react8.useState)(false);
+  const [results, setResults] = (0, import_react8.useState)([]);
+  const [loading, setLoading] = (0, import_react8.useState)(false);
+  (0, import_react8.useEffect)(() => {
     let live = true;
     setLoading(true);
     const h = setTimeout(() => {
@@ -2317,12 +2505,12 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
       clearTimeout(h);
     };
   }, [search, kind, query, projectId]);
-  const shown = (0, import_react6.useMemo)(
+  const shown = (0, import_react8.useMemo)(
     () => results.filter((o) => !existing.some((e) => e.kind === kind && e.ref === o.ref)),
     [results, existing, kind]
   );
   const atCap = results.length >= SEARCH_LIMIT;
-  (0, import_react6.useEffect)(() => {
+  (0, import_react8.useEffect)(() => {
     if (ref && !shown.some((o) => o.ref === ref)) setRef("");
   }, [shown, ref]);
   const submit = async () => {
@@ -2336,13 +2524,13 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
       setBusy(false);
     }
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: S.section, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("select", { "aria-label": labels.kindLabel, value: kind, onChange: (e) => {
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: S.section, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("select", { "aria-label": labels.kindLabel, value: kind, onChange: (e) => {
       setKind(e.target.value);
       setRef("");
       setQuery("");
-    }, style: S.select, children: TICKET_KINDS.map((k) => /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { style: S.option, value: k, children: labels.kind[k] }, k)) }),
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+    }, style: S.select, children: TICKET_KINDS.map((k) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { style: S.option, value: k, children: labels.kind[k] }, k)) }),
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
       "input",
       {
         type: "search",
@@ -2353,43 +2541,43 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
         style: { ...S.select, minWidth: 150 }
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("select", { "aria-label": labels.pickTicket, value: ref, onChange: (e) => setRef(e.target.value), style: { ...S.select, minWidth: 200 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { style: S.option, value: "", children: labels.pickTicket }),
-      shown.map((o) => /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { style: S.option, value: o.ref, children: o.label }, o.ref))
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("select", { "aria-label": labels.pickTicket, value: ref, onChange: (e) => setRef(e.target.value), style: { ...S.select, minWidth: 200 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { style: S.option, value: "", children: labels.pickTicket }),
+      shown.map((o) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { style: S.option, value: o.ref, children: o.label }, o.ref))
     ] }),
-    loading ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { style: S.muted, children: labels.searching }) : shown.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { style: S.muted, children: labels.noMatches }) : atCap ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { style: S.muted, children: labels.refine }) : null,
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("select", { "aria-label": labels.linkTypeLabel, value: linkType, onChange: (e) => setLinkType(e.target.value), style: S.select, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { style: S.option, value: "linked", children: labels.linkTypeLinked }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { style: S.option, value: "created", children: labels.linkTypeCreated })
+    loading ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: S.muted, children: labels.searching }) : shown.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: S.muted, children: labels.noMatches }) : atCap ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: S.muted, children: labels.refine }) : null,
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("select", { "aria-label": labels.linkTypeLabel, value: linkType, onChange: (e) => setLinkType(e.target.value), style: S.select, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { style: S.option, value: "linked", children: labels.linkTypeLinked }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { style: S.option, value: "created", children: labels.linkTypeCreated })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", onClick: () => void submit(), disabled: busy || !ref, style: S.pill(true), children: busy ? "\u2026" : labels.linkAction })
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", onClick: () => void submit(), disabled: busy || !ref, style: S.pill(true), children: busy ? "\u2026" : labels.linkAction })
   ] });
 }
 function AgentsSection({ agents, pool, labels, onInvite, onRemove, busy }) {
   const poolName = (ref) => pool.find((p) => p.ref === ref)?.name ?? ref;
   const uninvited = pool.filter((p) => !agents.some((a) => a.agentRef === p.ref));
-  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: { ...S.section, flexDirection: "column", alignItems: "stretch" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: agents.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { style: S.muted, children: labels.noAgents }) : agents.map((a) => /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { style: S.agentChip, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { "aria-hidden": true, children: "\u{1F916}" }),
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { ...S.section, flexDirection: "column", alignItems: "stretch" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: agents.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: S.muted, children: labels.noAgents }) : agents.map((a) => /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { style: S.agentChip, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { "aria-hidden": true, children: "\u{1F916}" }),
       poolName(a.agentRef),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", title: labels.removeAgent, disabled: busy, onClick: () => void onRemove(a.id), style: { ...S.icon, fontSize: 11 }, children: "\u2715" })
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", title: labels.removeAgent, disabled: busy, onClick: () => void onRemove(a.id), style: { ...S.icon, fontSize: 11 }, children: "\u2715" })
     ] }, a.id)) }),
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("select", { "aria-label": labels.inviteAgent, value: "", onChange: (e) => {
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("select", { "aria-label": labels.inviteAgent, value: "", onChange: (e) => {
       const p = pool.find((x) => x.ref === e.target.value);
       if (p) void onInvite(p.ref, p.kind);
     }, style: { ...S.select, maxWidth: 260 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("option", { style: S.option, value: "", children: labels.inviteAgent }),
-      uninvited.map((p) => /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("option", { style: S.option, value: p.ref, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { style: S.option, value: "", children: labels.inviteAgent }),
+      uninvited.map((p) => /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("option", { style: S.option, value: p.ref, children: [
         p.name,
         " \u2014 ",
         p.meta
       ] }, p.ref))
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { style: { fontSize: 11, ...S.muted }, children: labels.agentsHint })
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { fontSize: 11, ...S.muted }, children: labels.agentsHint })
   ] });
 }
 function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite, onRemove, busy }) {
-  const [email, setEmail] = (0, import_react6.useState)("");
+  const [email, setEmail] = (0, import_react8.useState)("");
   const submit = async () => {
     const e = email.trim();
     if (!e) return;
@@ -2397,18 +2585,18 @@ function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite,
     setEmail("");
   };
   const locked = visibility === "locked";
-  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: { ...S.section, flexDirection: "column", alignItems: "stretch" }, children: [
-    visibility && onSetVisibility && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", disabled: busy, onClick: () => void onSetVisibility(locked ? "shared" : "locked"), style: S.pill(locked), children: locked ? `\u{1F512} ${labels.visibilityLocked}` : `\u{1F513} ${labels.visibilityShared}` }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { style: { fontSize: 11, ...S.muted }, children: labels.lockHint })
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { ...S.section, flexDirection: "column", alignItems: "stretch" }, children: [
+    visibility && onSetVisibility && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", disabled: busy, onClick: () => void onSetVisibility(locked ? "shared" : "locked"), style: S.pill(locked), children: locked ? `\u{1F512} ${labels.visibilityLocked}` : `\u{1F513} ${labels.visibilityShared}` }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { fontSize: 11, ...S.muted }, children: labels.lockHint })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: members.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { style: S.muted, children: labels.noPeople }) : members.map((m) => /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { style: S.agentChip, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { "aria-hidden": true, children: m.status === "pending" ? "\u2709\uFE0F" : "\u{1F464}" }),
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: members.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: S.muted, children: labels.noPeople }) : members.map((m) => /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { style: S.agentChip, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { "aria-hidden": true, children: m.status === "pending" ? "\u2709\uFE0F" : "\u{1F464}" }),
       m.name,
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", title: labels.removePerson, disabled: busy, onClick: () => void onRemove(m.id), style: { ...S.icon, fontSize: 11 }, children: "\u2715" })
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", title: labels.removePerson, disabled: busy, onClick: () => void onRemove(m.id), style: { ...S.icon, fontSize: 11 }, children: "\u2715" })
     ] }, m.id)) }),
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
         "input",
         {
           type: "email",
@@ -2423,27 +2611,27 @@ function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite,
           style: { ...S.select, flex: 1, maxWidth: 260 }
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", disabled: busy || !email.trim(), onClick: () => void submit(), style: S.pill(false), children: "\uFF0B" })
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", disabled: busy || !email.trim(), onClick: () => void submit(), style: S.pill(false), children: "\uFF0B" })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { style: { fontSize: 11, ...S.muted }, children: labels.invitePersonHint })
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { fontSize: 11, ...S.muted }, children: labels.invitePersonHint })
   ] });
 }
 function MergeSection({ chatId, chatList, labels, onMerge, busy }) {
-  const [selected, setSelected] = (0, import_react6.useState)([]);
+  const [selected, setSelected] = (0, import_react8.useState)([]);
   const candidates = chatList.filter((c) => c.id !== chatId);
   const toggle = (id) => setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
-  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { style: { ...S.section, flexDirection: "column", alignItems: "stretch" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { style: { fontSize: 12, color: V.text2 }, children: labels.mergeHint }),
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { style: { maxHeight: 160, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }, children: candidates.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { style: S.muted, children: labels.mergeNoOthers }) : candidates.map((c) => /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("label", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "3px 4px", cursor: "pointer" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("input", { type: "checkbox", checked: selected.includes(c.id), onChange: () => toggle(c.id) }),
-      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: c.title })
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { ...S.section, flexDirection: "column", alignItems: "stretch" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { fontSize: 12, color: V.text2 }, children: labels.mergeHint }),
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { maxHeight: 160, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }, children: candidates.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: S.muted, children: labels.mergeNoOthers }) : candidates.map((c) => /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "3px 4px", cursor: "pointer" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("input", { type: "checkbox", checked: selected.includes(c.id), onChange: () => toggle(c.id) }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: c.title })
     ] }, c.id)) }),
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", onClick: () => {
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", onClick: () => {
       if (selected.length) void onMerge(selected).then(() => setSelected([]));
     }, disabled: busy || selected.length === 0, style: S.pill(true), children: busy ? "\u2026" : labels.mergeAction(selected.length) })
   ] });
 }
-var ChatTicketsPanel = (0, import_react6.memo)(ChatTicketsPanelInner);
+var ChatTicketsPanel = (0, import_react8.memo)(ChatTicketsPanelInner);
 var V = {
   border: "var(--bf-ct-border, var(--border-subtle, var(--bf-border, var(--vscode-panel-border, rgba(148,163,184,0.3)))))",
   surface: "var(--bf-ct-surface, var(--bg-elevated, var(--bf-surface, var(--vscode-editorWidget-background, transparent))))",
@@ -2612,12 +2800,12 @@ function createChatTicketsRestAdapter(opts) {
 }
 
 // src/chatTickets/useChatParticipants.ts
-var import_react7 = require("react");
+var import_react9 = require("react");
 function useChatParticipants(adapter, chatId, refreshSignal = 0) {
-  const [pool, setPool] = (0, import_react7.useState)([]);
-  const [invited, setInvited] = (0, import_react7.useState)([]);
-  const [members, setMembers] = (0, import_react7.useState)([]);
-  (0, import_react7.useEffect)(() => {
+  const [pool, setPool] = (0, import_react9.useState)([]);
+  const [invited, setInvited] = (0, import_react9.useState)([]);
+  const [members, setMembers] = (0, import_react9.useState)([]);
+  (0, import_react9.useEffect)(() => {
     let ok = true;
     adapter.loadAgentPool().then((p) => {
       if (ok) setPool(p);
@@ -2628,7 +2816,7 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
       ok = false;
     };
   }, [adapter]);
-  (0, import_react7.useEffect)(() => {
+  (0, import_react9.useEffect)(() => {
     if (chatId == null) {
       setInvited([]);
       setMembers([]);
@@ -2649,7 +2837,7 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
       ok = false;
     };
   }, [adapter, chatId, refreshSignal]);
-  return (0, import_react7.useMemo)(
+  return (0, import_react9.useMemo)(
     () => [
       ...invited.map((a) => ({
         kind: "agent",
@@ -2664,34 +2852,34 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
 }
 
 // src/mention/MentionAutocomplete.tsx
-var import_react8 = require("react");
-var import_builderforce_brain_embedded5 = require("@seanhogg/builderforce-brain-embedded");
-var import_jsx_runtime12 = require("react/jsx-runtime");
+var import_react10 = require("react");
+var import_builderforce_brain_embedded7 = require("@seanhogg/builderforce-brain-embedded");
+var import_jsx_runtime14 = require("react/jsx-runtime");
 function useMentionAutocomplete(opts) {
   const { textareaRef, value, setValue, participants, onPick, labels, disabled } = opts;
-  const [token, setToken] = (0, import_react8.useState)(null);
-  const [index, setIndex] = (0, import_react8.useState)(0);
-  const matches = (0, import_react8.useMemo)(
-    () => token && !disabled ? (0, import_builderforce_brain_embedded5.filterMentionCandidates)(participants, token.query) : [],
+  const [token, setToken] = (0, import_react10.useState)(null);
+  const [index, setIndex] = (0, import_react10.useState)(0);
+  const matches = (0, import_react10.useMemo)(
+    () => token && !disabled ? (0, import_builderforce_brain_embedded7.filterMentionCandidates)(participants, token.query) : [],
     [token, participants, disabled]
   );
   const open = !disabled && token != null && matches.length > 0;
-  const recompute = (0, import_react8.useCallback)(() => {
+  const recompute = (0, import_react10.useCallback)(() => {
     const el = textareaRef.current;
     if (!el || disabled || participants.length === 0) {
       setToken(null);
       return;
     }
-    const next = (0, import_builderforce_brain_embedded5.activeMentionToken)(el.value, el.selectionStart ?? el.value.length);
+    const next = (0, import_builderforce_brain_embedded7.activeMentionToken)(el.value, el.selectionStart ?? el.value.length);
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, participants.length]);
-  (0, import_react8.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     recompute();
   }, [value, recompute]);
-  const choose = (0, import_react8.useCallback)((r) => {
+  const choose = (0, import_react10.useCallback)((r) => {
     const el = textareaRef.current;
-    const tk = token ?? (el ? (0, import_builderforce_brain_embedded5.activeMentionToken)(el.value, el.selectionStart ?? 0) : null);
+    const tk = token ?? (el ? (0, import_builderforce_brain_embedded7.activeMentionToken)(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
       let after = value.slice(tk.end);
       if (after.startsWith(" ")) after = after.slice(1);
@@ -2711,7 +2899,7 @@ function useMentionAutocomplete(opts) {
     setToken(null);
     onPick(r);
   }, [token, value, setValue, onPick, textareaRef]);
-  const onKeyDown = (0, import_react8.useCallback)((e) => {
+  const onKeyDown = (0, import_react10.useCallback)((e) => {
     if (!open) return false;
     switch (e.key) {
       case "ArrowDown":
@@ -2735,13 +2923,13 @@ function useMentionAutocomplete(opts) {
         return false;
     }
   }, [open, matches, index, choose]);
-  const popup = open ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(MentionPopup, { matches, index, labels, onHover: setIndex, onPick: choose }) : null;
+  const popup = open ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(MentionPopup, { matches, index, labels, onHover: setIndex, onPick: choose }) : null;
   return { onKeyDown, onSelect: recompute, popup, open };
 }
 function MentionPopup({ matches, index, labels, onHover, onPick }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { style: POP.anchor, children: /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("ul", { role: "listbox", "aria-label": labels?.title ?? "Direct to", style: POP.list, children: [
-    labels?.title && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("li", { "aria-hidden": true, style: POP.group, children: labels.title }),
-    matches.map((m, i) => /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { style: POP.anchor, children: /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("ul", { role: "listbox", "aria-label": labels?.title ?? "Direct to", style: POP.list, children: [
+    labels?.title && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("li", { "aria-hidden": true, style: POP.group, children: labels.title }),
+    matches.map((m, i) => /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
       "li",
       {
         role: "option",
@@ -2753,9 +2941,9 @@ function MentionPopup({ matches, index, labels, onHover, onPick }) {
         onMouseEnter: () => onHover(i),
         style: POP.item(i === index),
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(Avatar, { name: m.name, kind: m.kind, size: 20 }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { style: POP.name, children: m.name }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { style: POP.kind, children: m.kind === "agent" ? labels?.agent ?? "Agent" : labels?.human ?? "Person" })
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(Avatar, { name: m.name, kind: m.kind, size: 20 }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { style: POP.name, children: m.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { style: POP.kind, children: m.kind === "agent" ? labels?.agent ?? "Agent" : labels?.human ?? "Person" })
         ]
       },
       `${m.kind}:${m.ref}`
@@ -2799,7 +2987,7 @@ var POP = {
 };
 
 // src/evermind/EvermindConsole.tsx
-var import_react14 = require("react");
+var import_react16 = require("react");
 
 // src/evermind/types.ts
 function defaultFormatWhen(atMs) {
@@ -3020,7 +3208,7 @@ function evermindNextAction(input) {
 }
 
 // src/evermind/EvermindTestBench.tsx
-var import_react9 = require("react");
+var import_react11 = require("react");
 
 // src/evermind/consoleStyles.ts
 var C = {
@@ -3183,12 +3371,12 @@ var warnBox = {
 };
 
 // src/evermind/EvermindTestBench.tsx
-var import_jsx_runtime13 = require("react/jsx-runtime");
+var import_jsx_runtime15 = require("react/jsx-runtime");
 function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
-  const [prompt, setPrompt] = (0, import_react9.useState)("");
-  const [running, setRunning] = (0, import_react9.useState)(false);
-  const [error, setError] = (0, import_react9.useState)(null);
-  const run = (0, import_react9.useCallback)(async (withPrompt) => {
+  const [prompt, setPrompt] = (0, import_react11.useState)("");
+  const [running, setRunning] = (0, import_react11.useState)(false);
+  const [error, setError] = (0, import_react11.useState)(null);
+  const run = (0, import_react11.useCallback)(async (withPrompt) => {
     setRunning(true);
     setError(null);
     try {
@@ -3203,10 +3391,10 @@ function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
   const busy = disabled || running;
   const canRunPrompt = prompt.trim().length >= 3;
   const passed = result?.samples.filter((s) => s.coherent).length ?? 0;
-  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: fieldTitle, children: t.testTitle }),
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: fieldHint, children: t.testHint }),
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { style: fieldTitle, children: t.testTitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { style: fieldHint, children: t.testHint }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
       "textarea",
       {
         value: prompt,
@@ -3217,32 +3405,32 @@ function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
         style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" }
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", onClick: () => void run(true), disabled: busy || !canRunPrompt, style: primaryBtn(busy || !canRunPrompt), children: running ? t.testRunning : t.testRunCta }),
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", onClick: () => void run(false), disabled: busy, style: secondaryBtn(busy), children: t.testReadinessCta })
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { type: "button", onClick: () => void run(true), disabled: busy || !canRunPrompt, style: primaryBtn(busy || !canRunPrompt), children: running ? t.testRunning : t.testRunCta }),
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { type: "button", onClick: () => void run(false), disabled: busy, style: secondaryBtn(busy), children: t.testReadinessCta })
     ] }),
-    error && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error }),
-    result && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginTop: 2 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { ...fieldTitle, flex: "1 1 auto", minWidth: 0 }, children: result.mode === "readiness" ? t.testResultReadiness(passed, result.samples.length) : t.testResultPrompt }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: verdictTag(result.ready ? "ok" : "bad"), children: result.ready ? t.testServable : t.testRefused })
+    error && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error }),
+    result && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginTop: 2 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { style: { ...fieldTitle, flex: "1 1 auto", minWidth: 0 }, children: result.mode === "readiness" ? t.testResultReadiness(passed, result.samples.length) : t.testResultPrompt }),
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { style: verdictTag(result.ready ? "ok" : "bad"), children: result.ready ? t.testServable : t.testRefused })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { style: { margin: 0, fontSize: "0.74rem", lineHeight: 1.5, color: result.ready ? C.text2 : C.danger }, children: result.ready ? t.testVerdictReady : t.testVerdictNotReady }),
-      result.samples.map((s, i) => /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4 }, children: [
-        result.samples.length > 1 && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: verdictTag(s.coherent ? "ok" : "bad"), children: s.coherent ? t.testServable : t.testRefused }),
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { fontSize: "0.72rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: s.prompt })
+      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { style: { margin: 0, fontSize: "0.74rem", lineHeight: 1.5, color: result.ready ? C.text2 : C.danger }, children: result.ready ? t.testVerdictReady : t.testVerdictNotReady }),
+      result.samples.map((s, i) => /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4 }, children: [
+        result.samples.length > 1 && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { style: verdictTag(s.coherent ? "ok" : "bad"), children: s.coherent ? t.testServable : t.testRefused }),
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { style: { fontSize: "0.72rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: s.prompt })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: outputBox, children: s.text.trim() || t.testEmptyOutput }),
-        !s.coherent && s.detail && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { style: { ...italic, color: C.danger, fontStyle: "normal", fontSize: "0.72rem" }, children: t.testRefusedBecause(s.detail) })
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { style: outputBox, children: s.text.trim() || t.testEmptyOutput }),
+        !s.coherent && s.detail && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { style: { ...italic, color: C.danger, fontStyle: "normal", fontSize: "0.72rem" }, children: t.testRefusedBecause(s.detail) })
       ] }, `${s.prompt}-${i}`))
     ] })
   ] });
 }
 
 // src/evermind/EvermindMaintenance.tsx
-var import_react10 = require("react");
-var import_jsx_runtime14 = require("react/jsx-runtime");
+var import_react12 = require("react");
+var import_jsx_runtime16 = require("react/jsx-runtime");
 function EvermindMaintenance({
   t,
   disabled,
@@ -3251,35 +3439,35 @@ function EvermindMaintenance({
   onReindex,
   onCleanup
 }) {
-  const [slug, setSlug] = (0, import_react10.useState)("");
-  const [pending, setPending] = (0, import_react10.useState)(null);
-  const doReseed = (0, import_react10.useCallback)(async () => {
+  const [slug, setSlug] = (0, import_react12.useState)("");
+  const [pending, setPending] = (0, import_react12.useState)(null);
+  const doReseed = (0, import_react12.useCallback)(async () => {
     setPending(null);
     await onReseed?.(slug || void 0);
   }, [onReseed, slug]);
-  const doCleanup = (0, import_react10.useCallback)(async () => {
+  const doCleanup = (0, import_react12.useCallback)(async () => {
     setPending(null);
     await onCleanup?.();
   }, [onCleanup]);
   if (!onReseed && !onReindex && !onCleanup) return null;
-  return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { style: fieldTitle, children: t.maintenanceTitle }),
-    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { style: fieldHint, children: t.maintenanceHint }),
-    onReindex && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { style: fieldTitle, children: t.maintenanceTitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { style: fieldHint, children: t.maintenanceHint }),
+    onReindex && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
       Row,
       {
         title: t.reindexLabel,
         hint: t.reindexHint,
-        action: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", onClick: () => void onReindex(), disabled, style: secondaryBtn(disabled), children: t.reindexCta })
+        action: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { type: "button", onClick: () => void onReindex(), disabled, style: secondaryBtn(disabled), children: t.reindexCta })
       }
     ),
-    onCleanup && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+    onCleanup && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
       Row,
       {
         title: t.cleanupLabel,
         hint: t.cleanupHint,
-        action: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", onClick: () => setPending("cleanup"), disabled: disabled || pending === "cleanup", style: secondaryBtn(disabled || pending === "cleanup"), children: t.cleanupCta }),
-        confirm: pending === "cleanup" ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+        action: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { type: "button", onClick: () => setPending("cleanup"), disabled: disabled || pending === "cleanup", style: secondaryBtn(disabled || pending === "cleanup"), children: t.cleanupCta }),
+        confirm: pending === "cleanup" ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
           Confirm,
           {
             message: t.cleanupConfirm,
@@ -3292,13 +3480,13 @@ function EvermindMaintenance({
         ) : null
       }
     ),
-    onReseed && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+    onReseed && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
       Row,
       {
         title: t.reseedLabel,
         hint: t.reseedHint,
-        action: /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
+        action: /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
             "select",
             {
               value: slug,
@@ -3307,14 +3495,14 @@ function EvermindMaintenance({
               "aria-label": t.reseedLabel,
               style: { ...select, maxWidth: 200 },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: "", style: optionStyle, children: t.reseedStarterOption }),
-                seedModels.map((m) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: m.slug, style: optionStyle, children: m.name }, m.slug))
+                /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("option", { value: "", style: optionStyle, children: t.reseedStarterOption }),
+                seedModels.map((m) => /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("option", { value: m.slug, style: optionStyle, children: m.name }, m.slug))
               ]
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", onClick: () => setPending("reseed"), disabled: disabled || pending === "reseed", style: dangerBtn(disabled || pending === "reseed"), children: t.reseedCta })
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { type: "button", onClick: () => setPending("reseed"), disabled: disabled || pending === "reseed", style: dangerBtn(disabled || pending === "reseed"), children: t.reseedCta })
         ] }),
-        confirm: pending === "reseed" ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+        confirm: pending === "reseed" ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
           Confirm,
           {
             message: t.reseedConfirm,
@@ -3331,13 +3519,13 @@ function EvermindMaintenance({
   ] });
 }
 function Row({ title, hint, action, confirm }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { style: { flex: "1 1 200px", minWidth: 0 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { style: { fontSize: "0.8rem", fontWeight: 600, color: C.text }, children: title }),
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { style: fieldHint, children: hint })
+  return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { flex: "1 1 200px", minWidth: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { style: { fontSize: "0.8rem", fontWeight: 600, color: C.text }, children: title }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { style: fieldHint, children: hint })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { style: { flex: "0 1 auto" }, children: action })
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { style: { flex: "0 1 auto" }, children: action })
     ] }),
     confirm
   ] });
@@ -3351,18 +3539,18 @@ function Confirm({
   onConfirm,
   onCancel
 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { style: { ...warnBox, display: "flex", flexDirection: "column", gap: 8 }, role: "alertdialog", "aria-label": message, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { children: message }),
-    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", onClick: onConfirm, disabled, style: danger ? dangerBtn(disabled) : secondaryBtn(disabled), children: confirmLabel }),
-      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", onClick: onCancel, disabled, style: secondaryBtn(disabled), children: cancelLabel })
+  return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { ...warnBox, display: "flex", flexDirection: "column", gap: 8 }, role: "alertdialog", "aria-label": message, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { children: message }),
+    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { type: "button", onClick: onConfirm, disabled, style: danger ? dangerBtn(disabled) : secondaryBtn(disabled), children: confirmLabel }),
+      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { type: "button", onClick: onCancel, disabled, style: secondaryBtn(disabled), children: cancelLabel })
     ] })
   ] });
 }
 
 // src/evermind/EvermindAnalyzer.tsx
-var import_react11 = require("react");
-var import_jsx_runtime15 = require("react/jsx-runtime");
+var import_react13 = require("react");
+var import_jsx_runtime17 = require("react/jsx-runtime");
 var TONE = {
   ok: "ok",
   incoherent: "bad",
@@ -3372,15 +3560,15 @@ var TONE = {
   redundant: "warn"
 };
 function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysis, onAnalysis }) {
-  const [selected, setSelected] = (0, import_react11.useState)(/* @__PURE__ */ new Set());
-  const [running, setRunning] = (0, import_react11.useState)(false);
-  const [applying, setApplying] = (0, import_react11.useState)(false);
-  const [repair, setRepair] = (0, import_react11.useState)(null);
-  const [error, setError] = (0, import_react11.useState)(null);
-  (0, import_react11.useEffect)(() => {
+  const [selected, setSelected] = (0, import_react13.useState)(/* @__PURE__ */ new Set());
+  const [running, setRunning] = (0, import_react13.useState)(false);
+  const [applying, setApplying] = (0, import_react13.useState)(false);
+  const [repair, setRepair] = (0, import_react13.useState)(null);
+  const [error, setError] = (0, import_react13.useState)(null);
+  (0, import_react13.useEffect)(() => {
     setSelected(new Set(analysis?.findings.map((f) => f.id) ?? []));
   }, [analysis]);
-  const run = (0, import_react11.useCallback)(async () => {
+  const run = (0, import_react13.useCallback)(async () => {
     setRunning(true);
     setError(null);
     setRepair(null);
@@ -3393,7 +3581,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
       setRunning(false);
     }
   }, [onAnalyze, onAnalysis, t.errorGeneric]);
-  const apply = (0, import_react11.useCallback)(async () => {
+  const apply = (0, import_react13.useCallback)(async () => {
     if (!onApply || !analysis) return;
     const picked = analysis.findings.filter((f) => selected.has(f.id));
     if (picked.length === 0) return;
@@ -3412,7 +3600,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
       setApplying(false);
     }
   }, [analysis, onAnalysis, onApply, onRepaired, selected, t.errorGeneric]);
-  const toggle = (0, import_react11.useCallback)((id) => {
+  const toggle = (0, import_react13.useCallback)((id) => {
     setSelected((cur) => {
       const next = new Set(cur);
       if (next.has(id)) next.delete(id);
@@ -3421,16 +3609,16 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
     });
   }, []);
   const findings = analysis?.findings ?? [];
-  const allSelected = (0, import_react11.useMemo)(() => findings.length > 0 && findings.every((f) => selected.has(f.id)), [findings, selected]);
+  const allSelected = (0, import_react13.useMemo)(() => findings.length > 0 && findings.every((f) => selected.has(f.id)), [findings, selected]);
   const busy = disabled || running || applying;
-  return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { style: fieldTitle, children: t.analyzeTitle }),
-    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { style: fieldHint, children: t.analyzeHint }),
-    /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { type: "button", onClick: () => void run(), disabled: busy, style: secondaryBtn(busy), children: running ? t.analyzing : t.analyzeCta }),
-      findings.length > 0 && onApply && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(import_jsx_runtime15.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("button", { type: "button", onClick: () => void apply(), disabled: busy || selected.size === 0, style: primaryBtn(busy || selected.size === 0), children: applying ? t.analyzeApplying : t.analyzeApplyCta(selected.size) }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: fieldTitle, children: t.analyzeTitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: fieldHint, children: t.analyzeHint }),
+    /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("button", { type: "button", onClick: () => void run(), disabled: busy, style: secondaryBtn(busy), children: running ? t.analyzing : t.analyzeCta }),
+      findings.length > 0 && onApply && /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(import_jsx_runtime17.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("button", { type: "button", onClick: () => void apply(), disabled: busy || selected.size === 0, style: primaryBtn(busy || selected.size === 0), children: applying ? t.analyzeApplying : t.analyzeApplyCta(selected.size) }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
           "button",
           {
             type: "button",
@@ -3442,14 +3630,14 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
         )
       ] })
     ] }),
-    error && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error }),
-    repair && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(RepairOutcome, { t, repair }),
-    analysis?.warning && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { style: warnBox, role: "note", children: analysis.warning }),
-    analysis && findings.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { style: italic, children: t.analyzeClean(analysis.analyzed) }),
-    analysis?.truncated && typeof analysis.total === "number" && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { style: italic, children: t.analyzeCoverage(analysis.analyzed, analysis.total) }),
-    analysis && findings.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(import_jsx_runtime15.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { style: { margin: 0, fontSize: "0.74rem", color: C.text2 }, children: analysis.model ? t.analyzeSummary(findings.length, analysis.analyzed, analysis.model) : t.analyzeSummaryLocal(findings.length, analysis.analyzed) }),
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: findings.map((f) => /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+    error && /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error }),
+    repair && /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(RepairOutcome, { t, repair }),
+    analysis?.warning && /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("p", { style: warnBox, role: "note", children: analysis.warning }),
+    analysis && findings.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("p", { style: italic, children: t.analyzeClean(analysis.analyzed) }),
+    analysis?.truncated && typeof analysis.total === "number" && /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("p", { style: italic, children: t.analyzeCoverage(analysis.analyzed, analysis.total) }),
+    analysis && findings.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(import_jsx_runtime17.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("p", { style: { margin: 0, fontSize: "0.74rem", color: C.text2 }, children: analysis.model ? t.analyzeSummary(findings.length, analysis.analyzed, analysis.model) : t.analyzeSummaryLocal(findings.length, analysis.analyzed) }),
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: findings.map((f) => /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
         FindingRow,
         {
           t,
@@ -3468,7 +3656,7 @@ function RepairOutcome({ t, repair }) {
   const applied = repair.corrected + repair.forgotten > 0;
   const reasons = [...new Set(repair.skipped.map((s) => s.reason))].join("; ");
   if (!applied && !reasons) return null;
-  return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
     "p",
     {
       style: applied ? { margin: 0, fontSize: "0.76rem", color: C.accent } : warnBox,
@@ -3490,7 +3678,7 @@ function FindingRow({
   onToggle
 }) {
   const tone = TONE[finding.verdict] ?? "warn";
-  return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("li", { style: {
+  return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("li", { style: {
     background: C.surface2,
     border: `1px solid ${selected ? C.accent : C.border}`,
     borderRadius: 8,
@@ -3499,8 +3687,8 @@ function FindingRow({
     flexDirection: "column",
     gap: 5
   }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-      selectable && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+      selectable && /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
         "input",
         {
           type: "checkbox",
@@ -3511,26 +3699,26 @@ function FindingRow({
           style: { margin: 0, cursor: disabled ? "not-allowed" : "pointer" }
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { style: verdictTag(tone), children: t.analyzeVerdict(finding.verdict) }),
-      finding.prompt && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { style: { fontSize: "0.74rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: finding.prompt })
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: verdictTag(tone), children: t.analyzeVerdict(finding.verdict) }),
+      finding.prompt && /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { fontSize: "0.74rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: finding.prompt })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { style: { fontSize: "0.74rem", lineHeight: 1.45, color: C.text }, children: finding.issue }),
-    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { style: { ...outputBox, maxHeight: 96, fontSize: "0.7rem", color: C.text2 }, children: finding.excerpt }),
-    finding.correction && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 3 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { style: { fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: t.analyzeCorrectionLabel }),
-      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { style: { ...outputBox, maxHeight: 140, fontSize: "0.7rem" }, children: finding.correction })
+    /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { fontSize: "0.74rem", lineHeight: 1.45, color: C.text }, children: finding.issue }),
+    /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { ...outputBox, maxHeight: 96, fontSize: "0.7rem", color: C.text2 }, children: finding.excerpt }),
+    finding.correction && /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 3 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: t.analyzeCorrectionLabel }),
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { ...outputBox, maxHeight: 140, fontSize: "0.7rem" }, children: finding.correction })
     ] })
   ] });
 }
 
 // src/evermind/EvermindDiagnostics.tsx
-var import_react12 = require("react");
-var import_jsx_runtime16 = require("react/jsx-runtime");
+var import_react14 = require("react");
+var import_jsx_runtime18 = require("react/jsx-runtime");
 function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
-  const [report, setReport] = (0, import_react12.useState)(null);
-  const [copied, setCopied] = (0, import_react12.useState)(false);
-  const [revealed, setRevealed] = (0, import_react12.useState)(false);
-  const copy = (0, import_react12.useCallback)(async () => {
+  const [report, setReport] = (0, import_react14.useState)(null);
+  const [copied, setCopied] = (0, import_react14.useState)(false);
+  const [revealed, setRevealed] = (0, import_react14.useState)(false);
+  const copy = (0, import_react14.useCallback)(async () => {
     const text = buildReport();
     setReport(text);
     try {
@@ -3545,27 +3733,27 @@ function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
       onManualFallback?.();
     }
   }, [buildReport, onCopy, onManualFallback]);
-  const toggleReveal = (0, import_react12.useCallback)(() => setRevealed((v) => !v), []);
+  const toggleReveal = (0, import_react14.useCallback)(() => setRevealed((v) => !v), []);
   return { report, copied, revealed, copy, toggleReveal };
 }
 function EvermindDiagnostics({ t, disabled, copy }) {
   const { report, copied, revealed } = copy;
-  const areaRef = (0, import_react12.useRef)(null);
-  (0, import_react12.useEffect)(() => {
+  const areaRef = (0, import_react14.useRef)(null);
+  (0, import_react14.useEffect)(() => {
     if (!revealed) return;
     areaRef.current?.focus();
     areaRef.current?.select();
   }, [revealed]);
-  return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { style: fieldTitle, children: t.diagnosticsTitle }),
-    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { style: fieldHint, children: t.diagnosticsHint }),
-    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { type: "button", onClick: () => void copy.copy(), disabled, style: secondaryBtn(disabled), children: t.diagnosticsCta }),
-      report !== null && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { type: "button", onClick: copy.toggleReveal, style: linkBtn, children: revealed ? t.diagnosticsHide : t.diagnosticsShow })
+  return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: fieldTitle, children: t.diagnosticsTitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: fieldHint, children: t.diagnosticsHint }),
+    /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("button", { type: "button", onClick: () => void copy.copy(), disabled, style: secondaryBtn(disabled), children: t.diagnosticsCta }),
+      report !== null && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("button", { type: "button", onClick: copy.toggleReveal, style: linkBtn, children: revealed ? t.diagnosticsHide : t.diagnosticsShow })
     ] }),
-    revealed && report !== null && /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(import_jsx_runtime16.Fragment, { children: [
-      !copied && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { style: { margin: 0, fontSize: "0.72rem", color: C.text2, lineHeight: 1.4 }, children: t.diagnosticsManualHint }),
-      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+    revealed && report !== null && /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(import_jsx_runtime18.Fragment, { children: [
+      !copied && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { style: { margin: 0, fontSize: "0.72rem", color: C.text2, lineHeight: 1.4 }, children: t.diagnosticsManualHint }),
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
         "textarea",
         {
           ref: areaRef,
@@ -3582,11 +3770,11 @@ function EvermindDiagnostics({ t, disabled, copy }) {
 }
 
 // src/evermind/ConsoleTabs.tsx
-var import_react13 = require("react");
-var import_jsx_runtime17 = require("react/jsx-runtime");
+var import_react15 = require("react");
+var import_jsx_runtime19 = require("react/jsx-runtime");
 function ConsoleTabs({ tabs, activeId, onSelect, label, idPrefix }) {
-  const stripRef = (0, import_react13.useRef)(null);
-  const onKeyDown = (0, import_react13.useCallback)((e) => {
+  const stripRef = (0, import_react15.useRef)(null);
+  const onKeyDown = (0, import_react15.useCallback)((e) => {
     const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
     if (!keys.includes(e.key)) return;
     e.preventDefault();
@@ -3599,8 +3787,8 @@ function ConsoleTabs({ tabs, activeId, onSelect, label, idPrefix }) {
     stripRef.current?.querySelector(`[id="${idPrefix}-tab-${target.id}"]`)?.focus();
   }, [activeId, idPrefix, onSelect, tabs]);
   const active = tabs.find((t) => t.id === activeId) ?? tabs[0];
-  return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 10 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 10 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
       "div",
       {
         ref: stripRef,
@@ -3617,7 +3805,7 @@ function ConsoleTabs({ tabs, activeId, onSelect, label, idPrefix }) {
         },
         children: tabs.map((tab) => {
           const selected = tab.id === active?.id;
-          return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
+          return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(
             "button",
             {
               id: `${idPrefix}-tab-${tab.id}`,
@@ -3646,7 +3834,7 @@ function ConsoleTabs({ tabs, activeId, onSelect, label, idPrefix }) {
               },
               children: [
                 tab.label,
-                tab.badge && /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+                tab.badge && /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
                   "span",
                   {
                     "aria-hidden": true,
@@ -3671,7 +3859,7 @@ function ConsoleTabs({ tabs, activeId, onSelect, label, idPrefix }) {
         })
       }
     ),
-    active && /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+    active && /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
       "div",
       {
         id: `${idPrefix}-panel-${active.id}`,
@@ -3862,30 +4050,30 @@ function buildEvermindDiagnostics(input) {
 }
 
 // src/evermind/EvermindConsole.tsx
-var import_jsx_runtime18 = require("react/jsx-runtime");
+var import_jsx_runtime20 = require("react/jsx-runtime");
 var TEACH_POLL_INTERVAL_MS = 3e3;
 var TEACH_POLL_TIMEOUT_MS = 12e4;
 function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate, host = "web" }) {
-  const t = (0, import_react14.useMemo)(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
-  const [data, setData] = (0, import_react14.useState)(null);
-  const [targets, setTargets] = (0, import_react14.useState)(null);
-  const [seedModels, setSeedModels] = (0, import_react14.useState)([]);
-  const [teacherOpts, setTeacherOpts] = (0, import_react14.useState)(null);
-  const [selectedSlug, setSelectedSlug] = (0, import_react14.useState)("");
-  const [teachPrompt, setTeachPrompt] = (0, import_react14.useState)("");
-  const [teachText, setTeachText] = (0, import_react14.useState)("");
-  const [busy, setBusy] = (0, import_react14.useState)(false);
-  const [validating, setValidating] = (0, import_react14.useState)(false);
-  const [validateResult, setValidateResult] = (0, import_react14.useState)(null);
-  const [notice, setNotice] = (0, import_react14.useState)(null);
-  const [noticeTone, setNoticeTone] = (0, import_react14.useState)("good");
-  const [error, setError] = (0, import_react14.useState)(null);
-  const [loaded, setLoaded] = (0, import_react14.useState)(false);
-  const [tab, setTab] = (0, import_react14.useState)("teach");
-  const [probeResult, setProbeResult] = (0, import_react14.useState)(null);
-  const [analysis, setAnalysis] = (0, import_react14.useState)(null);
-  const [loadFailed, setLoadFailed] = (0, import_react14.useState)(false);
-  const reload = (0, import_react14.useCallback)(async () => {
+  const t = (0, import_react16.useMemo)(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
+  const [data, setData] = (0, import_react16.useState)(null);
+  const [targets, setTargets] = (0, import_react16.useState)(null);
+  const [seedModels, setSeedModels] = (0, import_react16.useState)([]);
+  const [teacherOpts, setTeacherOpts] = (0, import_react16.useState)(null);
+  const [selectedSlug, setSelectedSlug] = (0, import_react16.useState)("");
+  const [teachPrompt, setTeachPrompt] = (0, import_react16.useState)("");
+  const [teachText, setTeachText] = (0, import_react16.useState)("");
+  const [busy, setBusy] = (0, import_react16.useState)(false);
+  const [validating, setValidating] = (0, import_react16.useState)(false);
+  const [validateResult, setValidateResult] = (0, import_react16.useState)(null);
+  const [notice, setNotice] = (0, import_react16.useState)(null);
+  const [noticeTone, setNoticeTone] = (0, import_react16.useState)("good");
+  const [error, setError] = (0, import_react16.useState)(null);
+  const [loaded, setLoaded] = (0, import_react16.useState)(false);
+  const [tab, setTab] = (0, import_react16.useState)("teach");
+  const [probeResult, setProbeResult] = (0, import_react16.useState)(null);
+  const [analysis, setAnalysis] = (0, import_react16.useState)(null);
+  const [loadFailed, setLoadFailed] = (0, import_react16.useState)(false);
+  const reload = (0, import_react16.useCallback)(async () => {
     const targetsP = adapter.loadTargets?.().catch(() => null);
     try {
       const d = await adapter.loadData();
@@ -3902,11 +4090,11 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       if (tg) setTargets(tg);
     }
   }, [adapter]);
-  (0, import_react14.useEffect)(() => {
+  (0, import_react16.useEffect)(() => {
     setLoaded(false);
     void reload();
   }, [reload]);
-  (0, import_react14.useEffect)(() => {
+  (0, import_react16.useEffect)(() => {
     if (!canManage) return;
     let cancelled = false;
     void adapter.loadSeedModels().then((m) => {
@@ -3924,20 +4112,20 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       cancelled = true;
     };
   }, [adapter, canManage]);
-  (0, import_react14.useEffect)(() => {
+  (0, import_react16.useEffect)(() => {
     if (!refreshMs) return;
     const id = setInterval(() => {
       if (!busy) void reload();
     }, refreshMs);
     return () => clearInterval(id);
   }, [refreshMs, busy, reload]);
-  const lastRefreshSignal = (0, import_react14.useRef)(refreshSignal);
-  (0, import_react14.useEffect)(() => {
+  const lastRefreshSignal = (0, import_react16.useRef)(refreshSignal);
+  (0, import_react16.useEffect)(() => {
     if (refreshSignal == null || refreshSignal === lastRefreshSignal.current) return;
     lastRefreshSignal.current = refreshSignal;
     void reload();
   }, [refreshSignal, reload]);
-  const runValidate = (0, import_react14.useCallback)(async (prompt) => {
+  const runValidate = (0, import_react16.useCallback)(async (prompt) => {
     const task = prompt.trim();
     if (task.length < 3) return;
     setValidating(true);
@@ -3953,20 +4141,20 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       setValidating(false);
     }
   }, [adapter, onValidate, t.errorGeneric]);
-  const clearValidate = (0, import_react14.useCallback)(() => {
+  const clearValidate = (0, import_react16.useCallback)(() => {
     setValidateResult(null);
     onValidate?.(null);
   }, [onValidate]);
-  const pollTimer = (0, import_react14.useRef)(null);
-  const mounted = (0, import_react14.useRef)(true);
-  (0, import_react14.useEffect)(() => {
+  const pollTimer = (0, import_react16.useRef)(null);
+  const mounted = (0, import_react16.useRef)(true);
+  (0, import_react16.useEffect)(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
       if (pollTimer.current) clearTimeout(pollTimer.current);
     };
   }, []);
-  const describeTeachOutcome = (0, import_react14.useCallback)((status) => {
+  const describeTeachOutcome = (0, import_react16.useCallback)((status) => {
     if (status.state === "dropped") return { text: t.taughtDropped, tone: "warn" };
     if (status.state !== "merged") return { text: t.taughtStillPending, tone: "warn" };
     const verdict = evermindLearnedStatus({
@@ -3982,7 +4170,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     if (verdict.state === "fault") return { text: t.taughtTeacherFault(verdict.teacherModel ?? "", verdict.reason), tone: "warn" };
     return { text: t.taughtSelf(version), tone: "good" };
   }, [t]);
-  const trackTeach = (0, import_react14.useCallback)((contributionId) => {
+  const trackTeach = (0, import_react16.useCallback)((contributionId) => {
     const readStatus = adapter.teachStatus;
     if (!readStatus || !Number.isInteger(contributionId) || contributionId <= 0) return;
     if (pollTimer.current) clearTimeout(pollTimer.current);
@@ -4016,7 +4204,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       void tick();
     }, TEACH_POLL_INTERVAL_MS);
   }, [adapter, describeTeachOutcome, reload, t.taughtStillPending]);
-  const run = (0, import_react14.useCallback)(async (op, successNotice) => {
+  const run = (0, import_react16.useCallback)(async (op, successNotice) => {
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -4031,8 +4219,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       setBusy(false);
     }
   }, [reload, t.errorGeneric]);
-  const panelId = (0, import_react14.useId)();
-  const buildReport = (0, import_react14.useCallback)(() => buildEvermindDiagnostics({
+  const panelId = (0, import_react16.useId)();
+  const buildReport = (0, import_react16.useCallback)(() => buildEvermindDiagnostics({
     data,
     projectName,
     host,
@@ -4047,7 +4235,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     onCopy: adapter.copyText,
     onManualFallback: () => setTab("maintain")
   });
-  if (!loaded) return /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Section, { "aria-busy": true, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { style: { margin: 0, color: C.text2, fontSize: "0.82rem" }, children: t.loading }) });
+  if (!loaded) return /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Section, { "aria-busy": true, children: /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { style: { margin: 0, color: C.text2, fontSize: "0.82rem" }, children: t.loading }) });
   const seeded = !!data?.seeded;
   const frozen = data?.mode === "offline-frozen";
   const inherited = !!data?.inherited;
@@ -4065,22 +4253,22 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     probe: probeResult
   }) : null;
   const scopeName = projectName?.trim();
-  const Header = /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("header", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { "aria-hidden": true, style: { fontSize: "1.05rem" }, children: "\u{1F9E0}" }),
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("h3", { style: { margin: 0, fontSize: "0.95rem", fontWeight: 700, color: C.text }, children: t.title }),
-    scopeName && /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("span", { style: { fontSize: "0.8rem", color: C.text2 }, title: scopeName, children: [
+  const Header = /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("header", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { "aria-hidden": true, style: { fontSize: "1.05rem" }, children: "\u{1F9E0}" }),
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("h3", { style: { margin: 0, fontSize: "0.95rem", fontWeight: 700, color: C.text }, children: t.title }),
+    scopeName && /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("span", { style: { fontSize: "0.8rem", color: C.text2 }, title: scopeName, children: [
       "\xB7 ",
       scopeName
     ] }),
-    !loadFailed && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: pill(seeded), children: seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded }),
-    !loadFailed && seeded && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(RegressionChip, { t, evalPoint: data?.eval ?? null }),
-    !loadFailed && quarantined && /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("span", { style: quarantinePill, title: t.quarantinedHint(quarantineReason), children: [
+    !loadFailed && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: pill(seeded), children: seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded }),
+    !loadFailed && seeded && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(RegressionChip, { t, evalPoint: data?.eval ?? null }),
+    !loadFailed && quarantined && /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("span", { style: quarantinePill, title: t.quarantinedHint(quarantineReason), children: [
       "\u26A0 ",
       t.quarantinedBadge
     ] }),
-    diagnostics.copied && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { role: "status", style: { fontSize: "0.72rem", color: C.accent }, children: t.diagnosticsCopied }),
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("span", { style: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(
+    diagnostics.copied && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { role: "status", style: { fontSize: "0.72rem", color: C.accent }, children: t.diagnosticsCopied }),
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("span", { style: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(
         "button",
         {
           type: "button",
@@ -4089,19 +4277,19 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           title: t.diagnosticsCta,
           "aria-label": t.diagnosticsCta,
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { "aria-hidden": true, children: diagnostics.copied ? "\u2713" : "\u29C9" }),
+            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { "aria-hidden": true, children: diagnostics.copied ? "\u2713" : "\u29C9" }),
             t.diagnosticsTitle
           ]
         }
       ),
-      showHeaderRefresh && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("button", { type: "button", onClick: () => void reload(), disabled: busy, style: { ...ghostBtn, marginLeft: 0 }, title: t.refresh, "aria-label": t.refresh, children: "\u21BB" })
+      showHeaderRefresh && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { type: "button", onClick: () => void reload(), disabled: busy, style: { ...ghostBtn, marginLeft: 0 }, title: t.refresh, "aria-label": t.refresh, children: "\u21BB" })
     ] })
   ] });
   if (loadFailed) {
-    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(Section, { "aria-label": t.title, children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(Section, { "aria-label": t.title, children: [
       Header,
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.danger }, role: "alert", children: t.errorGeneric }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("button", { type: "button", onClick: () => void reload(), disabled: busy, style: primaryBtn(busy), children: t.refresh })
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.danger }, role: "alert", children: t.errorGeneric }),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { type: "button", onClick: () => void reload(), disabled: busy, style: primaryBtn(busy), children: t.refresh })
     ] });
   }
   const tabs = [];
@@ -4113,8 +4301,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       // The queue depth belongs here: "3 waiting" is a prompt to press Learn now, and
       // it is the one number that changes while you are on another tab.
       ...head.pending > 0 ? { badge: String(head.pending), badgeTone: "info" } : {},
-      content: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(import_jsx_runtime18.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+      content: /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(import_jsx_runtime20.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
           TeacherPicker,
           {
             t,
@@ -4125,7 +4313,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
             onChange: (m) => run(() => adapter.setTeacher(m || null))
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
           TeachBox,
           {
             t,
@@ -4150,9 +4338,9 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
             onValidate: () => runValidate(head.teacherModel ? teachPrompt : teachPrompt.trim() || teachText)
           }
         ),
-        validateResult && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(ValidateResults, { t, result: validateResult, onClear: clearValidate }),
-        canManage && /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+        validateResult && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(ValidateResults, { t, result: validateResult, onClear: clearValidate }),
+        canManage && /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
             "button",
             {
               type: "button",
@@ -4165,13 +4353,13 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
               children: busy ? t.flushing : t.flushCta
             }
           ),
-          head.pending > 0 && /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("span", { style: { fontSize: "0.74rem", color: C.text2 }, children: [
+          head.pending > 0 && /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("span", { style: { fontSize: "0.74rem", color: C.text2 }, children: [
             t.pendingLabel,
             ": ",
             head.pending
           ] })
         ] }),
-        canManage && adapter.importMemory && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+        canManage && adapter.importMemory && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
           ImportBox,
           {
             t,
@@ -4196,7 +4384,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
         // A failed readiness check follows you to the other tabs. A refusal you can only
         // see while standing on the tab that found it is a refusal you forget.
         ...refused ? { badge: "!", badgeTone: "bad" } : {},
-        content: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+        content: /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
           EvermindTestBench,
           {
             t,
@@ -4214,7 +4402,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
         id: "check",
         label: t.tabCheck,
         ...issues > 0 ? { badge: String(issues), badgeTone: "bad" } : {},
-        content: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+        content: /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
           EvermindAnalyzer,
           {
             t,
@@ -4231,8 +4419,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     tabs.push({
       id: "maintain",
       label: t.tabMaintain,
-      content: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(import_jsx_runtime18.Fragment, { children: [
-        canManage && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+      content: /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(import_jsx_runtime20.Fragment, { children: [
+        canManage && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
           EvermindMaintenance,
           {
             t,
@@ -4258,15 +4446,15 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
             } : {}
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(EvermindDiagnostics, { t, disabled: busy, copy: diagnostics })
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(EvermindDiagnostics, { t, disabled: busy, copy: diagnostics })
       ] })
     });
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(Section, { "aria-label": t.title, children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(Section, { "aria-label": t.title, children: [
     Header,
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.text2 }, children: t.description }),
-    !canManage && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { style: { margin: 0, fontSize: "0.72rem", color: C.text2, fontStyle: "italic" }, children: t.managerOnlyHint }),
-    inherited && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.text2 }, children: t.description }),
+    !canManage && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { style: { margin: 0, fontSize: "0.72rem", color: C.text2, fontStyle: "italic" }, children: t.managerOnlyHint }),
+    inherited && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
       "p",
       {
         style: { margin: 0, fontSize: "0.72rem", lineHeight: 1.5, color: C.text2, fontStyle: "italic" },
@@ -4274,14 +4462,14 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
         children: t.inheritedHint
       }
     ),
-    quarantined && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { style: warnBox, role: "alert", children: t.quarantinedHint(quarantineReason) }),
-    nextAction && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(NextActionCard, { action: nextAction, canAct: canManage && !busy && !inherited, onAction: () => {
+    quarantined && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { style: warnBox, role: "alert", children: t.quarantinedHint(quarantineReason) }),
+    nextAction && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(NextActionCard, { action: nextAction, canAct: canManage && !busy && !inherited, onAction: () => {
       if (nextAction.id === "test") setTab("test");
       else if (nextAction.id === "teacher" || nextAction.id === "merge" || nextAction.id === "learn") setTab("teach");
       else if (nextAction.id === "check") setTab("check");
       else if (nextAction.id === "enable") void run(() => adapter.setInference(true));
     } }),
-    targets && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(TargetsList, { t, targets }),
+    targets && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(TargetsList, { t, targets }),
     inherited ? (
       // INHERITED — read-only. This build has no `project_evermind` row of its own;
       // it is displaying its container project's. Every write endpoint keeps exact-id
@@ -4290,8 +4478,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       // rendering the container's unchanged stats. Rendering the stats WITHOUT the
       // controls is the honest surface — the model is genuinely shared and genuinely
       // shown; it is just not managed from here.
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(StatRow, { t, data })
-    ) : !seeded ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(StatRow, { t, data })
+    ) : !seeded ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
       SeedControls,
       {
         t,
@@ -4302,9 +4490,9 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
         onSelect: setSelectedSlug,
         onSeed: () => selectedSlug && run(() => adapter.seedFromModel(selectedSlug))
       }
-    ) : /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(import_jsx_runtime18.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(StatRow, { t, data }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+    ) : /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(import_jsx_runtime20.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(StatRow, { t, data }),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
         ToggleRow,
         {
           label: t.inferenceLabel,
@@ -4316,7 +4504,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           onToggle: () => run(() => adapter.setInference(!data?.inferenceEnabled))
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
         ToggleRow,
         {
           label: t.learningLabel,
@@ -4328,7 +4516,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           onToggle: () => run(() => adapter.setMode(frozen ? "connected" : "offline-frozen"))
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
         ConsoleTabs,
         {
           tabs,
@@ -4338,26 +4526,26 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           idPrefix: `ev${panelId}`
         }
       ),
-      showRecent && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(RecentList, { t, entries: data?.recent ?? [] })
+      showRecent && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(RecentList, { t, entries: data?.recent ?? [] })
     ] }),
-    notice && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { style: { margin: 0, fontSize: "0.74rem", lineHeight: 1.5, color: noticeTone === "warn" ? C.warnText : C.accent }, role: "status", children: notice }),
-    error && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error })
+    notice && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { style: { margin: 0, fontSize: "0.74rem", lineHeight: 1.5, color: noticeTone === "warn" ? C.warnText : C.accent }, role: "status", children: notice }),
+    error && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error })
   ] });
 }
 function NextActionCard({ action, canAct, onAction }) {
   const color = action.tone === "danger" ? C.danger : action.tone === "attention" ? C.warnText : action.tone === "good" ? C.accent : C.text2;
   const actionable = !["seed", "none"].includes(action.id);
-  return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("section", { "aria-label": "Recommended next action", style: { display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: "6px 12px", alignItems: "center", padding: "11px 12px", border: `1px solid ${color}`, borderRadius: 10, background: C.surface2 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { gridColumn: "1 / -1", color, fontSize: "0.62rem", fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }, children: "Recommended next action" }),
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { minWidth: 0 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("strong", { style: { display: "block", color: C.text, fontSize: "0.82rem" }, children: action.title }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { style: { margin: "3px 0 0", color: C.text2, fontSize: "0.72rem", lineHeight: 1.45 }, children: action.detail }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("small", { style: { display: "block", marginTop: 5, color, fontSize: "0.66rem", fontWeight: 700 }, children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("section", { "aria-label": "Recommended next action", style: { display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: "6px 12px", alignItems: "center", padding: "11px 12px", border: `1px solid ${color}`, borderRadius: 10, background: C.surface2 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: { gridColumn: "1 / -1", color, fontSize: "0.62rem", fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }, children: "Recommended next action" }),
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { minWidth: 0 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("strong", { style: { display: "block", color: C.text, fontSize: "0.82rem" }, children: action.title }),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { style: { margin: "3px 0 0", color: C.text2, fontSize: "0.72rem", lineHeight: 1.45 }, children: action.detail }),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("small", { style: { display: "block", marginTop: 5, color, fontSize: "0.66rem", fontWeight: 700 }, children: [
         "Go to: ",
         action.destination
       ] })
     ] }),
-    actionable && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("button", { type: "button", disabled: !canAct, onClick: onAction, style: { border: `1px solid ${color}`, borderRadius: 8, padding: "7px 10px", background: "transparent", color, fontSize: "0.7rem", fontWeight: 800, cursor: canAct ? "pointer" : "not-allowed", opacity: canAct ? 1 : 0.55 }, children: action.cta })
+    actionable && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { type: "button", disabled: !canAct, onClick: onAction, style: { border: `1px solid ${color}`, borderRadius: 8, padding: "7px 10px", background: "transparent", color, fontSize: "0.7rem", fontWeight: 800, cursor: canAct ? "pointer" : "not-allowed", opacity: canAct ? 1 : 0.55 }, children: action.cta })
   ] });
 }
 function RegressionChip({ t, evalPoint }) {
@@ -4369,7 +4557,7 @@ function RegressionChip({ t, evalPoint }) {
   const color = tone === "up" ? "#22c55e" : tone === "down" ? "#f87171" : C.text2;
   const label = tone === "flat" ? t.evalFlat : t.evalDelta(pct.toFixed(1));
   const title = t.evalTooltip(evalPoint.version, evalPoint.baseLoss.toFixed(3), evalPoint.newLoss.toFixed(3), evalPoint.evalSize);
-  return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(
     "span",
     {
       title,
@@ -4386,14 +4574,14 @@ function RegressionChip({ t, evalPoint }) {
         padding: "2px 8px"
       },
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { "aria-hidden": true, children: arrow }),
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { "aria-hidden": true, children: arrow }),
         label
       ]
     }
   );
 }
 function Section({ children, ...rest }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
     "section",
     {
       ...rest,
@@ -4419,13 +4607,13 @@ function SeedControls({
   onSelect,
   onSeed
 }) {
-  if (!canManage) return /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { style: italic, children: t.notSetUp });
-  if (models.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { style: italic, children: t.noModels });
-  return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("label", { style: fieldLabel, children: t.pickModelLabel }),
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("select", { value: selectedSlug, onChange: (e) => onSelect(e.target.value), disabled: busy, style: { ...select, flex: "1 1 200px" }, children: models.map((m) => /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("option", { value: m.slug, style: optionStyle, children: m.name }, m.slug)) }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("button", { type: "button", onClick: onSeed, disabled: busy || !selectedSlug, style: primaryBtn(busy || !selectedSlug), children: busy ? t.working : t.enableCta })
+  if (!canManage) return /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { style: italic, children: t.notSetUp });
+  if (models.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { style: italic, children: t.noModels });
+  return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("label", { style: fieldLabel, children: t.pickModelLabel }),
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("select", { value: selectedSlug, onChange: (e) => onSelect(e.target.value), disabled: busy, style: { ...select, flex: "1 1 200px" }, children: models.map((m) => /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("option", { value: m.slug, style: optionStyle, children: m.name }, m.slug)) }),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { type: "button", onClick: onSeed, disabled: busy || !selectedSlug, style: primaryBtn(busy || !selectedSlug), children: busy ? t.working : t.enableCta })
     ] })
   ] });
 }
@@ -4437,9 +4625,9 @@ function StatRow({ t, data }) {
     { label: t.pendingLabel, value: String(data.pending) },
     { label: t.lastLearnedLabel, value: last }
   ];
-  return /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(88px, 1fr))", gap: 8 }, children: stats.map((s) => /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { fontSize: "0.66rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: s.label }),
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { fontSize: "0.9rem", fontWeight: 700, color: C.text, marginTop: 2, wordBreak: "break-word" }, children: s.value })
+  return /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(88px, 1fr))", gap: 8 }, children: stats.map((s) => /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { fontSize: "0.66rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: s.label }),
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { fontSize: "0.9rem", fontWeight: 700, color: C.text, marginTop: 2, wordBreak: "break-word" }, children: s.value })
   ] }, s.label)) });
 }
 function ToggleRow({
@@ -4451,12 +4639,12 @@ function ToggleRow({
   onText,
   offText
 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { flex: "1 1 200px", minWidth: 0 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: fieldTitle, children: label }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: fieldHint, children: hint })
+  return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { flex: "1 1 200px", minWidth: 0 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: fieldTitle, children: label }),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: fieldHint, children: hint })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
       "button",
       {
         type: "button",
@@ -4490,16 +4678,16 @@ function TeacherPicker({
 }) {
   const models = opts?.models ?? [];
   const options = value && !models.includes(value) ? [value, ...models] : models;
-  return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: fieldTitle, children: t.teacherLabel }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: fieldHint, children: t.teacherHint })
+  return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: fieldTitle, children: t.teacherLabel }),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: fieldHint, children: t.teacherHint })
     ] }),
-    !canManage ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { ...select, color: C.text2 }, children: value || t.teacherNone }) : opts && !opts.isPaid ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { style: italic, children: t.teacherPaidOnly }) : /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("select", { value, onChange: (e) => onChange(e.target.value), disabled: busy, "aria-label": t.teacherLabel, style: { ...select, maxWidth: 340 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("option", { value: "", style: optionStyle, children: t.teacherNone }),
-      options.map((m) => /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("option", { value: m, style: optionStyle, children: m }, m))
+    !canManage ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { ...select, color: C.text2 }, children: value || t.teacherNone }) : opts && !opts.isPaid ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { style: italic, children: t.teacherPaidOnly }) : /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("select", { value, onChange: (e) => onChange(e.target.value), disabled: busy, "aria-label": t.teacherLabel, style: { ...select, maxWidth: 340 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("option", { value: "", style: optionStyle, children: t.teacherNone }),
+      options.map((m) => /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("option", { value: m, style: optionStyle, children: m }, m))
     ] }),
-    value && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { fontSize: "0.72rem", lineHeight: 1.4, color: C.accent, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 6, padding: "6px 8px" }, children: t.teacherActiveHint(value) })
+    value && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { fontSize: "0.72rem", lineHeight: 1.4, color: C.accent, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 6, padding: "6px 8px" }, children: t.teacherActiveHint(value) })
   ] });
 }
 function TeachBox({
@@ -4517,66 +4705,66 @@ function TeachBox({
   const teaching = !!teacherModel;
   const canTeach = teaching ? prompt.trim().length >= 20 : text.trim().length >= 20;
   const canValidate = (teaching ? prompt : prompt.trim() || text).trim().length >= 3;
-  return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: fieldTitle, children: teaching ? t.teachTeacherTitle : t.teachTitle }),
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: fieldHint, children: teaching ? t.teachTeacherHint(teacherModel) : t.teachHint }),
-    teaching ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("textarea", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachTaskPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } }) : /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(import_jsx_runtime18.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("input", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachPromptPlaceholder, style: { ...select, width: "100%" } }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("textarea", { value: text, onChange: (e) => onText(e.target.value), disabled: busy, placeholder: t.teachTextPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } })
+  return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: fieldTitle, children: teaching ? t.teachTeacherTitle : t.teachTitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: fieldHint, children: teaching ? t.teachTeacherHint(teacherModel) : t.teachHint }),
+    teaching ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("textarea", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachTaskPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } }) : /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(import_jsx_runtime20.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("input", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachPromptPlaceholder, style: { ...select, width: "100%" } }),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("textarea", { value: text, onChange: (e) => onText(e.target.value), disabled: busy, placeholder: t.teachTextPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("button", { type: "button", onClick: onTeach, disabled: busy || !canTeach, style: primaryBtn(busy || !canTeach), children: busy ? t.teaching : teaching ? t.teachTeacherCta : t.teachCta }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("button", { type: "button", onClick: onValidate, disabled: busy || validating || !canValidate, style: secondaryBtn(busy || validating || !canValidate), title: t.validateHint, children: validating ? t.validating : t.validateCta })
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { type: "button", onClick: onTeach, disabled: busy || !canTeach, style: primaryBtn(busy || !canTeach), children: busy ? t.teaching : teaching ? t.teachTeacherCta : t.teachCta }),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { type: "button", onClick: onValidate, disabled: busy || validating || !canValidate, style: secondaryBtn(busy || validating || !canValidate), title: t.validateHint, children: validating ? t.validating : t.validateCta })
     ] })
   ] });
 }
 function ImportBox({ t, busy, frozen, onImport }) {
   const disabled = busy || frozen;
-  return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: fieldTitle, children: t.importTitle }),
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: fieldHint, children: t.importHint }),
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("button", { type: "button", onClick: onImport, disabled, style: { ...secondaryBtn(disabled), alignSelf: "flex-start" }, children: busy ? t.importing : t.importCta })
+  return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: fieldTitle, children: t.importTitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: fieldHint, children: t.importHint }),
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { type: "button", onClick: onImport, disabled, style: { ...secondaryBtn(disabled), alignSelf: "flex-start" }, children: busy ? t.importing : t.importCta })
   ] });
 }
 function ValidateResults({ t, result, onClear }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { ...fieldTitle, flex: 1, minWidth: 0 }, children: t.validateResultTitle(result.prompt) }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { fontSize: "0.64rem", fontWeight: 600, color: C.text2, border: `1px solid ${C.border}`, borderRadius: 999, padding: "1px 8px" }, children: t.validateMethod(result.method) }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("button", { type: "button", onClick: onClear, style: { ...ghostBtn, marginLeft: 0 }, children: t.validateClear })
+  return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: { ...fieldTitle, flex: 1, minWidth: 0 }, children: t.validateResultTitle(result.prompt) }),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: { fontSize: "0.64rem", fontWeight: 600, color: C.text2, border: `1px solid ${C.border}`, borderRadius: 999, padding: "1px 8px" }, children: t.validateMethod(result.method) }),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { type: "button", onClick: onClear, style: { ...ghostBtn, marginLeft: 0 }, children: t.validateClear })
     ] }),
-    result.matches.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { style: italic, children: t.validateEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: result.matches.map((m) => {
+    result.matches.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { style: italic, children: t.validateEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: result.matches.map((m) => {
       const primary = m.id === result.primaryId;
       const pct = Math.round(m.score * 100);
-      return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("li", { style: { display: "flex", flexDirection: "column", gap: 4, border: `1px solid ${primary ? C.accent : C.border}`, borderRadius: 6, padding: "6px 8px", background: C.surface }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-          primary && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: tag(false), children: t.validatePrimaryBadge }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.versionTag(m.version) }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { marginLeft: "auto", fontSize: "0.68rem", fontWeight: 700, color: C.accent }, children: t.validateScore(pct) })
+      return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("li", { style: { display: "flex", flexDirection: "column", gap: 4, border: `1px solid ${primary ? C.accent : C.border}`, borderRadius: 6, padding: "6px 8px", background: C.surface }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+          primary && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: tag(false), children: t.validatePrimaryBadge }),
+          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.versionTag(m.version) }),
+          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: { marginLeft: "auto", fontSize: "0.68rem", fontWeight: 700, color: C.accent }, children: t.validateScore(pct) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { height: 4, borderRadius: 999, background: C.border, overflow: "hidden" }, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { width: `${pct}%`, height: "100%", background: C.accent } }) }),
-        m.prompt && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { fontSize: "0.74rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: m.prompt }),
-        m.text && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { fontSize: "0.72rem", color: C.text2, lineHeight: 1.4, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 54, overflow: "hidden" }, children: m.text })
+        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { height: 4, borderRadius: 999, background: C.border, overflow: "hidden" }, children: /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { width: `${pct}%`, height: "100%", background: C.accent } }) }),
+        m.prompt && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { fontSize: "0.74rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: m.prompt }),
+        m.text && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { fontSize: "0.72rem", color: C.text2, lineHeight: 1.4, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 54, overflow: "hidden" }, children: m.text })
       ] }, m.id);
     }) })
   ] });
 }
 function TargetsList({ t, targets }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: fieldTitle, children: t.targetsTitle }),
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: fieldHint, children: t.targetsHint }),
-    targets.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { style: italic, children: t.targetsEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: targets.map((tg, i) => /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: fieldTitle, children: t.targetsTitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: fieldHint, children: t.targetsHint }),
+    targets.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { style: italic, children: t.targetsEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: targets.map((tg, i) => /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(
       "li",
       {
         style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: tag(false), children: i === 0 ? t.targetSelfBadge : t.targetBuildBadge }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { fontSize: "0.78rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: tg.name }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.targetProjectId(tg.projectId) }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("span", { style: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: targetChip, children: tg.seeded ? t.targetSeeded(tg.version) : t.targetUnseeded }),
-            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: targetChip, children: tg.mode === "connected" ? t.targetConnected : t.targetFrozen }),
-            tg.inferenceEnabled && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { ...targetChip, color: C.accent, borderColor: C.accent }, children: t.targetInferenceOn })
+          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: tag(false), children: i === 0 ? t.targetSelfBadge : t.targetBuildBadge }),
+          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: { fontSize: "0.78rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: tg.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.targetProjectId(tg.projectId) }),
+          /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("span", { style: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: targetChip, children: tg.seeded ? t.targetSeeded(tg.version) : t.targetUnseeded }),
+            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: targetChip, children: tg.mode === "connected" ? t.targetConnected : t.targetFrozen }),
+            tg.inferenceEnabled && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: { ...targetChip, color: C.accent, borderColor: C.accent }, children: t.targetInferenceOn })
           ] })
         ]
       },
@@ -4585,32 +4773,32 @@ function TargetsList({ t, targets }) {
   ] });
 }
 function RecentList({ t, entries }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: fieldTitle, children: t.inspectTitle }),
-    entries.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { style: italic, children: t.inspectEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: entries.map((e) => /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(RecentRow, { t, entry: e }, e.id)) })
+  return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: fieldTitle, children: t.inspectTitle }),
+    entries.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { style: italic, children: t.inspectEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: entries.map((e) => /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(RecentRow, { t, entry: e }, e.id)) })
   ] });
 }
 function RecentRow({ t, entry }) {
-  const [open, setOpen] = (0, import_react14.useState)(false);
+  const [open, setOpen] = (0, import_react16.useState)(false);
   const status = evermindLearnedStatus(entry);
   const faulted = status.state === "fault";
   const body = entry.kind === "delta" ? t.deltaEntry : faulted ? "" : entry.text ?? "";
   const hasDetail = entry.kind !== "delta" && (!!entry.prompt || !!entry.text || faulted);
-  return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("li", { style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 3 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: tag(entry.kind === "delta"), children: entry.kind === "delta" ? t.kindDelta : t.kindText }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.versionTag(entry.version) }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.weightTag(entry.weight) }),
-      faulted && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: faultTag, children: t.notDistilled }),
-      status.state === "distilled" && status.teacherModel && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.distilledBy(status.teacherModel) }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { marginLeft: "auto", fontSize: "0.68rem", color: C.text2 }, children: t.formatWhen(entry.at) })
+  return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("li", { style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 3 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: tag(entry.kind === "delta"), children: entry.kind === "delta" ? t.kindDelta : t.kindText }),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.versionTag(entry.version) }),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.weightTag(entry.weight) }),
+      faulted && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: faultTag, children: t.notDistilled }),
+      status.state === "distilled" && status.teacherModel && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.distilledBy(status.teacherModel) }),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: { marginLeft: "auto", fontSize: "0.68rem", color: C.text2 }, children: t.formatWhen(entry.at) })
     ] }),
-    entry.prompt && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { fontSize: "0.76rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: entry.prompt }),
-    open ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 2 }, children: faulted ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.5 }, children: t.teacherFault(status.teacherModel ?? "", status.reason) }) : entry.text && /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: t.detailTextLabel }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { fontSize: "0.74rem", color: C.text, lineHeight: 1.5, wordBreak: "break-word", whiteSpace: "pre-wrap" }, children: entry.text })
-    ] }) }) : body && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.45, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 72, overflow: "hidden" }, children: body }),
-    hasDetail && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("button", { type: "button", onClick: () => setOpen((v) => !v), style: { ...linkBtn, alignSelf: "flex-start" }, children: open ? t.hideDetail : t.viewDetail })
+    entry.prompt && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { fontSize: "0.76rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: entry.prompt }),
+    open ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 2 }, children: faulted ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.5 }, children: t.teacherFault(status.teacherModel ?? "", status.reason) }) : entry.text && /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: t.detailTextLabel }),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { fontSize: "0.74rem", color: C.text, lineHeight: 1.5, wordBreak: "break-word", whiteSpace: "pre-wrap" }, children: entry.text })
+    ] }) }) : body && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.45, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 72, overflow: "hidden" }, children: body }),
+    hasDetail && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { type: "button", onClick: () => setOpen((v) => !v), style: { ...linkBtn, alignSelf: "flex-start" }, children: open ? t.hideDetail : t.viewDetail })
   ] });
 }
 var faultTag = {
@@ -4646,7 +4834,7 @@ var targetChip = {
 };
 
 // src/project360/Project360View.tsx
-var import_react15 = require("react");
+var import_react17 = require("react");
 
 // src/project360/sunburstGeometry.ts
 var VIEWBOX = 320;
@@ -4700,12 +4888,12 @@ function padSlice(startDeg, endDeg, padDeg) {
 var ARC_PAD_DEG = 0.6;
 
 // src/project360/Sunburst.tsx
-var import_jsx_runtime19 = require("react/jsx-runtime");
+var import_jsx_runtime21 = require("react/jsx-runtime");
 function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel }) {
   const nPillars = pillars.length || 1;
   const pillarSpan = 360 / nPillars;
   const dimsByPillar = pillars.map((p) => dimensions.filter((d) => d.pillar === p.key));
-  return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)(
     "svg",
     {
       className: "bf-360-wheel",
@@ -4718,8 +4906,8 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
           const pMid = (pStart + pEnd) / 2;
           const dims = dimsByPillar[pi];
           const pLabel = labelAt((R_INNER_0 + R_INNER_1) / 2, pMid);
-          return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("g", { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+          return /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("g", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
               "path",
               {
                 d: sector(R_INNER_0, R_INNER_1, ...padSlice(pStart, pEnd, ARC_PAD_DEG)),
@@ -4728,7 +4916,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                 className: "bf-360-arc bf-360-arc--pillar"
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
               "text",
               {
                 x: pLabel.x,
@@ -4745,7 +4933,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
               const isSel = selected === dim.key;
               const lab = labelAt((R_OUTER_0 + R_OUTER_1) / 2, dMid);
               const lines = twoLines(dim.label);
-              return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(
+              return /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)(
                 "g",
                 {
                   className: "bf-360-arc-group",
@@ -4754,7 +4942,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                   "aria-pressed": isSel,
                   "aria-label": `${dim.label}: ${dim.score} of 100`,
                   children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+                    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
                       "path",
                       {
                         d: sector(R_OUTER_0, R_OUTER_1, ...padSlice(dStart, dEnd, ARC_PAD_DEG)),
@@ -4763,7 +4951,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                         className: `bf-360-arc bf-360-arc--dim${isSel ? " is-selected" : ""}`
                       }
                     ),
-                    /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+                    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
                       "text",
                       {
                         x: lab.x,
@@ -4771,7 +4959,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                         className: "bf-360-arc-label",
                         textAnchor: "middle",
                         dominantBaseline: "central",
-                        children: lines.map((ln, li) => /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("tspan", { x: lab.x, dy: li === 0 ? lines.length > 1 ? "-0.5em" : "0" : "1em", children: ln }, li))
+                        children: lines.map((ln, li) => /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("tspan", { x: lab.x, dy: li === 0 ? lines.length > 1 ? "-0.5em" : "0" : "1em", children: ln }, li))
                       }
                     )
                   ]
@@ -4781,10 +4969,10 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
             })
           ] }, pillar.key);
         }),
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("circle", { cx: CX, cy: CY, r: R_CENTER, className: "bf-360-center", onClick: () => onSelect?.(null), role: "button", "aria-label": "Clear selection" }),
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("circle", { cx: CX, cy: CY, r: R_CENTER, fill: "none", stroke: overall.color, strokeWidth: 3, className: "bf-360-center-ring" }),
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("text", { x: CX, y: CY - 8, className: "bf-360-center-score", textAnchor: "middle", dominantBaseline: "central", fill: overall.color, children: overall.score }),
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("text", { x: CX, y: CY + 14, className: "bf-360-center-label", textAnchor: "middle", dominantBaseline: "central", children: "HEALTH" })
+        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("circle", { cx: CX, cy: CY, r: R_CENTER, className: "bf-360-center", onClick: () => onSelect?.(null), role: "button", "aria-label": "Clear selection" }),
+        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("circle", { cx: CX, cy: CY, r: R_CENTER, fill: "none", stroke: overall.color, strokeWidth: 3, className: "bf-360-center-ring" }),
+        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("text", { x: CX, y: CY - 8, className: "bf-360-center-score", textAnchor: "middle", dominantBaseline: "central", fill: overall.color, children: overall.score }),
+        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("text", { x: CX, y: CY + 14, className: "bf-360-center-label", textAnchor: "middle", dominantBaseline: "central", children: "HEALTH" })
       ]
     }
   );
@@ -4823,25 +5011,25 @@ var DEFAULT_PROJECT360_LABELS = {
 };
 
 // src/project360/Project360View.tsx
-var import_jsx_runtime20 = require("react/jsx-runtime");
+var import_jsx_runtime22 = require("react/jsx-runtime");
 var STATUS_ORDER = ["working", "awaiting", "blocked", "idle", "available"];
 function Project360View({ data, loading, error, labels, onAction, onRefresh }) {
-  const L = (0, import_react15.useMemo)(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
-  const [selected, setSelected] = (0, import_react15.useState)(null);
-  const sortedWorkforce = (0, import_react15.useMemo)(
+  const L = (0, import_react17.useMemo)(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
+  const [selected, setSelected] = (0, import_react17.useState)(null);
+  const sortedWorkforce = (0, import_react17.useMemo)(
     () => [...data?.workforce ?? []].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)),
     [data?.workforce]
   );
   if (error) {
-    return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "bf-360-state", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "bf-360-state__title", children: L.loadError }),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "bf-360-state__hint", children: error }),
-      onRefresh && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
+    return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "bf-360-state", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { className: "bf-360-state__title", children: L.loadError }),
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { className: "bf-360-state__hint", children: error }),
+      onRefresh && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
     ] });
   }
   if (!data || loading) {
-    return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "bf-360-state", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "bf-360-spinner" }),
+    return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "bf-360-state", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { className: "bf-360-spinner" }),
       L.connecting
     ] });
   }
@@ -4861,24 +5049,24 @@ Gaps:
 ${lines}`
     });
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "bf-360", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("header", { className: "bf-360-head", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "bf-360-head__id", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "bf-360-head__title", children: project.name }),
-        project.key && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "bf-360-head__key", children: project.key })
+  return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "bf-360", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("header", { className: "bf-360-head", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "bf-360-head__id", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "bf-360-head__title", children: project.name }),
+        project.key && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "bf-360-head__key", children: project.key })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "bf-360-head__spacer" }),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard }),
-      gaps.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { className: "bf-btn bf-btn--primary", onClick: improveAll, children: L.improveAll }),
-      onRefresh && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { className: "bf-360-head__spacer" }),
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard }),
+      gaps.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("button", { className: "bf-btn bf-btn--primary", onClick: improveAll, children: L.improveAll }),
+      onRefresh && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
     ] }),
-    !hasData ? /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "bf-360-state", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "bf-360-state__title", children: L.noData }),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "bf-360-state__hint", children: L.noDataHint }),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard })
-    ] }) : /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "bf-360-grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("section", { className: "bf-360-col bf-360-col--wheel", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+    !hasData ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "bf-360-state", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { className: "bf-360-state__title", children: L.noData }),
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { className: "bf-360-state__hint", children: L.noDataHint }),
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard })
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "bf-360-grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("section", { className: "bf-360-col bf-360-col--wheel", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
           Sunburst,
           {
             pillars,
@@ -4889,83 +5077,83 @@ ${lines}`
             ariaLabel: `${project.name} health wheel`
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "bf-360-overall", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "bf-360-progress", "aria-label": `${L.progress} ${overall.progressPct}%`, children: /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "bf-360-progress__fill", style: { width: `${overall.progressPct}%`, background: overall.color } }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "bf-360-progress__label", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "bf-360-overall", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { className: "bf-360-progress", "aria-label": `${L.progress} ${overall.progressPct}%`, children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { className: "bf-360-progress__fill", style: { width: `${overall.progressPct}%`, background: overall.color } }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "bf-360-progress__label", children: [
             L.progress,
             ": ",
             overall.progressPct,
             "%"
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "bf-360-counts", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Count, { n: counts.open, label: L.counts_open }),
-            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Count, { n: counts.blocked, label: L.counts_blocked, tone: counts.blocked ? "warn" : void 0 }),
-            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Count, { n: counts.overdue, label: L.counts_overdue, tone: counts.overdue ? "bad" : void 0 }),
-            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Count, { n: counts.activeRuns, label: L.counts_running, tone: counts.activeRuns ? "good" : void 0 })
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "bf-360-counts", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Count, { n: counts.open, label: L.counts_open }),
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Count, { n: counts.blocked, label: L.counts_blocked, tone: counts.blocked ? "warn" : void 0 }),
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Count, { n: counts.overdue, label: L.counts_overdue, tone: counts.overdue ? "bad" : void 0 }),
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Count, { n: counts.activeRuns, label: L.counts_running, tone: counts.activeRuns ? "good" : void 0 })
           ] })
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("section", { className: "bf-360-col bf-360-col--detail", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "bf-360-legend-head", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { children: selectedDim ? selectedDim.label : L.allDimensions }),
-          selectedDim && /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("button", { className: "bf-360-clear", onClick: () => setSelected(null), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("section", { className: "bf-360-col bf-360-col--detail", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "bf-360-legend-head", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { children: selectedDim ? selectedDim.label : L.allDimensions }),
+          selectedDim && /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("button", { className: "bf-360-clear", onClick: () => setSelected(null), children: [
             L.allDimensions,
             " \u2715"
           ] })
         ] }),
-        selectedDim ? /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "bf-360-dim-detail", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(ScoreDot, { score: selectedDim.score, color: selectedDim.color }),
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "bf-360-dim-detail__summary", children: selectedDim.summary })
-        ] }) : /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("ul", { className: "bf-360-dim-list", children: dimensions.map((d) => /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(
+        selectedDim ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "bf-360-dim-detail", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(ScoreDot, { score: selectedDim.score, color: selectedDim.color }),
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { className: "bf-360-dim-detail__summary", children: selectedDim.summary })
+        ] }) : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("ul", { className: "bf-360-dim-list", children: dimensions.map((d) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(
           "button",
           {
             className: "bf-360-dim-row",
             onClick: () => setSelected(d.key),
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(ScoreDot, { score: d.score, color: d.color }),
-              /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "bf-360-dim-row__label", children: d.label }),
-              /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "bf-360-dim-row__summary", children: d.summary })
+              /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(ScoreDot, { score: d.score, color: d.color }),
+              /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "bf-360-dim-row__label", children: d.label }),
+              /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "bf-360-dim-row__summary", children: d.summary })
             ]
           }
         ) }, d.key)) })
       ] })
     ] }),
-    hasData && /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(import_jsx_runtime20.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("section", { className: "bf-360-section", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("h3", { className: "bf-360-section__title", children: [
+    hasData && /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_jsx_runtime22.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("section", { className: "bf-360-section", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("h3", { className: "bf-360-section__title", children: [
           L.missingItems,
-          shownGaps.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "bf-360-section__count", children: shownGaps.length })
+          shownGaps.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "bf-360-section__count", children: shownGaps.length })
         ] }),
-        shownGaps.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { className: "bf-360-empty", children: L.noGaps }) : /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("ul", { className: "bf-360-gaps", children: shownGaps.map((g) => /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(GapRow, { gap: g, onAction }, g.id)) })
+        shownGaps.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "bf-360-empty", children: L.noGaps }) : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("ul", { className: "bf-360-gaps", children: shownGaps.map((g) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(GapRow, { gap: g, onAction }, g.id)) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("section", { className: "bf-360-section", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("h3", { className: "bf-360-section__title", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("section", { className: "bf-360-section", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("h3", { className: "bf-360-section__title", children: [
           L.workforce,
-          workforce.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "bf-360-section__count", children: workforce.length })
+          workforce.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "bf-360-section__count", children: workforce.length })
         ] }),
-        workforce.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { className: "bf-360-empty", children: L.noWorkforce }) : /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("ul", { className: "bf-360-people", children: sortedWorkforce.map((m) => /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(MemberRow, { member: m, labels: L, onAction }, m.ref)) })
+        workforce.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("p", { className: "bf-360-empty", children: L.noWorkforce }) : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("ul", { className: "bf-360-people", children: sortedWorkforce.map((m) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(MemberRow, { member: m, labels: L, onAction }, m.ref)) })
       ] })
     ] })
   ] });
 }
 function Count({ n, label, tone }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("span", { className: `bf-360-count${tone ? ` bf-360-count--${tone}` : ""}`, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("b", { children: n }),
+  return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("span", { className: `bf-360-count${tone ? ` bf-360-count--${tone}` : ""}`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("b", { children: n }),
     " ",
     label
   ] });
 }
 function ScoreDot({ score, color }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "bf-360-scoredot", style: { borderColor: color, color }, children: score });
+  return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "bf-360-scoredot", style: { borderColor: color, color }, children: score });
 }
 function GapRow({ gap, onAction }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("li", { className: `bf-360-gap bf-360-gap--${gap.severity}`, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: `bf-360-sev bf-360-sev--${gap.severity}`, "aria-hidden": true }),
-    /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "bf-360-gap__body", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "bf-360-gap__title", children: gap.title }),
-      gap.detail && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "bf-360-gap__detail", children: gap.detail })
+  return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("li", { className: `bf-360-gap bf-360-gap--${gap.severity}`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: `bf-360-sev bf-360-sev--${gap.severity}`, "aria-hidden": true }),
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "bf-360-gap__body", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { className: "bf-360-gap__title", children: gap.title }),
+      gap.detail && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { className: "bf-360-gap__detail", children: gap.detail })
     ] }),
-    gap.action && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { className: "bf-btn bf-360-gap__cta", onClick: () => onAction?.(gap.action), children: gap.action.label })
+    gap.action && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("button", { className: "bf-btn bf-360-gap__cta", onClick: () => onAction?.(gap.action), children: gap.action.label })
   ] });
 }
 function MemberRow({ member, labels, onAction }) {
@@ -4977,25 +5165,25 @@ function MemberRow({ member, labels, onAction }) {
     available: labels.status_available
   }[member.status];
   const task = member.taskId != null ? { id: member.taskId, key: member.taskKey, title: member.taskTitle ?? "", taskType: member.taskType } : void 0;
-  return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("li", { className: "bf-360-person", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: `bf-360-dot bf-360-dot--${member.status}`, title: statusLabel, "aria-label": statusLabel }),
-    /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "bf-360-person__body", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "bf-360-person__top", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "bf-360-person__name", children: member.name }),
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: `bf-360-kind bf-360-kind--${member.kind}`, children: member.kind }),
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "bf-360-person__status", children: statusLabel })
+  return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("li", { className: "bf-360-person", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: `bf-360-dot bf-360-dot--${member.status}`, title: statusLabel, "aria-label": statusLabel }),
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "bf-360-person__body", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "bf-360-person__top", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "bf-360-person__name", children: member.name }),
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: `bf-360-kind bf-360-kind--${member.kind}`, children: member.kind }),
+        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "bf-360-person__status", children: statusLabel })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "bf-360-person__reason", children: member.reason })
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { className: "bf-360-person__reason", children: member.reason })
     ] }),
-    task && /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "bf-360-person__actions", children: [
-      (member.status === "idle" || member.status === "available") && member.kind !== "human" && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "run-task", label: labels.member_run, task }), children: labels.member_run }),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "open-task", label: labels.member_open, task }), children: labels.member_open })
+    task && /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "bf-360-person__actions", children: [
+      (member.status === "idle" || member.status === "available") && member.kind !== "human" && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "run-task", label: labels.member_run, task }), children: labels.member_run }),
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "open-task", label: labels.member_open, task }), children: labels.member_open })
     ] })
   ] });
 }
 
 // src/projectList/ProjectListView.tsx
-var import_react16 = require("react");
+var import_react18 = require("react");
 
 // src/projectList/types.ts
 var DEFAULT_PROJECT_LIST_LABELS = {
@@ -5008,66 +5196,66 @@ var DEFAULT_PROJECT_LIST_LABELS = {
 };
 
 // src/projectList/ProjectListView.tsx
-var import_jsx_runtime21 = require("react/jsx-runtime");
+var import_jsx_runtime23 = require("react/jsx-runtime");
 function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }) {
-  const L = (0, import_react16.useMemo)(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
-  const header = /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("header", { className: "bf-list-head", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "bf-list-head__id", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: "bf-list-head__title", children: title }),
-      data && /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("span", { className: "bf-list-head__count", children: [
+  const L = (0, import_react18.useMemo)(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
+  const header = /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("header", { className: "bf-list-head", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { className: "bf-list-head__id", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "bf-list-head__title", children: title }),
+      data && /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("span", { className: "bf-list-head__count", children: [
         data.total,
         " ",
         L.items
       ] })
     ] }),
-    subtitle && /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { className: "bf-list-head__sub", children: subtitle }),
-    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { className: "bf-list-head__spacer" }),
-    onRefresh && /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
+    subtitle && /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { className: "bf-list-head__sub", children: subtitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { className: "bf-list-head__spacer" }),
+    onRefresh && /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
   ] });
   if (error) {
-    return /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "bf-list", children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { className: "bf-list", children: [
       header,
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "bf-360-state", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { className: "bf-360-state__title", children: L.loadError }),
-        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { className: "bf-360-state__hint", children: error }),
-        onRefresh && /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { className: "bf-360-state", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { className: "bf-360-state__title", children: L.loadError }),
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { className: "bf-360-state__hint", children: error }),
+        onRefresh && /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
       ] })
     ] });
   }
   if (!data || loading) {
-    return /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "bf-list", children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { className: "bf-list", children: [
       header,
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "bf-360-state", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { className: "bf-360-spinner" }),
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { className: "bf-360-state", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { className: "bf-360-spinner" }),
         L.connecting
       ] })
     ] });
   }
   if (data.total === 0) {
-    return /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "bf-list", children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { className: "bf-list", children: [
       header,
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "bf-360-state", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { className: "bf-360-state__title", children: L.empty }),
-        L.emptyHint && /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { className: "bf-360-state__hint", children: L.emptyHint })
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { className: "bf-360-state", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { className: "bf-360-state__title", children: L.empty }),
+        L.emptyHint && /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { className: "bf-360-state__hint", children: L.emptyHint })
       ] })
     ] });
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "bf-list", children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { className: "bf-list", children: [
     header,
-    data.groups.filter((g) => g.items.length > 0).map((g) => /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("section", { className: "bf-list-group", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("h3", { className: "bf-list-group__title", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: `bf-list-group__dot bf-list-tone--${g.tone ?? "default"}`, "aria-hidden": true }),
+    data.groups.filter((g) => g.items.length > 0).map((g) => /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("section", { className: "bf-list-group", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("h3", { className: "bf-list-group__title", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: `bf-list-group__dot bf-list-tone--${g.tone ?? "default"}`, "aria-hidden": true }),
         g.label,
-        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: "bf-360-section__count", children: g.items.length })
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "bf-360-section__count", children: g.items.length })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("ul", { className: "bf-list-rows", children: g.items.map((it) => /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(Row2, { item: it, onAction }, it.id)) })
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("ul", { className: "bf-list-rows", children: g.items.map((it) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Row2, { item: it, onAction }, it.id)) })
     ] }, g.key))
   ] });
 }
 function Row2({ item, onAction }) {
   const act = item.action;
   const clickable = !!act && !!onAction;
-  return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("li", { className: "bf-list-row", children: /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("li", { className: "bf-list-row", children: /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(
     "button",
     {
       className: "bf-list-row__main",
@@ -5075,12 +5263,12 @@ function Row2({ item, onAction }) {
       onClick: clickable ? () => onAction(act) : void 0,
       title: clickable ? act.label : void 0,
       children: [
-        item.key && /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: "bf-list-row__key", children: item.key }),
-        /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("span", { className: "bf-list-row__body", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: "bf-list-row__title", children: item.title }),
-          item.subtitle && /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: "bf-list-row__sub", children: item.subtitle })
+        item.key && /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "bf-list-row__key", children: item.key }),
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("span", { className: "bf-list-row__body", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "bf-list-row__title", children: item.title }),
+          item.subtitle && /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "bf-list-row__sub", children: item.subtitle })
         ] }),
-        item.badges && item.badges.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: "bf-list-row__badges", children: item.badges.map((b, i) => /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: `bf-list-badge bf-list-tone--${b.tone ?? "default"}`, children: b.label }, i)) })
+        item.badges && item.badges.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "bf-list-row__badges", children: item.badges.map((b, i) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: `bf-list-badge bf-list-tone--${b.tone ?? "default"}`, children: b.label }, i)) })
       ]
     }
   ) });
@@ -5092,6 +5280,7 @@ function Row2({ item, onAction }) {
   BrainTimeline,
   ChatErrorBanner,
   ChatTicketsPanel,
+  CopyButton,
   DEFAULT_ASK_USER_LABELS,
   DEFAULT_CHAT_ERROR_LABELS,
   DEFAULT_CHAT_TICKETS_LABELS,
@@ -5121,8 +5310,8 @@ function Row2({ item, onAction }) {
   SLOW_AFTER_MS,
   Sunburst,
   TICKET_KINDS,
+  ToolStep,
   activeModelKey,
-  answerTextOf,
   askUserAnchorId,
   attachmentsOf,
   avatarColor,
@@ -5130,6 +5319,7 @@ function Row2({ item, onAction }) {
   buildSettledTimeline,
   buildTimeline,
   byoVendorLabel,
+  commandOf,
   createChatTicketsRestAdapter,
   displayModelName,
   evermindLearnedStatus,
@@ -5137,7 +5327,6 @@ function Row2({ item, onAction }) {
   filterModelItems,
   formatDuration,
   formatElapsed,
-  formatPayload,
   healthRingColor,
   initialsOf,
   modelCategoryLabel,
@@ -5153,9 +5342,12 @@ function Row2({ item, onAction }) {
   revealsModelId,
   selectPendingAskUser,
   serializeAskUser,
-  splitThinkSegments,
+  shellOutcomeOf,
+  strandedReplyKey,
   streamingNode,
   stripAskUser,
+  toolPreview,
+  toolStepView,
   useChatParticipants,
   useMentionAutocomplete
 });

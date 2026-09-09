@@ -51,10 +51,15 @@ export function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels
     },
     thoughtFor: t('tl.thoughtFor', 'Thought for {duration}'),
     thought: t('tl.thought', 'Thought'),
+    replyFromThought: t('tl.replyFromThought', "Recovered from the model's reasoning — the turn ended without a separate reply."),
     you: t('tl.you', 'You'),
     assistant: t('tl.assistant', 'BuilderForce'),
     input: t('tl.input', 'Input'),
     output: t('tl.output', 'Output'),
+    // Shell steps: the terminal panel's non-zero exit chip and its "printed nothing"
+    // note. `{code}` is substituted by <ToolStep>, not by the host's l10n.
+    noOutput: t('tl.noOutput', 'No output'),
+    exitCode: t('tl.exitCode', 'Exit {code}'),
     error: t('tl.error', 'Error'),
     loading: t('tl.loading', 'Loading…'),
     empty: t('tl.empty', 'Ask BuilderForce to build or change something.'),

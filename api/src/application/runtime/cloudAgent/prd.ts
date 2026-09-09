@@ -14,10 +14,8 @@
  *    commit/append path underneath it ({@link ensureTaskPrd},
  *    {@link recordPrdDirective}, `writeTaskPrdRevision`, `landPrdChange`) is what
  *    makes that write a real, reviewable repo change rather than a database blob.
- *
- * `gitSecret` lives here because every one of those writes needs it and nothing
- * else in the engine does.
  */
+import { integrationCredentialSecret } from '../../integrations/integrationCredentialSecret';
 import { and, eq } from 'drizzle-orm';
 import { SYSTEM_ACTOR, recordActivity } from '../../activity/activityLog';
 import { CODING_BACKSTOP_MODELS } from '../../llm/LlmProxyService';
@@ -50,11 +48,6 @@ export async function recordTaskFileChange(
   } catch (error) {
     reportCaughtError(error, { source: "application/runtime/cloudAgent/prd.ts", operation: "recordTaskFileChange", context: { logMessage: '[cloud-run] task file-change persistence failed', details: { tenantId, taskId, executionId, path, change, error } } });
   }
-}
-
-/** Resolve the credential secret for git operations (mirrors agentHost routes). */
-export function gitSecret(env: Env): string {
-  return (env as { INTEGRATION_ENCRYPTION_SECRET?: string }).INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET;
 }
 
 /**
@@ -224,7 +217,7 @@ async function landPrdChange(
   const prdPath = taskPrdRepoPath(args.taskId);
   await recordTaskFileChange(db, args.tenantId, args.taskId, args.executionId, prdPath, fileChange, args.agentLabel);
 
-  const committed = await commitPrdAsPendingChange(db, gitSecret(env), args.tenantId, args.taskId, args.taskTitle, args.prd, args.agentLabel);
+  const committed = await commitPrdAsPendingChange(db, integrationCredentialSecret(env), args.tenantId, args.taskId, args.taskTitle, args.prd, args.agentLabel);
   if (committed.ok) {
     await db.update(tasks)
       .set({ gitBranch: committed.branch, updatedAt: new Date() })

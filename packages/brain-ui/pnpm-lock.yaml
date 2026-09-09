@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@builderforce/agent-loop':
+        specifier: link:../agent-loop
+        version: link:../agent-loop
       '@seanhogg/builderforce-brain-embedded':
         specifier: link:../../brain-embedded
         version: link:../../brain-embedded

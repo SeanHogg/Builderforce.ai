@@ -20,6 +20,9 @@ export default [
   ['check:tenant-column', 'check-tenant-column.mjs'],
   ['check:polymorphic-fk', 'check-polymorphic-fk.mjs'],
   ['check:domain-boundary', 'check-domain-boundary.mjs'],
+  // Two at-rest credential chains, one owner each. Using the wrong one does not
+  // throw — it derives a different key and the row will not open — so it is a guard.
+  ['check:credential-secret', 'check-credential-secret.mjs'],
   ['check:domain-root-table', 'check-domain-root-table.mjs'],
   ['check:model-coverage', 'check-model-coverage.mjs'],
   ['check:table-adoption', 'check-table-adoption.mjs'],

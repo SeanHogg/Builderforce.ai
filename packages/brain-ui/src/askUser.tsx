@@ -1,31 +1,45 @@
 /**
- * The "ask the user a question" protocol — shared by the web app and the VS Code
- * webview so a clarifying question renders identically as a clickable card on both.
+ * The "ask the user a question" UI — the clickable card and the pinned banner that
+ * render an agent's `ask_user` question, shared by the web app and the VS Code webview
+ * so a clarifying question looks and behaves identically on both.
  *
- * The agent emits its question as a fenced ```ask-user block carrying a small JSON
- * payload (produced server-side when the model calls the `ask_user` tool — a
- * schema-validated call is far more reliable than asking a weak model to hand-format
- * JSON in prose). {@link parseAskUser} lifts that payload out of an assistant message
- * and {@link stripAskUser} removes the raw block so the surrounding prose still reads
- * cleanly; <BrainTimeline> renders the payload with <QuestionCard>. If the block is
- * absent or malformed, both degrade gracefully (no card; the fenced block just shows
- * as normal code), so a question is never lost.
+ * The PROTOCOL itself is not here. The fenced ```ask-user block, its payload coercion
+ * and the "is the chat blocked on an answer" predicate live in
+ * `@builderforce/agent-loop` (re-exported through brain-embedded), beside the loops
+ * that PRODUCE a question — the api's addressed-agent reply and the Brain run store.
+ * They were defined twice, once at each end of the same wire format, and two
+ * definitions of one format drift silently: a producer that accepts a payload the
+ * renderer then declines leaves the question swallowed. One definition, both ends.
+ *
+ * <BrainTimeline> lifts the payload out of an assistant message with `parseAskUser`
+ * and renders it with <QuestionCard>, using `stripAskUser` so the surrounding prose
+ * still reads cleanly. If the block is absent or malformed both degrade gracefully
+ * (no card; the fenced block just shows as normal code), so a question is never lost.
  */
 
 import { useMemo, useState } from 'react';
+import {
+  parseAskUser,
+  selectPendingAskUser,
+  serializeAskUser,
+  stripAskUser,
+  askUserAnchorId,
+  type AskUserOption,
+  type AskUserPayload,
+  type AskUserMessageLike,
+  type PendingAskUser,
+} from '@seanhogg/builderforce-brain-embedded';
 
-export interface AskUserOption {
-  label: string;
-  description?: string;
-}
-
-export interface AskUserPayload {
-  question: string;
-  options: AskUserOption[];
-  /** Allow more than one option to be chosen (checkboxes + submit) instead of a
-   *  single click. */
-  multiSelect?: boolean;
-}
+// Re-exported so a host reaches the ONE protocol through the transcript package it
+// already imports, rather than having to know which package underneath owns it.
+export {
+  parseAskUser,
+  selectPendingAskUser,
+  serializeAskUser,
+  stripAskUser,
+  askUserAnchorId,
+};
+export type { AskUserOption, AskUserPayload, AskUserMessageLike, PendingAskUser };
 
 /** Copy for <QuestionCard> — defaulted in English, overridable per host for i18n. */
 export interface AskUserLabels {
@@ -45,100 +59,6 @@ export const DEFAULT_ASK_USER_LABELS: AskUserLabels = {
   askPending: 'Answer needed',
   askJumpTo: 'Show in conversation',
 };
-
-/** The fenced info-string the agent tags its question block with. */
-const ASK_USER_FENCE = /```ask-user\s*\n([\s\S]*?)\n```/i;
-
-function coercePayload(raw: unknown): AskUserPayload | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const o = raw as Record<string, unknown>;
-  const question = typeof o.question === 'string' ? o.question.trim() : '';
-  const optionsIn = Array.isArray(o.options) ? o.options : [];
-  const options: AskUserOption[] = optionsIn
-    .map((it): AskUserOption | null => {
-      if (typeof it === 'string') return it.trim() ? { label: it.trim() } : null;
-      if (it && typeof it === 'object') {
-        const rec = it as Record<string, unknown>;
-        const label = typeof rec.label === 'string' ? rec.label.trim() : '';
-        const description = typeof rec.description === 'string' ? rec.description.trim() : undefined;
-        return label ? { label, ...(description ? { description } : {}) } : null;
-      }
-      return null;
-    })
-    .filter((x): x is AskUserOption => !!x);
-  // A question card is only meaningful with a prompt AND at least two choices.
-  if (!question || options.length < 2) return null;
-  return { question, options, multiSelect: o.multiSelect === true };
-}
-
-/** Extract the ask-user payload from an assistant message, or null if none/invalid. */
-export function parseAskUser(text: string): AskUserPayload | null {
-  if (!text || !text.includes('ask-user')) return null;
-  const m = text.match(ASK_USER_FENCE);
-  if (!m) return null;
-  try {
-    return coercePayload(JSON.parse(m[1]));
-  } catch {
-    return null;
-  }
-}
-
-/** Remove the raw ask-user fenced block so the message's prose reads cleanly beside
- *  the rendered card. Collapses the whitespace the removed block leaves behind. */
-export function stripAskUser(text: string): string {
-  if (!text) return text;
-  return text.replace(ASK_USER_FENCE, '').replace(/\n{3,}/g, '\n\n').trim();
-}
-
-/**
- * Serialize a payload into the canonical fenced block the agent runtime emits and
- * {@link parseAskUser} reads. Shared so the producer (server) and consumer (UI) can
- * never drift on the format.
- */
-export function serializeAskUser(payload: AskUserPayload): string {
-  return ['```ask-user', JSON.stringify(payload), '```'].join('\n');
-}
-
-/** The minimal message shape {@link selectPendingAskUser} needs — structural on
- *  purpose, so this module stays free of a brain-embedded import. */
-interface AskUserMessageLike {
-  id: number;
-  role: string;
-  content: string;
-}
-
-/** An unanswered question and the message carrying it. */
-export interface PendingAskUser {
-  payload: AskUserPayload;
-  /** The assistant message the question rides in (lets a host reveal its card). */
-  messageId: number;
-}
-
-/** The DOM id of a rendered question card. ONE convention, shared by the timeline
- *  that stamps it and any host that scrolls to it — so the two can never drift. */
-export function askUserAnchorId(messageId: number): string {
-  return `bf-ask-${messageId}`;
-}
-
-/**
- * The question the conversation is currently BLOCKED on, or null when there is none.
- * Walks back from the newest turn: the last assistant `ask-user` block wins, but a
- * user turn after it means the question was already answered (answering posts the
- * choice as the next user turn), so nothing is pending.
- *
- * Shared so a host never re-derives "is there an open question" — the same predicate
- * drives the pinned banner and any host-side pending affordance.
- */
-export function selectPendingAskUser(messages: readonly AskUserMessageLike[]): PendingAskUser | null {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
-    if (msg.role === 'user') return null;
-    if (msg.role !== 'assistant') continue;
-    const payload = parseAskUser(msg.content);
-    if (payload) return { payload, messageId: msg.id };
-  }
-  return null;
-}
 
 /**
  * A clarifying question rendered as clickable options. Single-select sends the

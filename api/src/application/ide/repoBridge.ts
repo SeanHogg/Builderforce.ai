@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * repoBridge — connects the Designer's R2 workspace to a real git repo.
@@ -35,11 +36,6 @@ import {
 } from '../../infrastructure/database/schema';
 import { resolveRepoApiTarget } from '../repos/repoApiTarget';
 import { renderDeployWorkflow, DEPLOY_WORKFLOW_PATH } from './deployWorkflow';
-
-/** Same precedence the cloud agent path uses for the integration-encryption secret. */
-function gitSecret(env: Env): string {
-  return (env as { INTEGRATION_ENCRYPTION_SECRET?: string }).INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET;
-}
 
 /** R2 key prefix for a project's Designer workspace. */
 function workspacePrefix(projectId: number): string {
@@ -87,7 +83,7 @@ export async function importRepoToWorkspace(
   ref?: string,
 ): Promise<RepoBridgeResult<{ imported: number; ref: string; truncated: boolean }>> {
   const db = buildDatabase(env);
-  const resolved = await resolveRepoCredential(db, gitSecret(env), tenantId, repoId);
+  const resolved = await resolveRepoCredential(db, integrationCredentialSecret(env), tenantId, repoId);
   if (isResolveError(resolved)) return { ok: false, status: resolved.status, error: resolved.error };
   const { repo, token } = resolved;
   if (repo.projectId !== projectId) return { ok: false, status: 400, error: 'Repository is not bound to this project' };
@@ -135,7 +131,7 @@ export async function commitWorkspaceToRepo(
   opts: { message?: string; branch?: string },
 ): Promise<RepoBridgeResult<{ branch: string; committed: number; deleted: number; prNumber: number | null; prUrl: string | null }>> {
   const db = buildDatabase(env);
-  const resolved = await resolveRepoCredential(db, gitSecret(env), tenantId, repoId);
+  const resolved = await resolveRepoCredential(db, integrationCredentialSecret(env), tenantId, repoId);
   if (isResolveError(resolved)) return { ok: false, status: resolved.status, error: resolved.error };
   const { repo, token } = resolved;
   if (repo.projectId !== projectId) return { ok: false, status: 400, error: 'Repository is not bound to this project' };
@@ -232,7 +228,7 @@ async function tokenForCredential(env: Env, tenantId: number, credentialId: stri
       eq(integrationCredentials.isEnabled, true),
     ));
   if (!cred) return null;
-  const creds = await decryptCredentials(cred.credentialsEnc, cred.iv, gitSecret(env), tenantId);
+  const creds = await decryptCredentials(cred.credentialsEnc, cred.iv, integrationCredentialSecret(env), tenantId);
   return (creds?.accessToken as string | undefined) ?? (creds?.apiToken as string | undefined) ?? (creds?.token as string | undefined) ?? null;
 }
 
@@ -454,7 +450,7 @@ export async function enableGitHubDeploys(
   opts: { apiOrigin: string; subdomain?: string | null; distDir?: string },
 ): Promise<RepoBridgeResult<{ path: string; branch: string; workflow: string }>> {
   const db = buildDatabase(env);
-  const resolved = await resolveRepoCredential(db, gitSecret(env), tenantId, repoId);
+  const resolved = await resolveRepoCredential(db, integrationCredentialSecret(env), tenantId, repoId);
   if (isResolveError(resolved)) return { ok: false, status: resolved.status, error: resolved.error };
   const { repo, token } = resolved;
   if (repo.projectId !== projectId) return { ok: false, status: 400, error: 'Repository is not bound to this project' };

@@ -26,6 +26,7 @@
  * a bag of engine internals. Every other op needs nothing from the engine at all,
  * which is precisely the boundary this split makes visible.
  */
+import { integrationCredentialSecret } from '../../integrations/integrationCredentialSecret';
 import { and, eq } from 'drizzle-orm';
 import { coordinationScopeKey } from '../../../domain/coordination/resourceKey';
 import { isMemoryScope } from '../../../domain/memory/memoryScope';
@@ -56,7 +57,7 @@ import { imageAdvertisedTools, readToolManifest } from '../imageToolHandshake';
 import { cloudCrashReason } from '../orphanReasons';
 import { teardownCrashedRunArtifacts } from '../runRollback';
 import { scoreRunOutcome } from '../scoreRunOutcome';
-import { agentCommitMessage, buildPrdCapability, gitSecret, recordTaskFileChange } from './prd';
+import { agentCommitMessage, buildPrdCapability, recordTaskFileChange } from './prd';
 import { readOpenAiToolCalls } from '@builderforce/agent-loop';
 import type { Env } from '../../../env';
 import type { Db } from '../../../infrastructure/database/connection';
@@ -313,7 +314,7 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
   coordinate: async (deps) => {
     const { env, db, ctx, executionId, args, tenantId, taskId, cloudAgentRef, agentLabel } = deps;
     const action = typeof args.action === 'string' ? args.action : '';
-    const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskId);
+    const repo = await resolveTicketRepoContext(db, integrationCredentialSecret(env), tenantId, taskId);
     const coordination = buildCoordinationCapability({
       env,
       db,
@@ -392,7 +393,7 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
       return { status: 200, body: { ok: false, error: 'this run was cancelled; do not delegate, just stop' } };
     }
     await heartbeatExecution(db, executionId);
-    const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskId);
+    const repo = await resolveTicketRepoContext(db, integrationCredentialSecret(env), tenantId, taskId);
     // The ceiling the CHILD is measured against, and the backing it runs on. The
     // child's own writes go through the Worker's git-API provider — the same writer the
     // durable surface uses — so a file a child commits lands on the ticket branch the
@@ -595,11 +596,11 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
     const content = typeof args.content === 'string' ? args.content : '';
     const isNew = args.isNew !== false;
     if (!path || !content) return { status: 200, body: { ok: false, error: 'path and content are both required' } };
-    const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskId);
+    const repo = await resolveTicketRepoContext(db, integrationCredentialSecret(env), tenantId, taskId);
     if (!repo.ok) return { status: 200, body: { ok: false, error: `no repo bound to this task (${repo.reason}); include the file contents in your final summary instead` } };
     // MULTI-REPO SPANNING (0956): route this path to the repo in the task's set
     // whose pathGlobs claim it. Single-repo tasks resolve to `repo.ctx` unchanged.
-    const router = await resolveTaskRepoRouter(db, gitSecret(env), tenantId, taskId, { ctx: repo.ctx, reason: '' })
+    const router = await resolveTaskRepoRouter(db, integrationCredentialSecret(env), tenantId, taskId, { ctx: repo.ctx, reason: '' })
       .catch(() => null);
     const target = router?.forPath(path) ?? repo.ctx;
     // The container writes through the Worker rather than through the capability
@@ -639,7 +640,7 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
     const writtenPaths = new Set<string>(Array.isArray(args.writtenPaths) ? (args.writtenPaths as unknown[]).filter((p): p is string => typeof p === 'string') : []);
     const finalOutput = typeof args.finalOutput === 'string' ? args.finalOutput : '';
     const cancelled = args.cancelled === true || (await isExecutionCancelled(db, executionId));
-    const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskId);
+    const repo = await resolveTicketRepoContext(db, integrationCredentialSecret(env), tenantId, taskId);
     const repoCtx = repo.ok ? repo.ctx : null;
     const repoMiss = repo.ok ? '' : repo.reason;
     // The container runs its OWN loop, so it never reaches the durable loop's terminal
@@ -674,7 +675,7 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
       // half-wrote, subject to the same shared safety decision the cancel path
       // uses (never the default branch, never under an open PR, never a branch
       // carrying commits this run did not author). Best-effort.
-      await teardownCrashedRunArtifacts(env, db, { executionId, secret: gitSecret(env) })
+      await teardownCrashedRunArtifacts(env, db, { executionId, secret: integrationCredentialSecret(env) })
         .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgent/containerOps.ts", operation: "handleContainerOp", context: { logMessage: '[cloud-container] crashed-run artifact teardown failed', details: { tenantId, executionId, error } } }));
       // Terminal (no self-heal requeue) — score the failed run. A requeue defers
       // scoring to the durable surface's terminal chokepoint instead.

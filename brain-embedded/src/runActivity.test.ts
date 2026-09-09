@@ -14,6 +14,11 @@ describe('activityTarget', () => {
     expect(activityTarget({ query: 'Board one-pager' })).toBe('Board one-pager');
   });
 
+  it('names the COMMAND a shell call runs — the one tool that used to have no subject', () => {
+    expect(activityTarget({ command: 'pnpm -w test' })).toBe('pnpm -w test');
+    expect(activityTarget({ cmd: 'git status' })).toBe('git status');
+  });
+
   it('accepts a numeric id — an update on #42 has a subject too', () => {
     expect(activityTarget({ id: 42 })).toBe('42');
   });

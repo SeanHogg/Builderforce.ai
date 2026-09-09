@@ -7,6 +7,7 @@
  * (builtinMcpService) so the credential-load + provider-build path lives once.
  */
 
+import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { loadConnectionCredentials } from '../boardsync/drizzleStore';
@@ -20,7 +21,7 @@ export async function buildMigrationProviderFactory(
   provider: string,
   credentialId: string | null,
 ): Promise<ProviderForBoard | null> {
-  const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET;
+  const secret = integrationCredentialSecret(env);
   const loaded = await loadConnectionCredentials(db, tenantId, credentialId, secret);
   if (!loaded) return null;
   return (externalBoardId) =>

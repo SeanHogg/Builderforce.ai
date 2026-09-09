@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { createDurableErrorReporter, type DurableErrorReporter } from '../../application/observability/durableErrorReporter';
 /**
  * AnalysisRunnerDO — drives a Digital-Transformation / Architect repo analysis
@@ -346,7 +347,7 @@ export class AnalysisRunnerDO implements DurableObject {
       .from(integrationCredentials)
       .where(and(eq(integrationCredentials.id, credentialId), eq(integrationCredentials.tenantId, tenantId)));
     if (!row) return { token: '', username: null };
-    const secret = this.env.INTEGRATION_ENCRYPTION_SECRET ?? this.env.JWT_SECRET ?? '';
+    const secret = integrationCredentialSecret(this.env);
     const creds = await decryptCredentials(row.credentialsEnc, row.iv, secret, tenantId);
     const token = String(creds?.accessToken ?? creds?.apiToken ?? creds?.token ?? '');
     const username = creds?.username ? String(creds.username) : creds?.email ? String(creds.email) : null;

@@ -1,3 +1,4 @@
+import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * publishTaskVerdict — turn a platform verdict about a TASK into a visible
@@ -56,16 +57,6 @@ export type PublishVerdictOutcome =
   | { published: false; reason: string };
 
 /**
- * Resolve the secret used to decrypt integration credentials. Mirrors the
- * convention already established in pollPrCiStatus / handleCiEventOutcome —
- * INTEGRATION_ENCRYPTION_SECRET is the real key, JWT_SECRET the legacy fallback
- * for deployments predating that split.
- */
-function credentialSecret(env: Env): string {
-  return env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
-}
-
-/**
  * Everything needed to write ANYTHING to a task's pull request: the resolved
  * credential, the PR number, and the current head SHA.
  *
@@ -97,7 +88,7 @@ export async function resolveTaskPrTarget(
   if (!pr.repoId) return { ok: false, reason: 'pull request row has no repo' };
   if (pr.number == null) return { ok: false, reason: 'pull request has no provider number yet' };
 
-  const auth = await resolveRepoAuth(env, db, credentialSecret(env), tenantId, pr.repoId);
+  const auth = await resolveRepoAuth(env, db, integrationCredentialSecret(env), tenantId, pr.repoId);
   if (!auth.ok) return { ok: false, reason: auth.error };
   if (auth.auth.repo.provider !== 'github') {
     return { ok: false, reason: `provider '${auth.auth.repo.provider}' is not GitHub` };
