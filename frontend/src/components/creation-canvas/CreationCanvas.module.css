@@ -614,6 +614,26 @@
 .moreMenu button[data-wide='true'] { grid-column:1 / -1; }
 .moreMenu button:hover,.moreMenu button:focus-visible { outline:none; background:var(--canvas-hover); color:var(--canvas-accent); }.moreMenu button:hover > span,.moreMenu button:focus-visible > span { background:color-mix(in srgb,var(--canvas-accent) 24%,var(--canvas-panel)); color:var(--canvas-accent); }
 .moreMenuHeading { composes: chromeHeading; grid-column:1 / -1; margin:5px 5px 1px; }.moreMenuHeading:first-child { margin-top:1px; }
+/* THE SHEET'S OWN WAY OUT, carried by every bar sheet rather than by one of them.
+   Both sheets were dismissed only by pressing the button that opened them — which the
+   sheet itself covers — or by choosing a row that closed them, and most of what the
+   ••• sheet holds deliberately does not: the view trough is pressed repeatedly, and
+   the connector selects are returned to. So the sheet states its name and offers the
+   way out on the same line. See `CanvasMenuSheet.tsx`. */
+.moreMenuSheetHeader {
+  grid-column:1 / -1; display:flex; align-items:center; justify-content:space-between; gap:8px;
+  margin:-2px -2px 1px; padding:1px 1px 5px; border-bottom:1px solid var(--canvas-line);
+}
+.moreMenuSheetTitle { composes: chromeHeading; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* `.moreMenu button` makes every child a full-width row with a 22px glyph chip, which is
+   right for a named errand and wrong for a dismiss. Width, padding and the chip are taken
+   back here — including the chip's hover background, which would otherwise light a box
+   around the ×. Kept at 28px square so it stays a real tap target on a phone. */
+.moreMenuSheetHeader button { width:auto; min-width:28px; min-height:28px; flex:none; justify-content:center; padding:0 6px; color:var(--canvas-muted); font-size:15px; line-height:1; }
+.moreMenuSheetHeader button > span,
+.moreMenuSheetHeader button:hover > span,
+.moreMenuSheetHeader button:focus-visible > span { width:auto; height:auto; background:transparent; font-size:15px; }
+.moreMenuSheetHeader button:hover,.moreMenuSheetHeader button:focus-visible { background:var(--canvas-hover); color:var(--canvas-accent); }
 /* A SET OF GLYPHS inside the sheet, not a column of rows. The view commands (zoom, fit,
    arrange, mini map, outline) live here now — they are not a stage of the arc, so they
    cannot be captioned by one on the bar, and a second floating pill in the corner would

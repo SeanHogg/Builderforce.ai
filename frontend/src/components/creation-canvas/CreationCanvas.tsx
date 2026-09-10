@@ -55,6 +55,7 @@ import { CanvasSurfaceSwitcher } from './CanvasSurfaceSwitcher';
 import { PhaseModalitySelector } from './PhaseModalitySelector';
 import { CanvasInsightsSurface } from './CanvasInsightsSurface';
 import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasSessionActions';
+import { CanvasMenuSheet } from './CanvasMenuSheet';
 import { CanvasSessionPill } from './CanvasSessionPill';
 import { RemoteCursors } from './RemoteCursors';
 import { applyPresenceFrame, dropPresence, expirePresence, isPresenceFrame, mergeLivePresence, LIVE_PRESENCE_TTL_MS, PRESENCE_SEND_INTERVAL_MS, type LivePresenceMap } from '@/lib/canvas/livePresence';
@@ -1197,6 +1198,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    *  sheets sit at opposite ends of the bar and each closes the other, which a shared
    *  flag could not express. */
   const [realOpen, setRealOpen] = useState(false);
+  /** Stable so `CanvasMenuSheet` binds its Escape listener once per opening rather
+   *  than on every render of a board this size. */
+  const closeMoreMenu = useCallback(() => setMoreOpen(false), []);
+  const closeRealMenu = useCallback(() => setRealOpen(false), []);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [templateSearch, setTemplateSearch] = useState('');
   const [templateKind, setTemplateKind] = useState<CreationObjectKind | 'all'>('all');
@@ -12165,7 +12170,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             title={t('proveThisIdeaTitle')}
             onClick={() => { setRealOpen((value) => !value); setMoreOpen(false); setShareOpen(false); }}
           ><ProveIdeaIcon /><span>{t('proveThisIdea')}</span><i aria-hidden><DisclosureIcon /></i></button>
-          {realOpen && <div className={styles.moreMenu} data-testid="canvas-make-it-real-menu" role="menu" aria-label={t('proveThisIdea')}>
+          {realOpen && <CanvasMenuSheet title={t('proveThisIdea')} testId="canvas-make-it-real-menu" role="menu" onClose={closeRealMenu}>
             <CanvasSessionActions variant="doors" surface={surface} collapsed={barCollapsed} handlers={sessionActionHandlers} />
             {/* Turn the board into a project. Self-gating: a local board, a viewer, and
                 a board that is not yet an app and cannot become one all render nothing,
@@ -12177,7 +12182,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               onOpenChange={(panelOpen) => { if (!panelOpen) setRealOpen(false); }}
             />
             <button onClick={() => { exportSession(); setRealOpen(false); }}><span aria-hidden>↓</span>{t('exportCanvas')}</button>
-          </div>}
+          </CanvasMenuSheet>}
       </div>
   );
 
@@ -12213,7 +12218,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               the one nobody could reach from anywhere else in the product. The pill
               still SAYS where the board lives; saying it is not the same as offering
               it twice. */}
-          {moreOpen && <div className={styles.moreMenu} data-testid="canvas-more-menu" aria-label={t('moreActions')}>
+          {moreOpen && <CanvasMenuSheet title={t('moreActions')} testId="canvas-more-menu" onClose={closeMoreMenu}>
             {/* First, because these are the session-bar actions a phone gave up its
                 room for — including the only way to invite anybody, which used to be
                 reachable on a desktop and nowhere else. On a desktop the bar already
@@ -12284,7 +12289,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             <label><span><i aria-hidden>─</i>{t('connector.line')}</span><select aria-label={t('connector.line')} value={connectionStyle.line} onChange={(event) => setConnectionStyle({ line: event.target.value as ConnectionStyle['line'] })}>{CONNECTION_LINES.map((line) => <option key={line} value={line}>{t(`connector.line_${line}` as 'connector.line_solid')}</option>)}</select></label>
             <label><span><i aria-hidden>→</i>{t('connector.ends')}</span><select aria-label={t('connector.ends')} value={connectionStyle.ends} onChange={(event) => setConnectionStyle({ ends: event.target.value as ConnectionStyle['ends'] })}>{CONNECTION_ENDS.map((ends) => <option key={ends} value={ends}>{t(`connector.ends_${ends}` as 'connector.ends_arrow')}</option>)}</select></label>
             <label><span><i aria-hidden>⌐</i>{t('connector.router')}</span><select aria-label={t('connector.router')} value={connectionStyle.router} onChange={(event) => setConnectionStyle({ router: event.target.value as ConnectionStyle['router'] })}>{CONNECTION_ROUTERS.map((router) => <option key={router} value={router}>{t(`connector.router_${router}` as 'connector.router_step')}</option>)}</select></label>
-          </div>}
+          </CanvasMenuSheet>}
           {templateOpen && <div className={styles.templateMenu}>
             <header><div><strong>{t('canvasTemplates')}</strong><small>{t('marketplacePacks')}</small></div><button onClick={() => setTemplateOpen(false)} aria-label={t('closeTemplates')}>×</button></header>
             <div className={styles.templateFilters}><input value={templateSearch} onChange={(event) => setTemplateSearch(event.target.value)} placeholder={t('searchTemplates')} aria-label={t('searchTemplates')} /><select value={templateCategory} onChange={(event) => setTemplateCategory(event.target.value as typeof templateCategory)} aria-label={t('filterTemplateCategory')}><option value="all">{t('allCategories')}</option><option value="pack">{t('templateCategoryObjectPack')}</option><option value="workspace">{t('templateCategoryAutomation')}</option><option value="prompt">{t('templateCategoryPrompt')}</option></select><select value={templateKind} onChange={(event) => setTemplateKind(event.target.value as typeof templateKind)} aria-label={t('filterTemplateKind')}><option value="all">{t('allMediaKinds')}</option>{[...new Set(CREATION_TEMPLATES.flatMap((template) => template.objects.map((object) => object.kind)))].sort().map((kind) => <option key={kind} value={kind}>{t(`object.${kind}`)}</option>)}</select></div>

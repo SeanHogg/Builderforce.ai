@@ -19699,6 +19699,7 @@
     "versionHistory": "Historique des versions",
     "versionHistoryHint": "La restauration crée une nouvelle révision",
     "closeHistory": "Fermer l’historique",
+    "closeMenu": "Fermer {name}",
     "nameCheckpoint": "+ Nommer le point de contrôle actuel",
     "revisionLabel": "Révision {revision}",
     "revisionMeta": "Révision {revision} · {at}",

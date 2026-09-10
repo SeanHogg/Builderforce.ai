@@ -19699,6 +19699,7 @@
     "versionHistory": "版本历史",
     "versionHistoryHint": "恢复会创建新的修订版本",
     "closeHistory": "关闭历史记录",
+    "closeMenu": "关闭{name}",
     "nameCheckpoint": "+ 命名当前检查点",
     "revisionLabel": "修订版 {revision}",
     "revisionMeta": "修订版 {revision} · {at}",

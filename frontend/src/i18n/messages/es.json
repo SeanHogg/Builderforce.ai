@@ -19699,6 +19699,7 @@
     "versionHistory": "Historial de versiones",
     "versionHistoryHint": "Restaurar crea una nueva revisión",
     "closeHistory": "Cerrar el historial",
+    "closeMenu": "Cerrar {name}",
     "nameCheckpoint": "+ Nombrar el punto de control actual",
     "revisionLabel": "Revisión {revision}",
     "revisionMeta": "Revisión {revision} · {at}",

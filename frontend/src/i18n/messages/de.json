@@ -19699,6 +19699,7 @@
     "versionHistory": "Versionsverlauf",
     "versionHistoryHint": "Wiederherstellen erzeugt eine neue Revision",
     "closeHistory": "Verlauf schließen",
+    "closeMenu": "{name} schließen",
     "nameCheckpoint": "+ Aktuellen Prüfpunkt benennen",
     "revisionLabel": "Revision {revision}",
     "revisionMeta": "Revision {revision} · {at}",

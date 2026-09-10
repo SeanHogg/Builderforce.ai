@@ -19699,6 +19699,7 @@
     "versionHistory": "Version history",
     "versionHistoryHint": "Restore creates a new revision",
     "closeHistory": "Close history",
+    "closeMenu": "Close {name}",
     "nameCheckpoint": "+ Name current checkpoint",
     "revisionLabel": "Revision {revision}",
     "revisionMeta": "Revision {revision} · {at}",
