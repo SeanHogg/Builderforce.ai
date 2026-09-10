@@ -51,6 +51,7 @@ export type CanvasSessionActionId =
   | 'diagnostics'
   | 'walkthrough'
   | 'call'
+  | 'standup'
   | 'talktrack'
   | 'share'
   | 'prove'
@@ -279,6 +280,14 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // the dock IS the control, and a second lit "call" button in the bar would be one
   // decision with two homes.
   { id: 'call', cluster: 'reach', order: 42, chrome: 'icon', state: 'none', phone: 'menu', labelKey: 'startCall', titleKey: 'startCallTitle' },
+  //
+  // THE STANDUP IS THE CALL'S NEIGHBOUR. It used to be a captioned group the room
+  // surface published into the bar — a project picker, two steppers and a Start button
+  // — which pushed the bar out under the Brain panel and hid a meeting behind one
+  // surface. A standup is people agreeing to talk about this canvas, which is what a
+  // call is, so it sits beside it on every surface. `pressed` while one is running:
+  // pressing again finishes it. The host decides the project (`useCanvasStandupAction`).
+  { id: 'standup', cluster: 'reach', order: 43, chrome: 'icon', state: 'pressed', phone: 'menu', labelKey: 'startStandup', activeLabelKey: 'finishStandup', titleKey: 'startStandupTitle' },
   //
   // ── THE DOORS OUT, behind ONE word ──────────────────────────────────────────────
   //

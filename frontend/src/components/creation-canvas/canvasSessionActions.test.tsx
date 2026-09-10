@@ -127,6 +127,9 @@ describe('canvas session action registry', () => {
     // including any added later.
     for (const surface of CANVAS_SURFACES) {
       expect(on(surface.id)).toContain('call');
+      // …and the standup beside it: a meeting about the canvas is not a feature of
+      // the room, so it is offered wherever the call is.
+      expect(on(surface.id)).toContain('standup');
     }
 
     // Derived, not hand-listed: every action kept is one the surface can answer.

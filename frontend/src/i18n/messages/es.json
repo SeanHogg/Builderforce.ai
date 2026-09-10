@@ -22554,22 +22554,6 @@
         "openFull": "Abrir panel completo"
       },
       "room": {
-        "standup": {
-          "caption": "Daily",
-          "groupLabel": "Controles del daily",
-          "projectLabel": "Proyecto del que trata este daily",
-          "allProjects": "Todos los proyectos",
-          "projectFallback": "Proyecto {id}",
-          "previous": "Proyecto anterior",
-          "next": "Proyecto siguiente",
-          "start": "Iniciar daily",
-          "starting": "Iniciando…",
-          "live": "En curso · {project}",
-          "finish": "Finalizar",
-          "finishing": "Finalizando…",
-          "needsProject": "Elige un proyecto para dejar constancia de este daily",
-          "dismiss": "Descartar"
-        },
         "label": "Sala",
         "enter": "Reunirse en la sala, con la sesión sobre la mesa",
         "active": "Estás en la sala",
@@ -22582,23 +22566,16 @@
         "onBoard": "En el tablero",
         "noWebglTitle": "El 3D no está disponible en este dispositivo",
         "noWebglBody": "La sala necesita WebGL y este navegador no puede iniciarlo. Abajo aparece todo el mundo que está en la sesión, y el resto del lienzo funciona con normalidad.",
-        "navigateHint": "Arrastra para mirar alrededor · botón derecho o dos dedos para desplazarte · rueda para acercar · arrastra la sesión para colocarla, púlsala para abrirla",
+        "navigateHint": "Arrastra para mirar alrededor · botón derecho o dos dedos para desplazarte · rueda para acercar · arrastra la sesión para moverla",
         "session": {
-          "caption": "Sesión",
-          "groupLabel": "La sesión en la sala",
           "open": "Abrir la sesión",
+          "openButton": "Abrir",
           "minimize": "Minimizar",
           "minimizeHint": "Devolver la sesión a la sala",
           "close": "Cerrar",
           "closeHint": "Volver al tablero",
           "objects": "{count, plural, =0 {sin objetos} one {# objeto} other {# objetos}}",
-          "hint": "{count, plural, =0 {Vacía · arrastra para colocar, pulsa para abrir} one {# objeto · arrastra para colocar, pulsa para abrir} other {# objetos · arrastra para colocar, pulsa para abrir}}",
-          "placeLabel": "Dónde está la sesión",
-          "place": {
-            "table": "Sobre la mesa",
-            "floor": "En el suelo",
-            "wall": "En la pared"
-          }
+          "hint": "{count, plural, =0 {Vacía · arrastra para mover} one {# objeto · arrastra para mover} other {# objetos · arrastra para mover}}"
         }
       },
       "page": {
@@ -23074,6 +23051,9 @@
     "sharedCallLabel": "Sesión compartida",
     "startCall": "Iniciar llamada",
     "startCallTitle": "Iniciar una llamada sobre este lienzo",
+    "startStandup": "Iniciar daily",
+    "finishStandup": "Terminar daily",
+    "startStandupTitle": "Iniciar un daily con todos los de este lienzo",
     "northStar": "Estrella polar",
     "proveThisIdea": "Hazlo real",
     "proveThisIdeaTitle": "Entrega la idea de este tablero al selector de pruebas y empieza a medirla",

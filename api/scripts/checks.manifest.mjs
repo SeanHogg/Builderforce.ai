@@ -11,6 +11,12 @@ export default [
   // toolchain in the repository, and this is the gate every change goes through.
   // The guard derives its own repo root, so the cwd it runs from does not matter.
   ['check:source-package-graph', '../../scripts/check-source-package-graph.mjs'],
+  // Also repo-level: a package nobody depends on directly is held at one version by
+  // an `overrides` entry per project, and the version itself lives in exactly one
+  // file. Without this, the number is copied into a manifest per project and the
+  // projects that carry the package transitively — with no entry at all — are
+  // invisible. See scripts/pinnedDependencies.mjs.
+  ['check:pinned-deps', '../../scripts/check-pinned-deps.mjs'],
   ['check:schema', 'check-schema-drift.mjs'],
   ['check:db-access', 'check-db-access.mjs'],
   ['check:migrations', 'check-migrations.mjs'],

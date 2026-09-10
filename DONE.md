@@ -1,3 +1,99 @@
+## ✅ RESOLVED 2026-09-10 — `webdit` is pnpm like the rest of the repo: the npm workspace over it is gone
+
+`webdit` was installed by two package managers at once. The root was an npm workspace
+over `shared`/`torch`/`runtime`/`converter`, and all four of those members ALSO carried
+their own `pnpm-lock.yaml` — which is the shape the rest of the repo uses and the shape
+`ensure-linked-deps.mjs` relies on. Its own header says it out loud: the repo is a set
+of separately installed packages referencing each other with `link:`/`file:`
+specifiers, deliberately NOT a pnpm workspace.
+
+The two managers collided. With pnpm's `node_modules/.pnpm` trees inside the members,
+npm's resolver crashed on the root (`Cannot read properties of null (reading 'name')`
+out of `Link.matches`), so `npm install --package-lock-only` could no longer regenerate
+`webdit/package-lock.json` at all. The `sharp` security pin had to be transplanted into
+that file by hand rather than resolved, which is what surfaced this.
+
+### What changed
+
+- **`webdit/package.json` is deleted.** Every other container folder in the repo —
+  `packages/`, `clients/`, `agent-runtime/vendor/` — has no root manifest, and this one
+  held nothing but the `workspaces` array, three `npm --workspaces` scripts and a
+  `sharp` override. The override now lives in `webdit/runtime`, the one member that
+  actually resolves `sharp`.
+- **Three npm lockfiles are deleted**: `webdit/package-lock.json`, and the stale
+  `webdit/converter/package-lock.json` + `webdit/runtime/package-lock.json` that had sat
+  beside pnpm locks since May. The orphaned 589 MB `webdit/node_modules` npm tree went
+  with them.
+- **`.gitignore` no longer excepts `webdit/package-lock.json`.** The comment claimed
+  webdit was "genuinely npm-resolved (no pnpm-lock.yaml)", which was never true of the
+  members — only of the root that existed to be a workspace. The rule now covers webdit
+  like everything else, and the comment records why the exception was wrong.
+
+The members already cross-reference each other with `file:../shared` rather than the
+workspace-only `*`, so nothing had to be rewired: they were independent pnpm projects
+already, with a redundant npm layer on top.
+
+Verified: all four members pass `pnpm install --frozen-lockfile`, `typecheck` and
+`test` standalone; `studio`, which consumes three of them through `file:` links, is
+type-clean with 160/160 tests; the pin guard reports 10 projects and 28 lockfiles; and
+api's guard chain is 34/34.
+
+## ✅ RESOLVED 2026-09-10 — Dependabot could not patch `sharp`: the version was a fact stored in eight places, and three projects had no copy
+
+The Dependabot security job failed with `security_update_not_possible` — latest
+resolvable 0.35.2, lowest non-vulnerable 0.35.4, no conflicting dependencies. That
+combination means the package is nobody's direct dependency: `sharp` arrives under
+`next`, under `@huggingface/transformers`, under `miniflare` and under `astro`, so
+there is no requirement for Dependabot to unlock and it has nothing to open a PR
+against.
+
+### What the inventory showed
+
+Eleven lockfiles resolved `sharp`, at four different versions, every one of them
+below the patched release:
+
+| resolved | projects |
+| --- | --- |
+| 0.35.3 | agent-runtime, api, docs-site, frontend, studio, studio-embedded, voice |
+| 0.35.2 | worker |
+| 0.34.5 | clients/vscode, webdit, webdit/runtime |
+
+The 0.35.3 group had an `overrides` entry each — eight manifests, each spelling the
+number out again. The other three had no entry at all, which is why they were two
+and three releases further behind: there was nothing to update and nothing that
+could notice. `webdit` was a third case, an `overrides` entry its lockfile had never
+applied.
+
+### The seam, fixed first
+
+- **`scripts/pinnedDependencies.mjs`** declares the version ONCE, with the reason
+  attached, plus the readers both manifest shapes (`pnpm.overrides` and npm's
+  top-level `overrides`, including pnpm's `"$name"` alias) and both lockfile formats
+  need. Moving a pin is now editing one line.
+- **`scripts/check-pinned-deps.mjs`** makes it true, on three rules: every lockfile
+  RESOLVES the pinned version; a project whose lockfile carries the package DECLARES
+  an override for it (the rule that catches the transitive-only projects, which is
+  the hole this whole failure came through); and a manifest naming the package twice
+  states the same version both times. Projects are discovered, not listed — the
+  inventory named eight and there are eleven.
+- Wired into api's `checks.manifest.mjs`, the repo-level guard chain. `npm run check`
+  in api: 34/34.
+
+### The bump
+
+`sharp` 0.35.4 everywhere: eight manifests moved, three gained the override they
+never had (`worker`, `clients/vscode`, `webdit/runtime`), eleven lockfiles
+regenerated. The churn is confined — worker's diff is sharp plus the peer-context
+suffixes that follow from sharp 0.35.4 declaring an optional `@types/node` peer, and
+docs-site's is the sharp family plus one `@emnapi/runtime` patch. `webdit`'s npm lock is gone
+entirely — see the entry below, which retires the workspace that owned it; `semver`
+and `@emnapi/runtime` moved in two projects, being the two requirements sharp 0.35.4
+raised above what those trees held.
+
+Verified: the guard passes (11 projects, 31 lockfiles), all nine pnpm projects pass
+`pnpm install --frozen-lockfile`, and both the guard and that gate were confirmed to
+FAIL on a deliberately perturbed pin rather than passing blind.
+
 ## ✅ RESOLVED 2026-09-09 — Deploy API + Deploy frontend red after the room consolidation: three ratchets, one file
 
 Both deploy jobs failed on the commit that merged the room and the 3D space. The
@@ -65,7 +161,26 @@ not see the other. They are now ONE surface.
 - **Tests:** `lib/canvas/roomSession.test.ts` (placement, diorama layout, storage);
   `canvasSurfaces.test.tsx`, `canvasSessionActions.test.tsx`, `CreationCanvas.test.tsx`
   and `roomSeating.test.ts` updated to the merged surface.
-- UI version `2026.9.25`.
+- UI version `2026.9.26` (a concurrent session had already taken `.25`).
+
+### Same-day rework, from the owner's review
+
+The first cut published two captioned groups (Session: open/minimise + a table/floor/wall
+picker; Standup: project picker + steppers + Start) into the session bar, which pushed the
+bar out under the Brain panel. Gone, both of them:
+
+- **The session's controls are ON the session.** The diorama's caption carries an **Open**
+  button (`data-testid="room-session-open"`); every pointer on the body is a drag, anywhere
+  in the room — the anchor (table / floor / wall) is still derived from where it lands.
+  `RoomSessionControls.tsx`, `ROOM_SESSION_SPOTS` and the picker strings are deleted.
+- **The standup is a session action beside "Start a call"** — `standup` in
+  `lib/canvasSessionActions.ts` (cluster `reach`, `state: 'pressed'` while live, press again
+  to finish), drawn by the same renderer with its own `StandupIcon`. `useCanvasStandupAction`
+  resolves the project (scope, then the board's), owns the ceremony via `useRoomStandup`,
+  and reports a failure as a notice. `RoomStandupBar.tsx` and `surface.room.standup.*` are
+  deleted. The room now contributes only its status ("N of M here") to the bar.
+- New strings in all five catalogs: `creationCanvas.{startStandup,finishStandup,startStandupTitle}`,
+  `surface.room.session.openButton`; `session.hint` and `navigateHint` reworded.
 
 ## ✅ RESOLVED 2026-09-08 — two at-rest credential secrets, resolved in 46 places, one of them under a colliding name
 

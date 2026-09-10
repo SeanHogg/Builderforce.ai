@@ -87,18 +87,8 @@ export function placeSessionInRoom({ x, z }: RoomSessionSpot): RoomSessionPlacem
   return { anchor: 'floor', position: [cx, REST_LIFT / 2, cz], rotation: [-Math.PI / 2, 0, 0] };
 }
 
-/**
- * A representative spot for each anchor, for a control that offers the three by
- * name. The table's centre, the middle of the wall, and the floor just in front of
- * the ring — each round-trips through {@link placeSessionInRoom} to its own anchor.
- */
-export const ROOM_SESSION_SPOTS: Readonly<Record<RoomSessionAnchor, RoomSessionSpot>> = {
-  table: { x: 0, z: 0 },
-  wall: { x: 0, z: ROOM_WALL_Z },
-  floor: { x: 0, z: ROOM_TABLE_RADIUS + 2.4 },
-};
-
-export const DEFAULT_ROOM_SESSION_SPOT: RoomSessionSpot = ROOM_SESSION_SPOTS.table;
+/** Where a session starts out: the middle of the table. */
+export const DEFAULT_ROOM_SESSION_SPOT: RoomSessionSpot = { x: 0, z: 0 };
 
 /** One board object, shrunk to the diorama. Local frame: x right, y up the sheet, z out of it. */
 export interface RoomSessionCard {

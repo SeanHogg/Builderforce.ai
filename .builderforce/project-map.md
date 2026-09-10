@@ -67,7 +67,6 @@ Sub-projects (each directory below contains a manifest — this is where distinc
 - studio  [package.json]
 - voice  [package.json]
 - webdit/converter  [package.json]
-- webdit  [package.json]
 - webdit/runtime  [package.json]
 - webdit/shared  [package.json]
 - webdit/torch  [package.json]

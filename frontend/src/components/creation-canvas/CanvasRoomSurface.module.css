@@ -254,23 +254,10 @@
   }
 }
 
-/* ── Controls on the ONE session bar ─────────────────────────────────────────
-   Published into the host's bar, so these rules style rows that are drawn by the
-   host rather than inside this surface's own tree — and the same rules dress the
-   session frame's own two buttons, so a control reads the same wherever the room
-   draws it. Sized for that row: 28px controls, nothing that forces the bar taller
-   than the groups beside it. */
+/* ── The session frame's two buttons ────────────────────────────────────────
+   Sized like the ONE session bar's own controls, so a way back reads as the same
+   kind of thing wherever it is drawn. */
 
-.standup,
-.sessionControls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  flex-wrap: wrap;
-}
-
-.barStep,
 .barAction {
   display: inline-flex;
   align-items: center;
@@ -286,97 +273,10 @@
   cursor: pointer;
 }
 
-/* A step is a glyph, so it gets a square tap target rather than a text one. */
-.barStep {
-  min-width: 28px;
-  padding: 0;
-  font-size: var(--font-size-body);
-}
-
-.barStep:hover:not(:disabled),
 .barAction:hover:not(:disabled) { border-color: var(--accent); }
 
-.barAction[aria-pressed='true'] { border-color: var(--accent); }
-
-.barStep:disabled,
 .barAction:disabled { opacity: .45; cursor: not-allowed; }
 
-.barPicker { display: inline-flex; align-items: center; min-width: 0; }
-
-.barSelect {
-  min-height: 28px;
-  max-width: 190px;
-  padding: 0 6px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--text-primary);
-  font-size: var(--font-size-small);
-}
-
-.barSelect:disabled { opacity: .45; cursor: not-allowed; }
-
-/* A native <option> list is painted by the OS, not by the page: without its own
-   opaque pair it inherits whatever the platform picks and can render light text
-   on a light menu in one theme. */
-.barSelect option {
-  background: var(--surface);
-  color: var(--text-primary);
-}
-
-.standupLive {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--font-size-small);
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 220px;
-}
-
-.standupLive::before {
-  content: "";
-  flex: 0 0 auto;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--success);
-}
-
-.standupError {
-  max-width: 260px;
-  padding: 2px 8px;
-  border: 1px solid var(--danger);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--danger);
-  font-size: var(--font-size-small);
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-/* Available to a label whose text is for screen readers only — the picker is
-   identified by the group caption beside it, which sighted readers already see. */
-.srOnly {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-/* On a phone the bar already wraps; keep the pickers from forcing a wide row. */
 @media (max-width: 760px) {
-  .barSelect { max-width: 130px; }
-  .standupLive { max-width: 140px; }
   .sessionFrameBar { padding-inline: 8px; }
 }

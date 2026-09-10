@@ -23,6 +23,7 @@ import '@xyflow/react/dist/style.css';
 import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasSocialIcon, CleanLayoutIcon, DepthIcon, DisclosureIcon, DropToLayersIcon, FitViewIcon, LayerGuidesIcon, MarqueeSelectIcon, MinimapIcon, MoreActionsIcon, ProveIdeaIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
 import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
 import type { CanvasRoomSurfaceProps } from './CanvasRoomSurface';
+import { useCanvasStandupAction } from './useCanvasStandupAction';
 import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
 import { canvasSurfaceDefinition, readCanvasSurface, writeCanvasSurface, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import { DEFAULT_CANVAS_PHASE, readCanvasPhase, surfacesForPhase, writeCanvasPhase, type CanvasPhase } from '@/lib/canvasPhases';
@@ -11973,6 +11974,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * so this map is behaviour only, and the desktop bar and the phone sheet are driven by
    * the same entry rather than by two copies of the same `onClick`.
    */
+  // The standup beside the call. The hook resolves the project (scope, then this
+  // board's) and owns the ceremony; this file learns one handler.
+  const standupAction = useCanvasStandupAction(rosterMembers, boardProjectId, persistence === 'server', setNotice);
   const sessionActionHandlers: Record<CanvasSessionActionId, CanvasSessionActionHandler> = (() => {
     // Every one of these can be pressed from the ••• sheet as well as from the bar, and a
     // sheet that stays open over the panel it just opened is a sheet in the way. Wrapping
@@ -12000,6 +12004,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       //                 shell is the control from now on and this one withdraws rather
       //                 than sitting beside it lit up doing nothing.
       call: { ...act(() => liveRoom?.start()), disabled: !liveRoom?.canStart, available: liveRoom?.live !== true },
+      standup: { ...act(standupAction.run), active: standupAction.active, disabled: standupAction.disabled },
       // A local canvas opens the SAME share sheet a saved one does. It used to open a
       // sign-up gate, which answered a question nobody asked: they wanted to show
       // someone the board, not to create an account.
@@ -12791,7 +12796,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 initialDepthMode={roomSceneInput.depthMode}
               />}
               sessionInitiallyOpen={comparisonModelIds.length >= 2}
-              boardProjectId={boardProjectId}
               onExit={() => setSurface('graph')}
             />,
             // The five medium runtimes. Each takes the object the surface is ABOUT, so

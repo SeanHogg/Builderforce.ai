@@ -22554,22 +22554,6 @@
         "openFull": "Open full dashboard"
       },
       "room": {
-        "standup": {
-          "caption": "Standup",
-          "groupLabel": "Standup controls",
-          "projectLabel": "Project this standup is about",
-          "allProjects": "All projects",
-          "projectFallback": "Project {id}",
-          "previous": "Previous project",
-          "next": "Next project",
-          "start": "Start standup",
-          "starting": "Starting…",
-          "live": "Live · {project}",
-          "finish": "Finish",
-          "finishing": "Finishing…",
-          "needsProject": "Pick a project to record this standup against",
-          "dismiss": "Dismiss"
-        },
         "label": "Room",
         "enter": "Meet in the room, with the session on the table",
         "active": "You are in the room",
@@ -22582,23 +22566,16 @@
         "onBoard": "On the board",
         "noWebglTitle": "3D is not available on this device",
         "noWebglBody": "The room needs WebGL, which this browser cannot start. Everyone in the session is listed below, and the rest of the canvas works normally.",
-        "navigateHint": "Drag to look around · right-drag or two fingers to move · scroll to zoom · drag the session to place it, press it to open",
+        "navigateHint": "Drag to look around · right-drag or two fingers to move · scroll to zoom · drag the session to move it",
         "session": {
-          "caption": "Session",
-          "groupLabel": "The session in the room",
           "open": "Open the session",
+          "openButton": "Open",
           "minimize": "Minimize",
           "minimizeHint": "Put the session back in the room",
           "close": "Close",
           "closeHint": "Back to the board",
           "objects": "{count, plural, =0 {no objects} one {# object} other {# objects}}",
-          "hint": "{count, plural, =0 {Empty · drag to place, press to open} one {# object · drag to place, press to open} other {# objects · drag to place, press to open}}",
-          "placeLabel": "Where the session sits",
-          "place": {
-            "table": "On the table",
-            "floor": "On the floor",
-            "wall": "On the wall"
-          }
+          "hint": "{count, plural, =0 {Empty · drag to move} one {# object · drag to move} other {# objects · drag to move}}"
         }
       },
       "page": {
@@ -23074,6 +23051,9 @@
     "sharedCallLabel": "Shared session",
     "startCall": "Start call",
     "startCallTitle": "Start a call about this canvas",
+    "startStandup": "Start standup",
+    "finishStandup": "Finish standup",
+    "startStandupTitle": "Start a standup with everyone on this canvas",
     "northStar": "North star",
     "proveThisIdea": "Make it real",
     "proveThisIdeaTitle": "Hand this board's idea to the proof picker and start measuring it",

@@ -15,13 +15,11 @@ import {
   type RoomOccupant,
 } from '@/lib/canvas/roomSeating';
 import {
-  DEFAULT_ROOM_SESSION_SPOT, ROOM_SESSION_SPOTS, placeSessionInRoom, readRoomSessionSpot, writeRoomSessionSpot,
-  type RoomSessionAnchor, type RoomSessionSpot,
+  DEFAULT_ROOM_SESSION_SPOT, placeSessionInRoom, readRoomSessionSpot, writeRoomSessionSpot,
+  type RoomSessionSpot,
 } from '@/lib/canvas/roomSession';
 import { CanvasBarGroup } from './CanvasBarGroup';
 import { useCanvasSurfaceActions } from './canvasSurfaceActions';
-import { RoomStandupBar } from './RoomStandupBar';
-import { RoomSessionControls } from './RoomSessionControls';
 import { RoomSessionFrame } from './RoomSessionFrame';
 import { RoomScene } from './world3d/RoomScene';
 import { RoomSessionDiorama } from './world3d/RoomSessionDiorama';
@@ -36,29 +34,27 @@ import styles from './CanvasRoomSurface.module.css';
  * depth; "Room" seated the people and hung a capped wall of the same objects behind
  * them. That was two 3D readings of one board with two cameras, and a person in one
  * could not see the other. Now there is ONE spatial surface: the room, where the
- * session is a THING — a diorama of the board's projection that you drag onto the
- * table, the floor or the wall, press to open at full size, and minimise back to
- * where you left it. The full-size projection is still `Canvas3DView`, unchanged;
- * the host hands it in through `renderSession` and this surface decides when it is
- * up. See `lib/canvas/roomSession.ts` for the placement arithmetic.
+ * session is a THING — a diorama of the board's projection that you drag anywhere in
+ * the room, open at full size from its own button, and minimise back to where you
+ * left it. The full-size projection is still `Canvas3DView`, unchanged; the host
+ * hands it in through `renderSession` and this surface decides when it is up. See
+ * `lib/canvas/roomSession.ts` for the placement arithmetic.
  *
- * ── WHY A SURFACE AND NOT A DESTINATION ──────────────────────────────────────────
- * A standup already had two homes in this product and neither was the board: a
- * full-screen meeting room and a project's round table, both of which you reach by
- * navigating AWAY from the thing being discussed. That is the wrong shape for the
- * one ceremony whose entire subject is the work in front of you. A surface is the
- * right shape, and it is deliberately `scope: 'board'` for the same reason `app` is —
- * a room is about the whole session, so there is no card to enter it from and
- * pressing it with nothing selected has an answer.
+ * ── WHAT IT PUTS ON THE BAR, AND WHAT IT DOES NOT ────────────────────────────────
+ * Only its STATUS — who is here. It used to publish a session group and a standup
+ * group as controls too, which pushed the one bar out under the Brain panel. The
+ * session's controls are on the session itself (drag it, press Open), and the
+ * standup is a session action beside the call (`useCanvasStandupAction`) — offered
+ * on every surface, because a standup is people agreeing to talk about this canvas,
+ * not a feature of the room.
  *
  * ── WHAT IT OWNS, AND WHAT IT DOES NOT ───────────────────────────────────────────
  * It owns the ROOM: where bodies stand, who is actually here, where the session
  * sits, whether it is open, and announcing its own presence. It owns no domain at
  * all — there is no room table, no room membership and no room record, because a
  * canvas session already has a roster and the presence relay already carries who
- * is live. A second store of "who is in this standup" would be a second answer to
- * a question that already has one. Where the session sits is a per-browser
- * reading preference, kept the way the surface preference is.
+ * is live. Where the session sits is a per-browser reading preference, kept the way
+ * the surface preference is.
  *
  * ── WHY IT ANNOUNCES ON A HEARTBEAT ──────────────────────────────────────────────
  * The relay drops a peer after `LIVE_PRESENCE_TTL_MS` without a frame, which is
@@ -120,9 +116,6 @@ export interface CanvasRoomSurfaceProps<T extends Canvas3DNode> {
   renderSession: (frame: { onMinimize: () => void }) => ReactNode;
   /** Arrive with the session already open — a model comparison lands in depth. */
   sessionInitiallyOpen?: boolean;
-  /** The project this board itself names, when it names one. One of the three
-   *  answers `resolveStandupProject` weighs — see `lib/canvas/standupProject`. */
-  boardProjectId?: number | null;
   onExit: () => void;
 }
 
@@ -136,7 +129,6 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
   sceneInput,
   renderSession,
   sessionInitiallyOpen = false,
-  boardProjectId = null,
   onExit,
 }: CanvasRoomSurfaceProps<T>) {
   const t = useTranslations('creationCanvas.surface.room');
@@ -163,7 +155,6 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
     writeRoomSessionSpot(sessionId, next);
   }, [sessionId]);
   const placement = useMemo(() => placeSessionInRoom(spot), [spot]);
-  const anchorSession = useCallback((anchor: RoomSessionAnchor) => placeSession(ROOM_SESSION_SPOTS[anchor]), [placeSession]);
   const [dragging, setDragging] = useState(false);
 
   const bodies = useMemo(() => {
@@ -225,23 +216,9 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
   // projection from the same input, and the room draws nothing of the board then.
   const scene = useMemo(() => (sessionOpen ? null : canvas3dScene(sceneInput)), [sceneInput, sessionOpen]);
 
-  // What the room IS doing goes in `controls`; what it is REPORTING goes in
-  // `status`, which is what survives a folded bar — see `canvasSurfaceActions`.
-  // The standup bar owns its own project choice and its own ceremony binding, so
-  // this surface hands it the roster and learns nothing about either. The session
-  // controls are the worded form of the diorama's own gestures.
+  // What the room is REPORTING goes in `status`, which is what survives a folded
+  // bar — see `canvasSurfaceActions`. It contributes no controls: see the header.
   useCanvasSurfaceActions(() => ({
-    controls: (
-      <>
-        <RoomSessionControls
-          open={sessionOpen}
-          anchor={placement.anchor}
-          onToggleOpen={sessionOpen ? minimizeSession : openSession}
-          onAnchor={anchorSession}
-        />
-        <RoomStandupBar members={members} boardProjectId={boardProjectId} />
-      </>
-    ),
     status: (
       <CanvasBarGroup caption={t('label')} label={t('regionLabel')}>
         <span className={styles.status} role="status">
@@ -249,7 +226,7 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
         </span>
       </CanvasBarGroup>
     ),
-  }), [anchorSession, boardProjectId, hereCount, members, minimizeSession, openSession, placement.anchor, seats.length, sessionOpen, t]);
+  }), [hereCount, seats.length, t]);
 
   const session = sessionOpen ? (
     <RoomSessionFrame title={sessionTitle} objectCount={objectCount} onMinimize={minimizeSession} onClose={onExit}>
@@ -310,6 +287,7 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
                     palette={palette}
                     title={sessionTitle}
                     hint={t('session.hint', { count: objectCount })}
+                    openLabel={t('session.openButton')}
                     onPlace={placeSession}
                     onOpen={openSession}
                     onDragChange={setDragging}

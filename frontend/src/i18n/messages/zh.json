@@ -22554,22 +22554,6 @@
         "openFull": "打开完整看板"
       },
       "room": {
-        "standup": {
-          "caption": "站会",
-          "groupLabel": "站会控件",
-          "projectLabel": "本次站会所属项目",
-          "allProjects": "全部项目",
-          "projectFallback": "项目 {id}",
-          "previous": "上一个项目",
-          "next": "下一个项目",
-          "start": "开始站会",
-          "starting": "正在开始…",
-          "live": "进行中 · {project}",
-          "finish": "结束",
-          "finishing": "正在结束…",
-          "needsProject": "请选择一个项目，以便记录本次站会",
-          "dismiss": "关闭"
-        },
         "label": "会议室",
         "enter": "在会议室里会面，会话就放在桌上",
         "active": "你正在会议室中",
@@ -22582,23 +22566,16 @@
         "onBoard": "在画板上",
         "noWebglTitle": "此设备无法使用 3D",
         "noWebglBody": "会议室需要 WebGL，而此浏览器无法启动它。会话中的所有成员都列在下方，画布的其余功能均可正常使用。",
-        "navigateHint": "拖动环视四周 · 右键拖动或双指移动 · 滚动缩放 · 拖动会话来摆放，点按打开",
+        "navigateHint": "拖动环视四周 · 右键拖动或双指移动 · 滚动缩放 · 拖动会话来移动它",
         "session": {
-          "caption": "会话",
-          "groupLabel": "会议室中的会话",
           "open": "打开会话",
+          "openButton": "打开",
           "minimize": "最小化",
           "minimizeHint": "把会话放回会议室",
           "close": "关闭",
           "closeHint": "返回画板",
           "objects": "{count, plural, =0 {没有对象} other {# 个对象}}",
-          "hint": "{count, plural, =0 {空 · 拖动摆放，点按打开} other {# 个对象 · 拖动摆放，点按打开}}",
-          "placeLabel": "会话的位置",
-          "place": {
-            "table": "放在桌上",
-            "floor": "放在地上",
-            "wall": "挂在墙上"
-          }
+          "hint": "{count, plural, =0 {空 · 拖动移动} other {# 个对象 · 拖动移动}}"
         }
       },
       "page": {
@@ -23074,6 +23051,9 @@
     "sharedCallLabel": "共享会话",
     "startCall": "发起通话",
     "startCallTitle": "就此画布发起通话",
+    "startStandup": "开始站会",
+    "finishStandup": "结束站会",
+    "startStandupTitle": "与此画布上的所有人开始站会",
     "northStar": "北极星指标",
     "proveThisIdea": "变为现实",
     "proveThisIdeaTitle": "把这块画布上的想法交给验证形式选择器，并开始度量它",

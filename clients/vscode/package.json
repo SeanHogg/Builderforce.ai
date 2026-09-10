@@ -839,5 +839,10 @@
     "vitest": "^4.0.3",
     "xlsx": "^0.18.5"
   },
-  "dependencies": {}
+  "dependencies": {},
+  "pnpm": {
+    "overrides": {
+      "sharp": "0.35.4"
+    }
+  }
 }

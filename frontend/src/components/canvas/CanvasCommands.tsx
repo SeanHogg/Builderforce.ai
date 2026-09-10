@@ -260,6 +260,17 @@ export function StartCallIcon() {
   </svg>;
 }
 
+/** Start a standup: a ring of people around a point — the circle the room seats,
+ *  not the headset {@link StartCallIcon} draws. A standup is a shape people make. */
+export function StandupIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx="8" cy="8" r="1.4" fill="currentColor" />
+    <circle cx="8" cy="2.6" r="1.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    <circle cx="13" cy="10.9" r="1.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    <circle cx="3" cy="10.9" r="1.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
+  </svg>;
+}
+
 /** Record a narrated walkthrough: a record dot inside the board's own frame.
  *  Deliberately NOT the headset {@link StartCallIcon} draws — a call is people
  *  talking to each other, a talktrack is one person recording the board. */

@@ -22554,22 +22554,6 @@
         "openFull": "Ouvrir le tableau de bord complet"
       },
       "room": {
-        "standup": {
-          "caption": "Point quotidien",
-          "groupLabel": "Commandes du point quotidien",
-          "projectLabel": "Projet concerné par ce point",
-          "allProjects": "Tous les projets",
-          "projectFallback": "Projet {id}",
-          "previous": "Projet précédent",
-          "next": "Projet suivant",
-          "start": "Démarrer le point",
-          "starting": "Démarrage…",
-          "live": "En cours · {project}",
-          "finish": "Terminer",
-          "finishing": "Clôture…",
-          "needsProject": "Choisissez un projet pour enregistrer ce point",
-          "dismiss": "Masquer"
-        },
         "label": "Salle",
         "enter": "Se retrouver dans la salle, la session posée sur la table",
         "active": "Vous êtes dans la salle",
@@ -22582,23 +22566,16 @@
         "onBoard": "Sur le tableau",
         "noWebglTitle": "La 3D n'est pas disponible sur cet appareil",
         "noWebglBody": "La salle nécessite WebGL, que ce navigateur ne parvient pas à démarrer. Toutes les personnes présentes dans la session sont listées ci-dessous, et le reste du canevas fonctionne normalement.",
-        "navigateHint": "Glissez pour regarder autour · clic droit ou deux doigts pour vous déplacer · molette pour zoomer · glissez la session pour la placer, appuyez pour l'ouvrir",
+        "navigateHint": "Glissez pour regarder autour · clic droit ou deux doigts pour vous déplacer · molette pour zoomer · glissez la session pour la déplacer",
         "session": {
-          "caption": "Session",
-          "groupLabel": "La session dans la salle",
           "open": "Ouvrir la session",
+          "openButton": "Ouvrir",
           "minimize": "Réduire",
           "minimizeHint": "Remettre la session dans la salle",
           "close": "Fermer",
           "closeHint": "Retour au tableau",
           "objects": "{count, plural, =0 {aucun objet} one {# objet} other {# objets}}",
-          "hint": "{count, plural, =0 {Vide · glissez pour placer, appuyez pour ouvrir} one {# objet · glissez pour placer, appuyez pour ouvrir} other {# objets · glissez pour placer, appuyez pour ouvrir}}",
-          "placeLabel": "Où se trouve la session",
-          "place": {
-            "table": "Sur la table",
-            "floor": "Au sol",
-            "wall": "Au mur"
-          }
+          "hint": "{count, plural, =0 {Vide · glissez pour déplacer} one {# objet · glissez pour déplacer} other {# objets · glissez pour déplacer}}"
         }
       },
       "page": {
@@ -23074,6 +23051,9 @@
     "sharedCallLabel": "Session partagée",
     "startCall": "Démarrer un appel",
     "startCallTitle": "Démarrer un appel à propos de ce canevas",
+    "startStandup": "Lancer le stand-up",
+    "finishStandup": "Terminer le stand-up",
+    "startStandupTitle": "Lancer un stand-up avec tout le monde sur ce canevas",
     "northStar": "Étoile polaire",
     "proveThisIdea": "Rendre réel",
     "proveThisIdeaTitle": "Confier l'idée de ce tableau au sélecteur de preuves et commencer à la mesurer",

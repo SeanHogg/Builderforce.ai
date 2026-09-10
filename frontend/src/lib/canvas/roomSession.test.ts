@@ -4,7 +4,7 @@ import { CANVAS_3D_LAYER_GAP } from '@/components/canvas/canvas3d';
 import { ROOM_FLOOR_SIZE, ROOM_TABLE_HEIGHT, ROOM_TABLE_RADIUS, ROOM_WALL_Z } from './roomSeating';
 import {
   DEFAULT_ROOM_SESSION_SPOT, ROOM_SESSION_FOOTPRINT, ROOM_SESSION_LAYER_STEP,
-  ROOM_SESSION_PREVIEW_CAPACITY, ROOM_SESSION_SPOTS, ROOM_SESSION_WALL_HEIGHT,
+  ROOM_SESSION_PREVIEW_CAPACITY, ROOM_SESSION_WALL_HEIGHT,
   placeSessionInRoom, readRoomSessionSpot, roomSessionDiorama, writeRoomSessionSpot,
 } from './roomSession';
 
@@ -54,10 +54,7 @@ describe('placeSessionInRoom', () => {
     expect(placeSessionInRoom({ x: Number.NaN, z: Number.NaN }).anchor).toBe('table');
   });
 
-  it('offers one named spot per anchor, each of which round-trips to its own anchor', () => {
-    for (const [anchor, spot] of Object.entries(ROOM_SESSION_SPOTS)) {
-      expect(placeSessionInRoom(spot).anchor).toBe(anchor);
-    }
+  it('starts a session on the table', () => {
     expect(placeSessionInRoom(DEFAULT_ROOM_SESSION_SPOT).anchor).toBe('table');
   });
 });

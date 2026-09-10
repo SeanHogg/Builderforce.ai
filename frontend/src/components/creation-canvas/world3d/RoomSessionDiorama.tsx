@@ -13,7 +13,7 @@ import { SurfacePanel } from './SurfacePanel';
 
 /**
  * THE SESSION, IN THE ROOM — the board's depth projection, small enough to sit on
- * a table, that you drag to where you want it and press to open.
+ * a table, that you drag to wherever you want it and open from its own button.
  *
  * ── WHAT IT IS, AND WHAT IT IS NOT ───────────────────────────────────────────
  * It is the same {@link Canvas3DScene} the full-size 3D view draws, at a distance:
@@ -21,16 +21,16 @@ import { SurfacePanel } from './SurfacePanel';
  * own picture. It is NOT a second layout of the board — `roomSessionDiorama` scales
  * the projection and this file turns metres into meshes, nothing more.
  *
- * ── WHY A DRAG AND A PRESS ARE ONE GESTURE ───────────────────────────────────
- * Pointer down starts a drag; the diorama follows the pointer across the floor
- * plane and {@link placeSessionInRoom} decides, per frame, whether it is on the
- * table, the floor or the wall. Pointer up without travel is a press, which opens
- * the session. One handler, one slop threshold, and no separate "open" hotspot
- * that a person has to find on a thing the size of a tray.
+ * ── WHY DRAG AND OPEN ARE TWO CONTROLS ───────────────────────────────────────
+ * They were one gesture — press to open, travel to drag — and a press that had
+ * wobbled a few pixels silently became a move. The item now carries its own OPEN
+ * button, on the caption above it, and every pointer on the body is a drag. Two
+ * things you can do, two things you can see.
+ *
+ * Dragging follows the pointer across the floor plane; {@link placeSessionInRoom}
+ * decides, per frame, whether the item is on the table, the floor or the wall.
  */
 
-/** Pointer travel, in pixels, past which a gesture is a drag and not a press. */
-const PRESS_SLOP = 4;
 /** Extra plate around the sheet so the base reads as a base and not as a card. */
 const PLATE_PAD = 0.08;
 const FLOOR = new Plane(new Vector3(0, 1, 0), 0);
@@ -39,18 +39,18 @@ export interface RoomSessionDioramaProps {
   scene: Canvas3DScene;
   placement: RoomSessionPlacement;
   palette: RoomPalette;
-  /** The caption over it — the session's own name, and what pressing does. Translated by the host. */
+  /** The caption over it. Translated by the host. */
   title: string;
   hint: string;
+  /** The Open button's own label. Translated by the host. */
+  openLabel: string;
   onPlace: (spot: RoomSessionSpot) => void;
   onOpen: () => void;
   /** Reported so the room can hold the camera still while the session travels. */
   onDragChange: (dragging: boolean) => void;
 }
 
-type Drag = { pointerId: number; startX: number; startY: number; moved: boolean };
-
-export function RoomSessionDiorama({ scene, placement, palette, title, hint, onPlace, onOpen, onDragChange }: RoomSessionDioramaProps) {
+export function RoomSessionDiorama({ scene, placement, palette, title, hint, openLabel, onPlace, onOpen, onDragChange }: RoomSessionDioramaProps) {
   const diorama = useMemo(() => roomSessionDiorama(scene), [scene]);
   const [hovered, setHovered] = useState(false);
   // The hand cursor says "this can be picked up" before anything is pressed. Set on the
@@ -62,32 +62,27 @@ export function RoomSessionDiorama({ scene, placement, palette, title, hint, onP
     document.body.style.cursor = 'grab';
     return () => { document.body.style.cursor = previous; };
   }, [hovered]);
-  const drag = useRef<Drag | null>(null);
+  const dragPointer = useRef<number | null>(null);
   const hit = useRef(new Vector3());
 
   const onPointerDown = (event: ThreeEvent<PointerEvent>) => {
     if (event.button !== 0) return;
     event.stopPropagation();
     (event.target as Element).setPointerCapture(event.pointerId);
-    drag.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, moved: false };
+    dragPointer.current = event.pointerId;
     onDragChange(true);
   };
   const onPointerMove = (event: ThreeEvent<PointerEvent>) => {
-    const current = drag.current;
-    if (!current || current.pointerId !== event.pointerId) return;
+    if (dragPointer.current !== event.pointerId) return;
     event.stopPropagation();
-    if (!current.moved && Math.hypot(event.clientX - current.startX, event.clientY - current.startY) < PRESS_SLOP) return;
-    current.moved = true;
     if (event.ray.intersectPlane(FLOOR, hit.current)) onPlace({ x: hit.current.x, z: hit.current.z });
   };
   const onPointerUp = (event: ThreeEvent<PointerEvent>) => {
-    const current = drag.current;
-    if (!current || current.pointerId !== event.pointerId) return;
+    if (dragPointer.current !== event.pointerId) return;
     event.stopPropagation();
     (event.target as Element).releasePointerCapture(event.pointerId);
-    drag.current = null;
+    dragPointer.current = null;
     onDragChange(false);
-    if (!current.moved) onOpen();
   };
 
   // The caption is DOM over the canvas, placed in WORLD space above whatever the
@@ -128,16 +123,19 @@ export function RoomSessionDiorama({ scene, placement, palette, title, hint, onP
         position={[placement.position[0], placement.position[1] + captionLift, placement.position[2]]}
         center
         distanceFactor={9}
-        pointerEvents="none"
         zIndexRange={[10, 0]}
       >
         <span
           data-testid="room-session-caption"
+          // A pointer that lands on the caption must not start a drag of the body
+          // under it — and R3F never sees it, because the caption is DOM.
+          onPointerDown={(event) => event.stopPropagation()}
           style={{
-            display: 'block',
-            maxWidth: 220,
-            textAlign: 'center',
-            padding: '3px 9px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            maxWidth: 260,
+            padding: '3px 3px 3px 9px',
             borderRadius: 'var(--radius-sm)',
             fontSize: 'var(--font-size-small)',
             lineHeight: 1.4,
@@ -145,12 +143,31 @@ export function RoomSessionDiorama({ scene, placement, palette, title, hint, onP
             color: 'var(--text-primary, #f5f5f5)',
             border: '1px solid var(--border, #333)',
             whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
           }}
         >
-          <strong style={{ fontWeight: 600 }}>{title}</strong>
-          <span style={{ display: 'block', color: 'var(--text-secondary, #a0a0a0)', fontSize: 'var(--font-size-eyebrow)' }}>{hint}</span>
+          <span style={{ display: 'block', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <strong style={{ fontWeight: 600 }}>{title}</strong>
+            <span style={{ display: 'block', color: 'var(--text-secondary, #a0a0a0)', fontSize: 'var(--font-size-eyebrow)' }}>{hint}</span>
+          </span>
+          <button
+            type="button"
+            data-testid="room-session-open"
+            onClick={onOpen}
+            style={{
+              flex: '0 0 auto',
+              minHeight: 28,
+              padding: '0 10px',
+              border: '1px solid var(--accent, #6d5dfc)',
+              borderRadius: 6,
+              background: 'var(--surface, #1a1a1a)',
+              color: 'var(--text-primary, #f5f5f5)',
+              fontSize: 'var(--font-size-small)',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            {openLabel}
+          </button>
         </span>
       </Html>
     </>
