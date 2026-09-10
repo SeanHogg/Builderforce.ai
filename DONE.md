@@ -1,3 +1,47 @@
+## ✅ RESOLVED 2026-09-10 — The canvas bar's sheets could trap you: both now carry a way out
+
+The ••• board sheet had no close control. It was dismissed only by pressing the
+button that opened it — which the sheet itself sits on top of — or by choosing a row
+that happened to close it, and most of what that sheet holds deliberately does NOT:
+the view trough is a set you press repeatedly (a menu that shuts under the second
+zoom is a menu you cannot zoom with), and the four connector controls are `<select>`s
+you come back to. So a person who opened it to change a line style had nothing in
+front of them that said "done".
+
+### What changed
+
+- **`CanvasMenuSheet.tsx`** is the bar's sheet: its header, its name, its close
+  button, and its Escape. Both sheets were open-coded `.moreMenu` divs inside
+  `CreationCanvas.tsx`; they are one component now, so a third sheet gets a way out
+  by being a sheet rather than by somebody remembering. The Escape listener is
+  registered on `document` in the CAPTURE phase and stops there, because the board
+  clears its selection on Escape from a `window` listener — one press must not be two
+  undos.
+- **It takes the sheet's NAME, not a close label.** The button's accessible name is
+  built from it through one parameterised key (`creationCanvas.closeMenu`, in all
+  five catalogs), so a caller cannot ship a sheet whose close button says something
+  other than what it closes, and a per-sheet key is not needed for the next one.
+- **`PanelCloseButton` is deliberately not reused**, and the component records why:
+  it is drawn in the SHELL's palette at 36px, and this sheet is on the board, which
+  declares its own `--canvas-*` family and sets its rows in 11px. The convention it
+  carries — dismiss at the top right, one place, every surface — is honoured.
+- `useClientFiles` 973 → 974, argued in `check-frontend-architecture.mjs` on the
+  `PanelCloseButton` terms. It is a net reduction in hand-written chrome.
+
+### A committed test failure found and fixed on the way
+
+`canvasSessionActions.test.ts` was red in `main`: the registry declared 15 actions
+but only 14 unique orders. `standup` arrived in `5de36f1d4` and took `order: 43`,
+which `prove` had held since `387388f4e`. Two actions with one order means their
+position on the bar depends on declaration order rather than on the number that is
+supposed to decide it. `standup` keeps 43 (it is an icon following `call` at 42) and
+the two doors shift to 44 and 45, which keeps them last. `npm test` runs `check &&
+vitest`, so this would have failed the next deploy on its own.
+
+Verified: 13/13 in `canvasSessionActions.test.tsx` including a new case that closes
+each sheet from its header and closes the ••• sheet with Escape; `tsgo --noEmit` clean;
+`npm run check` 22/22.
+
 ## ✅ RESOLVED 2026-09-10 — The frontend ratchets now run when a file is written, not when CI fails
 
 Three deploys in a row went red on the same class of thing, each caught only by

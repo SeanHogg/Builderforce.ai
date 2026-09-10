@@ -312,7 +312,7 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   //
   // It needs OBJECTS for the same reason the scorecard does: proving a conversation with
   // nothing on it has nothing to prove.
-  { id: 'prove', cluster: 'reach', order: 43, chrome: 'door', state: 'none', phone: 'menu', labelKey: 'proveIt', titleKey: 'proveThisIdeaTitle', needs: 'objects' },
+  { id: 'prove', cluster: 'reach', order: 44, chrome: 'door', state: 'none', phone: 'menu', labelKey: 'proveIt', titleKey: 'proveThisIdeaTitle', needs: 'objects' },
   // PUBLISH puts the result where strangers can reach it. It is here from the first
   // second of a session, before there is anything worth publishing, and that is the
   // point: it was previously reachable ONLY through `SellInMarketplace` in a selected
@@ -320,7 +320,7 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // commerce, and invisible until you had clicked the right card. It opens the SAME
   // release lifecycle that button does — one gate, two doors — scoped to the whole board,
   // which is the scope an application actually has.
-  { id: 'publish', cluster: 'reach', order: 44, chrome: 'door', state: 'expanded', phone: 'menu', labelKey: 'publishCanvas', titleKey: 'publishCanvasTitle' },
+  { id: 'publish', cluster: 'reach', order: 45, chrome: 'door', state: 'expanded', phone: 'menu', labelKey: 'publishCanvas', titleKey: 'publishCanvasTitle' },
 
   // ── BOARD · not a stage, and that is the point ──────────────────────────────────
   // Full screen answers no stage's question — it is done to the board, not to the work —

@@ -309,6 +309,38 @@ describe('the session actions on the canvas', () => {
     expect(screen.queryByTestId('canvas-more-menu')).toBeNull();
     expect(screen.getByRole('complementary', { name: 'Session outcome metrics' })).toBeInTheDocument();
   });
+
+  /**
+   * THE WAY OUT OF A SHEET THAT MOSTLY DOES NOT CLOSE.
+   *
+   * Most of what the ••• sheet holds deliberately leaves it open — the view trough is
+   * pressed repeatedly, and the connector selects are returned to — so a person who
+   * opened it to change a line style had nothing in front of them that said "done", and
+   * the button that would have closed it was underneath the sheet they were reading.
+   * Both bar sheets carry the same header now, because it belongs to being a sheet.
+   */
+  it('closes either bar sheet from its own header, and on Escape', () => {
+    render(<CreationCanvas sessionId="session-actions-sheet-close-test" persistence="local" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'More session actions' }));
+    const sheet = screen.getByTestId('canvas-more-menu');
+    // The close button names what it closes rather than saying "Close".
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Close More session actions' }));
+    expect(screen.queryByTestId('canvas-more-menu')).toBeNull();
+
+    // Escape leaves the sheet WITHOUT reaching the board's own Escape, which clears the
+    // selection — one press must not be two undos.
+    fireEvent.click(screen.getByRole('button', { name: 'More session actions' }));
+    expect(screen.getByTestId('canvas-more-menu')).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('canvas-more-menu')).toBeNull();
+
+    // The same header on the other sheet, so a second sheet cannot ship without a way out.
+    fireEvent.click(screen.getByTestId('canvas-make-it-real'));
+    const doors = screen.getByTestId('canvas-make-it-real-menu');
+    fireEvent.click(within(doors).getByRole('button', { name: 'Close Make it real' }));
+    expect(screen.queryByTestId('canvas-make-it-real-menu')).toBeNull();
+  });
 });
 
 describe('the board rail', () => {

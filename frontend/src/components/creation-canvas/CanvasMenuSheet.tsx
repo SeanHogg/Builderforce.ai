@@ -33,6 +33,17 @@ import styles from './CreationCanvas.module.css';
  * It takes the sheet's NAME rather than a close label: the accessible name of
  * the button is derived from it, so a caller cannot ship a sheet whose close
  * button says something other than what it closes.
+ *
+ * ── WHY NOT `PanelCloseButton` ────────────────────────────────────────────────
+ * That primitive is the one way out of a SLIDE-OUT PANEL, and it is right there:
+ * same corner, same job. It is not reused here because it is drawn in the
+ * SHELL's palette (`--bg-base`, `--border-subtle`, `--text-secondary`) at 36px,
+ * and this sheet is on the board, which declares its own `--canvas-*` family and
+ * sets its rows in 11px. Borrowing it would put a control the shell's colour and
+ * half again the height of everything around it inside a 250px sheet — the same
+ * mismatch the canvas palette exists to prevent. The convention it carries is
+ * the part worth keeping, and this honours it: dismiss lives at the top right,
+ * in one place, for every sheet.
  */
 export interface CanvasMenuSheetProps {
   /** Accessible name of the sheet, and the noun its close button is built from. */

@@ -30,6 +30,19 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   973 → 974 (`useClientFiles`, 2026-09-10) — `components/creation-canvas/CanvasMenuSheet.tsx`,
+ *   THE popover the canvas bar opens and the ONE way out of it. Both bar sheets were
+ *   dismissed only by pressing the button that opened them — which the sheet itself
+ *   covers — or by choosing a row that happened to close them, and most of what the
+ *   ••• sheet holds deliberately does not: the view trough is pressed repeatedly, and
+ *   the connector selects are returned to. So a sheet could trap you. Argued on the
+ *   `PanelCloseButton` terms (967 → 968): a shared reuse surface carries its own
+ *   boundary rather than inheriting one, and it binds a `keydown` effect and reads
+ *   `useTranslations`, so it could not be a Server Component. The +1 is a net
+ *   REDUCTION in hand-written chrome — both sheets were open-coded `.moreMenu`
+ *   divs in `CreationCanvas.tsx` and are now one component, so a third sheet gets a
+ *   way out by being a sheet rather than by somebody remembering.
+ *
  *   972 → 973 (`useClientFiles`, 2026-09-09) — `components/ui/ModalOverlay.tsx`, THE
  *   centred overlay every modal in the app now stands in. Four surfaces had each
  *   hand-written the same chrome (`.modal-overlay`, `role="dialog"`, the
