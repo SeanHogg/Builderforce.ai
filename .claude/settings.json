@@ -16,5 +16,21 @@
       "PowerShell(Get-ChildItem \"c:\\\\code\\\\agentic\\\\Builderforce.ai\\\\api\\\\migrations\" | Sort-Object Name -Descending | Select-Object -First 8 | ForEach-Object { $_.Name })"
     ],
     "defaultMode": "bypassPermissions"
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/frontend-ratchets.mjs\"",
+            "asyncRewake": true,
+            "timeout": 120,
+            "statusMessage": "Checking frontend ratchets"
+          }
+        ]
+      }
+    ]
   }
 }

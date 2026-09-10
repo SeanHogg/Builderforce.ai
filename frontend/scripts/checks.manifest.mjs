@@ -1,3 +1,5 @@
+import EDIT_RATCHETS from './edit-ratchets.manifest.mjs';
+
 /**
  * The guards `npm test` runs before vitest, as [reporting name, script, ...args].
  * Paths are relative to this file. Run by `../scripts/run-checks.mjs`, which owns
@@ -7,11 +9,12 @@
  * chain, so adding a guard is one line here.
  */
 export default [
+  // The fast, file-local ratchets, spread from their ONE declaration so this list
+  // and the PostToolUse hook can never disagree about what they are.
+  ...EDIT_RATCHETS,
   ['check:api-transport', 'check-api-transport.mjs'],
   ['check:architecture', 'check-frontend-architecture.mjs'],
-  ['check:design-tokens', 'check-design-tokens.mjs'],
   ['check:destinations', 'check-destinations.mjs'],
-  ['check:design-scale', 'check-design-scale.mjs'],
   ['check:container-queries', 'check-container-queries.mjs'],
   ['check:edge-runtime', 'check-edge-runtime.mjs'],
   ['check:i18n-keys', 'check-i18n-keys.mjs'],
@@ -24,14 +27,7 @@ export default [
   ['check:canvas-kind-labels', 'check-canvas-kind-labels.mjs'],
   ['check:layering', 'check-layering.mjs'],
   ['check:root-closure', 'check-root-closure.mjs'],
-  // Raw localStorage/sessionStorage sites may only shrink — see lib/storage.ts.
-  ['check:raw-storage', 'check-raw-storage.mjs'],
-  // window.confirm/prompt/alert: zero, not a ratchet — the app has its own doors.
-  ['check:native-dialogs', 'check-native-dialogs.mjs'],
   ['check:primitives', 'check-primitive-duplication.mjs'],
-  // The repo-wide silent-catch ratchet, narrowed to this package's tree so the
-  // cost stays local. The full sweep runs in api's chain.
-  ['check:silent-catches', '../../scripts/check-silent-catches.mjs', '--target', 'frontend/src'],
   // `--changed`, not a full sweep: four of the six rules run the React Compiler,
   // so all 2,071 files cost ~10 minutes and a single component costs ~17s. The
   // cost here is proportional to the diff, and a change touching no component

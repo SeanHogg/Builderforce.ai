@@ -1,3 +1,59 @@
+## ✅ RESOLVED 2026-09-10 — The frontend ratchets now run when a file is written, not when CI fails
+
+Three deploys in a row went red on the same class of thing, each caught only by
+CI: an empty catch and a raw `localStorage` (`ff4a20bd7`), then an off-scale
+radius (`ec90e8bfa` — `borderRadius: 6` on the diorama's open button, now
+`var(--radius-sm)`). Every one of them is caught locally in about four seconds.
+
+The rules were never missing. They were written down as advice — a wall of
+`UserPromptSubmit` echoes injected into every turn — and advice is something you
+can be holding and still not apply. `.claude/hooks/` was empty and `hooks` was
+null in the project settings, so nothing in the repo actually RAN a ratchet at
+edit time.
+
+### What changed
+
+- **`.claude/hooks/frontend-ratchets.mjs`** runs the fast ratchets after any
+  write under `frontend/src` and reports a regression back with the failing
+  guard's own output. Declared `asyncRewake` in `.claude/settings.json`: the
+  write is never blocked (the set costs ~4.5s, dominated by the silent-catch
+  sweep), and only a REGRESSION interrupts. Nothing is paid when nothing is
+  wrong. It fails OPEN — an unreadable payload, a file outside the tree, a
+  runner that cannot start all exit silently, because a hook that fails closed
+  on its own bugs is a hook that gets uninstalled.
+- **`frontend/scripts/edit-ratchets.manifest.mjs`** is the ONE declaration of
+  which ratchets are the fast, file-local ones. `checks.manifest.mjs` imports and
+  spreads it instead of restating the five entries, so the hook and `npm test`
+  cannot drift into disagreeing about the set.
+
+### Two guard bugs found while doing it
+
+- **`check-design-scale.mjs` reported the wrong line for every finding.** It
+  strips comments into `text` and then derives line numbers from offsets into
+  that stripped string, so each comment line above a finding silently subtracted
+  one: the literal on line 161 of a heavily-commented file was reported as line
+  139 — a different, innocent line. Comments are now BLANKED rather than deleted,
+  which preserves both line structure and byte offsets, and cannot fabricate a
+  match by joining the text either side of a comment the way deletion can. Every
+  tally is unchanged; the reported line is now 161. The four sibling guards that
+  strip comments the same way were checked and report no line numbers, so the
+  defect was this file's alone.
+- **The hook's own path check was case-blind to Windows drive letters.** This
+  session has been told its working directory as both `c:\code\...` and
+  `C:\code\...`; a plain `startsWith` against a self-derived path would have
+  matched nothing and passed every edit while checking nothing. Caught by testing
+  both spellings before wiring it up.
+
+Verified: the hook is silent and exits 0 on a clean file, on a file outside the
+tree and on a malformed payload; it exits 2 with the full guard report on a
+deliberately introduced off-scale radius, in BOTH drive-letter spellings; and
+`frontend` `npm run check` is 22/22 with the refactored manifest.
+
+*One step outstanding: the running session's config had not picked up the new
+`hooks` block when tested (the sentinel never appeared), so the hook is written
+and validated but not yet live in this session. Opening `/hooks` once, or
+restarting, loads it — neither can be done from inside a turn.*
+
 ## ✅ RESOLVED 2026-09-10 — `webdit` is pnpm like the rest of the repo: the npm workspace over it is gone
 
 `webdit` was installed by two package managers at once. The root was an npm workspace
