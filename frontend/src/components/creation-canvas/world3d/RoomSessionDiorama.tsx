@@ -158,7 +158,7 @@ export function RoomSessionDiorama({ scene, placement, palette, title, hint, ope
               minHeight: 28,
               padding: '0 10px',
               border: '1px solid var(--accent, #6d5dfc)',
-              borderRadius: 6,
+              borderRadius: 'var(--radius-sm)',
               background: 'var(--surface, #1a1a1a)',
               color: 'var(--text-primary, #f5f5f5)',
               fontSize: 'var(--font-size-small)',

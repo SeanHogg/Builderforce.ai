@@ -604,7 +604,18 @@ const columnLiterals = [];
 for (const file of files) {
   const rel = relative(srcDir, file).split('\\').join('/');
   const raw = readFileSync(file, 'utf8');
-  const text = raw.replace(BLOCK_COMMENT, '').replace(LINE_COMMENT, '');
+  // BLANKED, not deleted. Every line this guard reports is derived from an offset
+  // into `text` (`text.slice(0, match.index).split('\n').length`), so deleting a
+  // comment silently subtracts its lines from every number after it: a literal on
+  // line 161 of a file with 22 comment lines above it was reported as line 139,
+  // which is a different, innocent line. That is the exact failure the per-file
+  // tally exists to prevent — a report that names something other than what broke
+  // the build. Replacing each comment character with a space keeps both the line
+  // structure and the byte offsets, so the offsets stay true with no other change,
+  // and it cannot fabricate a match by joining the text on either side of a comment
+  // the way deletion can.
+  const blank = (match) => match.replace(/[^\n]/g, ' ');
+  const text = raw.replace(BLOCK_COMMENT, blank).replace(LINE_COMMENT, blank);
   // Blank character references before looking for colours — see CHARACTER_REFERENCE.
   const colourText = text.replace(CHARACTER_REFERENCE, ' ');
 
