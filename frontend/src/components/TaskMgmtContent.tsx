@@ -1,6 +1,7 @@
 'use client';
 
 import { Icon } from '@/components/ui/Icon';
+import { ModalOverlay } from '@/components/ui/ModalOverlay';
 import type { Formatter } from '@/i18n/format';
 import { Select } from '@/components/Select';
 
@@ -2731,12 +2732,7 @@ export function TaskMgmtContent({
       {effectiveProjectId != null && ceremony && (
         // Full-screen ceremony overlay over the board. On close we reload tasks so
         // any drag-assign / group / schedule done at the table shows on the board.
-        <div
-          className="modal-overlay"
-          role="dialog"
-          aria-modal="true"
-          style={{ position: 'fixed', inset: 0, zIndex: 10000, padding: 24 }}
-        >
+        <ModalOverlay label={effectiveProjectName || 'Ceremony'} style={{ zIndex: 10000 }}>
           <div
             style={{
               width: '100%',
@@ -2759,7 +2755,7 @@ export function TaskMgmtContent({
               onClose={() => { setCeremony(null); void load({ background: true }); }}
             />
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
     </AssigneeProfilesProvider>

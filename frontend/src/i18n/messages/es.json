@@ -22505,9 +22505,7 @@
         "active": "Estás en el tablero"
       },
       "scene3d": {
-        "label": "Espacio 3D",
-        "enter": "Ver este lienzo en 3D",
-        "active": "Salir de 3D",
+        "label": "Escena IA",
         "open": "Abrir la escena IA"
       },
       "app": {
@@ -22573,7 +22571,7 @@
           "dismiss": "Descartar"
         },
         "label": "Sala",
-        "enter": "Reunirse en la sala",
+        "enter": "Reunirse en la sala, con la sesión sobre la mesa",
         "active": "Estás en la sala",
         "regionLabel": "La sala de esta sesión",
         "here": "{here} de {total} presentes",
@@ -22584,7 +22582,24 @@
         "onBoard": "En el tablero",
         "noWebglTitle": "El 3D no está disponible en este dispositivo",
         "noWebglBody": "La sala necesita WebGL y este navegador no puede iniciarlo. Abajo aparece todo el mundo que está en la sesión, y el resto del lienzo funciona con normalidad.",
-        "wallOverflow": "{count, plural, one {Hay # objeto más que no está en la pared} other {Hay # objetos más que no están en la pared}}"
+        "navigateHint": "Arrastra para mirar alrededor · botón derecho o dos dedos para desplazarte · rueda para acercar · arrastra la sesión para colocarla, púlsala para abrirla",
+        "session": {
+          "caption": "Sesión",
+          "groupLabel": "La sesión en la sala",
+          "open": "Abrir la sesión",
+          "minimize": "Minimizar",
+          "minimizeHint": "Devolver la sesión a la sala",
+          "close": "Cerrar",
+          "closeHint": "Volver al tablero",
+          "objects": "{count, plural, =0 {sin objetos} one {# objeto} other {# objetos}}",
+          "hint": "{count, plural, =0 {Vacía · arrastra para colocar, pulsa para abrir} one {# objeto · arrastra para colocar, pulsa para abrir} other {# objetos · arrastra para colocar, pulsa para abrir}}",
+          "placeLabel": "Dónde está la sesión",
+          "place": {
+            "table": "Sobre la mesa",
+            "floor": "En el suelo",
+            "wall": "En la pared"
+          }
+        }
       },
       "page": {
         "label": "Página",

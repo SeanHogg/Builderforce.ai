@@ -39,9 +39,11 @@ describe('canvas surface registry', () => {
     // The board is the default, and it is the only surface that draws one.
     expect(canvasSurfaceDefinition(DEFAULT_CANVAS_SURFACE).showsBoard).toBe(true);
     expect(CANVAS_SURFACES.filter((def) => def.showsBoard).map((def) => def.id)).toEqual(['graph']);
-    // "no flat board" and "no objects" are different questions — the 3D space answers
-    // them differently, which is why the chrome that asks them reads two flags.
-    expect(CANVAS_SURFACES.filter((def) => def.showsObjects).map((def) => def.id)).toEqual(['graph', 'scene3d']);
+    // "no flat board" and "no objects" are different questions, which is why the chrome
+    // that asks them reads two flags. Only the board answers the second one statically:
+    // the room's session is a read-only diorama until it is opened, and the open
+    // projection reports itself by publishing its controls rather than by a flag here.
+    expect(CANVAS_SURFACES.filter((def) => def.showsObjects).map((def) => def.id)).toEqual(['graph']);
   });
 
   /**
@@ -58,8 +60,12 @@ describe('canvas surface registry', () => {
     // ONE `poll` in front of a room, with that poll's own join address and live tally.
     // `calendar` is the seventh and arrived the OTHER way: it was a board surface first,
     // and moved here when the month stopped being a mode and became an object.
+    // `scene3d` is the eighth and arrived the way `calendar` did: it was the rail's "3D
+    // space", forking on whether a `scene` object was bound. The board's projection moved
+    // into the room, and what was left — the AI scene's generation panel — is the
+    // surface of ONE object, entered from its card.
     // The properties BELOW are what this test is actually for; the list is the roll call.
-    expect(objectScoped.map((def) => def.id)).toEqual(['page', 'play', 'site', 'timeline', 'world', 'facilitate', 'calendar']);
+    expect(objectScoped.map((def) => def.id)).toEqual(['page', 'play', 'site', 'timeline', 'world', 'scene3d', 'facilitate', 'calendar']);
     // None persists: a page cannot be reopened without knowing which page.
     expect(objectScoped.every((def) => !def.persist)).toBe(true);
     // None draws the board or its objects — each is about exactly one.
@@ -70,10 +76,10 @@ describe('canvas surface registry', () => {
     // cannot point one at the meetings, releases, holidays or connected accounts whose
     // dates already existed. The reading became a value on a `calendar` OBJECT, so the
     // month is entered from the card that IS it, like every other object surface.
-    // `room` IS here, and it is the newest thing on this list that had to argue for it:
-    // its subject is the session's ROSTER, which is about the whole board and has no card
-    // to be entered from — the same argument `app` and `insights` each make.
-    expect(boardCanvasSurfaces().map((def) => def.id)).toEqual(['chat', 'graph', 'scene3d', 'app', 'insights', 'room']);
+    // `room` IS here, in the slot "3D space" used to hold, because it absorbed it: the
+    // session is a thing placed IN the room and opened from there, so the rail offers
+    // one spatial surface rather than two readings of the same board.
+    expect(boardCanvasSurfaces().map((def) => def.id)).toEqual(['chat', 'graph', 'room', 'app', 'insights']);
   });
 
   /**
@@ -143,22 +149,22 @@ describe('canvas surface registry', () => {
     expect(window.localStorage.getItem(CANVAS_SURFACE_STORAGE_KEY)).toBe('chat');
     expect(readCanvasSurface()).toBe('chat');
 
-    writeCanvasSurface('scene3d');
-    // Unwritten, so the last PLACE survives rather than being overwritten by a reading.
+    writeCanvasSurface('room');
+    // Unwritten, so the last PLACE survives rather than being overwritten by a moment.
     expect(window.localStorage.getItem(CANVAS_SURFACE_STORAGE_KEY)).toBe('chat');
 
-    window.localStorage.setItem(CANVAS_SURFACE_STORAGE_KEY, 'scene3d');
+    window.localStorage.setItem(CANVAS_SURFACE_STORAGE_KEY, 'room');
     expect(readCanvasSurface()).toBe(DEFAULT_CANVAS_SURFACE);
   });
 });
 
 describe('CanvasSurfaceRouter', () => {
   it('mounts the surface for the active id and nothing at all for the board', () => {
-    const surfaces = { chat: <p>conversation</p>, scene3d: <p>space</p> };
+    const surfaces = { chat: <p>conversation</p>, room: <p>space</p> };
     const { container, rerender } = render(<CanvasSurfaceRouter surface="chat" surfaces={surfaces} />);
     expect(container.textContent).toBe('conversation');
 
-    rerender(<CanvasSurfaceRouter surface="scene3d" surfaces={surfaces} />);
+    rerender(<CanvasSurfaceRouter surface="room" surfaces={surfaces} />);
     expect(container.textContent).toBe('space');
 
     // The board is the React Flow tree the host always renders; there is nothing to
@@ -168,7 +174,7 @@ describe('CanvasSurfaceRouter', () => {
   });
 
   it('falls back to the board when a declared surface has no runtime yet', () => {
-    const { container } = render(<CanvasSurfaceRouter surface="scene3d" surfaces={{ chat: <p>conversation</p> }} />);
+    const { container } = render(<CanvasSurfaceRouter surface="room" surfaces={{ chat: <p>conversation</p> }} />);
     expect(container.textContent).toBe('');
   });
 });
@@ -264,7 +270,7 @@ describe('the chat surface on the canvas', () => {
     // Room IS offered from Idea — unlike Insights it is legible with one person in it,
     // and gating a meeting by which stage a board says it is in would be the wrong rule.
     const offered = within(switcher()).getAllByRole('button').map((button) => button.textContent);
-    expect(offered).toEqual(['Chat', 'Board', '3D space', 'App', 'Room']);
+    expect(offered).toEqual(['Chat', 'Board', 'Room', 'App']);
   });
 
   /**
@@ -281,7 +287,7 @@ describe('the chat surface on the canvas', () => {
     render(<CreationCanvas sessionId="surface-placement-test" persistence="local" />);
 
     const group = screen.getByRole('group', { name: 'Canvas view' });
-    for (const name of ['Chat', 'Board', '3D space']) {
+    for (const name of ['Chat', 'Board', 'Room']) {
       const button = within(group).getByRole('button', { name });
       // The label is DRAWN, not only announced — the whole defect was three glyphs that
       // said nothing about which one was a conversation.
@@ -292,7 +298,7 @@ describe('the chat surface on the canvas', () => {
     // The rail keeps what it is actually for. If this ever finds a surface button again,
     // the switcher has been duplicated rather than moved.
     const rail = document.querySelector('.react-flow__controls');
-    for (const name of ['Chat', '3D space']) {
+    for (const name of ['Chat', 'Room']) {
       expect(rail && within(rail as HTMLElement).queryByRole('button', { name })).toBeFalsy();
     }
   });
@@ -444,7 +450,7 @@ describe('the chat surface on the canvas', () => {
    */
   it('lets exactly one surface be lit, and returns to the board when it is pressed again', () => {
     render(<CreationCanvas sessionId="surface-switcher-test" persistence="local" />);
-    const lit = () => ['Chat', 'Board', '3D space']
+    const lit = () => ['Chat', 'Board', 'Room']
       .filter((name) => surfaceButton(name).getAttribute('aria-pressed') === 'true');
 
     expect(lit()).toEqual(['Board']);

@@ -2793,7 +2793,7 @@
 .timelineMeta strong { color:var(--canvas-ink); font:700 13px var(--font-mono,var(--font-sans)); font-variant-numeric:tabular-nums; }
 .timelineMeta small { color:var(--canvas-muted); font-size:10px; }
 
-/* The `scene3d` surface's OTHER half — a prompt/model column beside a preview column,
+/* The `scene3d` surface — a prompt/model column beside a preview column,
    same two-pane shape `studio-embedded`'s own `.bfs-grid` uses, rebuilt here in canvas
    tokens so it sits beside `.timelineStage`/`.worldStage` as one more object surface
    rather than a visually foreign panel. */

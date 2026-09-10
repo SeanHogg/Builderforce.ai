@@ -61,7 +61,7 @@ export function GraphSurfaceIcon() {
 }
 
 /** The app surface: a window with a play mark in it. Deliberately NOT a bare triangle —
- *  a play glyph beside "Board" and "3D space" reads as "start something", and this tab
+ *  a play glyph beside "Board" and "Room" reads as "start something", and this tab
  *  answers the same question they do: what am I looking at. The frame is the answer. */
 export function AppSurfaceIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">

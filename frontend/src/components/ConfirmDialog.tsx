@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useEffect, useId } from 'react';
-import { createPortal } from 'react-dom';
 import { useTranslations } from 'next-intl';
 import { Button, Surface } from '@/components/ui';
+// Imported by path, not through the `ui` barrel: the barrel is in the root
+// layout's static closure and this overlay has no business on every first paint.
+import { ModalOverlay } from '@/components/ui/ModalOverlay';
 import styles from './ConfirmDialog.module.css';
 
 export interface ConfirmDialogProps {
@@ -43,29 +45,25 @@ export function ConfirmDialog({
   const titleId = useId();
   const messageId = useId();
 
-  // ESC cancels; Enter confirms — parity with the native prompt's keyboard UX.
+  // Enter confirms — parity with the native prompt's keyboard UX. Escape cancels
+  // via `ModalOverlay`, which owns that half for every modal in the app.
   useEffect(() => {
-    if (!open) return;
+    if (!open) return undefined;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
-      else if (e.key === 'Enter') { e.preventDefault(); onConfirm(); }
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      onConfirm();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, onCancel, onConfirm]);
+  }, [open, onConfirm]);
 
-  if (!open) return null;
-
-  const body = (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={title ? titleId : undefined}
-      aria-describedby={messageId}
-      className="modal-overlay"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onCancel();
-      }}
+  return (
+    <ModalOverlay
+      open={open}
+      onDismiss={onCancel}
+      labelledBy={title ? titleId : undefined}
+      describedBy={messageId}
     >
       <Surface tone="raised" padding="lg" className={styles.dialog} onClick={(e) => e.stopPropagation()}>
         {title && (
@@ -81,9 +79,6 @@ export function ConfirmDialog({
           </Button>
         </div>
       </Surface>
-    </div>
+    </ModalOverlay>
   );
-
-  // Portal to <body> so parent stacking contexts / overflow can't clip it.
-  return typeof document !== 'undefined' ? createPortal(body, document.body) : body;
 }

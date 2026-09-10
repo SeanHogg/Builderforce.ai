@@ -22505,9 +22505,7 @@
         "active": "Vous êtes sur le tableau"
       },
       "scene3d": {
-        "label": "Espace 3D",
-        "enter": "Voir ce canevas en 3D",
-        "active": "Quitter la 3D",
+        "label": "Scène IA",
         "open": "Ouvrir la scène IA"
       },
       "app": {
@@ -22573,7 +22571,7 @@
           "dismiss": "Masquer"
         },
         "label": "Salle",
-        "enter": "Se retrouver dans la salle",
+        "enter": "Se retrouver dans la salle, la session posée sur la table",
         "active": "Vous êtes dans la salle",
         "regionLabel": "La salle de cette session",
         "here": "{here} sur {total} présents",
@@ -22584,7 +22582,24 @@
         "onBoard": "Sur le tableau",
         "noWebglTitle": "La 3D n'est pas disponible sur cet appareil",
         "noWebglBody": "La salle nécessite WebGL, que ce navigateur ne parvient pas à démarrer. Toutes les personnes présentes dans la session sont listées ci-dessous, et le reste du canevas fonctionne normalement.",
-        "wallOverflow": "{count, plural, one {# objet de plus n'est pas au mur} other {# objets de plus ne sont pas au mur}}"
+        "navigateHint": "Glissez pour regarder autour · clic droit ou deux doigts pour vous déplacer · molette pour zoomer · glissez la session pour la placer, appuyez pour l'ouvrir",
+        "session": {
+          "caption": "Session",
+          "groupLabel": "La session dans la salle",
+          "open": "Ouvrir la session",
+          "minimize": "Réduire",
+          "minimizeHint": "Remettre la session dans la salle",
+          "close": "Fermer",
+          "closeHint": "Retour au tableau",
+          "objects": "{count, plural, =0 {aucun objet} one {# objet} other {# objets}}",
+          "hint": "{count, plural, =0 {Vide · glissez pour placer, appuyez pour ouvrir} one {# objet · glissez pour placer, appuyez pour ouvrir} other {# objets · glissez pour placer, appuyez pour ouvrir}}",
+          "placeLabel": "Où se trouve la session",
+          "place": {
+            "table": "Sur la table",
+            "floor": "Au sol",
+            "wall": "Au mur"
+          }
+        }
       },
       "page": {
         "label": "Page",

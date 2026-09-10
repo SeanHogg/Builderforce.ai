@@ -6,7 +6,7 @@ import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
  *
  * ── WHY A ROUTER AND NOT AN INLINE BRANCH ────────────────────────────────────────
  * `CreationCanvas.tsx` is already the widest dispatch in the codebase. A second axis
- * spelled out there as `{surface === 'chat' && <Chat/>}{surface === 'scene3d' && …}`
+ * spelled out there as `{surface === 'chat' && <Chat/>}{surface === 'room' && …}`
  * would be a branch every future runtime has to remember to add itself to, in a file
  * nobody wants to open. Open/closed: the host is closed to modification and the map is
  * open to extension.

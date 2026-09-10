@@ -46,10 +46,11 @@ export const DEFAULT_CANVAS_PHASE: CanvasPhase = 'idea';
 /**
  * Which board surfaces a phase offers.
  *
- * Additive, not exclusive: `chat`, `graph`, `scene3d` and `app` are in EVERY phase —
- * they predate this registry, a visitor has always been able to reach all four
- * regardless of what the session is "for", and taking one away the moment a phase
- * changes would be a real capability lost, not a tidier tab row. A session that built
+ * Additive, not exclusive: `chat`, `graph`, `room` and `app` are in EVERY phase —
+ * they predate this registry (the room absorbed the "3D space" entry that did), a
+ * visitor has always been able to reach all four regardless of what the session is
+ * "for", and taking one away the moment a phase changes would be a real capability
+ * lost, not a tidier tab row. A session that built
  * an app in Make and moved on to Measure still has that app — hiding `app` the moment
  * metrics appear would take away the very thing being measured.
  *
@@ -71,11 +72,11 @@ export const DEFAULT_CANVAS_PHASE: CanvasPhase = 'idea';
  * talk about an idea is the case for the room, not an argument against it.
  */
 const PHASE_SURFACES: Readonly<Record<CanvasPhase, readonly CanvasSurfaceId[]>> = {
-  idea: ['chat', 'graph', 'scene3d', 'app', 'room'],
-  make: ['chat', 'graph', 'scene3d', 'app', 'room'],
-  run: ['chat', 'graph', 'scene3d', 'app', 'room'],
-  measure: ['chat', 'graph', 'scene3d', 'app', 'room', 'insights'],
-  reach: ['chat', 'graph', 'scene3d', 'app', 'room', 'insights'],
+  idea: ['chat', 'graph', 'room', 'app'],
+  make: ['chat', 'graph', 'room', 'app'],
+  run: ['chat', 'graph', 'room', 'app'],
+  measure: ['chat', 'graph', 'room', 'app', 'insights'],
+  reach: ['chat', 'graph', 'room', 'app', 'insights'],
 };
 
 export function surfacesForPhase(phase: CanvasPhase): readonly CanvasSurfaceId[] {

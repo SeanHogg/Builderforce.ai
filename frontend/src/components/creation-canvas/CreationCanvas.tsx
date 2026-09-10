@@ -22,6 +22,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasSocialIcon, CleanLayoutIcon, DepthIcon, DisclosureIcon, DropToLayersIcon, FitViewIcon, LayerGuidesIcon, MarqueeSelectIcon, MinimapIcon, MoreActionsIcon, ProveIdeaIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
 import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
+import type { CanvasRoomSurfaceProps } from './CanvasRoomSurface';
 import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
 import { canvasSurfaceDefinition, readCanvasSurface, writeCanvasSurface, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import { DEFAULT_CANVAS_PHASE, readCanvasPhase, surfacesForPhase, writeCanvasPhase, type CanvasPhase } from '@/lib/canvasPhases';
@@ -56,7 +57,6 @@ import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasS
 import { CanvasSessionPill } from './CanvasSessionPill';
 import { RemoteCursors } from './RemoteCursors';
 import { applyPresenceFrame, dropPresence, expirePresence, isPresenceFrame, mergeLivePresence, LIVE_PRESENCE_TTL_MS, PRESENCE_SEND_INTERVAL_MS, type LivePresenceMap } from '@/lib/canvas/livePresence';
-import { ROOM_WALL_CAPACITY } from '@/lib/canvas/roomSeating';
 import { resolveStandupProject } from '@/lib/canvas/standupProject';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { BRAND_BINDING_FIELD, CANVAS_PRESENCE_FRAME, canvasScreenshotToolRedirect, isBrandBoundKind, isDateComparator, looksLikeWebPageUrl, type CanvasPresenceState } from '@builderforce/creation-canvas-contract';
@@ -72,7 +72,7 @@ import { CanvasSiteSurface } from './CanvasSiteSurface';
 import { CanvasTimelineSurface } from './CanvasTimelineSurface';
 import { CanvasSurfaceProvider } from './canvasSurfaceContext';
 import { CanvasSurfaceActionsProvider } from './canvasSurfaceActions';
-import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
+import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor, type Canvas3DSceneInput } from '@/components/canvas/canvas3d';
 import { CanvasOutlinePanel } from './CanvasOutlinePanel';
 import { CanvasFilesPanel } from './CanvasFilesPanel';
 import { CanvasMiroPanel } from './CanvasMiroPanel';
@@ -446,17 +446,18 @@ const CanvasWorldView = dynamic(
   () => import('./CanvasWorldView').then((module) => module.CanvasWorldView),
   { ssr: false },
 );
-// The room. Same WebGL stack as the world above and split for the same reason —
-// a person who only ever opens the board must not pay for three.js to have a
-// standup surface they have not pressed.
+// The room — and, placed inside it, the session: the depth projection above opens at
+// full size from the diorama on the table. Same WebGL stack as the world and split for
+// the same reason — a person who only ever opens the board must not pay for three.js
+// to have a room they have not pressed.
 const CanvasRoomSurface = dynamic(
-  () => import('./CanvasRoomSurface').then((module) => module.CanvasRoomSurface),
+  () => import('./CanvasRoomSurface')
+    .then((module) => module.CanvasRoomSurface as ComponentType<CanvasRoomSurfaceProps<CreationFlowNode>>),
   { ssr: false },
 );
-// The `scene3d` surface's OTHER half — a `scene` object's generation panel, rather
-// than the board projection above. Dynamic for the same reason: it lazily reaches for
-// the studio engine (WebGPU diffusion) only once a `scene` object is actually opened,
-// never in the main chunk for a visitor who only ever presses the rail's "3D" tab.
+// The `scene3d` surface — a `scene` object's generation panel. Dynamic for the same
+// reason: it lazily reaches for the studio engine (WebGPU diffusion) only once a
+// `scene` object is actually opened, never in the main chunk otherwise.
 const CanvasSceneGeneratorPanel = dynamic(
   () => import('./CanvasSceneGeneratorPanel').then((module) => module.CanvasSceneGeneratorPanel),
   { ssr: false },
@@ -1131,15 +1132,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * models side by side is to read the results in depth.
    */
   const comparisonModelIds = useMemo(() => normalizeModelComparisonIds(initialModelComparisonIds), [initialModelComparisonIds]);
-  const [surface, setSurfaceState] = useState<CanvasSurfaceId>(comparisonModelIds.length >= 2 ? 'scene3d' : initialSurface ?? 'graph');
+  const [surface, setSurfaceState] = useState<CanvasSurfaceId>(comparisonModelIds.length >= 2 ? 'room' : initialSurface ?? 'graph');
   /**
-   * The object an object-scoped surface is about. Null for every board surface but one,
-   * and the reason a surface can be `page` at all: a page is a page OF something.
-   *
-   * `scene3d` is the one board-scoped exception: it is a PROJECTION of the board when
-   * nothing is bound (entered from the rail, target null) but forks to the scene
-   * generation panel when opened from a `scene` object's own "open at full size" button
-   * (`CanvasObjectSurfaceButton`, via `setSurface('scene3d', nodeId)`). See `setSurface`.
+   * The object an object-scoped surface is about. Null for every board surface, and
+   * the reason a surface can be `page` at all: a page is a page OF something.
    */
   const [surfaceTarget, setSurfaceTarget] = useState<string | null>(null);
   const surfaceDef = canvasSurfaceDefinition(surface);
@@ -1169,11 +1165,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, []);
   const setSurface = useCallback((next: CanvasSurfaceId, targetId: string | null = null) => {
     setSurfaceState(next);
-    // `scene3d` keeps a target alongside every `scope: 'object'` surface — the one
-    // board-scoped surface that can ALSO be entered bound to an object (a `scene`'s own
-    // "open at full size" button). The rail's switcher never passes a targetId, so
-    // pressing "3D" always lands on the unbound projection regardless of this rule.
-    setSurfaceTarget(canvasSurfaceDefinition(next).scope === 'object' || next === 'scene3d' ? targetId : null);
+    // Only an object-scoped surface keeps a target; the rail's switcher never passes one.
+    setSurfaceTarget(canvasSurfaceDefinition(next).scope === 'object' ? targetId : null);
     // The registry decides what is worth remembering — a PLACE the user chose, never a
     // projection of the board they were already on, and never a surface that cannot be
     // restored without the object it was about.
@@ -3207,6 +3200,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * the other one.
    */
   const threeDControls = useCanvas3DControls();
+  /**
+   * Whether this canvas's objects are on screen and workable. The registry answers
+   * for every surface but one: the room, whose session is a read-only diorama until
+   * it is opened at full size — and the projection says it is up by publishing its
+   * controls. Read once here, so the selection toolbar and the large-session notice
+   * cannot disagree about it.
+   */
+  const objectsOnScreen = surfaceDef.showsObjects || threeDControls !== null;
   /**
    * The ordered walk through this board's frames.
    *
@@ -11335,26 +11336,21 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setSelectedIds([id]);
   }, []);
   /**
-   * WHAT HANGS ON THE ROOM'S WALL.
+   * WHAT THE ROOM'S SESSION IS MADE FROM.
    *
-   * Newest first, and described by `describeThreeD` rather than by a second reader:
-   * a card is the same card whether you are looking at the depth projection or
-   * standing in front of it in the room, so its label, its colour and the picture of
-   * what it produced are answered once. `wallPanels` decides how many actually fit
-   * and reports the rest — the cap lives with the geometry, not here.
+   * The same four things `Canvas3DView` is handed, as one memoised input: a card is
+   * the same card whether it is a miniature on the table or full size in the
+   * projection, so its label, its colour and the picture of what it produced are
+   * answered once by `describeThreeD`. The room lays it out itself, and only while
+   * the diorama is drawn — this memo is an object, not a layout.
    */
-  const roomWallObjects = useMemo(
-    () => [...threeDNodes].reverse().slice(0, ROOM_WALL_CAPACITY).map((node) => {
-      const described = describeThreeD(node);
-      return {
-        id: node.id,
-        label: described.label,
-        color: described.accent ?? '#94a3b8',
-        preview: described.preview,
-      };
-    }),
-    [describeThreeD, threeDNodes],
-  );
+  const roomSceneInput = useMemo<Canvas3DSceneInput<CreationFlowNode>>(() => ({
+    nodes: threeDNodes,
+    edges,
+    describe: describeThreeD,
+    measure: canvasNodeDimensions,
+    depthMode: comparisonModelIds.length >= 2 ? 'group' : 'flow',
+  }), [comparisonModelIds.length, describeThreeD, edges, threeDNodes]);
   /**
    * Objects moved in the 3D space, written straight back to the board.
    *
@@ -12611,7 +12607,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             all, not on which surface is drawn: the 3D space shows them and keeps both,
             the conversation shows none and would otherwise float a toolbar for things
             the reader cannot see. */}
-        {!presentMode && surfaceDef.showsObjects && effectiveSelectedIds.length > 0 && <div className={styles.selectionToolbar} aria-label={t('selectionActions')}>
+        {!presentMode && objectsOnScreen && effectiveSelectedIds.length > 0 && <div className={styles.selectionToolbar} aria-label={t('selectionActions')}>
           <span>{t('selectedCount', { count: effectiveSelectedIds.length })}</span>
           <button onClick={focusSelection}>{t('focus')}</button>
           <button onClick={duplicateSelection} disabled={!canEdit}>{t('duplicate')}</button>
@@ -12636,7 +12632,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           <button type="button" onClick={exitFrame}>{t('frameSection.exit')}</button>
         </div>}
         {loadingSession && <div className={styles.canvasSkeleton} role="status" aria-live="polite"><span /><span /><span /><b>{t('loadingSession')}</b></div>}
-        {surfaceDef.showsObjects && nodes.length > 100 && <div className={styles.performanceNotice} role="status"><strong>{t('largeSession', { count: nodes.length })}</strong><span>{t('largeSessionHint')}</span><button type="button" onClick={openObjectPicker}>{t('frame')}</button></div>}
+        {objectsOnScreen && nodes.length > 100 && <div className={styles.performanceNotice} role="status"><strong>{t('largeSession', { count: nodes.length })}</strong><span>{t('largeSessionHint')}</span><button type="button" onClick={openObjectPicker}>{t('frame')}</button></div>}
         <BrainSurfaceProvider value={brainSurface}>
         <ReactFlow<CreationFlowNode, Edge>
           nodes={framedBoard.nodes}
@@ -12723,29 +12719,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           surface={surface}
           hostSurfaces={hostSurfaces}
           surfaces={{
-            // Additive fork, not a growing conditional inside `Canvas3DView` itself
-            // (SRP: that component stays "project the board"; the generator panel owns
-            // "generate a clip"). No object bound (entered from the rail) → the
-            // unchanged board projection. A bound `scene` object → the generation panel.
-            // A stale target whose object is no longer `scene`-kind (or is gone) also
-            // falls back to the projection, same as every other object-scoped surface's
-            // `surfaceNode`-going-null rule.
+            // The AI scene: a `scene` object's generation panel, entered from its card.
+            // Object-scoped like the runtimes below, so `surfaceNode` going null is what
+            // the effect above turns back into the board.
             scene3d: surfaceNode && surfaceNode.data.kind === 'scene' ? <CanvasSceneGeneratorPanel
               objectId={surfaceNode.id}
               data={surfaceNode.data}
               onExit={() => setSurface('graph')}
               {...(cardsEditable ? { onEdit: (patch: Partial<CreationNodeData>) => updateNodeData(surfaceNode.id, patch) } : {})}
-            /> : <Canvas3DView
-              nodes={threeDNodes}
-              edges={edges}
-              describe={describeThreeD}
-              measure={canvasNodeDimensions}
-              selectedIds={effectiveSelectedIds}
-              onSelect={selectThreeDObject}
-              onMove={canEdit ? moveThreeDObjects : undefined}
-              onExit={() => setSurface('graph')}
-              initialDepthMode={comparisonModelIds.length >= 2 ? 'group' : 'flow'}
-            />,
+            /> : null,
             // The zero-object case of this canvas: the same transcript, the same
             // composer, no board. Objects Brain creates during the conversation land on
             // the board behind it, which is what the footer's live count offers.
@@ -12781,20 +12763,35 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             // What the session is worth, read back. Board-scoped for the same reason
             // `app` is — the metrics are about the whole session, not one card.
             insights: <CanvasInsightsSurface onExit={() => setSurface('graph')} />,
-            // THE ROOM. Board-scoped like `app` and `insights`: its subject is the
-            // whole session's roster, so there is no card to enter it from. It is
-            // handed the roster and the live presence map the host already holds —
-            // the room owns no membership of its own, because the session already
-            // has one and a second would be a second answer to "who is here".
+            // THE ROOM, with the session in it. Board-scoped like `app` and `insights`:
+            // its subject is the whole session, so there is no card to enter it from. It
+            // is handed the roster and the live presence map the host already holds —
+            // the room owns no membership of its own, because the session already has
+            // one and a second would be a second answer to "who is here" — and the
+            // projection's input, which it draws small on the table and, when pressed,
+            // full size through `renderSession`. `Canvas3DView` is unchanged: its
+            // Escape is the frame's minimise, and its commands still ride the ONE bar.
             room: <CanvasRoomSurface
+              sessionId={sessionId}
+              sessionTitle={title}
               members={rosterMembers}
               currentUserId={currentUserId}
               live={livePresence}
               onPresence={sendPresence}
-              objects={roomWallObjects}
-              totalObjects={threeDNodes.length}
+              sceneInput={roomSceneInput}
+              renderSession={({ onMinimize }) => <Canvas3DView
+                nodes={threeDNodes}
+                edges={edges}
+                describe={describeThreeD}
+                measure={canvasNodeDimensions}
+                selectedIds={effectiveSelectedIds}
+                onSelect={selectThreeDObject}
+                onMove={canEdit ? moveThreeDObjects : undefined}
+                onExit={onMinimize}
+                initialDepthMode={roomSceneInput.depthMode}
+              />}
+              sessionInitiallyOpen={comparisonModelIds.length >= 2}
               boardProjectId={boardProjectId}
-              {...(canEdit ? { onSelectObject: selectThreeDObject } : {})}
               onExit={() => setSurface('graph')}
             />,
             // The five medium runtimes. Each takes the object the surface is ABOUT, so

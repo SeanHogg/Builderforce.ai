@@ -22505,9 +22505,7 @@
         "active": "Du bist auf dem Board"
       },
       "scene3d": {
-        "label": "3D-Raum",
-        "enter": "Diese Leinwand in 3D ansehen",
-        "active": "3D verlassen",
+        "label": "KI-Szene",
         "open": "KI-Szene öffnen"
       },
       "app": {
@@ -22573,7 +22571,7 @@
           "dismiss": "Ausblenden"
         },
         "label": "Raum",
-        "enter": "Im Raum treffen",
+        "enter": "Im Raum treffen, mit der Sitzung auf dem Tisch",
         "active": "Du bist im Raum",
         "regionLabel": "Der Raum dieser Sitzung",
         "here": "{here} von {total} anwesend",
@@ -22584,7 +22582,24 @@
         "onBoard": "Auf dem Board",
         "noWebglTitle": "3D ist auf diesem Gerät nicht verfügbar",
         "noWebglBody": "Der Raum benötigt WebGL, das dieser Browser nicht starten kann. Alle Personen der Sitzung stehen unten, und der Rest der Canvas funktioniert normal.",
-        "wallOverflow": "{count, plural, one {# weiteres Objekt hängt nicht an der Wand} other {# weitere Objekte hängen nicht an der Wand}}"
+        "navigateHint": "Ziehen zum Umsehen · Rechtsklick-Ziehen oder zwei Finger zum Bewegen · Scrollen zum Zoomen · Sitzung ziehen zum Platzieren, antippen zum Öffnen",
+        "session": {
+          "caption": "Sitzung",
+          "groupLabel": "Die Sitzung im Raum",
+          "open": "Sitzung öffnen",
+          "minimize": "Minimieren",
+          "minimizeHint": "Sitzung zurück in den Raum legen",
+          "close": "Schließen",
+          "closeHint": "Zurück zum Board",
+          "objects": "{count, plural, =0 {keine Objekte} one {# Objekt} other {# Objekte}}",
+          "hint": "{count, plural, =0 {Leer · ziehen zum Platzieren, antippen zum Öffnen} one {# Objekt · ziehen zum Platzieren, antippen zum Öffnen} other {# Objekte · ziehen zum Platzieren, antippen zum Öffnen}}",
+          "placeLabel": "Wo die Sitzung liegt",
+          "place": {
+            "table": "Auf dem Tisch",
+            "floor": "Auf dem Boden",
+            "wall": "An der Wand"
+          }
+        }
       },
       "page": {
         "label": "Seite",

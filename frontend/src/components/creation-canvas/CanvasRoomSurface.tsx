@@ -3,24 +3,44 @@
  * already declares the boundary — the same reason `CanvasAppSurface` and
  * `CanvasInsightsSurface` state in their own headers.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { Canvas } from '@react-three/fiber';
 import type { CanvasPresenceSpatial, CanvasPresenceState } from '@builderforce/creation-canvas-contract';
+import { canvas3dScene, type Canvas3DNode, type Canvas3DSceneInput } from '@/components/canvas/canvas3d';
 import { useTheme } from '@/lib/useTheme';
 import { spatialPeers, type LivePresenceMap } from '@/lib/canvas/livePresence';
 import {
-  ROOM_PALETTES, assignRoomSeats, bodyColor, seatPlacement, wallPanels,
-  type RoomOccupant, type RoomWallObject,
+  ROOM_PALETTES, assignRoomSeats, bodyColor, seatPlacement,
+  type RoomOccupant,
 } from '@/lib/canvas/roomSeating';
+import {
+  DEFAULT_ROOM_SESSION_SPOT, ROOM_SESSION_SPOTS, placeSessionInRoom, readRoomSessionSpot, writeRoomSessionSpot,
+  type RoomSessionAnchor, type RoomSessionSpot,
+} from '@/lib/canvas/roomSession';
 import { CanvasBarGroup } from './CanvasBarGroup';
 import { useCanvasSurfaceActions } from './canvasSurfaceActions';
 import { RoomStandupBar } from './RoomStandupBar';
+import { RoomSessionControls } from './RoomSessionControls';
+import { RoomSessionFrame } from './RoomSessionFrame';
 import { RoomScene } from './world3d/RoomScene';
+import { RoomSessionDiorama } from './world3d/RoomSessionDiorama';
 import styles from './CanvasRoomSurface.module.css';
 
 /**
- * THE ROOM — this session's people, standing in a circle, with its work on the wall.
+ * THE ROOM — this session's people, standing in a circle, with the session itself
+ * placed among them.
+ *
+ * ── WHY THE ROOM AND THE 3D SPACE ARE ONE SURFACE ────────────────────────────────
+ * They shipped as two rail entries. "3D space" projected the board's objects through
+ * depth; "Room" seated the people and hung a capped wall of the same objects behind
+ * them. That was two 3D readings of one board with two cameras, and a person in one
+ * could not see the other. Now there is ONE spatial surface: the room, where the
+ * session is a THING — a diorama of the board's projection that you drag onto the
+ * table, the floor or the wall, press to open at full size, and minimise back to
+ * where you left it. The full-size projection is still `Canvas3DView`, unchanged;
+ * the host hands it in through `renderSession` and this surface decides when it is
+ * up. See `lib/canvas/roomSession.ts` for the placement arithmetic.
  *
  * ── WHY A SURFACE AND NOT A DESTINATION ──────────────────────────────────────────
  * A standup already had two homes in this product and neither was the board: a
@@ -32,20 +52,21 @@ import styles from './CanvasRoomSurface.module.css';
  * pressing it with nothing selected has an answer.
  *
  * ── WHAT IT OWNS, AND WHAT IT DOES NOT ───────────────────────────────────────────
- * It owns the ROOM: where bodies stand, who is actually here, what hangs on the
- * wall, and announcing its own presence. It owns no domain at all — there is no
- * room table, no room membership and no room record, because a canvas session
- * already has a roster and the presence relay already carries who is live. A
- * second store of "who is in this standup" would be a second answer to a question
- * that already has one.
+ * It owns the ROOM: where bodies stand, who is actually here, where the session
+ * sits, whether it is open, and announcing its own presence. It owns no domain at
+ * all — there is no room table, no room membership and no room record, because a
+ * canvas session already has a roster and the presence relay already carries who
+ * is live. A second store of "who is in this standup" would be a second answer to
+ * a question that already has one. Where the session sits is a per-browser
+ * reading preference, kept the way the surface preference is.
  *
  * ── WHY IT ANNOUNCES ON A HEARTBEAT ──────────────────────────────────────────────
  * The relay drops a peer after `LIVE_PRESENCE_TTL_MS` without a frame, which is
  * exactly right for a pointer (a still pointer is a stale pointer) and exactly
  * wrong for a seated person (sitting still is what a standup IS). So being in the
- * room is re-asserted on an interval well inside that window. It is one small frame
- * per person per interval, which is cheaper than the alternative — a durable
- * "in the room" flag that a closed laptop leaves set forever.
+ * room is re-asserted on an interval well inside that window — and it keeps being
+ * asserted while the session is open at full size, because opening the work does
+ * not leave the room.
  */
 
 /** Re-assert presence comfortably inside the relay's 30s expiry. */
@@ -74,7 +95,10 @@ function canRenderWebgl(): boolean {
   }
 }
 
-export interface CanvasRoomSurfaceProps {
+export interface CanvasRoomSurfaceProps<T extends Canvas3DNode> {
+  /** Keys where THIS viewer left the session in THIS room. */
+  sessionId: string;
+  sessionTitle: string;
   /** The session roster, in its own stable order. */
   members: readonly RoomOccupant[];
   currentUserId: string | null;
@@ -82,33 +106,39 @@ export interface CanvasRoomSurfaceProps {
   live: LivePresenceMap;
   /** Publish this client's own presence. The host owns the socket. */
   onPresence: (state: CanvasPresenceState) => void;
-  /** What hangs on the wall — described once by the host, for both 3D readings.
-   *  Already capped to {@link ROOM_WALL_CAPACITY} by the host, which is the only
-   *  place that can avoid describing objects the wall will never draw. */
-  objects: readonly RoomWallObject[];
-  /** Every object on the board, not just the ones handed over. The difference is
-   *  what the surface reports as left off the wall — a number only the host can
-   *  know, and one a wall that quietly showed ten of ninety would be lying about. */
-  totalObjects: number;
-  /** Selecting a panel selects the card it stands for. Absent = read-only wall. */
-  onSelectObject?: ((objectId: string) => void) | undefined;
+  /**
+   * What the board's depth projection is made from — the same input `Canvas3DView`
+   * takes. The layout is computed HERE, and only while the diorama is drawn, so a
+   * board being dragged on the flat surface never pays for a room it is not in.
+   * Memoise it in the host: a fresh object every render is a fresh layout.
+   */
+  sceneInput: Canvas3DSceneInput<T>;
+  /**
+   * The session at full size. Handed the frame's own way back so that Escape inside
+   * the projection minimises it into the room rather than leaving the surface.
+   */
+  renderSession: (frame: { onMinimize: () => void }) => ReactNode;
+  /** Arrive with the session already open — a model comparison lands in depth. */
+  sessionInitiallyOpen?: boolean;
   /** The project this board itself names, when it names one. One of the three
    *  answers `resolveStandupProject` weighs — see `lib/canvas/standupProject`. */
   boardProjectId?: number | null;
   onExit: () => void;
 }
 
-export function CanvasRoomSurface({
+export function CanvasRoomSurface<T extends Canvas3DNode>({
+  sessionId,
+  sessionTitle,
   members,
   currentUserId,
   live,
   onPresence,
-  objects,
-  totalObjects,
-  onSelectObject,
+  sceneInput,
+  renderSession,
+  sessionInitiallyOpen = false,
   boardProjectId = null,
   onExit,
-}: CanvasRoomSurfaceProps) {
+}: CanvasRoomSurfaceProps<T>) {
   const t = useTranslations('creationCanvas.surface.room');
   const { theme } = useTheme();
   const palette = ROOM_PALETTES[theme === 'light' ? 'light' : 'dark'];
@@ -118,6 +148,23 @@ export function CanvasRoomSurface({
   // import, so there is no server frame in which `document` is missing — and
   // the probe itself still guards for one rather than relying on that.
   const [webgl] = useState(canRenderWebgl);
+
+  const [sessionOpen, setSessionOpen] = useState(sessionInitiallyOpen);
+  const openSession = useCallback(() => setSessionOpen(true), []);
+  const minimizeSession = useCallback(() => setSessionOpen(false), []);
+
+  // Where the session sits. Restored in an effect rather than as the initial state,
+  // the same way the folded bar and the phase are: storage is a per-browser fact
+  // and reading it during render is the pattern the hooks ratchet exists to stop.
+  const [spot, setSpot] = useState<RoomSessionSpot>(DEFAULT_ROOM_SESSION_SPOT);
+  useEffect(() => { setSpot(readRoomSessionSpot(sessionId)); }, [sessionId]);
+  const placeSession = useCallback((next: RoomSessionSpot) => {
+    setSpot(next);
+    writeRoomSessionSpot(sessionId, next);
+  }, [sessionId]);
+  const placement = useMemo(() => placeSessionInRoom(spot), [spot]);
+  const anchorSession = useCallback((anchor: RoomSessionAnchor) => placeSession(ROOM_SESSION_SPOTS[anchor]), [placeSession]);
+  const [dragging, setDragging] = useState(false);
 
   const bodies = useMemo(() => {
     const map = new Map<string, CanvasPresenceSpatial>();
@@ -129,9 +176,6 @@ export function CanvasRoomSurface({
     () => assignRoomSeats(members, bodies, currentUserId),
     [members, bodies, currentUserId],
   );
-
-  const panels = useMemo(() => wallPanels(objects), [objects]);
-  const hidden = Math.max(0, totalObjects - panels.length);
 
   /**
    * MY OWN SEAT, announced.
@@ -176,13 +220,28 @@ export function CanvasRoomSurface({
   }, [onPresence]);
 
   const hereCount = seats.filter((seat) => seat.live || seat.isSelf).length;
+  const objectCount = sceneInput.nodes.length;
+  // Laid out only while the diorama is on screen: the open session computes its own
+  // projection from the same input, and the room draws nothing of the board then.
+  const scene = useMemo(() => (sessionOpen ? null : canvas3dScene(sceneInput)), [sceneInput, sessionOpen]);
 
   // What the room IS doing goes in `controls`; what it is REPORTING goes in
   // `status`, which is what survives a folded bar — see `canvasSurfaceActions`.
   // The standup bar owns its own project choice and its own ceremony binding, so
-  // this surface hands it the roster and learns nothing about either.
+  // this surface hands it the roster and learns nothing about either. The session
+  // controls are the worded form of the diorama's own gestures.
   useCanvasSurfaceActions(() => ({
-    controls: <RoomStandupBar members={members} boardProjectId={boardProjectId} />,
+    controls: (
+      <>
+        <RoomSessionControls
+          open={sessionOpen}
+          anchor={placement.anchor}
+          onToggleOpen={sessionOpen ? minimizeSession : openSession}
+          onAnchor={anchorSession}
+        />
+        <RoomStandupBar members={members} boardProjectId={boardProjectId} />
+      </>
+    ),
     status: (
       <CanvasBarGroup caption={t('label')} label={t('regionLabel')}>
         <span className={styles.status} role="status">
@@ -190,56 +249,93 @@ export function CanvasRoomSurface({
         </span>
       </CanvasBarGroup>
     ),
-  }), [boardProjectId, hereCount, members, seats.length, t]);
+  }), [anchorSession, boardProjectId, hereCount, members, minimizeSession, openSession, placement.anchor, seats.length, sessionOpen, t]);
+
+  const session = sessionOpen ? (
+    <RoomSessionFrame title={sessionTitle} objectCount={objectCount} onMinimize={minimizeSession} onClose={onExit}>
+      {renderSession({ onMinimize: minimizeSession })}
+    </RoomSessionFrame>
+  ) : null;
 
   return (
     <section
       className={styles.surface}
       data-testid="canvas-room-surface"
+      data-session={sessionOpen ? 'open' : 'placed'}
       aria-label={t('regionLabel')}
-      onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); onExit(); } }}
+      // Escape steps OUT one level: the open session minimises into the room, and
+      // the room hands the board back. The projection's own Escape calls the same
+      // minimise, so a keyboard user never skips the room on the way out.
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape') return;
+        event.stopPropagation();
+        if (sessionOpen) minimizeSession(); else onExit();
+      }}
     >
       {!webgl ? (
         <div className={styles.fallback} role="status">
-          <h3>{t('noWebglTitle')}</h3>
-          <p>{t('noWebglBody')}</p>
-          <div className={styles.ring}>
-            {seats.map((seat) => (
-              <span key={seat.userId} className={styles.ringSeat} data-live={seat.live || seat.isSelf ? 'true' : 'false'}>
-                <span className={styles.seatDot} style={{ background: bodyColor(seat.userId, palette, seat.isSelf) }} />
-                {seat.displayName || t('unknown')}
-              </span>
-            ))}
-          </div>
+          {session ?? (
+            <>
+              <h3>{t('noWebglTitle')}</h3>
+              <p>{t('noWebglBody')}</p>
+              <div className={styles.ring}>
+                {seats.map((seat) => (
+                  <span key={seat.userId} className={styles.ringSeat} data-live={seat.live || seat.isSelf ? 'true' : 'false'}>
+                    <span className={styles.seatDot} style={{ background: bodyColor(seat.userId, palette, seat.isSelf) }} />
+                    {seat.displayName || t('unknown')}
+                  </span>
+                ))}
+              </div>
+              {/* The projection is DOM, not WebGL, so the session still opens here. */}
+              <button type="button" className={styles.fallbackOpen} onClick={openSession}>
+                {t('session.open')}
+              </button>
+            </>
+          )}
         </div>
       ) : (
         <div className={styles.stage}>
-          <Canvas shadows camera={{ position: [0, 3.4, 6.4], fov: 55, near: 0.1, far: 120 }}>
-            <RoomScene
-              seats={seats}
-              panels={panels}
-              palette={palette}
-              unknownLabel={t('unknown')}
-              onSelectObject={onSelectObject}
-            />
-          </Canvas>
+          {session ?? (
+            <>
+              <Canvas shadows camera={{ position: [0, 3.4, 6.4], fov: 55, near: 0.1, far: 120 }}>
+                <RoomScene
+                  seats={seats}
+                  palette={palette}
+                  unknownLabel={t('unknown')}
+                  controlsEnabled={!dragging}
+                >
+                  {scene && <RoomSessionDiorama
+                    scene={scene}
+                    placement={placement}
+                    palette={palette}
+                    title={sessionTitle}
+                    hint={t('session.hint', { count: objectCount })}
+                    onPlace={placeSession}
+                    onOpen={openSession}
+                    onDragChange={setDragging}
+                  />}
+                </RoomScene>
+              </Canvas>
+              <p className={styles.hint}>{t('navigateHint')}</p>
+            </>
+          )}
         </div>
       )}
 
-      <div className={styles.roster}>
-        <p className={styles.rosterHead}>{t('rosterHead', { count: seats.length })}</p>
-        {seats.map((seat) => (
-          <div key={seat.userId} className={styles.seat} data-live={seat.live || seat.isSelf ? 'true' : 'false'}>
-            <span className={styles.seatDot} style={{ background: bodyColor(seat.userId, palette, seat.isSelf) }} />
-            <span className={styles.seatName}>{seat.displayName || t('unknown')}</span>
-            <span className={styles.seatState}>
-              {seat.isSelf ? t('you') : seat.live ? t('inRoom') : t('onBoard')}
-            </span>
-          </div>
-        ))}
-        {hidden > 0 && <p className={styles.hidden}>{t('wallOverflow', { count: hidden })}</p>}
-      </div>
+      {!sessionOpen && (
+        <div className={styles.roster}>
+          <p className={styles.rosterHead}>{t('rosterHead', { count: seats.length })}</p>
+          {seats.map((seat) => (
+            <div key={seat.userId} className={styles.seat} data-live={seat.live || seat.isSelf ? 'true' : 'false'}>
+              <span className={styles.seatDot} style={{ background: bodyColor(seat.userId, palette, seat.isSelf) }} />
+              <span className={styles.seatName}>{seat.displayName || t('unknown')}</span>
+              <span className={styles.seatState}>
+                {seat.isSelf ? t('you') : seat.live ? t('inRoom') : t('onBoard')}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
-

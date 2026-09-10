@@ -7,6 +7,7 @@ import type { Project } from '@/lib/types';
 import { fetchProjects } from '@/lib/api';
 import { tasksApi } from '@/lib/builderforceApi';
 import { faultMessage } from '@/lib/apiClient';
+import { ModalOverlay } from '@/components/ui/ModalOverlay';
 export interface DeleteProjectDialogProps {
   /** The project to delete; null keeps the dialog closed. */
   project: Project | null;
@@ -104,14 +105,7 @@ export function DeleteProjectDialog({ project, onCancel, onConfirm }: DeleteProj
   };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      className="modal-overlay"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !busy) onCancel();
-      }}
-    >
+    <ModalOverlay onDismiss={busy ? undefined : onCancel} label={`Delete project "${project.name}"`}>
       <div
         style={{
           maxWidth: 480,
@@ -224,6 +218,6 @@ export function DeleteProjectDialog({ project, onCancel, onConfirm }: DeleteProj
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

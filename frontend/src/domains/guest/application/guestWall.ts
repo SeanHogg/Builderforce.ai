@@ -25,8 +25,16 @@
  *
  * `inline` counts the prompts a page has mounted INSIDE its content (a
  * `SectionError` that met the wall, for instance). The shell mounts one
- * catch-all above every page; it stands down while an inline one is showing,
- * so a visitor is invited once, where the missing content would have been.
+ * catch-all over every page as a centred modal; it stands down while an inline
+ * one is showing, so a visitor is invited once, where the missing content would
+ * have been.
+ *
+ * `dismissed` is the route on which the visitor closed that modal. A guest is
+ * meant to keep exploring the real app — the invitation is an invitation, not a
+ * gate — so closing it must stick, and it must stick against the NEXT refused
+ * read on the same route too (a canvas fires several). It is forgotten the
+ * moment the wall moves to a different route, which is the visitor asking to see
+ * something new.
  *
  * No `'use client'`: a plain module, imported by the transport, that guards on
  * `typeof window` itself. On the server there is no visitor to invite.
@@ -37,9 +45,11 @@ export interface GuestWallState {
   pathname: string | null;
   /** How many prompts are currently mounted inside page content. */
   inline: number;
+  /** The route on which the visitor closed the shell's modal invitation. */
+  dismissed: string | null;
 }
 
-const IDLE: GuestWallState = { pathname: null, inline: 0 };
+const IDLE: GuestWallState = { pathname: null, inline: 0, dismissed: null };
 
 let state: GuestWallState = IDLE;
 const listeners = new Set<() => void>();
@@ -58,7 +68,14 @@ function currentPathname(): string | null {
 export function noteSignedOutRead(): void {
   const pathname = currentPathname();
   if (!pathname || state.pathname === pathname) return;
-  emit({ ...state, pathname });
+  // A new route is a new invitation: whatever was closed on the last one is spent.
+  emit({ ...state, pathname, dismissed: null });
+}
+
+/** The visitor closed the shell's invitation; it stays closed on this route. */
+export function dismissGuestWall(): void {
+  if (!state.pathname || state.dismissed === state.pathname) return;
+  emit({ ...state, dismissed: state.pathname });
 }
 
 /** An inline prompt has mounted (or unmounted); the shell's catch-all follows. */

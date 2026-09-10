@@ -25,7 +25,8 @@
  * this registry now owns: two states, two controls, and a `threeD.active ? '3d' : 'flat'`
  * ternary that a third surface could not extend. The creation canvas therefore derives
  * 3D from the surface instead of holding its own copy — one state, one control on the
- * rail, one `data-view` attribute the stylesheet keys on.
+ * rail, one `data-view` attribute the stylesheet keys on. The depth projection itself
+ * later stopped being a rail entry: it is the SESSION, a thing placed in the `room`.
  *
  * ── ADDING A SURFACE ─────────────────────────────────────────────────────────────
  *   1. an entry in `CANVAS_SURFACES` below,
@@ -64,8 +65,11 @@ export interface CanvasSurfaceDef {
   showsBoard: boolean;
   /**
    * Whether this canvas's OBJECTS are on screen at all. Distinct from `showsBoard`:
-   * the 3D space draws every object without drawing the flat board, so the two
+   * a surface can draw every object without drawing the flat board, so the two
    * questions have different answers and the chrome that asks them is different chrome.
+   * The room's OPEN session is the one case this static flag cannot answer — the
+   * projection publishes its `Canvas3DControls` while it is up, and the host reads
+   * that as the live answer (see the `room` entry).
    * This is the one the selection toolbar and the large-session notice read — floating
    * "6 selected · Align · Frame" over a conversation that has no objects on it is a
    * toolbar for something the reader cannot see.
@@ -82,7 +86,7 @@ export interface CanvasSurfaceDef {
    * Whether the choice survives a reload. A surface is a place the user chose to work
    * (`chat` is a front door, not a mode); a PROJECTION of the board they were already
    * on is not — coming back to a canvas silently rotated into 3D reads as a bug, so
-   * `scene3d` is entered deliberately every time.
+   * the room, and the session it opens, are entered deliberately every time.
    */
   persist: boolean;
 }
@@ -93,7 +97,34 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // arriving from any other assistant already knows how to use.
   { id: 'chat', scope: 'board', order: 0, showsBoard: false, showsObjects: false, brainIsSurface: true, persist: true },
   { id: 'graph', scope: 'board', order: 1, showsBoard: true, showsObjects: true, brainIsSurface: false, persist: true },
-  { id: 'scene3d', scope: 'board', order: 2, showsBoard: false, showsObjects: true, brainIsSurface: false, persist: false },
+  // THE ROOM — the people AND the work, in one space.
+  //
+  // It took the slot "3D space" used to hold, because it absorbed it. The 3D space
+  // was a projection of the board through depth; the room seated the roster with a
+  // capped wall of the same objects behind them. Two 3D readings of one board, two
+  // cameras, and a person in one could not see the other. Now the session is a THING
+  // in the room — a diorama of that same projection, placed on the table, the floor
+  // or the wall — that opens at full size when pressed and minimises back to where it
+  // was left (`CanvasRoomSurface`, `lib/canvas/roomSession.ts`).
+  //
+  // Board-scoped for the same reason `app` and `insights` are: a room is about the
+  // whole session, so there is no card to enter it from and pressing it with nothing
+  // selected has an answer.
+  //
+  // `showsObjects` is FALSE, and the distinction matters. The diorama in the room is
+  // a reading: it can be placed, but its cards cannot be moved, aligned or framed, so
+  // floating "6 selected · Align · Frame" over a standup would be a toolbar for
+  // something nobody in the room can act on. Once the session is OPEN at full size
+  // the objects ARE on screen and movable — and the projection says so itself by
+  // publishing its `Canvas3DControls`, which is the live answer the host reads for
+  // the selection toolbar rather than a second flag here that would be wrong half
+  // the time.
+  //
+  // It does NOT persist, and this is the one board surface where that needs saying.
+  // A reload should put you back on the board where the work is: landing tomorrow
+  // inside a room whose standup ended last night is the same wrong answer
+  // `facilitate` gives for a poll that closed.
+  { id: 'room', scope: 'board', order: 2, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   // The first surface that reads MANY objects as ONE artifact.
   //
   // Everything below this line is `scope: 'object'` — a medium whose own axis will not
@@ -113,43 +144,33 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // shares (`WidgetCard`, `ReorderableWidgetGrid`) rather than inventing a second
   // metrics surface — so `showsObjects` stays false the way `chat`'s does.
   { id: 'insights', scope: 'board', order: 4, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true },
-  // THE ROOM — the people, not the work.
-  //
-  // Board-scoped for the same reason `app` and `insights` are: a standup is about the
-  // whole session, so there is no card to enter it from and pressing it with nothing
-  // selected has an answer. It is the first surface whose subject is the ROSTER rather
-  // than the objects — the objects are on its wall, but as a reading of them.
-  //
-  // `showsObjects` is therefore FALSE, and the distinction matters: the wall draws a
-  // capped, newest-first selection of cards that cannot be moved, aligned or framed.
-  // Floating "6 selected · Align · Frame" over a standup would be a toolbar for
-  // something nobody in the room can act on, which is exactly the failure this flag
-  // exists to prevent on the chat surface.
-  //
-  // It does NOT persist, and this is the one board surface where that needs saying.
-  // `scene3d` does not persist because it is a projection; this one does not persist
-  // because it is a MOMENT. Landing tomorrow inside a room whose standup ended last
-  // night is the same wrong answer `facilitate` gives for a poll that closed, and a
-  // reload should put you back on the board where the work is.
-  { id: 'room', scope: 'board', order: 5, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   // The three medium runtimes. Each is a PROMOTION: the editor already existed, squeezed
   // into a node body where the medium's own axis had nowhere to go — a paged document in a
   // card, a playable build behind a bespoke `gameFocus` boolean, and a multi-track edit
   // with no room for a second track. None of them persists, because a surface bound to one
   // object cannot be restored without it.
-  { id: 'page', scope: 'object', order: 6, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
-  { id: 'play', scope: 'object', order: 7, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'page', scope: 'object', order: 5, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'play', scope: 'object', order: 6, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   // A site is pages AND a width. It is not the `page` surface with more room: that one
   // draws ONE sheet at a reading measure, and a website is a set of pages you move
   // between at a width you choose. Two axes the sheet does not have, so two surfaces.
-  { id: 'site', scope: 'object', order: 8, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
-  { id: 'timeline', scope: 'object', order: 9, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'site', scope: 'object', order: 7, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'timeline', scope: 'object', order: 8, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   // A `world` object is a place with its own camera and props, not a page — it does
   // not fit the sheet/build/track shapes above any more than they fit each other. It
   // does not persist as the active surface for the same reason they don't: a surface
   // bound to one object snaps back to the board on reload, not into an editor whose
   // target it has to re-find.
-  { id: 'world', scope: 'object', order: 10, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'world', scope: 'object', order: 9, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  // THE AI SCENE — a `scene` object's generation panel (prompt, model, Generate).
+  //
+  // This id used to be the rail's "3D space", which forked on whether a `scene`
+  // object was bound: unbound, the board's depth projection; bound, this panel. The
+  // projection now lives in the room (above), so what is left is what this always
+  // was underneath — the surface of ONE object, entered from its card, meaningless
+  // without it — and it is declared as exactly that. The id stays: the object registry
+  // and the generation panel both name it, and nothing about an id says "rail".
+  { id: 'scene3d', scope: 'object', order: 10, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   // THE ROOM. A live poll's own axis is the people answering it — a join address on the
   // wall, a count that moves, and two controls (open/close voting, show/hide the count)
   // that are pressed while a room watches. A ~340px card can preview a question; it

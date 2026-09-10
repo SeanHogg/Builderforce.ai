@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GuestAccountPrompt } from './GuestAccountPrompt';
 import { noteSignedOutRead, resetGuestWall } from '@/domains/guest/application/guestWall';
@@ -83,6 +83,51 @@ describe('GuestAccountPrompt', () => {
 
     render(<GuestAccountPrompt placement="shell" />);
     expect(document.querySelectorAll('[data-guest-wall="shell"]').length).toBe(1);
+  });
+
+  it('stands the catch-all in the CENTRE, not in whatever corner a full-screen surface left free', () => {
+    meetWallOn('/');
+    const { container } = render(<GuestAccountPrompt placement="shell" />);
+
+    // It portals out of the page: a canvas's stacking context / overflow cannot
+    // corner or clip it.
+    expect(container.querySelector('[data-guest-wall="shell"]')).toBeNull();
+    const overlay = document.querySelector('[data-guest-wall-overlay="shell"]');
+    expect(overlay).toBeTruthy();
+    expect(overlay?.classList.contains('modal-overlay')).toBe(true);
+    expect(overlay?.getAttribute('role')).toBe('dialog');
+    expect(overlay?.getAttribute('aria-modal')).toBe('true');
+    expect(overlay?.querySelector('[data-guest-wall="shell"]')).toBeTruthy();
+  });
+
+  it('leaves the inline invitation in flow, where the rows would have been', () => {
+    meetWallOn('/');
+    const { container } = render(<GuestAccountPrompt />);
+    expect(container.querySelector('[data-guest-wall="inline"]')).toBeTruthy();
+    expect(document.querySelector('[data-guest-wall-overlay="shell"]')).toBeNull();
+  });
+
+  it('lets a guest close the modal and keep exploring — and stays closed on that route', () => {
+    meetWallOn('/');
+    const { rerender } = render(<GuestAccountPrompt placement="shell" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.close' }));
+    expect(document.querySelector('[data-guest-wall-overlay="shell"]')).toBeNull();
+
+    // The canvas fires several reads; the next refusal on the same route must not
+    // put the modal straight back up.
+    noteSignedOutRead();
+    rerender(<GuestAccountPrompt placement="shell" />);
+    expect(document.querySelector('[data-guest-wall-overlay="shell"]')).toBeNull();
+  });
+
+  it('escape closes it, so a visitor is never trapped behind the invitation', () => {
+    meetWallOn('/');
+    render(<GuestAccountPrompt placement="shell" />);
+    expect(document.querySelector('[data-guest-wall-overlay="shell"]')).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(document.querySelector('[data-guest-wall-overlay="shell"]')).toBeNull();
   });
 
   it('says what an account unlocks, in every catalogue', () => {

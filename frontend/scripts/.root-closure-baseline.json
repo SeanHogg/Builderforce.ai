@@ -145,6 +145,7 @@
     "components/ui/GateHint.tsx",
     "components/ui/Icon.tsx",
     "components/ui/InlineNameForm.tsx",
+    "components/ui/ModalOverlay.tsx",
     "components/ui/PageHeader.tsx",
     "components/ui/SectionState.tsx",
     "components/ui/SplitButton.tsx",

@@ -30,6 +30,17 @@
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
  *
+ *   972 → 973 (`useClientFiles`, 2026-09-09) — `components/ui/ModalOverlay.tsx`, THE
+ *   centred overlay every modal in the app now stands in. Four surfaces had each
+ *   hand-written the same chrome (`.modal-overlay`, `role="dialog"`, the
+ *   `e.target === e.currentTarget` backdrop check, an Escape listener) and
+ *   disagreed: one portalled to `<body>` and three did not, two closed on Escape
+ *   and two left the visitor no keyboard way out. ConfirmDialog,
+ *   DeleteProjectDialog, TaskMgmtContent's ceremony stage and the guest account
+ *   wall all migrated onto it in the same pass, so this is one file added and
+ *   four copies of a decision removed. It holds a `keydown` effect, so it could
+ *   not be a Server Component.
+ *
  *   968 → 972 (`useClientFiles`, 2026-09-07) — the Create library stopped being two
  *   lists and one god component. `components/dashboard/DashboardCreationSessions.tsx`
  *   (307 lines) fetched six endpoints, mapped them, owned the selection, performed

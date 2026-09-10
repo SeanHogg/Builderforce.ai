@@ -2,25 +2,32 @@
  * No `'use client'` — mounted only inside surfaces reached through a
  * `dynamic(..., { ssr: false })` import, since WebGL has no server-side render.
  */
-import { Html, OrbitControls } from '@react-three/drei';
-import type { ThreeEvent } from '@react-three/fiber';
+import type { ReactNode } from 'react';
+import { OrbitControls } from '@react-three/drei';
 import {
-  ROOM_EYE_HEIGHT, ROOM_FLOOR_SIZE, ROOM_PANEL_HEIGHT, ROOM_PANEL_WIDTH,
-  ROOM_SEAT_RADIUS, ROOM_TABLE_HEIGHT, ROOM_TABLE_RADIUS, ROOM_WALL_Z,
+  ROOM_EYE_HEIGHT, ROOM_FLOOR_SIZE, ROOM_SEAT_RADIUS, ROOM_TABLE_HEIGHT, ROOM_TABLE_RADIUS, ROOM_WALL_Z,
   bodyColor, seatPlacement,
-  type RoomPalette, type RoomPanel, type RoomSeat,
+  type RoomPalette, type RoomSeat,
 } from '@/lib/canvas/roomSeating';
 import { PeerAvatar } from './PeerAvatar';
-import { SurfacePanel } from './SurfacePanel';
 
 /**
- * THE ROOM — a floor, a table, a ring of people and a wall of the work.
+ * THE ROOM — a floor, a table, a ring of people, a back wall, and whatever the
+ * surface puts in it.
  *
- * Presentational by contract: it draws exactly what {@link assignRoomSeats} and
- * {@link wallPanels} hand it and computes no layout of its own. That separation
- * is what lets the geometry be checked by a test instead of by squinting, and
- * it is why this file has no arithmetic in it beyond turning a metre into a
- * mesh.
+ * Presentational by contract: it draws exactly what {@link assignRoomSeats} hands
+ * it and computes no layout of its own. That separation is what lets the geometry
+ * be checked by a test instead of by squinting, and it is why this file has no
+ * arithmetic in it beyond turning a metre into a mesh.
+ *
+ * ── WHY THE WORK IS NOT DRAWN HERE ───────────────────────────────────────────
+ * The room used to hang a capped, newest-first wall of the board's objects behind
+ * the ring — a SECOND 3D reading of the board beside the "3D space" surface, with
+ * its own cap, its own layout and its own way of drawing a card. The session is
+ * now ONE thing the surface places in the room (`RoomSessionDiorama`), rendered
+ * as `children` so this scene stays about the room and the diorama stays about
+ * the board. The wall is still here, blank, because it is one of the places the
+ * session can hang.
  *
  * ── WHY EVERY MEMBER GETS A CHAIR, NOT ONLY THE LIVE ONES ────────────────────
  * A standup where people appear only once they move is a standup where you
@@ -33,20 +40,27 @@ import { SurfacePanel } from './SurfacePanel';
  * Walking belongs to the `world` and `play` surfaces, where the space itself is
  * the thing. A fifteen-minute standup is not improved by pointer lock and a
  * jump key; it is improved by being able to see every face at once. So the
- * camera is outside the ring looking in, and your own body is drawn with
- * everybody else's — you see the room the same way the room sees you.
+ * camera orbits the table, pans across the room and zooms — enough to look at
+ * anything in it from anywhere a person could stand — and your own body is
+ * drawn with everybody else's.
  */
 
 export interface RoomSceneProps {
   seats: readonly RoomSeat[];
-  panels: readonly RoomPanel[];
   palette: RoomPalette;
   /** Label for a peer the roster has not named yet. Translated by the host. */
   unknownLabel: string;
-  onSelectObject?: ((objectId: string) => void) | undefined;
+  /**
+   * Whether the camera answers the pointer. False while something IN the room is
+   * being dragged, because a drag that also orbits the camera is a drag that
+   * moves the floor out from under the thing being placed.
+   */
+  controlsEnabled?: boolean;
+  /** What the surface puts in the room — the session, today. */
+  children?: ReactNode;
 }
 
-export function RoomScene({ seats, panels, palette, unknownLabel, onSelectObject }: RoomSceneProps) {
+export function RoomScene({ seats, palette, unknownLabel, controlsEnabled = true, children }: RoomSceneProps) {
   const wallHeight = 4.2;
 
   return (
@@ -71,8 +85,8 @@ export function RoomScene({ seats, panels, palette, unknownLabel, onSelectObject
         <meshStandardMaterial color={palette.floor} />
       </mesh>
 
-      {/* The wall the work hangs on. Slightly behind the panels so the two
-          never fight for the same depth — see SurfacePanel's own offset. */}
+      {/* The back wall. Slightly behind the wall's own anchor depth so a session
+          hung on it never fights it for the same pixels. */}
       <mesh position={[0, wallHeight / 2, ROOM_WALL_Z - 0.06]} receiveShadow>
         <planeGeometry args={[ROOM_FLOOR_SIZE, wallHeight]} />
         <meshStandardMaterial color={palette.wall} />
@@ -113,21 +127,16 @@ export function RoomScene({ seats, panels, palette, unknownLabel, onSelectObject
         />
       ))}
 
-      {panels.map((panel) => (
-        <WallPanel
-          key={panel.objectId}
-          panel={panel}
-          palette={palette}
-          {...(onSelectObject ? { onSelect: () => onSelectObject(panel.objectId) } : {})}
-        />
-      ))}
+      {children}
 
       <OrbitControls
+        enabled={controlsEnabled}
         enableDamping
         dampingFactor={0.1}
+        enablePan
         target={[0, ROOM_EYE_HEIGHT * 0.8, 0]}
-        minDistance={3}
-        maxDistance={12}
+        minDistance={1.2}
+        maxDistance={14}
         // Never below the floor and never straight down: both are views of a
         // room from somewhere nobody can stand.
         minPolarAngle={0.25}
@@ -136,60 +145,3 @@ export function RoomScene({ seats, panels, palette, unknownLabel, onSelectObject
     </>
   );
 }
-
-interface WallPanelProps {
-  panel: RoomPanel;
-  palette: RoomPalette;
-  onSelect?: (() => void) | undefined;
-}
-
-/**
- * One board object on the wall.
- *
- * A backing board in the room's own panel colour, the object's colour painted
- * on its face through the shared {@link SurfacePanel}, and the object's title
- * under it. The title is the whole reason the wall is worth drawing — a grid of
- * anonymous coloured rectangles is wallpaper, not the team's work.
- */
-function WallPanel({ panel, palette, onSelect }: WallPanelProps) {
-  const click = onSelect
-    ? (event: ThreeEvent<MouseEvent>) => { event.stopPropagation(); onSelect(); }
-    : undefined;
-
-  return (
-    <group position={panel.position}>
-      <mesh receiveShadow {...(click ? { onClick: click } : {})}>
-        <planeGeometry args={[ROOM_PANEL_WIDTH, ROOM_PANEL_HEIGHT]} />
-        <meshStandardMaterial color={palette.panel} />
-      </mesh>
-      <SurfacePanel
-        width={ROOM_PANEL_WIDTH - 0.16}
-        height={ROOM_PANEL_HEIGHT - 0.16}
-        color={panel.color}
-        imageUrl={panel.preview}
-        fit="contain"
-        {...(click ? { onClick: click } : {})}
-      />
-      <Html position={[0, -(ROOM_PANEL_HEIGHT / 2) - 0.16, 0.02]} center distanceFactor={9} pointerEvents="none" zIndexRange={[10, 0]}>
-        <span
-          style={{
-            display: 'block',
-            maxWidth: 190,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            // A caption under a wall panel is DOM over the canvas, not geometry,
-            // so it reads the app's own scale — the same as the peer name plate.
-            fontSize: 'var(--font-size-small)',
-            lineHeight: 1.4,
-            color: 'var(--text-primary, #f5f5f5)',
-            textShadow: '0 1px 2px rgba(0,0,0,.35)',
-          }}
-        >
-          {panel.label}
-        </span>
-      </Html>
-    </group>
-  );
-}
-

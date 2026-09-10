@@ -232,23 +232,35 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
   const namedButtons = (name: string) => [...document.querySelectorAll('button')]
     .filter((button) => (button.getAttribute('aria-label') ?? button.textContent ?? '').trim() === name);
 
+  /**
+   * The depth projection is the SESSION, placed in the room: the rail opens the room,
+   * and pressing the session in it opens the projection at full size. jsdom has no
+   * WebGL, so the room renders its legible fallback — which still offers the session,
+   * because the projection is DOM and not WebGL.
+   */
   const enterThreeD = async () => {
-    fireEvent.click(namedButtons('3D space')[0]!);
+    fireEvent.click(namedButtons('Room')[0]!);
+    const room = await screen.findByTestId('canvas-room-surface');
+    fireEvent.click(within(room).getByRole('button', { name: 'Open the session' }));
     return screen.findByTestId('canvas-3d-view');
   };
 
-  it('opens the 3D view from the canvas rail, then hands the board back', async () => {
+  it('opens the 3D view from the room, minimises it back, then hands the board back', async () => {
     render(<CreationCanvas sessionId="three-d-controls-test" persistence="local" />);
 
-    // The rail and the phone-sized action stack both offer the surface. It is named
-    // for the surface, not for the act of toggling, because it is one entry in the
-    // surface switcher rather than a mode of its own — see `canvasSurfaces.ts`.
-    const [toggle] = namedButtons('3D space');
+    // The rail and the phone-sized action stack both offer the room. It is named for
+    // the surface, not for the act of toggling, because it is one entry in the surface
+    // switcher rather than a mode of its own — see `canvasSurfaces.ts`.
+    const [toggle] = namedButtons('Room');
     expect(screen.queryByTestId('canvas-3d-view')).not.toBeInTheDocument();
 
     const scene = await enterThreeD();
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
     expect(scene).toBeInTheDocument();
+    // The session wears its two ways back: minimise into the room, close to the board.
+    const frame = screen.getByTestId('room-session-frame');
+    expect(within(frame).getByRole('button', { name: 'Minimize' })).toBeInTheDocument();
+    expect(within(frame).getByRole('button', { name: 'Close' })).toBeInTheDocument();
     // The mini map is a map of the flat board, so it — and its button — stand
     // down in 3D. The toggle lives in the board sheet now and reports its
     // state IN its own name ("Hide"/"Show"), not a static "Toggle" label.
@@ -263,7 +275,7 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(within(scene).queryByRole('button', { name: /3D/ })).not.toBeInTheDocument();
     expect(within(scene).queryByRole('combobox')).not.toBeInTheDocument();
     expect(within(scene).queryAllByRole('button', { name: 'Zoom in' })).toHaveLength(0);
-    expect(toggle).toHaveAttribute('title', 'Exit 3D');
+    expect(toggle).toHaveAttribute('title', 'You are in the room');
 
     // The scene's own commands ride the ONE board sheet — the corner rail that used to
     // carry a second copy of every one of them is gone, so each is offered exactly once.
@@ -277,10 +289,17 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     fireEvent.click(depth[0]!);
     expect(namedButtons('Stack layers by object group')[0]).toHaveAttribute('aria-pressed', 'true');
 
-    fireEvent.click(toggle!);
+    // Minimising puts the session back in the room — the room is still up, the
+    // projection and its commands are not.
+    fireEvent.click(within(screen.getByTestId('room-session-frame')).getByRole('button', { name: 'Minimize' }));
     expect(screen.queryByTestId('canvas-3d-view')).not.toBeInTheDocument();
+    expect(screen.getByTestId('canvas-room-surface')).toHaveAttribute('data-session', 'placed');
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(toggle!);
+    expect(screen.queryByTestId('canvas-room-surface')).not.toBeInTheDocument();
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
-    expect(toggle).toHaveAttribute('title', 'View this canvas in 3D');
+    expect(toggle).toHaveAttribute('title', 'Meet in the room, with the session on the table');
     // Leaving swaps the bar's contents back: the 3D commands go, the flat ones return.
     // The mini map was never toggled in this test, so it is still open — the
     // command bar's own control reports that as "Hide mini map".

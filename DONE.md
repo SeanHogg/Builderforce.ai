@@ -1,3 +1,49 @@
+## ✅ RESOLVED 2026-09-09 — Room and 3D space merged: the session is a thing you place in the room
+
+The rail offered two 3D readings of one board — "3D space" (the depth projection,
+`Canvas3DView`) and "Room" (the roster around a table, with a capped wall of the same
+objects behind it). Two cameras, two ways of drawing a card, and a person in one could
+not see the other. They are now ONE surface.
+
+### What changed
+
+- **`room` is the one spatial rail entry**, in the slot `scene3d` held (Chat · Board ·
+  Room · App · Insights). `canvasPhases.ts` offers it in every phase.
+- **The session is a diorama in the room** (`world3d/RoomSessionDiorama.tsx`): the same
+  `Canvas3DScene` the full-size view draws, scaled by `lib/canvas/roomSession.ts` so its
+  longest edge is 1.6 m, layers stepped 0.14 m apart, the first 24 cards keeping their
+  pictures. Drag it anywhere: `placeSessionInRoom` derives the anchor from the spot —
+  inside the table's radius it rests on the table, against the back wall it hangs
+  upright, otherwise it sits on the floor. The spot is remembered per session per browser
+  (`readRoomSessionSpot`/`writeRoomSessionSpot`); the anchor is never stored.
+- **Press it (or the bar's "Open the session") to open at full size**: `CanvasRoomSurface`
+  mounts the host's `Canvas3DView` through `renderSession` inside `RoomSessionFrame`,
+  which draws the two ways back — **Minimize** (back into the room, where it was left)
+  and **Close** (back to the board). Escape steps out one level. Presence keeps
+  heart-beating while the session is open: opening the work does not leave the room.
+- **The bar's session group** (`RoomSessionControls`) is the worded form of the same two
+  gestures — open/minimise, and a table/floor/wall picker — beside the standup controls.
+- **The camera pans as well as orbits** (`RoomScene`: `enablePan`, closer `minDistance`),
+  and locks while the session is being dragged. A hint under the stage says how.
+- **`scene3d` is now an object surface** — the AI scene's generation panel, entered from a
+  `scene` card (`label: "AI scene"`). The `|| next === 'scene3d'` special case in
+  `setSurface`, the projection/generator fork in the host's `surfaces` map, and the
+  rail's "3D space" tab are gone.
+- **Selection toolbar and large-session notice read `objectsOnScreen`** =
+  `surfaceDef.showsObjects || threeDControls !== null`: the open projection reports
+  itself by publishing its controls, so the room's static flag stays `false` for the
+  read-only diorama and the toolbar still floats over the open session.
+- **Model comparisons** land in the room with the session already open in `group` depth.
+- **Deleted:** `wallPanels`, `RoomPanel`, `RoomWallObject`, `ROOM_PANEL_*`,
+  `ROOM_WALL_CAPACITY` and the host's `roomWallObjects` memo; the room's
+  `wallOverflow` string in all five catalogs.
+- **Localized** in en/zh/es/fr/de: `creationCanvas.surface.room.{enter,navigateHint,session.*}`,
+  `creationCanvas.surface.scene3d.{label,open}`.
+- **Tests:** `lib/canvas/roomSession.test.ts` (placement, diorama layout, storage);
+  `canvasSurfaces.test.tsx`, `canvasSessionActions.test.tsx`, `CreationCanvas.test.tsx`
+  and `roomSeating.test.ts` updated to the merged surface.
+- UI version `2026.9.25`.
+
 ## ✅ RESOLVED 2026-09-08 — two at-rest credential secrets, resolved in 46 places, one of them under a colliding name
 
 Closed the Gap Register entry opened earlier the same day. The deferral was wrong: it

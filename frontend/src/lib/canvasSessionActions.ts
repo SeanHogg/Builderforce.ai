@@ -91,7 +91,7 @@ export type CanvasSessionActionCluster = 'idea' | 'make' | 'run' | 'measure' | '
  * The bar used to be the same eight buttons on every surface, which put "align the
  * selected objects" and "read the outcome numbers for this board" on a conversation that
  * has no objects on it — a control whose only possible answer is nothing. The obvious fix
- * is `surfaces: ['graph', 'scene3d']` on each entry, and it is the wrong one: every future
+ * is `surfaces: ['graph', 'room']` on each entry, and it is the wrong one: every future
  * surface would have to be added to every list that happens to apply to it, in a file
  * about actions, and the lists would drift the moment somebody forgot one.
  *

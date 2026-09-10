@@ -1,0 +1,39 @@
+/* The shell's catch-all invitation. It is the one thing on a full-screen surface
+   (the Creation Canvas above all) that has nowhere in flow to stand: mounted in
+   flow it landed in whatever corner the stage left free — a tooltip-sized card
+   pinned top-right of the canvas, reading as chrome rather than as the answer to
+   the read that was just refused. As a centred modal it says what it is.
+
+   Token-driven, so it reads in both themes; fluid, so it fits a 360px viewport.
+   The solid background comes from the shared `.modal-overlay > div` rule. */
+
+.card {
+  position: relative;
+  box-sizing: border-box;
+  width: min(420px, 100%);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+/* The CTA block draws a top border for its in-flow use, where it caps a section.
+   Standing alone as the whole modal it has nothing to cap. */
+.card > * {
+  border-top: 0;
+}
+
+.closeSlot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+}
+
+/* The in-flow placement: exactly what it was, standing where the rows would have been. */
+.inline {
+  overflow: hidden;
+  margin: 12px 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}

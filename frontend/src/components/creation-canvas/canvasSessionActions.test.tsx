@@ -96,9 +96,11 @@ describe('canvas session action registry', () => {
     const on = (surface: Parameters<typeof canvasSessionActionsFor>[0]) =>
       canvasSessionActionsFor(surface).map((def) => def.id);
 
-    // The board and the 3D space draw objects, so the outcome scorecard belongs on both.
+    // The board draws objects, so the outcome scorecard belongs on it. The room does
+    // not — its session is a diorama until it is opened, and a scorecard floating over
+    // a standup would be a control for something nobody in the room can act on.
     expect(on('graph')).toContain('outcomes');
-    expect(on('scene3d')).toContain('outcomes');
+    expect(on('room')).not.toContain('outcomes');
 
     // Chat is the zero-object surface, and the app surface draws a running app rather
     // than the board's objects. Neither has deliverables to score.
@@ -115,7 +117,7 @@ describe('canvas session action registry', () => {
     for (const surface of CANVAS_SURFACES) {
       expect(on(surface.id)).toContain('diagnostics');
     }
-    for (const surface of ['chat', 'graph', 'scene3d', 'app'] as const) {
+    for (const surface of ['chat', 'graph', 'room', 'app'] as const) {
       expect(on(surface)).toEqual(expect.arrayContaining(['undo', 'redo', 'fullscreen', 'share', 'publish']));
     }
 

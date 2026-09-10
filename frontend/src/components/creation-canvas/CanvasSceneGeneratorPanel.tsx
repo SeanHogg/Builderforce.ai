@@ -14,15 +14,14 @@ import { CanvasObjectSurface } from './CanvasObjectSurface';
 import type { CreationNodeData } from './types';
 
 /**
- * CanvasSceneGeneratorPanel — the `scene3d` surface's OTHER half.
+ * CanvasSceneGeneratorPanel — the `scene3d` surface: a `scene` object at full size.
  *
- * `Canvas3DView` (the surface's board-scoped default) projects the flat board in 3D;
- * this is what the same surface shows instead when it is entered bound to a `scene`
- * object — a prompt, a model, and a Generate action that calls the studio engine
- * directly. See `CreationCanvas.tsx`'s `scene3d` entry in its `surfaces` map for the
- * fork, and `creationObjectSurfaces.ts` for why `scene` maps here rather than to
- * `timeline` (the unrelated, untouched multi-track editor for imported/screen/camera
- * clips).
+ * A prompt, a model, and a Generate action that calls the studio engine directly.
+ * Object-scoped, entered from the scene's own card. (The id used to double as the
+ * rail's "3D space", forking on whether a `scene` was bound; the board's depth
+ * projection lives in the room now, so there is no fork left.) See
+ * `creationObjectSurfaces.ts` for why `scene` maps here rather than to `timeline`
+ * (the unrelated, untouched multi-track editor for imported/screen/camera clips).
  *
  * Composed from `studio-embedded`'s own sub-components rather than the all-in-one
  * `<StudioPanel>` — this canvas's persistence (a JSON patch through `onEdit`), its own

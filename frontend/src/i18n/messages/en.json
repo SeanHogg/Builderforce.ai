@@ -22505,9 +22505,7 @@
         "active": "You are on the board"
       },
       "scene3d": {
-        "label": "3D space",
-        "enter": "View this canvas in 3D",
-        "active": "Exit 3D",
+        "label": "AI scene",
         "open": "Open the AI scene"
       },
       "app": {
@@ -22573,7 +22571,7 @@
           "dismiss": "Dismiss"
         },
         "label": "Room",
-        "enter": "Meet in the room",
+        "enter": "Meet in the room, with the session on the table",
         "active": "You are in the room",
         "regionLabel": "This session's room",
         "here": "{here} of {total} here",
@@ -22584,7 +22582,24 @@
         "onBoard": "On the board",
         "noWebglTitle": "3D is not available on this device",
         "noWebglBody": "The room needs WebGL, which this browser cannot start. Everyone in the session is listed below, and the rest of the canvas works normally.",
-        "wallOverflow": "{count, plural, one {# more object is not on the wall} other {# more objects are not on the wall}}"
+        "navigateHint": "Drag to look around · right-drag or two fingers to move · scroll to zoom · drag the session to place it, press it to open",
+        "session": {
+          "caption": "Session",
+          "groupLabel": "The session in the room",
+          "open": "Open the session",
+          "minimize": "Minimize",
+          "minimizeHint": "Put the session back in the room",
+          "close": "Close",
+          "closeHint": "Back to the board",
+          "objects": "{count, plural, =0 {no objects} one {# object} other {# objects}}",
+          "hint": "{count, plural, =0 {Empty · drag to place, press to open} one {# object · drag to place, press to open} other {# objects · drag to place, press to open}}",
+          "placeLabel": "Where the session sits",
+          "place": {
+            "table": "On the table",
+            "floor": "On the floor",
+            "wall": "On the wall"
+          }
+        }
       },
       "page": {
         "label": "Page",

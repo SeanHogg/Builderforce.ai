@@ -33,6 +33,86 @@
   touch-action: none;
 }
 
+/* How to move around the room, in words, in the corner of the stage. It sits over
+   the WebGL canvas and must never take a pointer from it. */
+.hint {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
+  max-width: calc(100% - 24px);
+  margin: 0;
+  padding: 4px 9px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  color: var(--text-secondary);
+  font-size: var(--font-size-eyebrow);
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+/* ── The session at full size ─────────────────────────────────────────────────
+   A frame around the projection: one header row with its name and its two ways
+   back, and a body the projection fills. `position: relative` on the body is what
+   `Canvas3DView`'s own `position: absolute; inset` measures itself against. */
+
+.sessionFrame {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--surface);
+}
+
+.sessionFrameBar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 40px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-raised, var(--surface));
+}
+
+.sessionFrameTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--font-size-small);
+  color: var(--text-primary);
+}
+
+.sessionFrameTitle strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.sessionFrameTitle small {
+  flex: 0 0 auto;
+  font-size: var(--font-size-eyebrow);
+  color: var(--text-secondary);
+}
+
+.sessionFrameActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.sessionFrameBody {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
 .roster {
   flex: 0 0 clamp(180px, 22vw, 244px);
   display: flex;
@@ -87,15 +167,12 @@
   color: var(--text-secondary);
 }
 
-.hidden {
-  margin: 10px 0 0;
-  font-size: var(--font-size-small);
-  color: var(--text-secondary);
-}
-
 /* The no-WebGL path. Not a degraded copy of the room — a legible list of who is
-   in it, in the same order the ring seats them, so the two readings agree. */
+   in it, in the same order the ring seats them, so the two readings agree. It is
+   also where the full-size session mounts on such a device, so it is positioned:
+   the frame inside it measures against it. */
 .fallback {
+  position: relative;
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
@@ -105,6 +182,7 @@
   padding: 24px;
   text-align: center;
   min-width: 0;
+  min-height: 0;
 }
 
 .fallback h3 {
@@ -119,6 +197,20 @@
   font-size: var(--font-size-small);
   color: var(--text-secondary);
 }
+
+.fallbackOpen {
+  margin-top: 8px;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised, var(--surface));
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+  cursor: pointer;
+}
+
+.fallbackOpen:hover { border-color: var(--accent); }
 
 .ring {
   display: flex;
@@ -162,12 +254,15 @@
   }
 }
 
-/* ── The standup bar ─────────────────────────────────────────────────────────
-   Published into the ONE session bar, so these rules style a row that is drawn
-   by the host rather than inside this surface's own tree. Sized for that row:
-   28px controls, nothing that forces the bar taller than the groups beside it. */
+/* ── Controls on the ONE session bar ─────────────────────────────────────────
+   Published into the host's bar, so these rules style rows that are drawn by the
+   host rather than inside this surface's own tree — and the same rules dress the
+   session frame's own two buttons, so a control reads the same wherever the room
+   draws it. Sized for that row: 28px controls, nothing that forces the bar taller
+   than the groups beside it. */
 
-.standup {
+.standup,
+.sessionControls {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -175,8 +270,8 @@
   flex-wrap: wrap;
 }
 
-.standupStep,
-.standupAction {
+.barStep,
+.barAction {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -192,21 +287,23 @@
 }
 
 /* A step is a glyph, so it gets a square tap target rather than a text one. */
-.standupStep {
+.barStep {
   min-width: 28px;
   padding: 0;
   font-size: var(--font-size-body);
 }
 
-.standupStep:hover:not(:disabled),
-.standupAction:hover:not(:disabled) { border-color: var(--accent); }
+.barStep:hover:not(:disabled),
+.barAction:hover:not(:disabled) { border-color: var(--accent); }
 
-.standupStep:disabled,
-.standupAction:disabled { opacity: .45; cursor: not-allowed; }
+.barAction[aria-pressed='true'] { border-color: var(--accent); }
 
-.standupPicker { display: inline-flex; align-items: center; min-width: 0; }
+.barStep:disabled,
+.barAction:disabled { opacity: .45; cursor: not-allowed; }
 
-.standupSelect {
+.barPicker { display: inline-flex; align-items: center; min-width: 0; }
+
+.barSelect {
   min-height: 28px;
   max-width: 190px;
   padding: 0 6px;
@@ -217,10 +314,12 @@
   font-size: var(--font-size-small);
 }
 
+.barSelect:disabled { opacity: .45; cursor: not-allowed; }
+
 /* A native <option> list is painted by the OS, not by the page: without its own
    opaque pair it inherits whatever the platform picks and can render light text
    on a light menu in one theme. */
-.standupSelect option {
+.barSelect option {
   background: var(--surface);
   color: var(--text-primary);
 }
@@ -275,8 +374,9 @@
   border: 0;
 }
 
-/* On a phone the bar already wraps; keep the picker from forcing a wide row. */
+/* On a phone the bar already wraps; keep the pickers from forcing a wide row. */
 @media (max-width: 760px) {
-  .standupSelect { max-width: 130px; }
+  .barSelect { max-width: 130px; }
   .standupLive { max-width: 140px; }
+  .sessionFrameBar { padding-inline: 8px; }
 }

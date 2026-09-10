@@ -95,11 +95,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // Still `stageHosted`: the shells that have no stage at all (the embed tree,
   // marketing chrome) must not sprout one.
   const panelHosted = (canvas?.stageHosted ?? false) && panelOpen(pathname ?? '');
-  // The page, with the ONE catch-all invitation above it: a signed-out visitor
-  // whose read on this route was refused sees why an account matters where the
-  // content would have been. It decides its own visibility (see its note) and
-  // stands down whenever a section has already said it inline. Built once so
-  // the three branches below cannot disagree about whether it is there.
+  // The page, with the ONE catch-all invitation over it: a signed-out visitor
+  // whose read on this route was refused sees why an account matters, centred in
+  // a dismissible modal rather than wedged into whatever corner a full-screen
+  // surface left free. It portals to <body>, so its position here buys only the
+  // mount; it decides its own visibility (see its note) and stands down whenever
+  // a section has already said it inline. Built once so the three branches below
+  // cannot disagree about whether it is there.
   const page = (
     <>
       <GuestAccountPrompt placement="shell" />

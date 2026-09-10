@@ -66,6 +66,23 @@
  *   edge moved — a raise this guard cares about is a new FILE, and there is none.
  *   That sentence is why the guard now ratchets the file set and not the lines.
  *
+ *   313 → 314 files (2026-09-09) — `components/ui/ModalOverlay.tsx`, THE centred
+ *   overlay every modal stands in. `ConfirmDialog` is already in the closure (the
+ *   root layout mounts `ConfirmProvider`, which is the whole point of it — one
+ *   shared instance, so `useConfirm()` resolves without a chunk), and until this
+ *   pass it CARRIED this code inline: the `.modal-overlay` element, the
+ *   `aria-modal` attributes, the backdrop-target check, the Escape listener and
+ *   the portal to `<body>`. Those lines did not arrive in the first paint, they
+ *   moved into a file with a name — the closure went 90723 → 90725 lines for a
+ *   whole new module, which is the measure of it. Three other surfaces
+ *   (`DeleteProjectDialog`, the ceremony stage, the guest account wall) had each
+ *   written the same chrome slightly differently and now share this one; none of
+ *   them is in the closure. `dynamic()` here would be worse than the edge: a
+ *   confirmation modal that waits for a second chunk before it can be seen is a
+ *   destructive prompt the reader is looking straight through. Kept OUT of the
+ *   `components/ui` barrel deliberately — the barrel IS a closure edge, and an
+ *   overlay has no business on a first paint that renders no modal.
+ *
  *   313 → 314 files (2026-09-07) — `components/PanelCloseButton.tsx`, the ONE
  *   dismiss control every slide-out panel renders. It is in the closure for the
  *   same reason `SlideOutPanel` already is (the shell's own panels import it), and

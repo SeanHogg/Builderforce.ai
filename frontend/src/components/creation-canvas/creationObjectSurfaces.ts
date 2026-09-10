@@ -36,10 +36,11 @@ const AUTHORING_SURFACE: Partial<Record<CreationObjectKind, CanvasSurfaceId>> = 
   // any more than one previews a running build — same reason `game` opens in `play`.
   world: 'world',
   // AI VIDEO/3D GENERATION. Deliberately `scene3d` and not `timeline`: the product
-  // decision is that generation lives under the 3D surface, which forks on whether a
-  // `scene` object is bound (`CreationCanvas.tsx`'s `surfaces` map) rather than
-  // growing a conditional inside `Canvas3DView` itself. `video`/`voice` above are
-  // untouched — this is purely additive.
+  // decision is that generation is its own surface — the generation panel, entered
+  // from the scene's card — rather than a mode of the multi-track editor. (The id once
+  // doubled as the rail's "3D space"; the board's depth projection now lives in the
+  // room, and this is what the id always meant for a `scene`.) `video`/`voice` above
+  // are untouched.
   scene: 'scene3d',
   // A room. A poll's own axis is the people answering it: the join address goes on the
   // wall, the count moves while they answer, and the two facilitation controls are

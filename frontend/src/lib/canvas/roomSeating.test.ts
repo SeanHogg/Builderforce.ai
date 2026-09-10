@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import type { CanvasPresenceSpatial } from '@builderforce/creation-canvas-contract';
 import {
-  ROOM_PANEL_COLUMNS, ROOM_SEAT_RADIUS, ROOM_WALL_CAPACITY, ROOM_WALL_Z,
-  assignRoomSeats, seatPlacement, wallPanels,
-  type RoomOccupant, type RoomWallObject,
+  ROOM_SEAT_RADIUS,
+  assignRoomSeats, seatPlacement,
+  type RoomOccupant,
 } from './roomSeating';
 
 /**
@@ -98,44 +98,5 @@ describe('assignRoomSeats', () => {
   it('leaves an unnamed peer unnamed rather than guessing a label', () => {
     const seats = assignRoomSeats([{ userId: 'u1' }], bodies({}), null);
     expect(seats[0]!.displayName).toBe('');
-  });
-});
-
-describe('wallPanels', () => {
-  const objects = (n: number): RoomWallObject[] =>
-    Array.from({ length: n }, (_, i) => ({ id: `o${i}`, label: `Object ${i}`, color: '#123456' }));
-
-  it('hangs everything on the back wall at one depth', () => {
-    expect(wallPanels(objects(6)).every((panel) => panel.position[2] === ROOM_WALL_Z)).toBe(true);
-  });
-
-  it('fills a row before starting the one above it', () => {
-    const panels = wallPanels(objects(ROOM_PANEL_COLUMNS + 1));
-    const firstRowY = panels[0]!.position[1];
-    expect(panels.slice(0, ROOM_PANEL_COLUMNS).every((panel) => panel.position[1] === firstRowY)).toBe(true);
-    expect(panels[ROOM_PANEL_COLUMNS]!.position[1]).toBeGreaterThan(firstRowY);
-  });
-
-  it('centres each row on its own contents, so a short top row is not hung off one end', () => {
-    const panels = wallPanels(objects(ROOM_PANEL_COLUMNS + 1));
-    const topRow = panels.slice(ROOM_PANEL_COLUMNS);
-    expect(topRow).toHaveLength(1);
-    expect(topRow[0]!.position[0]).toBeCloseTo(0);
-    const bottomRow = panels.slice(0, ROOM_PANEL_COLUMNS);
-    const centre = bottomRow.reduce((sum, panel) => sum + panel.position[0], 0) / bottomRow.length;
-    expect(centre).toBeCloseTo(0);
-  });
-
-  it('caps the wall even when the caller forgot to', () => {
-    expect(wallPanels(objects(ROOM_WALL_CAPACITY + 40))).toHaveLength(ROOM_WALL_CAPACITY);
-  });
-
-  it('carries the preview through, so the wall shows the work and not a colour swatch', () => {
-    const [panel] = wallPanels([{ id: 'o1', label: 'Deck', color: '#fff', preview: 'https://x/y.png' }]);
-    expect(panel).toMatchObject({ objectId: 'o1', label: 'Deck', preview: 'https://x/y.png' });
-  });
-
-  it('draws nothing for an empty board rather than one blank panel', () => {
-    expect(wallPanels([])).toEqual([]);
   });
 });

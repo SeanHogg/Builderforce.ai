@@ -6,9 +6,11 @@ import type { CanvasPresenceSpatial } from '@builderforce/creation-canvas-contra
  * ── WHY THIS IS NOT IN THE SCENE COMPONENT ───────────────────────────────────
  * "Six people around a table" is a layout decision, and layout decisions that
  * live inside a renderer can only be checked by looking at them. A ring, a
- * table that fits inside it, a back wall the objects hang on and a camera that
- * can see all three are four numbers that have to agree; here they agree in one
- * file that a test can read, and `RoomScene` only draws what this returns.
+ * table that fits inside it, a back wall the session can hang on and a camera
+ * that can see all three are four numbers that have to agree; here they agree
+ * in one file that a test can read, and `RoomScene` only draws what this
+ * returns. Where the SESSION sits among them is the same kind of arithmetic,
+ * kept in its own module — see `roomSession.ts`.
  *
  * It is also what keeps the room honest about presence. A seat is where a
  * person is when the relay has NOT heard from them — the deterministic fallback
@@ -30,26 +32,9 @@ export const ROOM_SEAT_RADIUS = 2.35;
 export const ROOM_EYE_HEIGHT = 1.35;
 /** Square floor edge length. */
 export const ROOM_FLOOR_SIZE = 14;
-/** Where the object wall stands, on -Z. Inside the floor, behind the ring. */
+/** Where the back wall stands, on -Z. Inside the floor, behind the ring. The one
+ *  place in the room the session can hang rather than rest. */
 export const ROOM_WALL_Z = -5.2;
-/** Wall panel footprint, and the gap between two of them. */
-export const ROOM_PANEL_WIDTH = 1.5;
-export const ROOM_PANEL_HEIGHT = 0.95;
-export const ROOM_PANEL_GAP = 0.22;
-/** Panels per row before the wall starts a second row upward. */
-export const ROOM_PANEL_COLUMNS = 5;
-/** Height of the lowest row's centre. */
-export const ROOM_PANEL_BASE_Y = 1.25;
-
-/**
- * How many objects the wall will draw.
- *
- * A board with four hundred cards is not a room with four hundred posters on
- * the wall — it is an unreadable wall and a frame budget spent on geometry
- * nobody can see. The wall shows the most recent two rows and the surface says
- * how many it did not draw, which is a true statement a reader can act on.
- */
-export const ROOM_WALL_CAPACITY = ROOM_PANEL_COLUMNS * 2;
 
 /** One transform on the ring: where a body stands, and which way it faces. */
 export interface RoomPlacement {
@@ -125,67 +110,6 @@ export function assignRoomSeats(
       yaw: body ? body.yaw : fallback.yaw,
       live: !!body,
       isSelf: occupant.userId === currentUserId,
-    };
-  });
-}
-
-/** One object hanging on the wall. */
-export interface RoomPanel {
-  objectId: string;
-  label: string;
-  color: string;
-  /** A picture of what the object produced, when it produced one. */
-  preview?: string | undefined;
-  position: [number, number, number];
-}
-
-/**
- * The minimum an object needs to hang on the wall.
- *
- * Deliberately the same three-or-four facts `Canvas3DDescriptor` already
- * carries, so the host describes an object ONCE for both spatial readings: a
- * card is the same card whether you are looking at the depth projection or
- * standing in front of it.
- */
-export interface RoomWallObject {
-  id: string;
-  label: string;
-  color: string;
-  preview?: string | undefined;
-}
-
-/**
- * Lay objects out on the back wall, newest first, up to {@link ROOM_WALL_CAPACITY}.
- *
- * Rows build UPWARD from {@link ROOM_PANEL_BASE_Y} and each row is centred, so a
- * partial second row sits over the middle of the first rather than hanging off
- * one end.
- *
- * The cap is applied here even though the caller has usually applied it already —
- * the caller slices because describing four hundred cards to draw ten of them is
- * work nobody sees, and this slices because a layout function that trusts its
- * input to be short is a layout function that eventually is not. One CONSTANT,
- * two enforcements, no second opinion about the number. How many were left off is
- * not returned: only the caller knows the true total, and a count derived from an
- * already-truncated list would report zero and be believed.
- */
-export function wallPanels(objects: readonly RoomWallObject[]): RoomPanel[] {
-  const shown = objects.slice(0, ROOM_WALL_CAPACITY);
-  const stride = ROOM_PANEL_WIDTH + ROOM_PANEL_GAP;
-  const rowHeight = ROOM_PANEL_HEIGHT + ROOM_PANEL_GAP;
-
-  return shown.map((object, i) => {
-    const row = Math.floor(i / ROOM_PANEL_COLUMNS);
-    const column = i % ROOM_PANEL_COLUMNS;
-    // Width of THIS row, so the last row centres on its own contents.
-    const inRow = Math.min(ROOM_PANEL_COLUMNS, shown.length - row * ROOM_PANEL_COLUMNS);
-    const left = -((inRow - 1) * stride) / 2;
-    return {
-      objectId: object.id,
-      label: object.label,
-      color: object.color,
-      preview: object.preview,
-      position: [left + column * stride, ROOM_PANEL_BASE_Y + row * rowHeight, ROOM_WALL_Z] as [number, number, number],
     };
   });
 }

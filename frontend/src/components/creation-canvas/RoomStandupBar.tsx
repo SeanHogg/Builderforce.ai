@@ -90,7 +90,7 @@ export function RoomStandupBar({ members, boardProjectId = null }: RoomStandupBa
       <div className={styles.standup}>
         <button
           type="button"
-          className={styles.standupStep}
+          className={styles.barStep}
           onClick={() => setChosen(stepStandupProject(projectIds, resolved.projectId, -1))}
           disabled={!walkable}
           title={t('previous')}
@@ -99,12 +99,12 @@ export function RoomStandupBar({ members, boardProjectId = null }: RoomStandupBa
           ‹
         </button>
 
-        <label className={styles.standupPicker}>
+        <label className={styles.barPicker}>
           <span className={styles.srOnly}>{t('projectLabel')}</span>
           <select
             value={resolved.projectId == null ? '' : String(resolved.projectId)}
             onChange={(event) => setChosen(event.target.value === '' ? null : Number(event.target.value))}
-            className={styles.standupSelect}
+            className={styles.barSelect}
           >
             <option value="">{t('allProjects')}</option>
             {projects.map((project) => (
@@ -115,7 +115,7 @@ export function RoomStandupBar({ members, boardProjectId = null }: RoomStandupBa
 
         <button
           type="button"
-          className={styles.standupStep}
+          className={styles.barStep}
           onClick={() => setChosen(stepStandupProject(projectIds, resolved.projectId, 1))}
           disabled={!walkable}
           title={t('next')}
@@ -127,14 +127,14 @@ export function RoomStandupBar({ members, boardProjectId = null }: RoomStandupBa
         {live ? (
           <>
             <span className={styles.standupLive} role="status">{t('live', { project: label })}</span>
-            <button type="button" className={styles.standupAction} onClick={standup.finish} disabled={standup.busy}>
+            <button type="button" className={styles.barAction} onClick={standup.finish} disabled={standup.busy}>
               {standup.busy ? t('finishing') : t('finish')}
             </button>
           </>
         ) : (
           <button
             type="button"
-            className={styles.standupAction}
+            className={styles.barAction}
             onClick={standup.start}
             // A standup with no project can still be HELD — people are in the
             // room either way — it just has no record to file itself against,

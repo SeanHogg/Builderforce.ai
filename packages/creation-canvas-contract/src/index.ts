@@ -570,7 +570,7 @@ export const CREATION_OBJECT_KINDS = [
   'image', 'animation', 'podcast', 'comic', 'game', 'cad', 'model3d', 'resume', 'template',
   // A place, not a picture: a walkable 3D scene with placed props and a real camera.
   // Distinct from `model3d` (one generated mesh, previewed on a card) and from the
-  // `scene3d` SURFACE (a temporary reading of the flat board) — `world` is authored
+  // room's session (a temporary reading of the flat board) — `world` is authored
   // object state of its own, opened full-size the same way `game`/`website` are.
   'world',
   // AI VIDEO/3D GENERATION, as a canvas object. Opens into the `scene3d` SURFACE
