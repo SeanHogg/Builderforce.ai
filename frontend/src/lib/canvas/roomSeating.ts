@@ -132,6 +132,8 @@ export interface RoomPalette {
   panel: string;
   /** Ring under an empty chair. */
   chair: string;
+  /** Face of a board card that names no accent, in the session diorama. */
+  card: string;
   /** Body colour for a peer with no colour of their own. */
   body: string;
   /** Body colour for the viewer, so you can find yourself. */
@@ -146,12 +148,12 @@ export interface RoomPalette {
 export const ROOM_PALETTES: Readonly<Record<'light' | 'dark', RoomPalette>> = {
   light: {
     sky: '#dbe3f0', floor: '#c9d1de', wall: '#e6ebf3', table: '#9aa6ba',
-    panel: '#f6f8fb', chair: '#aab4c4', body: '#4c6ef5', self: '#0ca678',
+    panel: '#f6f8fb', chair: '#aab4c4', card: '#b6c0d0', body: '#4c6ef5', self: '#0ca678',
     bodyLightness: 46, ambient: 0.72, sun: 0.85,
   },
   dark: {
     sky: '#141821', floor: '#1e2430', wall: '#232a37', table: '#39424f',
-    panel: '#2b3340', chair: '#39424f', body: '#7c83fd', self: '#34d399',
+    panel: '#2b3340', chair: '#39424f', card: '#5a6578', body: '#7c83fd', self: '#34d399',
     bodyLightness: 62, ambient: 0.5, sun: 0.7,
   },
 };

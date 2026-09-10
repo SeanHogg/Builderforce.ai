@@ -120,7 +120,7 @@ export function RoomSessionDiorama({ scene, placement, palette, title, hint, onP
         ))}
         {diorama.cards.map((card) => (
           <group key={card.id} position={card.position}>
-            <SurfacePanel width={card.width} height={card.height} color={card.color} imageUrl={card.preview} fit="cover" offset={0.004} />
+            <SurfacePanel width={card.width} height={card.height} color={card.color ?? palette.card} imageUrl={card.preview} fit="cover" offset={0.004} />
           </group>
         ))}
       </group>

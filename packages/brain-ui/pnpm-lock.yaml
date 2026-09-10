@@ -8,9 +8,6 @@ importers:
 
   .:
     dependencies:
-      '@builderforce/agent-loop':
-        specifier: link:../agent-loop
-        version: link:../agent-loop
       '@seanhogg/builderforce-brain-embedded':
         specifier: link:../../brain-embedded
         version: link:../../brain-embedded
@@ -21,6 +18,9 @@ importers:
         specifier: ^4.0.1
         version: 4.0.1
     devDependencies:
+      '@builderforce/agent-loop':
+        specifier: link:../agent-loop
+        version: link:../agent-loop
       '@types/react':
         specifier: ^18
         version: 18.3.31

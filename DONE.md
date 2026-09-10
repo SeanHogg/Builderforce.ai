@@ -1,3 +1,26 @@
+## ✅ RESOLVED 2026-09-09 — Deploy API + Deploy frontend red after the room consolidation: three ratchets, one file
+
+Both deploy jobs failed on the commit that merged the room and the 3D space. The
+`check:silent-catches`, `check:design-scale` and `check:raw-storage` guards all
+pointed at the same new file, `lib/canvas/roomSession.ts`:
+
+- **A literal hex in a token-first file.** The diorama fell back to `#94a3b8` for a
+  card with no accent. WebGL never reads a CSS token, so the fallback is now a declared
+  per-theme slot — `RoomPalette.card` in `roomSeating.ts` (the file already exempt on
+  those grounds) — and `RoomSessionCard.color` is optional data the diorama resolves
+  as `card.color ?? palette.card`, the same shape `Canvas3DView` uses for a card with
+  no `--canvas-3d-accent`.
+- **Two raw `localStorage` calls and an empty catch.** `readRoomSessionSpot` /
+  `writeRoomSessionSpot` now go through `readLocalJson` / `writeLocalJson` from
+  `lib/storage.ts`, the one door to the browser's storage, which already owns the
+  private-mode / quota / server guards. The try/catch pair is gone with them.
+- **`packages/brain-ui/pnpm-lock.yaml` drift.** `@builderforce/agent-loop` had moved to
+  `devDependencies` in `package.json` but was still under `dependencies` in the lock,
+  so `ensure-linked-deps` hit `ERR_PNPM_OUTDATED_LOCKFILE` and fell through to a
+  non-frozen install on every frontend deploy. The lock now matches.
+
+Ratchets return to their baselines: empty-catch 192, raw-storage 143, literalHexFiles 0.
+
 ## ✅ RESOLVED 2026-09-09 — Room and 3D space merged: the session is a thing you place in the room
 
 The rail offered two 3D readings of one board — "3D space" (the depth projection,

@@ -1,6 +1,7 @@
 import type { Canvas3DScene } from '@/components/canvas/canvas3d';
 import { CANVAS_3D_LAYER_GAP } from '@/components/canvas/canvas3d';
 import { ROOM_FLOOR_SIZE, ROOM_TABLE_HEIGHT, ROOM_TABLE_RADIUS, ROOM_WALL_Z } from './roomSeating';
+import { readLocalJson, writeLocalJson } from '@/lib/storage';
 
 /**
  * THE SESSION IN THE ROOM — where it sits, and what it looks like from across a table.
@@ -103,7 +104,8 @@ export const DEFAULT_ROOM_SESSION_SPOT: RoomSessionSpot = ROOM_SESSION_SPOTS.tab
 export interface RoomSessionCard {
   id: string;
   label: string;
-  color: string;
+  /** The card's own accent; absent, the diorama paints the palette's card face. */
+  color?: string | undefined;
   preview?: string | undefined;
   position: [number, number, number];
   width: number;
@@ -147,7 +149,7 @@ export function roomSessionDiorama(scene: Canvas3DScene, footprint = ROOM_SESSIO
   const cards: RoomSessionCard[] = scene.cards.map((card, index) => ({
     id: card.id,
     label: card.label,
-    color: card.accent ?? '#94a3b8',
+    color: card.accent,
     preview: index < ROOM_SESSION_PREVIEW_CAPACITY ? card.preview : undefined,
     position: [
       card.x * scale,
@@ -189,21 +191,12 @@ const STORAGE_PREFIX = 'builderforce:create:room-session:';
  * stored session onto the right thing rather than leaving it floating.
  */
 export function readRoomSessionSpot(sessionId: string): RoomSessionSpot {
-  if (typeof window === 'undefined') return DEFAULT_ROOM_SESSION_SPOT;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_PREFIX + sessionId);
-    if (!raw) return DEFAULT_ROOM_SESSION_SPOT;
-    const parsed = JSON.parse(raw) as Partial<RoomSessionSpot> | null;
-    if (!parsed || typeof parsed.x !== 'number' || typeof parsed.z !== 'number') return DEFAULT_ROOM_SESSION_SPOT;
-    return { x: parsed.x, z: parsed.z };
-  } catch {
-    return DEFAULT_ROOM_SESSION_SPOT;
-  }
+  const parsed = readLocalJson<Partial<RoomSessionSpot>>(STORAGE_PREFIX + sessionId);
+  if (!parsed || typeof parsed.x !== 'number' || typeof parsed.z !== 'number') return DEFAULT_ROOM_SESSION_SPOT;
+  return { x: parsed.x, z: parsed.z };
 }
 
+/** Best effort: where storage is unavailable (server, private mode) the spot is simply not remembered. */
 export function writeRoomSessionSpot(sessionId: string, spot: RoomSessionSpot): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(STORAGE_PREFIX + sessionId, JSON.stringify({ x: spot.x, z: spot.z }));
-  } catch { /* storage can be unavailable in hardened contexts */ }
+  writeLocalJson(STORAGE_PREFIX + sessionId, { x: spot.x, z: spot.z });
 }
