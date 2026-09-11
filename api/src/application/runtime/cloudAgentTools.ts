@@ -177,20 +177,20 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
  * toolset (the Cloudflare Container and the GitHub Actions runner) dispatch `update_prd`
  * to it, so the capability is backed on every surface it is advertised to.
  *
- * `skill.author` is INTENTIONALLY omitted, and it is now the ONLY thing in this file
- * that is: it has no `skill` container-op behind it and no dispatch arm in the shared
- * relay module, so advertising it would surface two tools with nothing to answer them.
- * Adding it is a `skill` op in `handleContainerOp` relaying to the same Worker-side
- * authoring service the durable surface calls, plus an arm in `container/agentRelay.mjs`
- * — and, unlike before, in EITHER order.
+ * `skill.author` relays the same way, through the `skill` op (`cloudAgent/skillOp.ts`),
+ * which runs the durable surface's own `skill_propose` / `skill_list` definitions
+ * against the same `buildSkillAuthoringCapability` — so a container or Actions run that
+ * produced a working procedure can propose it as a DRAFT, exactly as a durable run can.
+ * Both images dispatch the two tools through the shared relay module.
  *
- * That ordering used to matter, and no longer does. Each image is a separately shipped
- * artifact, so a capability had to follow the DEPLOYED image rather than the source, or
- * a run would be offered a tool its image answered with `unknown tool`. Every image now
- * sends the tool names it can actually dispatch on each `llm` op and the Worker
+ * Adding it did not have to wait for a redeploy. Each image is a separately shipped
+ * artifact, so a capability used to have to follow the DEPLOYED image rather than the
+ * source, or a run would be offered a tool its image answered with `unknown tool`. Every
+ * image now sends the tool names it can actually dispatch on each `llm` op and the Worker
  * advertises the intersection (`imageToolHandshake.ts`), so a capability can be added
  * the moment its op exists: an older image simply does not name the tool and is never
- * offered it.
+ * offered it (and an image too old to send a manifest is covered by
+ * `HANDSHAKE_ONLY_TOOLS`).
  *
  * `repo.edit` is INTENTIONALLY omitted (not a gap): unlike the shell-less durable
  * surface — which must do surgical edits over the git API (read blob → string-replace
@@ -231,6 +231,10 @@ export const CONTAINER_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capabilit
   // shell can already curl. Search is the one that genuinely needs the Worker, because
   // the vendor credential, the read-through cache and the meter all live there.
   'web.search',
+  // Skill authoring — PARITY with the durable surface. Backed by the `skill` container-op,
+  // which runs the same tool definitions against the same authoring service, so a
+  // proposal from an image lands as a draft for review and can never be binding.
+  'skill.author',
 ]);
 
 /** Durable/Worker schema array — derived from {@link CLOUD_SURFACE_CAPS}, not

@@ -63,6 +63,7 @@ import type { Env } from '../../../env';
 import type { Db } from '../../../infrastructure/database/connection';
 import type { RuntimeService } from '../RuntimeService';
 import { heartbeatExecution, isExecutionCancelled, type ContainerRunContext } from './runContext';
+import { skillOp } from './skillOp';
 
 /** What one op answers with — an HTTP status and a JSON body for the image. */
 export interface ContainerOpResult {
@@ -307,6 +308,12 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
     });
     return { status: 200, body: result };
   },
+
+  // Skill authoring relayed from the container / Actions runner — `skill_propose` and
+  // `skill_list`, run against the SAME authoring capability the durable provider builds,
+  // so a proposal from any surface lands as a draft for human review. Its own module
+  // (`skillOp.ts`) rather than an inline body: see that file for the one-path rule.
+  skill: skillOp,
 
   // Multi-agent coordination relayed from the container. The Worker remains the
   // authority for leases and blackboard notes; the image receives only the same

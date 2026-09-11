@@ -11,7 +11,7 @@ const api = vi.hoisted(() => ({ getConfig: vi.fn(), setFeature: vi.fn() }));
 
 vi.mock('@/lib/AuthContext', () => ({ useAuth: () => auth }));
 vi.mock('@/lib/rbac', () => ({
-  usePermission: () => ({ allowed: auth.tenant.role === 'owner' || auth.tenant.role === 'manager', role: auth.tenant.role, required: 'manager', requiredLabel: 'Manager' }),
+  usePermission: () => ({ allowed: auth.tenant.role === 'owner' || auth.tenant.role === 'manager', role: auth.tenant.role, required: 'manager' }),
 }));
 vi.mock('@/lib/builderforceApi', () => ({ embedApi: api }));
 vi.mock('@/components/settings/EmbedIntegrationSettings', () => ({ EmbedIntegrationSettings: () => null }));

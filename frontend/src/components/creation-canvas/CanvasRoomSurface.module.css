@@ -196,6 +196,65 @@
 
 .fallbackOpen:hover { border-color: var(--accent); }
 
+/* The no-WebGL reading of what stands in the room: one row per creation, each with
+   the same Open its 3D stand carries. Capped in width so a phone and a desktop both
+   read it as a list rather than as a stretched table. */
+.creations {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(100%, 420px);
+  margin: 6px 0 0;
+  padding: 0;
+}
+
+.creation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised, var(--surface));
+  text-align: left;
+}
+
+.creationName {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: var(--font-size-small);
+  color: var(--text-primary);
+}
+
+.creationName strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.creationName small {
+  font-size: var(--font-size-eyebrow);
+  color: var(--text-secondary);
+}
+
+.creationOpen {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+  cursor: pointer;
+}
+
+.creationOpen:hover { border-color: var(--accent); }
+
 .ring {
   display: flex;
   flex-wrap: wrap;

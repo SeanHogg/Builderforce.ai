@@ -1752,6 +1752,8 @@
     "typeDesign": "Design",
     "typeIncident": "Incident",
     "requiresRoleHint": "{role, select, viewer {Requires Viewer role} developer {Requires Developer role} manager {Requires Manager role} owner {Requires Owner role} other {Requires {role} role}}",
+    "tenantRoleLabel": "{role, select, viewer {Viewer} developer {Developer} manager {Manager} owner {Owner} other {{role}}}",
+    "tenantRoleDescription": "{role, select, viewer {Read-only access to boards, work, and the workforce.} developer {Build and run agents, work the board, and see delivery insights.} manager {Invite people, manage roles and integrations, and see every insight lens.} owner {Full control, including billing, API keys, and deleting the workspace.} other {}}",
     "requiresDeveloperRole": "Requires Developer role",
     "closePanel": "Close panel",
     "panel": "Panel",
@@ -3747,6 +3749,19 @@
     }
   },
   "workforce": {
+    "memberCard": {
+      "roleSelect": "Member role",
+      "roleBadge": "Workspace role",
+      "mfaEnabled": "MFA enabled",
+      "mfa": "MFA",
+      "activeSessions": "{count, plural, one {# active session} other {# active sessions}}",
+      "remove": "Remove",
+      "removing": "Removing…",
+      "invitedAs": "Invited as {role}",
+      "joinsOnSignup": "Joins automatically when they sign up with this email.",
+      "revoke": "Revoke",
+      "revoking": "Revoking…"
+    },
     "page": {
       "title": "Workforce",
       "sub": {
@@ -17711,8 +17726,11 @@
     "chooseObjective": "Choose an objective…",
     "linkObjective": "Link",
     "linking": "Linking…",
-    "linkObjectiveDenied": "Only a manager can link a ticket to an objective.",
     "noObjectivesYet": "No objectives exist yet — create one on the Planning board.",
+    "projectObjectives": "This project’s objectives",
+    "otherObjectives": "Other objectives",
+    "loadObjectivesFailed": "Couldn’t load objectives.",
+    "retryLoadObjectives": "Retry",
     "signoffs": "Sign-offs",
     "basisLane": "Stage {index} of {total}",
     "basisSignoff": "{done} of {total} signed off",
@@ -21987,6 +22005,7 @@
         "answer": "Answer",
         "version": "Version",
         "savedAt": "Saved",
+        "notes": "Notes",
         "evalScore": "Score"
       }
     },
@@ -22570,7 +22589,13 @@
         "onBoard": "On the board",
         "noWebglTitle": "3D is not available on this device",
         "noWebglBody": "The room needs WebGL, which this browser cannot start. Everyone in the session is listed below, and the rest of the canvas works normally.",
-        "navigateHint": "Drag to look around · right-drag or two fingers to move · scroll to zoom · drag the session to move it",
+        "navigateHint": "Drag to look around · right-drag or two fingers to move · scroll to zoom · drag the session or a creation to move it",
+        "creation": {
+          "hint": "{kind} · drag to move",
+          "openNamed": "Open {title}",
+          "untitled": "Untitled",
+          "head": "{count, plural, one {# creation in the room} other {# creations in the room}}"
+        },
         "session": {
           "open": "Open the session",
           "openButton": "Open",
@@ -28388,7 +28413,7 @@
     "sectionIntro": "Register an external Model Context Protocol server so this workspace's agents can call its tools.",
     "loading": "Loading registered servers…",
     "empty": "No MCP servers registered yet.",
-    "requiresRole": "Requires the {role} role. Ask a workspace owner to register MCP servers.",
+    "requiresRole": "{role, select, viewer {Requires the Viewer role.} developer {Requires the Developer role.} manager {Requires the Manager role.} owner {Requires the Owner role.} other {Requires the {role} role.}} Ask a workspace owner to register MCP servers.",
     "confirmDisconnect": "Disconnect {name}? The registration stays, but its access grant is revoked.",
     "confirmRemove": "Remove {name}? Agents here will lose its tools immediately.",
     "status": {
@@ -28490,7 +28515,7 @@
     "intro": "Send agent runs to your own collector, so they sit beside the rest of your system instead of only in this product.",
     "loading": "Loading collectors…",
     "empty": "No collector configured. Agent telemetry stays in BuilderForce.",
-    "requiresRole": "Requires the {role} role. Ask a workspace manager to configure telemetry export.",
+    "requiresRole": "{role, select, viewer {Requires the Viewer role.} developer {Requires the Developer role.} manager {Requires the Manager role.} owner {Requires the Owner role.} other {Requires the {role} role.}} Ask a workspace manager to configure telemetry export.",
     "lastExport": "Last export {at}.",
     "lastError": "Last failure: {error}",
     "neverExported": "Nothing exported yet.",

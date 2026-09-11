@@ -65,8 +65,8 @@ export function RoleGate({ capability, children, variant = 'inline', silent = fa
     );
   }
 
-  // Localized via an ICU select on the role key rather than interpolating the
-  // English ROLE_LABEL — "Requires {label} role" is not a sentence shape that
+  // Localized via an ICU select on the role key rather than interpolating a
+  // role name — "Requires {label} role" is not a sentence shape that
   // survives translation (German needs the role in quotes and a different verb,
   // Chinese drops the article entirely), so each locale owns the whole phrase.
   const hint = t('requiresRoleHint', { role: required });

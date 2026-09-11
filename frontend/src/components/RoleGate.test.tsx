@@ -17,7 +17,6 @@ const permission = vi.hoisted(() => ({
     allowed: false,
     role: undefined as 'owner' | 'manager' | 'developer' | 'viewer' | undefined,
     required: 'manager',
-    requiredLabel: 'Manager',
   },
 }));
 vi.mock('@/lib/rbac', () => ({ usePermission: () => permission.current }));
@@ -36,13 +35,13 @@ import { RoleGate } from './RoleGate';
 
 describe('RoleGate', () => {
   it('renders children plainly when the capability is allowed', () => {
-    permission.current = { allowed: true, role: 'manager', required: 'developer', requiredLabel: 'Developer' };
+    permission.current = { allowed: true, role: 'manager', required: 'developer' };
     render(<RoleGate capability="knowledge.create"><button>New document</button></RoleGate>);
     expect(screen.getByRole('button', { name: 'New document' })).toBeEnabled();
   });
 
   it('shows the honest role hint to a signed-in person below the required role', () => {
-    permission.current = { allowed: false, role: 'viewer', required: 'developer', requiredLabel: 'Developer' };
+    permission.current = { allowed: false, role: 'viewer', required: 'developer' };
     sampleWorkspace.current = { ready: true, signedIn: true, isSample: false };
     render(<RoleGate capability="knowledge.create"><button>New document</button></RoleGate>);
     expect(screen.getByTitle(/Requires.*role/i)).toBeInTheDocument();
@@ -50,7 +49,7 @@ describe('RoleGate', () => {
   });
 
   it('shows the account CTA, not a role hint, to a signed-out visitor', () => {
-    permission.current = { allowed: false, role: undefined, required: 'developer', requiredLabel: 'Developer' };
+    permission.current = { allowed: false, role: undefined, required: 'developer' };
     sampleWorkspace.current = { ready: true, signedIn: false, isSample: true };
     render(<RoleGate capability="knowledge.create" variant="block"><button>New document</button></RoleGate>);
     expect(screen.getByText('Create an account to unlock this.')).toBeInTheDocument();
@@ -60,7 +59,7 @@ describe('RoleGate', () => {
   });
 
   it('honors silent on the guest branch — disabled, no visible CTA', () => {
-    permission.current = { allowed: false, role: undefined, required: 'developer', requiredLabel: 'Developer' };
+    permission.current = { allowed: false, role: undefined, required: 'developer' };
     sampleWorkspace.current = { ready: true, signedIn: false, isSample: true };
     render(<RoleGate capability="knowledge.create" silent><button>New document</button></RoleGate>);
     expect(screen.queryByText('Create an account')).not.toBeInTheDocument();

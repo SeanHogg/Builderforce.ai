@@ -1,11 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { tasksApi, kanbanApi, pmoApi, type Objective, type TicketContext, type TicketObjective } from '@/lib/builderforceApi';
-import { usePermission } from '@/lib/rbac';
-import { Select } from '@/components/Select';
+import { tasksApi, kanbanApi, type TicketContext, type TicketObjective } from '@/lib/builderforceApi';
 import { faultMessage } from '@/lib/apiClient';
+import { TicketObjectiveLinkPicker } from './TicketObjectiveLinkPicker';
+import { contextCard as card, contextLabel as label, contextLinkButton as linkButton } from './ticketContextStyles';
 /**
  * The ticket drawer's CONTEXT header — the answer to "why does this matter and
  * how far along is it", above the fold, before any tab.
@@ -22,36 +22,6 @@ import { faultMessage } from '@/lib/apiClient';
  * it was folded from ("stage 4 of 9", "0 of 10 signed off"), so a number a manager
  * would otherwise distrust is auditable in place.
  */
-
-const card: CSSProperties = {
-  border: '1px solid var(--border-subtle)',
-  borderRadius: 'var(--radius-lg)',
-  padding: 12,
-  background: 'var(--bg-elevated)',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 8,
-  minWidth: 0,
-};
-
-const label: CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
-  letterSpacing: 0.6,
-  textTransform: 'uppercase',
-  color: 'var(--text-muted)',
-};
-
-const linkButton: CSSProperties = {
-  border: 'none',
-  background: 'none',
-  padding: 0,
-  font: 'inherit',
-  color: 'var(--coral-bright)',
-  fontWeight: 600,
-  cursor: 'pointer',
-  textAlign: 'left',
-};
 
 /** Tone a completion bar by how far along it is — red early, amber mid, green done. */
 function meterColor(percent: number): string {
@@ -87,89 +57,6 @@ function Stat({ children, value, percent }: { children: ReactNode; value: string
         <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>{value}</span>
       </div>
       {percent != null && <Meter percent={percent} />}
-    </div>
-  );
-}
-
-/**
- * LINK THIS TICKET TO AN OBJECTIVE, from the ticket.
- *
- * The strip reported "not linked to an objective" and pointed at the Planning board,
- * because an objective link was writable ONLY through
- * `POST /api/pmo/objectives/:id/links` — which the Planning board is the only surface
- * that calls. So the gap was noticed here and could only be closed somewhere else: leave
- * the board, find the objective, link from the other end, come back.
- *
- * MANAGER-gated to match the route (which is `requireRole(MANAGER)`), and the control is
- * DISABLED rather than hidden for everyone else — a viewer should be able to see that
- * linking is possible and who can do it, per the RoleGate convention.
- */
-function LinkObjective({ taskId, onLinked }: { taskId: number; onLinked: () => void }) {
-  const t = useTranslations('ticketContext');
-  const canLink = usePermission('pmo.objectives.link');
-  const [options, setOptions] = useState<Objective[] | null>(null);
-  const [choice, setChoice] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Loaded on first render of the empty state only — a ticket that already serves an
-  // objective never renders this, so the objective list is not fetched for it.
-  useEffect(() => {
-    let alive = true;
-    pmoApi.objectives.list()
-      .then((rows) => { if (alive) setOptions(rows); })
-      .catch(() => { if (alive) setOptions([]); });
-    return () => { alive = false; };
-  }, []);
-
-  const link = useCallback(() => {
-    if (!choice) return;
-    setBusy(true);
-    setError(null);
-    pmoApi.objectives.addLink(choice, { linkKind: 'task', taskId })
-      .then(() => { setChoice(''); onLinked(); })
-      .catch((e) => setError(faultMessage(e)))
-      .finally(() => setBusy(false));
-  }, [choice, taskId, onLinked]);
-
-  return (
-    <div style={{ ...card, gap: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span style={label}>{t('objective')}</span>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)', flex: '1 1 200px', minWidth: 0 }}>{t('noObjective')}</span>
-      </div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Select
-          value={choice}
-          onChange={(e) => setChoice(e.target.value)}
-          disabled={!canLink || busy || options == null}
-          aria-label={t('linkObjectiveLabel')}
-          style={{ flex: '1 1 200px', minWidth: 0, fontSize: 12 }}
-        >
-          <option value="">{options == null ? t('loadingObjectives') : t('chooseObjective')}</option>
-          {(options ?? []).map((o) => (
-            <option key={o.id} value={o.id}>{o.title}</option>
-          ))}
-        </Select>
-        <button
-          type="button"
-          onClick={link}
-          disabled={!canLink || busy || !choice}
-          title={canLink ? undefined : t('linkObjectiveDenied')}
-          style={{
-            padding: '6px 12px', borderRadius: 'var(--radius-md)', border: 'none', fontSize: 12, fontWeight: 700,
-            background: 'var(--coral-bright)', color: 'var(--text-on-accent)',
-            cursor: !canLink || busy || !choice ? 'default' : 'pointer',
-            opacity: !canLink || busy || !choice ? 0.6 : 1,
-          }}
-        >
-          {busy ? t('linking') : t('linkObjective')}
-        </button>
-      </div>
-      {options != null && options.length === 0 && (
-        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('noObjectivesYet')}</span>
-      )}
-      {error && <span style={{ fontSize: 11, color: 'var(--danger-text)' }}>{error}</span>}
     </div>
   );
 }
@@ -380,7 +267,7 @@ export function TicketContextStrip({ taskId, onOpenEpic, onOpenTab, onChanged }:
           <ObjectiveCard key={o.id} objective={o} onOpen={() => { window.location.href = `/pmo?objective=${o.id}`; }} />
         ))
       ) : (
-        <LinkObjective taskId={taskId} onLinked={() => { load(); onChanged?.(); }} />
+        <TicketObjectiveLinkPicker taskId={taskId} projectId={ctx.projectId} onLinked={() => { load(); onChanged?.(); }} />
       )}
     </div>
   );

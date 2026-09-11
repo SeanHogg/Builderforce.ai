@@ -323,7 +323,9 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   // events (agent.message, llm.complete, …) so "Tools (N)" reflects real invocations.
   const realToolEvents = toolEvents.filter(isGenuineToolCall);
   // The reasoning the Tools count excludes, read whole on its own tab.
-  const thoughts = useMemo(() => thinkingEventsOf(toolEvents), [toolEvents]);
+  // A plain filter over the trace — no memo: `toolEvents` is a fresh array per render,
+  // so a memo keyed on it would recompute every time anyway.
+  const thoughts = thinkingEventsOf(toolEvents);
   // Structured per-turn model + token facts for this run (0949) — real columns off
   // the run's own trace rows, not a JSON blob the UI has to re-parse.
   const llmTurns: ExecutionLlmTurn[] = trace?.trace.llmTurns ?? [];

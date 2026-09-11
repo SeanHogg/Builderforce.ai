@@ -456,6 +456,15 @@ export const ACCOUNT_REQUIRED_CANVAS_TOOLS = [
   // it the board launches a training run and can never see the loss curve or the
   // scorecard it produced.
   'canvas_read_training_run',
+  // The prompt library (`/api/prompts/*`, `prompt_library_entries` +
+  // `prompt_library_versions`) — the other half of the same loop for prompt
+  // engineering. Account-required for the same reason as the training run one line up:
+  // a library entry is a tenant row behind a tenant JWT, and saving a version appends to
+  // it. A guest board can still author a `prompt` card with `canvas_add_object`; what it
+  // cannot have is the history, and there is no true one-sentence answer that turns an
+  // empty workspace's library into one. See `lib/canvasPromptLibraryTools.ts`.
+  'canvas_read_prompt',
+  'canvas_save_prompt_version',
   // ── The recruiter's funnel (`/api/hiring/*`) ─────────────────────────────────
   // Account-required for the same reason `canvas_read_domain` is: every one reads or
   // writes tenant hiring data. The Recruiter built-in agent ships a good bio and, until

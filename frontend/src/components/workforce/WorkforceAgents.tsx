@@ -35,7 +35,8 @@ import {
 } from '@/lib/auth';
 import { RoleGate } from '@/components/RoleGate';
 import { SplitButton } from '@/components/ui/SplitButton';
-import { ROLE_LABEL, usePermission, type TenantRole } from '@/lib/rbac';
+import { usePermission } from '@/lib/rbac';
+import { useRoleText } from '@/lib/useRoleText';
 import type { PublishedAgent } from '@/lib/types';
 import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
 import { FleetMeshContent } from '@/components/FleetMeshContent';
@@ -103,6 +104,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
   const { tenant, tenantToken } = useAuth();
   const confirm = useConfirm();
   const tWf = useTranslations('workforce');
+  const roleText = useRoleText();
   const tAdd = useTranslations('workforceAddAgent');
   const tc = useTranslations('common');
 
@@ -605,7 +607,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                   <td style={tdStyle}>{m.displayName ?? m.username ?? m.email}</td>
                   <td style={tdStyle}><AgentTypePill kind="human" /></td>
                   <td style={tdMutedStyle}>{m.email}</td>
-                  <td style={tdMutedStyle}>{ROLE_LABEL[m.role as TenantRole] ?? m.role}</td>
+                  <td style={tdMutedStyle}>{roleText.label(m.role)}</td>
                   <td style={tdMutedStyle}>—</td>
                   <td style={tdStyle}>
                     <RoleSelect value={m.role} onChange={(role) => handleChangeRole(m, role)} busy={changingRoleId === m.id} compact />

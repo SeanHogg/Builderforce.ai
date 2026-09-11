@@ -21,19 +21,9 @@ export type TenantRole = 'owner' | 'manager' | 'developer' | 'viewer';
 // Higher index = more authority. Mirrors ROLE_ORDER on the API.
 export const ROLE_ORDER: TenantRole[] = ['viewer', 'developer', 'manager', 'owner'];
 
-export const ROLE_LABEL: Record<TenantRole, string> = {
-  owner: 'Owner',
-  manager: 'Manager',
-  developer: 'Developer',
-  viewer: 'Viewer',
-};
-
-export const ROLE_DESCRIPTION: Record<TenantRole, string> = {
-  owner: 'Full control, including billing, API keys, and deleting the workspace.',
-  manager: 'Invite people, manage roles & integrations, and see every insight lens.',
-  developer: 'Build and run agents, work the board, and see delivery insights.',
-  viewer: 'Read-only access to boards, work, and the workforce.',
-};
+// A role's NAME and DESCRIPTION are localized chrome, not model data — they live in
+// the catalogs (`common.tenantRoleLabel` / `common.tenantRoleDescription`) and are
+// read through `useRoleText()` (`lib/useRoleText.ts`).
 
 /** Roles a manager/owner may assign through the Members UI (owner is owner-only). */
 export const ASSIGNABLE_ROLES: TenantRole[] = ['viewer', 'developer', 'manager', 'owner'];
@@ -91,7 +81,7 @@ export const CAPABILITIES = {
   // Starting / cancelling / steering an agent run. Mirrors the API's
   // requireRole(DEVELOPER) on every dispatch-tier route in runtimeRoutes (submit,
   // cancel, messages, state, broadcast, telemetry). DEVELOPER — not manager —
-  // because running agents IS the developer's job (see ROLE_DESCRIPTION.developer);
+  // because running agents IS the developer's job (see common.tenantRoleDescription);
   // the manager control for a run is the SEPARATE governance approval gate, which
   // holds high/urgent tickets for sign-off in /api/approvals. Keeping both at
   // manager would collapse two distinct controls and make the approval queue moot.
@@ -224,8 +214,9 @@ export type Capability = keyof typeof CAPABILITIES;
 export interface PermissionResult {
   allowed: boolean;
   role: TenantRole | undefined;
+  /** The role KEY the capability needs. A hint names it through an ICU select on
+   *  this key (`common.requiresRoleHint`), never by splicing a label into prose. */
   required: TenantRole;
-  requiredLabel: string;
 }
 
 /** The current user's role in the active workspace (undefined when unknown or
@@ -240,7 +231,7 @@ export function useRole(): TenantRole | undefined {
 export function usePermission(cap: Capability): PermissionResult {
   const role = useRole();
   const required = CAPABILITIES[cap];
-  return { allowed: hasMinRole(role, required), role, required, requiredLabel: ROLE_LABEL[required] };
+  return { allowed: hasMinRole(role, required), role, required };
 }
 
 /**

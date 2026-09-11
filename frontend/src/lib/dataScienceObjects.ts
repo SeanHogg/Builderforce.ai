@@ -326,20 +326,27 @@ export const DATA_SCIENCE_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         label: 'variables',
         hint: 'Placeholder names the body interpolates, e.g. "customer_name". Declaring them is what lets an evaluation fill them from a dataset column instead of running the prompt with its placeholders still in it.',
       },
+      // `entryId` and `versions` are BOOKKEEPING, not `derived`, for the reason
+      // `jobPosting.postingId` is: `derived` keeps a field out of the mutable list, so
+      // `sanitizeCreationObjectPatch` dropped both on the way to the board and nothing
+      // could ever bind a card to its library row. The tools that write them
+      // (`canvasPromptLibraryTools.ts`) read them FROM the library, and every read or
+      // save overwrites whatever a hand-typed patch left there — the library, not the
+      // card, is the record.
       {
         name: 'entryId',
         render: 'stat',
         label: 'entryId',
-        hint: 'Prompt-library entry this is bound to. Set by the save action.',
-        derived: true,
+        hint: 'The `prompt_library_entries` row this card IS, by id. Written by canvas_read_prompt and canvas_save_prompt_version, never by hand — an invented id resolves to nothing, and a card without one has no history to diff against.',
+        bookkeeping: true,
       },
       {
         name: 'versions',
         render: 'rows',
         label: 'versions',
-        columns: ['version', 'savedAt', 'evalScore'],
-        hint: 'Every saved version with the score its evaluation produced.',
-        derived: true,
+        columns: ['version', 'savedAt', 'notes', 'evalScore'],
+        hint: 'Every saved version, read from the prompt library: its number, when it was saved and the note saying what changed. Never type a row — the next read replaces the list with what the library holds, and a score appears only where an evaluation produced one.',
+        bookkeeping: true,
       },
       {
         name: 'activeVersion',

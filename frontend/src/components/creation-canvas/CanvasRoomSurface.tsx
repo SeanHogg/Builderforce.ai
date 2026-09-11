@@ -14,20 +14,21 @@ import {
   ROOM_PALETTES, assignRoomSeats, bodyColor, seatPlacement,
   type RoomOccupant,
 } from '@/lib/canvas/roomSeating';
-import {
-  DEFAULT_ROOM_SESSION_SPOT, placeSessionInRoom, readRoomSessionSpot, writeRoomSessionSpot,
-  type RoomSessionSpot,
-} from '@/lib/canvas/roomSession';
+import { DEFAULT_ROOM_SESSION_SPOT, placeSessionInRoom } from '@/lib/canvas/roomSession';
+import type { RoomCreation } from '@/lib/canvas/roomCreations';
+import { roomSpotKey } from '@/lib/canvas/roomSpots';
+import { useRoomSpot } from '@/lib/canvas/useRoomSpot';
 import { CanvasBarGroup } from './CanvasBarGroup';
 import { useCanvasSurfaceActions } from './canvasSurfaceActions';
 import { RoomSessionFrame } from './RoomSessionFrame';
+import { RoomCreationItem } from './world3d/RoomCreationItem';
 import { RoomScene } from './world3d/RoomScene';
 import { RoomSessionDiorama } from './world3d/RoomSessionDiorama';
 import styles from './CanvasRoomSurface.module.css';
 
 /**
  * THE ROOM — this session's people, standing in a circle, with the session itself
- * placed among them.
+ * placed among them, and every 3D thing the session has made standing beside it.
  *
  * ── WHY THE ROOM AND THE 3D SPACE ARE ONE SURFACE ────────────────────────────────
  * They shipped as two rail entries. "3D space" projected the board's objects through
@@ -39,6 +40,15 @@ import styles from './CanvasRoomSurface.module.css';
  * left it. The full-size projection is still `Canvas3DView`, unchanged; the host
  * hands it in through `renderSession` and this surface decides when it is up. See
  * `lib/canvas/roomSession.ts` for the placement arithmetic.
+ *
+ * ── WHY 3D CREATIONS STAND IN IT ─────────────────────────────────────────────────
+ * A game, a world, an AI scene and a model are the things on a board that HAVE
+ * depth, and they used to be flat cards that each opened into a surface of their own
+ * — so the one spatial surface never showed the spatial work. Each now stands in the
+ * room (`RoomCreationItem`): dragged like the session, opened from its own button
+ * into the surface its kind already has, and — through the host — minimised back
+ * here rather than onto the board. A Brain turn that makes one brings the reader
+ * here. Which kinds, and where they first stand, is `lib/canvas/roomCreations.ts`.
  *
  * ── WHAT IT PUTS ON THE BAR, AND WHAT IT DOES NOT ────────────────────────────────
  * Only its STATUS — who is here. It used to publish a session group and a standup
@@ -114,6 +124,16 @@ export interface CanvasRoomSurfaceProps<T extends Canvas3DNode> {
    * the projection minimises it into the room rather than leaving the surface.
    */
   renderSession: (frame: { onMinimize: () => void }) => ReactNode;
+  /**
+   * Every 3D creation on the board — games, worlds, AI scenes, models — in board
+   * order. Each stands in the room beside the session (see the header).
+   */
+  creations: readonly RoomCreation[];
+  /**
+   * Open one at full size, in the surface its kind has. Only offered for a creation
+   * whose `surface` is set; the host routes its way back to the room.
+   */
+  onOpenCreation: (creation: RoomCreation) => void;
   /** Arrive with the session already open — a model comparison lands in depth. */
   sessionInitiallyOpen?: boolean;
   onExit: () => void;
@@ -128,10 +148,13 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
   onPresence,
   sceneInput,
   renderSession,
+  creations,
+  onOpenCreation,
   sessionInitiallyOpen = false,
   onExit,
 }: CanvasRoomSurfaceProps<T>) {
   const t = useTranslations('creationCanvas.surface.room');
+  const tCanvas = useTranslations('creationCanvas');
   const { theme } = useTheme();
   const palette = ROOM_PALETTES[theme === 'light' ? 'light' : 'dark'];
 
@@ -145,17 +168,17 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
   const openSession = useCallback(() => setSessionOpen(true), []);
   const minimizeSession = useCallback(() => setSessionOpen(false), []);
 
-  // Where the session sits. Restored in an effect rather than as the initial state,
-  // the same way the folded bar and the phase are: storage is a per-browser fact
-  // and reading it during render is the pattern the hooks ratchet exists to stop.
-  const [spot, setSpot] = useState<RoomSessionSpot>(DEFAULT_ROOM_SESSION_SPOT);
-  useEffect(() => { setSpot(readRoomSessionSpot(sessionId)); }, [sessionId]);
-  const placeSession = useCallback((next: RoomSessionSpot) => {
-    setSpot(next);
-    writeRoomSessionSpot(sessionId, next);
-  }, [sessionId]);
+  // Where the session sits — the same per-browser spot every creation keeps, under
+  // the key the session has always had.
+  const [spot, placeSession] = useRoomSpot(roomSpotKey(sessionId), DEFAULT_ROOM_SESSION_SPOT);
   const placement = useMemo(() => placeSessionInRoom(spot), [spot]);
   const [dragging, setDragging] = useState(false);
+
+  /** What one creation is called, what it is, and how its Open button is named. */
+  const labelsOf = useCallback((creation: RoomCreation) => {
+    const title = creation.title || t('creation.untitled');
+    return { title, kind: tCanvas(`object.${creation.kind}`), openName: t('creation.openNamed', { title }) };
+  }, [t, tCanvas]);
 
   const bodies = useMemo(() => {
     const map = new Map<string, CanvasPresenceSpatial>();
@@ -267,6 +290,29 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
               <button type="button" className={styles.fallbackOpen} onClick={openSession}>
                 {t('session.open')}
               </button>
+              {/* So do the creations: each surface they open into has its own reading
+                  for a device without WebGL, so the room still lists them with the
+                  same Open their 3D stands carry. */}
+              {creations.length > 0 && (
+                <ul className={styles.creations} aria-label={t('creation.head', { count: creations.length })}>
+                  {creations.map((creation) => {
+                    const labels = labelsOf(creation);
+                    return (
+                      <li key={creation.id} className={styles.creation} data-testid="room-creation">
+                        <span className={styles.creationName}>
+                          <strong>{labels.title}</strong>
+                          <small>{labels.kind}</small>
+                        </span>
+                        {creation.surface && (
+                          <button type="button" className={styles.creationOpen} onClick={() => onOpenCreation(creation)} aria-label={labels.openName}>
+                            {t('session.openButton')}
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </>
           )}
         </div>
@@ -292,6 +338,27 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
                     onOpen={openSession}
                     onDragChange={setDragging}
                   />}
+                  {creations.map((creation, index) => {
+                    const labels = labelsOf(creation);
+                    return (
+                      <RoomCreationItem
+                        key={creation.id}
+                        sessionId={sessionId}
+                        creation={creation}
+                        index={index}
+                        palette={palette}
+                        title={labels.title}
+                        hint={t('creation.hint', { kind: labels.kind })}
+                        open={creation.surface ? {
+                          label: t('session.openButton'),
+                          name: labels.openName,
+                          testId: 'room-creation-open',
+                          onOpen: () => onOpenCreation(creation),
+                        } : undefined}
+                        onDragChange={setDragging}
+                      />
+                    );
+                  })}
                 </RoomScene>
               </Canvas>
               <p className={styles.hint}>{t('navigateHint')}</p>

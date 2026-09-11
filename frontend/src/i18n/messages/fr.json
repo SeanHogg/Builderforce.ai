@@ -1752,6 +1752,8 @@
     "typeDesign": "Design",
     "typeIncident": "Incident",
     "requiresRoleHint": "{role, select, viewer {Nécessite le rôle Observateur} developer {Nécessite le rôle Développeur} manager {Nécessite le rôle Gestionnaire} owner {Nécessite le rôle Propriétaire} other {Nécessite le rôle {role}}}",
+    "tenantRoleLabel": "{role, select, viewer {Observateur} developer {Développeur} manager {Gestionnaire} owner {Propriétaire} other {{role}}}",
+    "tenantRoleDescription": "{role, select, viewer {Accès en lecture seule aux tableaux, au travail et à l’effectif.} developer {Créer et exécuter des agents, travailler le tableau et voir les analyses de livraison.} manager {Inviter des personnes, gérer les rôles et les intégrations, et voir toutes les vues d’analyse.} owner {Contrôle total, y compris la facturation, les clés d’API et la suppression de l’espace de travail.} other {}}",
     "requiresDeveloperRole": "Nécessite le rôle Développeur",
     "closePanel": "Fermer le panneau",
     "panel": "Panneau",
@@ -3747,6 +3749,19 @@
     }
   },
   "workforce": {
+    "memberCard": {
+      "roleSelect": "Rôle du membre",
+      "roleBadge": "Rôle dans l’espace de travail",
+      "mfaEnabled": "MFA activée",
+      "mfa": "MFA",
+      "activeSessions": "{count, plural, one {# session active} other {# sessions actives}}",
+      "remove": "Retirer",
+      "removing": "Retrait…",
+      "invitedAs": "Invitation : {role}",
+      "joinsOnSignup": "Rejoint automatiquement l’espace à l’inscription avec cette adresse e-mail.",
+      "revoke": "Révoquer",
+      "revoking": "Révocation…"
+    },
     "page": {
       "title": "Effectif",
       "sub": {
@@ -17711,8 +17726,11 @@
     "chooseObjective": "Choisir un objectif…",
     "linkObjective": "Rattacher",
     "linking": "Rattachement…",
-    "linkObjectiveDenied": "Seul un manager peut rattacher un ticket à un objectif.",
     "noObjectivesYet": "Aucun objectif pour l’instant — créez-en un sur le tableau de planification.",
+    "projectObjectives": "Objectifs de ce projet",
+    "otherObjectives": "Autres objectifs",
+    "loadObjectivesFailed": "Impossible de charger les objectifs.",
+    "retryLoadObjectives": "Réessayer",
     "signoffs": "Validations",
     "basisLane": "Étape {index} sur {total}",
     "basisSignoff": "{done} sur {total} validées",
@@ -21987,6 +22005,7 @@
         "answer": "Réponse",
         "version": "Version",
         "savedAt": "Enregistré",
+        "notes": "Notes",
         "evalScore": "Score"
       }
     },
@@ -22570,7 +22589,13 @@
         "onBoard": "Sur le tableau",
         "noWebglTitle": "La 3D n'est pas disponible sur cet appareil",
         "noWebglBody": "La salle nécessite WebGL, que ce navigateur ne parvient pas à démarrer. Toutes les personnes présentes dans la session sont listées ci-dessous, et le reste du canevas fonctionne normalement.",
-        "navigateHint": "Glissez pour regarder autour · clic droit ou deux doigts pour vous déplacer · molette pour zoomer · glissez la session pour la déplacer",
+        "navigateHint": "Glissez pour regarder autour · clic droit ou deux doigts pour vous déplacer · molette pour zoomer · glissez la session ou une création pour la déplacer",
+        "creation": {
+          "hint": "{kind} · glissez pour déplacer",
+          "openNamed": "Ouvrir {title}",
+          "untitled": "Sans titre",
+          "head": "{count, plural, one {# création dans la salle} other {# créations dans la salle}}"
+        },
         "session": {
           "open": "Ouvrir la session",
           "openButton": "Ouvrir",
@@ -28388,7 +28413,7 @@
     "sectionIntro": "Enregistrez un serveur Model Context Protocol externe pour que les agents de cet espace puissent appeler ses outils.",
     "loading": "Chargement des serveurs enregistrés…",
     "empty": "Aucun serveur MCP enregistré pour le moment.",
-    "requiresRole": "Nécessite le rôle {role}. Demandez à un propriétaire de l'espace d'enregistrer des serveurs MCP.",
+    "requiresRole": "{role, select, viewer {Nécessite le rôle Observateur.} developer {Nécessite le rôle Développeur.} manager {Nécessite le rôle Gestionnaire.} owner {Nécessite le rôle Propriétaire.} other {Nécessite le rôle {role}.}} Demandez à un propriétaire de l’espace d’enregistrer des serveurs MCP.",
     "confirmDisconnect": "Déconnecter {name} ? L'enregistrement est conservé, mais l'autorisation est révoquée.",
     "confirmRemove": "Supprimer {name} ? Les agents d'ici perdront ses outils immédiatement.",
     "status": {
@@ -28490,7 +28515,7 @@
     "intro": "Envoyez les exécutions d'agents vers votre propre collecteur, pour qu'elles côtoient le reste de votre système au lieu de rester dans ce produit.",
     "loading": "Chargement des collecteurs…",
     "empty": "Aucun collecteur configuré. La télémétrie des agents reste dans BuilderForce.",
-    "requiresRole": "Nécessite le rôle {role}. Demandez à un responsable de l'espace de configurer l'export de télémétrie.",
+    "requiresRole": "{role, select, viewer {Nécessite le rôle Observateur.} developer {Nécessite le rôle Développeur.} manager {Nécessite le rôle Gestionnaire.} owner {Nécessite le rôle Propriétaire.} other {Nécessite le rôle {role}.}} Demandez à un responsable de l’espace de configurer l’export de télémétrie.",
     "lastExport": "Dernier export : {at}.",
     "lastError": "Dernier échec : {error}",
     "neverExported": "Rien n'a encore été exporté.",

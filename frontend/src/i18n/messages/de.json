@@ -1752,6 +1752,8 @@
     "typeDesign": "Design",
     "typeIncident": "Vorfall",
     "requiresRoleHint": "{role, select, viewer {Erfordert die Rolle „Betrachter“} developer {Erfordert die Rolle „Entwickler“} manager {Erfordert die Rolle „Manager“} owner {Erfordert die Rolle „Eigentümer“} other {Erfordert die Rolle „{role}“}}",
+    "tenantRoleLabel": "{role, select, viewer {Betrachter} developer {Entwickler} manager {Manager} owner {Eigentümer} other {{role}}}",
+    "tenantRoleDescription": "{role, select, viewer {Nur-Lese-Zugriff auf Boards, Arbeit und Belegschaft.} developer {Agenten erstellen und ausführen, das Board bearbeiten und Delivery-Insights sehen.} manager {Personen einladen, Rollen und Integrationen verwalten und alle Insight-Ansichten sehen.} owner {Volle Kontrolle, einschließlich Abrechnung, API-Schlüsseln und Löschen des Workspace.} other {}}",
     "requiresDeveloperRole": "Erfordert die Rolle „Entwickler“",
     "closePanel": "Panel schließen",
     "panel": "Panel",
@@ -3747,6 +3749,19 @@
     }
   },
   "workforce": {
+    "memberCard": {
+      "roleSelect": "Mitgliedsrolle",
+      "roleBadge": "Workspace-Rolle",
+      "mfaEnabled": "MFA aktiviert",
+      "mfa": "MFA",
+      "activeSessions": "{count, plural, one {# aktive Sitzung} other {# aktive Sitzungen}}",
+      "remove": "Entfernen",
+      "removing": "Wird entfernt…",
+      "invitedAs": "Eingeladen als {role}",
+      "joinsOnSignup": "Tritt automatisch bei, sobald sich die Person mit dieser E-Mail registriert.",
+      "revoke": "Widerrufen",
+      "revoking": "Wird widerrufen…"
+    },
     "page": {
       "title": "Belegschaft",
       "sub": {
@@ -17711,8 +17726,11 @@
     "chooseObjective": "Ziel auswählen…",
     "linkObjective": "Verknüpfen",
     "linking": "Wird verknüpft…",
-    "linkObjectiveDenied": "Nur eine Managerin oder ein Manager kann ein Ticket mit einem Ziel verknüpfen.",
     "noObjectivesYet": "Es gibt noch keine Ziele — legen Sie eines im Planungsboard an.",
+    "projectObjectives": "Ziele dieses Projekts",
+    "otherObjectives": "Weitere Ziele",
+    "loadObjectivesFailed": "Ziele konnten nicht geladen werden.",
+    "retryLoadObjectives": "Erneut versuchen",
     "signoffs": "Freigaben",
     "basisLane": "Phase {index} von {total}",
     "basisSignoff": "{done} von {total} freigegeben",
@@ -21987,6 +22005,7 @@
         "answer": "Antwort",
         "version": "Version",
         "savedAt": "Gespeichert",
+        "notes": "Notizen",
         "evalScore": "Punktzahl"
       }
     },
@@ -22570,7 +22589,13 @@
         "onBoard": "Auf dem Board",
         "noWebglTitle": "3D ist auf diesem Gerät nicht verfügbar",
         "noWebglBody": "Der Raum benötigt WebGL, das dieser Browser nicht starten kann. Alle Personen der Sitzung stehen unten, und der Rest der Canvas funktioniert normal.",
-        "navigateHint": "Ziehen zum Umsehen · Rechtsklick-Ziehen oder zwei Finger zum Bewegen · Scrollen zum Zoomen · Sitzung ziehen zum Verschieben",
+        "navigateHint": "Ziehen zum Umsehen · Rechtsklick-Ziehen oder zwei Finger zum Bewegen · Scrollen zum Zoomen · Sitzung oder Kreation ziehen zum Verschieben",
+        "creation": {
+          "hint": "{kind} · ziehen zum Verschieben",
+          "openNamed": "{title} öffnen",
+          "untitled": "Ohne Titel",
+          "head": "{count, plural, one {# Kreation im Raum} other {# Kreationen im Raum}}"
+        },
         "session": {
           "open": "Sitzung öffnen",
           "openButton": "Öffnen",
@@ -28388,7 +28413,7 @@
     "sectionIntro": "Registrieren Sie einen externen Model-Context-Protocol-Server, damit die Agenten dieses Workspace seine Tools aufrufen können.",
     "loading": "Registrierte Server werden geladen…",
     "empty": "Noch keine MCP-Server registriert.",
-    "requiresRole": "Erfordert die Rolle {role}. Bitten Sie eine Workspace-Inhaberin oder einen Workspace-Inhaber, MCP-Server zu registrieren.",
+    "requiresRole": "{role, select, viewer {Erfordert die Rolle „Betrachter“.} developer {Erfordert die Rolle „Entwickler“.} manager {Erfordert die Rolle „Manager“.} owner {Erfordert die Rolle „Eigentümer“.} other {Erfordert die Rolle „{role}“.}} Bitten Sie eine Workspace-Inhaberin oder einen Workspace-Inhaber, MCP-Server zu registrieren.",
     "confirmDisconnect": "{name} trennen? Die Registrierung bleibt bestehen, die Zugriffsfreigabe wird widerrufen.",
     "confirmRemove": "{name} entfernen? Die Agenten hier verlieren dessen Tools sofort.",
     "status": {
@@ -28490,7 +28515,7 @@
     "intro": "Senden Sie Agentenläufe an Ihren eigenen Collector, damit sie neben dem Rest Ihres Systems stehen und nicht nur in diesem Produkt.",
     "loading": "Collectors werden geladen…",
     "empty": "Kein Collector konfiguriert. Agenten-Telemetrie bleibt in BuilderForce.",
-    "requiresRole": "Erfordert die Rolle {role}. Bitten Sie eine Workspace-Managerin oder einen Workspace-Manager, den Telemetrie-Export einzurichten.",
+    "requiresRole": "{role, select, viewer {Erfordert die Rolle „Betrachter“.} developer {Erfordert die Rolle „Entwickler“.} manager {Erfordert die Rolle „Manager“.} owner {Erfordert die Rolle „Eigentümer“.} other {Erfordert die Rolle „{role}“.}} Bitten Sie eine Workspace-Managerin oder einen Workspace-Manager, den Telemetrie-Export einzurichten.",
     "lastExport": "Letzter Export: {at}.",
     "lastError": "Letzter Fehler: {error}",
     "neverExported": "Noch nichts exportiert.",

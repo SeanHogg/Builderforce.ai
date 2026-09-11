@@ -95,7 +95,7 @@ export function McpServersGallery({ search = '', viewMode = 'card', returnTo = '
       {state.error && <p role="alert" style={{ fontSize: 'var(--font-size-small)', color: 'var(--danger)', margin: '0 0 12px' }}>{state.error}</p>}
 
       {!state.allowed ? (
-        <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: 0 }}>{t('requiresRole', { role: state.requiredLabel })}</p>
+        <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: 0 }}>{t('requiresRole', { role: state.requiredRole })}</p>
       ) : state.loading && state.servers.length === 0 ? (
         <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: 0 }}>{t('loading')}</p>
       ) : visible.length === 0 ? (

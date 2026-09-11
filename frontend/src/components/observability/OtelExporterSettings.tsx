@@ -50,7 +50,7 @@ const subtle: React.CSSProperties = {
 export function OtelExporterSettings() {
   const t = useTranslations('otelExport');
   const confirm = useConfirm();
-  const { allowed, requiredLabel } = usePermission('integrations.manage');
+  const { allowed, required } = usePermission('integrations.manage');
   const [exporters, setExporters] = useState<OtelExporter[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -108,7 +108,7 @@ export function OtelExporterSettings() {
     return (
       <div style={card}>
         <div style={{ fontWeight: 650, marginBottom: 6 }}>{t('title')}</div>
-        <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: 0 }}>{t('requiresRole', { role: requiredLabel })}</p>
+        <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: 0 }}>{t('requiresRole', { role: required })}</p>
       </div>
     );
   }

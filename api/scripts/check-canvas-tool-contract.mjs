@@ -80,6 +80,9 @@ const CANVAS_FILES = [
   // day it was written, for the reason the note above `canvasLegalRecordTools.ts` gives:
   // a family absent from this array makes the guard pass VACUOUSLY.
   path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasHiringPostingTools.ts'),
+  // The prompt library's read-and-version loop. Listed the same day it was written, for
+  // the same reason as the two families above.
+  path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasPromptLibraryTools.ts'),
 ];
 const CONTRACT_FILE = path.resolve(repoRoot, 'packages', 'creation-canvas-contract', 'src', 'canvasTools.ts');
 

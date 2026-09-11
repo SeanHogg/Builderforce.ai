@@ -23,6 +23,8 @@ import '@xyflow/react/dist/style.css';
 import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasSocialIcon, CleanLayoutIcon, DepthIcon, DisclosureIcon, DropToLayersIcon, FitViewIcon, LayerGuidesIcon, MarqueeSelectIcon, MinimapIcon, MoreActionsIcon, ProveIdeaIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
 import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
 import type { CanvasRoomSurfaceProps } from './CanvasRoomSurface';
+import { ROOM_CREATION_TOOL_NOTE, isRoomCreationKind, type RoomCreation } from '@/lib/canvas/roomCreations';
+import { roomCreationsOf } from './roomCreationsOf';
 import { useCanvasStandupAction } from './useCanvasStandupAction';
 import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
 import { canvasSurfaceDefinition, readCanvasSurface, writeCanvasSurface, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
@@ -207,7 +209,7 @@ import { computeProjectHealth } from '@/lib/projectHealth';
 import { createCloudAgent, updateAgent } from '@/lib/api';
 import { presentationSequence, presentationStepAt, presentationViewport, stepPresentation } from '@/lib/canvasPresentation';
 import { localCheckpointSummaries, readLocalCheckpoint, saveLocalCheckpoint, type LocalCheckpointSummary } from '@/lib/creationCheckpoints';
-import { CREATION_OBJECT_REGISTRY, createDefaultCreationData, creationObjectDefinition, creationObjectMutableFields, emptyShellProblem, sanitizeCreationObjectPatch, TITLE_IS_CONTENT_KINDS, type CreationObjectGroup } from './creationObjectRegistry';
+import { CREATION_OBJECT_REGISTRY, canvasEvidencePatch, createDefaultCreationData, creationObjectDefinition, creationObjectMutableFields, emptyShellProblem, sanitizeCreationObjectPatch, TITLE_IS_CONTENT_KINDS, type CreationObjectGroup } from './creationObjectRegistry';
 import { CREATION_TEMPLATES, type CreationTemplate } from './creationTemplates';
 import { expandTemplateWorkflows } from './expandTemplateWorkflows';
 import { describeMailboxFilter, mailboxApi, resolveMailboxConnection, type MailboxFilter } from '@/lib/mailboxApi';
@@ -399,6 +401,7 @@ import { canvasHiringPostingActions } from '@/lib/canvasHiringPostingTools';
 import { canvasLegalDocumentActions } from '@/lib/canvasLegalDocumentTools';
 import { canvasLegalRecordActions } from '@/lib/canvasLegalRecordTools';
 import { canvasSellMotionActions } from '@/lib/canvasSellMotionTools';
+import { canvasPromptLibraryActions } from '@/lib/canvasPromptLibraryTools';
 import { canvasSignatureActions } from '@/lib/canvasSignatureTools';
 import { moveDeal as moveDealOnBoard } from '@/lib/founderOpsApi';
 import { notifyWorkspaceFilesChanged } from '@/lib/workspaceFileEvents';
@@ -1165,15 +1168,26 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setBarCollapsedState(next);
     writeCanvasBarCollapsed(next);
   }, []);
-  const setSurface = useCallback((next: CanvasSurfaceId, targetId: string | null = null) => {
+  /**
+   * Where an object surface's way back goes. Null — the board — for every entry except
+   * one made FROM a surface that asked to be returned to: a creation opened from the
+   * room goes back into the room rather than dropping the reader on the board.
+   */
+  const [surfaceOrigin, setSurfaceOrigin] = useState<CanvasSurfaceId | null>(null);
+  const setSurface = useCallback((next: CanvasSurfaceId, targetId: string | null = null, origin: CanvasSurfaceId | null = null) => {
     setSurfaceState(next);
-    // Only an object-scoped surface keeps a target; the rail's switcher never passes one.
-    setSurfaceTarget(canvasSurfaceDefinition(next).scope === 'object' ? targetId : null);
+    // Only an object-scoped surface keeps a target (and an origin); the rail's switcher
+    // never passes either.
+    const objectScoped = canvasSurfaceDefinition(next).scope === 'object';
+    setSurfaceTarget(objectScoped ? targetId : null);
+    setSurfaceOrigin(objectScoped ? origin : null);
     // The registry decides what is worth remembering — a PLACE the user chose, never a
     // projection of the board they were already on, and never a surface that cannot be
     // restored without the object it was about.
     writeCanvasSurface(next);
   }, []);
+  /** Leave an object surface: back to wherever it was opened from, else the board. */
+  const exitSurface = useCallback(() => setSurface(surfaceOrigin ?? 'graph'), [setSurface, surfaceOrigin]);
   /**
    * Which stage of ITS OWN methodology this session is in — see `lib/canvasPhases.ts`
    * for why this is not `useFounderJourney()`. Same SSR-safe pattern as `surface`:
@@ -2606,8 +2620,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    */
   const surfaceNode = surfaceTarget ? nodes.find((node) => node.id === surfaceTarget) ?? null : null;
   useEffect(() => {
-    if (canvasSurfaceDefinition(surface).scope === 'object' && !surfaceNode) setSurface('graph');
-  }, [surface, surfaceNode, setSurface]);
+    if (canvasSurfaceDefinition(surface).scope === 'object' && !surfaceNode) exitSurface();
+  }, [surface, surfaceNode, exitSurface]);
   const effectiveSelectedIds = useMemo(() => selectedIds.length ? selectedIds : selectedId ? [selectedId] : [], [selectedId, selectedIds]);
   /**
    * SELECTING THE CHAT IS NOT A SCOPING INTENT.
@@ -4849,6 +4863,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    *  a trial, hand the board off, and drive a cadence. See `canvasSellMotionTools.ts` for
    *  why none of them can accept a quote. */
   const canvasSellMotionActionList = useMemo<BrainAction[]>(() => canvasSellMotionActions(canvasOpsContext), [canvasOpsContext]);
+  /** Prompt iteration — read a library prompt with its versions, save the next one. See `canvasPromptLibraryTools.ts`. */
+  const canvasPromptLibraryActionList = useMemo<BrainAction[]>(() => canvasPromptLibraryActions(canvasOpsContext), [canvasOpsContext]);
 
   /**
    * Stage ONE resolved image asset as an `image` object — the single place a picture
@@ -7036,17 +7052,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
       const title = args.title?.trim() || `Analysis of ${String(target.data.title)}`;
       const failures = outputs.filter((output) => output.kind === 'error');
-      const fields = sanitizeCreationObjectPatch('notebook', {
+      const fields = canvasEvidencePatch('notebook', {
         title,
         language: 'js',
         sourceObjectId: target.id,
         cells,
-        outputs: outputs.map((output) => ({ cellId: output.cellId, kind: output.kind, preview: output.preview, runtimeMs: output.runtimeMs })),
-        lastRunAt: new Date().toISOString(),
         status: failures.length ? `${failures.length} of ${cells.length} failed` : `${cells.length} cell${cells.length === 1 ? '' : 's'} ran`,
         summary: failures.length
           ? `${failures.length} of ${cells.length} cells failed: ${failures.map((output) => output.error).join(' · ').slice(0, 300)}`
           : `Ran ${cells.length} cell${cells.length === 1 ? '' : 's'} over ${fmt.number(source.rows.length)} rows of ${String(target.data.title)}.`,
+      }, {
+        // What the kernel actually returned — evidence, so it is not model-authorable.
+        outputs: outputs.map((output) => ({ cellId: output.cellId, kind: output.kind, preview: output.preview, runtimeMs: output.runtimeMs })),
+        lastRunAt: new Date().toISOString(),
       });
       const node = stage.createObject('notebook');
       node.data = { ...node.data, ...fields };
@@ -7131,10 +7149,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
       const all = stage.nodes();
       const title = `${job.base_model} · run ${job.id.slice(0, 8)}`;
-      const fields = sanitizeCreationObjectPatch('trainingRun', {
+      // `lowered` was READ from the job, so its measured fields go in as evidence; the
+      // model-facing sanitizer alone dropped every one of them (and the `jobId` the
+      // refresh match below depends on).
+      const fields = canvasEvidencePatch('trainingRun', {
         title, ...lowered,
         ...(args.datasetObjectId ? { datasetObjectId: args.datasetObjectId } : {}),
-      });
+      }, { ...lowered });
       const existing = all.find((node) => node.data.kind === 'trainingRun' && node.data.jobId === job.id);
       if (existing) {
         stage.updateObject('Refresh training run', existing.id, fields);
@@ -7177,15 +7198,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       );
       const title = args.title?.trim() || `Run comparison · ${comparison.rankBy}`;
       const scored = comparison.rows.filter((row) => row.score != null).length;
-      const fields = sanitizeCreationObjectPatch('runComparison', {
+      const fields = canvasEvidencePatch('runComparison', {
         title,
         rankBy: comparison.rankBy,
         baselineRunId: comparison.baselineObjectId,
-        runs: comparison.rows,
-        verdict: comparison.verdict,
         status: `${scored} of ${comparison.rows.length} scored`,
         summary: `${comparison.rows.length} runs ranked on ${comparison.rankBy}. ${scored < comparison.rows.length ? `${comparison.rows.length - scored} have not been evaluated.` : 'All runs evaluated.'}`,
-      });
+      }, { runs: comparison.rows, verdict: comparison.verdict });
       const node = stage.createObject('runComparison');
       node.data = { ...node.data, ...fields };
       stage.addObject('Compare runs', node);
@@ -7225,17 +7244,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!samples.length) return { error: `${String(target.data.title)} has no rows to sample.` };
 
       const title = args.title?.trim() || `Labels · ${String(target.data.title)}`;
-      const fields = sanitizeCreationObjectPatch('labelSet', {
+      const fields = canvasEvidencePatch('labelSet', {
         title,
         sourceDatasetId: target.id,
         question,
         options: Array.isArray(args.options) ? args.options.map(String) : [],
         ...(args.guidelines?.trim() ? { guidelines: args.guidelines.trim() } : {}),
-        samples,
-        labels: [],
         status: `0 of ${samples.length} labelled`,
         summary: `${samples.length} rows sampled from ${fmt.number(source.rows.length)} for review. Nothing is labelled yet, so this set cannot score anything.`,
-      });
+      }, { samples, labels: [] });
       const node = stage.createObject('labelSet');
       node.data = { ...node.data, ...fields };
       stage.addObject('Sample for labels', node);
@@ -8508,8 +8525,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         object: { id: node.id, kind: 'game', title: gameTitle }, platform,
         provider: artifact.provider, outputFormat: artifact.outputFormat,
         instruction: platform === 'roblox'
-          ? 'The place is on the board and downloadable as a .rbxlx — say it opens in Roblox Studio and plays there. Do NOT restate the design as prose.'
-          : 'The game is on the board and plays immediately — say so in one line. Do NOT restate the design as prose.',
+          ? `${ROOM_CREATION_TOOL_NOTE} The place also downloads as a .rbxlx — say it opens in Roblox Studio and plays there. Do NOT restate the design as prose.`
+          : `${ROOM_CREATION_TOOL_NOTE} It plays immediately — say so in one line. Do NOT restate the design as prose.`,
       };
     },
   }, {
@@ -8601,7 +8618,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const width = Number(args.width); const height = Number(args.height);
       if (Number.isFinite(width) || Number.isFinite(height)) node.style = { width: Number.isFinite(width) ? Math.max(240, Math.min(width, 2_400)) : undefined, height: Number.isFinite(height) ? Math.max(130, Math.min(height, 1_800)) : undefined };
       stage.addObject(`Add ${node.data.kind} “${node.data.title}”`, node);
-      return { ok: true, proposed: true, object: { id: node.id, kind: node.data.kind, title: node.data.title }, mutableFields: creationObjectDefinition(args.kind).mutableFields };
+      return { ok: true, proposed: true, object: { id: node.id, kind: node.data.kind, title: node.data.title }, mutableFields: creationObjectDefinition(args.kind).mutableFields, ...(isRoomCreationKind(args.kind) ? { instruction: ROOM_CREATION_TOOL_NOTE } : {}) };
     },
   }, {
     name: 'canvas_update_object',
@@ -9286,8 +9303,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ...(projectId == null ? { note: 'Published without a project. Add a project object to the canvas to file these under it, which is what gives them a run target and a persona.' } : {}),
       };
     },
-  }, ...canvasBuildActionList, ...canvasFounderOpsActionList, ...canvasEquityActionList, ...canvasHiringPostingActionList, ...canvasDataRoomActionList, ...canvasDocumentTemplateActionList, ...canvasLegalDocumentActionList, ...canvasLegalRecordActionList, ...canvasSignatureActionList, ...canvasSellMotionActionList].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
-  [buildSocialFeedNode, canEdit, canvasBuildActionList, canvasDataRoomActionList, canvasDocumentTemplateActionList, canvasEquityActionList, canvasFounderOpsActionList, canvasHiringPostingActionList, canvasLegalDocumentActionList, canvasLegalRecordActionList, canvasSellMotionActionList, canvasSignatureActionList, convertObjectToDiagram, edges, effectiveSelectedIds, fmt, localizedTourDefaults, measurementGate, nodes, openAccountGate, persistence, recentJournalEvidence, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, stage, stageImageAsset, t, tSocial]);
+  }, ...canvasBuildActionList, ...canvasFounderOpsActionList, ...canvasEquityActionList, ...canvasHiringPostingActionList, ...canvasDataRoomActionList, ...canvasDocumentTemplateActionList, ...canvasLegalDocumentActionList, ...canvasLegalRecordActionList, ...canvasSignatureActionList, ...canvasSellMotionActionList, ...canvasPromptLibraryActionList].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
+  [buildSocialFeedNode, canEdit, canvasBuildActionList, canvasDataRoomActionList, canvasDocumentTemplateActionList, canvasEquityActionList, canvasFounderOpsActionList, canvasHiringPostingActionList, canvasLegalDocumentActionList, canvasLegalRecordActionList, canvasPromptLibraryActionList, canvasSellMotionActionList, canvasSignatureActionList, convertObjectToDiagram, edges, effectiveSelectedIds, fmt, localizedTourDefaults, measurementGate, nodes, openAccountGate, persistence, recentJournalEvidence, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, stage, stageImageAsset, t, tSocial]);
 
   const addAgentKnowledge = useCallback((agentId: string, content: string) => {
     const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');
@@ -9907,6 +9924,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (deletedObjectIds.size) setSelectedIds((current) => selectionWithinBoard(current, nodes.filter((node) => !deletedObjectIds.has(node.id))));
     if (materializedAdditions.length) setSelectedId(materializedAdditions[materializedAdditions.length - 1]!.node.id);
     else if (selectedId && deletedObjectIds.has(selectedId)) { setSelectedId(null); setSelectedIds([]); }
+    // A 3D creation stands in the ROOM — that is where it is walked round and opened
+    // from — so a turn that made one takes the reader there, on every device.
+    if (materializedAdditions.some((change) => isRoomCreationKind(change.node.data.kind))) setSurface('room');
     if (layoutViewportRef.current().narrow && materializedAdditions.length) {
       const brainId = nodes.find((node) => node.data.kind === 'chat')?.id;
       const focusIds = [brainId, ...materializedAdditions.map((change) => change.node.id)].filter((id): id is string => !!id);
@@ -9919,7 +9939,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setAcceptedProposalIds(new Set());
     setNotice(canonicalPrds.length ? `${canonicalPrds.length} project PRD${canonicalPrds.length === 1 ? '' : 's'} saved and ${selected.length} reviewed Brain changes applied` : `${selected.length} reviewed Brain changes applied`);
     trackActivity('creation_change_set_applied', { sessionId, metadata: { clientSurface: canvasSurface(), commandCount: selected.length } });
-  }, [acceptedProposalIds, nodes, proposedChanges, selectedId, sessionId, setEdges, setNodes]);
+  }, [acceptedProposalIds, nodes, proposedChanges, selectedId, sessionId, setEdges, setNodes, setSurface]);
 
   useEffect(() => {
     if (!autoApplyPending || !proposedChanges.length || acceptedProposalIds.size !== proposedChanges.length) return;
@@ -11336,6 +11356,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       locked: !canvasPlacementUnlocked(node),
     };
   }, [minimapColor, t]);
+  /**
+   * WHAT STANDS IN THE ROOM besides the session: every 3D creation on the board —
+   * games, worlds, AI scenes and models (see `lib/canvas/roomCreations.ts`). Opening
+   * one records the room as its origin, so its way back lands in the room.
+   */
+  const roomCreations = useMemo(() => roomCreationsOf(nodes), [nodes]);
+  const openRoomCreation = useCallback((creation: RoomCreation) => {
+    if (creation.surface) setSurface(creation.surface, creation.id, 'room');
+  }, [setSurface]);
   const selectThreeDObject = useCallback((id: string) => {
     setInspectorFocus(null);
     setSelectedId(id);
@@ -12735,7 +12764,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             scene3d: surfaceNode && surfaceNode.data.kind === 'scene' ? <CanvasSceneGeneratorPanel
               objectId={surfaceNode.id}
               data={surfaceNode.data}
-              onExit={() => setSurface('graph')}
+              onExit={exitSurface}
               {...(cardsEditable ? { onEdit: (patch: Partial<CreationNodeData>) => updateNodeData(surfaceNode.id, patch) } : {})}
             /> : null,
             // The zero-object case of this canvas: the same transcript, the same
@@ -12800,6 +12829,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 onExit={onMinimize}
                 initialDepthMode={roomSceneInput.depthMode}
               />}
+              creations={roomCreations}
+              onOpenCreation={openRoomCreation}
               sessionInitiallyOpen={comparisonModelIds.length >= 2}
               onExit={() => setSurface('graph')}
             />,
@@ -12808,7 +12839,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             // the effect above turns back into the board.
             page: surfaceNode ? <CanvasPageSurface
               data={surfaceNode.data}
-              onExit={() => setSurface('graph')}
+              onExit={exitSurface}
               {...(cardsEditable ? { onEdit: (patch: Partial<CreationNodeData>) => updateNodeData(surfaceNode.id, patch) } : {})}
               onTailor={(prompt: string) => tailorResumeFromNode(surfaceNode.id, prompt)}
               onDetach={(patch: Partial<CreationNodeData>) => detachResumeFromNode(surfaceNode.id, patch)}
@@ -12820,7 +12851,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             /> : null,
             play: surfaceNode ? <CanvasPlaySurface
               data={surfaceNode.data}
-              onExit={() => setSurface('graph')}
+              onExit={exitSurface}
               // Shipping opens OVER the surfacerather than replacing it: distribution is
               // a panel about a build you are still looking at.
               onShip={() => openGamePanel(surfaceNode.id)}
@@ -12831,17 +12862,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             /> : null,
             site: surfaceNode ? <CanvasSiteSurface
               data={surfaceNode.data}
-              onExit={() => setSurface('graph')}
+              onExit={exitSurface}
               {...(cardsEditable ? { onEdit: (patch: Partial<CreationNodeData>) => updateNodeData(surfaceNode.id, patch) } : {})}
             /> : null,
             timeline: surfaceNode ? <CanvasTimelineSurface
               data={surfaceNode.data}
-              onExit={() => setSurface('graph')}
+              onExit={exitSurface}
               {...(cardsEditable ? { onEdit: (patch: Partial<CreationNodeData>) => updateNodeData(surfaceNode.id, patch) } : {})}
             /> : null,
             world: surfaceNode ? <CanvasWorldView
               data={surfaceNode.data}
-              onExit={() => setSurface('graph')}
+              onExit={exitSurface}
               {...(cardsEditable ? { onEdit: (patch: Partial<CreationNodeData>) => updateNodeData(surfaceNode.id, patch) } : {})}
             /> : null,
             // THE ROOM. Same object-scoped shape as the four above, and the same reason
@@ -12851,7 +12882,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             facilitate: surfaceNode ? <CanvasFacilitateSurface
               data={surfaceNode.data}
               objectId={surfaceNode.id}
-              onExit={() => setSurface('graph')}
+              onExit={exitSurface}
               {...(cardsEditable ? { onEdit: (patch: Partial<CreationNodeData>) => updateNodeData(surfaceNode.id, patch) } : {})}
             /> : null,
             // THE MONTH. It used to be a BOARD surface in the rail — one grid welded to
@@ -12867,7 +12898,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             calendar: surfaceNode ? <CanvasCalendarSurface
               data={surfaceNode.data}
               nodes={nodes}
-              onExit={() => setSurface('graph')}
+              onExit={exitSurface}
               onOpenObject={revealObject}
               {...(cardsEditable ? {
                 onEdit: (patch: Partial<CreationNodeData>) => updateNodeData(surfaceNode.id, patch),

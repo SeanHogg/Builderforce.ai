@@ -1752,6 +1752,8 @@
     "typeDesign": "Diseño",
     "typeIncident": "Incidente",
     "requiresRoleHint": "{role, select, viewer {Requiere el rol de Observador} developer {Requiere el rol de Desarrollador} manager {Requiere el rol de Gerente} owner {Requiere el rol de Propietario} other {Requiere el rol {role}}}",
+    "tenantRoleLabel": "{role, select, viewer {Observador} developer {Desarrollador} manager {Gerente} owner {Propietario} other {{role}}}",
+    "tenantRoleDescription": "{role, select, viewer {Acceso de solo lectura a tableros, trabajo y plantilla.} developer {Crear y ejecutar agentes, trabajar el tablero y ver los análisis de entrega.} manager {Invitar personas, gestionar roles e integraciones y ver todas las vistas de análisis.} owner {Control total, incluida la facturación, las claves de API y la eliminación del espacio de trabajo.} other {}}",
     "requiresDeveloperRole": "Requiere el rol de Desarrollador",
     "closePanel": "Cerrar el panel",
     "panel": "Panel",
@@ -3747,6 +3749,19 @@
     }
   },
   "workforce": {
+    "memberCard": {
+      "roleSelect": "Rol del miembro",
+      "roleBadge": "Rol en el espacio de trabajo",
+      "mfaEnabled": "MFA activada",
+      "mfa": "MFA",
+      "activeSessions": "{count, plural, one {# sesión activa} other {# sesiones activas}}",
+      "remove": "Quitar",
+      "removing": "Quitando…",
+      "invitedAs": "Invitación como {role}",
+      "joinsOnSignup": "Se unirá automáticamente cuando se registre con este correo.",
+      "revoke": "Revocar",
+      "revoking": "Revocando…"
+    },
     "page": {
       "title": "Plantilla",
       "sub": {
@@ -17711,8 +17726,11 @@
     "chooseObjective": "Elige un objetivo…",
     "linkObjective": "Vincular",
     "linking": "Vinculando…",
-    "linkObjectiveDenied": "Solo un gestor puede vincular un ticket a un objetivo.",
     "noObjectivesYet": "Todavía no hay objetivos: crea uno en el tablero de planificación.",
+    "projectObjectives": "Objetivos de este proyecto",
+    "otherObjectives": "Otros objetivos",
+    "loadObjectivesFailed": "No se pudieron cargar los objetivos.",
+    "retryLoadObjectives": "Reintentar",
     "signoffs": "Aprobaciones",
     "basisLane": "Etapa {index} de {total}",
     "basisSignoff": "{done} de {total} aprobadas",
@@ -21987,6 +22005,7 @@
         "answer": "Respuesta",
         "version": "Versión",
         "savedAt": "Guardado",
+        "notes": "Notas",
         "evalScore": "Puntuación"
       }
     },
@@ -22570,7 +22589,13 @@
         "onBoard": "En el tablero",
         "noWebglTitle": "El 3D no está disponible en este dispositivo",
         "noWebglBody": "La sala necesita WebGL y este navegador no puede iniciarlo. Abajo aparece todo el mundo que está en la sesión, y el resto del lienzo funciona con normalidad.",
-        "navigateHint": "Arrastra para mirar alrededor · botón derecho o dos dedos para desplazarte · rueda para acercar · arrastra la sesión para moverla",
+        "navigateHint": "Arrastra para mirar alrededor · botón derecho o dos dedos para desplazarte · rueda para acercar · arrastra la sesión o una creación para moverla",
+        "creation": {
+          "hint": "{kind} · arrastra para mover",
+          "openNamed": "Abrir {title}",
+          "untitled": "Sin título",
+          "head": "{count, plural, one {# creación en la sala} other {# creaciones en la sala}}"
+        },
         "session": {
           "open": "Abrir la sesión",
           "openButton": "Abrir",
@@ -28388,7 +28413,7 @@
     "sectionIntro": "Registra un servidor externo de Model Context Protocol para que los agentes de este espacio puedan usar sus herramientas.",
     "loading": "Cargando servidores registrados…",
     "empty": "Aún no hay servidores MCP registrados.",
-    "requiresRole": "Requiere el rol {role}. Pide a un propietario del espacio que registre servidores MCP.",
+    "requiresRole": "{role, select, viewer {Requiere el rol de Observador.} developer {Requiere el rol de Desarrollador.} manager {Requiere el rol de Gerente.} owner {Requiere el rol de Propietario.} other {Requiere el rol {role}.}} Pide a un propietario del espacio que registre servidores MCP.",
     "confirmDisconnect": "¿Desconectar {name}? El registro se mantiene, pero se revoca su autorización.",
     "confirmRemove": "¿Eliminar {name}? Los agentes aquí perderán sus herramientas de inmediato.",
     "status": {
@@ -28490,7 +28515,7 @@
     "intro": "Envía las ejecuciones de agentes a tu propio recolector, para que aparezcan junto al resto de tu sistema y no solo en este producto.",
     "loading": "Cargando recolectores…",
     "empty": "No hay ningún recolector configurado. La telemetría de los agentes se queda en BuilderForce.",
-    "requiresRole": "Requiere el rol {role}. Pide a un gestor del espacio que configure la exportación de telemetría.",
+    "requiresRole": "{role, select, viewer {Requiere el rol de Observador.} developer {Requiere el rol de Desarrollador.} manager {Requiere el rol de Gerente.} owner {Requiere el rol de Propietario.} other {Requiere el rol {role}.}} Pide a un gestor del espacio que configure la exportación de telemetría.",
     "lastExport": "Última exportación: {at}.",
     "lastError": "Último fallo: {error}",
     "neverExported": "Aún no se ha exportado nada.",

@@ -93,7 +93,7 @@ import { limitParam } from './queryParams';
  *     no extra gate, a VIEWER may observe the fleet.
  *   • Anything that STARTS, cancels, steers, retries or reports on a billable run
  *     is `requireRole(TenantRole.DEVELOPER)` — the platform's "build and run
- *     agents" tier (see frontend ROLE_DESCRIPTION). This is what excludes a
+ *     agents" tier (see the frontend catalogs' `common.tenantRoleDescription`). This is what excludes a
  *     read-only VIEWER from spending the tenant's cloud-run + token allowance.
  *     It is deliberately NOT manager-level: the manager check for a run is the
  *     separate GOVERNANCE gate (evaluateExecutionApprovalGate), which stops

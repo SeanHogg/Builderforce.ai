@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { usePermission } from '@/lib/rbac';
+import { usePermission, type TenantRole } from '@/lib/rbac';
 import { getStoredTenant } from '@/lib/auth';
 import { faultMessage } from '@/lib/apiClient';
 import {
@@ -23,8 +23,8 @@ import {
 export interface McpServersState {
   /** True when this member may read/write the workspace's registered servers. */
   allowed: boolean;
-  /** Role name the workspace requires, for the not-entitled hint. */
-  requiredLabel: string;
+  /** Role KEY the workspace requires; the not-entitled hint selects its sentence on it. */
+  requiredRole: TenantRole;
   servers: McpExtension[];
   loading: boolean;
   /** Last failure, already reduced to displayable text. */
@@ -39,7 +39,7 @@ export interface McpServersState {
 }
 
 export function useMcpServers(): McpServersState {
-  const { allowed, requiredLabel } = usePermission('mcp.manage');
+  const { allowed, required: requiredRole } = usePermission('mcp.manage');
   // `Tenant.id` is the JWT claim's string; every tenant-scoped client takes the
   // numeric id (see `BillingClient`), so the narrowing happens here rather than
   // being pushed into the API module for one caller.
@@ -80,7 +80,7 @@ export function useMcpServers(): McpServersState {
 
   return {
     allowed,
-    requiredLabel,
+    requiredRole,
     servers,
     loading,
     error,

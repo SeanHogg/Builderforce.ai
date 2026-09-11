@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+// The spot is kept in `localStorage`, which the `lib` project's node environment lacks.
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { Canvas3DScene } from '@/components/canvas/canvas3d';
 import { CANVAS_3D_LAYER_GAP } from '@/components/canvas/canvas3d';
@@ -5,8 +7,9 @@ import { ROOM_FLOOR_SIZE, ROOM_TABLE_HEIGHT, ROOM_TABLE_RADIUS, ROOM_WALL_Z } fr
 import {
   DEFAULT_ROOM_SESSION_SPOT, ROOM_SESSION_FOOTPRINT, ROOM_SESSION_LAYER_STEP,
   ROOM_SESSION_PREVIEW_CAPACITY, ROOM_SESSION_WALL_HEIGHT,
-  placeSessionInRoom, readRoomSessionSpot, roomSessionDiorama, writeRoomSessionSpot,
+  placeSessionInRoom, roomSessionDiorama,
 } from './roomSession';
+import { readRoomSpot, roomSpotKey, writeRoomSpot } from './roomSpots';
 
 /**
  * Where the session sits in the room, and what it looks like there, are
@@ -116,15 +119,19 @@ describe('room session spot storage', () => {
   beforeEach(() => { window.localStorage.clear(); });
 
   it('remembers the spot per session and per browser, and derives nothing else', () => {
-    writeRoomSessionSpot('s1', { x: 2, z: 3 });
-    expect(readRoomSessionSpot('s1')).toEqual({ x: 2, z: 3 });
-    expect(readRoomSessionSpot('s2')).toEqual(DEFAULT_ROOM_SESSION_SPOT);
+    writeRoomSpot(roomSpotKey('s1'), { x: 2, z: 3 });
+    expect(readRoomSpot(roomSpotKey('s1'), DEFAULT_ROOM_SESSION_SPOT)).toEqual({ x: 2, z: 3 });
+    expect(readRoomSpot(roomSpotKey('s2'), DEFAULT_ROOM_SESSION_SPOT)).toEqual(DEFAULT_ROOM_SESSION_SPOT);
+  });
+
+  it('keeps the key a session has always had, so a spot left before creations moved in survives', () => {
+    expect(roomSpotKey('s1')).toBe('builderforce:create:room-session:s1');
   });
 
   it('falls back to the table on a corrupt value rather than throwing', () => {
     window.localStorage.setItem('builderforce:create:room-session:s1', '{"x":"no"}');
-    expect(readRoomSessionSpot('s1')).toEqual(DEFAULT_ROOM_SESSION_SPOT);
+    expect(readRoomSpot(roomSpotKey('s1'), DEFAULT_ROOM_SESSION_SPOT)).toEqual(DEFAULT_ROOM_SESSION_SPOT);
     window.localStorage.setItem('builderforce:create:room-session:s1', 'not json');
-    expect(readRoomSessionSpot('s1')).toEqual(DEFAULT_ROOM_SESSION_SPOT);
+    expect(readRoomSpot(roomSpotKey('s1'), DEFAULT_ROOM_SESSION_SPOT)).toEqual(DEFAULT_ROOM_SESSION_SPOT);
   });
 });

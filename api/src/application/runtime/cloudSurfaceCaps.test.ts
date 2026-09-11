@@ -94,9 +94,18 @@ describe('CONTAINER_SURFACE_CAPS → container toolset (must match server.mjs)',
     expect(names(CONTAINER_AGENT_TOOLS)).toEqual([
       'ask_human', 'claim_resource', 'finish', 'git_diff', 'git_history', 'git_redo', 'git_status',
       'git_sync_latest', 'git_undo', 'list_files', 'memory_forget', 'memory_recall', 'memory_remember',
-      'read_file', 'release_resource', 'run_command', 'spawn_agent', 'update_prd', 'web_search',
-      'workspace_note', 'workspace_read', 'write_file',
+      'read_file', 'release_resource', 'run_command', 'skill_list', 'skill_propose', 'spawn_agent',
+      'update_prd', 'web_search', 'workspace_note', 'workspace_read', 'write_file',
     ]);
+  });
+
+  it('backs `skill.author` — parity with the durable surface, on the shared `skill` op', () => {
+    // Withheld until there was a `skill` container-op and a relay arm to answer the two
+    // tools. Both exist now (cloudAgent/skillOp.ts + container/agentRelay.mjs), so a
+    // container or Actions run can propose a procedure it proved, as a durable run can.
+    expect(CONTAINER_SURFACE_CAPS.has('skill.author')).toBe(true);
+    expect(names(CONTAINER_AGENT_TOOLS)).toContain('skill_propose');
+    expect(names(CONTAINER_AGENT_TOOLS)).toContain('skill_list');
   });
 
   it('backs `coordinate` through the Worker-owned lease and blackboard stores', () => {

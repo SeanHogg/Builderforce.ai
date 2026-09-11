@@ -24,7 +24,7 @@ import { SELL_MOTION_OBJECT_SPECS } from '@/lib/sellMotionObjects';
 // above — and it is what gives `llm` a `derive` hook, so its projected monthly cost is
 // computed from its own rate card instead of typed on top of it.
 import { MODEL_OBJECT_SPECS } from '@/lib/modelObjects';
-import { isSpecObjectKind, specBookkeepingFields, specFieldGuidance, specFieldNames, type SpecDeriveBoard } from '@/lib/specObjects';
+import { isSpecObjectKind, specBookkeepingFields, specDerivedFields, specFieldGuidance, specFieldNames, type SpecDeriveBoard } from '@/lib/specObjects';
 import {
   ACADEMIC_MUTABLE_FIELDS, ACADEMIC_REGISTRY, FOUNDER_MUTABLE_FIELDS, FOUNDER_REGISTRY,
   CAREER_MUTABLE_FIELDS, CAREER_REGISTRY,
@@ -910,6 +910,39 @@ export function sanitizeCreationObjectPatch(kind: CreationObjectKind, value: unk
     const safe = sanitizeMutationValue(item);
     return safe === undefined ? [] : [[key, safe]];
   })) as Partial<CreationNodeData>;
+}
+
+/**
+ * A patch a canvas TOOL writes: fields a caller authored, plus EVIDENCE the tool itself
+ * read or computed.
+ *
+ * ── WHY THE SANITIZER ALONE WAS WRONG HERE ─────────────────────────────────────
+ * {@link sanitizeCreationObjectPatch} admits only authorable fields, which is exactly
+ * right for what a MODEL supplies and exactly wrong for what a tool measured: a spec's
+ * `derived` fields are the ones "written by the canvas, never by you", and the tools
+ * that are that canvas mechanism ran their readings through the model-facing filter.
+ * `canvas_read_training_run` therefore placed a card with a title and none of the run —
+ * no job id, loss curve, scorecard or hyperparameters — and, with no `jobId` stored, a
+ * refresh could never find the card it meant to update, so every refresh added another.
+ * A notebook kept its cells and lost their outputs; a comparison lost its ranked runs
+ * and verdict; a label set lost its samples.
+ *
+ * `evidence` is admitted ONLY for the kind's declared `derived` fields
+ * ({@link specDerivedFields}), through the same value-safety as every other write, so a
+ * tool cannot use this door to write an arbitrary key — the declaration still decides.
+ */
+export function canvasEvidencePatch(
+  kind: CreationObjectKind,
+  authored: unknown,
+  evidence: Record<string, unknown>,
+): Partial<CreationNodeData> {
+  const derived = new Set(specDerivedFields(kind));
+  const measured = Object.fromEntries(Object.entries(evidence).flatMap(([key, item]) => {
+    if (!derived.has(key) || SENSITIVE_MUTATION_KEY.test(key)) return [];
+    const safe = sanitizeMutationValue(item);
+    return safe === undefined ? [] : [[key, safe]];
+  }));
+  return { ...sanitizeCreationObjectPatch(kind, authored), ...measured } as Partial<CreationNodeData>;
 }
 /**
  * Explicit, content-safe fields Brain may receive from a Canvas Object.

@@ -56,7 +56,7 @@ export interface RoomSceneProps {
    * moves the floor out from under the thing being placed.
    */
   controlsEnabled?: boolean;
-  /** What the surface puts in the room — the session, today. */
+  /** What the surface puts in the room — the session, and every 3D creation on the board. */
   children?: ReactNode;
 }
 

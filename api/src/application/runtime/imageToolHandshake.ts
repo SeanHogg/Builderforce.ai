@@ -35,8 +35,10 @@ import type { ToolSchema } from '@builderforce/agent-tools';
  *
  * `spawn_agent` is the first entry: `orchestrate` became a container capability in the
  * same pass that introduced the handshake, so an un-redeployed image must not see it.
+ * `skill_propose` / `skill_list` followed when `skill.author` joined the container set
+ * on the `skill` op — an image from before the handshake has no arm for either.
  */
-export const HANDSHAKE_ONLY_TOOLS: readonly string[] = ['spawn_agent'];
+export const HANDSHAKE_ONLY_TOOLS: readonly string[] = ['spawn_agent', 'skill_propose', 'skill_list'];
 
 /**
  * Whether `name` is covered by a manifest entry. A trailing `*` is a PREFIX match, which

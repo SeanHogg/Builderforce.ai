@@ -18,7 +18,7 @@ const auth = vi.hoisted(() => ({ current: { tenantToken: null as string | null }
 vi.mock('@/lib/AuthContext', () => ({ useAuth: () => auth.current }));
 
 const permission = vi.hoisted(() => ({
-  current: { allowed: false, role: undefined as string | undefined, required: 'manager', requiredLabel: 'Manager' },
+  current: { allowed: false, role: undefined as string | undefined, required: 'manager' },
 }));
 vi.mock('@/lib/rbac', () => ({ usePermission: () => permission.current }));
 
@@ -54,7 +54,7 @@ describe('EmbedIntegrationSettings', () => {
 
   it('shows a signed-out visitor the surface catalog, the install walkthrough and an account notice — never an empty tab', () => {
     auth.current = { tenantToken: null };
-    permission.current = { allowed: false, role: undefined, required: 'manager', requiredLabel: 'Manager' };
+    permission.current = { allowed: false, role: undefined, required: 'manager' };
     sampleWorkspace.current = { ready: true, signedIn: false, isSample: true };
 
     render(<EmbedIntegrationSettings />);
@@ -73,7 +73,7 @@ describe('EmbedIntegrationSettings', () => {
 
   it('shows a signed-in member below manager the same content with the honest role hint', () => {
     auth.current = { tenantToken: 'tenant-jwt' };
-    permission.current = { allowed: false, role: 'developer', required: 'manager', requiredLabel: 'Manager' };
+    permission.current = { allowed: false, role: 'developer', required: 'manager' };
     sampleWorkspace.current = { ready: true, signedIn: true, isSample: false };
 
     render(<EmbedIntegrationSettings />);
@@ -86,7 +86,7 @@ describe('EmbedIntegrationSettings', () => {
 
   it('loads the workspace config for a manager and marks the live area in the catalog', async () => {
     auth.current = { tenantToken: 'tenant-jwt' };
-    permission.current = { allowed: true, role: 'manager', required: 'manager', requiredLabel: 'Manager' };
+    permission.current = { allowed: true, role: 'manager', required: 'manager' };
     sampleWorkspace.current = { ready: true, signedIn: true, isSample: false };
 
     render(<EmbedIntegrationSettings />);

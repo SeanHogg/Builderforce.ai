@@ -106,6 +106,24 @@ describe('the images and the Worker agree about tool names', () => {
     expect(arrayLiteral('IMAGE_LOCAL_TOOL_NAMES')).not.toContain('spawn_agent');
   });
 
+  it('the skill tools are relayed, not implemented in the image', () => {
+    // A skill is written to the workspace's own store, which only the Worker can reach.
+    expect(arrayLiteral('RELAY_TOOL_NAMES')).toEqual(expect.arrayContaining(['skill_propose', 'skill_list']));
+    expect(arrayLiteral('IMAGE_LOCAL_TOOL_NAMES')).not.toContain('skill_propose');
+  });
+
+  it('a current image is offered the skill tools; one too old to send a manifest is not', () => {
+    const containerTools = names(CONTAINER_AGENT_TOOLS);
+    expect(containerTools).toEqual(expect.arrayContaining(['skill_propose', 'skill_list']));
+    const current = names(imageAdvertisedTools(CONTAINER_AGENT_TOOLS, [
+      ...arrayLiteral('IMAGE_LOCAL_TOOL_NAMES'), ...arrayLiteral('RELAY_TOOL_NAMES'),
+    ]));
+    expect(current).toEqual(expect.arrayContaining(['skill_propose', 'skill_list']));
+    const old = names(imageAdvertisedTools(CONTAINER_AGENT_TOOLS, null));
+    expect(old).not.toContain('skill_propose');
+    expect(old).not.toContain('skill_list');
+  });
+
   it('everything gated behind the handshake is something a current image dispatches', () => {
     // A gated tool no image implements would be permanently invisible: withheld from an
     // old image by the gate, and from a new one by the intersection.

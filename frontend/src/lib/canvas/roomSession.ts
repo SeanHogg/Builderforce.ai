@@ -1,7 +1,7 @@
 import type { Canvas3DScene } from '@/components/canvas/canvas3d';
 import { CANVAS_3D_LAYER_GAP } from '@/components/canvas/canvas3d';
 import { ROOM_FLOOR_SIZE, ROOM_TABLE_HEIGHT, ROOM_TABLE_RADIUS, ROOM_WALL_Z } from './roomSeating';
-import { readLocalJson, writeLocalJson } from '@/lib/storage';
+import type { RoomSpot } from './roomSpots';
 
 /**
  * THE SESSION IN THE ROOM — where it sits, and what it looks like from across a table.
@@ -54,11 +54,11 @@ export interface RoomSessionPlacement {
   rotation: [number, number, number];
 }
 
-/** The two numbers a person actually chooses — everything else is derived. */
-export interface RoomSessionSpot {
-  x: number;
-  z: number;
-}
+/**
+ * The two numbers a person actually chooses — everything else is derived. The same
+ * spot every creation in the room keeps; stored through `roomSpots.ts`.
+ */
+export type RoomSessionSpot = RoomSpot;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -167,26 +167,4 @@ export function roomSessionDiorama(scene: Canvas3DScene, footprint = ROOM_SESSIO
     cards,
     plates,
   };
-}
-
-const STORAGE_PREFIX = 'builderforce:create:room-session:';
-
-/**
- * Where THIS viewer left the session in THIS room.
- *
- * Per browser, like the surface preference and the folded bar: where the diorama
- * sits is how one person chooses to read the room, not a fact about the session
- * that a collaborator's placement should overwrite. Only the spot is written — the
- * anchor is re-derived on read, so a change to the table's radius moves every
- * stored session onto the right thing rather than leaving it floating.
- */
-export function readRoomSessionSpot(sessionId: string): RoomSessionSpot {
-  const parsed = readLocalJson<Partial<RoomSessionSpot>>(STORAGE_PREFIX + sessionId);
-  if (!parsed || typeof parsed.x !== 'number' || typeof parsed.z !== 'number') return DEFAULT_ROOM_SESSION_SPOT;
-  return { x: parsed.x, z: parsed.z };
-}
-
-/** Best effort: where storage is unavailable (server, private mode) the spot is simply not remembered. */
-export function writeRoomSessionSpot(sessionId: string, spot: RoomSessionSpot): void {
-  writeLocalJson(STORAGE_PREFIX + sessionId, { x: spot.x, z: spot.z });
 }

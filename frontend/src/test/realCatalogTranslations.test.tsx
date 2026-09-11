@@ -57,6 +57,20 @@ describe('realCatalogTranslator', () => {
     expect(renderToStaticMarkup(<>{t.rich('plain', { em: (c) => <em>{c}</em> })}</>)).toBe('No tags here');
   });
 
+  it('resolves ICU select arms, including an arm that carries its own argument', () => {
+    const t = realCatalogTranslator({
+      role: {
+        label: '{role, select, owner {Owner} viewer {Viewer} other {{role}}}',
+        hint: 'Before. {role, select, manager {Requires Manager role} other {Requires {role} role}} After.',
+      },
+    })('role');
+
+    expect(t('label', { role: 'owner' })).toBe('Owner');
+    expect(t('label', { role: 'auditor' })).toBe('auditor');
+    expect(t('hint', { role: 'manager' })).toBe('Before. Requires Manager role After.');
+    expect(t('hint', { role: 'billing' })).toBe('Before. Requires billing role After.');
+  });
+
   it('keeps the referential stability the real hook guarantees', () => {
     expect(useTranslations('home')).toBe(useTranslations('home'));
   });

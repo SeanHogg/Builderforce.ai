@@ -1,3 +1,79 @@
+## ✅ RESOLVED 2026-09-10 — Roadmap sweep, second pass: four entries closed, three bugs found and fixed on the way
+
+### A ticket can be linked to an objective from the ticket
+- New self-contained `components/task/TicketObjectiveLinkPicker.tsx` (the ticket's own
+  project's objectives first, a Retry on a failed load, `role="alert"` on a failed write)
+  mounted by `TicketContextStrip`; shared styles in `ticketContextStyles.ts`. Route unchanged:
+  `POST /api/pmo/objectives/:id/links` stays `requireRole(MANAGER)`, client
+  `pmoApi.objectives.addLink`, capability `pmo.objectives.link` behind `<RoleGate>`.
+- **Bug fixed:** the inline linker it replaces tested `!canLink` against `usePermission()`'s
+  RESULT OBJECT, so the control never disabled for a non-manager; and a failed objectives
+  load read as "No objectives exist yet".
+- No client cache added: the server already caches the list (`pmo-objectives`) and clears it
+  on every objective write; a link write does not change the list.
+- Keys `ticketContext.{projectObjectives,otherObjectives,loadObjectivesFailed,retryLoadObjectives}`
+  in five catalogs; `linkObjectiveDenied` removed (RoleGate's hint replaces it).
+
+### Container and GitHub Actions runs can author skills — `skill.author` on image surfaces
+- New `runtime/cloudAgent/skillOp.ts` (`skill` op: `propose` | `list`) in `OP_HANDLERS`,
+  calling the SAME `buildSkillAuthoringCapability` and tool definitions the durable surface
+  uses — a proposal still lands as a draft, and attribution comes from the run, never the
+  payload. `container/agentRelay.mjs` gained the two arms (generated runner copy
+  regenerated); `CONTAINER_SURFACE_CAPS` gained `skill.author`; `HANDSHAKE_ONLY_TOOLS` gained
+  both tools so an image too old to declare them is never offered them.
+- Needs a container image rebuild to be exercised in a live container; until then the
+  handshake withholds the tools from the deployed image, so nothing breaks.
+
+### Prompt iteration on the canvas — `canvas_read_prompt` / `canvas_save_prompt_version`
+- New `lib/canvasPromptLibraryTools.ts` over the existing `promptLibraryApi` (list / get /
+  create / addVersion): reads through `getOrSetClientCached` keyed by canvas session, every
+  save clears the namespace; a save to a PUBLIC prompt is refused without `publishPublicly`.
+- **Bug fixed:** the `prompt` card's `entryId`/`versions` were `derived`, which the canvas
+  drops from every write, so a card could never be bound to its library row; both are now
+  `bookkeeping` (the `jobPosting.postingId` precedent). `versions` gained a `notes` column
+  (`creationCanvas.dataScience.column.notes`, five locales).
+
+### Canvas tools lost the evidence they measured — ONE `canvasEvidencePatch`
+Found while verifying the prompt tools. `derived` spec fields are "written by the canvas,
+never by you", but the canvas tools that ARE that writer ran their readings through
+`sanitizeCreationObjectPatch`, the model-facing filter that drops every derived field.
+- `canvas_read_training_run` placed a card with a title and NONE of the run — no job id,
+  loss curve, scorecard or hyperparameters — and with no `jobId` stored its refresh match
+  never fired, so every refresh added a duplicate card.
+- `canvas_run_notebook` lost `outputs`/`lastRunAt`; `canvas_compare_runs` lost
+  `runs`/`verdict`; `canvas_sample_for_labels` lost `samples`/`labels`.
+- Fix: `specDerivedFields(kind)` in `lib/specObjects.ts` and `canvasEvidencePatch(kind,
+  authored, evidence)` in `creationObjectRegistry.ts` — authored fields still go through the
+  sanitizer; evidence is admitted ONLY for the kind's declared derived fields (never a
+  computed `derive` field, never a sensitive key), with the same value-safety. All four
+  sites migrated. An audit of every other `sanitizeCreationObjectPatch` call found no other
+  tool writing a derived field. Test: `creationObjectEvidence.test.ts`.
+
+### Role names and descriptions are localized — the English role maps are gone
+- `ROLE_DESCRIPTION` (listed as unwired) now shows under the role picker; `ROLE_LABEL` and
+  `ROLE_DESCRIPTION` are deleted in favour of ONE `useRoleText()` (`lib/useRoleText.ts`) over
+  `common.tenantRoleLabel` / `common.tenantRoleDescription` ICU selects in five locales.
+  `MemberCard`, `RoleSelect`, `PendingInviteCard` and the members table use it; the rest of
+  `MemberCard`'s English is localized (`workforce.memberCard.*`).
+- **Bug fixed:** `OtelExporterSettings` and `McpServersGallery` spliced the English
+  `requiredLabel` into an otherwise translated sentence; both `requiresRole` messages are now
+  ICU selects on the role KEY, and `requiredLabel` is removed from `PermissionResult`.
+- The test resolver `test/realCatalogTranslations.ts` gained ICU `select` support (arms may
+  carry their own argument), pinned in its own test — it had been asserting raw ICU source.
+
+### Stale claims removed from the register
+The Ceremony `window.prompt` (no call remains), `verifyEmulationJwt` "dead" (the middleware
+calls it), `hasTenantRole` (no longer exists) and `auth.addPassword` "unwired"
+(`AuthContext` calls it).
+
+Verified: vitest — the 48 real-catalog test files (412 tests), `MemberCard`,
+`realCatalogTranslations`, `TicketObjectiveLinkPicker` + `TicketContextStrip` (18),
+`canvasPromptLibraryTools` (25) with its neighbours (111), `creationObjectEvidence` (5), the
+full `CreationCanvas.test.tsx` suite (re-run after the evidence migration), api runtime + skills (679); api and frontend `tsc` clean;
+`gen-agent-relay-source --check`; `check-canvas-tool-contract`; `check-silent-catches` (api +
+frontend at baseline); `check-i18n-keys`; all five catalogs parse. The react-hooks ratchet is
+back to baseline for every file this pass touched.
+
 ## ✅ RESOLVED 2026-09-10 — Roadmap sweep: four Gap Register entries closed (two built, two already fixed)
 
 ### A flow step's DATA IN can read a run variable — `$vars.<name>`
@@ -42,6 +118,43 @@ domain, thinking panel, `AgentExecutionPanel.test.tsx`), frontend `tsc --noEmit`
 `check-silent-catches` (api + frontend at baseline), `check-i18n-keys`, all five catalogs
 parse. Both built items improve surfaces that already existed, so they get no marketing
 push; a `category=improvement` release note needs a live superadmin session.
+
+## ✅ RESOLVED 2026-09-10 — Asking for a 3D model or a Roblox game never reached the Room: 3D creations now stand in it
+
+The room is the canvas's one spatial surface, but when it absorbed the old "3D space"
+entry only the board's depth projection moved in (as the session diorama). A `game`
+(Roblox or web), `world`, `scene` or `model3d` stayed a flat card that opened into its
+own full-screen surface, the Brain prompt and tools never mentioned the room, and no
+code ever switched to it — so "make me a Roblox game" or "a 3D model" landed on the
+board, never in the room.
+
+### What changed
+- **Which kinds** — `lib/canvas/roomCreations.ts`: `ROOM_CREATION_KINDS` (game, world,
+  scene, model3d); membership is the whole rule. Default spots (a centre-out row behind
+  the ring, later rows in front), `placeCreationInRoom` (the session's anchor rule,
+  always upright), `fitModelToRoom` (Z-up mesh → Y-up, scaled, centred, resting on
+  its stand), and `ROOM_CREATION_TOOL_NOTE`.
+- **Standing in the room** — `world3d/RoomCreationItem`: a plinth on the floor, a base
+  on the table, a frame on the wall; a model is its real mesh (`RoomMeshModel`, same
+  `meshPreviewCache` the board uses), everything else its preview picture. Open is on
+  its caption. `components/creation-canvas/roomCreationsOf.ts` joins kind, surface,
+  preview and mesh.
+- **One drag, one caption, one spot store** — `useRoomItemDrag` and `RoomItemCaption`
+  extracted from `RoomSessionDiorama` (migrated); `lib/canvas/roomSpots.ts` +
+  `useRoomSpot` replace the session-only read/write (deleted), keeping the session's
+  original storage key.
+- **Back to the room** — `CreationCanvas.setSurface` takes an `origin`; every
+  object surface exits through `exitSurface`, so a creation opened from the room
+  returns there (and a deleted target returns there too).
+- **Brain lands you there** — `applyProposedChanges` (the one commit path for review
+  and auto-apply) switches to the room when a turn adds a room kind; `canvas_add_game`
+  and `canvas_add_object` results carry `ROOM_CREATION_TOOL_NOTE` so the reply matches.
+- **No WebGL** — the room's fallback lists each creation with the same Open.
+- **Also fixed** — the room session storage tests ran in the `lib` project's node
+  environment and failed on `window`; both storage test files now declare jsdom.
+- Keys `surface.room.creation.{hint,openNamed,untitled,head}` + reworded `navigateHint`
+  in all five catalogs. Tests: `roomCreations.test.ts`, `canvasRoomCreations.test.tsx`,
+  `roomSession.test.ts` (storage via `roomSpots`).
 
 ## ✅ RESOLVED 2026-09-10 — The session opened in the room had no visible way back: it now wears an (X)
 

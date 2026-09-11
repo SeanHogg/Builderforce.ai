@@ -73,6 +73,50 @@ function selectPluralArm(body: string, count: number): string {
     ?? '';
 }
 
+/**
+ * ICU `select` arguments — `{role, select, owner {Owner} other {{role}}}`.
+ *
+ * Absent until a component rendered a role through one: the resolver passed the raw
+ * ICU source through, so a real-catalog test of `common.tenantRoleLabel` or
+ * `common.requiresRoleHint` asserted against the source as if it were copy — the
+ * same defect the `plural` note above records. Arms may carry a simple argument of
+ * their own (`other {Requires {role} role}`, `other {{role}}`), so each arm is
+ * walked with a brace counter rather than matched with `[^{}]*`.
+ */
+function resolveSelects(copy: string, values: Values | undefined): string {
+  const opener = /\{(\w+),\s*select,/g;
+  let out = '';
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+  while ((match = opener.exec(copy))) {
+    const arms = new Map<string, string>();
+    let i = match.index + match[0].length;
+    for (;;) {
+      while (/\s/.test(copy[i] ?? '')) i++;
+      if (i >= copy.length) break;
+      if (copy[i] === '}') { i++; break; }
+      const armKey = /^[\w=]+/.exec(copy.slice(i))?.[0];
+      if (!armKey) break;
+      i += armKey.length;
+      while (/\s/.test(copy[i] ?? '')) i++;
+      if (copy[i] !== '{') break;
+      const start = i + 1;
+      let depth = 0;
+      do {
+        if (copy[i] === '{') depth++;
+        else if (copy[i] === '}') depth--;
+        i++;
+      } while (depth > 0 && i < copy.length);
+      arms.set(armKey, copy.slice(start, i - 1));
+    }
+    const chosen = arms.get(String(values?.[match[1]!] ?? '')) ?? arms.get('other') ?? '';
+    out += copy.slice(cursor, match.index) + chosen;
+    cursor = i;
+    opener.lastIndex = i;
+  }
+  return out + copy.slice(cursor);
+}
+
 function lookup(messages: Messages, namespace: string | undefined, key: string): unknown {
   return (namespace ? `${namespace}.${key}` : key)
     .split('.')
@@ -107,7 +151,7 @@ function build(messages: Messages, namespace: string | undefined): RealCatalogTr
   const translate = (key: string, values?: Values) => {
     const value = lookup(messages, namespace, key);
     const copy = typeof value === 'string' ? value : namespace ? `${namespace}.${key}` : key;
-    const pluralized = copy.replace(PLURAL, (_match, name: string, body: string) => {
+    const pluralized = resolveSelects(copy, values).replace(PLURAL, (_match, name: string, body: string) => {
       const count = Number(values?.[name]);
       return selectPluralArm(body, count).replaceAll('#', String(count));
     });

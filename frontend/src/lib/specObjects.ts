@@ -510,6 +510,19 @@ export function specMutableFields(kind: string): readonly string[] {
 }
 
 /**
+ * The STORED evidence fields of one spec kind — `derived` and not computed.
+ *
+ * The complement of {@link specMutableFields}: what the model may never write, and
+ * what the canvas's own mechanisms (a tool that READ the value from a training job, a
+ * kernel that ran a cell, a sampler that drew rows) must be able to. A `derive` field is
+ * excluded because it is computed at render time and never stored at all.
+ */
+export function specDerivedFields(kind: string): readonly string[] {
+  const spec = specObjectSpec(kind);
+  return spec ? spec.fields.filter((field) => field.derived && !field.derive && !field.restricted).map((field) => field.name) : [];
+}
+
+/**
  * The value a field RENDERS — computed where the field says how, stored otherwise.
  *
  * THE one resolver. The node body and the emptiness predicate both used to read

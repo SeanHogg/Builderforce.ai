@@ -1,10 +1,12 @@
 'use client';
 
 import type { CSSProperties } from 'react';
+import { useTranslations } from 'next-intl';
 import type { TenantMember, PendingInvitation } from '@/lib/auth';
 import { Select } from '@/components/Select';
 import { RoleGate } from '@/components/RoleGate';
-import { useRole, ROLE_LABEL, ASSIGNABLE_ROLES, type TenantRole } from '@/lib/rbac';
+import { useRole, ASSIGNABLE_ROLES, type TenantRole } from '@/lib/rbac';
+import { useRoleText } from '@/lib/useRoleText';
 import { WorkforceCard, InitialAvatar } from './WorkforceCard';
 import { MemberStatsStrip } from './MemberStatsStrip';
 import { useWorkforceMetrics } from './WorkforceMetricsContext';
@@ -21,6 +23,10 @@ const roleBadgeStyle: CSSProperties = {
  * than vanishing. The `owner` option is offered only to an owner, since the API
  * permits only owners to grant/alter that role. Shared by the card + table so
  * neither re-implements the gate or the option list.
+ *
+ * Says what the chosen role can DO, not just its name: a person promoting someone
+ * to Manager should not have to guess what that grants. The full line shows under
+ * the picker on the card; the compact table variant carries it as the tooltip.
  */
 export function RoleSelect({
   value,
@@ -33,27 +39,38 @@ export function RoleSelect({
   busy?: boolean;
   compact?: boolean;
 }) {
+  const t = useTranslations('workforce.memberCard');
+  const roleText = useRoleText();
   const myRole = useRole();
   const options = ASSIGNABLE_ROLES.filter((r) => r !== 'owner' || myRole === 'owner');
+  const description = roleText.description(value);
   return (
-    <RoleGate capability="members.manageRoles">
-      <Select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={busy}
-        aria-label="Member role"
-        style={{
-          padding: compact ? '4px 8px' : '6px 10px', fontSize: 12,
-          background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
-          borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', cursor: busy ? 'not-allowed' : 'pointer',
-          opacity: busy ? 0.6 : 1,
-        }}
-      >
-        {options.map((r: TenantRole) => (
-          <option key={r} value={r}>{ROLE_LABEL[r]}</option>
-        ))}
-      </Select>
-    </RoleGate>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, flex: compact ? undefined : '1 1 180px' }}>
+      <RoleGate capability="members.manageRoles">
+        <Select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={busy}
+          aria-label={t('roleSelect')}
+          title={description || undefined}
+          style={{
+            padding: compact ? '4px 8px' : '6px 10px', fontSize: 12,
+            background: 'var(--bg-base)', border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', cursor: busy ? 'not-allowed' : 'pointer',
+            opacity: busy ? 0.6 : 1,
+          }}
+        >
+          {options.map((r: TenantRole) => (
+            <option key={r} value={r}>{roleText.label(r)}</option>
+          ))}
+        </Select>
+      </RoleGate>
+      {!compact && description && (
+        <span data-testid="role-description" style={{ fontSize: 11, lineHeight: 1.4, color: 'var(--text-muted)' }}>
+          {description}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -89,8 +106,9 @@ export function MemberCard({
   removing?: boolean;
   changingRole?: boolean;
 }) {
+  const t = useTranslations('workforce.memberCard');
+  const roleText = useRoleText();
   const name = member.displayName ?? member.username ?? member.email;
-  const roleLabel = ROLE_LABEL[member.role as TenantRole] ?? member.role;
   // Surface the same Performance + Contributors signals as their dedicated tabs,
   // looked up from the shared directory fetch (humans key both lookups on user id).
   const { scorecardFor, engagementFor } = useWorkforceMetrics();
@@ -104,8 +122,8 @@ export function MemberCard({
       pill={{ kind: 'human' }}
       badges={
         <>
-          <span style={roleBadgeStyle} title="Workspace role">{roleLabel}</span>
-          {member.mfaEnabled && <span title="MFA enabled" style={mfaBadgeStyle}>MFA</span>}
+          <span style={roleBadgeStyle} title={t('roleBadge')}>{roleText.label(member.role)}</span>
+          {member.mfaEnabled && <span title={t('mfaEnabled')} style={mfaBadgeStyle}>{t('mfa')}</span>}
         </>
       }
       body={
@@ -114,15 +132,15 @@ export function MemberCard({
           {/* This person's personality — self-hides when they haven't taken the test. */}
           <PersonalitySummary profile={member.psychometric ?? undefined} />
           <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-            {member.activeSessions} active session{member.activeSessions === 1 ? '' : 's'}
+            {t('activeSessions', { count: member.activeSessions })}
           </div>
         </div>
       }
       footer={
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
           <RoleSelect value={member.role} onChange={(role) => onChangeRole(member, role)} busy={changingRole} />
           <button type="button" onClick={() => onRemove(member)} disabled={removing} style={dangerBtnStyle(removing)}>
-            {removing ? 'Removing…' : 'Remove'}
+            {removing ? t('removing') : t('remove')}
           </button>
         </div>
       }
@@ -139,21 +157,23 @@ export function PendingInviteCard({
   onRevoke: (invite: PendingInvitation) => void;
   revoking?: boolean;
 }) {
+  const t = useTranslations('workforce.memberCard');
+  const roleText = useRoleText();
   return (
     <WorkforceCard
       avatar={<InitialAvatar label={invite.email} />}
       name={invite.email}
-      subtitle={`Invited as ${invite.role}`}
+      subtitle={t('invitedAs', { role: roleText.label(invite.role) })}
       pill={{ kind: 'pending' }}
       body={
         <div style={{ fontSize: 12, color: 'var(--muted)', flex: 1 }}>
-          Joins automatically when they sign up with this email.
+          {t('joinsOnSignup')}
         </div>
       }
       footer={
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <button type="button" onClick={() => onRevoke(invite)} disabled={revoking} style={dangerBtnStyle(revoking)}>
-            {revoking ? 'Revoking…' : 'Revoke'}
+            {revoking ? t('revoking') : t('revoke')}
           </button>
         </div>
       }

@@ -22,7 +22,7 @@
  *
  * What lives here is exactly the set of tools whose backing is the WORKER: durable
  * memory, the ticket PRD, coordination leases + blackboard, web search, the curated
- * platform tools, the human-in-the-loop pause, and delegation. What does NOT live here
+ * platform tools, the human-in-the-loop pause, delegation, and skill authoring. What does NOT live here
  * is everything genuinely surface-shaped — `list_files`, `read_file`, `write_file`,
  * `run_command` and the `git_*` family all touch a local filesystem/shell that the two
  * images obtain differently (the container clones; Actions gets a checkout), so each
@@ -54,6 +54,8 @@ export const RELAY_TOOL_NAMES = [
   'web_search',
   'ask_human',
   'spawn_agent',
+  'skill_propose',
+  'skill_list',
   'builtin_*',
 ];
 
@@ -176,6 +178,26 @@ export async function execRelayTool(op, name, parsed, loop) {
     const query = text(parsed.query);
     if (!query) return { ok: false, error: 'query is required' };
     return op('search', { query });
+  }
+
+  // ── Skill authoring ─────────────────────────────────────────────────────────
+  // A run that worked out a repeatable procedure proposes it as a skill DRAFT. Both
+  // verbs relay to the Worker's `skill` op, which runs the same tool definitions
+  // against the same authoring service the durable surface uses — so the proposal is
+  // validated identically and can only ever land as a draft awaiting human review.
+  // The arguments pass through untouched: the tool's own validation is the authority.
+  if (name === 'skill_propose') {
+    return op('skill', {
+      action: 'propose',
+      slug: parsed.slug,
+      name: parsed.name,
+      description: parsed.description,
+      body: parsed.body,
+      evidence: parsed.evidence,
+    });
+  }
+  if (name === 'skill_list') {
+    return op('skill', { action: 'list' });
   }
 
   // ── Delegation ──────────────────────────────────────────────────────────────
