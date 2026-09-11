@@ -15038,6 +15038,9 @@
     "tabOutput": "Salida",
     "tabChanges": "Cambios",
     "tabTools": "Herramientas",
+    "tabThinking": "Razonamiento",
+    "noThinking": "Esta ejecución no registró razonamiento. Solo los modelos que devuelven una traza de razonamiento lo generan.",
+    "thinkingStep": "Paso {step}",
     "tabModelTurns": "Turnos del modelo",
     "noModelTurns": "Todavía no hay turnos del modelo registrados para esta ejecución.",
     "modelTurnsTotalTokens": "{count} tokens en total",
@@ -23525,6 +23528,7 @@
     "flowStep": {
       "dataIn": "Datos de entrada",
       "dataInHint": "Nombra lo que recibe este paso e indica de dónde se lee cada valor en los datos anteriores.",
+      "dataInVariables": "Los pasos anteriores publican variables de ejecución. Lee una como $vars.nombre: aparecen como sugerencias en «Leer de».",
       "dataOut": "Datos de salida",
       "dataOutHint": "Nombra lo que publica este paso. Los pasos posteriores lo leen con Obtener variable.",
       "outlets": "Rutas",

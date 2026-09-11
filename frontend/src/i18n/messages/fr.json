@@ -15038,6 +15038,9 @@
     "tabOutput": "Sortie",
     "tabChanges": "Modifications",
     "tabTools": "Outils",
+    "tabThinking": "Raisonnement",
+    "noThinking": "Cette exécution n'a enregistré aucun raisonnement. Seuls les modèles qui renvoient une trace de raisonnement en produisent une.",
+    "thinkingStep": "Étape {step}",
     "tabModelTurns": "Tours du modèle",
     "noModelTurns": "Aucun tour du modèle tracé pour cette exécution pour l'instant.",
     "modelTurnsTotalTokens": "{count} jetons au total",
@@ -23525,6 +23528,7 @@
     "flowStep": {
       "dataIn": "Données entrantes",
       "dataInHint": "Nommez ce que reçoit cette étape et indiquez où chaque valeur est lue dans les données précédentes.",
+      "dataInVariables": "Les étapes précédentes publient des variables d'exécution. Lisez-en une avec $vars.nom — elles sont suggérées dans « Lire depuis ».",
       "dataOut": "Données sortantes",
       "dataOutHint": "Nommez ce que publie cette étape. Les étapes suivantes le lisent avec Obtenir la variable.",
       "outlets": "Chemins",

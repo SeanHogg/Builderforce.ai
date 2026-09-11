@@ -1,3 +1,48 @@
+## ✅ RESOLVED 2026-09-10 — Roadmap sweep: four Gap Register entries closed (two built, two already fixed)
+
+### A flow step's DATA IN can read a run variable — `$vars.<name>`
+A declared input mapping resolved only against the payload directly in front of the
+step, so a value published three steps back had to be re-threaded through every step
+between. The executor now joins the run's variable store into the expression context.
+- `api/src/domain/workflowExpr.ts`: `RUN_VARIABLES_KEY` (`$vars`), `referencesRunVariables`,
+  `withRunVariables`. The store is joined AFTER the payload's fields, so a payload carrying
+  its own `$vars` key cannot shadow it; a variable holding a JSON object/array is walked
+  as one (`$vars.order.id`).
+- `api/src/application/workflow/workflowVariables.ts`: `listWorkflowVariables` — one
+  indexed read on (tenant, scope, scopeId), bounded at 500. Deliberately NOT cached:
+  run-scoped state is written by the same run that reads it, node by node.
+- `cloudExecutor.ts`: ONE `expressionContext()` used by every expression-evaluating kind
+  (transform, filter, branch, router, assert, set-variable, set-variables). It loads the
+  store only when a node's expression names `$vars`, so every other node pays nothing.
+- Frontend: `domains/workflow/domain/runVariables.ts` derives the variables published
+  UPSTREAM of a step (declared DATA OUT, Set Variable, Set Variables — never a later or
+  unconnected step, never the step's own outputs), and `FlowStepInspector` offers them
+  as `$vars.<name>` suggestions on the DATA IN "Read from" field, with one localized hint
+  (`creationCanvas.flowStep.dataInVariables`, five locales).
+- Tests: `workflowExpr.runVariables.test.ts` (api), `runVariables.test.ts` (frontend).
+
+### The run drawer shows the reasoning a run recorded — a Thinking tab
+`agent.thinking` rows carried the full text in `args.content`, but the drawer only
+excluded them from the Tools count, and the Observability timeline showed 120 characters.
+- New self-contained `components/agent/RunThinkingPanel.tsx` (`thinkingEventsOf` +
+  presentational panel): full text, oldest first, step + model per thought, preview
+  fallback for older rows, its own empty state. `AgentExecutionPanel` only adds the tab
+  (it is a 1,000-line file and was not grown by the rendering).
+- Keys `agentExecution.tabThinking` / `noThinking` / `thinkingStep` in all five catalogs.
+- Test: `RunThinkingPanel.test.ts`.
+
+### Already fixed, entries were stale
+- **Vendor-health clear on the non-streaming path** — `successJsonResult` is async and
+  `await`s `clearVendorHealth` (`LlmProxyService.ts`), matching the streaming path.
+- **`check:silent-catches` +2 / TS4104 in the Creation Library** — `CreationLibraryPanel.tsx`
+  has no catch bodies left, the guard passes at baseline, and `frontend` typechecks clean.
+
+Verified: api vitest (workflow + expression suites, 177 tests), frontend vitest (workflow
+domain, thinking panel, `AgentExecutionPanel.test.tsx`), frontend `tsc --noEmit`,
+`check-silent-catches` (api + frontend at baseline), `check-i18n-keys`, all five catalogs
+parse. Both built items improve surfaces that already existed, so they get no marketing
+push; a `category=improvement` release note needs a live superadmin session.
+
 ## ✅ RESOLVED 2026-09-10 — The session opened in the room had no visible way back: it now wears an (X)
 
 Opening the session from the room's diorama mounted `Canvas3DView` inside

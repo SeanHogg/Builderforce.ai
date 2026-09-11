@@ -15038,6 +15038,9 @@
     "tabOutput": "Ausgabe",
     "tabChanges": "Änderungen",
     "tabTools": "Werkzeuge",
+    "tabThinking": "Überlegungen",
+    "noThinking": "Dieser Lauf hat keine Überlegungen aufgezeichnet. Nur Modelle, die eine Reasoning-Spur zurückgeben, erzeugen welche.",
+    "thinkingStep": "Schritt {step}",
     "tabModelTurns": "Modelldurchläufe",
     "noModelTurns": "Für diesen Lauf sind noch keine Modelldurchläufe aufgezeichnet.",
     "modelTurnsTotalTokens": "{count} Tokens insgesamt",
@@ -23525,6 +23528,7 @@
     "flowStep": {
       "dataIn": "Eingehende Daten",
       "dataInHint": "Benennen Sie, was dieser Schritt erhält, und woher jeder Wert in den vorherigen Daten gelesen wird.",
+      "dataInVariables": "Frühere Schritte veröffentlichen Laufvariablen. Lesen Sie eine mit $vars.name – sie werden unter „Lesen aus“ vorgeschlagen.",
       "dataOut": "Ausgehende Daten",
       "dataOutHint": "Benennen Sie, was dieser Schritt veröffentlicht. Spätere Schritte lesen es mit „Variable lesen“.",
       "outlets": "Pfade",

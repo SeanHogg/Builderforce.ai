@@ -1,4 +1,5 @@
 // No 'use client': rendered only inside `CreationCanvas`'s client boundary.
+import { useId } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Edge } from '@xyflow/react';
 import { StepConfigForm } from '@/domains/workflow/presentation/StepConfigForm';
@@ -9,6 +10,7 @@ import {
 import {
   appendOutlet, isMultiOutletKind, outletForHandle, outletPredicate, patchOutlet, removeOutlet, stepOutlets,
 } from '@/domains/workflow/domain/stepOutlets';
+import { runVariablePath, upstreamRunVariables } from '@/domains/workflow/domain/runVariables';
 import { creationObjectName } from './creationObjectRegistry';
 import type { CreationFlowNode } from './CreationNode';
 import type { CreationNodeData } from './types';
@@ -63,6 +65,9 @@ export function FlowStepInspector({
   const outlets = stepOutlets(stepKind, config);
   const decides = isMultiOutletKind(stepKind);
   const predicate = outletPredicate(stepKind);
+  // Run variables published upstream, offered as `$vars.<name>` for DATA IN.
+  const runVariables = upstreamRunVariables(nodeId, nodes, edges);
+  const runVariablesListId = useId();
 
   const patchConfig = (patch: Record<string, unknown>) => onChange({ stepConfig: { ...config, ...patch } });
   const nameOf = (id: string) => {
@@ -79,6 +84,7 @@ export function FlowStepInspector({
     keyLabel: string,
     fromLabel: string,
     fromHint: string,
+    fromSuggestionsId?: string,
   ) => (
     <div className={styles.flowRows}>
       {list.map((entry, index) => (
@@ -96,6 +102,7 @@ export function FlowStepInspector({
             <input
               value={entry.from}
               placeholder={fromHint}
+              list={fromSuggestionsId}
               disabled={!editable}
               onChange={(event) => onChange({ [key]: list.map((item, i) => (i === index ? { ...item, from: event.target.value } : item)) } as Partial<CreationNodeData>)}
             />
@@ -170,7 +177,18 @@ export function FlowStepInspector({
       <section className={styles.flowSection}>
         <h4>{t('flowStep.dataIn')}</h4>
         <p>{t('flowStep.dataInHint')}</p>
-        {rows('stepInputs', inputs, t('flowStep.bindingKey'), t('flowStep.bindingFrom'), t('flowStep.bindingFromHint'))}
+        {runVariables.length > 0 && (
+          <>
+            <p data-testid="flow-step-run-variables">{t('flowStep.dataInVariables')}</p>
+            <datalist id={runVariablesListId}>
+              {runVariables.map((name) => <option key={name} value={runVariablePath(name)} />)}
+            </datalist>
+          </>
+        )}
+        {rows(
+          'stepInputs', inputs, t('flowStep.bindingKey'), t('flowStep.bindingFrom'), t('flowStep.bindingFromHint'),
+          runVariables.length > 0 ? runVariablesListId : undefined,
+        )}
       </section>
 
       {/* 4. DATA OUT — never offered on a step that decides: a capture placed after

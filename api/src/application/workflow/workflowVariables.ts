@@ -36,6 +36,32 @@ export async function getWorkflowVariable(
   return row?.value ?? '';
 }
 
+/**
+ * Every variable in one scope as a name → value map — what an expression reads
+ * through `$vars`. One indexed read on (tenant, scope, scopeId); bounded, because
+ * a run publishes a handful of names, not an unbounded set.
+ *
+ * Not cached: run-scoped state is written by the same run that reads it, step by
+ * step, so a cached copy would be stale by the next node.
+ */
+export async function listWorkflowVariables(
+  db: Db,
+  tenantId: number,
+  scope: VariableScope,
+  scopeId: string,
+): Promise<Record<string, string>> {
+  const rows = await db
+    .select({ key: workflowVariables.key, value: workflowVariables.value })
+    .from(workflowVariables)
+    .where(and(
+      eq(workflowVariables.tenantId, tenantId),
+      eq(workflowVariables.scope, scope),
+      eq(workflowVariables.scopeId, scopeId),
+    ))
+    .limit(500);
+  return Object.fromEntries(rows.map((row) => [row.key, row.value ?? '']));
+}
+
 /** Write (upsert) one variable. */
 export async function setWorkflowVariable(
   db: Db,

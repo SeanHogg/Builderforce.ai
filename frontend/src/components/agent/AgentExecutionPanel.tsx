@@ -35,6 +35,7 @@ import { useExecutionStream, type ExecutionFileChange } from './useExecutionStre
 import { ObservabilityContent } from '../ObservabilityContent';
 import { TaskChangesPanel } from './TaskChangesPanel';
 import { PullRequestPanel } from './PullRequestPanel';
+import { RunThinkingPanel, thinkingEventsOf } from './RunThinkingPanel';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
 import { formatUsdSpend } from '@/lib/formatSpend';
@@ -135,7 +136,7 @@ function runProvenance(toolEvents: ExecutionTraceToolEvent[]): {
   return { dispatch, models: [...models.entries()].map(([m, n]) => `${m} ×${n}`), repo };
 }
 
-type SubTab = 'output' | 'changes' | 'tools' | 'model' | 'logs' | 'timeline' | 'pull-request';
+type SubTab = 'output' | 'changes' | 'tools' | 'thinking' | 'model' | 'logs' | 'timeline' | 'pull-request';
 const card: React.CSSProperties = { border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 14, marginBottom: 12 };
 const RUNNING = new Set(['pending', 'submitted', 'running']);
 /**
@@ -321,6 +322,8 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   // Genuine tool calls only — the Tools tab count + list exclude lifecycle/telemetry
   // events (agent.message, llm.complete, …) so "Tools (N)" reflects real invocations.
   const realToolEvents = toolEvents.filter(isGenuineToolCall);
+  // The reasoning the Tools count excludes, read whole on its own tab.
+  const thoughts = useMemo(() => thinkingEventsOf(toolEvents), [toolEvents]);
   // Structured per-turn model + token facts for this run (0949) — real columns off
   // the run's own trace rows, not a JSON blob the UI has to re-parse.
   const llmTurns: ExecutionLlmTurn[] = trace?.trace.llmTurns ?? [];
@@ -845,7 +848,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
 
           {/* Sub-tabs */}
           <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border-subtle)', marginBottom: 10 }}>
-            {(() => { const changeCount = taskChanges.length || files.length; const base: Array<readonly [SubTab, string]> = [['output', t('tabOutput')], ['changes', `${t('tabChanges')}${changeCount ? ` (${changeCount})` : ''}`], ['tools', `${t('tabTools')}${realToolEvents.length ? ` (${realToolEvents.length})` : ''}`], ['model', `${t('tabModelTurns')}${llmTurns.length ? ` (${llmTurns.length})` : ''}`], ['logs', t('tabLogs')], ['timeline', t('tabTimeline')]]; if (prUrl) base.push(['pull-request', t('tabPullRequest')]); return base; })().map(([id, label]) => (
+            {(() => { const changeCount = taskChanges.length || files.length; const base: Array<readonly [SubTab, string]> = [['output', t('tabOutput')], ['changes', `${t('tabChanges')}${changeCount ? ` (${changeCount})` : ''}`], ['tools', `${t('tabTools')}${realToolEvents.length ? ` (${realToolEvents.length})` : ''}`], ['thinking', `${t('tabThinking')}${thoughts.length ? ` (${thoughts.length})` : ''}`], ['model', `${t('tabModelTurns')}${llmTurns.length ? ` (${llmTurns.length})` : ''}`], ['logs', t('tabLogs')], ['timeline', t('tabTimeline')]]; if (prUrl) base.push(['pull-request', t('tabPullRequest')]); return base; })().map(([id, label]) => (
               <button
                 key={id}
                 type="button"
@@ -963,6 +966,8 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
               )}
             </div>
           )}
+
+          {subTab === 'thinking' && <RunThinkingPanel thoughts={thoughts} />}
 
           {subTab === 'model' && (
             <div style={{ minHeight: 80, maxHeight: 360, overflow: 'auto' }}>

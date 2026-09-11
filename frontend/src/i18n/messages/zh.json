@@ -15038,6 +15038,9 @@
     "tabOutput": "输出",
     "tabChanges": "变更",
     "tabTools": "工具",
+    "tabThinking": "思考",
+    "noThinking": "本次运行没有记录推理过程。只有返回推理轨迹的模型才会产生推理记录。",
+    "thinkingStep": "第 {step} 步",
     "tabModelTurns": "模型轮次",
     "noModelTurns": "本次运行尚无已记录的模型轮次。",
     "modelTurnsTotalTokens": "共 {count} 个 token",
@@ -23525,6 +23528,7 @@
     "flowStep": {
       "dataIn": "输入数据",
       "dataInHint": "为该步骤接收的数据命名，并指定每个值从上游负载的哪个位置读取。",
+      "dataInVariables": "前面的步骤发布了运行变量。用 $vars.名称 读取——它们会作为“读取自”的建议出现。",
       "dataOut": "输出数据",
       "dataOutHint": "为该步骤发布的数据命名。后续步骤可通过“获取变量”读取。",
       "outlets": "分支路径",

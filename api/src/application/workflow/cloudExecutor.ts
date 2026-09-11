@@ -86,7 +86,10 @@ import { loadGoogleCredential } from '../integrations/googleCredential';
 import { sendGmail, searchGoogleDrive, readGoogleDriveFileText } from '../integrations/googleOAuth';
 import { tenantProxyForPlan, byoAwareModel } from '../llm/tenantProxy';
 import { recordProxyUsage } from '../llm/usageLedger';
-import { contextFromInput, evaluateBool, renderTransform, renderValueTemplate } from '../../domain/workflowExpr';
+import {
+  contextFromInput, evaluateBool, referencesRunVariables, renderTransform, renderValueTemplate, withRunVariables,
+  type ExprContext,
+} from '../../domain/workflowExpr';
 import {
   regexMatch, htmlToText, htmlTable, htmlElements, matchElements,
   matchPatternAdvanced, replaceText, chunkText, convertEncoding,
@@ -94,7 +97,7 @@ import {
 import { credentialSecret } from '../integrations/credentialCrypto';
 import { executeMcpNode, type McpNodeConfig } from './mcpNode';
 import { executeConnectorNode, type ConnectorNodeConfig } from './connectorNode';
-import { getWorkflowVariable, setWorkflowVariable, incrementWorkflowVariable } from './workflowVariables';
+import { getWorkflowVariable, setWorkflowVariable, incrementWorkflowVariable, listWorkflowVariables } from './workflowVariables';
 import { assertSafeUrl, BlockedUrlError } from '../../infrastructure/net/ssrfGuard';
 import { fetchPublic } from '../../infrastructure/net/fetchPublic';
 import { platformWebSearchBacking } from '../runtime/webSearchCredential';
@@ -148,6 +151,24 @@ export interface UsageContext {
 /** Substitute `{{input}}` (and `{{ input }}`) in a template with the upstream text. */
 export function renderTemplate(template: string, input: string): string {
   return template.replace(/\{\{\s*input\s*\}\}/g, input);
+}
+
+/**
+ * The context an author-written expression is evaluated against: the upstream
+ * payload, plus — when one of the node's expressions names `$vars` — every run
+ * variable an earlier step published. That is what lets a declared DATA IN read
+ * a value three steps back without re-threading it through every step between.
+ * Loaded on demand only, so a node that never mentions a variable pays nothing.
+ */
+async function expressionContext(
+  inputText: string,
+  usageCtx: UsageContext | undefined,
+  expressions: readonly unknown[],
+): Promise<ExprContext> {
+  const ctx = contextFromInput(inputText);
+  if (!usageCtx || !referencesRunVariables(expressions)) return ctx;
+  const variables = await listWorkflowVariables(usageCtx.db, usageCtx.tenantId, 'run', usageCtx.workflowId);
+  return withRunVariables(ctx, variables);
 }
 
 /**
@@ -340,12 +361,13 @@ export async function executeCloudNode(
     // (no eval/Function). An empty expression is a pass-through, so existing
     // workflows are unaffected.
     case 'transform': {
-      const ctx = contextFromInput(inputText);
-      return { output: renderTransform(typeof node.config.expression === 'string' ? node.config.expression : '', inputText, ctx) };
+      const expression = typeof node.config.expression === 'string' ? node.config.expression : '';
+      const ctx = await expressionContext(inputText, usageCtx, [expression]);
+      return { output: renderTransform(expression, inputText, ctx) };
     }
     case 'filter': {
-      const ctx = contextFromInput(inputText);
       const predicate = typeof node.config.predicate === 'string' ? node.config.predicate : '';
+      const ctx = await expressionContext(inputText, usageCtx, [predicate]);
       // Predicate holds → forward the payload; fails → drop it, which prunes the
       // whole downstream cone of this filter (the drain loop cancels dependents
       // of a dropped node — see `dispositionFromDeps`).
@@ -358,8 +380,8 @@ export async function executeCloudNode(
       // edge does not match it (see `prunedByEdgeLabel`). An unlabeled graph
       // still runs both sides, exactly as before — a workflow authored without
       // labels cannot change behaviour under it.
-      const ctx = contextFromInput(inputText);
       const condition = typeof node.config.condition === 'string' ? node.config.condition : '';
+      const ctx = await expressionContext(inputText, usageCtx, [condition]);
       const taken = condition ? evaluateBool(condition, ctx) : true;
       try {
         const parsed = JSON.parse(inputText || '{}') as Record<string, unknown>;
@@ -380,7 +402,7 @@ export async function executeCloudNode(
       // labeled with a route name is pruned by the drain loop when a different
       // route won; a `filter` on `$route` remains available for graphs that
       // were authored before labels existed.
-      const ctx = contextFromInput(inputText);
+      const ctx = await expressionContext(inputText, usageCtx, [node.config.routes]);
       // `routes` is authored as a JSON string in the config panel (same
       // convention as the `mcp` kind's `params` field) — parse defensively so a
       // malformed/empty value degrades to "no routes" rather than throwing.
@@ -536,7 +558,8 @@ export async function executeCloudNode(
       // unless it carries a span, and every span form is available — so a declared
       // output capture can name a PATH (`{{ order.id }}`) instead of being able to
       // store only the whole upstream payload. See its own doc comment.
-      const value = renderValueTemplate(typeof node.config.value === 'string' ? node.config.value : '{{input}}', inputText, contextFromInput(inputText));
+      const template = typeof node.config.value === 'string' ? node.config.value : '{{input}}';
+      const value = renderValueTemplate(template, inputText, await expressionContext(inputText, usageCtx, [template]));
       await setWorkflowVariable(usageCtx.db, usageCtx.tenantId, 'run', usageCtx.workflowId, key, value);
       return { output: value };
     }
@@ -589,7 +612,7 @@ export async function executeCloudNode(
       const written: Record<string, string> = {};
       // One context for the whole map — parsing the payload once per node, not once
       // per key, on what is routinely the widest node in a graph.
-      const valuesCtx = contextFromInput(inputText);
+      const valuesCtx = await expressionContext(inputText, usageCtx, Object.values(values));
       for (const [key, raw] of Object.entries(values)) {
         const value = renderValueTemplate(String(raw ?? ''), inputText, valuesCtx);
         await setWorkflowVariable(usageCtx.db, usageCtx.tenantId, 'run', usageCtx.workflowId, key, value);
@@ -643,8 +666,8 @@ export async function executeCloudNode(
       return { output: JSON.stringify(chunkText(inputText, chunkSize, overlap)) };
     }
     case 'assert': {
-      const ctx = contextFromInput(inputText);
       const expression = typeof node.config.expression === 'string' ? node.config.expression : '';
+      const ctx = await expressionContext(inputText, usageCtx, [expression]);
       const onFail = node.config.onFail === 'warn-only' ? 'warn-only' : 'fail-task';
       const holds = evaluateBool(expression, ctx);
       if (!holds && onFail === 'fail-task') throw new Error(`Assertion failed: ${expression || '(empty expression)'}`);

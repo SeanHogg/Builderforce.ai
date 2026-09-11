@@ -15038,6 +15038,9 @@
     "tabOutput": "Output",
     "tabChanges": "Changes",
     "tabTools": "Tools",
+    "tabThinking": "Thinking",
+    "noThinking": "This run recorded no reasoning. Only models that return a reasoning trace produce one.",
+    "thinkingStep": "Step {step}",
     "tabModelTurns": "Model turns",
     "noModelTurns": "No traced model turns for this run yet.",
     "modelTurnsTotalTokens": "{count} tokens total",
@@ -23525,6 +23528,7 @@
     "flowStep": {
       "dataIn": "Data in",
       "dataInHint": "Name what this step receives, and where each value is read from in the payload before it.",
+      "dataInVariables": "Earlier steps publish run variables. Read one as $vars.name — they are suggested under Read from.",
       "dataOut": "Data out",
       "dataOutHint": "Name what this step publishes. Later steps read these with Get variable.",
       "outlets": "Paths",

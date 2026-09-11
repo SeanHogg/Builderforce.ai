@@ -21,7 +21,8 @@
  * A bare operand (no comparison) is truthy by JS truthiness of its resolved
  * value. The context exposes the upstream payload's top-level fields directly
  * (when it is a JSON object), plus `input` (the raw text) and `$` (the parsed
- * value) so a scalar/array payload is still addressable.
+ * value) so a scalar/array payload is still addressable — and, when the executor
+ * joins them, the run's variables under `$vars` (see {@link RUN_VARIABLES_KEY}).
  */
 
 export type ExprContext = Record<string, unknown>;
@@ -43,6 +44,44 @@ export function contextFromInput(inputText: string): ExprContext {
   } catch {
     return { input: text, $: text };
   }
+}
+
+/**
+ * The reserved context key the run's variables are read through — `$vars.orderId`.
+ *
+ * A step's payload carries only what the step before it returned, so a value an
+ * earlier step published had to be re-threaded through every step in between to
+ * reach a mapping that needed it. `$vars` names the run's variable store directly.
+ * It is joined AFTER the payload's own fields, so a payload that happens to carry
+ * a `$vars` key cannot shadow the store.
+ */
+export const RUN_VARIABLES_KEY = '$vars';
+
+/** Whether any of a node's expressions reads a run variable — the executor loads
+ *  the store only then, so a node that never names one costs no extra read. */
+export function referencesRunVariables(expressions: readonly unknown[]): boolean {
+  return expressions.some((expression) => {
+    const text = typeof expression === 'string' ? expression : expression == null ? '' : JSON.stringify(expression);
+    return text.includes(RUN_VARIABLES_KEY);
+  });
+}
+
+/** A stored variable is text; one that holds a JSON object or array is walked as
+ *  one, so `$vars.order.id` reaches into a captured `order`. */
+function variableValue(raw: string): unknown {
+  const text = raw.trim();
+  if (!text.startsWith('{') && !text.startsWith('[')) return raw;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return raw;
+  }
+}
+
+/** The context with the run's variables joined under {@link RUN_VARIABLES_KEY}. */
+export function withRunVariables(ctx: ExprContext, variables: Readonly<Record<string, string>>): ExprContext {
+  const scope = Object.fromEntries(Object.entries(variables).map(([key, value]) => [key, variableValue(value)]));
+  return { ...ctx, [RUN_VARIABLES_KEY]: scope };
 }
 
 /** Resolve a dotted/bracketed path (`a.b[0].c`) against the context. */
