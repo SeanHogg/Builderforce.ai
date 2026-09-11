@@ -8,9 +8,16 @@
  * and a missing variable degrades to something readable rather than to nothing.
  */
 
+/* Left/right are NOT 0, for the reason `.objectSurface` gives in the canvas sheet: a
+   docked Brain paints above the surface layer, so a full-bleed room ran underneath it
+   — its roster and the open session's way back sat invisibly under the dock. The
+   dock's width arrives on the shell as --brain-dock-left/right. */
 .surface {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: var(--brain-dock-right, 0px);
+  bottom: 0;
+  left: var(--brain-dock-left, 0px);
   display: flex;
   flex-direction: row;
   min-width: 0;
@@ -51,67 +58,44 @@
 }
 
 /* ── The session at full size ─────────────────────────────────────────────────
-   A frame around the projection: one header row with its name and its two ways
-   back, and a body the projection fills. `position: relative` on the body is what
-   `Canvas3DView`'s own `position: absolute; inset` measures itself against. */
+   The projection fills the frame — `Canvas3DView`'s own `position: absolute; inset`
+   measures itself against it — and the (X) floats in its top-right corner. The frame
+   isolates its stacking so the projection's own layers can never paint over the X. */
 
 .sessionFrame {
   position: absolute;
   inset: 0;
-  display: flex;
-  flex-direction: column;
+  isolation: isolate;
   min-width: 0;
   min-height: 0;
   background: var(--surface);
 }
 
-.sessionFrameBar {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 40px;
-  padding: 4px 10px;
-  border-bottom: 1px solid var(--border);
+/* Just below the floating top chrome (`--canvas-top-chrome-space`, measured by the
+   host), so the stage switcher and the sync notice never cover it at any width. */
+.sessionClose {
+  position: absolute;
+  z-index: 20;
+  top: var(--canvas-top-chrome-space, 64px);
+  right: 14px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
   background: var(--surface-raised, var(--surface));
-}
-
-.sessionFrameTitle {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-  font-size: var(--font-size-small);
   color: var(--text-primary);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--text-primary) 18%, transparent);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
 }
 
-.sessionFrameTitle strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 600;
-}
+.sessionClose:hover { border-color: var(--accent); color: var(--accent); }
 
-.sessionFrameTitle small {
-  flex: 0 0 auto;
-  font-size: var(--font-size-eyebrow);
-  color: var(--text-secondary);
-}
-
-.sessionFrameActions {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-}
-
-.sessionFrameBody {
-  position: relative;
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 0;
-}
+.sessionClose:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .roster {
   flex: 0 0 clamp(180px, 22vw, 244px);
@@ -254,29 +238,6 @@
   }
 }
 
-/* ── The session frame's two buttons ────────────────────────────────────────
-   Sized like the ONE session bar's own controls, so a way back reads as the same
-   kind of thing wherever it is drawn. */
-
-.barAction {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--text-primary);
-  font-size: var(--font-size-small);
-  line-height: 1;
-  cursor: pointer;
-}
-
-.barAction:hover:not(:disabled) { border-color: var(--accent); }
-
-.barAction:disabled { opacity: .45; cursor: not-allowed; }
-
 @media (max-width: 760px) {
-  .sessionFrameBar { padding-inline: 8px; }
+  .sessionClose { right: 8px; }
 }

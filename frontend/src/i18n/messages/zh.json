@@ -22571,11 +22571,7 @@
         "session": {
           "open": "打开会话",
           "openButton": "打开",
-          "minimize": "最小化",
-          "minimizeHint": "把会话放回会议室",
-          "close": "关闭",
-          "closeHint": "返回画板",
-          "objects": "{count, plural, =0 {没有对象} other {# 个对象}}",
+          "back": "返回会议室",
           "hint": "{count, plural, =0 {空 · 拖动移动} other {# 个对象 · 拖动移动}}"
         }
       },

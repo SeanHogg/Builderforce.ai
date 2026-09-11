@@ -1,3 +1,25 @@
+## ✅ RESOLVED 2026-09-10 — The session opened in the room had no visible way back: it now wears an (X)
+
+Opening the session from the room's diorama mounted `Canvas3DView` inside
+`RoomSessionFrame`, whose way out was a header row with worded Minimize / Close
+buttons. The room surface was `inset: 0` over the whole canvas shell, so that header
+ran underneath the floating top chrome (the title sat under the sync notice) and its
+buttons, at the right end, sat underneath the docked Brain panel. The owner opened
+the 3D session and saw nothing to press. The same clearance miss hid the room's
+roster column under the dock.
+
+### What changed
+- `RoomSessionFrame` is now the projection plus ONE floating (X) in its top-right
+  corner (`data-testid="room-session-close"`, `session.back` = "Back to the room"),
+  placed just under `--canvas-top-chrome-space`. It minimises back into the room.
+  The header, the title and count (already on screen in the pill and the layer
+  header), and "Close → board" (one press on the surface switcher) are gone.
+- The room's `.surface` clears `--brain-dock-left/right`, the same as `.objectSurface`,
+  so neither the X nor the roster can sit under a docked Brain.
+- Keys `minimize`, `minimizeHint`, `close`, `closeHint`, `objects` removed from all
+  five catalogs; `back` added with real translations.
+- `CreationCanvas.test.tsx` asserts the single X and minimises through it.
+
 ## ✅ RESOLVED 2026-09-10 — The canvas bar's sheets could trap you: both now carry a way out
 
 The ••• board sheet had no close control. It was dismissed only by pressing the

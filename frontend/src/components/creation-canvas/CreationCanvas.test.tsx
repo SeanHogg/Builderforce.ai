@@ -257,10 +257,11 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     const scene = await enterThreeD();
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
     expect(scene).toBeInTheDocument();
-    // The session wears its two ways back: minimise into the room, close to the board.
+    // The session wears ONE way back — an (X) that puts it back in the room. The board
+    // is the surface switcher's job, so the frame carries no second "close".
     const frame = screen.getByTestId('room-session-frame');
-    expect(within(frame).getByRole('button', { name: 'Minimize' })).toBeInTheDocument();
-    expect(within(frame).getByRole('button', { name: 'Close' })).toBeInTheDocument();
+    expect(within(frame).getAllByRole('button', { name: 'Back to the room' })).toHaveLength(1);
+    expect(within(frame).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
     // The mini map is a map of the flat board, so it — and its button — stand
     // down in 3D. The toggle lives in the board sheet now and reports its
     // state IN its own name ("Hide"/"Show"), not a static "Toggle" label.
@@ -291,7 +292,7 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
 
     // Minimising puts the session back in the room — the room is still up, the
     // projection and its commands are not.
-    fireEvent.click(within(screen.getByTestId('room-session-frame')).getByRole('button', { name: 'Minimize' }));
+    fireEvent.click(screen.getByTestId('room-session-close'));
     expect(screen.queryByTestId('canvas-3d-view')).not.toBeInTheDocument();
     expect(screen.getByTestId('canvas-room-surface')).toHaveAttribute('data-session', 'placed');
     expect(toggle).toHaveAttribute('aria-pressed', 'true');

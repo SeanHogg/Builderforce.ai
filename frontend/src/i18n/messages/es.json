@@ -22571,11 +22571,7 @@
         "session": {
           "open": "Abrir la sesión",
           "openButton": "Abrir",
-          "minimize": "Minimizar",
-          "minimizeHint": "Devolver la sesión a la sala",
-          "close": "Cerrar",
-          "closeHint": "Volver al tablero",
-          "objects": "{count, plural, =0 {sin objetos} one {# objeto} other {# objetos}}",
+          "back": "Volver a la sala",
           "hint": "{count, plural, =0 {Vacía · arrastra para mover} one {# objeto · arrastra para mover} other {# objetos · arrastra para mover}}"
         }
       },

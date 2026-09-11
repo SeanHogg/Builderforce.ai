@@ -22571,11 +22571,7 @@
         "session": {
           "open": "Ouvrir la session",
           "openButton": "Ouvrir",
-          "minimize": "Réduire",
-          "minimizeHint": "Remettre la session dans la salle",
-          "close": "Fermer",
-          "closeHint": "Retour au tableau",
-          "objects": "{count, plural, =0 {aucun objet} one {# objet} other {# objets}}",
+          "back": "Retour à la salle",
           "hint": "{count, plural, =0 {Vide · glissez pour déplacer} one {# objet · glissez pour déplacer} other {# objets · glissez pour déplacer}}"
         }
       },

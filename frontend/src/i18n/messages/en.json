@@ -22571,11 +22571,7 @@
         "session": {
           "open": "Open the session",
           "openButton": "Open",
-          "minimize": "Minimize",
-          "minimizeHint": "Put the session back in the room",
-          "close": "Close",
-          "closeHint": "Back to the board",
-          "objects": "{count, plural, =0 {no objects} one {# object} other {# objects}}",
+          "back": "Back to the room",
           "hint": "{count, plural, =0 {Empty · drag to move} one {# object · drag to move} other {# objects · drag to move}}"
         }
       },

@@ -229,7 +229,7 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
   }), [hereCount, seats.length, t]);
 
   const session = sessionOpen ? (
-    <RoomSessionFrame title={sessionTitle} objectCount={objectCount} onMinimize={minimizeSession} onClose={onExit}>
+    <RoomSessionFrame onMinimize={minimizeSession}>
       {renderSession({ onMinimize: minimizeSession })}
     </RoomSessionFrame>
   ) : null;
