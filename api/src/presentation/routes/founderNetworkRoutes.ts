@@ -30,6 +30,19 @@ import {
   upsertFundingRound,
 } from '../../application/finance/fundingRounds';
 import { InvestorUpdateError, sendInvestorUpdate } from '../../application/investor/investorUpdateDelivery';
+import { parseBody, z, zJsonObject, zNumberLike } from './requestBody';
+
+// Most bodies here are read field by field with `typeof` guards and handed to an
+// engine that owns the rules, so their schema is `zJsonObject`. The three small
+// ones mirror what their handlers read.
+const IntroductionBody = z.object({
+  // `Number(...)`-ed by the handler; the service answers for an unknown profile.
+  toProfileId: zNumberLike.nullish(),
+  message: z.string().nullish(),
+});
+/** Anything but `'accepted'` is a decline — deliberately, so no value is refused. */
+const IntroductionResponseBody = z.object({ decision: z.unknown().optional() });
+const MoveDealBody = z.object({ stage: z.string().nullish() });
 
 /** One translation for all three, keyed on the error type each service throws —
  *  so a new endpoint cannot invent a different code for the same rejection. */
@@ -85,7 +98,7 @@ export function createCofounderRoutes(db: Db): Hono<HonoEnv> {
     Response.json(await discoverCofounders(db, tenant(c), actor(c)))));
 
   router.post('/introductions', (c) => handle(async () => {
-    const body = await c.req.json<{ toProfileId?: unknown; message?: unknown }>();
+    const body = await parseBody(c, IntroductionBody);
     const result = await requestIntroduction(db, tenant(c), actor(c), Number(body.toProfileId), String(body.message ?? ''));
     return Response.json(result);
   }));

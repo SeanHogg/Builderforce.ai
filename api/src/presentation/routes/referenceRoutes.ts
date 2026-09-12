@@ -54,14 +54,14 @@ export function createReferenceRoutes(db: Db): Hono<HonoEnv> {
   router.get('/', async (c) => c.json({ references: await service.list(userId(c)) }));
 
   router.post('/', async (c) => {
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({}));
+    const body = await parseOptionalBody(c, zJsonObject);
     const input = readInput(body);
     if (!input.name?.trim()) return c.json({ error: 'A name is required' }, 400);
     return c.json({ reference: await service.create(userId(c), input as ReferenceInput) }, 201);
   });
 
   router.patch('/:id', async (c) => {
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({}));
+    const body = await parseOptionalBody(c, zJsonObject);
     const updated = await service.update(userId(c), c.req.param('id'), readInput(body));
     return updated ? c.json({ reference: updated }) : c.json({ error: 'Not found' }, 404);
   });

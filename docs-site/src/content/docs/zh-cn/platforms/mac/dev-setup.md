@@ -59,7 +59,7 @@ macOS 应用期望全局安装 `builderforce` CLI 来管理后台任务。
 或者，手动安装：
 
 ```bash
-npm install -g builderforce@<version>
+npm install -g @seanhogg/builderforce-agents@<version>
 ```
 
 ## 故障排除

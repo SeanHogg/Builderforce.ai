@@ -52,7 +52,7 @@ The macOS app expects a global `builderforce` CLI install to manage background t
 Alternatively, install it manually:
 
 ```bash
-npm install -g builderforce@<version>
+npm install -g @seanhogg/builderforce-agents@<version>
 ```
 
 ## Troubleshooting

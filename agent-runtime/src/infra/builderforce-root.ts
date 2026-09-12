@@ -2,8 +2,7 @@ import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-
-const CORE_PACKAGE_NAMES = new Set(["builderforce"]);
+import { isCorePackageName } from "./package-names.js";
 
 async function readPackageName(dir: string): Promise<string | null> {
   try {
@@ -29,7 +28,7 @@ async function findPackageRoot(startDir: string, maxDepth = 12): Promise<string 
   let current = path.resolve(startDir);
   for (let i = 0; i < maxDepth; i += 1) {
     const name = await readPackageName(current);
-    if (name && CORE_PACKAGE_NAMES.has(name)) {
+    if (isCorePackageName(name)) {
       return current;
     }
     const parent = path.dirname(current);
@@ -45,7 +44,7 @@ function findPackageRootSync(startDir: string, maxDepth = 12): string | null {
   let current = path.resolve(startDir);
   for (let i = 0; i < maxDepth; i += 1) {
     const name = readPackageNameSync(current);
-    if (name && CORE_PACKAGE_NAMES.has(name)) {
+    if (isCorePackageName(name)) {
       return current;
     }
     const parent = path.dirname(current);

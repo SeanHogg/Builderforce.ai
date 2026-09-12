@@ -1,9 +1,9 @@
-import { cookies, headers } from 'next/headers';
+import { cookies } from 'next/headers';
 import { getRequestConfig } from 'next-intl/server';
-import { BRAND } from '@/lib/content';
 import { loadCatalog } from './catalog';
 import { DEFAULT_LOCALE, isLocale } from './config';
 import { ignoreEnvironmentFallback } from './onError';
+import { requestOrigin } from './requestOrigin';
 
 /**
  * Per-request locale + message resolution for next-intl (App Router, no i18n
@@ -13,22 +13,6 @@ import { ignoreEnvironmentFallback } from './onError';
  * route no longer carries 3.5 MB of catalogs it will never use. See that file for
  * why (it is the reason `/embedded` could not be built as an edge function).
  */
-
-/**
- * Absolute origin to resolve the catalog asset against.
- *
- * A worker has no implicit base URL, and the deployed host differs per
- * environment (production, a Pages preview, `next dev`), so it comes from the
- * request. `BRAND.url` is the last resort rather than the default: a preview
- * deploy must read ITS OWN catalogs, not production's.
- */
-async function requestOrigin(): Promise<string> {
-  const head = await headers();
-  const host = head.get('host');
-  if (!host) return BRAND.url;
-  const protocol = head.get('x-forwarded-proto') ?? (host.startsWith('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https');
-  return `${protocol}://${host}`;
-}
 
 export default getRequestConfig(async () => {
   const store = await cookies();

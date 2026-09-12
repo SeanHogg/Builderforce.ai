@@ -15,7 +15,7 @@ import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrast
 import { addDependency, deleteDependency, listProjectDependencies, isDepType } from '../../application/task/taskDependencies';
 import { invalidateCompletedByAssignee } from './reportRoutes';
 import { invalidateProjectsList } from '../../application/project/projectsListCache';
-import { convertWorkItemType, ConvertError, type WorkItemKind } from '../../application/workitem/convertWorkItemType';
+import { convertWorkItemType, ConvertError } from '../../application/workitem/convertWorkItemType';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { openTaskPullRequest } from '../../application/repos/openTaskPullRequest';
@@ -1049,7 +1049,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   router.post('/:id/specs', requirePermission(PERMISSIONS.TASK_WRITE), async (c) => {
     const taskId = Number(c.req.param('id'));
     const tenantId = c.get('tenantId');
-    const body = await c.req.json<{ specId: string; isPrimary?: boolean }>();
+    const body = await parseBody(c, LinkSpecBody);
     if (!(await loadTenantTask(taskId, tenantId))) return c.json({ error: 'Task not found' }, 404);
     const [spec] = await db.select({ id: specs.id }).from(specs).where(and(eq(specs.id, body.specId), eq(specs.tenantId, tenantId)));
     if (!spec) return c.json({ error: 'PRD not found' }, 404);

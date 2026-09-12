@@ -665,7 +665,7 @@ kill -9 <PID> # 最后手段
 
 ```bash
 builderforce --version
-npm install -g builderforce@<version>
+npm install -g @seanhogg/builderforce-agents@<version>
 ```
 
 ## 调试模式

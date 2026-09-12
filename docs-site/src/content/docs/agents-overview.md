@@ -232,7 +232,7 @@ BuilderForce Agents is **MIT licensed** and **free to use**.
 ## Getting Started
 
 ```bash
-npm install -g builderforce@latest
+npm install -g @seanhogg/builderforce-agents@latest
 builderforce onboard --install-daemon
 builderforce gateway --port 18789
 ```

@@ -863,7 +863,7 @@ builderforce gateway restart
 From git → npm:
 
 ```bash
-npm install -g builderforce@latest
+npm install -g @seanhogg/builderforce-agents@latest
 builderforce doctor
 builderforce gateway restart
 ```

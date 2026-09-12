@@ -913,7 +913,7 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const segmentId = c.get('segmentId') as string;
     const id = c.req.param('id');
-    const body = await c.req.json<{ status?: string; taskId?: number }>().catch(() => ({}) as { status?: string; taskId?: number });
+    const body = await parseOptionalBody(c, TriageFeedbackBody);
     const status = body.status;
     if (!status || !FEEDBACK_STATUSES.has(status)) {
       return c.json({ error: `status must be one of: ${[...FEEDBACK_STATUSES].join(', ')}` }, 400);
@@ -959,4 +959,3 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
 
   return router;
 }
-                                   

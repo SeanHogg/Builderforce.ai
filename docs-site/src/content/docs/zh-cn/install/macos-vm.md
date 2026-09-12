@@ -144,7 +144,7 @@ ssh youruser@192.168.64.X
 在 VM 内：
 
 ```bash
-npm install -g builderforce@latest
+npm install -g @seanhogg/builderforce-agents@latest
 builderforce onboard --install-daemon
 ```
 

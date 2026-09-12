@@ -1,13 +1,13 @@
 'use client';
 
 import { Icon } from '@/components/ui/Icon';
-import { use } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import ReactMarkdown from 'react-markdown';
 import { formatCalendarDate } from '@/lib/calendarDate';
 import { MARKDOWN_REHYPE_PLUGINS, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdownPipeline';
 import { getPostBySlug } from '@/lib/blogData';
+import { blogTagLabel, localizePost, type BlogText } from '@/lib/blogLocale';
 import JsonLd from '@/components/JsonLd';
 import RelatedArticles from '@/components/blog/RelatedArticles';
 import BlogCover from '@/components/blog/BlogCover';
@@ -48,9 +48,17 @@ function MarkdownPre({ node, children, ...rest }: { node?: unknown; children?: R
 
 const MARKDOWN_COMPONENTS = { pre: MarkdownPre };
 
-export default function BlogPostClient({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = use(params);
-  const post = getPostBySlug(slug);
+/**
+ * @param content The body in the reader's language, resolved on the server by
+ *   the route (`loadPostBody`). Absent for the default locale, whose body is the
+ *   bundled English one.
+ */
+export default function BlogPostClient({ slug, content }: { slug: string; content?: string }) {
+  const tBlog = useTranslations('blog') as unknown as BlogText;
+  const source = getPostBySlug(slug);
+  // Title and description from the catalogs, body from the route — the article
+  // reads in ONE language, not a translated title over an English body.
+  const post = source ? { ...localizePost(source, tBlog), content: content ?? source.content } : undefined;
   const t = useTranslations('blog.post');
   // The published date is formatted in the reader's locale rather than always
   // en-US — a localized article with an American date is half-translated.
@@ -269,7 +277,7 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
                   {formatCalendarDate(post.date, locale)}
                 </span>
                 {post.tags.slice(0, 3).map((tag) => (
-                  <span key={tag} className="bpost-tag">{tag}</span>
+                  <span key={tag} className="bpost-tag">{blogTagLabel(tag, tBlog)}</span>
                 ))}
                 {post.author && <span className="bpost-author">{t('byline', { author: post.author })}</span>}
               </div>

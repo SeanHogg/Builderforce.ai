@@ -77,15 +77,15 @@ x-i18n:
 - [ ] 确认 git 状态干净；根据需要提交并推送。
 - [ ] 如需要，`npm login`（验证 2FA）。
 - [ ] `npm publish --access public`（预发布版本使用 `--tag beta`）。
-- [ ] 验证注册表：`npm view builderforce version`、`npm view builderforce dist-tags` 和 `npx -y builderforce@X.Y.Z --version`（或 `--help`）。
+- [ ] 验证注册表：`npm view @seanhogg/builderforce-agents version`、`npm view @seanhogg/builderforce-agents dist-tags` 和 `npx -y @seanhogg/builderforce-agents@X.Y.Z --version`（或 `--help`）。
 
 ### 故障排除（来自 2.0.0-beta2 发布的笔记）
 
 - **npm pack/publish 挂起或产生巨大 tarball**：`dist/BuilderForce Agents.app` 中的 macOS 应用包（和发布 zip）被扫入包中。通过 `package.json` 的 `files` 白名单发布内容来修复（包含 dist 子目录、docs、skills；排除应用包）。用 `npm pack --dry-run` 确认 `dist/BuilderForce Agents.app` 未列出。
 - **npm auth dist-tags 的 Web 循环**：使用旧版认证以获取 OTP 提示：
-  - `NPM_CONFIG_AUTH_TYPE=legacy npm dist-tag add builderforce@X.Y.Z latest`
+  - `NPM_CONFIG_AUTH_TYPE=legacy npm dist-tag add @seanhogg/builderforce-agents@X.Y.Z latest`
 - **`npx` 验证失败并显示 `ECOMPROMISED: Lock compromised`**：使用新缓存重试：
-  - `NPM_CONFIG_CACHE=/tmp/npm-cache-$(date +%s) npx -y builderforce@X.Y.Z --version`
+  - `NPM_CONFIG_CACHE=/tmp/npm-cache-$(date +%s) npx -y @seanhogg/builderforce-agents@X.Y.Z --version`
 - **延迟修复后需要重新指向标签**：强制更新并推送标签，然后确保 GitHub 发布资产仍然匹配：
   - `git tag -f vX.Y.Z && git push -f origin vX.Y.Z`
 
@@ -95,7 +95,7 @@ x-i18n:
 - [ ] 为 `vX.Y.Z` 创建/刷新 GitHub 发布，**标题为 `builderforce X.Y.Z`**（不仅仅是标签）；正文应包含该版本的**完整**变更日志部分（亮点 + 更改 + 修复），内联显示（无裸链接），且**不得在正文中重复标题**。
 - [ ] 附加产物：`npm pack` tarball（可选）、`BuilderForce Agents-X.Y.Z.zip` 和 `BuilderForce Agents-X.Y.Z.dSYM.zip`（如果生成）。
 - [ ] 提交更新后的 `appcast.xml` 并推送（Sparkle 从 main 获取源）。
-- [ ] 从干净的临时目录（无 `package.json`），运行 `npx -y builderforce@X.Y.Z send --help` 确认安装/CLI 入口点正常工作。
+- [ ] 从干净的临时目录（无 `package.json`），运行 `npx -y @seanhogg/builderforce-agents@X.Y.Z send --help` 确认安装/CLI 入口点正常工作。
 - [ ] 宣布/分享发布说明。
 
 ## 插件发布范围（npm）

@@ -92,7 +92,7 @@ Gatewayは、セッション、ルーティング、チャネル接続の信頼�
 <Steps>
   <Step title="BuilderForce Agentsをインストール">
     ```bash
-    npm install -g builderforce@latest
+    npm install -g @seanhogg/builderforce-agents@latest
     ```
   </Step>
   <Step title="オンボーディングとサービスのインストール">

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import type { BlogPost } from '@/lib/blogData';
+import { blogTagLabel, localizePost, type BlogText } from '@/lib/blogLocale';
 import { formatCalendarDate } from '@/lib/calendarDate';
 
 /**
@@ -19,7 +20,10 @@ import { formatCalendarDate } from '@/lib/calendarDate';
  *
  * The date is formatted in the ACTIVE locale. It was pinned to `en-US`, which
  * printed "August 14, 2026" on all five language builds of a page whose every
- * other string was translated.
+ * other string was translated. The title, description and tag chips are
+ * localized HERE too (`lib/blogLocale.ts`), which is why every collection that
+ * renders through this file — the index, related articles, the homepage — reads
+ * in the visitor's language without each one localizing on its own.
  */
 
 /**
@@ -40,8 +44,10 @@ export interface ArticleCardProps {
   index?: number;
 }
 
-export function ArticleCard({ post, index = 0 }: ArticleCardProps) {
+export function ArticleCard({ post: source, index = 0 }: ArticleCardProps) {
   const t = useTranslations('blog');
+  const text = t as unknown as BlogText;
+  const post = localizePost(source, text);
   const formatDate = useArticleDate();
 
   return (
@@ -53,7 +59,7 @@ export function ArticleCard({ post, index = 0 }: ArticleCardProps) {
       <div className="blog-card-meta">
         <span className="blog-card-date">{formatDate(post.date)}</span>
         {post.tags.slice(0, 1).map((tag) => (
-          <span key={tag} className="blog-card-tag">{tag}</span>
+          <span key={tag} className="blog-card-tag">{blogTagLabel(tag, text)}</span>
         ))}
       </div>
 
@@ -99,13 +105,14 @@ export function ArticleCardGrid({ posts, limit, className }: ArticleCardGridProp
  */
 export function ArticleRows({ posts, className }: { posts: BlogPost[]; className?: string }) {
   const t = useTranslations('blog');
+  const text = t as unknown as BlogText;
   const formatDate = useArticleDate();
 
   return (
     <>
       <ArticleCardStyles />
       <ul className={className ? `blog-rows ${className}` : 'blog-rows'}>
-        {posts.map((post) => (
+        {posts.map((source) => localizePost(source, text)).map((post) => (
           <li key={post.slug}>
             <Link href={`/blog/${post.slug}`} className="blog-row">
               <div className="blog-row-main">
@@ -115,7 +122,7 @@ export function ArticleRows({ posts, className }: { posts: BlogPost[]; className
                   <span>{formatDate(post.date)}</span>
                   {post.author && <span>{t('post.byline', { author: post.author })}</span>}
                   {post.tags.slice(0, 3).map((tag) => (
-                    <span key={tag} className="blog-card-tag">{tag}</span>
+                    <span key={tag} className="blog-card-tag">{blogTagLabel(tag, text)}</span>
                   ))}
                 </div>
               </div>

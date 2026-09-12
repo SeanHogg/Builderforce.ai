@@ -42,6 +42,25 @@ import {
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import type { HonoEnv } from '../../env';
+import { parseBody, parseOptionalBody, z } from './requestBody';
+
+// Required ids stay optional so each handler's own "X required" still answers.
+const SendMessageBody = z.object({ body: z.string().nullish() });
+const OpenMineBody = z.object({
+  engagementId: z.string().nullish(),
+  body: z.string().nullish(),
+  title: z.string().nullish(),
+});
+const OpenConversationBody = z.object({
+  freelancerUserId: z.string().nullish(),
+  engagementId: z.string().nullish(),
+  jobId: z.string().nullish(),
+  proposalId: z.string().nullish(),
+  subjectType: z.string().nullish(),
+  title: z.string().nullish(),
+  body: z.string().nullish(),
+  projectId: z.number().nullish(),
+});
 
 const MESSAGE_MAX = 8000;
 const ATTACH_MAX_BYTES = 15 * 1024 * 1024;
@@ -163,8 +182,8 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
   async function readSendPayload(c: { req: { header(n: string): string | undefined; json<T>(): Promise<T>; formData(): Promise<FormData> }; env: HonoEnv['Bindings'] }, senderUserId: string): Promise<{ body: string; attach: { key: string; name: string; type: string } | null } | { error: string; status: 400 | 413 | 415 }> {
     const ct = c.req.header('content-type') ?? '';
     if (!ct.includes('multipart/form-data')) {
-      const b = await c.req.json<{ body?: string }>().catch(() => ({} as { body?: string }));
-      const body = typeof b.body === 'string' ? b.body.trim() : '';
+      const b = await parseOptionalBody(c, SendMessageBody);
+      const body = (b.body ?? '').trim();
       if (!body) return { error: 'body required', status: 400 };
       return { body, attach: null };
     }
@@ -254,7 +273,7 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
   router.post('/mine', webAuthMiddleware, async (c) => {
     const db = requestDb(c);
     const userId = c.get('userId') as string;
-    const b = await c.req.json<{ engagementId?: string; body?: string; title?: string }>().catch(() => ({} as Record<string, string>));
+    const b = await parseOptionalBody(c, OpenMineBody);
     if (!b.engagementId) return c.json({ error: 'engagementId required' }, 400);
     const [eng] = await db.select({
       id: freelancerEngagements.id,
@@ -353,7 +372,7 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
-    const b = await c.req.json<{ freelancerUserId?: string; engagementId?: string; jobId?: string; proposalId?: string; subjectType?: string; title?: string; body?: string; projectId?: number }>();
+    const b = await parseBody(c, OpenConversationBody);
     if (!b.freelancerUserId) return c.json({ error: 'freelancerUserId required' }, 400);
     // Resolve scope + verify it belongs to this tenant (no cross-tenant threads).
     let subjectType = SUBJECT_TYPES.includes(b.subjectType as never) ? (b.subjectType as string) : 'direct';

@@ -5,6 +5,7 @@ import { Icon } from '@/components/ui/Icon';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { BLOG_POSTS } from '@/lib/blogData';
+import { blogTagLabel, localizePost, type BlogText } from '@/lib/blogLocale';
 import JsonLd from '@/components/JsonLd';
 import { blogIndexSchema } from '@/lib/structured-data';
 import { ArticleCardGrid, ArticleRows } from '@/components/blog/ArticleCard';
@@ -41,6 +42,13 @@ const PAGE_SIZE = 9;
  */
 export default function BlogPageClient() {
   const t = useTranslations('blog');
+  const text = t as unknown as BlogText;
+  /**
+   * The corpus in the reader's language. Every control below reads THIS rather
+   * than `BLOG_POSTS`, so a zh reader's search box matches the Chinese titles
+   * and descriptions they can see — not the English ones they cannot.
+   */
+  const posts = useMemo(() => BLOG_POSTS.map((post) => localizePost(post, text)), [text]);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -81,26 +89,26 @@ export default function BlogPageClient() {
   // Topic counts are of the whole corpus, not of the current result set: a chip
   // reads "Canvas 21" whatever else is selected, so the number tells a reader
   // what pressing it is worth rather than what they have already filtered away.
-  const counts = useMemo(() => topicCounts(BLOG_POSTS), []);
+  const counts = useMemo(() => topicCounts(posts), [posts]);
 
   const topicChips: FilterChip[] = useMemo(
     () => [
-      { id: '', label: t('topic.all'), count: BLOG_POSTS.length },
+      { id: '', label: t('topic.all'), count: posts.length },
       ...BLOG_TOPICS.map((entry) => ({
         id: entry.id,
         label: t(`topic.${entry.labelKey}` as never),
         count: counts[entry.id] ?? 0,
       })),
     ],
-    [counts, t],
+    [counts, posts.length, t],
   );
 
   // Posts in the active topic, before the tag and the query narrow them — the
   // set the tag chips are derived from, so a tag chip always has articles behind
   // it even while a query is selecting none of them.
   const inTopic = useMemo(
-    () => (topic ? BLOG_POSTS.filter((post) => topicOf(post) === topic) : BLOG_POSTS),
-    [topic],
+    () => (topic ? posts.filter((post) => topicOf(post) === topic) : posts),
+    [posts, topic],
   );
 
   const tagChips: FilterChip[] = useMemo(() => {
@@ -108,10 +116,11 @@ export default function BlogPageClient() {
     // A tag arriving from the URL that this topic does not carry still needs a
     // chip, or the reader sees a filtered grid with nothing showing it is on.
     const ids = tag && !tags.includes(tag) ? [tag, ...tags] : tags;
-    return [{ id: '', label: t('tag.all') }, ...ids.map((id) => ({ id, label: id }))];
-  }, [inTopic, tag, t]);
+    // The chip's id stays the tag (it is the `?tag=` value); only its label is localized.
+    return [{ id: '', label: t('tag.all') }, ...ids.map((id) => ({ id, label: blogTagLabel(id, text) }))];
+  }, [inTopic, tag, t, text]);
 
-  const results = useMemo(() => filterPosts(BLOG_POSTS, { topic, tag, query }), [topic, tag, query]);
+  const results = useMemo(() => filterPosts(posts, { topic, tag, query }), [posts, topic, tag, query]);
 
   const totalPages = Math.max(1, Math.ceil(results.length / PAGE_SIZE));
   const parsed = parseInt(searchParams.get('page') ?? '1', 10);

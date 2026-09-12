@@ -118,7 +118,7 @@ server {
 ## 更新
 
 ```bash
-npm i -g builderforce@latest
+npm i -g @seanhogg/builderforce-agents@latest
 builderforce doctor
 builderforce gateway restart
 builderforce health

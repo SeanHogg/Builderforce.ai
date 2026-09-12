@@ -1162,7 +1162,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
   // ---- COMPLETE A PAID CHECKOUT (the processor's redirect lands here) -------
   router.post('/listings/:listingId/checkout/complete', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ checkoutSessionId?: string }>().catch(() => ({ checkoutSessionId: undefined }));
+    const body = await parseOptionalBody(c, CompleteKnowledgeCheckoutBody);
     if (!body.checkoutSessionId) return c.json({ error: 'checkoutSessionId is required' }, 400);
     try {
       const purchase = await completeKnowledgeCheckout(db, c.env as Env, {

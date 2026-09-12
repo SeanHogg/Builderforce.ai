@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathExists } from "../utils.js";
+import { CORE_PACKAGE_NAME, CORE_PACKAGE_NAMES } from "./package-names.js";
 
 export type GlobalInstallManager = "npm" | "pnpm" | "bun";
 
@@ -10,8 +11,8 @@ export type CommandRunner = (
   options: { timeoutMs: number; cwd?: string; env?: NodeJS.ProcessEnv },
 ) => Promise<{ stdout: string; stderr: string; code: number | null }>;
 
-const PRIMARY_PACKAGE_NAME = "builderforce";
-const ALL_PACKAGE_NAMES = [PRIMARY_PACKAGE_NAME] as const;
+const PRIMARY_PACKAGE_NAME = CORE_PACKAGE_NAME;
+const ALL_PACKAGE_NAMES = CORE_PACKAGE_NAMES;
 const GLOBAL_RENAME_PREFIX = ".";
 
 async function tryRealpath(targetPath: string): Promise<string> {

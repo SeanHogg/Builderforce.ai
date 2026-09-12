@@ -49,6 +49,48 @@ import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { createStakeholderAlignmentRoutes } from './stakeholderAlignmentRoutes';
 import { createVulnerabilityFindingRoutes } from './vulnerabilityFindingRoutes';
+import { parseBody, z } from './requestBody';
+
+/** `status` stays a string so the handler's own "must be one of" answer wins. */
+const ControlPatchBody = z.object({
+  status: z.string().optional(),
+  ownerId: z.string().nullish(),
+  notes: z.string().nullish(),
+});
+
+/** Blank or absent title/evidenceType fall through to the handler's "required" answer. */
+const EvidenceBody = z.object({
+  title: z.string().nullish(),
+  evidenceType: z.string().nullish(),
+  url: z.string().nullish(),
+  note: z.string().nullish(),
+});
+
+/**
+ * Every field `PolicyPackInput` accepts — the body is handed to the service
+ * whole, and the service owns the rules (a blank name, a bad scope). `name`
+ * refuses `null` because the update path `.trim()`s it.
+ */
+const PolicyPackBody = z.object({
+  name: z.string().optional(),
+  description: z.string().nullish(),
+  enabled: z.boolean().optional(),
+  projectId: z.number().nullish(),
+  agentRef: z.string().nullish(),
+});
+
+/**
+ * Every field `PolicyGateInput` accepts. `effect` stays a string so the service's
+ * own effect check answers; `gateKey` refuses `null` because update `.trim()`s it.
+ */
+const PolicyGateBody = z.object({
+  gateKey: z.string().optional(),
+  tool: z.string().nullish(),
+  effect: z.string().optional(),
+  directive: z.string().nullish(),
+  reason: z.string().nullish(),
+  position: z.number().optional(),
+});
 
 const CONTROL_STATUSES = ['not_started', 'in_progress', 'ready', 'out_of_scope'] as const;
 type ControlStatus = (typeof CONTROL_STATUSES)[number];

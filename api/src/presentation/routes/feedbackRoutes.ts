@@ -36,6 +36,44 @@ import { isUniqueViolation } from '../../infrastructure/database/uniqueViolation
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
 import { limitParam } from './queryParams';
+import { parseBody, parseOptionalBody, z } from './requestBody';
+
+/** `projectId` stays optional so the handler's own "projectId is required" wins. */
+const CreateCollectorBody = z.object({
+  projectId: z.number().optional(),
+  name: z.string().nullish(),
+});
+
+/** Each field is written only when present; the dailyLimit range stays a hand check. */
+const UpdateCollectorBody = z.object({
+  name: z.string().optional(),
+  enabled: z.boolean().optional(),
+  autoCreateTask: z.boolean().optional(),
+  dailyLimit: z.number().optional(),
+  allowedOrigins: z.string().optional(),
+});
+
+/**
+ * `provider` is checked against the adapter registry by the handler. `secret` is
+ * read only when it is a string (anything else mints one), so its shape is left
+ * to that guard.
+ */
+const ConnectIntegrationBody = z.object({
+  provider: z.string().nullish(),
+  secret: z.unknown().optional(),
+});
+
+/** Absent → the handler's own "enabled must be a boolean" answer. */
+const IntegrationToggleBody = z.object({ enabled: z.boolean().optional() });
+
+/**
+ * The whole body is handed to `normalizeFeedback`, which owns every other field's
+ * rules — so unknown keys are KEPT. Only the tenant anchor is typed here.
+ */
+const InAppSubmissionBody = z.looseObject({ projectId: z.number().optional() });
+
+/** The handler answers any value other than 'approved' / 'declined' itself. */
+const ReviewBody = z.object({ decision: z.string().optional() });
 
 /**
  * The public webhook address for one (collector, provider). Built in ONE place so

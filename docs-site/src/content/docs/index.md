@@ -84,7 +84,7 @@ The Gateway is the single source of truth for sessions, routing, and channel con
 <Steps>
   <Step title="Install BuilderForce Agents">
     ```bash
-    npm install -g builderforce@latest
+    npm install -g @seanhogg/builderforce-agents@latest
     ```
   </Step>
   <Step title="Onboard and install the service">

@@ -11,7 +11,14 @@ graph, repo access, and the agent run lifecycle.
 
 > Positioning: BuilderForce is "an agentic AI tool that provides software development **and**
 > product management features." The PM/Agile pillars are the product-management half; this
-> document is the software-development half. They share the `WorkItem` spine.
+> document is the software-development half. They share one work spine — the platform's `tasks`.
+>
+> **Unified onto the platform (operator decision 2026-09-12).** The entity names this PRD uses
+> (`WorkItem`, `AgentRun`, `Repo`, …) are the spec's vocabulary, not tables to build. The spec's
+> PM spine is unified onto `projects` / `tasks` / `specs`, and its agentic layer onto the existing
+> `executions` / `workflows` / `source_control_integrations` stack (all already `segment_id`
+> scoped). §2 is the mapping; read every entity name below through it. Doc 01 §4–§7 carries the
+> field-level map.
 
 ---
 
@@ -27,16 +34,26 @@ graph, repo access, and the agent run lifecycle.
 | **TEST** | item / PR | code | generated/updated tests + run results |
 | **RESEARCH** | discovery / spike | question | cited findings (feeds PM discovery) |
 
-All runs are `AgentRun` rows with `AgentRunStep[]` for live progress, Segment-scoped, and
-credit-metered through the gateway (`dev.*` use cases — doc 01 §8).
+All runs are `executions` rows (the spec's `AgentRun`) with `execution_messages` / `tool_runs` for
+live progress, Segment-scoped, and credit-metered through the gateway (`dev.*` use cases — doc 01
+§8; spend lands in `llm_usage_log`).
 
 ---
 
-## 2. Core entities (recap from doc 01 §7)
+## 2. Core entities → platform owners (doc 01 §4, §7)
 
-`Repo`, `AgentRun`, `AgentRunStep`, `AgentOrchestration`, `CodeReviewFinding`. Secrets
-(installation tokens, deploy keys) are stored in a vault keyed by `Repo.id`, **never** in the DB
-row — the row holds only a `installationRef` pointer.
+No table in this PRD is new. Each spec entity is an existing platform row:
+
+| Spec entity | Platform owner (id type) | Notes |
+|---|---|---|
+| `WorkItem` | `tasks` (`serial`, human `key`) | the ticket; `task_type` task / epic / bug / gap / …; `parent_task_id` nests |
+| `Repo` | `source_control_integrations` (`serial`) + `project_repositories` (`uuid`) + `task_repo_bindings` | a ticket's repo is `tasks.explicit_repo_id` or its bindings; secrets live in `integration_credentials` / kernel `credentials`, **never** on the row |
+| `AgentRun` | `executions` (`serial`, `task_id NOT NULL`, `segment_id`) | status pending / submitted / running / paused / completed / failed / cancelled; the run *kind* is the dispatching lane role (`submitted_by`) and agent (`cloud_agent_ref`), not a column |
+| `AgentRunStep` | `execution_messages` + `tool_runs` / `tool_audit_events` + `telemetry_spans` | |
+| `AgentOrchestration` | `workflows` + `workflow_tasks` (`uuid`, `segment_id`, `spec_id`) | policy = board `max_concurrent_tickets`, lane `gate`s, `execution_limits`, the autonomy circuit breaker |
+| `CodeReviewFinding` | `task_reviews` (append-only verdicts) + `qa_findings` (`task_id`) + `vulnerability_findings` | a failed review mints a `gap` ticket |
+| `ItemActivity` (`actorKind = AGENT`) | `task_status_transitions` (`actor_kind = 'agent'`) + kernel `activity_log` | |
+| `Sprint`, `KanbanBoard` / column | `sprints`, `boards` / `swimlanes` | |
 
 ---
 
@@ -49,16 +66,16 @@ and open PRs.
 1. OAuth/app-install handshake with the provider; store `Repo` (`status = CONNECTED`,
    `installationRef` → vault).
 2. Detect languages/stack (populate `Repo.languages`).
-3. Bind repos to boards/projects: a `KanbanBoard` or `ProductIdea` can declare a default
-   `repoRef`; WorkItems inherit it (overridable per item).
+3. Bind repos to projects: a project's repositories are `project_repositories` (its default is
+   the project's `source_control_*` connection); tickets inherit it, overridable per ticket through
+   `tasks.explicit_repo_id` or several repos through `task_repo_bindings`.
 
-**API**
+**API** (platform routes; the spec's `/v1/repos*` was never built as a parallel surface)
 ```
-POST   /v1/repos/connect          start provider install/oauth
-GET    /v1/repos                  list connected repos
-GET    /v1/repos/:id              detail + detected stack
-DELETE /v1/repos/:id              disconnect (revoke token in vault)
-PUT    /v1/work-items/:id/repo    set target repoRef + branch base
+/api/integrations/*            provider connect (source_control_integrations + credentials)
+/api/repos/*                   connected repositories (repoRoutes.ts)
+/api/projects/*                project ↔ repository binding (project_repositories)
+/api/tasks/:id                 the ticket's repo pin (tasks.explicit_repo_id) rides the task route
 ```
 
 **Acceptance**
@@ -77,31 +94,32 @@ the change, writes code on a branch, runs tests, and opens a PR linked back to t
 review and merge.
 
 **Flow**
-1. Create `AgentRun(kind=IMPLEMENT, workItemId, repoId, useCase="dev.implement", goal=<item
-   acceptance criteria + description>)`, status `QUEUED`.
-2. **Context assembly:** resolve the WorkItem (title, description, `acceptanceCriteria`,
-   `userType/want/so`, `technicalNotes`), pull relevant repo files (search + dependency graph),
-   prior `AgentRun`s on the item, and the repo's conventions (lint/test config). Store in
-   `inputContext`.
+1. Create an `executions` row for the ticket (`task_id`; the repo resolved from
+   `tasks.explicit_repo_id` / `task_repo_bindings` / the project default; use case
+   `dev.implement`), status `pending`.
+2. **Context assembly:** resolve the ticket (`tasks` title and description, plus its primary PRD
+   through `task_specs` → `specs`, which carries the acceptance criteria and technical notes), pull
+   relevant repo files (search + dependency graph), prior `executions` of the ticket, and the
+   repo's conventions (lint/test config).
 3. **Plan:** agent emits a step plan (`AgentRun.plan`); optionally gated on human approval per
    `AgentOrchestration.policy`.
 4. **Execute:** agent works in an isolated workspace (per-run branch off the base). Each tool
    call is an `AgentRunStep` (`read_file`, `edit`, `run_tests`, `lint`, `open_pr`). Tests/lint run
    in a sandboxed runner.
-5. **Deliver:** open a PR; store `branch`, `prUrl`, `diffSummary`; set WorkItem
-   `generatedBranch`/`generatedPrUrl`/`agentRunId`; write `ItemActivity` (`actorKind = AGENT`).
-   Status → `AWAITING_REVIEW`.
+5. **Deliver:** open a PR; set `tasks.git_branch` / `tasks.github_pr_url` (the run itself is
+   `executions.task_id`); the lane move is a `task_status_transitions` row with
+   `actor_kind = 'agent'`, and the ticket moves to its board's review lane.
 6. **Human gate:** the card shows the PR + diff summary; a human (or a REVIEW agent) approves.
    Merge can be manual or auto per policy.
 
-**API**
+**API** (platform routes; the spec's `/v1/work-items/*` and `/v1/agent-runs/*` were never built as a
+parallel surface)
 ```
-POST   /v1/work-items/:id/agent-run        { kind:"IMPLEMENT", autoApprovePlan?, repoId? }
-GET    /v1/agent-runs/:id                   status + plan + diffSummary
-GET    /v1/agent-runs/:id/steps             live steps (also via realtime stream)
-POST   /v1/agent-runs/:id/approve-plan
-POST   /v1/agent-runs/:id/cancel
-GET    /v1/work-items/:id/agent-runs        history for an item
+POST   /api/tasks/:id/run-now                 run an agent on the ticket (creates the executions row)
+GET    /api/runtime/executions                runs (filterable by ticket)
+GET    /api/runtime/executions/:id            status + result
+GET    /api/runtime/executions/:id/coordination   live coordination / steps
+POST   /api/runtime/tasks/:id/cancel          cancel the ticket's run
 ```
 
 **Realtime.** `agent-runs/:id` streams `step.started/finished`, `plan.ready`,
@@ -113,8 +131,9 @@ GET    /v1/work-items/:id/agent-runs        history for an item
 - Token spend is metered per step and aggregated on the run; the run respects a per-run budget
   cap (from policy) and fails closed when exceeded.
 - A failed test run is reported, not hidden; the run can retry or stop per policy.
-- WorkItem stays the source of truth — the PR links back; merging the PR can transition the
-  item's `status`/`stage` via webhook (doc 05 §4.3).
+- The ticket (`tasks`) stays the source of truth — the PR links back; merging the PR moves
+  `tasks.status` through the SCM webhooks (`/api/webhooks`), and the ticket's first entry to a
+  done-class lane emits `workitem.released` (doc 05 §4.3).
 
 ---
 
@@ -150,14 +169,16 @@ PATCH  /v1/findings/:id                       resolve / dismiss
 story out to IMPLEMENT agents in parallel, gated by review, within a budget cap.
 
 **Flow**
-1. `POST /v1/orchestrations { scopeType:"SPRINT", scopeId, policy }`.
-2. Orchestrator enumerates eligible WorkItems (committed, has repo target, not blocked by an
-   open dependency) and spawns child `AgentRun`s up to `policy.concurrency`.
-3. Each run flows through IMPLEMENT → REVIEW → (auto-merge | await human) per policy.
-4. Dependency-aware: an item whose `dependencies` aren't merged waits.
+1. Start a `workflows` run scoped to the sprint (`/api/workflows`).
+2. The orchestrator enumerates eligible tickets (`tasks` with that `sprint_id`, a repo target, and
+   no open predecessor in `task_dependencies`) and spawns `executions` up to the board's
+   `max_concurrent_tickets`.
+3. Each run flows through IMPLEMENT → REVIEW → (auto-merge | await human) per the lane `gate`s.
+4. Dependency-aware: a ticket whose `task_dependencies` predecessors aren't merged waits.
 5. Live dashboard: per-item agent status across the sprint board; aggregate token spend vs. cap.
 
-**Policy** (`AgentOrchestration.policy`)
+**Policy** (the spec's `AgentOrchestration.policy`; on the platform these are the board's
+`max_concurrent_tickets`, the lane `gate`s, `execution_limits` and the autonomy circuit breaker)
 ```jsonc
 {
   "concurrency": 4,
@@ -170,11 +191,11 @@ story out to IMPLEMENT agents in parallel, gated by review, within a budget cap.
 }
 ```
 
-**API**
+**API** (platform routes)
 ```
-POST   /v1/orchestrations
-GET    /v1/orchestrations/:id          aggregate status + child runs + spend
-POST   /v1/orchestrations/:id/pause | /resume | /cancel
+/api/workflows/*               start / inspect / cancel a workflows run (workflowRoutes.ts)
+POST /api/runtime/executions/cancel-all      stop every in-flight run
+GET|PUT /api/runtime/execution-control       the tenant's execution kill switch
 ```
 
 **Acceptance**
@@ -189,13 +210,14 @@ POST   /v1/orchestrations/:id/pause | /resume | /cancel
 - **TRIAGE** — on item create/update: classify type/priority, draft acceptance criteria, surface
   clarifying questions, propose a plan. Writes back suggestions for human accept.
 - **ESTIMATE** — code-aware effort: reads the repo to estimate complexity/effort; feeds poker
-  `estimate-assist` and `WorkItem.effort`/`estimatedHours`.
+  `estimate-assist` and a `task_effort_estimates` row (`estimator_kind = 'agent'`, `task_id`).
 - **REFACTOR** — fed by a retro action item or a REVIEW finding; targeted refactor PR.
 - **TEST** — generate/extend tests for an item or PR; run them; report coverage delta.
 - **RESEARCH** — answers a discovery/spike question with cited findings; output can feed PM
   Discovery (`pm.discovery.research`) or a `CustomerInsight`/`ValidationAIInsight`.
 
-Each is an `AgentRun` of the corresponding `kind`; same lifecycle, steps, metering, and audit.
+Each is an `executions` row dispatched by the corresponding lane role; same lifecycle, steps,
+metering, and audit.
 
 ---
 
@@ -205,8 +227,9 @@ Each is an `AgentRun` of the corresponding `kind`; same lifecycle, steps, meteri
   Segment's connected repos. Context assembly never crosses Segments.
 - **Human-in-the-loop default:** v1 defaults to `autoMerge: never` and `autoApprovePlan: false`.
   Autonomy is opt-in per Segment via policy.
-- **Full audit:** `AgentRun` + `AgentRunStep` reconstruct every action, file touched, and token
-  spent. `ItemActivity` records agent edits to work items with `actorKind = AGENT`.
+- **Full audit:** `executions` + `execution_messages` / `tool_audit_events` reconstruct every
+  action, file touched, and token spent. `task_status_transitions` and `activity_log` record agent
+  edits to tickets with `actor_kind = 'agent'`.
 - **Budget:** per-run and per-orchestration token caps; the gateway's existing daily-budget
   breaker still applies. Credits are debited from the **Segment's** ledger.
 - **Reversibility:** agents only ever propose via branch + PR; nothing reaches the base branch
@@ -218,11 +241,11 @@ Each is an `AgentRun` of the corresponding `kind`; same lifecycle, steps, meteri
 ## 9. How this layer consumes the PM/Agile graph
 
 ```
-ProductIdea ──discovery──► RESEARCH agent (cited findings)
-Backlog WorkItem ──"assign"──► TRIAGE → ESTIMATE → IMPLEMENT ──► branch + PR ──► REVIEW
-Sprint ──"execute"──► AgentOrchestration ──► many IMPLEMENT runs (dependency-aware)
-Retro ActionItem ──"convert + fix"──► REFACTOR agent ──► PR
-PR merged ──webhook──► WorkItem.status→DONE, velocity recorded, ROI actuals updated
+product_ideas ──discovery──► RESEARCH agent (cited findings)
+backlog ticket (tasks) ──"assign"──► TRIAGE → ESTIMATE → IMPLEMENT (executions) ──► branch + PR ──► REVIEW
+sprints ──"execute"──► workflows run ──► many IMPLEMENT executions (task_dependencies-aware)
+retro action_items ──promote (promoted_task_id)──► REFACTOR agent ──► PR
+PR merged ──webhook──► tasks.status → done lane (emits workitem.released), velocity recorded, ROI actuals updated
 ```
 
 This is the loop the whole product exists to close: **PM decides → Agile sequences → Agents

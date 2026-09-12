@@ -8,6 +8,23 @@ import { TenantService } from '../../application/tenant/TenantService';
 import { commissionPercentToBps } from '../../application/sales/salesPolicy';
 import { SalesWorkspaceService, type SalesWorkspaceDb } from '../../application/sales/SalesWorkspaceService';
 import { isSalesReportWindow } from '../../application/sales/salesReports';
+import { parseBody, z, zJsonObject, zNumberLike } from './requestBody';
+
+// Bodies read field by field through `clean`/`moneyCents`/`positive`/`dealFields`
+// (which tolerate any value) are `zJsonObject`. The rest mirror their declared
+// shapes; the required-field checks stay in the handlers so their messages win.
+const ClaimReferralBody = z.object({ referralCode: z.string().nullish() });
+const CommissionRulesBody = z.object({
+  rules: z.array(z.object({
+    plan: z.string().nullish(),
+    billingCycle: z.string().nullish(),
+    // `commissionPercentToBps` Number()s these, so a numeric string always counted.
+    referralPercent: zNumberLike.nullish(),
+    salesPercent: zNumberLike.nullish(),
+  })).nullish(),
+});
+const SetCanvasBody = z.object({ sessionId: z.string().nullish() });
+const NoteBody = z.object({ body: z.string().nullish() });
 
 const STAGES = new Set(['new', 'contacted', 'qualified', 'meeting', 'proposal', 'won', 'lost']);
 const CAMPAIGN_STATUSES = new Set(['draft', 'scheduled', 'active', 'complete']);
@@ -58,7 +75,7 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
   /** Complete referral attribution after an OAuth signup. Password registration
    * records the same row before verification; OAuth returns here already verified. */
   r.post('/claim-referral', async (c) => {
-    const body = await c.req.json<{ referralCode?: string }>();
+    const body = await parseBody(c, ClaimReferralBody);
     const referralCode = clean(body.referralCode, 32).toUpperCase();
     if (!referralCode) return c.json({ error: 'Referral code is required' }, 400);
     const result = await sales.claimReferral(userId(c), referralCode, c.env);
@@ -82,7 +99,7 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
   r.put('/settings', async (c) => {
     const target = await owner(c);
     if (!target) return c.json({ error: 'Forbidden' }, 403);
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const current = await sales.settings(target.id);
     if (!current) throw new InternalError('Settings unavailable');
     const row = await sales.updateSettings(target.id, {
@@ -102,7 +119,7 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
   r.put('/commission-rules', async (c) => {
     const current = await viewer(c);
     if (!current?.isSuperadmin) return c.json({ error: 'Superadmin required' }, 403);
-    const body = await c.req.json<{ rules?: Array<{ plan?: string; billingCycle?: string; referralPercent?: number; salesPercent?: number }> }>();
+    const body = await parseBody(c, CommissionRulesBody);
     const allowedPlans = new Set(['pro', 'teams']); const allowedCycles = new Set(['monthly', 'yearly']);
     if (!Array.isArray(body.rules) || body.rules.length < 1 || body.rules.length > 4) return c.json({ error: 'One to four commission rules are required' }, 400);
     const prepared = body.rules.map((rule) => ({ ...rule, referralBps: commissionPercentToBps(rule.referralPercent), salesBps: commissionPercentToBps(rule.salesPercent) }));
@@ -116,7 +133,7 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
   r.put('/canvas', async (c) => {
     const target = await owner(c);
     if (!target) return c.json({ error: 'Forbidden' }, 403);
-    const body = await c.req.json<{ sessionId?: string }>();
+    const body = await parseBody(c, SetCanvasBody);
     if (!body.sessionId) return c.json({ error: 'sessionId is required' }, 400);
     const sessionId = await sales.setCanvas(target.id, userId(c), body.sessionId);
     if (!sessionId) return c.json({ error: 'Canvas session not found' }, 404);
@@ -125,7 +142,7 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
 
   r.post('/contacts', async (c) => {
     const target = await owner(c); if (!target) return c.json({ error: 'Forbidden' }, 403);
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const stage = clean(body.stage, 24);
     const row = await sales.createContact(target.id, {
       name: clean(body.name, 255), email: clean(body.email, 255), company: clean(body.company, 255),
@@ -137,7 +154,7 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
 
   r.patch('/contacts/:id', async (c) => {
     const target = await owner(c); if (!target) return c.json({ error: 'Forbidden' }, 403);
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     for (const key of ['name', 'email', 'company', 'market'] as const) if (body[key] !== undefined) patch[key] = clean(body[key], 255);
     if (body.stage !== undefined && STAGES.has(String(body.stage))) { patch.stage = body.stage; patch.lastTouchAt = new Date(); }
@@ -152,7 +169,7 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
 
   r.post('/campaigns', async (c) => {
     const target = await owner(c); if (!target) return c.json({ error: 'Forbidden' }, 403);
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const name = clean(body.name, 255); if (!name) return c.json({ error: 'Campaign name is required' }, 400);
     const row = await sales.createCampaign(target.id, { name, market: clean(body.market, 255), subject: clean(body.subject, 500) });
     return c.json(row, 201);
@@ -160,7 +177,7 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
 
   r.patch('/campaigns/:id', async (c) => {
     const target = await owner(c); if (!target) return c.json({ error: 'Forbidden' }, 403);
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (body.status !== undefined && CAMPAIGN_STATUSES.has(String(body.status))) patch.status = body.status;
     for (const key of ['sent', 'replies'] as const) if (body[key] !== undefined) patch[key] = Math.min(2_147_483_647, Math.max(0, Math.round(Number(body[key]) || 0)));
@@ -171,7 +188,7 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
 
   r.put('/goals', async (c) => {
     const target = await owner(c); if (!target) return c.json({ error: 'Forbidden' }, 403);
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     return c.json(await sales.setGoals(target.id, { outreachTarget: positive(body.outreachTarget, 50), contactsTarget: positive(body.contactsTarget, 20), meetingsTarget: positive(body.meetingsTarget, 3) }));
   });
 
@@ -233,7 +250,7 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
   r.post('/notes', async (c) => {
     const current = await viewer(c); if (!current?.isSuperadmin) return c.json({ error: 'Superadmin required' }, 403);
     const target = await owner(c); if (!target) return c.json({ error: 'Sales associate not found' }, 404);
-    const body = await c.req.json<{ body?: string }>(); const note = clean(body.body, 5000);
+    const body = await parseBody(c, NoteBody); const note = clean(body.body, 5000);
     if (!note) return c.json({ error: 'Note is required' }, 400);
     return c.json(await sales.addNote(target.id, current.id, note), 201);
   });

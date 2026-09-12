@@ -25,7 +25,7 @@ Non-interactive (automation / npx):
 
 ```bash
 builderforce uninstall --all --yes --non-interactive
-npx -y builderforce uninstall --all --yes --non-interactive
+npx -y @seanhogg/builderforce-agents uninstall --all --yes --non-interactive
 ```
 
 Manual steps (same result):
@@ -59,9 +59,9 @@ rm -rf ~/.builderforce/workspace
 5. Remove the CLI install (pick the one you used):
 
 ```bash
-npm rm -g builderforce
-pnpm remove -g builderforce
-bun remove -g builderforce
+npm rm -g @seanhogg/builderforce-agents
+pnpm remove -g @seanhogg/builderforce-agents
+bun remove -g @seanhogg/builderforce-agents
 ```
 
 6. If you installed the macOS app:
@@ -116,8 +116,8 @@ If you used a profile, delete the matching task name and `~\.builderforce-<profi
 
 ### Normal install (install.sh / npm / pnpm / bun)
 
-If you used `https://builderforce.ai/install.sh` or `install.ps1`, the CLI was installed with `npm install -g builderforce@latest`.
-Remove it with `npm rm -g builderforce` (or `pnpm remove -g` / `bun remove -g` if you installed that way).
+If you used `https://builderforce.ai/install.sh` or `install.ps1`, the CLI was installed with `npm install -g @seanhogg/builderforce-agents@latest`.
+Remove it with `npm rm -g @seanhogg/builderforce-agents` (or `pnpm remove -g` / `bun remove -g` if you installed that way).
 
 ### Source checkout (git clone)
 

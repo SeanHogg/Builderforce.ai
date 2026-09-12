@@ -110,8 +110,10 @@ async/eventual and never block a render path.
 - BurnRateOS Customer Engagement posts feedback events to BuilderForce
   `POST /v1/ingest/feedback { companyId, widgetId, eventId, text, sentiment, contact }`
   (service token, scope `ingest:feedback`).
-- BuilderForce creates a `CustomerInsight(insightType=FEEDBACK)` candidate with `externalRef`
-  and/or a backlog `WorkItem` candidate (per Segment setting). The founder triages from a
+- BuilderForce creates a `customer_feedback` row (the spec's `CustomerInsight(insightType=FEEDBACK)`;
+  `external_ref` is the host event id, unique per segment) and/or a backlog ticket candidate — a
+  `tasks` row, the spec's `WorkItem` (per Segment setting). Implemented as `POST /v1/ingest/feedback`
+  (`seamRoutes.ts`, migration 0071). The founder triages from a
   "Voice of customer" inbox. **Implements the catalog's promised feedback→backlog flow that was
   only manually linkable before.**
 - Validation Lab's `GET /v1/validation/engagements` proxies BurnRateOS to list the Segment's
@@ -123,6 +125,18 @@ async/eventual and never block a render path.
   - `workitem.released` → feeds Investor board decks / Changelog.
   - `sprint.completed` (velocity, financial impact) → feeds BI / health scoring.
   - `roadmap.published` → feeds Investor Intelligence roadmap slides.
+- **Implemented on the platform's own rows** (the PM spine is unified onto `projects` / `tasks` /
+  `specs`, decided 2026-09-12). Subscriptions are `webhook_subscriptions` (segment-scoped, 0071)
+  managed at `GET|POST /v1/webhooks` and `DELETE /v1/webhooks/:id`; deliveries are audited in
+  `webhook_deliveries`. The three producers:
+  - `workitem.released` — `releaseWorkItemWebhook` (`application/seams/workItemWebhook.ts`), called
+    from the task lifecycle when a **`tasks` row first enters a done-class lane**. Payload
+    `{ id, key, title, status, projectId, priority, releasedAt }` — `id` is the integer `tasks.id`,
+    `key` its human key; there is no uuid work-item id.
+  - `sprint.completed` — the `/api/agile/sprints` tracker when a `sprints` row's `status` becomes
+    `completed`.
+  - `roadmap.published` — the `/api/product/roadmap` tracker when a `roadmap_items` row's `status`
+    becomes `shipped`.
 - Lets BurnRateOS's Investor/BI domains read velocity/roadmap/release data they previously had no
   coupling to (a gap the inventory found).
 
@@ -223,14 +237,12 @@ passing the SSO JWT (so BuilderForce resolves the Segment):
 
 ## 8. API surface summary (BuilderForce `/v1`)
 
-| Group | Endpoints (see PRDs for full list) |
-|-------|-------------------------------------|
-| Identity/admin | `POST/PUT/DELETE /v1/admin/segments`, `resolveSegment` (internal) |
-| Product Mgmt | `/v1/ideas*`, `/v1/mvp*`, `/v1/roadmap*`, `/v1/validation*`, `/v1/backlog*`, `/v1/business-value-config*`, `/v1/feature-roi*`, `/v1/ab-tests*` |
-| Agile | `/v1/poker*`, `/v1/retros*`, `/v1/kanban*`, `/v1/sprints*`, `/v1/velocity*`, `/v1/feature-scoring*`, `/v1/capacity*`, `/v1/agile/*` (cost), `/v1/action-items*` |
-| Agentic | `/v1/repos*`, `/v1/work-items/:id/agent-run`, `/v1/agent-runs*`, `/v1/orchestrations*`, `/v1/pull-requests/:ref/review`, `/v1/findings*` |
-| Seams | `/v1/ingest/feedback`, `/v1/validation/engagements` (proxy), outbound webhooks |
-| Realtime | poker/retro rooms + `agent-runs/:id` stream (WebSocket/SSE, Segment-authorized) |
+The spec named a parallel `/v1` surface per group. With the PM spine unified onto the platform
+(decided 2026-09-12), only the cross-app **seams** live under `/v1`; every PM / Agile / agentic
+capability is the platform's own route over its own rows (doc 01 §4–§7).
 
-All `/v1` require a Segment-scoped JWT (end-user) or a tenant service token (S2S); all are
-Segment-isolated and rate-limited per Segment.
+| Group | Spec endpoints | Platform owner (implemented) |
+|-------|----------------|------------------------------|
+| Identity/admin | `POST/PUT/DELETE /v1/admin/segments`, `resolveSegment` (internal) | `/api/segments` (`segments`) |
+| Product Mgmt | `/v1/ideas*`, `/v1/mvp*`, `/v1/roadmap*`, `/v1/validation*`, `/v1/backlog*`, `/v1/business-value-config*`, `/v1/feature-roi*`, `/v1/ab-tests*` | `/api/product/{mvp,validation,roadmap,release-planning,changelog,feature-flags,business-value,feature-roi}`, `/api/releases`, `/api/specs`, `/api/pmo`; the backlog is `/api/tasks` + `/api/kanban` |
+| Agile | `/v1/poker*`, `/v1/retros*`, `/v1/kanban*`, `/v1/sprints*`, `/v1/velocity*`, `/v1/feature-scoring*`, `/v1/capacity*`, `

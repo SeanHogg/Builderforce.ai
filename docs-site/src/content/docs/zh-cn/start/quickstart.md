@@ -21,12 +21,12 @@ BuilderForce Agents 需要 Node 22 或更新版本。
 <Tabs>
   <Tab title="npm">
     ```bash
-    npm install -g builderforce@latest
+    npm install -g @seanhogg/builderforce-agents@latest
     ```
   </Tab>
   <Tab title="pnpm">
     ```bash
-    pnpm add -g builderforce@latest
+    pnpm add -g @seanhogg/builderforce-agents@latest
     ```
   </Tab>
 </Tabs>

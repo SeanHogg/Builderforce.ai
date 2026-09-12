@@ -27,6 +27,72 @@ import { sendTransactionalEmail } from '../../application/email/sendEmail';
 import { headerHints } from '../../application/email/emailLocaleResolver';
 import { localeFromHeaders } from '../../infrastructure/email/emailLocale';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { parseBody, z, zNumberLike } from './requestBody';
+
+// ---------------------------------------------------------------------------
+// Request bodies. Fields a handler answers "X is required" for stay optional so
+// that message still wins; the schema's job is the SHAPE.
+// ---------------------------------------------------------------------------
+
+const RegisterBody = z.object({
+  email: z.string().nullish(),
+  username: z.string().nullish(),
+  password: z.string().nullish(),
+  display_name: z.string().nullish(),
+});
+
+const LoginBody = z.object({
+  email: z.string().nullish(),
+  password: z.string().nullish(),
+});
+
+/** All three columns are nullable, so an explicit `null` still clears one. */
+const ProfileBody = z.object({
+  display_name: z.string().nullish(),
+  bio: z.string().nullish(),
+  avatar_url: z.string().nullish(),
+});
+
+const PRICING_MODELS = ['flat_fee', 'consumption'] as const;
+
+const CreateSkillBody = z.object({
+  name: z.string().nullish(),
+  slug: z.string().nullish(),
+  description: z.string().nullish(),
+  category: z.string().nullish(),
+  tags: z.array(z.string()).nullish(),
+  version: z.string().nullish(),
+  readme: z.string().nullish(),
+  icon_url: z.string().nullish(),
+  repo_url: z.string().nullish(),
+  /** Dollars; `Number(...)`ed into cents, so a numeric string was always accepted. */
+  price: zNumberLike.nullish(),
+  pricing_model: z.enum(PRICING_MODELS).nullish(),
+  price_unit: z.string().nullish(),
+});
+
+/** `name` / `category` / `version` are NOT NULL columns, so they refuse `null`. */
+const UpdateSkillBody = z.object({
+  name: z.string().optional(),
+  description: z.string().nullish(),
+  category: z.string().optional(),
+  tags: z.array(z.string()).nullish(),
+  version: z.string().optional(),
+  readme: z.string().nullish(),
+  icon_url: z.string().nullish(),
+  repo_url: z.string().nullish(),
+  published: z.boolean().optional(),
+});
+
+/**
+ * `agent` is admitted by the SHAPE only so the handler's own refusal (pointing at
+ * the workforce checkout) answers it — see the route's docstring.
+ */
+const PurchaseBody = z.object({
+  artifactType: z.enum(['skill', 'persona', 'agent']).optional(),
+  artifactSlug: z.string().optional(),
+  stripePaymentIntentId: z.string().nullish(),
+});
 
 /** Read-through cache key for a single published skill's SEO/SSR payload. */
 const skillSeoCacheKey = (slug: string): string => `mp:skill:seo:${slug}`;

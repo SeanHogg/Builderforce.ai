@@ -213,12 +213,22 @@ function parseYamlArray(value: string): string[] {
   return [value];
 }
 
+/**
+ * A post file's renderable body: front-matter removed, and the leading `# Title`
+ * H1 that duplicates the page title shown above the content stripped. Only a
+ * single top-level ATX heading (# followed by a space) goes, never ##/###.
+ *
+ * Exported because a TRANSLATED body (`<slug>.<locale>.md`, see `blogLocale.ts`)
+ * is cleaned by the same rule — two cleaners would be two answers to "where
+ * does this article start".
+ */
+export function postBody(raw: string): string {
+  return parseFrontmatter(raw).body.trim().replace(/^# [^\n]*\r?\n?/, '').trim();
+}
+
 function buildPost(slug: string, raw: string): BlogPost {
-  const { meta, body } = parseFrontmatter(raw);
-  // Strip the leading `# Title` H1 that duplicates the page title shown above
-  // the content. Only removes a single top-level ATX heading (# followed by a
-  // space), not ##/### subheadings.
-  const cleanBody = body.trim().replace(/^# [^\n]*\n?/, '').trim();
+  const { meta } = parseFrontmatter(raw);
+  const cleanBody = postBody(raw);
   return {
     slug,
     title: meta.title ?? slug,

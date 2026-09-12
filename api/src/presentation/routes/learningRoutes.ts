@@ -44,6 +44,34 @@ import {
   removePrerequisiteByCourseId,
 } from '../../application/learning/coursePrerequisites';
 import { completeCourse, enrollInPath, pathProgressFor } from '../../application/learning/pathProgress';
+import { parseOptionalBody, z, zOptionalString } from './requestBody';
+
+// Every body here was already read as `.catch(() => ({}))`, so an absent body
+// keeps meaning "nothing given" and each handler's own message still answers.
+
+const CreatePathBody = z.object({
+  slug: z.string().nullish(),
+  title: z.string().nullish(),
+  summary: z.string().nullish(),
+  level: z.string().nullish(),
+});
+
+/** The handler checks "an array of integer ids" and answers in its own words. */
+const PathCoursesBody = z.object({ courseIds: z.unknown().optional() });
+
+/** The handler checks the status against STATUSES and answers in its own words. */
+const PathStatusBody = z.object({ status: z.unknown().optional() });
+
+/** `learner` is trimmed and blank-is-me in `learnerFor`, which zOptionalString matches. */
+const EnrollBody = z.object({
+  learner: zOptionalString,
+  dueAt: z.string().nullish(),
+});
+
+/** The handler checks "an integer course id" and answers in its own words. */
+const PrerequisiteBody = z.object({ prerequisiteId: z.unknown().optional() });
+
+const CompleteCourseBody = z.object({ learner: zOptionalString });
 
 const STATUSES: readonly CourseStatus[] = ['draft', 'published', 'retired'];
 const isStatus = (value: unknown): value is CourseStatus =>

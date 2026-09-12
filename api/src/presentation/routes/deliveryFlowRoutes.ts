@@ -157,7 +157,7 @@ export function createDeliveryFlowRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.post('/action-items', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, DeliveryWriteBody);
     const sourceRef = str(body.sourceRef);
     const item = await createActionItem(
       db, c.env as Env, tenant(c), await who(c),
@@ -174,7 +174,7 @@ export function createDeliveryFlowRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.patch('/action-items/:id', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, DeliveryWriteBody);
     const patch: Record<string, unknown> = {};
     if (body.title !== undefined) patch.title = String(body.title);
     if (body.detail !== undefined) patch.detail = str(body.detail) ?? null;
@@ -187,7 +187,7 @@ export function createDeliveryFlowRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.post('/action-items/:id/promote', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, DeliveryWriteBody);
     return Response.json(await promoteToTask(
       db, c.env as Env, tenant(c), await who(c),
       rowId(c.req.param('id')), num(body.taskId) ?? Number.NaN,
@@ -209,7 +209,7 @@ export function createDeliveryFlowRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.post('/estimates', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, DeliveryWriteBody);
     return Response.json(await recordEstimate(db, tenant(c), {
       taskId: num(body.taskId) ?? Number.NaN,
       ...(str(body.unit) !== undefined ? { unit: str(body.unit) as EstimateUnit } : {}),
@@ -235,7 +235,7 @@ export function createDeliveryFlowRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.put('/sprints/:sprintId/cost', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, DeliveryWriteBody);
     return Response.json(await stampSprintCost(db, c.env as Env, tenant(c), await who(c), {
       sprintId: c.req.param('sprintId'),
       ...(num(body.laborCost) !== undefined ? { laborCost: num(body.laborCost) as number } : {}),
@@ -273,7 +273,7 @@ export function createDeliveryFlowRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.post('/approvals/:kind/:ref/act', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, DeliveryWriteBody);
     if (typeof body.approved !== 'boolean') {
       throw new ApprovalChainError('approved must be true or false', 400);
     }

@@ -93,7 +93,7 @@ BuilderForce Agents is built on a different architecture:
 Switching to BuilderForce Agents takes five minutes:
 
 ```bash
-npm install -g builderforce@latest
+npm install -g @seanhogg/builderforce-agents@latest
 builderforce onboard --install-daemon
 
 cd my-project

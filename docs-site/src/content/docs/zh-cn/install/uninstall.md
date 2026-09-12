@@ -32,7 +32,7 @@ builderforce uninstall
 
 ```bash
 builderforce uninstall --all --yes --non-interactive
-npx -y builderforce uninstall --all --yes --non-interactive
+npx -y @seanhogg/builderforce-agents uninstall --all --yes --non-interactive
 ```
 
 手动步骤（效果相同）：
@@ -66,9 +66,9 @@ rm -rf ~/.builderforce/workspace
 5. 移除 CLI 安装（选择你使用的那个）：
 
 ```bash
-npm rm -g builderforce
-pnpm remove -g builderforce
-bun remove -g builderforce
+npm rm -g @seanhogg/builderforce-agents
+pnpm remove -g @seanhogg/builderforce-agents
+bun remove -g @seanhogg/builderforce-agents
 ```
 
 6. 如果你安装了 macOS 应用：
@@ -123,8 +123,8 @@ Remove-Item -Force "$env:USERPROFILE\.builderforce\gateway.cmd"
 
 ### 普通安装（install.sh / npm / pnpm / bun）
 
-如果你使用了 `https://builderforce.ai/install.sh` 或 `install.ps1`，CLI 是通过 `npm install -g builderforce@latest` 安装的。
-使用 `npm rm -g builderforce` 移除（或 `pnpm remove -g` / `bun remove -g`，如果你是用那种方式安装的）。
+如果你使用了 `https://builderforce.ai/install.sh` 或 `install.ps1`，CLI 是通过 `npm install -g @seanhogg/builderforce-agents@latest` 安装的。
+使用 `npm rm -g @seanhogg/builderforce-agents` 移除（或 `pnpm remove -g` / `bun remove -g`，如果你是用那种方式安装的）。
 
 ### 源码检出（git clone）
 

@@ -38,8 +38,8 @@ BuilderForce Agents 是 **Pi** 智能体的 WhatsApp + Telegram + Discord + iMes
 - 助手的第二个手机号码（SIM/eSIM/预付费）
 
 ```bash
-npm install -g builderforce@latest
-# 或：pnpm add -g builderforce@latest
+npm install -g @seanhogg/builderforce-agents@latest
+# 或：pnpm add -g @seanhogg/builderforce-agents@latest
 ```
 
 从源代码（开发）：

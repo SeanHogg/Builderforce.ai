@@ -26,7 +26,7 @@ import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { recordActivity, cloudAgentActor, resolveHumanActor } from '../../application/activity/activityLog';
 import { coordinateTicket } from '../../application/manager/coordinateTicket';
 import { buildRuntimeService } from '../../buildRuntimeService';
-import { parseBody, z, zJsonObject } from './requestBody';
+import { parseBody, z } from './requestBody';
 
 // ── Bodies ───────────────────────────────────────────────────────────────────
 // Role, assignment and template bodies are handed to their services, which own

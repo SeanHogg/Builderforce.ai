@@ -71,11 +71,11 @@ iwr -useb https://builderforce.ai/install.ps1 | iex
 替代方案（全局安装）：
 
 ```bash
-npm install -g builderforce@latest
+npm install -g @seanhogg/builderforce-agents@latest
 ```
 
 ```bash
-pnpm add -g builderforce@latest
+pnpm add -g @seanhogg/builderforce-agents@latest
 ```
 
 ## 2) 运行新手引导向导（并安装服务）

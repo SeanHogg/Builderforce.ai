@@ -10,9 +10,13 @@ matter). Every model that moved from BurnRateOS preserves the **full field union
 
 ## 1. Conventions
 
-- IDs are `uuid` (preserve source UUIDs on migration so cross-references survive).
+- IDs are the **platform's own types** (§4.1): `serial` for `projects` / `tasks` (each with a unique
+  human `key`), `uuid` for `specs`, `boards`, `swimlanes`, `sprints`, `product_releases` and OKRs.
+  BurnRateOS source uuids are mapped onto them through import lineage, not kept as primary keys —
+  the PM spine is UNIFIED onto `projects` / `tasks` / `specs` (operator decision 2026-09-12).
 - `Json` = jsonb. `Decimal(p,s)` preserved from source for money/percentages.
-- Every business entity carries **`tenantId` + `segmentId`** (see §3). The composite index
+- Every business entity carries **`tenantId` + `segmentId`** (see §3) — on the platform,
+  `tenant_id integer` → `tenants` and `segment_id uuid` → `segments` (NOT NULL via the 0056 trigger). The composite index
   `@@index([tenantId, segmentId, …])` leads on both.
 - `createdAt @default(now())`, `updatedAt @updatedAt` on every table unless noted.
 - Foreign keys to identity (`userId`, `assigneeId`, `teamId`) are **string IDs that reference
@@ -102,535 +106,163 @@ enum SegmentStatus{ ACTIVE SUSPENDED ARCHIVED }
 
 ---
 
-## 4. Product & Agile core
+## 4. The PM spine — UNIFIED onto the platform (decided 2026-09-12)
 
-### 4.1 `WorkItem` — the shared spine (PM backlog ⇄ Agile kanban)
+> **Operator decision 2026-09-12: unify, do not build beside.** This document originally specified
+> its own uuid-keyed project-management spine (`WorkItem`, `KanbanBoard`, `KanbanColumn`, `Sprint`,
+> `Delivery`, release planning, `ItemActivity`, …). Every one of those concepts already has an owner
+> in the platform schema (`api/src/infrastructure/database/schema/*.ts`, PRD 20). The spine is
+> therefore **unified onto `projects` / `tasks` / `specs`** and their existing neighbours: there is
+> no parallel work-item table, no second board, no second release, and ids are the platform's own
+> types. The sections below are that mapping. The BurnRateOS field union survives as a
+> field-by-field *provenance* map (§4.2), not as DDL.
+>
+> **Code state.** Migration `1160_unify_pm_spine_onto_platform_owners.sql` removed the last parallel
+> pieces: the `work_item_ref` / `sprint_ref` / `project_ref` string pointers became typed foreign
+> keys, the duplicate `kanban_columns` and `release_plans` tables were folded into `swimlanes` and
+> `product_releases` and dropped, and `task_type` gained `bug`, the one spec kind with no owner.
 
-The single most important model. One row is a backlog item *or* a kanban card depending on
-`stage`. **Full field union preserved from `work_items`.**
+### 4.1 Ids and scope — platform types, not spec uuids
 
-```prisma
-model WorkItem {
-  id          String   @id @default(uuid())
-  tenantId    String
-  segmentId   String
+| Entity | Primary key | Human key | Tenancy / scope |
+|---|---|---|---|
+| `projects` | `serial` (`integer`) | `projects.key` (unique) + `public_id uuid` | `tenant_id integer` → `tenants`; `segment_id uuid` → `segments` |
+| `tasks` (the work item) | `serial` (`integer`) | `tasks.key` (unique, e.g. `PROJ-12`) | `tenant_id` (DB-derived from the project, 0944), `segment_id`, `project_id` |
+| `specs` (PRD / architecture spec) | `uuid` | — | `tenant_id`, `segment_id`, optional `project_id` |
+| `boards` / `swimlanes` | `uuid` | `swimlanes.key` (unique per board) | one board per project (`UNIQUE(project_id)`, `projects.primary_board_id`) |
+| `sprints` | `uuid` | `name` | `tenant_id`, `segment_id`, optional `project_id` |
+| `product_releases` | `uuid` | `version` | `tenant_id`, `segment_id`, optional `project_id` |
+| `objectives` / `key_results` / `initiatives` | `uuid` | — | `tenant_id`, `segment_id`, optional `project_id` |
 
-  // Core
-  title       String
-  description String?
-  type        ItemType
-  priority    ItemPriority
-  assigneeId  String?
-  reporterId  String?
-  parentId    String?               // self-join: Epic→Story→Task
-  tags        Json
-  origin      String?  @default("MANUAL") // MANUAL|ONBOARDING|AI_GENERATED|MVP_SCAFFOLDING|AGENT  ([NEW] AGENT)
+Rules:
 
-  // Lifecycle
-  stage   WorkItemStage @default(STRATEGIC_BACKLOG) // STRATEGIC_BACKLOG | KANBAN_BOARD | ARCHIVED
-  status  ItemStatus?                               // only when stage = KANBAN_BOARD
+- A reference to a work item is **`task_id integer`**, never a `work_item_ref` string; to a sprint,
+  **`sprint_id uuid`**; to a project, **`project_id integer`**.
+- A foreign key proves the row exists, not whose it is: every writer checks tenancy first
+  (`taskInTenant`, `scopedToTenant`).
+- Across a domain boundary the id is carried without a Drizzle `.references()` and the foreign key
+  lives in the migration (the `projects.company_id` and `product_ideas.promoted_task_id`
+  precedent), so `check-domain-boundary` stays clean.
+- BurnRateOS source uuids are **not** kept as primary keys. The data gate (PRD 19) maps them onto
+  platform ids through `import_run_id` lineage.
 
-  // Strategic backlog (PM)
-  businessValue      Int?
-  effort             Int?
-  risk               RiskLevel?
-  acceptanceCriteria Json
-  dependencies       Json            // item IDs this depends on
+### 4.2 `WorkItem` → `tasks` (field provenance)
 
-  // MVP scaffolding (origin = MVP_SCAFFOLDING)
-  mvpPhase          String?          // MVP_1|MVP_2|POST_MVP
-  revenueImpact     String?          // DIRECT|INDIRECT|RETENTION|ACQUISITION
-  complexity        String?          // XS|S|M|L|XL
-  suggestedApproach String?
-  technicalNotes    String?
-  designNotes       String?
-  userType          String?          // "As a [userType]"
-  want              String?          // "I want [want]"
-  so                String?          // "So that [so]"
+The spec's "one row is a backlog item or a kanban card" model is exactly a `tasks` row: the lane it
+sits in decides whether it reads as backlog or board.
 
-  // Kanban (stage = KANBAN_BOARD)
-  position        Int?
-  columnId        String?
-  boardId         String?
-  sprintId        String?
-  deliveryId      String?
-  dueDate         DateTime?
-  estimatedHours  Int?
-  workStartedAt   DateTime?
-  workCompletedAt DateTime?
-  cycleTime       Int?               // hours
-  leadTime        Int?               // hours
+| Spec `WorkItem` field(s) | Platform owner |
+|---|---|
+| `id` (uuid) | `tasks.id` (serial) + `tasks.key` |
+| `tenantId`, `segmentId` | `tasks.tenant_id`, `tasks.segment_id` (both derived from the project) |
+| `title`, `description` | `tasks.title`, `tasks.description` |
+| `type` — source `ItemType` INITIATIVE / EPIC / STORY / TASK / BUG / SUBTASK | INITIATIVE → an `initiatives` row (work links to it through `tasks.initiative_id`); EPIC → `task_type = 'epic'`; STORY, TASK → `task_type = 'task'`; SUBTASK → `task_type = 'task'` with `parent_task_id`; **BUG → `task_type = 'bug'`** (added by 1160 — a new kind is a value, not a table). Platform-only kinds: `gap`, `security`, `incident`, `product`, `design`. |
+| `priority` LOW / MEDIUM / HIGH / CRITICAL | `tasks.priority` `low` / `medium` / `high` / `urgent` (CRITICAL → `urgent`) |
+| `assigneeId` | `tasks.assigned_user_id` (a person) **or** `assigned_agent_ref` / `assigned_agent_host_id` (an agent). One owner, never both. |
+| `reporterId` | the creating actor in `activity_log` — not a column |
+| `parentId` | `tasks.parent_task_id` (self-FK, `ON DELETE SET NULL`) |
+| `tags` | no column. Work is classified by `task_type`, `action_type` (technical axis) and `allocation_category` (investment axis). |
+| `origin` MANUAL / ONBOARDING / AI_GENERATED / MVP_SCAFFOLDING / AGENT | `tasks.source` (external board), `tasks.import_run_id` (import lineage), `tasks.decomposition_source` (llm / heuristic / manual) and the creating actor in `activity_log` |
+| `stage` STRATEGIC_BACKLOG / KANBAN_BOARD / ARCHIVED | the lane: `tasks.status` is a backlog lane key or a board lane key; ARCHIVED → `tasks.archived = true` |
+| `status` INACTIVE / ACTIVE / COMPLETE | `tasks.status` (free-form lane key) + the derived `tasks.swimlane_id`; COMPLETE = a lane with `swimlanes.is_terminal` |
+| `businessValue` | `tasks.business_value` (+ `business_value_rationale`, `business_value_source`) |
+| `effort`, `estimatedHours`, `complexity` | `tasks.story_points` (current) + `task_effort_estimates` (history: `task_id`, unit points / hours / days / tshirt, `estimator_kind` user / agent) |
+| `risk` | per-ticket readiness in `ticket_audits`; team risk registers in kernel `question_sets` (PRD 20 map) |
+| `acceptanceCriteria`, `technicalNotes`, `designNotes`, `suggestedApproach`, `userType` / `want` / `so` | the ticket's PRD: `specs` (`prd`, `arch_spec`, `task_list`), linked 1..N through `task_specs` (one primary), plus `tasks.description` |
+| `dependencies` | `task_dependencies` (predecessor → successor edges, kept acyclic) |
+| `mvpPhase`, `revenueImpact` (MVP scaffolding) | `mvp_scenarios` + `roadmap_items.horizon` |
+| `position` | `tasks.manager_rank` (backlog order) |
+| `columnId`, `boardId` | `tasks.swimlane_id` (derived by trigger from `status`) → `swimlanes.board_id` → `boards` |
+| `sprintId`, `deliveryId` | `tasks.sprint_id` → `sprints` (a spec `Delivery` is a project-scoped sprint) |
+| `dueDate`, `workStartedAt`, `workCompletedAt` | `tasks.due_date`, `tasks.start_date`, `tasks.completed_at` |
+| `cycleTime`, `leadTime` | derived from `task_status_transitions` and never stored (PRD 20: derived numbers are not columns) |
+| `revenueValue`, `customerKPIValue`, `burnRateImpact`, `runwayCost`, `priorityScore` | `business_value_configs` (the team's value model) + `feature_roi` + `tasks.manager_rank` |
+| `estimatedCost`, `actualCost` | `task_effort_estimates` × rates → `cost_calculations`; the sprint roll-up is `sprint_financial_impact`; `tasks.cost_class` (capex / opex) |
+| impact tracking (`impactCategory` … `impactNotes`) | `feature_roi` (+ `roi_timeline_entries`) |
+| feature flags (`isFeatureFlag` … `targetUserSegments`) | `feature_flags` |
+| experiments (`isExperiment` … `experimentEndDate`) | `experiments`, `ab_tests` (+ `ab_test_variants`, `ab_test_segments`) |
+| release planning (`targetReleaseId`, `releaseVersion`, `releaseDate`, `releasedAt`, `releaseNotes`) | `tasks.release_id` → `product_releases` (`version`, `target_date`, `release_date`, `released_at`, `notes`); published notes are `release_notes` / `changelog_entries` |
+| product analytics (`featureAdoptionRate` … `lastUsageTrackedAt`) | `feature_roi.usage` + `metric_facts` |
+| `linkedObjectiveId`, `linkedKeyResultId`, `goalContribution` | `objective_links` (`link_kind` task / epic, `task_id`) → `objectives` / `key_results`. Local rows, not external ids. |
+| `agentRunId` | `executions.task_id` (every run of the ticket) |
+| `repoRef` | `tasks.explicit_repo_id` → `project_repositories`; multi-repo tickets use `task_repo_bindings` |
+| `generatedBranch`, `generatedPrUrl` | `tasks.git_branch`, `tasks.github_pr_url` / `github_pr_number`; PR lifecycle in `pull_requests` |
+| `teamId` | the project's team (`team_projects`) |
+| `movedToKanbanAt`, `archivedAt` | the first move out of backlog in `task_status_transitions`; `tasks.archived` |
 
-  // Value tracking
-  revenueValue     Float?
-  customerKPIValue Float?
-  burnRateImpact   Float?            // +increases / -reduces monthly burn
-  runwayCost       Float?
-  priorityScore    Float?
+### 4.3 `ItemActivity` → the lifecycle ledger
 
-  // Cost (budget-to-actuals)
-  estimatedCost Decimal? @db.Decimal(18,2)
-  actualCost    Decimal? @db.Decimal(18,2)
-
-  // Impact tracking (mirrors BusinessValueConfig)
-  impactCategory            String?  // REVENUE_GENERATION|COST_REDUCTION|CUSTOMER_ACQUISITION|CUSTOMER_RETENTION|CUSTOMER_SATISFACTION|EFFICIENCY
-  expectedRevenueImpact     Decimal? @db.Decimal(18,2)
-  actualRevenueImpact       Decimal? @db.Decimal(18,2)
-  expectedCustomerImpact    Int?
-  actualCustomerImpact      Int?
-  customerSatisfactionDelta Decimal? @db.Decimal(5,2)
-  retentionImpact           Decimal? @db.Decimal(5,2)
-  acquisitionImpact         Int?
-  churnReductionImpact      Decimal? @db.Decimal(5,2)
-  timeToValue               Int?
-  impactConfidence          ImpactConfidence?
-  impactMeasurementPlan     String?
-  impactBaseline            Json?
-  impactActuals             Json?
-  impactNotes               String?
-
-  // Feature flags & experiments
-  isFeatureFlag        Boolean @default(false)
-  featureFlagKey       String?
-  featureFlagStatus    FeatureFlagStatus?
-  rolloutPercentage    Int?
-  targetUserSegments   Json
-  isExperiment         Boolean @default(false)
-  experimentHypothesis String?
-  experimentVariants   Json?
-  experimentMetrics    Json?
-  experimentResults    Json?
-  experimentStatus     ExperimentStatus?
-  experimentStartDate  DateTime?
-  experimentEndDate    DateTime?
-
-  // Release planning
-  targetReleaseId String?
-  releaseVersion  String?
-  releaseDate     DateTime?
-  releasedAt      DateTime?
-  releaseNotes    String?
-
-  // Product analytics
-  featureAdoptionRate Decimal? @db.Decimal(5,2)
-  featureUsageCount   Int?
-  activeUsers         Int?
-  lastUsageTrackedAt  DateTime?
-
-  // OKR linkage (linked objective lives in BurnRateOS Operational Cadence — store id only)
-  linkedObjectiveId String?
-  linkedKeyResultId String?
-  goalContribution  String?
-
-  // [NEW] Agentic linkage
-  agentRunId      String?            // last/active AgentRun that worked this item
-  repoRef         Json?              // { repoId, defaultBranch } target repo for dev agents
-  generatedBranch String?            // branch an agent created
-  generatedPrUrl  String?            // PR an agent opened
-
-  teamId          String?
-  movedToKanbanAt DateTime?
-  archivedAt      DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@index([tenantId, segmentId, stage])
-  @@index([tenantId, segmentId, boardId, columnId])
-  @@index([tenantId, segmentId, sprintId])
-  @@index([tenantId, segmentId, targetReleaseId])
-  @@index([tenantId, segmentId, impactCategory])
-  @@map("work_items")
-}
-
-enum WorkItemStage    { STRATEGIC_BACKLOG KANBAN_BOARD ARCHIVED }
-enum ItemType         { EPIC STORY TASK BUG SPIKE CHORE }   // confirm against source ItemType
-enum ItemPriority     { LOW MEDIUM HIGH CRITICAL }
-enum ItemStatus       { INACTIVE ACTIVE COMPLETE DONE }      // from source
-enum RiskLevel        { LOW MEDIUM HIGH }
-enum ImpactConfidence { LOW MEDIUM HIGH }
-enum FeatureFlagStatus{ DISABLED ENABLED PERCENTAGE_ROLLOUT USER_TARGETING }
-enum ExperimentStatus { DRAFT RUNNING COMPLETED CANCELLED }
-
-model ItemActivity {              // change log per work item
-  id         String   @id @default(uuid())
-  tenantId   String
-  segmentId  String
-  workItemId String
-  actorId    String?              // userId or agentRunId
-  actorKind  String   @default("USER")  // USER | AGENT | SYSTEM
-  field      String
-  fromValue  Json?
-  toValue    Json?
-  createdAt  DateTime @default(now())
-  @@index([tenantId, segmentId, workItemId, createdAt])
-}
-```
+`task_status_transitions` (`from_status`, `to_status`, `actor_kind` user / agent / system,
+`actor_ref`) is the per-ticket lane history. Kernel `activity_log` carries field edits through
+`recordActivity`. `actor_kind` is decisive: an agent's edit is `actor_kind = 'agent'`, which is
+the spec's `actorKind = AGENT`.
 
 ---
 
-## 5. Product Management entities
+## 5. Product Management entities → platform owners
 
-```prisma
-model ProductIdea {
-  id               String   @id @default(uuid())
-  tenantId         String
-  segmentId        String
-  name             String
-  description      String
-  problemStatement String
-  targetMarket     String?
-  status           ProductIdeaStatus @default(DISCOVERY)  // DISCOVERY|VALIDATION|BUILDING|LAUNCHED|ARCHIVED
-  createdBy        String
-  // Discovery JSON blobs (preserve all)
-  businessDetails      Json?
-  documentSources      Json?
-  gapAnalysis          Json?
-  investmentCategories Json?
-  valueHierarchy       Json?
-  roadmap              Json?            // AI Roadmap output lives here
-  aiInsights           Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  @@index([tenantId, segmentId, status])
-}
-
-model MarketAnalysis {
-  id String @id @default(uuid())
-  tenantId String; segmentId String; productIdeaId String
-  marketSize Json                       // { tam, sam, som }
-  growthRate Float?
-  trends Json; opportunities Json; threats Json
-  aiInsights Json?; sources Json?
-  @@index([tenantId, segmentId, productIdeaId])
-}
-
-model CompetitiveAnalysis {
-  id String @id @default(uuid())
-  tenantId String; segmentId String; productIdeaId String
-  competitorName String; competitorUrl String?
-  strengths Json; weaknesses Json; pricing Json?; features Json?
-  marketPosition String?; aiInsights Json?
-  @@index([tenantId, segmentId, productIdeaId])
-}
-
-model CustomerInsight {
-  id String @id @default(uuid())
-  tenantId String; segmentId String; productIdeaId String
-  insightType CustomerInsightType       // PAIN_POINT|NEED|BEHAVIOR|FEEDBACK|INTERVIEW|SURVEY
-  source String; content String
-  painPoints Json?; needs Json?; willingnessToPay Float?; segment String?
-  aiSummary Json?
-  // [NEW] provenance when ingested from BurnRateOS CRM feedback widget
-  externalRef Json?                      // { source:"burnrateos.feedback", widgetId, eventId }
-  @@index([tenantId, segmentId, productIdeaId])
-  @@index([tenantId, segmentId, insightType])
-}
-
-model MVPScenario {
-  id String @id @default(uuid())
-  tenantId String; segmentId String
-  createdBy String; productIdeaId String?
-  name String; description String?
-  pricingModel String                    // SAAS|FREEMIUM|SUBSCRIPTION_TIERS|TRANSACTIONAL
-  targetRevenue Float; timelineConstraint Int; budgetConstraint Float; teamSize Int
-  startDate DateTime?; endDate DateTime?
-  pricingConfig Json
-  aiInsights Json?
-  status MVPScenarioStatus @default(DRAFT) // DRAFT|ANALYZING|READY|APPROVED|IN_PROGRESS|COMPLETED
-  @@index([tenantId, segmentId, status])
-  @@index([tenantId, segmentId, productIdeaId])
-}
-
-// Validation Lab — result + its imports, AI insights, dashboards, scenarios
-model ValidationResult {
-  id String @id @default(uuid())
-  tenantId String; segmentId String
-  productIdeaId String; mvpScenarioId String?
-  validationType ValidationType          // PROBLEM|SOLUTION|MARKET|PRICING|CHANNEL
-  hypothesis String; method String; methods Json?
-  result ValidationOutcome @default(IN_PROGRESS) // VALIDATED|INVALIDATED|INCONCLUSIVE|IN_PROGRESS
-  metrics Json; learnings String?; nextSteps String?
-  hypothesisVariables Json; resultVariables Json
-  engagementId String?                   // feedback widget / cohort ref (external → BurnRateOS)
-  engagementType String?                 // FEEDBACK_WIDGET | CUSTOMER_COHORT
-  @@index([tenantId, segmentId, productIdeaId])
-  @@index([tenantId, segmentId, validationType])
-}
-model ValidationDataImport { id String @id @default(uuid()) tenantId String segmentId String validationResultId String data String dataType String @default("text") summary String? }
-model ValidationAIInsight  { id String @id @default(uuid()) tenantId String segmentId String validationResultId String dataImportId String? insights Json recommendations Json? risks Json? nextSteps Json? summary String }
-model ValidationDashboard  { id String @id @default(uuid()) tenantId String segmentId String validationResultId String keyMetrics Json insights Json? recommendations Json? improvements Json? changes Json? summary String }
-model ValidationScenario   { id String @id @default(uuid()) tenantId String segmentId String validationResultId String name String description String? assumptions Json? metrics Json? results Json? status String @default("DRAFT") }
-
-// Custom Business-Value Models
-model BusinessValueConfig {
-  id String @id @default(uuid())
-  tenantId String; segmentId String; teamId String
-  valueType BusinessValueType            // REVENUE|CUSTOMER_KPI|BOTH
-  displayMode ValueDisplayMode           // REVENUE|CUSTOMER_KPI|COMBINED
-  revenueSettings Json?; customerKPISettings Json?
-  rewardMultiplier Float @default(1.0)
-  isActive Boolean @default(true)
-  @@index([tenantId, segmentId, teamId])
-  @@index([tenantId, segmentId, isActive])
-}
-
-// Feature ROI Portfolio
-model FeatureROI {
-  id String @id @default(uuid())
-  tenantId String; segmentId String
-  featureId String; featureName String; featureType FeatureType // FEATURE|PAGE|COMPONENT|FLOW|INTEGRATION
-  development Json; maintenance Json; revenue Json; costSavings Json; usage Json; customer Json; calculated Json
-  status ROIStatus                       // TRACKING|COMPLETED|ARCHIVED
-  category String; tags Json?; notes String @default(""); createdBy String
-  @@index([tenantId, segmentId, featureId])
-  @@index([tenantId, segmentId, status])
-}
-model ROITimelineEntry { id String @id @default(uuid()) tenantId String segmentId String featureROIId String date DateTime metrics Json events Json }
-
-// A/B Testing
-model ABTest {
-  id String @id @default(uuid())
-  tenantId String; segmentId String
-  name String; description String?
-  status ABTestStatus @default(DRAFT); type ABTestType
-  objective String?; hypothesis String; successMetrics Json
-  trafficAllocation Int; startDate DateTime; endDate DateTime?
-  confidenceLevel Float? @default(95.0); minimumSampleSize Int?; currentSampleSize Int? @default(0)
-  statisticalSignificance Float?; winner String?; results Json?; insights Json?; recommendations Json?
-  @@index([tenantId, segmentId, status])
-}
-model ABTestVariant { id String @id @default(uuid()) tenantId String segmentId String abTestId String name String isControl Boolean @default(false) config Json metrics Json? }
-model ABTestSegment { id String @id @default(uuid()) tenantId String segmentId String abTestId String name String rules Json }
-```
+| Spec model | Platform owner | Notes |
+|---|---|---|
+| `ProductIdea` | `product_ideas` (Investor domain, serial) | Promotion to a ticket is `product_ideas.promoted_task_id` → `tasks.id` (1160). Discovery material lives on the idea's canvas session (`creation_sessions`) — PRD 20 §2.1: an idea is its conversation plus its files. |
+| `MarketAnalysis`, `CompetitiveAnalysis` | folded into siblings (PRD 20 map): evidence is `research_notes` (discovery), competitors are `ai_competitors` | |
+| `CustomerInsight` | `customer_feedback` (ingested voice of customer, 0071), `customer_interviews` + `research_notes` (discovery) | the spec's `externalRef` is `customer_feedback.external_ref` |
+| `MVPScenario` | `mvp_scenarios` | `/api/product/mvp` |
+| `ValidationResult` | `validation_results` | `/api/product/validation` |
+| `ValidationDataImport`, `ValidationDashboard` | `validation_data_imports`, `validation_dashboards` | |
+| `ValidationAIInsight` | kernel `metric_facts` | derived |
+| `ValidationScenario` | `break_even_scenarios` (the `scenario` root, PRD 20 §3.3) | |
+| `BusinessValueConfig` | `business_value_configs` | `/api/product/business-value` |
+| `FeatureROI`, `ROITimelineEntry` | `feature_roi`, `roi_timeline_entries` | `/api/product/feature-roi` |
+| `ABTest`, `ABTestVariant`, `ABTestSegment` | `ab_tests`, `ab_test_variants`, `ab_test_segments` (Growth) | |
+| RICE feature scoring | `feature_scores` | `/api/agile/feature-scoring` |
+| Roadmap | `roadmap_items` (project- or segment-scoped) | `/api/product/roadmap`; `status → shipped` emits `roadmap.published` |
+| Release planning | `product_releases` | `/api/releases`, `/api/product/release-planning`. BurnRateOS `release_plans` was folded here by 1160. |
+| PRD / spec documents | `specs` (+ `spec_versions`, `spec_audit_records`, `task_specs`) | `/api/specs` |
+| OKRs, initiatives, portfolios | `objectives`, `key_results`, `objective_links`, `initiatives`, `portfolios` | `/api/pmo`. An OKR is never an Epic (`work_items.convert_type` promotes one to the other). |
 
 ---
 
-## 6. Agile Survival entities
+## 6. Agile Survival entities → platform owners
 
-```prisma
-// Planning Poker (realtime)
-model PlanningPokerSession {
-  id String @id @default(uuid())
-  tenantId String; segmentId String; teamId String?
-  creatorId String; facilitatorId String
-  name String; description String?
-  votingSystem String @default("fibonacci")
-  status SessionStatus @default(DRAFT)   // DRAFT|ACTIVE|PAUSED|COMPLETED|ARCHIVED
-  timerOption TimerOption @default(NONE)
-  settings Json
-  timerStart DateTime?; timerEnd DateTime?; startedAt DateTime?; completedAt DateTime?
-  @@index([tenantId, segmentId, status])
-}
-model PlanningPokerSessionParticipant { id String @id @default(uuid()) tenantId String segmentId String sessionId String userId String role ParticipantRole isOnline Boolean @default(false) joinedAt DateTime @default(now()) @@unique([sessionId, userId]) }
-model Story {
-  id String @id @default(uuid())
-  tenantId String; segmentId String; sessionId String
-  title String; description String?; acceptanceCriteria String?
-  externalId String?; externalUrl String?           // can point at a WorkItem
-  status StoryStatus @default(PENDING)               // PENDING|VOTING|REVEALED|ESTIMATED|SKIPPED
-  finalEstimate Float?; order Int
-  revenueImpact Float?; runwayExtensionDays Int?; costEstimate Float?; estimatedROI Float?
-  @@index([tenantId, segmentId, sessionId])
-}
-model Vote { id String @id @default(uuid()) tenantId String segmentId String storyId String userId String value String isRevealed Boolean @default(false) @@unique([storyId, userId]) }
-model SessionDiscussion { id String @id @default(uuid()) tenantId String segmentId String sessionId String storyId String? userId String message String messageType SessionDiscussionType isResolved Boolean @default(false) resolvedBy String? resolvedAt DateTime? }
-model CardDeck { id String @id @default(uuid()) tenantId String segmentId String? teamId String? name String description String? cards Json isDefault Boolean @default(false) isCustom Boolean @default(true) }
-
-// Retrospectives
-model Retrospective {
-  id String @id @default(uuid())
-  tenantId String; segmentId String; teamId String?
-  creatorId String
-  name String; description String?
-  status RetrospectiveStatus @default(DRAFT)         // DRAFT|ACTIVE|COMPLETED
-  template RetrospectiveTemplate @default(MAD_SAD_GLAD) // MAD_SAD_GLAD|FOUR_LS|START_STOP_CONTINUE|WHAT_WENT_WELL|CUSTOM
-  settings Json
-  @@index([tenantId, segmentId, status])
-}
-model RetrospectiveParticipant { id String @id @default(uuid()) tenantId String segmentId String retrospectiveId String userId String role ParticipantRole isOnline Boolean @default(false) @@unique([retrospectiveId, userId]) }
-model RetrospectiveItem { id String @id @default(uuid()) tenantId String segmentId String retrospectiveId String category String content String authorId String votes Int @default(0) }
-
-// Unified Action Items (from retros, meetings, syncs, milestones, agents)
-model ActionItem {
-  id String @id @default(uuid())
-  tenantId String; segmentId String; teamId String?
-  title String; description String?
-  status ActionItemStatus @default(TO_DO)            // TO_DO|PENDING|IN_PROGRESS|ON_HOLD_BLOCKED|COMPLETED|OVERDUE
-  priority ActionItemPriority @default(MEDIUM)        // LOW|MEDIUM|HIGH|CRITICAL
-  assigneeId String?; assigneeName String?; dueDate DateTime?; completedAt DateTime?
-  createdBy String
-  sourceType String                                   // RETROSPECTIVE|MEETING|SYNC|MILESTONE|MANUAL|AGENT  ([NEW] AGENT)
-  retrospectiveId String?
-  // Cross-domain link: when converted to a backlog item, points at a WorkItem
-  linkedEntityType String?                            // WORK_ITEM|GOAL|INITIATIVE
-  linkedEntityId String?
-  linkedRetroIds Json?
-  @@index([tenantId, segmentId, status])
-}
-
-// Kanban
-model KanbanBoard {
-  id String @id @default(uuid())
-  tenantId String; segmentId String; teamId String?
-  title String; description String?
-  agileProcessType AgileProcessType @default(KANBAN)  // KANBAN|SCRUM
-  isActive Boolean @default(true)
-  startDate DateTime?; endDate DateTime?
-  mvpScenarioId String?                               // budget-to-actuals link to MVPScenario
-  estimatedBudget Float?; actualCost Float?
-  @@index([tenantId, segmentId, isActive])
-}
-model KanbanColumn { id String @id @default(uuid()) tenantId String segmentId String boardId String teamId String? title String description String? position Int status ItemStatus color String? wipLimit Int? }
-
-// Sprints, deliveries, forecasting, velocity
-model Sprint {
-  id String @id @default(uuid())
-  tenantId String; segmentId String; teamId String
-  name String; goal String?
-  startDate DateTime; endDate DateTime; capacity Int
-  status SprintStatus @default(PLANNING)              // PLANNING|ACTIVE|COMPLETED|ARCHIVED
-  runwayBudget Float?; actualBurn Float?; projectedBurn Float?
-  @@index([tenantId, segmentId, status])
-}
-model Delivery { id String @id @default(uuid()) tenantId String segmentId String boardId String name String goal String? startDate DateTime endDate DateTime capacity Int status SprintStatus @default(PLANNING) }
-model TeamVelocity { id String @id @default(uuid()) tenantId String segmentId String teamId String sprintId String? period String periodStart DateTime periodEnd DateTime completedPoints Int committedPoints Int velocityScore Float rollingAverage Float? trend String confidence Float @default(0.8) @@index([tenantId, segmentId, teamId, periodStart]) }
-model SprintForecast { id String @id @default(uuid()) tenantId String segmentId String sprintId String teamId String forecastedCompletion DateTime confidenceInterval Json predictedVelocity Float riskFactors Json assumptions Json }
-model VelocityHistory { id String @id @default(uuid()) tenantId String segmentId String teamId String recordedAt DateTime velocity Float sprintId String? metadata Json? }
-
-// Capacity & risk
-model CapacityPlanning { id String @id @default(uuid()) tenantId String segmentId String teamId String sprintId String? planningPeriod String totalCapacity Float allocatedCapacity Float availableCapacity Float utilizationRate Float teamSize Int averageVelocity Float }
-model TeamCapacity { id String @id @default(uuid()) tenantId String segmentId String teamId String userId String role String skillSet Json availableHours Float allocatedHours Float utilizationRate Float costPerHour Float effectiveFrom DateTime effectiveTo DateTime? }
-model RiskAssessment { id String @id @default(uuid()) tenantId String segmentId String teamId String sprintId String? riskType String severity String probability Float impact Float riskScore Float description String mitigation String? status String identifiedBy String identifiedAt DateTime @default(now()) resolvedAt DateTime? }
-model BottleneckAnalysis { id String @id @default(uuid()) tenantId String segmentId String teamId String bottleneckType String resourceId String? severity String impactedItems Json throughputImpact Float? description String recommendations Json status String identifiedAt DateTime @default(now()) resolvedAt DateTime? }
-model CapacityHeatmap { id String @id @default(uuid()) tenantId String segmentId String teamId String periodStart DateTime periodEnd DateTime heatmapData Json aggregations Json bottlenecks Json recommendations Json }
-
-// Cost / runway integration (financial seam to BurnRateOS BI)
-model TaskEffortEstimate { id String @id @default(uuid()) tenantId String segmentId String workItemId String @unique estimatedHours Float actualHours Float? hourlyRate Float totalCost Float overhead Float @default(0) confidence Float @default(0.8) estimatedBy String notes String? }
-model CostCalculation { id String @id @default(uuid()) tenantId String segmentId String workItemId String? sprintId String? calculationType String laborCost Float overheadCost Float toolingCost Float @default(0) infrastructureCost Float @default(0) totalCost Float runwayImpactDays Int? calculatedAt DateTime @default(now()) calculatedBy String metadata Json? }
-model SprintFinancialImpact { id String @id @default(uuid()) tenantId String segmentId String sprintId String @unique plannedBudget Float actualCost Float? projectedCost Float laborCost Float overheadCost Float variance Float? runwayImpact Float runwayDaysConsumed Int? revenueImpact Float? roi Float? }
-// Records the burn-rate figure pulled from BurnRateOS BI for cost-per-point.
-model RunwayForecastLink { id String @id @default(uuid()) tenantId String segmentId String sourceType String sourceId String externalBurnRateMetricRef Json? impactAmount Float impactType String effectiveDate DateTime notes String? @@index([tenantId, segmentId, sourceType, sourceId]) }
-
-enum SessionStatus { DRAFT ACTIVE PAUSED COMPLETED ARCHIVED }
-enum StoryStatus { PENDING VOTING REVEALED ESTIMATED SKIPPED }
-enum RetrospectiveStatus { DRAFT ACTIVE COMPLETED }
-enum RetrospectiveTemplate { MAD_SAD_GLAD FOUR_LS START_STOP_CONTINUE WHAT_WENT_WELL CUSTOM }
-enum ParticipantRole { FACILITATOR VOTER OBSERVER }
-enum TimerOption { NONE THIRTY_SECONDS ONE_MINUTE TWO_MINUTES THREE_MINUTES FOUR_MINUTES FIVE_MINUTES }
-enum SessionDiscussionType { COMMENT QUESTION CLARIFICATION DECISION }
-enum SprintStatus { PLANNING ACTIVE COMPLETED ARCHIVED }
-enum AgileProcessType { KANBAN SCRUM }
-enum ActionItemStatus { TO_DO PENDING IN_PROGRESS ON_HOLD_BLOCKED COMPLETED OVERDUE }
-enum ActionItemPriority { LOW MEDIUM HIGH CRITICAL }
-```
+| Spec model | Platform owner | Notes |
+|---|---|---|
+| `KanbanBoard` | `boards` (one per project) | BurnRateOS `kanban_boards` merged here. A board budget (`estimatedBudget`, `actualCost`) is `sprint_financial_impact` / Finance `budgets`, not board columns. |
+| `KanbanColumn` | `swimlanes` (`key`, `name`, `position`, `is_terminal`, `is_parking`, `gate`) | **1160 folded `kanban_columns` in and dropped it.** The column's `wipLimit` and `color` became `swimlanes.wip_limit` / `swimlanes.color_token`; `auto_run_enabled` is the lane `gate` (`auto` / `human`). |
+| `Sprint` | `sprints` (uuid, optional `project_id`) | `/api/agile/sprints`; `status → completed` emits `sprint.completed` |
+| `Delivery` | `sprints` with `project_id` set | a board-scoped cadence is a project-scoped sprint, not a second table |
+| `PlanningPokerSession`, `Story`, `Vote` | `poker_sessions`, `poker_stories`, `poker_votes` | `/api/agile/poker`. A story's final estimate lands on the ticket as `story_points` / a `task_effort_estimates` row. |
+| `PlanningPokerSessionParticipant`, `RetrospectiveParticipant` | `ceremony_participants` / kernel `memberships` | |
+| `SessionDiscussion`, `CardDeck` | `session_discussions`, `card_decks` | |
+| `Retrospective`, `RetrospectiveItem` | `retrospectives`, `retro_items` | `/api/agile/retros` |
+| `ActionItem` | `action_items` | Promotion is `action_items.promoted_task_id` → `tasks.id` (1160); `/api/delivery-flow/action-items` |
+| `TeamVelocity`, `VelocityHistory` | `team_velocity` + velocity derived from `tasks.story_points` (`/api/agile/velocity/derived`) | |
+| `SprintForecast` | derived (`computeVelocityInsights`), not stored | |
+| `CapacityPlanning` | `capacity_planning` | `/api/agile/capacity` |
+| `TeamCapacity` | `member_profiles` (WIP caps) + `user_availability` + `capacity_heatmaps` | |
+| `RiskAssessment` | kernel `question_sets` (PRD 20 map) | |
+| `BottleneckAnalysis` | `bottleneck_analysis` (`project_id` since 1160) | |
+| `CapacityHeatmap` | `capacity_heatmaps` | |
+| `TaskEffortEstimate` | `task_effort_estimates` (`task_id` since 1160) | a 1:N history rather than the spec's 1:1; `/api/delivery-flow/estimates` |
+| `CostCalculation` | `cost_calculations` (Finance) | `/api/agile/cost` |
+| `SprintFinancialImpact` | `sprint_financial_impact` (`sprint_id` since 1160; the project is the sprint's own) | `/api/delivery-flow/sprints/:sprintId/cost` |
+| `RunwayForecastLink` | no table: burn / runway is read from local `metric_facts` (PRD 19 B1) | |
 
 ---
 
-## 7. [NEW] Agentic software-development entities
+## 7. Agentic software-development entities → platform owners
 
-These power decision 2 (full autonomous dev agents). Full PRD in doc 04.
+The spec's agentic layer duplicated the existing stack. It maps onto `executions` / `workflows` /
+`source_control_integrations`, all of which already carry `segment_id` (0056). The full PRD is
+doc 04.
 
-```prisma
-// A connected source repository (GitHub/GitLab) for a Segment.
-model Repo {
-  id            String   @id @default(uuid())
-  tenantId      String
-  segmentId     String
-  provider      RepoProvider        // GITHUB | GITLAB | BITBUCKET
-  externalId    String              // provider repo id
-  fullName      String              // "org/repo"
-  defaultBranch String   @default("main")
-  installationRef Json              // app-installation / token reference (secrets stored in vault, not here)
-  languages     Json?               // detected stack
-  status        RepoStatus @default(CONNECTED)
-  connectedBy   String
-  @@unique([tenantId, segmentId, provider, externalId])
-  @@index([tenantId, segmentId, status])
-}
-enum RepoProvider { GITHUB GITLAB BITBUCKET }
-enum RepoStatus   { CONNECTED DISCONNECTED ERROR }
-
-// A single autonomous agent execution against a unit of work.
-model AgentRun {
-  id           String   @id @default(uuid())
-  tenantId     String
-  segmentId    String
-  kind         AgentKind            // IMPLEMENT | REVIEW | REFACTOR | TEST | TRIAGE | RESEARCH | ESTIMATE
-  status       AgentRunStatus @default(QUEUED) // QUEUED|RUNNING|AWAITING_REVIEW|SUCCEEDED|FAILED|CANCELLED
-  // What it acts on (any one)
-  workItemId   String?
-  actionItemId String?
-  sprintId     String?
-  repoId       String?
-  // Inputs / outputs
-  goal         String               // natural-language objective handed to the agent
-  inputContext Json                 // resolved context bundle (item, repo files, prior runs)
-  plan         Json?                // agent's step plan
-  branch       String?
-  prUrl        String?
-  diffSummary  Json?                // files changed, +/- lines
-  result       Json?                // structured outcome
-  // Gateway accounting (reuses api.builderforce.ai)
-  useCase      String               // AI_USE_CASES key, e.g. "dev.implement"
-  tokenUsage   Json?
-  triggeredBy  String?              // userId or "ORCHESTRATOR" or "WEBHOOK"
-  startedAt    DateTime?
-  finishedAt   DateTime?
-  createdAt    DateTime @default(now())
-  @@index([tenantId, segmentId, status])
-  @@index([tenantId, segmentId, workItemId])
-}
-enum AgentKind { IMPLEMENT REVIEW REFACTOR TEST TRIAGE RESEARCH ESTIMATE }
-enum AgentRunStatus { QUEUED RUNNING AWAITING_REVIEW SUCCEEDED FAILED CANCELLED }
-
-// Ordered steps inside a run (for live progress + audit).
-model AgentRunStep {
-  id         String   @id @default(uuid())
-  tenantId   String
-  segmentId  String
-  agentRunId String
-  ordinal    Int
-  tool       String              // "read_file" | "edit" | "run_tests" | "open_pr" | "llm"
-  input      Json?
-  output     Json?
-  status     String   @default("done")
-  tokenUsage Json?
-  createdAt  DateTime @default(now())
-  @@index([tenantId, segmentId, agentRunId, ordinal])
-}
-
-// Orchestrator: fans a sprint or epic out into many AgentRuns.
-model AgentOrchestration {
-  id         String   @id @default(uuid())
-  tenantId   String
-  segmentId  String
-  scopeType  String              // SPRINT | EPIC | BACKLOG_BATCH
-  scopeId    String
-  status     String   @default("RUNNING")
-  policy     Json                // concurrency, auto-merge rules, review gates, budget cap
-  runIds     Json                // child AgentRun ids
-  createdBy  String
-  @@index([tenantId, segmentId, scopeType, scopeId])
-}
-
-// Code-review findings produced by REVIEW agents on a PR / branch.
-model CodeReviewFinding {
-  id         String   @id @default(uuid())
-  tenantId   String
-  segmentId  String
-  agentRunId String
-  repoId     String
-  prUrl      String?
-  filePath   String?
-  line       Int?
-  severity   String              // INFO|MINOR|MAJOR|BLOCKER
-  category   String              // BUG|SECURITY|PERF|STYLE|TEST
-  message    String
-  suggestion String?
-  resolved   Boolean  @default(false)
-  @@index([tenantId, segmentId, agentRunId])
-}
-```
+| Spec model | Platform owner | Notes |
+|---|---|---|
+| `Repo` | `source_control_integrations` (provider connection, serial) + `project_repositories` (project ↔ repo, uuid) + `task_repo_bindings` (ticket ↔ repos) | Secrets never sit on the row: `integration_credentials` / kernel `credentials`. |
+| `AgentRun` | `executions` (serial, `task_id NOT NULL`, `segment_id`, `status` pending / submitted / running / paused / completed / failed / cancelled) | The run's *kind* is not a column: it is the dispatching lane role and agent (`submitted_by`, `cloud_agent_ref`). |
+| `AgentRunStep` | `execution_messages` + `tool_runs` / `tool_audit_events` + `telemetry_spans` | |
+| `AgentOrchestration` | `workflows` + `workflow_tasks` (uuid, `segment_id`, `spec_id`) | Policy is the board's `max_concurrent_tickets`, the lane `gate`s, `execution_limits` and the autonomy circuit breaker. |
+| `CodeReviewFinding` | `task_reviews` (append-only Validator verdicts) + `qa_findings` (`task_id`) + `vulnerability_findings` | A failed review mints a `gap` ticket. |
+| token accounting (`useCase`, `tokenUsage`) | `llm_usage_log` (per call, per tenant / segment) | |
 
 ---
 
@@ -663,24 +295,23 @@ Segment**.
 
 ---
 
-## 9. Entity-relationship summary
+## 9. Entity-relationship summary (platform tables)
 
 ```
-Tenant 1──* Segment 1──* { every business entity }
+tenants 1──* segments ;  every business row carries tenant_id (integer) + segment_id (uuid)
 
-ProductIdea 1──* MarketAnalysis | CompetitiveAnalysis | CustomerInsight | ValidationResult | MVPScenario
-MVPScenario 1──* ValidationResult ;  MVPScenario 1──* KanbanBoard (mvpScenarioId)
-ValidationResult 1──* ValidationDataImport | ValidationAIInsight | ValidationDashboard | ValidationScenario
+projects 1──1 boards 1──* swimlanes
+projects 1──* tasks ──parent_task_id──► tasks          (epic → task → task; task_type is the kind)
+tasks ──swimlane_id──► swimlanes                         (derived from tasks.status)
+tasks ──sprint_id──► sprints ;  tasks ──release_id──► product_releases ;  tasks ──initiative_id──► initiatives
+tasks *──* specs (task_specs) ;  tasks 1──* task_dependencies ;  tasks 1──* task_status_transitions
+tasks 1──* task_effort_estimates | task_time_entries      (task_id, since 1160)
+objectives 1──* key_results ;  objectives 1──* objective_links ──task_id──► tasks
+action_items ──promoted_task_id──► tasks ;  product_ideas ──promoted_task_id──► tasks
+sprints 1──1 sprint_financial_impact                      (sprint_id, since 1160)
+poker_sessions 1──* poker_stories 1──* poker_votes ;  retrospectives 1──* retro_items
 
-WorkItem ──parentId──► WorkItem (Epic→Story→Task)
-WorkItem ──columnId──► KanbanColumn ──boardId──► KanbanBoard
-WorkItem ──sprintId──► Sprint ;  WorkItem ──deliveryId──► Delivery
-WorkItem 1──1 TaskEffortEstimate ;  WorkItem 1──* ItemActivity
-
-PlanningPokerSession 1──* Story 1──* Vote ;  Session 1──* SessionDiscussion | Participant
-Retrospective 1──* RetrospectiveItem | RetrospectiveParticipant | ActionItem
-ActionItem ──linkedEntityId──► WorkItem (when promoted to backlog)
-
-[NEW] AgentRun ──{workItemId|actionItemId|sprintId|repoId} ;  AgentRun 1──* AgentRunStep | CodeReviewFinding
-AgentOrchestration 1──* AgentRun ;  Repo 1──* AgentRun
+tasks 1──* executions 1──* execution_messages ;  workflows 1──* workflow_tasks
+source_control_integrations ◄── projects 1──* project_repositories ;  tasks *──* project_repositories (task_repo_bindings)
+tasks 1──* task_reviews | qa_findings
 ```

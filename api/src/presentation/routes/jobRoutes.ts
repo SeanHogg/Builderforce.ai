@@ -1490,10 +1490,10 @@ export function createNotificationRoutes(): Hono<HonoEnv> {
   router.post('/read', webAuthMiddleware, async (c) => {
     const db = requestDb(c);
     const userId = c.get('userId') as string;
-    let ids: number[] | null = null;
-    try { const b = await c.req.json<{ ids?: number[] }>(); ids = Array.isArray(b.ids) ? b.ids.map(Number).filter(Number.isFinite) : null; } catch (error) { /* mark all */ 
-      reportCaughtError(error, { source: "presentation/routes/jobRoutes.ts", operation: "createNotificationRoutes" });
-    }
+    // No body, or no `ids`, marks everything read. A body that IS sent is validated,
+    // so a malformed `ids` is a 400 rather than silently marking the whole feed read.
+    const b = await parseOptionalBody(c, NotificationReadBody);
+    const ids = b.ids ? b.ids.map(Number).filter(Number.isFinite) : null;
     if (ids && ids.length > 0) {
       await db
         .update(freelancerNotifications)

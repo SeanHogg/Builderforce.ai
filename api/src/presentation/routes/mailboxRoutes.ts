@@ -54,7 +54,7 @@ import {
   runMailboxAutomationSweep,
   sendMailboxAutomationExecution,
   updateMailboxAutomationRule,
-  type MailboxAutomationRuleInput,
+  type MailboxResponseMode,
 } from '../../application/mailbox/mailboxAutomationService';
 import {
   ensureMailboxWatch,
@@ -65,6 +65,47 @@ import {
 } from '../../application/mailbox/mailboxWatch';
 import { signalPendingWork } from '../../application/runtime/cronWorkSignal';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { parseOptionalBody, z } from './requestBody';
+
+/**
+ * A provider push notification. Deliberately NOT refused on shape: Pub/Sub and
+ * Graph retry any non-2xx for days, and `handleGmailPush` / `handleGraphPush`
+ * already read the payload defensively as `unknown` — they own its rules.
+ */
+const ProviderPushBody = z.unknown();
+
+/** The sending opt-in. Absent → the handler's own "must be a boolean" answer. */
+const MailboxSendingBody = z.object({ allowSending: z.boolean().optional() });
+
+/** Mark read / unread. Absent → the handler's own "must be a boolean" answer. */
+const MessageReadBody = z.object({ unread: z.boolean().optional() });
+
+/** Composer send. Blank or absent fields fall through to the handler's "required" answer. */
+const MailboxSendBody = z.object({
+  to: z.string().nullish(),
+  subject: z.string().nullish(),
+  html: z.string().nullish(),
+  replyTo: z.string().nullish(),
+});
+
+/**
+ * Every field `MailboxAutomationRuleInput` accepts — the body is handed to the
+ * service whole. `name` and `responseMode` stay loose so the handler's own
+ * "name is required" / "Invalid response mode." answers still win; the service
+ * `.trim()`s the free-text fields on update, so those refuse `null`.
+ */
+const MailboxRuleBody = z.object({
+  name: z.string().optional(),
+  enabled: z.boolean().optional(),
+  fromContains: z.string().optional(),
+  subjectContains: z.string().optional(),
+  agentRef: z.string().nullish(),
+  responseMode: z.string().optional(),
+  instructions: z.string().optional(),
+});
+
+const isResponseMode = (value: string): value is MailboxResponseMode =>
+  (MAILBOX_RESPONSE_MODES as readonly string[]).includes(value);
 
 /** Where the connect flow sends the browser back to when it is not told. */
 const DEFAULT_RETURN_TO = '/growth';

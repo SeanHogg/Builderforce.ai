@@ -8,6 +8,7 @@ import {
 } from "./control-ui-assets.js";
 import { detectPackageManager as detectPackageManagerImpl } from "./detect-package-manager.js";
 import { readPackageName, readPackageVersion } from "./package-json.js";
+import { CORE_PACKAGE_NAME, isCorePackageName, stripPackagePrefix } from "./package-names.js";
 import { trimLogTail } from "./restart-sentinel.js";
 import {
   channelToNpmTag,
@@ -82,8 +83,6 @@ const DEFAULT_TIMEOUT_MS = 20 * 60_000;
 const MAX_LOG_CHARS = 8000;
 const PREFLIGHT_MAX_COMMITS = 10;
 const START_DIRS = ["cwd", "argv1", "process"];
-const DEFAULT_PACKAGE_NAME = "builderforce";
-const CORE_PACKAGE_NAMES = new Set([DEFAULT_PACKAGE_NAME]);
 
 function normalizeDir(value?: string | null) {
   if (!value) {
@@ -218,7 +217,7 @@ async function findPackageRoot(candidates: string[]) {
         const raw = await fs.readFile(pkgPath, "utf-8");
         const parsed = JSON.parse(raw) as { name?: string };
         const name = parsed?.name?.trim();
-        if (name && CORE_PACKAGE_NAMES.has(name)) {
+        if (isCorePackageName(name)) {
           return current;
         }
       } catch {
@@ -315,10 +314,7 @@ function normalizeTag(tag?: string) {
   if (!trimmed) {
     return "latest";
   }
-  if (trimmed.startsWith(`${DEFAULT_PACKAGE_NAME}@`)) {
-    return trimmed.slice(`${DEFAULT_PACKAGE_NAME}@`.length);
-  }
-  return trimmed;
+  return stripPackagePrefix(trimmed);
 }
 
 export async function runGatewayUpdate(opts: UpdateRunnerOptions = {}): Promise<UpdateRunResult> {
@@ -860,7 +856,7 @@ export async function runGatewayUpdate(opts: UpdateRunnerOptions = {}): Promise<
   const beforeVersion = await readPackageVersion(pkgRoot);
   const globalManager = await detectGlobalInstallManagerForRoot(runCommand, pkgRoot, timeoutMs);
   if (globalManager) {
-    const packageName = (await readPackageName(pkgRoot)) ?? DEFAULT_PACKAGE_NAME;
+    const packageName = (await readPackageName(pkgRoot)) ?? CORE_PACKAGE_NAME;
     await cleanupGlobalRenameDirs({
       globalRoot: path.dirname(pkgRoot),
       packageName,

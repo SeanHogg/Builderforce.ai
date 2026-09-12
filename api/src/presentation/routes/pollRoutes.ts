@@ -29,6 +29,13 @@ import {
   setPollState,
   tallyPoll,
 } from '../../application/collection/pollFacilitation';
+import { parseBody, z, zJsonObject } from './requestBody';
+
+/** `answer` is the service's to judge against the poll's format, so it stays untyped. */
+const VoteBody = z.object({
+  submissionId: z.unknown().optional(),
+  answer: z.unknown().optional(),
+});
 
 /** One translation of a refusal into a status, shared by every handler — so a new
  *  endpoint cannot invent a different code for the same rejection. */
@@ -50,7 +57,7 @@ export function createPollRoutes(db: Db): Hono<HonoEnv> {
   /** Publish a poll and OPEN it — one press, because the next thing that happens is a
    *  room being asked to answer. */
   router.post('/publish', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const result = await publishPoll(db, tenant(c), {
       ...(typeof body.questionSetId === 'string' ? { questionSetId: body.questionSetId } : {}),
       title: String(body.title ?? ''),
@@ -77,7 +84,7 @@ export function createPollRoutes(db: Db): Hono<HonoEnv> {
    * instrument honest, and a control that could only do both at once would not allow it.
    */
   router.post('/:id/state', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const state = await setPollState(db, tenant(c), c.req.param('id'), {
       ...(body.status === 'open' || body.status === 'closed' ? { status: body.status } : {}),
       ...(typeof body.showResultsLive === 'boolean' ? { showResultsLive: body.showResultsLive } : {}),
@@ -134,7 +141,7 @@ export function createPublicPollRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:slug/vote', (c) => handle(async () => {
     const resolved = await resolvePublicPoll(db, c.req.param('slug'));
     if (!resolved) return Response.json({ error: 'No poll at that address.' }, { status: 404 });
-    const body = await c.req.json<{ submissionId?: unknown; answer?: unknown }>();
+    const body = await parseBody(c, VoteBody);
     await castPollVote(db, resolved, {
       submissionId: String(body.submissionId ?? ''),
       answer: body.answer,

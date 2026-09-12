@@ -5,6 +5,11 @@ import path from "node:path";
 import { resolveStateDir } from "../../config/paths.js";
 import { resolveBuilderForceAgentsPackageRoot } from "../../infra/builderforce-root.js";
 import { readPackageName, readPackageVersion } from "../../infra/package-json.js";
+import {
+  CORE_PACKAGE_NAME,
+  isCorePackageName,
+  stripPackagePrefix,
+} from "../../infra/package-names.js";
 import { trimLogTail } from "../../infra/restart-sentinel.js";
 import { parseSemver } from "../../infra/runtime-guard.js";
 import { fetchNpmTagVersion } from "../../infra/update-check.js";
@@ -52,8 +57,7 @@ export function parseTimeoutMsOrExit(timeout?: string): number | undefined | nul
 const BUILDERFORCE_AGENTS_REPO_URL = "https://github.com/SeanHogg/Builderforce.ai.git";
 const MAX_LOG_CHARS = 8000;
 
-export const DEFAULT_PACKAGE_NAME = "builderforce";
-const CORE_PACKAGE_NAMES = new Set([DEFAULT_PACKAGE_NAME]);
+export const DEFAULT_PACKAGE_NAME = CORE_PACKAGE_NAME;
 
 export function normalizeTag(value?: string | null): string | null {
   if (!value) {
@@ -63,10 +67,7 @@ export function normalizeTag(value?: string | null): string | null {
   if (!trimmed) {
     return null;
   }
-  if (trimmed.startsWith(`${DEFAULT_PACKAGE_NAME}@`)) {
-    return trimmed.slice(`${DEFAULT_PACKAGE_NAME}@`.length);
-  }
-  return trimmed;
+  return stripPackagePrefix(trimmed);
 }
 
 export function normalizeVersionTag(tag: string): string | null {
@@ -102,8 +103,7 @@ export async function isGitCheckout(root: string): Promise<boolean> {
 }
 
 export async function isCorePackage(root: string): Promise<boolean> {
-  const name = await readPackageName(root);
-  return Boolean(name && CORE_PACKAGE_NAMES.has(name));
+  return isCorePackageName(await readPackageName(root));
 }
 
 export async function isEmptyDir(targetPath: string): Promise<boolean> {

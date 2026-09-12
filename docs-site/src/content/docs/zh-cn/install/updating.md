@@ -33,7 +33,7 @@ curl -fsSL https://builderforce.ai/install.sh | bash
   curl -fsSL https://builderforce.ai/install.sh | bash -s -- --install-method git --no-onboard
   ```
   安装程序**仅**在仓库干净时才会执行 `git pull --rebase`。
-- 对于**全局安装**，脚本底层使用 `npm install -g builderforce@latest`。
+- 对于**全局安装**，脚本底层使用 `npm install -g @seanhogg/builderforce-agents@latest`。
 - 旧版说明：`builderforce` 仍可作为兼容性垫片使用。
 
 ## 更新之前
@@ -50,11 +50,11 @@ curl -fsSL https://builderforce.ai/install.sh | bash
 全局安装（选择一个）：
 
 ```bash
-npm i -g builderforce@latest
+npm i -g @seanhogg/builderforce-agents@latest
 ```
 
 ```bash
-pnpm add -g builderforce@latest
+pnpm add -g @seanhogg/builderforce-agents@latest
 ```
 
 我们**不**推荐将 Bun 用于 Gateway 网关运行时（WhatsApp/Telegram 有 bug）。
@@ -186,14 +186,14 @@ builderforce logs --follow
 安装已知良好的版本（将 `<version>` 替换为最后可用的版本）：
 
 ```bash
-npm i -g builderforce@<version>
+npm i -g @seanhogg/builderforce-agents@<version>
 ```
 
 ```bash
-pnpm add -g builderforce@<version>
+pnpm add -g @seanhogg/builderforce-agents@<version>
 ```
 
-提示：要查看当前发布的版本，运行 `npm view builderforce version`。
+提示：要查看当前发布的版本，运行 `npm view @seanhogg/builderforce-agents version`。
 
 然后重启 + 重新运行 doctor：
 

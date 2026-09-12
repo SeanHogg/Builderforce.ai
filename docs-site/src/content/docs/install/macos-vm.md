@@ -137,7 +137,7 @@ Replace `youruser` with the account you created, and the IP with your VM's IP.
 Inside the VM:
 
 ```bash
-npm install -g builderforce@latest
+npm install -g @seanhogg/builderforce-agents@latest
 builderforce onboard --install-daemon
 ```
 

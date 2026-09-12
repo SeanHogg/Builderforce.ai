@@ -628,7 +628,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Install BuilderForce Agents
-        run: npm install -g builderforce
+        run: npm install -g @seanhogg/builderforce-agents
       - name: Run Review Workflow
         run: |
           builderforce init

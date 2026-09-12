@@ -46,7 +46,7 @@ import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveActorFromContext } from '../../application/activity/activityLog';
-import { parseBody, z, zNonEmptyString } from './requestBody';
+import { parseBody, z, zJsonObject, zNonEmptyString } from './requestBody';
 import {
   ContactProfileError,
   addEducation,
@@ -95,6 +95,18 @@ import {
 const EnrichBody = z.object({
   email: zNonEmptyString,
   provider: zNonEmptyString.optional(),
+});
+
+/** Every other body here is read field by field through `str`/`num`/`when` (see
+ *  below), so `zJsonObject` is their schema. These two carry sub-objects the
+ *  service consumes AS objects — `criteria` is `Object.keys`-ed, `weightings` and
+ *  `attributes` are indexed per criterion — so those are typed, not cast. */
+const IcpBody = z.looseObject({
+  criteria: zJsonObject.nullish(),
+  weightings: z.record(z.string(), z.number()).nullish(),
+});
+const ProspectBody = z.looseObject({
+  attributes: zJsonObject.nullish(),
 });
 
 const handle = async (run: () => Promise<Response>): Promise<Response> => {
@@ -173,7 +185,7 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
     Response.json({ providers: await enrichmentSavings(db, tenant(c)) })));
 
   router.post('/contacts/:ref/experience', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     return Response.json(await setExperience(db, tenant(c), c.req.param('ref'), {
       company: str(body.company) ?? null,
       title: str(body.title) ?? null,
@@ -185,7 +197,7 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.post('/contacts/:ref/education', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     return Response.json(await addEducation(db, tenant(c), c.req.param('ref'), {
       institution: str(body.institution) ?? null,
       degree: str(body.degree) ?? null,
@@ -196,7 +208,7 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.post('/contacts/:ref/compensation', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const observedAt = when(body.observedAt);
     return Response.json(await recordCompensation(db, tenant(c), c.req.param('ref'), {
       base: num(body.base) ?? null,
@@ -218,7 +230,7 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
     Response.json({ searches: await searchesFor(db, tenant(c), c.req.query('ownerRef') ?? me(c)) })));
 
   router.post('/searches', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const savedSearchId = num(body.savedSearchId);
     if (savedSearchId === undefined) throw new RevenueIntelError('savedSearchId is required', 400);
     return Response.json(await claimSearch(db, tenant(c), savedSearchId, str(body.ownerRef) ?? me(c)), { status: 201 });
@@ -232,12 +244,12 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
   router.get('/icps', (c) => handle(async () => Response.json({ icps: await listIcps(db, tenant(c)) })));
 
   router.post('/icps', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, IcpBody);
     return Response.json(await createIcp(db, tenant(c), {
       name: String(body.name ?? ''),
       description: str(body.description) ?? null,
-      criteria: (body.criteria ?? {}) as Record<string, unknown>,
-      weightings: (body.weightings ?? null) as Record<string, number> | null,
+      criteria: body.criteria ?? {},
+      weightings: body.weightings ?? null,
     }), { status: 201 });
   }));
 
@@ -255,20 +267,20 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.post('/prospects', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, ProspectBody);
     const icpId = num(body.icpId);
     if (icpId === undefined) throw new RevenueIntelError('icpId is required', 400);
     return Response.json(await scoreProspect(db, tenant(c), {
       icpId,
       contactRef: str(body.contactRef) ?? null,
       companyRef: str(body.companyRef) ?? null,
-      attributes: (body.attributes ?? {}) as Record<string, unknown>,
+      attributes: body.attributes ?? {},
       ownerRef: str(body.ownerRef) ?? me(c),
     }), { status: 201 });
   }));
 
   router.patch('/prospects/:id', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     return Response.json(await advanceProspect(
       db, c.env as Env, tenant(c), await who(c),
       rowId(c.req.param('id')), String(body.status ?? '') as ProspectStatus,
@@ -281,7 +293,7 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
     Response.json({ suspects: await suspectedDuplicates(db, tenant(c)) })));
 
   router.post('/identities', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     return Response.json(await resolveIdentity(db, tenant(c), {
       entityKind: String(body.entityKind ?? '') as EntityKind,
       canonicalRef: String(body.canonicalRef ?? ''),
@@ -314,7 +326,7 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.post('/deal-flow', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     return Response.json(await recordDealFlow(db, c.env as Env, tenant(c), await who(c), {
       source: String(body.source ?? ''),
       companyName: str(body.companyName) ?? null,
@@ -327,7 +339,7 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.patch('/deal-flow/:id', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     return Response.json(await triageDealFlow(
       db, c.env as Env, tenant(c), await who(c),
       rowId(c.req.param('id')), String(body.status ?? '') as DealFlowStatus,

@@ -69,15 +69,15 @@ When the operator says “release”, immediately do this preflight (no extra qu
 - [ ] Confirm git status is clean; commit and push as needed.
 - [ ] `npm login` (verify 2FA) if needed.
 - [ ] `npm publish --access public` (use `--tag beta` for pre-releases).
-- [ ] Verify the registry: `npm view builderforce version`, `npm view builderforce dist-tags`, and `npx -y builderforce@X.Y.Z --version` (or `--help`).
+- [ ] Verify the registry: `npm view @seanhogg/builderforce-agents version`, `npm view @seanhogg/builderforce-agents dist-tags`, and `npx -y @seanhogg/builderforce-agents@X.Y.Z --version` (or `--help`).
 
 ### Troubleshooting (notes from 2.0.0-beta2 release)
 
 - **npm pack/publish hangs or produces huge tarball**: the macOS app bundle in `dist/BuilderForce Agents.app` (and release zips) get swept into the package. Fix by whitelisting publish contents via `package.json` `files` (include dist subdirs, docs, skills; exclude app bundles). Confirm with `npm pack --dry-run` that `dist/BuilderForce Agents.app` is not listed.
 - **npm auth web loop for dist-tags**: use legacy auth to get an OTP prompt:
-  - `NPM_CONFIG_AUTH_TYPE=legacy npm dist-tag add builderforce@X.Y.Z latest`
+  - `NPM_CONFIG_AUTH_TYPE=legacy npm dist-tag add @seanhogg/builderforce-agents@X.Y.Z latest`
 - **`npx` verification fails with `ECOMPROMISED: Lock compromised`**: retry with a fresh cache:
-  - `NPM_CONFIG_CACHE=/tmp/npm-cache-$(date +%s) npx -y builderforce@X.Y.Z --version`
+  - `NPM_CONFIG_CACHE=/tmp/npm-cache-$(date +%s) npx -y @seanhogg/builderforce-agents@X.Y.Z --version`
 - **Tag needs repointing after a late fix**: force-update and push the tag, then ensure the GitHub release assets still match:
   - `git tag -f vX.Y.Z && git push -f origin vX.Y.Z`
 
@@ -87,7 +87,7 @@ When the operator says “release”, immediately do this preflight (no extra qu
 - [ ] Create/refresh the GitHub release for `vX.Y.Z` with **title `builderforce X.Y.Z`** (not just the tag); body should include the **full** changelog section for that version (Highlights + Changes + Fixes), inline (no bare links), and **must not repeat the title inside the body**.
 - [ ] Attach artifacts: `npm pack` tarball (optional), `BuilderForce Agents-X.Y.Z.zip`, and `BuilderForce Agents-X.Y.Z.dSYM.zip` (if generated).
 - [ ] Commit the updated `appcast.xml` and push it (Sparkle feeds from main).
-- [ ] From a clean temp directory (no `package.json`), run `npx -y builderforce@X.Y.Z send --help` to confirm install/CLI entrypoints work.
+- [ ] From a clean temp directory (no `package.json`), run `npx -y @seanhogg/builderforce-agents@X.Y.Z send --help` to confirm install/CLI entrypoints work.
 - [ ] Announce/share release notes.
 
 ## Plugin publish scope (npm)
