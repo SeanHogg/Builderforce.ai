@@ -1,3 +1,57 @@
+## ✅ RESOLVED 2026-09-12 — Designed rooms: presets, a furniture designer, Roblox-style walking, Roblox places played inside the Room, and Room listings
+
+The Room was one room (round table, ring, back wall), seen only from above, and a
+generated Roblox place was played on a separate surface. Now:
+
+- **Room designs are canvas objects** (`room` kind; `roomLayout` names a preset, `roomDesign`
+  holds the document, `activatedAt` picks which room the session meets in — newest wins,
+  derived in `lib/canvas/roomDesigns.ts`, never a flag two writers can both set). The
+  contract lives in `packages/creation-canvas-contract/src/roomDesign.ts`: four presets
+  (standup, boardroom, office kitchen, open floor plan), 17 furniture kinds as spec DATA
+  (footprint, seats, rest surfaces, wall-mounted, takes a picture / a model), one placement
+  rule (`moveRoomFurniture` — floor pieces clamp inside the walls, wall pieces slide to the
+  nearest wall facing in) and a defensive parser (`canvasRoomDesignFrom`: https or
+  same-origin URLs only, 400-piece cap, a model whose file is gone is dropped).
+- **The designer** (`components/creation-canvas/room/`): `useRoomDesign` reads and writes
+  through the board bridge (autosave, undo, locks, Brain's view for free);
+  `useFurnitureDesigner` previews a drag and commits ONCE on release; `RoomDesignerRail` +
+  `RoomPieceInspector` offer presets, furniture, uploads of 3D models (STL/OBJ/glTF/GLB/STEP)
+  and pictures, walls and floor, and sharing (sell, download, upload design).
+  `CanvasRoomSurface` was decomposed into mode bar, roster, fallback, level stage and
+  designer rather than grown.
+- **Chairs seat the roster** (`roomSeatPlacement`): designed seats first, a wider standing
+  ring (`ROOM_STANDING_RADIUS`) past the last chair. The diorama, creations and stations
+  rest on whatever surface the design puts under them (`restSurfaceAt`).
+- **Walking** (`world3d/RoomWalk.tsx`, `PlayerController`, `walkerInput.ts`,
+  `useDragLook.ts`, `WalkerTouchControls.tsx`): Rapier colliders for floor, walls and every
+  solid piece; WASD/arrows, Space, V, drag-look and wheel zoom, and an on-screen pad on
+  coarse pointers. The spawn is keyed to the FLOOR, so a moved chair never sends walkers
+  back to the door. The walker's body is announced through the existing presence relay.
+- **Roblox inside the Room**: a game whose output is a Roblox place carries `placeUrl`,
+  stands with a miniature of its level, and Play loads the level on the room's own stage
+  (`RoomLevelStage`, same `WorldViewport`). Presence frames gained `space` (sanitised in
+  `presence.ts`) so players of one level see each other and the room does not — which also
+  closed the Gap Register entry "Two people on one canvas cannot see each other INSIDE the
+  game" (the play surface passes `objectId` as its space). Shared SCORE is still open and
+  stays logged.
+- **Marketplace**: `room` listing kind (install, copy, preview trial) with a new `space`
+  Stage harness in `api/src/application/marketplace/stageChecks.ts` — refuses a snapshot with
+  no room, furniture whose TURNED footprint crosses a wall, and a room that seats nobody with
+  a surface filling its centre; warns on an unchanged preset.
+- **Also closed:** the Gap Register entry "The room has no release-note row" — its blocker
+  (a live superadmin session) was wrong, release notes ship as migrations: `1163` (the Room
+  surface) and `1162` (designed rooms). Brain is told how to design a room
+  (`ROOM_DESIGN_TOOL_NOTE`), and a turn that adds one takes the reader to the Room.
+- **Marketing:** `content/blog/design-the-room-you-meet-in.md` (+ de/es/fr/zh), registered in
+  `blogData.ts`. All UI strings in five catalogs (`scripts/i18n-patch-room-designs.mjs`).
+  Versions: frontend 2026.9.28, api 2026.9.24.
+
+**Verified.** `tsgo --noEmit` (frontend) and api `tsc` clean; new tests `roomDesign.test.ts`,
+`roomDesigns.test.ts`, `roomSeatPlacement.test.ts`, `stageChecks.space.test.ts`, plus the
+existing room, presence, walker and Stage suites green; `check:i18n-keys`,
+`check:canvas-kind-labels`, `check:design-tokens`, `check:design-scale`,
+`check:architecture`, `check:primitives` pass.
+
 ## ✅ RESOLVED 2026-09-12 — Room: agents answer as themselves and speak over their heads; Call, Standup and Copy diagnostics work there
 
 Reported from the Room: "@Manager @CFO @Counsel …" came back as ONE reply labelled Brain that role-played

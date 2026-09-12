@@ -1588,3 +1588,67 @@
      menu is now the only place either one is shown. */
   .bf-pmenu__model { max-width: 72px; }
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Composer "who" pickers — To (RecipientPicker) and Acting as (PersonaPicker).
+   One pill for both, on both hosts; the popover reuses the `/` menu's
+   .bf-pmenu__pop / __item rows. The leading mark sits outside the button (a host
+   may make it a hovercard), so the PILL is the wrapper, not the button.
+   ────────────────────────────────────────────────────────────────────────── */
+.bf-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 240px;
+  height: var(--chat-ctl-size, 30px);
+  padding: 0 4px 0 9px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  border: 1px solid var(--chat-input-border, var(--bf-border, rgba(128, 128, 128, 0.35)));
+  color: var(--bf-text, inherit);
+  font-size: 12px;
+}
+
+.bf-picker:hover,
+.bf-picker.is-open { background: var(--bf-surface-2, rgba(128, 128, 128, 0.12)); }
+.bf-picker.is-active { border-color: var(--bf-accent, #6ea8fe); }
+
+.bf-picker__eyebrow {
+  flex: 0 0 auto;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--bf-text-muted, #8a8a8a);
+}
+
+.bf-picker__lead { display: inline-flex; align-items: center; flex: 0 0 auto; line-height: 1; }
+
+.bf-picker__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  height: 100%;
+  padding: 0 5px 0 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.bf-picker__btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.bf-picker__btn:focus-visible { outline: 2px solid var(--bf-accent, #6ea8fe); outline-offset: 2px; border-radius: 6px; }
+
+.bf-picker__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.bf-picker__caret { flex: 0 0 auto; font-size: 10px; opacity: 0.7; }
+
+/* Narrow panels (a 300px editor sidebar, a phone): the eyebrow gives way first —
+   the leading mark still says which control it is — then the name truncates. */
+@media (max-width: 420px) {
+  .bf-picker { max-width: 150px; padding-left: 7px; }
+  .bf-picker__eyebrow { display: none; }
+}

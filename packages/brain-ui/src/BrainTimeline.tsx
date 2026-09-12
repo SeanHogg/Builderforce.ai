@@ -7,7 +7,7 @@ import {
   type ChatActivityLabels,
   DEFAULT_MODEL_IDENTITY,
   displayModelName,
-  parseDirectedRecipient,
+  parseDirectedRecipients,
   parseMessageAuthor,
   parseMessageProvenance,
   type BrainMessage,
@@ -18,7 +18,7 @@ import {
 } from '@seanhogg/builderforce-brain-embedded';
 import { Markdown } from './Markdown';
 import { answerTextOf, thoughtTextOf } from '@builderforce/agent-loop';
-import { Avatar } from './ParticipantBadge';
+import { Avatar, RecipientsBadge } from './ParticipantBadge';
 import { parseAskUser, stripAskUser, QuestionCard, askUserAnchorId, DEFAULT_ASK_USER_LABELS } from './askUser';
 import { buildSettledTimeline, formatDuration, strandedReplyKey, streamingNode, type TimelineNode } from './timelineModel';
 import { CopyButton } from './CopyButton';
@@ -474,9 +474,10 @@ function BrainTimelineInner({
       <ol className="bf-tl" ref={contentRef}>
         {nodes.map((node) => {
           if (node.kind === 'user') {
-            // A message addressed to a participant (not the BRAIN) shows a "→ Name"
-            // badge so the transcript makes clear who it was spoken to.
-            const to = parseDirectedRecipient(node.message);
+            // A message addressed to participants (not the BRAIN) shows a "→ Name"
+            // badge — several for a group turn — so the transcript makes clear who it
+            // was spoken to.
+            const to = parseDirectedRecipients(node.message);
             const author = parseMessageAuthor(node.message);
             return (
               <li key={node.key} className="bf-tl__item bf-tl__item--user">
@@ -484,15 +485,9 @@ function BrainTimelineInner({
                   <span className="bf-tl__dot">{author ? <Avatar name={author.name} kind={author.kind} size={16} /> : dotIcon('user')}</span>
                 </span>
                 <div className="bf-tl__body">
-                  <div className="bf-tl__role" style={to ? { display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' } : undefined}>
+                  <div className="bf-tl__role" style={to.length > 0 ? { display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' } : undefined}>
                     <span>{author ? author.name : labels.you}</span>
-                    {to && (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, opacity: 0.9 }}>
-                        <span aria-hidden style={{ opacity: 0.6 }}>→</span>
-                        <Avatar name={to.name} kind={to.kind} size={15} />
-                        <span>{to.name}</span>
-                      </span>
-                    )}
+                    <RecipientsBadge recipients={to} />
                   </div>
                   {node.images.length > 0 && (
                     <div className="bf-tl__images">

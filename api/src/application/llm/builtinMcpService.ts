@@ -1998,6 +1998,121 @@ const CATALOG: BuiltinTool[] = [
     run: (ctx, a) => executeAsAddressedAgent(ctx, { chatId: num(a.chatId), directive: str(a.directive), ...(a.taskId != null ? { taskId: num(a.taskId) } : {}) }),
   },
 
+  // ---- #hashtag resolution: tag chat-linked tickets so participants can be directed ----
+  // Typing #2395 in a chat message references ticket 2395. This tool resolves those
+  // tags against the chat's linked tickets (and the broader project when needed) so
+  // an agent can show the item, direct a participant to it, or dispatch work on it.
+  {
+    tool: 'chats.resolve_hashtag', mutates: false,
+    description:
+      'Resolve #hashtag ticket references in a chat. Pass chatId and optionally a message/text containing #N tags (e.g. "#2395 fix this" or just "2395"). '
+      + 'Returns the matching tickets from the chat\'s linked items (and any project-scoped ticket found by id), each with id, title, status, progressPct and a deep-link path. '
+      + 'Use this when a user types #123 to show the tagged item, direct a participant to it, or decide which ticket to dispatch. '
+      + 'With no hashtag text, returns ALL tickets linked to the chat (same as chats.list_tickets) — the picker surface for "what can I tag?".',
+    parameters: obj({ chatId: N, text: S, projectId: N }, ['chatId']),
+    run: async (ctx, a) => {
+      const chatId = num(a.chatId);
+      const svc = new ChatTicketService(ctx.db, ctx.env as Env);
+      const linked = await svc.listTicketsForChat(ctx.tenantId, chatId, ctx.userId ?? null);
+      if (!Array.isArray(linked)) throw new Error(linked.error);
+
+      // Extract #N / bare ticket ids from free text. Accepts "#2395", "# 2395", or bare "2395"
+      // when the whole string is numeric. Dedupes while preserving first-seen order.
+      const text = a.text != null ? str(a.text) : '';
+      const seen = new Set<number>();
+      const ids: number[] = [];
+      const push = (n: number) => { if (Number.isFinite(n) && n > 0 && !seen.has(n)) { seen.add(n); ids.push(n); } };
+      for (const m of text.matchAll(/#\s*(\d{1,10})\b/g)) push(Number(m[1]));
+      if (ids.length === 0 && /^\s*\d{1,10}\s*$/.test(text)) push(Number(text.trim()));
+
+      // No hashtag → return the full linked set (the "what can I tag?" picker).
+      if (ids.length === 0) {
+        return {
+          chatId,
+          mode: 'list',
+          tickets: linked,
+          instruction: 'These are the work items linked to this chat. Reference any of them as #ID in a message to tag it, then use chats.dispatch_agent or chats.link_ticket to act on it.',
+        };
+      }
+
+      // Resolve each id: prefer a chat-linked match, else look up the ticket by id in-tenant.
+      const byRef = new Map<string, (typeof linked)[number]>();
+      for (const t of linked) byRef.set(String(t.ref), t);
+
+      const resolved: Array<{
+        hashtag: string;
+        id: number;
+        title: string;
+        status: string | null;
+        progressPct: number | null;
+        kind: string;
+        linked: boolean;
+        deepLink: string;
+      }> = [];
+      const missing: string[] = [];
+
+      for (const id of ids) {
+        const tag = `#${id}`;
+        const hit = byRef.get(String(id));
+        if (hit) {
+          resolved.push({
+            hashtag: tag,
+            id,
+            title: hit.label ?? hit.title ?? `Ticket #${id}`,
+            status: hit.status ?? null,
+            progressPct: hit.progressPct ?? null,
+            kind: hit.kind ?? 'task',
+            linked: true,
+            deepLink: `/projects?tab=tasks&project=${hit.projectId ?? ''}&task=${id}`,
+          });
+        } else {
+          // Not in chat links — look it up in the project.
+          const lookup = await svc.getTicketById(ctx.tenantId, id).catch(() => null);
+          if (lookup && 'id' in lookup) {
+            resolved.push({
+              hashtag: tag,
+              id,
+              title: lookup.title ?? `Ticket #${id}`,
+              status: lookup.status ?? null,
+              progressPct: lookup.progressPct ?? null,
+              kind: lookup.kind ?? 'task',
+              linked: false,
+              deepLink: `/projects?tab=tasks&project=${lookup.projectId ?? ''}&task=${id}`,
+            });
+          } else {
+            missing.push(tag);
+          }
+        }
+      }
+
+      return {
+        chatId,
+        mode: 'resolve',
+        resolved,
+        missing,
+        instruction: resolved.length
+          ? `Resolved ${resolved.length} ticket(s). Use #hashtag in messages to tag them, then chats.dispatch_agent to direct a participant to work on a tagged item.`
+          : 'No matching tickets found.',
+      };
+    },
+  },
+
+  // ---- AI Manager: enable/disable ----
+  // Turn the AI Manager on or off for a project. Use this to enable autonomous
+  // agent dispatch, ticket assignment, and backlog management.
+  { tool: 'manager.enable', mutates: true,
+    description: 'Enable or disable the AI Manager for a project. Pass enabled:true to turn it on (allowing autonomous agent dispatch and ticket management), or enabled:false to pause it. Returns the updated config.',
+    parameters: obj({ projectId: N, enabled: B }, ['projectId', 'enabled']),
+    run: async (ctx, a) => {
+      const projectId = num(a.projectId);
+      const enabled = a.enabled;
+      if (typeof enabled !== 'boolean') throw new Error('enabled must be a boolean');
+      await ctx.projects.getProject(projectId, ctx.tenantId); // tenant-ownership guard
+      const cfg = await upsertManagerConfig(ctx.db, { tenantId: ctx.tenantId, projectId, enabled });
+      return { projectId, enabled: cfg.enabled, updatedAt: cfg.updatedAt };
+    },
+  },
+
   // ---- AI Manager: coaching (chat → standing directive) ----
   // Turns a "coaching session" (the human telling the manager how to manage) into a
   // durable directive the background manager pass honors on every run — the chat-side

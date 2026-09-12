@@ -163,7 +163,7 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
   const minimizeSession = useCallback(() => setSessionOpen(false), []);
   const [level, setLevel] = useState<RoomCreation | null>(null);
   const closeLevel = useCallback(() => setLevel(null), []);
-  const [mode, setMode] = useState<RoomMode>('look');
+  const [chosenMode, setMode] = useState<RoomMode>('look');
   const [cameraView, setCameraView] = useState<'first' | 'third'>('third');
   const [respawnNonce, setRespawnNonce] = useState(0);
 
@@ -171,13 +171,14 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
   // and the designer's hands on it. While a piece is being dragged the designer's
   // preview is what is drawn, so every reading below uses `design`.
   const room = useRoomDesign();
-  const designing = mode === 'design' && room.editable;
+  // A viewer whose edit rights went away mid-design is back to looking — derived from
+  // the rights, never reset by an effect, so there is no render where both are true.
+  const mode: RoomMode = chosenMode === 'design' && !room.editable ? 'look' : chosenMode;
+  const designing = mode === 'design';
   const designer = useFurnitureDesigner(room.design, room.change, designing);
   const design = designer.shown;
   const geometry = useMemo(() => roomDesignGeometry(design), [design]);
   const designSeats = useMemo(() => roomDesignSeats(design), [design]);
-  // A viewer whose edit rights went away mid-design is put back to looking.
-  useEffect(() => { if (mode === 'design' && !room.editable) setMode('look'); }, [mode, room.editable]);
 
   const [spot, placeSession] = useRoomSpot(roomSpotKey(sessionId), DEFAULT_ROOM_SESSION_SPOT);
   const placement = useMemo(() => placeSessionInRoom(spot, geometry), [spot, geometry]);

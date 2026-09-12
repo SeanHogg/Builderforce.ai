@@ -96,8 +96,17 @@ export {
   revealsModelId,
 } from '@seanhogg/builderforce-brain-embedded';
 
-export { Avatar, ParticipantBadge, initialsOf, avatarColor } from './ParticipantBadge';
+export { Avatar, RecipientsBadge, initialsOf, avatarColor } from './ParticipantBadge';
 export type { AvatarProps } from './ParticipantBadge';
+
+// The composer's "who" controls — ONE recipient ("To") and ONE persona ("Acting as")
+// picker for the web composer and the VS Code webview, on one popover primitive.
+export { usePopover } from './popover/usePopover';
+export { RecipientPicker, DEFAULT_RECIPIENT_PICKER_LABELS } from './recipient/RecipientPicker';
+export type { RecipientPickerProps, RecipientPickerLabels } from './recipient/RecipientPicker';
+export { useRecipientChoice } from './recipient/useRecipientChoice';
+export { PersonaPicker, DEFAULT_PERSONA_PICKER_LABELS } from './persona/PersonaPicker';
+export type { PersonaPickerProps, PersonaPickerLabels, PersonaModalityOption } from './persona/PersonaPicker';
 
 export { HealthRing, healthRingColor } from './HealthRing';
 export type { HealthRingProps } from './HealthRing';

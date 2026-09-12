@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   withDirectedMetadata,
-  parseDirectedRecipient,
+  parseDirectedRecipients,
   isDirectedToParticipant,
   mentionRecipient,
   resolveRecipient,
@@ -16,7 +16,8 @@ const ada: DirectedRecipient = { kind: 'human', ref: 'u_1', name: 'Ada Lovelace'
 describe('directed message metadata', () => {
   it('round-trips a recipient through metadata', () => {
     const meta = withDirectedMetadata(bob);
-    expect(parseDirectedRecipient({ metadata: meta })).toEqual(bob);
+    expect(JSON.parse(meta!)).toEqual({ addressedTo: bob });
+    expect(parseDirectedRecipients({ metadata: meta })).toEqual([bob]);
     expect(isDirectedToParticipant({ metadata: meta })).toBe(true);
   });
 
@@ -28,12 +29,48 @@ describe('directed message metadata', () => {
   it('is undefined when there is nothing to store', () => {
     expect(withDirectedMetadata(null)).toBeUndefined();
     expect(withDirectedMetadata(undefined)).toBeUndefined();
+    expect(withDirectedMetadata([])).toBeUndefined();
   });
 
   it('treats a BRAIN turn (no addressedTo) as not directed', () => {
-    expect(parseDirectedRecipient({ metadata: null })).toBeNull();
-    expect(parseDirectedRecipient({ metadata: JSON.stringify({ attachments: [] }) })).toBeNull();
+    expect(parseDirectedRecipients({ metadata: null })).toEqual([]);
+    expect(parseDirectedRecipients({ metadata: JSON.stringify({ attachments: [] }) })).toEqual([]);
+    expect(parseDirectedRecipients({ metadata: 'null' })).toEqual([]);
     expect(isDirectedToParticipant({ metadata: '{bad json' })).toBe(false);
+  });
+});
+
+describe('group-addressed messages', () => {
+  it('stores several recipients as a named group and reads every member back', () => {
+    const meta = withDirectedMetadata([bob, ada], { creationSessionId: 's1' });
+    expect(JSON.parse(meta!)).toEqual({ creationSessionId: 's1', addressedTo: { kind: 'group', members: [bob, ada] } });
+    expect(parseDirectedRecipients({ metadata: meta })).toEqual([bob, ada]);
+  });
+
+  it('stores a one-member list as the plain single shape', () => {
+    expect(JSON.parse(withDirectedMetadata([bob])!)).toEqual({ addressedTo: bob });
+  });
+
+  // A group turn is put to the agents it names — the BRAIN must stay idle for it,
+  // exactly as for a single directed turn.
+  it('counts a group turn as directed, so the BRAIN does not auto-reply', () => {
+    expect(isDirectedToParticipant({ metadata: withDirectedMetadata([bob, ada]) })).toBe(true);
+  });
+
+  it('reads legacy group rows that stored bare refs, named by their ref', () => {
+    const legacy = JSON.stringify({ addressedTo: { kind: 'group', refs: ['7', '', 9, '8'] } });
+    expect(parseDirectedRecipients({ metadata: legacy })).toEqual([
+      { kind: 'agent', ref: '7', name: '7' },
+      { kind: 'agent', ref: '8', name: '8' },
+    ]);
+    expect(isDirectedToParticipant({ metadata: legacy })).toBe(true);
+  });
+
+  it('drops malformed members and treats an all-malformed group as not directed', () => {
+    const partial = JSON.stringify({ addressedTo: { kind: 'group', members: [bob, { kind: 'robot', ref: 'x', name: 'X' }, { ref: 'y' }] } });
+    expect(parseDirectedRecipients({ metadata: partial })).toEqual([bob]);
+    const empty = JSON.stringify({ addressedTo: { kind: 'group', members: [{ ref: 'y' }] } });
+    expect(isDirectedToParticipant({ metadata: empty })).toBe(false);
   });
 });
 

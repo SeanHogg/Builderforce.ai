@@ -367,7 +367,7 @@ export {
   ADDRESSED_TO_META_KEY,
   AUTHORED_BY_META_KEY,
   withDirectedMetadata,
-  parseDirectedRecipient,
+  parseDirectedRecipients,
   parseMessageAuthor,
   isDirectedToParticipant,
   mentionRecipient,
@@ -375,7 +375,35 @@ export {
   activeMentionToken,
   filterMentionCandidates,
 } from './directedMessage';
-export type { DirectedRecipient, RecipientChoice, MentionToken } from './directedMessage';
+export type { DirectedRecipient, DirectedGroup, RecipientChoice, MentionToken } from './directedMessage';
+
+// The tenant's assignable agent pool (owned + purchased + registered), one mapping
+export {
+  AGENT_POOL_PATHS,
+  DEFAULT_AGENT_MODEL_SENTINEL,
+  poolAgentsFrom,
+  loadAgentPoolVia,
+} from './agentPool';
+export type { PoolAgent, PoolWorkforceAgentRow, PoolRegisteredAgentRow, PoolRequest } from './agentPool';
+
+// Brain personas ("Acting as"): modality personas + Brain-assigned agents
+export {
+  PERSONA_MODALITY_IDS,
+  MODALITY_PERSONAS,
+  DEFAULT_PERSONA,
+  BRAIN_AGENT_ASSIGNMENTS_PATH,
+  modalityPersonaChoice,
+  agentPersonaChoice,
+  personaModalityOf,
+  personaAgentOf,
+  agentPersonaPrompt,
+  personaSystemPrompt,
+  personaOverlay,
+  personaModel,
+  brainPersonaAgents,
+  loadBrainPersonaAgentsVia,
+} from './brainPersona';
+export type { PersonaModalityId, ModalityPersona, BrainPersonaAgent, BrainPersonaChoice } from './brainPersona';
 
 // Per-reply model/account provenance (the "which LLM / whose account" chip)
 export {

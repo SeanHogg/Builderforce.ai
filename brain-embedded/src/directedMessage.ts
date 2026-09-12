@@ -3,16 +3,23 @@
  *
  * A BuilderForce chat is multi-party: alongside the BRAIN (the agent that
  * executes build/change requests) a chat can have other participants — invited
- * teammate agents and (in future) humans. Not every message is a directive for
- * the BRAIN to run: a user can @-tag a participant and simply talk to them. Such
- * a turn is a normal `user` message tagged with `{ addressedTo: {...} }` in its
- * metadata; the conversation loop reads that flag and does NOT start a BRAIN run
- * for it, while the transcript still shows who it was addressed to. An untagged
- * message (or one addressed to the BRAIN) runs the agent loop as before.
+ * teammate agents and humans. Not every message is a directive for the BRAIN to
+ * run: a user can @-tag a participant and simply talk to them. Such a turn is a
+ * normal `user` message tagged with `{ addressedTo: {...} }` in its metadata; the
+ * conversation loop reads that flag and does NOT start a BRAIN run for it, while
+ * the transcript still shows who it was addressed to. An untagged message (or one
+ * addressed to the BRAIN) runs the agent loop as before.
+ *
+ * `addressedTo` has two shapes. ONE participant is stored as the participant
+ * itself (`{kind:'agent'|'human', ref, name}`). SEVERAL — a canvas group turn that
+ * asks every agent on the board at once — are stored as
+ * `{kind:'group', members:[…participants]}`. Readers go through
+ * {@link parseDirectedRecipients}, which answers a list for both, so no surface
+ * has to know which shape a row carries.
  *
  * This is the single source of truth for the convention, shared by the send path
  * (which skips the run), the auto-reply guard, and any surface that renders the
- * "→ recipient" badge.
+ * "→ recipients" badge.
  */
 
 /** A non-BRAIN participant a message can be addressed to. */
@@ -25,6 +32,12 @@ export interface DirectedRecipient {
   name: string;
 }
 
+/** A turn addressed to several participants at once (a canvas group turn). */
+export interface DirectedGroup {
+  kind: 'group';
+  members: DirectedRecipient[];
+}
+
 /** The metadata key that flags a user message as addressed to a participant. */
 export const ADDRESSED_TO_META_KEY = 'addressedTo';
 
@@ -33,14 +46,20 @@ export const ADDRESSED_TO_META_KEY = 'addressedTo';
  *  {@link ADDRESSED_TO_META_KEY} on the answering side. */
 export const AUTHORED_BY_META_KEY = 'authoredBy';
 
+/** A well-formed participant, or null — the one validation both keys share. */
+function asRecipient(value: unknown): DirectedRecipient | null {
+  const a = value as Partial<DirectedRecipient> | null | undefined;
+  if (a && typeof a.ref === 'string' && typeof a.name === 'string' && (a.kind === 'agent' || a.kind === 'human')) {
+    return { kind: a.kind, ref: a.ref, name: a.name };
+  }
+  return null;
+}
+
 /** The participant that authored an assistant turn, or `null` for the BRAIN. */
 export function parseMessageAuthor(msg: { metadata?: string | null }): DirectedRecipient | null {
   if (!msg.metadata) return null;
   try {
-    const a = (JSON.parse(msg.metadata) as { authoredBy?: Partial<DirectedRecipient> }).authoredBy;
-    if (a && typeof a.ref === 'string' && typeof a.name === 'string' && (a.kind === 'agent' || a.kind === 'human')) {
-      return { kind: a.kind, ref: a.ref, name: a.name };
-    }
+    return asRecipient((JSON.parse(msg.metadata) as { authoredBy?: unknown }).authoredBy);
   } catch {
     /* not an attributed message */
   }
@@ -49,35 +68,62 @@ export function parseMessageAuthor(msg: { metadata?: string | null }): DirectedR
 
 /**
  * Merge an `addressedTo` flag into a message's metadata object (preserving any
- * other keys, e.g. `attachments`). Returns a serialized string, or `undefined`
- * when there is nothing to store — ready to hand to `persistence.sendMessages`.
+ * other keys, e.g. `attachments`). One recipient is stored as itself; two or more
+ * as a {@link DirectedGroup}. Returns a serialized string, or `undefined` when
+ * there is nothing to store — ready to hand to `persistence.sendMessages`.
  */
 export function withDirectedMetadata(
-  recipient: DirectedRecipient | null | undefined,
+  recipient: DirectedRecipient | readonly DirectedRecipient[] | null | undefined,
   base?: Record<string, unknown>,
 ): string | undefined {
   const meta: Record<string, unknown> = { ...(base ?? {}) };
-  if (recipient) meta[ADDRESSED_TO_META_KEY] = recipient;
+  const list: readonly DirectedRecipient[] = recipient == null ? [] : 'kind' in recipient ? [recipient] : recipient;
+  if (list.length === 1) meta[ADDRESSED_TO_META_KEY] = list[0];
+  else if (list.length > 1) meta[ADDRESSED_TO_META_KEY] = { kind: 'group', members: [...list] } satisfies DirectedGroup;
   return Object.keys(meta).length > 0 ? JSON.stringify(meta) : undefined;
 }
 
-/** The recipient a persisted message was addressed to, or `null` for the BRAIN. */
-export function parseDirectedRecipient(msg: { metadata?: string | null }): DirectedRecipient | null {
-  if (!msg.metadata) return null;
+/**
+ * Everyone a persisted message was addressed to — empty for a BRAIN turn, one
+ * entry for a directed turn, several for a group turn.
+ *
+ * Group rows written before members carried names stored bare agent refs
+ * (`{kind:'group', refs}`); those still read as addressed, named by their ref, so
+ * the transcript says SOMETHING true about them and the BRAIN still stays idle.
+ */
+export function parseDirectedRecipients(msg: { metadata?: string | null }): DirectedRecipient[] {
+  if (!msg.metadata) return [];
   try {
-    const a = (JSON.parse(msg.metadata) as { addressedTo?: Partial<DirectedRecipient> }).addressedTo;
-    if (a && typeof a.ref === 'string' && typeof a.name === 'string' && (a.kind === 'agent' || a.kind === 'human')) {
-      return { kind: a.kind, ref: a.ref, name: a.name };
+    const a = (JSON.parse(msg.metadata) as { addressedTo?: unknown }).addressedTo as
+      | { kind?: unknown; members?: unknown; refs?: unknown }
+      | null
+      | undefined;
+    if (!a || typeof a !== 'object') return [];
+    if (a.kind !== 'group') {
+      const one = asRecipient(a);
+      return one ? [one] : [];
+    }
+    if (Array.isArray(a.members)) {
+      return a.members.map(asRecipient).filter((r): r is DirectedRecipient => r !== null);
+    }
+    if (Array.isArray(a.refs)) {
+      return a.refs
+        .filter((ref): ref is string => typeof ref === 'string' && ref.length > 0)
+        .map((ref) => ({ kind: 'agent' as const, ref, name: ref }));
     }
   } catch {
     /* not a directed message */
   }
-  return null;
+  return [];
 }
 
-/** True when a message is addressed to a participant (so the BRAIN should NOT run for it). */
+/**
+ * True when a message is addressed to one or more participants — a directed OR a
+ * group turn — so the BRAIN must NOT run for it: whoever it was put to owns the
+ * reply.
+ */
 export function isDirectedToParticipant(msg: { metadata?: string | null }): boolean {
-  return parseDirectedRecipient(msg) !== null;
+  return parseDirectedRecipients(msg).length > 0;
 }
 
 /**

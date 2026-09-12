@@ -60,13 +60,36 @@ export function Avatar({ name, kind = 'agent', size = 18, title, style }: Avatar
   );
 }
 
-/** Avatar + name — the "→ recipient" badge shown on a directed message / composer chip. */
-export function ParticipantBadge({ recipient, prefix, size = 16 }: { recipient: DirectedRecipient; prefix?: string; size?: number }) {
+/**
+ * The "→ recipients" badge on a directed user turn: who it was put to. One recipient
+ * reads "→ [avatar] Name"; a group turn stacks up to `max` avatars and names them,
+ * with "+N" for the rest (the full list is in the tooltip). Renders nothing for a
+ * BRAIN turn.
+ */
+export function RecipientsBadge({ recipients, max = 3, size = 15 }: { recipients: readonly DirectedRecipient[]; max?: number; size?: number }) {
+  if (recipients.length === 0) return null;
+  const shown = recipients.slice(0, max);
+  const extra = recipients.length - shown.length;
+  const overlap = Math.round(size * 0.3);
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, opacity: 0.95 }}>
-      {prefix ? <span aria-hidden style={{ opacity: 0.7 }}>{prefix}</span> : null}
-      <Avatar name={recipient.name} kind={recipient.kind} size={size} />
-      <span>{recipient.name}</span>
+    <span title={recipients.map((r) => r.name).join(', ')} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0, opacity: 0.9 }}>
+      <span aria-hidden style={{ opacity: 0.6 }}>→</span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', flex: '0 0 auto' }}>
+        {shown.map((r, i) => (
+          <Avatar
+            key={`${r.kind}:${r.ref}`}
+            name={r.name}
+            kind={r.kind}
+            size={size}
+            // Overlapped avatars get a ring in the transcript surface's colour so each
+            // disc stays distinct against its neighbour, in either theme.
+            style={i > 0 ? { marginLeft: -overlap, boxShadow: '0 0 0 1.5px var(--bf-surface, #1b1b1b)' } : undefined}
+          />
+        ))}
+      </span>
+      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {shown.map((r) => r.name).join(', ')}{extra > 0 ? ` +${extra}` : ''}
+      </span>
     </span>
   );
 }

@@ -44,27 +44,28 @@ export function useFurnitureDesigner(design: CanvasRoomDesign, commit: (next: Ca
   const designRef = useRef(design);
   useEffect(() => { designRef.current = design; }, [design]);
 
-  // Leaving the designer drops a selection nobody can see any more.
-  useEffect(() => { if (!enabled) { setSelectedId(null); setPreview(null); previewRef.current = null; } }, [enabled]);
-
-  const shown = preview ?? design;
-  const selected = useMemo(() => shown.furniture.find((item) => item.id === selectedId) ?? null, [shown, selectedId]);
+  // Outside the designer nothing is selected and nothing is in flight. Derived from
+  // `enabled` rather than cleared by an effect, so no render draws a stale pick.
+  const activeId = enabled ? selectedId : null;
+  const shown = (enabled ? preview : null) ?? design;
+  const selected = useMemo(() => shown.furniture.find((item) => item.id === activeId) ?? null, [shown, activeId]);
 
   const designing = useMemo<RoomFurnitureDesigning>(() => ({
-    selectedId,
+    selectedId: activeId,
     onMove: (id: string, spot: RoomSpot) => {
       const next = moveRoomFurniture(previewRef.current ?? designRef.current, id, spot.x, spot.z);
       previewRef.current = next;
       setPreview(next);
     },
     onGrip: (id: string, gripped: boolean) => {
-      if (gripped) { setSelectedId(id); return; }
+      // A new grip starts from the design, never from a drag the designer was left mid-way through.
+      if (gripped) { previewRef.current = null; setPreview(null); setSelectedId(id); return; }
       const moved = previewRef.current;
       previewRef.current = null;
       setPreview(null);
       if (moved) commit(moved);
     },
-  }), [commit, selectedId]);
+  }), [activeId, commit]);
 
   const add = useCallback((kind: RoomFurnitureKind, extra: { imageUrl?: string; model?: RoomFurnitureModel } = {}) => {
     const current = designRef.current;
@@ -78,24 +79,24 @@ export function useFurnitureDesigner(design: CanvasRoomDesign, commit: (next: Ca
   }, [commit]);
 
   const patchSelected = useCallback((patch: Partial<Omit<RoomFurniture, 'id' | 'kind'>>) => {
-    if (selectedId) commit(updateRoomFurniture(designRef.current, selectedId, patch));
-  }, [commit, selectedId]);
+    if (activeId) commit(updateRoomFurniture(designRef.current, activeId, patch));
+  }, [activeId, commit]);
 
   const rotateSelected = useCallback((delta: number) => {
-    const item = designRef.current.furniture.find((candidate) => candidate.id === selectedId);
+    const item = designRef.current.furniture.find((candidate) => candidate.id === activeId);
     if (item && !ROOM_FURNITURE_SPECS[item.kind].wallMounted) commit(updateRoomFurniture(designRef.current, item.id, { yaw: item.yaw + delta }));
-  }, [commit, selectedId]);
+  }, [activeId, commit]);
 
   const removeSelected = useCallback(() => {
-    if (!selectedId) return;
-    commit(removeRoomFurniture(designRef.current, selectedId));
+    if (!activeId) return;
+    commit(removeRoomFurniture(designRef.current, activeId));
     setSelectedId(null);
-  }, [commit, selectedId]);
+  }, [activeId, commit]);
 
   // Delete removes and R turns the selected piece — the board's own Delete, and the
   // rotate key every layout tool has. Never while somebody is typing into a field.
   useEffect(() => {
-    if (!enabled || !selectedId) return undefined;
+    if (!activeId) return undefined;
     const onKey = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) return;
       if (event.code === 'Delete' || event.code === 'Backspace') { event.preventDefault(); removeSelected(); }
@@ -103,7 +104,7 @@ export function useFurnitureDesigner(design: CanvasRoomDesign, commit: (next: Ca
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [enabled, removeSelected, rotateSelected, selectedId]);
+  }, [activeId, removeSelected, rotateSelected]);
 
   return { shown, selected, select: setSelectedId, designing, add, patchSelected, rotateSelected, removeSelected };
 }

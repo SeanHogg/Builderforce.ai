@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   activeModelKey,
   buildModelItems,
@@ -14,6 +14,7 @@ import {
   type ModelIdentityContext,
 } from '@seanhogg/builderforce-brain-embedded';
 import { promptOptionsLabels, type PromptOptionsLabels } from './types';
+import { usePopover } from '../popover/usePopover';
 
 /** Model wiring for the `/` menu. Omit it on a surface with no model choice. */
 export interface PromptOptionsModel {
@@ -160,21 +161,9 @@ export function PromptOptionsMenu({
   className,
 }: PromptOptionsMenuProps) {
   const labels = useMemo(() => promptOptionsLabels(labelOverrides), [labelOverrides]);
-  const [open, setOpen] = useState(false);
+  const { open, toggle, close, rootRef } = usePopover<HTMLDivElement>();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | ModelCategory>('all');
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (event: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false); };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
-  }, [open]);
 
   const identity = model?.identity ?? DEFAULT_MODEL_IDENTITY;
   const items = useMemo(() => (model ? buildModelItems(model.options, labels, identity) : []), [model, labels, identity]);
