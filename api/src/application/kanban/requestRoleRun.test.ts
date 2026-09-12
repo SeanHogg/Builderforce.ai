@@ -7,7 +7,12 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
 
-vi.mock('../runtime/dispatchCloudRun', () => ({ dispatchCloudRunForTask: vi.fn() }));
+// Partial: only the dispatcher is stubbed — `dispatchError` (how a throw becomes a
+// refusal) is the real one, so the test pins the message the caller actually receives.
+vi.mock('../runtime/dispatchCloudRun', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../runtime/dispatchCloudRun')>()),
+  dispatchCloudRunForTask: vi.fn(),
+}));
 vi.mock('../activity/activityLog', () => ({
   recordActivity: vi.fn().mockResolvedValue(undefined),
   cloudAgentActor: (ref: string, name: string) => ({ ref, name }),
@@ -59,12 +64,20 @@ describe('requestRoleRun', () => {
     expect(mockActivity).not.toHaveBeenCalled();
   });
 
-  it('records NOTHING when the dispatcher throws', async () => {
+  // A throw is a refusal WITH its reason, never a reasonless null — the null is what
+  // made Run now answer a person "the dispatcher gave no reason" (coded `no_agent`) on a
+  // ticket whose agent had resolved and whose dispatch had simply thrown.
+  it('records NOTHING when the dispatcher throws, and hands back the error as a dispatch_error refusal', async () => {
     mockDispatch.mockRejectedValue(new Error('managed execution is not authorized'));
     const { service, markRoleInProgress } = participantsStub();
 
-    await expect(requestRoleRun(env, db, runtime, service, request())).resolves.toEqual({ executionId: null });
+    const result = await requestRoleRun(env, db, runtime, service, request());
+
+    expect(result.executionId).toBeNull();
+    expect(result.refusal?.reason).toBe('dispatch_error');
+    expect(result.refusal?.message).toContain('managed execution is not authorized');
     expect(markRoleInProgress).not.toHaveBeenCalled();
+    expect(mockActivity).not.toHaveBeenCalled();
   });
 
   /** `in_progress` is what `pickSignoffCandidate` reads to move on to the NEXT role. */

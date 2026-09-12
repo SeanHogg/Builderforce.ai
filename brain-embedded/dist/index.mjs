@@ -2735,6 +2735,9 @@ function selectToolsForTurn(tools, options) {
   return { tools: chosen, trimmed: true, available };
 }
 
+// ../packages/agent-loop/src/types.ts
+var DEFAULT_TOOL_FAILURE_STREAK = 5;
+
 // ../packages/agent-loop/src/parseToolCall.ts
 function asToolArgs(value) {
   if (value && typeof value === "object" && !Array.isArray(value)) return value;
@@ -2766,6 +2769,7 @@ var Ctx = class {
   step = 0;
   stepInCall = 0;
   output = "";
+  failureStreak = 0;
 };
 async function runAgentLoop(args) {
   const { codec, ports, budget, signal } = args;
@@ -2773,14 +2777,17 @@ async function runAgentLoop(args) {
   const ctx = new Ctx(args.messages, signal);
   const startStep = Math.max(0, budget.startStep ?? 0);
   const maxThisCall = budget.maxSteps ?? Number.POSITIVE_INFINITY;
+  const stepCap = budget.stepCap ?? Number.POSITIVE_INFINITY;
+  const failureStreakCap = budget.failureStreakCap ?? DEFAULT_TOOL_FAILURE_STREAK;
   ctx.step = startStep;
   ctx.output = args.initialOutput ?? "";
   let ok = true;
   let finished = false;
   let cancelled = false;
+  let failuresTripped = false;
   let awaitingInput;
   const isCancelled = async () => Boolean(signal?.aborted) || Boolean(await hooks.isCancelled?.(ctx));
-  for (; ctx.step < budget.stepCap && !finished && ctx.stepInCall < maxThisCall; ctx.step++, ctx.stepInCall++) {
+  for (; ctx.step < stepCap && !finished && ctx.stepInCall < maxThisCall; ctx.step++, ctx.stepInCall++) {
     if (await isCancelled()) {
       cancelled = true;
       break;
@@ -2853,6 +2860,7 @@ async function runAgentLoop(args) {
         await hooks.onAskHuman?.(ctx, result.control, call);
         awaitingInput = { approvalId: result.control.approvalId, question: result.control.question, callId: call.id };
       }
+      if (!result.control) ctx.failureStreak = result.isError ? ctx.failureStreak + 1 : 0;
       const row = codec.tool(call, result);
       ctx.messages.push(row);
       const post = await hooks.afterDispatch?.(call, result, row, ctx);
@@ -2865,14 +2873,23 @@ async function runAgentLoop(args) {
     const after = await hooks.afterToolCalls?.(ctx, finished);
     if (after && after.finished !== void 0) finished = after.finished;
     if (awaitingInput) break;
+    if (!finished && ctx.failureStreak >= failureStreakCap) {
+      ctx.step++;
+      ctx.stepInCall++;
+      failuresTripped = true;
+      break;
+    }
   }
+  const exhausted = !finished && !cancelled && !awaitingInput && (failuresTripped || ctx.step >= stepCap);
   return {
     ok,
     output: ctx.output,
     finished,
     cancelled,
     step: ctx.step,
-    exhausted: !finished && !cancelled && !awaitingInput && ctx.step >= budget.stepCap,
+    exhausted,
+    ...exhausted ? { exhaustedBy: failuresTripped ? "failures" : "steps" } : {},
+    failureStreak: ctx.failureStreak,
     ...awaitingInput ? { awaitingInput } : {}
   };
 }
@@ -3595,10 +3612,6 @@ function provenanceMetadata(result) {
   const account = a === "own" || a === "shared" || a === "shared_byo_unused" ? a : void 0;
   return withProvenanceMetadata({ model, ...account ? { account } : {} });
 }
-var MAX_TOOL_ITERATIONS = 25;
-function iterationCap(requested) {
-  return typeof requested === "number" && Number.isFinite(requested) && requested > 0 ? Math.floor(requested) : MAX_TOOL_ITERATIONS;
-}
 var HISTORY_WINDOW = 80;
 var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files"]);
 var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isReadOnlyPlatformTool(name);
@@ -4213,7 +4226,6 @@ async function runLoop(chatId, c, req) {
   const allTools = catalog && catalog.length > 0 ? catalog : void 0;
   const usedTools = /* @__PURE__ */ new Set();
   const runMode = normalizeChatMode(req.chatMode ?? "work");
-  const maxIterations = iterationCap(req.maxIterations);
   const metadata = {
     chatId,
     guestTurnId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -4796,9 +4808,12 @@ ${revisit}` : replayNote });
     ports,
     hooks,
     signal: c.abort?.signal,
-    budget: { stepCap: maxIterations }
+    // No step cap. The kernel's consecutive-tool-failure breaker is the run's only
+    // limit — see the note above `HISTORY_WINDOW`.
+    budget: {}
   });
   if (loop.finished || loop.cancelled) return;
+  const streak = loop.failureStreak;
   c.streamingText = "";
   if (!c.abort?.signal.aborted) {
     const closeStart = nowMs2();
@@ -4808,7 +4823,7 @@ ${revisit}` : replayNote });
         ...windowed(convo),
         {
           role: "user",
-          content: "You have reached your tool-call budget for this turn. Do NOT call any more tools. Answer the user now, in prose, using what you have already gathered \u2014 summarise your findings and state plainly anything you could not finish."
+          content: `This turn was stopped because your last ${streak} tool calls all failed. Do NOT call any more tools. Answer the user now, in prose, using what you have already gathered \u2014 say what you completed, quote what the failing calls answered, and state plainly what is blocking you and what you need (a different argument, a permission, a decision) so the next turn can succeed.`
         }
       ];
       let closeFirstTokenAt;
@@ -4829,11 +4844,11 @@ ${revisit}` : replayNote });
         label: "llm.complete",
         durationMs: nowMs2() - closeStart,
         ttftMs: closeFirstTokenAt !== void 0 ? closeFirstTokenAt - closeStart : void 0,
-        args: { model: closing.resolvedModel ?? activeModel ?? "default", requestedModel: activeModel ?? "default", step: maxIterations, toolCalls: 0, forcedFinish: true, account: closing.account, byoUnresolved: closing.byoUnresolved },
+        args: { model: closing.resolvedModel ?? activeModel ?? "default", requestedModel: activeModel ?? "default", step: loop.step, toolCalls: 0, forcedFinish: true, failureStreak: streak, account: closing.account, byoUnresolved: closing.byoUnresolved },
         usage: closing.usage,
         finishReason: closing.finishReason,
         textChars: closing.text.length,
-        result: `forced final synthesis (tool budget reached) \xB7 ${closing.text.length} chars \xB7 finish: ${closing.finishReason ?? "\u2014"}`
+        result: `forced final synthesis (${streak} consecutive tool failures stopped the run) \xB7 ${closing.text.length} chars \xB7 finish: ${closing.finishReason ?? "\u2014"}`
       });
       const closingText = canonicalTurnText(closing.text);
       if (closingText) {
@@ -4857,10 +4872,10 @@ ${revisit}` : replayNote });
     ts: nowIso(),
     category: "error",
     label: "agent.loop",
-    result: `Loop exhausted after ${maxIterations} tool iterations (a forced final answer without tools also came back empty)`,
+    result: `Stopped after ${streak} consecutive failed tool calls over ${loop.step} steps (a forced final answer without tools also came back empty)`,
     isError: true
   });
-  c.error = "The assistant kept calling tools without finishing. Try rephrasing.";
+  c.error = `The assistant's last ${streak} tool calls all failed and it gave no answer. Read the failing steps above, then try again with what they ask for.`;
   emit(c);
 }
 
@@ -6089,6 +6104,7 @@ export {
   DEFAULT_CHAT_TITLE,
   DEFAULT_MODEL_CHOICE_LABELS,
   DEFAULT_MODEL_IDENTITY,
+  DEFAULT_TOOL_FAILURE_STREAK,
   DEFAULT_TOOL_LIMIT,
   EVERMIND_LEARN_MIN_CHARS,
   FAILURE_HARD_AT,

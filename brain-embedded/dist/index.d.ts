@@ -1,6 +1,7 @@
 import * as react_jsx_runtime from 'react/jsx-runtime';
 import { ChatErrorAction } from './chatError.js';
 export { BrainRequestError, ChatErrorActionKind, brainRequestError, chatErrorAction } from './chatError.js';
+export { DEFAULT_TOOL_FAILURE_STREAK } from './types.js';
 
 /**
  * Shared data shapes for the brain core. These define the contract the host
@@ -2622,16 +2623,6 @@ interface BrainRunRequest {
      * than silently losing their ticket lineage.
      */
     chatMode?: ChatMode;
-    /**
-     * Tool-iteration ceiling for THIS run (one iteration = one model turn, which may
-     * batch several tool calls). Omit to use the shared default.
-     *
-     * An injected capability, not a per-host branch: a surface whose budget is
-     * legitimately different — the native VS Code chat participant runs a longer
-     * coding loop than a web panel — states its own number here instead of the loop
-     * learning which host is calling it. Non-positive values are ignored.
-     */
-    maxIterations?: number;
 }
 /** Live, observable snapshot of a chat's run (what the hook renders). */
 interface BrainRunSnapshot {

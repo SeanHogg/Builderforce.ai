@@ -34,7 +34,9 @@ describe("subagentSystemPrompt", () => {
 
 describe("runSubagent", () => {
   it("starts the child from its brief and nothing else", async () => {
-    const complete = vi.fn(async () => answer("the middleware is in src/auth.ts"));
+    // Typed parameter, so `mock.calls[0][0]` is the request the child sent rather than
+    // an element of an empty tuple (a strict `tsc` rejected the untyped form).
+    const complete = vi.fn(async (_req: { messages: unknown[] }) => answer("the middleware is in src/auth.ts"));
     const run = await runSubagent({
       task: "find the auth middleware",
       readOnly: true,
