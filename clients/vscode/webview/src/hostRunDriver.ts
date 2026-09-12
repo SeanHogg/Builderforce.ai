@@ -84,7 +84,6 @@ function serialize(chatId: number, req: BrainRunRequest): Record<string, unknown
     userTurn: req.userTurn,
     projectId: req.projectId ?? null,
     chatMode: req.chatMode,
-    maxIterations: req.maxIterations,
     autoApprove: context.autoApprove,
     evermind: req.evermind != null,
     modelSurface: context.modelSurface,

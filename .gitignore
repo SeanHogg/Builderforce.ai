@@ -51,6 +51,11 @@ worker/test-output/
 # which otherwise aborts `git add -A` with "unable to index file".
 *.tmp.[0-9]*
 
+# Local one-off probe/dump tests (e.g. __fooDump.tmp.test.ts) — they depend on
+# env vars CI never sets, so a committed one fails the deploy's test gate.
+*.tmp.test.ts
+*.tmp.test.tsx
+
 # Ignore local secrets
 worker/secrets.json
 # Cloudflare Workers local secrets (NEON_DATABASE_URL etc.) — never commit
