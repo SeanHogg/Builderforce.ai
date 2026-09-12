@@ -1,3 +1,39 @@
+## ✅ RESOLVED 2026-09-12 — `agent-runtime`'s browser/server tests flaked under full-suite CI load
+
+`pnpm test:fast` (`vitest.unit.config.ts`, 3 parallel workers on CI) intermittently failed
+`src/browser/server.agent-contract-form-layout-act-commands.test.ts`,
+`server.post-tabs-open-profile-unknown-returns-404.test.ts`,
+`server.evaluate-disabled-does-not-block-storage.test.ts`,
+`server.agent-contract-snapshot-endpoints.test.ts` and `bridge-server.auth.test.ts` — always passing
+alone or in a small group locally, always failing on some subset when the full ~700-file suite ran
+under CI's concurrency. Two separate bugs, both invisible at small scale:
+
+- **Port TOCTOU race.** `getFreePort()` (`test-port.ts`) probes a port by binding then immediately
+  closing it, and the real bind (via `BUILDERFORCE_AGENTS_GATEWAY_PORT` → `resolved.controlPort` →
+  `app.listen()` in `server.ts`) happens later, after config/auth setup — a real window in which
+  another worker process's own probe-then-bind can claim that exact port first. `server.ts` already
+  treats that as an ordinary `EADDRINUSE` and returns `null` rather than throwing, but nothing
+  retried: the test went on to fetch a `baseUrl` with nothing listening, or worse, another test's
+  live server, producing wrong statuses/bodies instead of a clear failure. Only reproduces under real
+  concurrent port churn (hundreds of servers opening/closing across 3 CI workers), never in a small
+  local run.
+- **`bridge-server.auth.test.ts` used the plain global `fetch`** instead of `undici`'s `fetch`, the
+  deliberate convention every sibling file in `src/browser/` already follows specifically because
+  `server.control-server.test-harness.ts` and others call `vi.stubGlobal("fetch", ...)` to mock CDP
+  responses — the one file not opting out of that global was exposed to it.
+
+- **Fix:** `server.control-server.test-harness.ts`'s exported `startBrowserControlServerFromConfig`
+  now retries (up to 5 attempts) against a freshly re-probed port whenever the real starter returns
+  `null`, updating `state.testPort`/`cdpBaseUrl`/`BUILDERFORCE_AGENTS_GATEWAY_PORT` before each retry
+  — covers `post-tabs-open-profile-unknown-returns-404`, `agent-contract-form-layout-act-commands` and
+  `agent-contract-snapshot-endpoints` (all funnel through this one harness). Applied the identical
+  retry directly in `server.evaluate-disabled-does-not-block-storage.test.ts` (its own bespoke setup,
+  not routed through the shared harness), also replacing its duplicated inline `getFreePort()` with
+  the shared one in `test-port.ts`. `bridge-server.auth.test.ts` now imports `fetch` from `undici`
+  (`realFetch`) like every other file in the directory.
+- Verified: `npx tsc --noEmit -p .` clean; `vitest run --config vitest.unit.config.ts src/browser/`
+  — 34/34 files, 206/206 tests green, including all five previously-flaky files.
+
 ## ✅ RESOLVED 2026-09-12 — Room: the open session stopped one dock-width short of the Brain panel
 
 With the Brain docked right and the session opened at full size inside the Room, the projection
