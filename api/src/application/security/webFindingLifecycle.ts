@@ -17,6 +17,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TaskStatus } from '../../domain/shared/types';
 import { stageOfCheckId } from './webScanStages';
 import type { Db } from '../../infrastructure/database/connection';
+import { gateAutomaticClose, loadCloseContext, recordManagerReviewClose } from '../manager/reviewGateAuthority';
 
 /**
  * Which findings a given pass is ENTITLED to close. The Worker pass owns every check
@@ -83,17 +84,42 @@ export async function autoCloseResolved(
   // caller resolving the project loosely would silently close another workspace's
   // tickets.
   const rows = await db
-    .select({ id: tasks.id, title: tasks.title })
+    .select({ id: tasks.id, title: tasks.title, status: tasks.status })
     .from(tasks)
     .where(scopedToTenant(tasks, tenantId, and(
       eq(tasks.projectId, projectId),
       eq(tasks.archived, false),
       ne(tasks.status, TaskStatus.DONE),
     )));
-  const toClose = selectResolvedTicketIds(rows, origin, currentMarkers, owns);
+  const resolved = selectResolvedTicketIds(rows, origin, currentMarkers, owns);
+  if (resolved.length === 0) return 0;
+
+  // A re-scan closing a ticket is an AUTOMATIC close, so it obeys the one review gate
+  // (1153): a resolved finding whose ticket sits in a human-gated review lane waits for a
+  // person unless the workspace lets the manager close reviewed tickets. One context read
+  // for the whole batch; the hold is journalled once per ticket.
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const picked = resolved.map((id) => byId.get(id)).filter((r): r is NonNullable<typeof r> => r != null);
+  const context = await loadCloseContext(db, undefined, { tenantId, projectId, statuses: picked.map((r) => r.status) });
+  const toClose: number[] = [];
+  const authorized: typeof picked = [];
+  for (const r of picked) {
+    const gate = await gateAutomaticClose(undefined, db, {
+      tenantId, projectId, taskId: r.id, status: r.status, title: r.title, source: 'security_rescan', context,
+    });
+    if (gate.verdict === 'held_for_human') continue;
+    toClose.push(r.id);
+    if (gate.verdict === 'manager_authorized') authorized.push(r);
+  }
   if (toClose.length === 0) return 0;
   await db.update(tasks)
     .set({ status: TaskStatus.DONE, updatedAt: new Date() })
     .where(scopedToTenant(tasks, tenantId, inArray(tasks.id, toClose)));
+  for (const r of authorized) {
+    await recordManagerReviewClose(undefined, db, {
+      tenantId, projectId, taskId: r.id, title: r.title ?? `ticket #${r.id}`, lane: r.status,
+      managerRef: null, actor: {}, source: 'security_rescan',
+    });
+  }
   return toClose.length;
 }

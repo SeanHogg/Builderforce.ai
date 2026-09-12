@@ -102,7 +102,9 @@ export default async function IntegrationsIndexPage() {
             <ReferenceGroup id={referenceAnchorId('proven')} title={t('provenCategory')}>
               <ReferenceGrid>
                 {provenOnly.map((entry) => (
-                  <ReferenceCard key={entry.name} title={entry.name}>{entry.limitation}</ReferenceCard>
+                  <ReferenceCard key={entry.name} title={entry.name}>
+                    {(tRoot.raw('product.integrationMatrix.items') as { limitation: string }[])[INTEGRATION_CAPABILITY_PROOF.indexOf(entry)]?.limitation}
+                  </ReferenceCard>
                 ))}
               </ReferenceGrid>
             </ReferenceGroup>

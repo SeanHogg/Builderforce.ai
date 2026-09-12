@@ -101,10 +101,7 @@ import {
   type DispatchReserver, type TickDispatchBudget,
 } from '../runtime/tickDispatchBudget';
 import { recordActivity, cloudAgentActor, SYSTEM_ACTOR } from '../activity/activityLog';
-import { completeTaskOnMerge } from '../task/taskLifecycle';
-import {
-  decideReviewGate, loadReviewLaneGates, recordManagerReviewClose, recordReviewGateHeld, reviewCloseActor,
-} from './reviewGateAuthority';
+import { closeTicketAutomatically, loadReviewLaneGates, type CloseContext } from './reviewGateAuthority';
 
 /** Statuses an agent could pick up (Blocked waits on a dependency, not an agent). */
 const RUNNABLE: string[] = [
@@ -1830,9 +1827,12 @@ async function coordinatePullRequests(
     // THE REVIEW LANE'S GATE (1153), one read for the whole cohort. Null when it cannot be
     // read, and a null gate CLOSES NOTHING this pass: completing past a gate whose
     // configuration is unknown is exactly the override the setting exists to govern.
-    const reviewLaneGates = reviewReady.length
-      ? await loadReviewLaneGates(db, tenantId, projectId).catch(() => null)
-      : new Map<string, string>();
+    const closeContext: CloseContext = {
+      laneGates: reviewReady.length
+        ? await loadReviewLaneGates(db, tenantId, projectId).catch(() => null)
+        : new Map<string, string>(),
+      managerMayCloseReviewedTickets: policy.managerMayCloseReviewedTickets,
+    };
     // Build statuses for the whole review cohort in ONE query rather than a poll per
     // ticket (this loop runs every 5 minutes across every project).
     const reviewPrBuild = reviewReady.length
@@ -2025,56 +2025,27 @@ async function coordinatePullRequests(
         // ── WHO MAY CLOSE IT (1153) ───────────────────────────────────────────────
         // The review verdict above is the manager's; whether the manager may ACT on it
         // through a human-gated review lane is the workspace admin's decision, answered
-        // by `decideReviewGate` — the same module triage and the census ask, so the stage
-        // that closes tickets and the reports that count them cannot disagree. Held: say
-        // so once (a state, not a per-pass row) and leave the close to a person.
-        if (!reviewLaneGates) continue;
-        const reviewGate = decideReviewGate({
-          status: t.status, laneGate: reviewLaneGates.get(t.status),
-          managerMayCloseReviewedTickets: policy.managerMayCloseReviewedTickets,
-        });
-        if (reviewGate === 'held_for_human') {
-          await recordReviewGateHeld(db, { tenantId, projectId, taskId: t.id, runTaskId, title: t.title, detail: readiness.detail });
-          continue;
-        }
-        const closeActor = reviewGate === 'manager_authorized'
-          ? reviewCloseActor(policy.managerRef, t)
-          : { actorAgentRef: t.assignedAgentRef, actorAgentHostId: t.assignedAgentHostId };
-        const canOpenPr = readiness.completion === 'open_pr';
-        // ── THROUGH THE ONE COMPLETION PATH, NOT A SECOND `db.update` ───────────────
-        // This was `db.update(tasks).set({ status: DONE, completedAt: now })`, which
-        // stamps the ticket and records NO lane hop — and `task_status_transitions` is
-        // the only place the schema names who moved a ticket. The digest reads
-        // `completed_at` for its headline and transitions for everything else, so the
-        // two disagreed outright: project 11, 2026-07-31 reported **11 tickets finished,
-        // 0 forward lane moves (by people: 0 · by agents: 0), and every contributor at
-        // `finished=0`** — three numbers describing the same eleven events, two of them
-        // empty. The missing rows also cost the lifecycle ledger and the autonomy audit,
-        // which read transitions rather than the stamp.
+        // by `closeTicketAutomatically` — the ONE automatic-close path the merge sweep, the
+        // CI/deploy webhooks, the delta merge, the stage advance and the security re-scan
+        // also go through, and the same gate triage and the census read. Held (or a gate
+        // that could not be read): nothing is closed and a person closes it; the hold is
+        // journalled once, as a state rather than a per-pass row.
         //
-        // `completeTaskOnMerge` is the shared path that already closes exactly this gap
-        // — its own header says it exists because "the plain db.update the manager used
-        // skipped the metrics". A second completion path was the whole defect, so this
-        // one is deleted rather than taught to record its own hop: the ordinals, the
-        // backward test, the done-class fold, the idempotent already-done check and the
-        // producer-fallback attribution all stay in one place.
-        await completeTaskOnMerge(env, db, {
-          tenantId, taskId: t.id,
-          // Named so the fallback does not have to guess; `resolveCompletionActor`
-          // credits the ticket's most recent executor when this is absent, which is the
-          // right answer on a managed board where the assignee is the Coordinator. A close
-          // through a delegated human gate credits the manager (see `reviewCloseActor`).
-          ...closeActor,
+        // The close itself goes through `completeTaskOnMerge` inside that wrapper — the
+        // shared completion path whose header explains why the manager's old plain
+        // `db.update` was deleted: it recorded no lane hop, so the digest, the ledger and
+        // the autonomy audit disagreed about who finished the ticket. The executor is
+        // credited (on a managed board the assignee is the Coordinator, never an
+        // executor), or the manager when it closes under delegated authority.
+        const close = await closeTicketAutomatically(env, db, {
+          tenantId, taskId: t.id, source: 'manager_review', managerRef: policy.managerRef,
+          actor: { actorAgentRef: t.assignedAgentRef, actorAgentHostId: t.assignedAgentHostId },
+          heldDetail: readiness.detail, runTaskId,
+          known: { status: t.status, projectId, title: t.title, context: closeContext },
         });
-        if (reviewGate === 'manager_authorized') {
-          // Audited like every managed-board override: an activity row on the ticket (its
-          // ledger + the audit timeline) and a `managed.gate_override` row, both naming
-          // the manager and the workspace setting that authorized it.
-          await recordManagerReviewClose(env, db, {
-            tenantId, projectId, taskId: t.id, title: t.title, lane: t.status,
-            managerRef: policy.managerRef, actor: closeActor,
-          });
-        }
+        if (!close.closed) continue;
+        const reviewGate = close.verdict;
+        const canOpenPr = readiness.completion === 'open_pr';
         if (canOpenPr) {
           await dispatchTaskFinalize(env as never, db, tenantId, t.id, {
             assignedAgentHostId: t.assignedAgentHostId,

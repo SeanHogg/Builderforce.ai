@@ -42,7 +42,7 @@ describe('decideReviewGate', () => {
 });
 
 describe('reviewCloseActor — the ledger credits an agent, never a person', () => {
-  const executor = { assignedAgentRef: 'exec-agent', assignedAgentHostId: null };
+  const executor = { actorAgentRef: 'exec-agent', actorAgentHostId: null };
   it('credits a named agent manager', () => {
     expect(reviewCloseActor('c:mgr-agent', executor)).toEqual({ actorAgentRef: 'mgr-agent' });
     expect(reviewCloseActor('h:7', executor)).toEqual({ actorAgentHostId: 7 });
@@ -120,22 +120,12 @@ describe('the conduct step asks the gate before it closes anything', () => {
   const source = readFileSync(fileURLToPath(new URL('./ManagerService.ts', import.meta.url).href), 'utf8');
   const conduct = source.slice(source.indexOf('async function coordinatePullRequests'));
 
-  it('decides the review gate BEFORE the one completion path', () => {
-    const gate = conduct.indexOf('decideReviewGate(');
-    const complete = conduct.indexOf('await completeTaskOnMerge(');
-    expect(gate).toBeGreaterThan(-1);
-    expect(complete).toBeGreaterThan(gate);
+  it('closes only through the gated wrapper, never the raw completion write', () => {
+    expect(conduct).toMatch(/closeTicketAutomatically\(env, db, \{[\s\S]*?source: 'manager_review'/);
+    expect(source).not.toMatch(/completeTaskOnMerge\(/);
   });
 
-  it('holds (and journals) instead of closing when the gate is held for a person', () => {
-    expect(conduct).toMatch(/if \(reviewGate === 'held_for_human'\) \{[\s\S]*?recordReviewGateHeld\([\s\S]*?continue;/);
-  });
-
-  it('closes nothing when the review lane gate could not be read', () => {
-    expect(conduct).toMatch(/if \(!reviewLaneGates\) continue;/);
-  });
-
-  it('audits every manager-authorized close', () => {
-    expect(conduct).toMatch(/if \(reviewGate === 'manager_authorized'\) \{[\s\S]*?recordManagerReviewClose\(/);
+  it('does nothing further with a ticket the gate held (or could not read)', () => {
+    expect(conduct).toMatch(/if \(!close\.closed\) continue;/);
   });
 });

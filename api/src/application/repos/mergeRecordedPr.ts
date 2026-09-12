@@ -16,8 +16,11 @@ import { resolveRepoCredential, isResolveError } from './resolveRepoCredential';
 import { mergePullRequest, normalizeMergeMethod, type MergeMethod } from './mergePullRequest';
 import { markPullRequestMergedById } from './recordPullRequestRow';
 import { invalidatePullRequestDetail } from './getPullRequestDetail';
-import { completeTaskOnMerge, type TransitionActorInput } from '../task/taskLifecycle';
+import type { TransitionActorInput } from '../task/taskLifecycle';
 import { resolveManagerAssignee } from '../manager/managerPolicy';
+import {
+  closeTicketAutomatically, type AutomaticCloseResult, type CloseInitiator,
+} from '../manager/reviewGateAuthority';
 import { updatePullRequestBranch } from './updatePullRequestBranch';
 
 export type UpdateRecordedPrBranchResult =
@@ -85,8 +88,32 @@ export function resolveMergeActor(mergedBy: string | null | undefined): Transiti
   return { actorUserId: ref };
 }
 
+/**
+ * WHO ASKED FOR THIS MERGE, for the review gate. PURE.
+ *
+ * A user id is a person clicking Approve & Merge — that click IS the approval a human
+ * review gate waits for. `manager:<ref>` (the merge sweep) and `provider:*` (a reconcile)
+ * are automation, and an automatic close obeys the workspace's review-and-close setting.
+ */
+export function mergeInitiator(mergedBy: string | null | undefined): CloseInitiator {
+  const ref = mergedBy?.trim();
+  if (!ref || ref.startsWith('manager:') || ref.startsWith('provider:')) return 'automation';
+  return 'human';
+}
+
+/** The manager designation a `manager:<ref>` merge was taken under, else null. PURE. */
+export function managerRefFromMergedBy(mergedBy: string | null | undefined): string | null {
+  const ref = mergedBy?.trim();
+  return ref?.startsWith('manager:') ? ref.slice('manager:'.length) || null : null;
+}
+
 export type MergeRecordedPrResult =
-  | { ok: true; merged: boolean; alreadyMerged?: boolean; branchUpdated?: boolean; sha: string | null; pullRequest: unknown }
+  | {
+    ok: true; merged: boolean; alreadyMerged?: boolean; branchUpdated?: boolean; sha: string | null; pullRequest: unknown;
+    /** What happened to the linked ticket — held in review, or closed. Null when there is
+     *  no linked ticket or the close attempt failed (the merge stands either way). */
+    ticketClose?: AutomaticCloseResult | null;
+  }
   | { ok: false; httpStatus: number; error: string; code?: string };
 
 /**
@@ -162,19 +189,26 @@ export async function mergeRecordedPullRequest(
     reportCaughtError(error, { source: "application/repos/mergeRecordedPr.ts", operation: "mergeRecordedPullRequest" });
   });
 
-  // Merge → ticket complete: the ONE place every merge path funnels through, so the
-  // human "Approve & Merge", the AI Manager sweep and the green-CI auto-merge all
-  // complete the linked ticket identically. Best-effort — a merged PR must not be
-  // reported as failed just because the completion write hiccuped.
+  // Merge → ticket complete, THROUGH THE REVIEW GATE (1153). The merge is already recorded
+  // above and stands whatever happens next. A person's Approve & Merge closes the ticket;
+  // the manager sweep's merge closes it only where the workspace lets the manager close
+  // reviewed tickets — otherwise the ticket stays in review, merged, and the hold is
+  // journalled once. Best-effort — a merged PR must not be reported as failed just because
+  // the completion write hiccuped.
+  let ticketClose: AutomaticCloseResult | null = null;
   if (row.taskId != null) {
-    await completeTaskOnMerge(env, db, {
+    ticketClose = await closeTicketAutomatically(env, db, {
       tenantId: args.tenantId,
       taskId: row.taskId,
-      ...resolveMergeActor(args.mergedBy),
+      source: 'pr_merge',
+      initiator: mergeInitiator(args.mergedBy),
+      actor: resolveMergeActor(args.mergedBy),
+      managerRef: managerRefFromMergedBy(args.mergedBy),
     }).catch((error) => { /* completion is best-effort; the merge itself succeeded */
       reportCaughtError(error, { source: "application/repos/mergeRecordedPr.ts", operation: "mergeRecordedPullRequest" });
+      return null;
     });
   }
 
-  return { ok: true, merged: result.merged, branchUpdated, sha: result.sha, pullRequest: updated ?? row };
+  return { ok: true, merged: result.merged, branchUpdated, sha: result.sha, pullRequest: updated ?? row, ticketClose };
 }

@@ -847,6 +847,21 @@ function kb(bytes: number): string {
 }
 
 /**
+ * WHAT tripped the context verdict, stated as the evidence it is. The old line claimed
+ * "the transcript outgrew the model window" whatever the signal — on a 46k-token peak
+ * against a model with a ~1M window, where the true reading is "a large prompt and some
+ * results cut to the per-result budget". The reader decides from the numbers.
+ */
+function contextEvidence(d: BrainDiagnostics): string {
+  const parts: string[] = [];
+  if (d.promptTokenPeak >= CONTEXT_PROMPT_PEAK) parts.push(`the prompt peaked at ${d.promptTokenPeak.toLocaleString('en-US')} tokens`);
+  if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) were cut before the model saw them`);
+  if (d.downgradeEvents > 0) parts.push(`${d.downgradeEvents} turn(s) were served by a smaller model than asked`);
+  if (parts.length === 0 && d.largestToolResult) parts.push(`one ${d.largestToolResult.label} result was ${kb(d.largestToolResult.bytes)}`);
+  return parts.length ? parts.join('; ') : 'context pressure without a single dominant signal';
+}
+
+/**
  * Render {@link BrainDiagnostics} as transcript lines. Shared by both copy
  * surfaces so the "Diagnostics" block is identical on web and in VS Code. Emits
  * a leading `--- Diagnostics ---` header and returns the lines (caller joins).
@@ -865,7 +880,7 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
           : d.likelyCause === 'no-progress'
             ? ((d.progress && runProgressVerdict(d.progress)) ?? 'NO PROGRESS — the run repeated work without advancing.')
           : d.likelyCause === 'context-exhaustion'
-            ? 'Likely CONTEXT EXHAUSTION (case A) — the transcript outgrew the model window.'
+            ? `Likely CONTEXT EXHAUSTION (case A) — ${contextEvidence(d)}.`
             : d.likelyCause === 'model-degradation'
               ? 'Likely MODEL DEGRADATION (case B) — an Evermind/SSM turn returned empty while tokens stayed low.'
               : d.likelyCause === 'healthy'
@@ -891,7 +906,7 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
     );
   }
   lines.push(
-    `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` · largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ''}${d.truncatedToolResults ? ` · ${d.truncatedToolResults} truncated before the model saw them` : ''}`,
+    `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` · largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ''}${d.truncatedToolResults ? ` · ${d.truncatedToolResults} truncated before the model saw them` : ''}${d.pagedReadWindows ? ` · ${d.pagedReadWindows} read_file window(s) paged (continued by offset, not lost)` : ''}`,
   );
   // Repetition / reach / effect / timing. Placed directly under the tool-result
   // sizes because they answer the question those sizes raise: 102 KB of tool output

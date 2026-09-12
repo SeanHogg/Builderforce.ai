@@ -172,6 +172,8 @@ export {
   buildBrainTriageReport,
   detectUnbackedWriteClaim,
   detectUnbackedTicketClaim,
+  UNBACKED_WRITE_CLAIM_NOTICE,
+  UNBACKED_TICKET_CLAIM_NOTICE,
   detectAnnouncedButUnmadeToolCall,
   isFailedToolResult,
   isEvermindModel,

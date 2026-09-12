@@ -45,6 +45,14 @@
  * got easier; only the noise around it went away.
  *
  * Deliberate raises, so a name in the baseline always has an argument:
+ *   323 → 326 files (2026-09-12, marketing translation) — `lib/content.ts` (2,001
+ *   lines, in the closure through `AppFooter` and the onboarding `RoleChoiceScreen`)
+ *   is SPLIT, and only the four modules the shell actually reaches replace it:
+ *   `content/brand.ts` (BRAND, MEDIA_KIT), `content/auth.ts` (the auth-panel
+ *   registry), and `content/faq.ts` + `content/copy.ts` (the key helpers it uses) —
+ *   ~320 lines together. Every English sentence moved into the catalogs, so the
+ *   closure lost ~1,700 lines for three more names; `content/{product,compare,seo}`
+ *   stay out of it.
  *
  *   320 → 323 files (2026-09-12, later the same day) — the identity split and the ONE
  *   session gate. No new first-paint WORK; code that was already here moved into files

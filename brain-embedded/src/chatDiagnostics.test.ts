@@ -52,6 +52,20 @@ const signals = (d: ChatDiagnosticsData) => {
   return i === -1 ? '' : text.slice(i);
 };
 
+describe('formatChatDiagnostics — learn version signal', () => {
+  it('stays silent when the head moved AHEAD of the learn step — that is the queued learn landing', () => {
+    // Observed: "reported v22 · head v23" flagged as a mismatch on a healthy chat. The
+    // gate reports the head it evaluated; its own contribution then bumps the head.
+    const d = baseline({ evermind: { ...baseline().evermind!, version: 23 }, lastLearn: { learned: true, version: 22 } });
+    expect(signals(d)).not.toContain('DIFFERENT projects/heads');
+  });
+
+  it('flags a head BEHIND the learn step — impossible for one head', () => {
+    const d = baseline({ evermind: { ...baseline().evermind!, version: 3 }, lastLearn: { learned: true, version: 9 } });
+    expect(signals(d)).toContain('DIFFERENT projects/heads');
+  });
+});
+
 describe('formatChatDiagnostics — account block', () => {
   it('states plan, billing, quota and entitlement for a healthy paid tenant', () => {
     const out = render(baseline());

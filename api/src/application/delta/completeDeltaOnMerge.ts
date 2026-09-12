@@ -39,7 +39,7 @@ import type { Env } from '../../env';
 import { pullRequests, tasks, workDeltas } from '../../infrastructure/database/schema';
 import { TaskStatus } from '../../domain/shared/types';
 import { resolveRepoLink } from '../contributors/activityIngest';
-import { completeTaskOnMerge } from '../task/taskLifecycle';
+import { closeTicketAutomatically } from '../manager/reviewGateAuthority';
 
 /** The merged pull request, in the shape a provider webhook can supply. */
 export interface MergedPullRequestRef {
@@ -55,6 +55,9 @@ export interface MergedPullRequestRef {
 export interface DeltaMergeOutcome {
   /** Task ids actually moved to done. */
   completed: number[];
+  /** Matched tickets left in review because the board's review lane needs a person and
+   *  the workspace has not let the manager close reviewed tickets (1153). */
+  heldForReview?: number[];
   /** Why nothing was completed — a webhook that no-ops must be able to say so. */
   reason?: string;
 }
@@ -170,11 +173,21 @@ export async function completeDeltaTicketsOnMerge(
   }
 
   const completed: number[] = [];
+  const heldForReview: number[] = [];
   for (const taskId of eligible) {
-    // No actor: a merge webhook has no user, and `completeTaskOnMerge` already falls
-    // back to the agent whose run produced the work rather than stamping it anonymous.
-    await completeTaskOnMerge(env, db, { tenantId: link.tenantId, taskId });
-    completed.push(taskId);
+    // No actor: a merge webhook has no user, and the completion path falls back to the
+    // agent whose run produced the work rather than stamping it anonymous. THROUGH THE
+    // REVIEW GATE (1153): a merge is automation, so a human-gated review lane holds unless
+    // the workspace lets the manager close reviewed tickets.
+    const close = await closeTicketAutomatically(env, db, { tenantId: link.tenantId, taskId, source: 'delta_merge' });
+    (close.closed ? completed : heldForReview).push(taskId);
   }
-  return { completed };
+  if (heldForReview.length === 0) return { completed };
+  return {
+    completed,
+    heldForReview,
+    ...(completed.length === 0
+      ? { reason: 'the merge is recorded; the matched delta ticket waits in review because this board\'s review lane needs a person and the workspace has not let the manager close reviewed tickets' }
+      : {}),
+  };
 }

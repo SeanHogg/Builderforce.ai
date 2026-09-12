@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
+import { defaultCopy } from '@/lib/content/defaultCopy';
 import { registerSchema } from '@/lib/structured-data';
 import RegisterPageClient from './RegisterPageClient';
 
@@ -21,12 +21,11 @@ export const metadata: Metadata = {
   },
 };
 
-/** JSON-LD on the server, in the visitor's locale — see `app/login/page.tsx`. */
-export default async function RegisterPage() {
-  const t = await getTranslations();
+/** JSON-LD on the server, out of the client bundle — see `app/login/page.tsx`. */
+export default function RegisterPage() {
   return (
     <>
-      <JsonLd data={registerSchema(t)} />
+      <JsonLd data={registerSchema(defaultCopy)} />
       <RegisterPageClient />
     </>
   );

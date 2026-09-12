@@ -14,6 +14,8 @@ import {
   computeBrainDiagnostics,
   detectUnbackedTicketClaim,
   detectUnbackedWriteClaim,
+  UNBACKED_TICKET_CLAIM_NOTICE,
+  UNBACKED_WRITE_CLAIM_NOTICE,
   formatBrainDiagnostics,
   formatBrainProvenance,
   formatChatDiagnostics,
@@ -155,12 +157,8 @@ export function buildTranscript(input: TranscriptInput): string {
   // Structural honesty flags — an assistant turn that CLAIMED a file write or a
   // filed/linked ticket while no such tool call succeeded. Web parity: these ran only
   // in the web triage report, so a VSIX capture of the same failure said nothing.
-  if (detectUnbackedWriteClaim(events, input.messages)) {
-    lines.push('⚠ UNBACKED WRITE CLAIM — an assistant turn claimed it saved/updated a file, but no file-write tool (attachments.write / project_files.save) succeeded in this run. The file was NOT modified.', '');
-  }
-  if (detectUnbackedTicketClaim(events, input.messages)) {
-    lines.push('⚠ UNBACKED TICKET CLAIM — an assistant turn claimed it created/filed/linked a ticket or gap, but no create/link tool (tasks.create / chats.link_ticket / tickets.from_delta) succeeded in this run. Nothing was filed or linked to the chat.', '');
-  }
+  if (detectUnbackedWriteClaim(events, input.messages)) lines.push(UNBACKED_WRITE_CLAIM_NOTICE, '');
+  if (detectUnbackedTicketClaim(events, input.messages)) lines.push(UNBACKED_TICKET_CLAIM_NOTICE, '');
 
   for (const node of nodes) {
     switch (node.kind) {

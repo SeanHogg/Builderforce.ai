@@ -262,7 +262,7 @@ const BASELINE = {
    * pages (three `fontSize: 14` each) became ONE `WebContainerConnect` leaf on
    * `--font-size-body`. Net of the one the integrations forms had added.
    */
-  offScaleFontSizes: 3462,
+  offScaleFontSizes: 3459,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

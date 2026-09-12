@@ -1,3 +1,117 @@
+## ✅ RESOLVED 2026-09-12 — The built-but-unreachable canvas features stand in the 3D Room (operator decision: wire ALL of them into the Room)
+
+The 2026-09-05 review found features built and validated but reachable from nowhere: the approval
+gate's write half, the metric engine, the third-party widget host, and the academic modules.
+Decision 2026-09-12: wire all of them into the Room.
+
+- **Stations are registry DATA.** Each is one entry in `lib/canvas/roomStations.ts` (when it
+  stands) plus one in `room-stations/registry.tsx` (how it renders); the room never branches on a
+  station id. Stations read the board through `canvasBoardBridge.tsx`, published by CreationCanvas
+  beside the card-act runner, so the room surface needed no new props (CreationCanvas net shorter).
+  Each station stands in 3D with live content on its face (`SurfacePanel` gained a `content` prop),
+  appears in the keyboard/screen-reader list beside the roster — which is the whole room on devices
+  without 3D — and opens a 2D slide-out.
+- **Approval desk:** every object with changes awaiting sign-off, oldest first; Approve / Refuse /
+  "Approve and <act>". Uses the gate's own separation-of-duties rule (no self-approval, agents never
+  approve); read-only for non-editors, absent for unidentified guests. `canvasApprovalGate.ts`
+  gained a `refused` state (stops waiting, keeps the act blocked); `grantApproval` and
+  `pendingApprovals` now have callers.
+- **Metrics board:** evaluates every board metric with `readMetricDefinitions`/`computeMetricSet`,
+  leads with a one-line insight (how many are behind target), orders behind-target first, shows the
+  source rows, trends time-series metrics, and says why a metric cannot compute instead of showing 0.
+- **Widget host:** sandboxed iframe with the protocol's sandbox attributes; messages accepted only
+  from our own frame via `widgetAcceptsOrigin` (moved into `@builderforce/canvas-widget-protocol`)
+  then `parseWidgetMessage`. **Protocol bug fixed:** a frame sandboxed without same-origin reports
+  origin `'null'`, so the old check would have refused every widget — `effectiveWidgetOrigin`
+  treats only our own not-yet-navigated frame as the registered origin. Widget writes are
+  sanitised, cannot touch `resourceId`/`approvalMode`/`provenance`/another widget's storage, and
+  money-field changes queue at the approval desk. New session-authenticated
+  `GET /api/creation-sessions/:id/widgets/:widgetId`.
+- **Academic stations:** Assessment desk (mode, window, deadline + approved extra time, rubric
+  problems, submission counts; integrity flags and a Mark button for editors via
+  `submission.mark`), Gradebook (at-risk first, labelled in words, moderation queue; editors only),
+  Accessibility audit (score + WCAG criterion per finding; which accommodation raised it is
+  editor-only), Citations desk (style picker, copy in-text citation, BibTeX export).
+- **Exam gate:** a released, not-yet-closed assessment locks the Brain everywhere — canvas prompt,
+  BrainPanel composer and send path, meeting-room ask-agent field, dashboard composer, and
+  object-button turns (`startCanvasTurn` refuses) — strictest mode wins; closed-book disables the
+  box and says why in words; an unreleased exam locks nothing so its author can still use the Brain.
+- **Downloads + TeX:** card acts can return a file saved via `lib/download.ts` (gradebook CSV,
+  bibliography/citation BibTeX — previously no-ops); maths renders where `looksLikeTex` detects it
+  (KaTeX for delimited, MathML with a spoken label for bare expressions).
+- **`PromptInput`** moved to `brain-embedded/src/ui/PromptInput.tsx` (no Next.js deps, labels
+  passed in translated), package rebuilt, meeting room migrated, old copy deleted.
+- Localized: `roomStations` block + 101 academic keys in all five catalogs. Marketing:
+  `content/blog/sign-measure-and-plug-in-inside-the-room.md` (registered in `blogData.ts`).
+- Tests: approvals/metrics/widgets 9 files / 72 green; academic 38 + 23 (SpecObjectBody,
+  CreationNode) + brain-embedded 6 green; api typecheck clean.
+- **Release-note row** for the room stations still needs authoring through the superadmin surface
+  (live session required), like the other room entries.
+
+## ✅ RESOLVED 2026-09-12 — Evermind's 90% coding gate, and the on-prem runner pushing weight diffs (operator decisions)
+
+**A — Evermind for IDE coding needs 90%.** `evermindCodingGate.ts`: ONE constant
+`EVERMIND_CODING_QUALITY_BAR = 0.9`, ONE predicate `evermindQualifiesForCoding(head)` — true only
+when a coding eval recorded for the CURRENT head version scores ≥ 90% of the frontier baseline on
+the same eval; an unseeded or quarantined head never qualifies, and every merge closes the gate
+until the eval is re-run. Stored as `coding_eval_*` columns on `project_evermind` (migration
+`1157_evermind_coding_eval.sql`); written by manager-only `POST /:projectId/evermind/coding-eval`
+from two `EvalHarness` reports (head + baseline, same dataset and case count; 409 if the head has
+moved on). Consulted by every path that would send a coding turn to Evermind — `dispatchCloudRun`,
+the gateway `project_evermind:` pin VS Code sends (`llmRoutes`), explicit `evermind/` pins in
+`pickCloudModel`/`cloudAgentEngine`, and VS Code's default-model choice (`modelState`) — each
+falling back to the normal model, never erroring. Nothing switched on: `autoRoute:false` stays.
+Status payloads carry `codingGate`; the console shows "Coding eval X% of baseline, needs 90%"
+(`CodingGateNote`, five catalogs).
+
+**B — `/evermind/learn`: the on-prem runner pushes diffs.** The producer
+(`agent-runtime/src/infra/project-evermind-delta.ts`) already existed but its door had been removed
+on 2026-08-23 (9097b7af4), so every push 404'd and silently fell back to text. Restored:
+`evermindDeltaLearn.ts` is the shared contract (8 MiB base64 cap matching the producer, unseeded
+409, frozen 423, stale base 409 with `headVersion` so the runner re-pulls and re-diffs); the
+coordinator DO queues delta entries and `drain()` merges them in the same batch as text fits,
+validating each delta alone so one bad diff cannot drop the batch; `learnCore` is back on the JWT
+and agent-host-key doors (never fanned out to sibling Everminds — a diff fits exactly one head;
+oversized bodies 413 before parsing).
+
+Tests: api 249 (+12 route re-run), agent-runtime 20, brain-ui 19, frontend console 32; api tsgo,
+brain-ui, frontend and VS Code typechecks clean; `check-migrations` and `check-unvalidated-bodies`
+green. Still open (roadmap): a checkpoint that passes the gate, and the live coordinator-DO merge.
+
+## ✅ RESOLVED 2026-09-12 — The npm package, CLI binary and domain no longer say coderclaw (operator decision: npm + domain only)
+
+Scope decided 2026-09-12: de-brand the npm package, CLI binary and domain; leave schema, live
+API field names, `CODERCLAW_*` env vars and store bundle ids alone.
+
+- **Canonical names:** npm `@seanhogg/builderforce-agents`, CLI `builderforce`, domain
+  `builderforce.ai`. The legacy `coderclaw` npm package was unpublished 2026-06-18 and agent-runtime
+  declares only the `builderforce` bin, so no alias needed keeping alive.
+- **Installers:** `frontend/public/install-cli.sh` installs the scoped package into
+  `~/.builderforce/bin/builderforce` (git mode clones `SeanHogg/Builderforce.ai` and builds
+  agent-runtime). `install.cmd` uses builderforce.ai URLs and was passing four flags `install.ps1`
+  never accepted — now only `-Tag`/`-NoStart`. The docs-site install SVG, README, sdk README updated.
+- **Runtime self-update:** four copies of the package name folded into
+  `agent-runtime/src/infra/package-names.ts` (still recognises the legacy unscoped name); the updater
+  finds scoped installs and cleans npm's rename leftovers; printed install hints fixed. 61 wrong
+  `npm install -g builderforce@latest`-style commands across 28 docs pages corrected.
+- **Installer docs rewritten to the real scripts** (`installer.md` en + zh-cn and siblings, 23 edits):
+  the docs described flags neither `install.sh` (env only: `BUILDERFORCE_TAG/_TOKEN/_WORKSPACE/_URL/_NO_START`)
+  nor `install.ps1` (`-Tag/-ApiUrl/-NoStart`) has. The Docker install smoke harness passed the dead
+  `BUILDERFORCE_AGENTS_NO_ONBOARD` to `install.sh` — now `BUILDERFORCE_NO_START`.
+- **Native apps (macOS/iOS/Android):** the CLI lookup prefers `builderforce` and falls back to
+  `coderclaw` for existing installs; installer/About/share URLs point at builderforce.ai. **Gateway
+  discovery bug fixed:** the apps browsed `_coderclaw-gw._tcp` while the runtime advertises
+  `_builderforce-gw._tcp`, so no app could find a current gateway; each platform now has ONE service
+  type list (`BonjourTypes.swift` shared by iOS/macOS, `GatewayServiceTypes.kt`) and browses both;
+  the iOS Info.plist's stale `_openclaw-gw._tcp` replaced. *Not compiled — no Xcode/Android build
+  here.*
+- Accept-old-names paths kept: `/coderclaw*` redirects, the `coderclawllm/` model prefix, the
+  `coderclaw` dispatch label, the `docs.coderclaw.ai` Cloudflare redirect.
+- Checks: `bash -n` on `install-cli.sh`/`install.sh`; vitest 48/48 (`package-names`, `update-runner`,
+  `builderforce-root`, `update-cli`).
+- Left open (roadmap): nothing PUBLISHES `@seanhogg/builderforce-agents` — blocked on the operator's
+  go-ahead to publish a public npm package.
+
 ## ✅ RESOLVED 2026-09-12 — `allowAutoStaffLanes` granted on the operator's workspace (operator decision)
 
 The 309-ticket unconfigured-lane cohort (`backlog` 299, `blocked` 10) authorised no role, and

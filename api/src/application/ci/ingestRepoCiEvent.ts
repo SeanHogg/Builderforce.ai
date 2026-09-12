@@ -25,7 +25,7 @@ import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCrede
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutofixOnBuildFailure, MAX_AUTOFIX_ATTEMPTS } from '../repos/mergeBranchToBase';
 import { ticketBranchName } from '../repos/commitFileAsPendingChange';
 import { markPullRequestMergedByTask, findMergedPullRequestBySha, findOpenPullRequestByTask, findOpenPullRequestByProject, setPullRequestBuildStatus } from '../repos/recordPullRequestRow';
-import { completeTaskOnMerge } from '../task/taskLifecycle';
+import { closeTicketAutomatically } from '../manager/reviewGateAuthority';
 import { fetchBuildError } from './fetchBuildError';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -439,8 +439,9 @@ async function ingestPreMergeEvent(db: Db, env: Env, secret: string, evt: RepoCi
           await markPullRequestMergedByTask(db, task.tenantId, taskId, { mergeSha: mr.sha ?? null }).catch((error) => {
             reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "ingestPreMergeEvent" });
           });
-          // Merge on green → ticket complete (same completion path as the human/manager merge).
-          await completeTaskOnMerge(env, db, { tenantId: task.tenantId, taskId }).catch((error) => {
+          // Merge on green → ticket complete, through the same review gate every automatic
+          // close obeys (1153). Held: the merge above stands and the ticket waits in review.
+          await closeTicketAutomatically(env, db, { tenantId: task.tenantId, taskId, source: 'ci_merge' }).catch((error) => {
             reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "ingestPreMergeEvent" });
           });
         }
@@ -477,8 +478,10 @@ async function ingestPostMergeEvent(db: Db, env: Env, secret: string, evt: RepoC
   // "it shipped" signal, so complete the ticket here too (idempotent — a no-op if an
   // earlier merge path already completed it). A deploy FAILURE leaves it open and
   // drives auto-fix below.
+  // Through the review gate (1153): where the workspace keeps a person on the review lane,
+  // a successful deploy leaves the ticket in review and says so once.
   if (evt.outcome === 'success') {
-    await completeTaskOnMerge(env, db, { tenantId, taskId }).catch((error) => {
+    await closeTicketAutomatically(env, db, { tenantId, taskId, source: 'deploy_success' }).catch((error) => {
       reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "ingestPostMergeEvent" });
     });
   }

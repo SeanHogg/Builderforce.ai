@@ -97,6 +97,36 @@ describe("splitReasoningSegments — the shared transcript's split", () => {
     const text = "The `<think>` tag wraps reasoning.";
     expect(splitReasoningSegments(text)).toEqual([{ kind: "answer", content: text }]);
   });
+
+  it("re-joins a sentence the closing tag cut in two", () => {
+    // Verbatim shape (MiniMax-M1, chat #103): the chat's first visible line was
+    // "tickets linked to this chat…" with its subject hidden in the reasoning.
+    const out = splitReasoningSegments(
+      "<think>The user wants a ticket review.\nI'll start by listing the</think>tickets linked to this chat to see what open tickets we're working with.",
+    );
+    expect(out).toEqual([
+      { kind: "thought", content: "The user wants a ticket review." },
+      { kind: "answer", content: "I'll start by listing the tickets linked to this chat to see what open tickets we're working with." },
+    ]);
+  });
+
+  it("does not stitch a finished thought, or an answer that opens like a reply", () => {
+    expect(splitReasoningSegments("<think>Plan the steps.</think>then run them all in order today.")).toEqual([
+      { kind: "thought", content: "Plan the steps." },
+      { kind: "answer", content: "then run them all in order today." },
+    ]);
+    expect(splitReasoningSegments("<think>Checking the branches for the</think>Here is the full list of branches.")).toEqual([
+      { kind: "thought", content: "Checking the branches for the" },
+      { kind: "answer", content: "Here is the full list of branches." },
+    ]);
+  });
+
+  it("drops an empty vendor tool-call wrapper from the reasoning", () => {
+    expect(splitReasoningSegments("<think>Check more tickets.\n<minimax:tool_call>\n\n</minimax:tool_call></think>Done.")).toEqual([
+      { kind: "thought", content: "Check more tickets." },
+      { kind: "answer", content: "Done." },
+    ]);
+  });
 });
 
 describe("answerTextOf / thoughtTextOf", () => {

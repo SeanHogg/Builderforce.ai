@@ -109,10 +109,52 @@ describe('detectUnbackedWriteClaim', () => {
     expect(detectUnbackedWriteClaim(events, messages)).toBe(true);
   });
 
+  it('counts the IDE workspace writers (write_file / edit_file) as backing the claim', () => {
+    // The VS Code run edits files with its own tools; the gateway-only list flagged
+    // every such run "UNBACKED" — observed on a chat whose edit had opened a ticket.
+    const messages = [msg('assistant', 'Updated ROADMAP.md with the new section.')];
+    expect(detectUnbackedWriteClaim([toolEv('edit_file', { ok: true })], messages)).toBe(false);
+    expect(detectUnbackedWriteClaim([toolEv('write_file', { ok: true, change: 'created' })], messages)).toBe(false);
+    expect(detectUnbackedWriteClaim([toolEv('edit_file', { ok: false, error: 'old_string not found' })], messages)).toBe(true);
+  });
+
   it('ignores assistant prose that is not a file-save claim', () => {
     const events: BrainTraceEvent[] = [];
     const messages = [msg('assistant', 'I created 3 tasks and 2 objectives on the board.')];
     expect(detectUnbackedWriteClaim(events, messages)).toBe(false);
+  });
+});
+
+describe('context verdict — paged reads are not lost context', () => {
+  const msg = (role: string, content: string): BrainMessage => ({ role, content } as BrainMessage);
+  const llmTurn = (prompt: number): BrainTraceEvent => ({ ts: '', category: 'llm', label: 'llm.complete', usage: { prompt, completion: 40 } });
+  const cut = (label: string, resultBytes: number): BrainTraceEvent =>
+    ({ ts: '', category: 'tool', label, result: { ok: true }, truncated: true, resultBytes });
+
+  it('counts a read_file window as PAGED, and does not call it context exhaustion', () => {
+    // A 182 KB ROADMAP read arrives as several 16k windows, each naming its next offset.
+    const d = computeBrainDiagnostics(
+      [llmTurn(3_000), cut('read_file', 182_000)],
+      undefined,
+      [msg('user', 'What does the roadmap say?'), msg('assistant', 'It lists three open items.')],
+    );
+    expect(d.truncatedToolResults).toBe(0);
+    expect(d.pagedReadWindows).toBe(1);
+    expect(d.likelyCause).not.toBe('context-exhaustion');
+    expect(formatBrainDiagnostics(d).join('\n')).toContain('1 read_file window(s) paged');
+  });
+
+  it('names the evidence behind a context verdict instead of asserting the window was outgrown', () => {
+    const d = computeBrainDiagnostics(
+      [llmTurn(46_228), cut('builtin_manager_stalled_tickets', 9_000)],
+      undefined,
+      [msg('user', 'Which tickets are stuck?'), msg('assistant', 'Several.')],
+    );
+    expect(d.likelyCause).toBe('context-exhaustion');
+    const report = formatBrainDiagnostics(d).join('\n');
+    expect(report).toContain('the prompt peaked at 46,228 tokens');
+    expect(report).toContain('1 tool result(s) were cut before the model saw them');
+    expect(report).not.toContain('outgrew the model window');
   });
 });
 

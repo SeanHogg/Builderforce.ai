@@ -20,6 +20,7 @@ import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { blocksCompletion } from '../kanban/participantStates';
 import { isParkedLane } from '../swimlane/nextLane';
+import { gateAutomaticClose, recordManagerReviewClose, type ReviewGateVerdict } from './reviewGateAuthority';
 
 export interface CoordinateResult {
   ok: boolean;
@@ -99,9 +100,29 @@ export async function coordinateCompletedStage(
   if (!decision.nextStatus) return unchanged(true, decision.outstanding);
   const next = lanes.find((l) => l.key === decision.nextStatus)!;
 
+  // A move INTO THE TERMINAL LANE is an automatic close, so the one review gate every
+  // automatic close obeys decides it (1153). Held: the stage stays satisfied, the ticket
+  // stays in review for a person, and the hold is journalled once.
+  let closeVerdict: ReviewGateVerdict | null = null;
+  if (next.isTerminal) {
+    const gate = await gateAutomaticClose(env, db, {
+      tenantId: args.tenantId, projectId: args.projectId, taskId: args.taskId,
+      status: args.fromStatus, title: null, source: 'stage_advance',
+    });
+    if (gate.verdict === 'held_for_human') return unchanged(true);
+    closeVerdict = gate.verdict;
+  }
+
   const changed = await db.update(tasks).set({ status: next.key, updatedAt: new Date() })
     .where(and(eq(tasks.id, args.taskId), eq(tasks.status, args.fromStatus))).returning({ id: tasks.id });
   if (!changed.length) return unchanged(true);
+  if (closeVerdict === 'manager_authorized') {
+    await recordManagerReviewClose(env, db, {
+      tenantId: args.tenantId, projectId: args.projectId, taskId: args.taskId,
+      title: `ticket #${args.taskId}`, lane: args.fromStatus, managerRef: null, actor: {},
+      source: 'stage_advance',
+    });
+  }
 
   // The ADVANCE is a state change and always happens; only the destination lane's run is
   // subject to the caller's dispatch budget. Withholding the advance would be worse than

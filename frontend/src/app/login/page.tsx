@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
+import { defaultCopy } from '@/lib/content/defaultCopy';
 import { loginSchema } from '@/lib/structured-data';
 import LoginPageClient from './LoginPageClient';
 
@@ -21,13 +21,13 @@ export const metadata: Metadata = {
   },
 };
 
-/** The JSON-LD is rendered HERE, on the server, so the FAQPage a crawler receives is
- *  already in the visitor's locale — the client island only renders the form. */
-export default async function LoginPage() {
-  const t = await getTranslations();
+/** The JSON-LD is rendered HERE, on the server, rather than by the client island:
+ *  the form ships without the structured-data module, and this static route's HTML
+ *  carries it in the default locale (`lib/content/defaultCopy.ts`). */
+export default function LoginPage() {
   return (
     <>
-      <JsonLd data={loginSchema(t)} />
+      <JsonLd data={loginSchema(defaultCopy)} />
       <LoginPageClient />
     </>
   );
