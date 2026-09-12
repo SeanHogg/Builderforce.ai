@@ -168,7 +168,7 @@ export function createPublicSignatureRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.post('/:token', (c) => handle(async () => {
-    const body = await c.req.json<{ decision?: unknown; signedName?: unknown; declineReason?: unknown }>();
+    const body = await parseBody(c, SignerDecisionBody);
     const decision = body.decision === 'decline' ? 'decline' : 'agree';
     const result = await recordSignature(db, c.req.param('token'), {
       decision,

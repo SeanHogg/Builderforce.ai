@@ -62,6 +62,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { NEWSLETTER_EVENT_TYPES } from '../../../domain/marketing/newsletterEvents';
 /**
  * Schema — the kernel (PRD 20 §2).
  *
@@ -1464,9 +1465,8 @@ export const newsletterSubscriptionStatusEnum = pgEnum('newsletter_subscription_
 ]);
 
 
-export const newsletterEventTypeEnum = pgEnum('newsletter_event_type', [
-  'subscribed', 'unsubscribed', 'template_sent', 'email_opened', 'email_clicked',
-]);
+// Values owned by the domain vocabulary so request schemas admit exactly what this enum stores.
+export const newsletterEventTypeEnum = pgEnum('newsletter_event_type', NEWSLETTER_EVENT_TYPES);
 
 
 export const privacyRequestTypeEnum = pgEnum('privacy_request_type', [

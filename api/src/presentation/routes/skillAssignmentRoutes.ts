@@ -27,6 +27,10 @@ import {
 import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseBody, z } from './requestBody';
+
+/** `skillSlug` stays optional so "skillSlug is required" still answers. */
+const SkillAssignmentBody = z.object({ skillSlug: z.string().nullish() });
 
 export function createSkillAssignmentRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -45,7 +49,7 @@ export function createSkillAssignmentRoutes(db: Db): Hono<HonoEnv> {
   router.post('/tenant', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId   = c.get('userId') as string;
-    const body     = await c.req.json<{ skillSlug: string }>();
+    const body     = await parseBody(c, SkillAssignmentBody);
     if (!body.skillSlug) return c.json({ error: 'skillSlug is required' }, 400);
 
     if (!await marketplaceSkillExists(db, body.skillSlug)) return c.json({ error: 'Skill not found' }, 404);
@@ -87,7 +91,7 @@ export function createSkillAssignmentRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const userId   = c.get('userId') as string;
     const agentHostId   = Number(c.req.param('agentHostId'));
-    const body     = await c.req.json<{ skillSlug: string }>();
+    const body     = await parseBody(c, SkillAssignmentBody);
     if (!body.skillSlug) return c.json({ error: 'skillSlug is required' }, 400);
 
     const [agentHost] = await db

@@ -1,5 +1,5 @@
 import { headers } from 'next/headers';
-import { BRAND } from '@/lib/content';
+import { BRAND } from '@/lib/content/brand';
 
 /**
  * Absolute origin of the current request — what a server render resolves a

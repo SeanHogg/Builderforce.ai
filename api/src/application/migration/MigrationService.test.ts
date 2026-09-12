@@ -136,10 +136,12 @@ describe('MigrationService', () => {
     const { store } = makeStore();
     const svc = new MigrationService(store);
     const base = makeProvider();
+    const discoverBase = base.discover;
+    if (!discoverBase) throw new Error('the fixture provider must implement discover()');
     const withBug: BoardProvider = {
       ...base,
       async discover() {
-        const d = await base.discover();
+        const d = await discoverBase.call(base);
         return { ...d, itemTypes: [...d.itemTypes, { externalType: 'Bug', name: 'Bug', category: 'bug' }] };
       },
     };

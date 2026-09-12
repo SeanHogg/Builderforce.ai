@@ -48,7 +48,7 @@ Drei Punkte daran sind es wert, klar ausgesprochen zu werden – denn jeder erse
 }
 ```
 
-## Der geführte Weg gibt es weiterhin
+## Den geführten Weg gibt es weiterhin
 
 Nicht jeder Datensatz ist eine Datei. Ein einzelner Incident, eine offene Stelle, die KI-Tool-Zahlen dieses Monats – der Assistent nimmt sie einzeln entgegen, prüft jedes Feld beim Verlassen und bietet vor dem Absenden einen Prüfschritt. Geändert hat sich das Ende: Er übermittelt den einen Datensatz über denselben Endpunkt, den auch der Massenimport nutzt, und zeigt Ihnen die Antwort des Servers – geschrieben oder übersprungen, und warum. Die erfundene Referenznummer ist verschwunden, denn eine Quittung, die man sich ausgedacht hat, ist keine Quittung.
 

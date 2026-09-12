@@ -23,17 +23,41 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { isWebhookEvent, WEBHOOK_EVENTS } from '../../application/seams/webhookService';
 import { generateApiKey } from '../../infrastructure/auth/HashService';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { parseOptionalBody, z } from './requestBody';
+
+/**
+ * Host (third-party) payloads: loose, only the fields read, each as optional as the
+ * handler treated it — the required ones answer their own 400 AFTER the service
+ * token is checked. `null` coordinates read as absent, exactly as `?? ''` did.
+ */
+const segmentCoordinates = {
+  accountId: z.string().nullish().transform((value) => value ?? undefined),
+  companyId: z.string().nullish().transform((value) => value ?? undefined),
+};
+
+const FeedbackIngestBody = z.looseObject({
+  ...segmentCoordinates,
+  eventId: z.string().nullish(),
+  widgetId: z.string().nullish(),
+  text: z.string().nullish(),
+  sentiment: z.string().nullish(),
+  contact: z.string().nullish(),
+});
+
+/** `events` is filtered through `isWebhookEvent`, so unknown entries are dropped, not refused. */
+const WebhookSubscribeBody = z.looseObject({
+  ...segmentCoordinates,
+  url: z.string().nullish(),
+  events: z.unknown().optional(),
+  secret: z.string().nullish(),
+});
 
 export function createSeamRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
   // ── Feedback ingest (host → BuilderForce) ──────────────────────────────────
   router.post('/ingest/feedback', async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as {
-      accountId?: string; companyId?: string;
-      eventId?: string; widgetId?: string; text?: string;
-      sentiment?: string; contact?: string;
-    };
+    const body = await parseOptionalBody(c, FeedbackIngestBody);
 
     let svc;
     try {
@@ -100,10 +124,7 @@ export function createSeamRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.post('/webhooks', async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as {
-      accountId?: string; companyId?: string;
-      url?: string; events?: unknown; secret?: string;
-    };
+    const body = await parseOptionalBody(c, WebhookSubscribeBody);
 
     let svc;
     try {

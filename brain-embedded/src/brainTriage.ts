@@ -14,6 +14,14 @@ import { turnInterruption } from './finishReason';
 import type { BrainMessage } from './types';
 import { traceWithPersistedSteps } from './persistedSteps';
 import { computeRunProgress, formatRunProgress, runProgressVerdict, type RunProgress } from './runProgress';
+import { isCodeChangeTool } from './localWorkspaceTools';
+import { READ_FILE_TOOL } from './toolResultBudget';
+
+/** A prompt at or past this many tokens is context PRESSURE (the loop's history budget
+ *  is 24k). Pressure alone is evidence, not a diagnosis — see `contextEvidence`. */
+const CONTEXT_PROMPT_PEAK = 24_000;
+/** A single LOSSY tool result at least this large is context pressure too. */
+const LARGE_LOSSY_RESULT_BYTES = 20_000;
 import { midRunNotice, type BrainRunActivity } from './runActivity';
 
 /** One step of the Brain agent loop, recorded as it runs. */
@@ -107,8 +115,20 @@ export function isFailedToolResult(result: unknown): boolean {
 /** Tool labels that PERSIST a file/attachment change. A "saved the file" claim is
  *  only honest if one of these SUCCEEDED this run. Covers the client manifest
  *  (`project_files.save`) and the gateway builtin catalog (`attachments.write`,
- *  advertised `builtin_attachments_write` / `builtin_project_files_save`). */
+ *  advertised `builtin_attachments_write` / `builtin_project_files_save`). The IDE's
+ *  own workspace writers (`write_file` / `edit_file`) are {@link isCodeChangeTool}. */
 const FILE_WRITE_TOOL = /(attachments|files?|project_files)[._](write|save|update)/i;
+
+/** Did this tool call persist a file — an IDE workspace write or a gateway save? */
+function isFileWriteTool(label: string): boolean {
+  return isCodeChangeTool(label) || FILE_WRITE_TOOL.test(label);
+}
+
+/** THE honesty-flag lines, shared by every copy surface so they cannot drift apart. */
+export const UNBACKED_WRITE_CLAIM_NOTICE =
+  '⚠ UNBACKED WRITE CLAIM — an assistant turn claimed it saved/updated a file, but no file-write tool (write_file / edit_file / attachments.write / project_files.save) succeeded in this run. The file was NOT modified.';
+export const UNBACKED_TICKET_CLAIM_NOTICE =
+  '⚠ UNBACKED TICKET CLAIM — an assistant turn claimed it created/filed/linked a ticket or gap, but no create/link tool (tasks.create / chats.link_ticket / tickets.from_delta) succeeded in this run. Nothing was filed or linked to the chat.';
 
 /** Assistant prose that CLAIMS a file/attachment was persisted. */
 const FILE_SAVE_CLAIM = /\b(saved|updated|wrote|written|edited|persisted|added)\b[^.!?\n]*\b(file|attachment|roadmap|document|upload|\.md|\.csv|\.txt|\.json)\b/i;
@@ -131,7 +151,7 @@ const TICKET_CLAIM = /\b(created|filed|opened|logged|added|linked|tracked)\b[^.!
  */
 export function detectUnbackedWriteClaim(events: BrainTraceEvent[], messages: BrainMessage[]): boolean {
   const wroteOk = events.some(
-    (e) => e.category === 'tool' && FILE_WRITE_TOOL.test(e.label) && !e.isError && !isFailedToolResult(e.result),
+    (e) => e.category === 'tool' && isFileWriteTool(e.label) && !e.isError && !isFailedToolResult(e.result),
   );
   if (wroteOk) return false;
   return messages.some((m) => m.role === 'assistant' && typeof m.content === 'string' && FILE_SAVE_CLAIM.test(m.content));
@@ -484,8 +504,12 @@ export interface BrainDiagnostics {
   lastPromptTokens: number;
   /** Total bytes of tool results returned this run (pre-trim). */
   toolResultBytes: number;
-  /** Count of tool results that were truncated before hitting the model. */
+  /** Count of tool results that were truncated before hitting the model — LOSSY cuts
+   *  only; a paged `read_file` window is counted in {@link pagedReadWindows}. */
   truncatedToolResults: number;
+  /** `read_file` results handed over as one window of a larger file, with the offset
+   *  that continues it. The budget working as designed, not lost context. */
+  pagedReadWindows: number;
   /** The single largest tool result (label + pre-trim bytes). */
   largestToolResult: { label: string; bytes: number } | null;
   /**
@@ -692,11 +716,22 @@ export function computeBrainDiagnostics(
 
   let toolResultBytes = 0;
   let truncatedToolResults = 0;
+  let pagedReadWindows = 0;
+  let largestLossyResultBytes = 0;
   let largestToolResult: { label: string; bytes: number } | null = null;
   for (const ev of toolEvents) {
     const bytes = typeof ev.resultBytes === 'number' ? ev.resultBytes : byteLen(ev.result);
     toolResultBytes += bytes;
-    if (ev.truncated) truncatedToolResults += 1;
+    // A `read_file` result is PAGED, not lost: the trim hands the model the exact offset
+    // that continues it, and its `bytes` is the whole FILE, not what the model received.
+    // Counted as truncation, every read of a large file was a context-exhaustion signal
+    // ("14 truncated", "largest read_file 182 KB") on a run whose context was fine.
+    const paged = ev.label === READ_FILE_TOOL;
+    if (ev.truncated) {
+      if (paged) pagedReadWindows += 1;
+      else truncatedToolResults += 1;
+    }
+    if (!paged && bytes > largestLossyResultBytes) largestLossyResultBytes = bytes;
     if (!largestToolResult || bytes > largestToolResult.bytes) largestToolResult = { label: ev.label, bytes };
   }
 
@@ -723,11 +758,11 @@ export function computeBrainDiagnostics(
   // results, or a model downgrade/length-finish. Degradation signals: an
   // Evermind model answered, tokens stayed low, and a turn was empty/failed.
   const contextSignal =
-    promptTokenPeak >= 24_000 || truncatedToolResults > 0 || downgradeEvents > 0 ||
-    (largestToolResult != null && largestToolResult.bytes >= 20_000);
+    promptTokenPeak >= CONTEXT_PROMPT_PEAK || truncatedToolResults > 0 || downgradeEvents > 0 ||
+    largestLossyResultBytes >= LARGE_LOSSY_RESULT_BYTES;
   const degradationSignal =
     evermindUsed.length > 0 && emptyOrLengthFinishes > 0 &&
-    (!tokensMeasured || promptTokenPeak < 24_000) && truncatedToolResults === 0;
+    (!tokensMeasured || promptTokenPeak < CONTEXT_PROMPT_PEAK) && truncatedToolResults === 0;
   // Nothing went wrong: no errors, no aborted loop, no truncated/empty turn, and
   // no context pressure. There is no failure to attribute — say so rather than
   // implying an unresolved one. (A run that did NOTHING is not evidence of health,
@@ -785,6 +820,7 @@ export function computeBrainDiagnostics(
     lastPromptTokens,
     toolResultBytes,
     truncatedToolResults,
+    pagedReadWindows,
     largestToolResult,
     modelsUsed,
     evermindUsed,
@@ -976,12 +1012,8 @@ export function buildBrainTriageReport(opts: BuildBrainTriageOptions): string {
 
   // Structural honesty flag — a "saved the file" claim with no successful file-write
   // tool call this run (the "it said it updated the file but didn't" failure mode).
-  if (detectUnbackedWriteClaim(events, messages)) {
-    lines.push('', '⚠ UNBACKED WRITE CLAIM — an assistant turn claimed it saved/updated a file, but no file-write tool (attachments.write / project_files.save) succeeded in this run. The file was NOT modified.');
-  }
-  if (detectUnbackedTicketClaim(events, messages)) {
-    lines.push('', '⚠ UNBACKED TICKET CLAIM — an assistant turn claimed it created/filed/linked a ticket or gap, but no create/link tool (tasks.create / chats.link_ticket / tickets.from_delta) succeeded in this run. Nothing was filed or linked to the chat.');
-  }
+  if (detectUnbackedWriteClaim(events, messages)) lines.push('', UNBACKED_WRITE_CLAIM_NOTICE);
+  if (detectUnbackedTicketClaim(events, messages)) lines.push('', UNBACKED_TICKET_CLAIM_NOTICE);
 
   if (errors.length) {
     lines.push('', `--- Errors (${errors.length}) ---`);

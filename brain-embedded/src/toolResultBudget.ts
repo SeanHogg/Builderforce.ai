@@ -41,8 +41,10 @@ export const MAX_TOOL_RESULT_CHARS = 6_000;
  */
 export const READ_FILE_RESULT_CHARS = 16_000;
 
-/** The tool whose results are paged by line rather than sliced by char. */
-const READ_FILE_TOOL = 'read_file';
+/** The tool whose results are paged by line rather than sliced by char. A truncated
+ *  result from it is a WINDOW (the model is told the offset that continues it), not a
+ *  loss — which is how the diagnostics tell the two apart. */
+export const READ_FILE_TOOL = 'read_file';
 
 export interface TrimmedToolResult {
   /** The string to store as the tool message the model sees. */

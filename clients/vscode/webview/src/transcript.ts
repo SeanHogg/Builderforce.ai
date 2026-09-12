@@ -186,7 +186,10 @@ export function buildTranscript(input: TranscriptInput): string {
         if (rescued) {
           lines.push("_(reply recovered from the model's reasoning — the turn ended without a separate reply)_", '', rescued);
         } else {
-          lines.push(answer || '(no response)');
+          // A turn that only REASONED (then called a tool) rendered as one collapsed
+          // "Thought" line, not as an empty reply — say that, rather than "(no
+          // response)" over every step of a working run.
+          lines.push(answer || (thoughts ? '_(reasoning only — no reply text this turn)_' : '(no response)'));
           // Reasoning is kept, clearly marked as not-the-reply — it is often where a
           // failing turn explains itself.
           if (thoughts) lines.push('', `<details><summary>model reasoning (not shown to the user)</summary>\n\n${thoughts}\n\n</details>`);
