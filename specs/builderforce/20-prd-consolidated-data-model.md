@@ -9,7 +9,7 @@
 > the data rather than from taste. See PRD 21 §4.
 
 > **Status:** Steps 0–3, step 5's access layer, and the kernel halves of 6–7 are built and green.
-> The target schema exists — `check-model-coverage.mjs` reports **362 / 362 (100%)** — the kernel is
+> The target schema exists — `check-model-coverage.mjs` reports **360 / 360 (100%)** — the kernel is
 > exposed once at `/api/objects`, the fifteen domain route groups are live at `/api/<domain>`, and
 > the fifteen domain surfaces render from ONE component at `/seat/<domain>`.
 > **Every one of the 333 consolidated tables now has a code path**: `check-table-adoption.mjs` went
@@ -32,9 +32,9 @@
 > distinct source tables, each mapped to its target and the move that takes it there. Zero
 > unaccounted.
 >
-> ### **1,206 declarations → 1,130 distinct names → 387 tables**
+> ### **1,206 declarations → 1,130 distinct names → 385 tables**
 >
-> **25 kernel + 362 domain**, across 15 domains, one owner each. The file above is the proof:
+> **25 kernel + 360 domain**, across 15 domains, one owner each. The file above is the proof:
 > 566 absorbed by a kernel primitive, 168 merged into a sibling, 24 into the canvas, 9 flattened,
 > and **363 distinct kept targets** — which is the domain count arrived at independently.
 > Of the 388, **371 are measured and reproducible**; the last 17 are the eleven named judgements
@@ -384,6 +384,17 @@ into the governed memory store by migration 0442 (every row became a tenant-scop
 dropped the empty table. Its map row now reads `merged`, which brings the domain total back to 362
 and the schema to 387.
 
+**Retired after the fact — `kanban_columns` → `swimlanes`, `release_plans` → `product_releases`.**
+PRD 19 §9.7 had already classified both as `transform`: a duplicate of a richer Builderforce owner
+the platform already feature-reaches. The 2026-09-12 operator decision to UNIFY the spec PM spine
+(docs 01/04/05) onto `projects` / `tasks` / `specs` made that final. Migration 1160 folds every row
+(a lane keyed `(board_id, key)`; a release, with its registered kernel `objects` re-pointed so
+annotations survive), gives `swimlanes` the two KanbanColumn attributes it lacked (`wip_limit`,
+`color_token`) as columns, and drops both tables. The same migration turns the delivery tables'
+`work_item_ref` / `sprint_ref` / `project_ref` strings into typed foreign keys on `tasks` /
+`sprints` / `projects`. Their map rows now read `merged`, which brings the domain total to **360**
+and the schema to **385**.
+
 **The three tables the machine kept, and should have.** `promo_projects` is a client creative
 *order*, not a project. `modules` is a permission module, `course_modules` a chapter.
 `mvp_scenarios` carries pricing model, team size and timeline constraint — a business-model
@@ -419,7 +430,7 @@ against the target schema, plus one coverage proof.
 
 | Check | Invariant | Fails when |
 |---|---|---|
-| **Coverage** | Every one of the 1,130 source tables maps to a target | A capability was dropped silently. Current state: 1,130 mapped, **0 unaccounted**, and the 362 distinct `keep` targets reconcile with the domain roster row-for-row. |
+| **Coverage** | Every one of the 1,130 source tables maps to a target | A capability was dropped silently. Current state: 1,130 mapped, **0 unaccounted**, and the 360 distinct `keep` targets reconcile with the domain roster row-for-row. |
 | **Tenancy** | Every table carries `tenant_id NOT NULL` | 162 BurnRateOS models carry `company_id` and no tenant column; every gate in the platform runs on tenant. |
 | **Referential integrity** | Every polymorphic `(kind, id)` references `object` | A generic table can orphan rows the old per-entity table could not. |
 | **Shape lint** | No table outside the kernel implements a kernel shape | Someone adds `X_comments`. This is the rule from §0 as a test. |
@@ -456,7 +467,7 @@ stale-entry reporting — extracted from the pattern `check-tenant-scope.mjs` an
 | `check-tenant-column.mjs` | **72** tables with no tenant-scoping column |
 | `check-polymorphic-fk.mjs` | **3** `(kind, id)` pairs with no `objects` registry |
 | `check-domain-boundary.mjs` | **82** cross-module schema imports, including cycles |
-| `check-model-coverage.mjs` | 1,130 mapped · 0 unaccounted · 362 keeps + 25 kernel = 387 |
+| `check-model-coverage.mjs` | 1,130 mapped · 0 unaccounted · 362 keeps + 25 kernel = 387 (360 + 25 = 385 since migration 1160) |
 
 **The eight duplicate clusters inside this repo today, before any merge:**
 

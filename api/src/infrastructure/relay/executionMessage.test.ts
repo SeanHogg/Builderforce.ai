@@ -7,6 +7,14 @@ describe('buildExecutionMessageFrame', () => {
     expect(r).toEqual({ ok: true, frame: { type: 'execution.message', executionId: 12, text: 'use Go, not Rust' } });
   });
 
+  it('carries the steer row id — the late-steer follow-up\'s idempotency key — and drops a malformed one', () => {
+    expect(buildExecutionMessageFrame({ executionId: 12, text: 'push', messageId: 7 })).toEqual({
+      ok: true, frame: { type: 'execution.message', executionId: 12, text: 'push', messageId: 7 },
+    });
+    const bad = buildExecutionMessageFrame({ executionId: 12, text: 'push', messageId: -1 });
+    expect(bad.ok && 'messageId' in bad.frame).toBe(false);
+  });
+
   it('trims the text', () => {
     const r = buildExecutionMessageFrame({ executionId: 1, text: '  hi  ' });
     expect(r.ok && r.frame.text).toBe('hi');

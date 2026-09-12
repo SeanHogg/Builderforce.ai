@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { getTranslations } from 'next-intl/server';
-import { destinationForRoute, getRouteMarketing, isNoindexTeaserRoute, teaserDestinationPitchKey } from '@/lib/routeMarketing';
+import { destinationForRoute, getRouteMarketing, isNoindexTeaserRoute, teaserDestinationPitchKey, type RouteMarketingTranslate } from '@/lib/routeMarketing';
 import { routeMarketingSchema } from '@/lib/structured-data';
 import { BRAND } from '@/lib/content';
 
@@ -28,22 +28,23 @@ import { BRAND } from '@/lib/content';
  * without it.
  *
  * Localized the way every other `generateMetadata` in the tree is: through
- * `getTranslations`, which reads the locale cookie. The tier-1 copy in
- * `lib/routeMarketing.ts` is English by a standing decision about marketing
- * copy and is used as it is, exactly as the teaser used it; tiers 2 and 3 are
- * catalog keys and arrive in the visitor's locale.
+ * `getTranslations`, which reads the locale cookie. All three tiers are catalog
+ * keys now — the tier-1 registry copy included, which until 2026-09-12 shipped
+ * English into every locale's head — so the title, description and FAQ a
+ * crawler or link preview receives are in the visitor's language.
  *
  * A route entry that is still `'use client'` cannot export `generateMetadata`,
  * so it is split: a server `page.tsx` that exports this and renders the client
  * island beside it (`app/dashboard/DashboardClient.tsx` and its siblings).
  */
 export async function routeTeaserMetadata(pathname: string): Promise<Metadata> {
-  const marketing = getRouteMarketing(pathname);
   const group = destinationForRoute(pathname);
-  const [t, tNav] = await Promise.all([
+  const [t, tNav, tAll] = await Promise.all([
     getTranslations('routeMarketing'),
     getTranslations('nav'),
+    getTranslations(),
   ]);
+  const marketing = getRouteMarketing(pathname, (key) => tAll(key as never));
 
   const surface = marketing?.title ?? (group ? tNav(group.labelKey) : t('generic.title'));
   const pitchKey = group ? teaserDestinationPitchKey(group.id) : null;
@@ -76,10 +77,11 @@ export async function routeTeaserMetadata(pathname: string): Promise<Metadata> {
  * registry row, so the real page emits what the teaser used to. FAQ routes only:
  * a route with no FAQ never rendered a FAQPage, and its application node alone
  * is not worth a second script tag on a product page. Rendered by
- * `<RouteTeaserJsonLd>` from the server route entry.
+ * `<RouteTeaserJsonLd>` from the server route entry, which hands in the
+ * request's translator so the FAQPage is in the visitor's language.
  */
-export function routeTeaserSchema(pathname: string): Record<string, unknown> | null {
-  const marketing = getRouteMarketing(pathname);
+export function routeTeaserSchema(pathname: string, t: RouteMarketingTranslate): Record<string, unknown> | null {
+  const marketing = getRouteMarketing(pathname, t);
   if (!marketing?.faq?.length) return null;
   return routeMarketingSchema({
     path: pathname,

@@ -45,6 +45,7 @@ import type { HonoEnv } from '../../env';
 import { getReconciliationDiagnostics, listReconciliationRuns, reconciliationRequesterId, runPrTicketReconciliation } from '../../application/reconciliation/prReconciliationService';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { listIdeAgentVersions, releaseIdeAgentVersion } from '../../application/agentIdentity/agentRunIdentity';
+import { parseOptionalBody, z, zJsonObject } from './requestBody';
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -53,6 +54,17 @@ const numQuery = (v: string | undefined): number | null => {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? n : null;
 };
+
+/** `DELETE /coordination/:taskId/leases` — the handler refuses a missing/non-string resource itself. */
+const ForceReleaseLeaseBody = z.object({ resource: z.unknown().optional() });
+
+/** `POST /agents/:ref/releases` — the handler refuses a missing versionId / unknown mode itself. */
+const AgentReleaseBody = z.object({
+  versionId: z.string().nullish(),
+  mode: z.string().nullish(),
+  // `releaseIdeAgentVersion` defaults an absent percent (`?? 10`); `null` reads as absent.
+  canaryPercent: z.number().nullish().transform((value) => value ?? undefined),
+});
 
 export function createAgentOpsRoutes(db: DbHandle) {
   const router = new Hono<HonoEnv>();
@@ -77,7 +89,7 @@ export function createAgentOpsRoutes(db: DbHandle) {
    */
   router.delete('/coordination/:taskId/leases', requireRole(TenantRole.MANAGER), async (c) => {
     const taskId = Number(c.req.param('taskId'));
-    const body = (await c.req.json<{ resource?: unknown }>().catch(() => ({}))) as { resource?: unknown };
+    const body = await parseOptionalBody(c, ForceReleaseLeaseBody);
     const resource = typeof body.resource === 'string' ? body.resource : '';
     if (!Number.isFinite(taskId) || !resource) return json({ error: 'taskId and resource are required' }, 400);
     // Only the PATH comes from the client. The service resolves which live lease that
@@ -146,7 +158,8 @@ export function createAgentOpsRoutes(db: DbHandle) {
    * service; only high-confidence close candidates can pass the second gate.
    */
   router.post('/pr-reconciliation/runs', requireRole(TenantRole.MANAGER), async (c) => {
-    const body = (await c.req.json<Record<string, unknown>>().catch(() => ({}))) as Record<string, unknown>;
+    // Every field is type-guarded below; an absent body is a dry run's defaults.
+    const body = await parseOptionalBody(c, zJsonObject);
     const repoId = typeof body.repoId === 'string' ? body.repoId : '';
     const mode = body.mode === 'apply' ? 'apply' : body.mode == null || body.mode === 'dry_run' ? 'dry_run' : null;
     const approvedPrNumbers = Array.isArray(body.approvedPrNumbers)
@@ -199,7 +212,8 @@ export function createAgentOpsRoutes(db: DbHandle) {
   router.post('/rehearsals', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId');
     const userId = c.get('userId');
-    const body = (await c.req.json<Record<string, unknown>>().catch(() => ({}))) as Record<string, unknown>;
+    // Every field is type-guarded / Number()-coerced below, so any JSON object is admitted.
+    const body = await parseOptionalBody(c, zJsonObject);
     const kind = body.kind;
     if (!isRehearsalKind(kind)) return json({ error: "kind must be 'dry_run', 'replay' or 'trial'" }, 400);
 
@@ -244,7 +258,7 @@ export function createAgentOpsRoutes(db: DbHandle) {
   });
 
   router.post('/agents/:ref/releases', requireRole(TenantRole.MANAGER), async (c) => {
-    const body: { versionId?: string; mode?: string; canaryPercent?: number } = await c.req.json<{ versionId?: string; mode?: string; canaryPercent?: number }>().catch(() => ({}));
+    const body = await parseOptionalBody(c, AgentReleaseBody);
     if (!body.versionId || !['stable', 'canary', 'rollback'].includes(body.mode ?? '')) return json({ error: 'versionId and mode (stable, canary, rollback) are required' }, 400);
     try {
       await releaseIdeAgentVersion(db, {

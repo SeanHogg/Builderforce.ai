@@ -31,6 +31,7 @@ import { ALERT_METRICS, evaluateMetric } from '../../application/alerts/metricEv
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { parseOptionalBody, zJsonObject } from './requestBody';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 
@@ -132,7 +133,8 @@ export function createAlertRoutes(db: Db): Hono<HonoEnv> {
   router.post('/', async (c) => {
     const { tenantId, segmentId } = scope(c);
     const userId = c.get('userId') as string | undefined;
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({}));
+    // `buildWriteFields` type-guards and coerces every field with its own messages.
+    const body = await parseOptionalBody(c, zJsonObject);
     const built = buildWriteFields(body, true);
     if ('error' in built) return c.json({ error: built.error }, 400);
 
@@ -147,7 +149,7 @@ export function createAlertRoutes(db: Db): Hono<HonoEnv> {
   router.patch('/:id', async (c) => {
     const { tenantId } = scope(c);
     const id = c.req.param('id');
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({}));
+    const body = await parseOptionalBody(c, zJsonObject);
     const built = buildWriteFields(body, false);
     if ('error' in built) return c.json({ error: built.error }, 400);
     if (Object.keys(built.fields).length === 0) return c.json({ error: 'nothing to update' }, 400);

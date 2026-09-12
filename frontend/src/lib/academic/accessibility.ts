@@ -52,6 +52,18 @@ const VISUAL_KINDS: ReadonlySet<string> = new Set<CreationObjectKind[] extends n
 /** Kinds that convey data and need a summary a reader can use instead of the picture. */
 const DATA_KINDS: ReadonlySet<string> = new Set(['chart', 'map', 'dashboard', 'kpi', 'report']);
 
+/** Kinds that carry a recording or an equation the audit checks — see the rules below. */
+const MEDIA_KINDS: ReadonlySet<string> = new Set(['video', 'lecture', 'podcast', 'voice', 'equation']);
+
+/**
+ * Whether the audit has anything to say about this kind at all — what decides that an
+ * accessibility station belongs in a board's room. Read off the same sets the rules
+ * below use, so the station and the findings cannot disagree about what is audited.
+ */
+export function auditsKind(kind: string): boolean {
+  return VISUAL_KINDS.has(kind) || DATA_KINDS.has(kind) || MEDIA_KINDS.has(kind);
+}
+
 /**
  * What a learner's approved accommodations require, reduced to the checks they affect.
  *

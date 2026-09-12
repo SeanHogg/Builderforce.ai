@@ -76,6 +76,7 @@ import {
 import { validateJsonSchema } from './jsonSchemaValidator';
 import { parseClientReasoningIntent } from './reasoningCapability';
 import { estimateTokensFromChars } from './tokenUsage';
+import { isEvermindModelId } from './evermindCodingGate';
 import type { ActionType } from '@builderforce/learned-routing';
 import {
   DEFAULT_MIN_SAMPLES,
@@ -2376,6 +2377,15 @@ export interface PickCloudModelOptions {
    * coding default) rather than erroring a background run.
    */
   premiumEntitled?: boolean;
+  /**
+   * The Evermind CODING gate's verdict for an `evermind/<ref>` pin on this run (from
+   * `resolveEvermindCodingRoute`). A cloud run is always a coding turn, so an Evermind
+   * pin is honoured ONLY when this names the SAME model as qualified (a recorded coding
+   * eval ≥ 90% of the frontier baseline, for that exact head version). Absent or not
+   * qualified → the pin is ignored and the run takes the normal coding selection —
+   * never an error. Operator decision 2026-09-12.
+   */
+  evermindCoding?: { model: string; qualified: boolean };
 }
 
 /** Headroom over the prompt estimate to reserve for the model's OUTPUT tokens +
@@ -2471,7 +2481,14 @@ export function pickCloudModel(
   // this function RETURNS (which is then written onto the execution row) all agreeing
   // on one id — a stale id would otherwise fail `isKnownModel` and silently drop the
   // run back to the plan default with no signal that the pin was the problem.
-  const explicit = canonicalModelId(explicitRaw) || undefined;
+  const canonical = canonicalModelId(explicitRaw) || undefined;
+  // Evermind coding gate: an `evermind/<ref>` pin serves this (coding) run only when
+  // the caller resolved it as qualified. Otherwise treat the run as unpinned, so it
+  // falls through to the normal coding selection below exactly as a missing pin would.
+  const explicit = isEvermindModelId(canonical)
+    && !(opts?.evermindCoding?.qualified === true && opts.evermindCoding.model === canonical)
+    ? undefined
+    : canonical;
   // An explicit pin is honored (strict) ONLY when it PREEMPTS the connected-BYO seed
   // (shared rule — see explicitModelPreemptsByo): nothing connected, or the pin is on
   // the tenant's OWN account. A non-BYO pin while an account is connected (e.g. a

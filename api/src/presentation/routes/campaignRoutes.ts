@@ -60,6 +60,98 @@ import {
   maxAssetBytes,
 } from '../../application/marketing/templateLibrary';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { parseOptionalBody, z, zJsonObject, zNumberLike } from './requestBody';
+
+// ── Bodies ───────────────────────────────────────────────────────────────────
+// Every body here was read `.catch(() => ({}))`, so an absent body still reads as
+// `{}` and each handler's own sentence ("Name the audience.") is still what a
+// missing field gets — those fields stay optional. Optional strings tolerate
+// `null` (the handler hands the service `undefined` for it), and a field the
+// handler `String(...)`s accepts a string or a number.
+
+const AudienceBody = z.object({
+  name: z.string().nullish(),
+  description: z.string().nullish(),
+  projectId: z.number().nullish(),
+});
+
+/**
+ * One imported member — every `AudienceMemberInput` field, because the handler
+ * spreads the row into it. A row without an email is still counted as REJECTED by
+ * `addAudienceMembers` rather than failing the whole import.
+ */
+const AudienceMemberBody = z.object({
+  email: z.string().default(''),
+  name: z.string().nullish(),
+  phone: z.string().nullish(),
+  attributes: zJsonObject.optional(),
+});
+const AudienceMembersBody = z.object({ members: z.array(AudienceMemberBody).nullish() });
+
+const SenderBody = z.object({
+  fromEmail: zNumberLike.nullish(),
+  fromName: z.string().nullish(),
+  replyTo: z.string().nullish(),
+});
+
+const SuppressionsBody = z.object({ emails: z.array(z.string()).nullish() });
+
+/** `channel`/`transport`/`scheduledAt` are refused by the handler with their own sentences. */
+const CampaignCreateBody = z.object({
+  name: z.string().nullish(),
+  audienceId: z.number().nullish(),
+  subject: z.string().nullish(),
+  bodyHtml: z.string().nullish(),
+  bodyText: z.string().nullish(),
+  senderIdentityId: z.number().nullish(),
+  projectId: z.number().nullish(),
+  sessionId: z.string().nullish(),
+  channel: z.string().nullish(),
+  transport: z.string().nullish(),
+  mailboxConnectionId: z.number().nullish(),
+  connectorConnectionId: z.string().nullish(),
+  templateId: z.number().nullish(),
+  fromName: z.string().nullish(),
+  fromNumber: z.string().nullish(),
+  scheduledAt: z.unknown().optional(),
+});
+
+/**
+ * A campaign patch is forwarded to `updateCampaign` as-is (minus the three fields
+ * the handler converts), and that function type-guards each field it reads — so the
+ * route admits any JSON object, exactly the `Record<string, unknown>` it declared.
+ */
+const CampaignPatchBody = zJsonObject;
+
+const TemplateCreateBody = z.object({
+  name: z.string().nullish(),
+  subject: z.string().nullish(),
+  bodyHtml: z.string().nullish(),
+  description: z.string().nullish(),
+  source: z.string().nullish(),
+  assetId: z.number().nullish(),
+});
+
+/** Every field `updateTemplate` reads; `null` on a text field is ignored as it always was. */
+const TemplatePatchBody = z.object({
+  name: z.string().nullish(),
+  subject: z.string().nullish(),
+  bodyHtml: z.string().nullish(),
+  description: z.string().nullish(),
+  assetId: z.number().nullish(),
+});
+
+const AssetSourceBody = z.object({
+  source: z.string().nullish(),
+  name: zNumberLike.nullish(),
+  kind: z.string().nullish(),
+});
+
+const GenerateLogoBody = z.object({
+  description: z.string().nullish(),
+  style: z.string().nullish(),
+  name: z.string().nullish(),
+});
 
 /**
  * Sentinel for "the caller sent a send time and it was not a date".
@@ -88,11 +180,11 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
     c.json({ audiences: await listAudiences(db, c.get('tenantId') as number) }));
 
   router.post('/audiences', manager, async (c) => {
-    const body = await c.req.json<{ name?: string; description?: string; projectId?: number }>().catch(() => ({}) as never);
+    const body = await parseOptionalBody(c, AudienceBody);
     if (!body.name?.trim()) return c.json({ error: 'Name the audience.' }, 400);
     const audience = await createAudience(db, c.get('tenantId') as number, {
       name: body.name,
-      description: body.description,
+      description: body.description ?? undefined,
       projectId: body.projectId ?? null,
     });
     return c.json(audience, 201);
@@ -101,12 +193,11 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
   router.post('/audiences/:id/members', manager, async (c) => {
     const audienceId = Number(c.req.param('id'));
     if (!Number.isInteger(audienceId)) return c.json({ error: 'Invalid audience id.' }, 400);
-    const body = await c.req.json<{ members?: Array<{ email: string; name?: string; phone?: string }> }>()
-      .catch(() => ({}) as never);
-    const members = Array.isArray(body.members) ? body.members.slice(0, 5_000) : [];
+    const body = await parseOptionalBody(c, AudienceMembersBody);
+    const members = body.members?.slice(0, 5_000) ?? [];
     if (members.length === 0) return c.json({ error: 'Add at least one email address.' }, 400);
     const result = await addAudienceMembers(db, c.get('tenantId') as number, audienceId,
-      members.map((m) => ({ ...m, source: 'import' })));
+      members.map((m) => ({ ...m, name: m.name ?? undefined, source: 'import' })));
     return c.json(result);
   });
 
@@ -116,11 +207,11 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
     c.json({ senders: await listSenders(db, c.get('tenantId') as number) }));
 
   router.post('/senders', manager, async (c) => {
-    const body = await c.req.json<{ fromEmail?: string; fromName?: string; replyTo?: string }>().catch(() => ({}) as never);
+    const body = await parseOptionalBody(c, SenderBody);
     const result = await createSender(db, c.get('tenantId') as number, {
       fromEmail: String(body.fromEmail ?? ''),
-      fromName: body.fromName,
-      replyTo: body.replyTo,
+      fromName: body.fromName ?? undefined,
+      replyTo: body.replyTo ?? undefined,
     });
     if (!result.ok) return c.json({ error: result.error }, result.status);
     return c.json(result.sender, 201);
@@ -137,8 +228,8 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
   // ---- suppression -----------------------------------------------------
 
   router.post('/suppressions', manager, async (c) => {
-    const body = await c.req.json<{ emails?: string[] }>().catch(() => ({}) as never);
-    const emails = Array.isArray(body.emails) ? body.emails.slice(0, 5_000) : [];
+    const body = await parseOptionalBody(c, SuppressionsBody);
+    const emails = body.emails?.slice(0, 5_000) ?? [];
     const added = await suppressEmails(db, c.get('tenantId') as number, emails, 'manual');
     return c.json({ added });
   });
@@ -149,12 +240,7 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
     c.json({ campaigns: await listCampaigns(db, c.get('tenantId') as number) }));
 
   router.post('/campaigns', manager, async (c) => {
-    const body = await c.req.json<{
-      name?: string; audienceId?: number; subject?: string; bodyHtml?: string; bodyText?: string;
-      senderIdentityId?: number; projectId?: number; sessionId?: string;
-      channel?: string; transport?: string; mailboxConnectionId?: number; connectorConnectionId?: string;
-      templateId?: number; fromName?: string; fromNumber?: string; scheduledAt?: string;
-    }>().catch(() => ({}) as never);
+    const body = await parseOptionalBody(c, CampaignCreateBody);
     if (!body.name?.trim()) return c.json({ error: 'Name the campaign.' }, 400);
     if (!Number.isInteger(body.audienceId)) return c.json({ error: 'Pick an audience.' }, 400);
     // An unrecognised channel or transport is rejected rather than silently
@@ -174,16 +260,16 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
     const result = await createCampaign(db, c.get('tenantId') as number, {
       name: body.name,
       audienceId: Number(body.audienceId),
-      subject: body.subject,
-      bodyHtml: body.bodyHtml,
-      bodyText: body.bodyText,
+      subject: body.subject ?? undefined,
+      bodyHtml: body.bodyHtml ?? undefined,
+      bodyText: body.bodyText ?? undefined,
       senderIdentityId: body.senderIdentityId ?? null,
       ...(isCampaignChannel(body.channel) ? { channel: body.channel } : {}),
       ...(isCampaignTransport(body.transport) ? { transport: body.transport } : {}),
       mailboxConnectionId: body.mailboxConnectionId ?? null,
       connectorConnectionId: body.connectorConnectionId ?? null,
       templateId: body.templateId ?? null,
-      fromName: body.fromName,
+      fromName: body.fromName ?? undefined,
       fromNumber: body.fromNumber ?? null,
       scheduledAt,
       projectId: body.projectId ?? null,
@@ -196,7 +282,7 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
   router.patch('/campaigns/:id', manager, async (c) => {
     const campaignId = Number(c.req.param('id'));
     if (!Number.isInteger(campaignId)) return c.json({ error: 'Invalid campaign id.' }, 400);
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({}) as never);
+    const body = await parseOptionalBody(c, CampaignPatchBody);
     const { channel, transport, scheduledAt: rawScheduledAt, ...rest } = body;
     if (channel !== undefined && !isCampaignChannel(channel)) {
       return c.json({ error: 'Unknown channel.' }, 400);
@@ -232,16 +318,13 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
    * separate `/import` route would be a second place to forget it.
    */
   router.post('/templates', manager, async (c) => {
-    const body = await c.req.json<{
-      name?: string; subject?: string; bodyHtml?: string; description?: string;
-      source?: string; assetId?: number;
-    }>().catch(() => ({}) as never);
+    const body = await parseOptionalBody(c, TemplateCreateBody);
     if (!body.name?.trim()) return c.json({ error: 'Name the template.' }, 400);
     const result = await createTemplate(db, c.get('tenantId') as number, {
       name: body.name,
-      subject: body.subject,
-      bodyHtml: body.bodyHtml,
-      description: body.description,
+      subject: body.subject ?? undefined,
+      bodyHtml: body.bodyHtml ?? undefined,
+      description: body.description ?? undefined,
       source: body.source === 'imported' || body.source === 'generated' ? body.source : 'custom',
       assetId: body.assetId ?? null,
       createdBy: c.get('userId') as string,
@@ -253,8 +336,14 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
   router.patch('/templates/:id', manager, async (c) => {
     const templateId = Number(c.req.param('id'));
     if (!Number.isInteger(templateId)) return c.json({ error: 'Invalid template id.' }, 400);
-    const body = await c.req.json<Record<string, never>>().catch(() => ({}) as never);
-    const result = await updateTemplate(db, c.get('tenantId') as number, templateId, body);
+    const body = await parseOptionalBody(c, TemplatePatchBody);
+    const result = await updateTemplate(db, c.get('tenantId') as number, templateId, {
+      name: body.name ?? undefined,
+      subject: body.subject ?? undefined,
+      bodyHtml: body.bodyHtml ?? undefined,
+      description: body.description ?? undefined,
+      assetId: body.assetId,
+    });
     if (!result.ok) return c.json({ error: result.error }, result.status);
     return c.json(result.template);
   });
@@ -297,7 +386,7 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
    */
   router.post('/assets', manager, async (c) => {
     if ((c.req.header('content-type') ?? '').includes('application/json')) {
-      const body = await c.req.json<{ source?: string; name?: string; kind?: string }>().catch(() => ({}) as never);
+      const body = await parseOptionalBody(c, AssetSourceBody);
       if (!body.source?.trim()) return c.json({ error: 'Supply the file as a data URL or an https URL.' }, 400);
       const stored = await createAssetFromSource(db, c.env as Env, c.get('tenantId') as number, {
         source: body.source,
@@ -345,12 +434,11 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
    * the same vendors.
    */
   router.post('/assets/generate', manager, async (c) => {
-    const body = await c.req.json<{ description?: string; style?: string; name?: string }>()
-      .catch(() => ({}) as never);
+    const body = await parseOptionalBody(c, GenerateLogoBody);
     const description = (body.description ?? '').trim();
     if (!description) return c.json({ error: 'Describe the brand or product.' }, 400);
 
-    const prompt = logoPrompt(description, body.style);
+    const prompt = logoPrompt(description, body.style ?? undefined);
     const auth = c.req.header('authorization');
     if (!auth) return c.json({ error: 'Not authorized.' }, 401);
 

@@ -36,6 +36,7 @@ import { markdownToPdf, type PdfTheme } from '../../application/office/pdfWriter
 import { markdownToPptx } from '../../application/office/slidesRenderer';
 import { MAX_XLSX_COLUMNS, MAX_XLSX_ROWS, rowsToXlsx, type XlsxCell } from '../../application/office/xlsxWriter';
 import { slugify } from '@builderforce/creation-canvas-contract';
+import { parseBody, z } from './requestBody';
 
 const DOCX_CT = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const PPTX_CT = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
@@ -45,8 +46,23 @@ const PDF_CT = 'application/pdf';
 /** Cap the payload so one chat message can't turn into an unbounded render. */
 const MAX_MARKDOWN_CHARS = 200_000;
 
-interface ExportBody { markdown?: string; title?: string; theme?: unknown; subtitle?: string; footer?: string; sourceFileKey?: string }
-interface SheetBody { columns?: unknown; rows?: unknown; title?: string }
+// `markdown` / `columns` stay optional so `readBody` / `readSheet` still answer their
+// own "… is required"; `theme` is read defensively by `readDocxTheme` / `readPdfTheme`.
+const ExportBody = z.object({
+  markdown: z.string().nullish(),
+  title: z.string().nullish(),
+  theme: z.unknown().optional(),
+  subtitle: z.string().nullish(),
+  footer: z.string().nullish(),
+  sourceFileKey: z.string().nullish(),
+});
+type ExportBody = z.infer<typeof ExportBody>;
+const SheetBody = z.object({
+  columns: z.unknown().optional(),
+  rows: z.unknown().optional(),
+  title: z.string().nullish(),
+});
+type SheetBody = z.infer<typeof SheetBody>;
 
 /** Validate + normalize the shared request body (markdown + a filename-safe title). */
 function readBody(body: ExportBody): { error: string } | { markdown: string; title: string; name: string } {
@@ -118,7 +134,7 @@ const MAX_DOCX_SOURCE_BYTES = 20 * 1024 * 1024;
  * and the export regenerates. A missing source is a lost SOURCE, not a lost
  * download.
  */
-async function docxSourceBytes(c: Context<HonoEnv>, key: string | undefined): Promise<Uint8Array | null | 'foreign'> {
+async function docxSourceBytes(c: Context<HonoEnv>, key: string | null | undefined): Promise<Uint8Array | null | 'foreign'> {
   const sourceFileKey = (key ?? '').trim();
   if (!sourceFileKey) return null;
   const tenantId = optionalTenantId(c);
@@ -196,7 +212,7 @@ export function createExportRoutes(): Hono<HonoEnv> {
    * failing: the export must always end with a real file.
    */
   router.post('/docx', async (c) => {
-    const body = await c.req.json<ExportBody>();
+    const body = await parseBody(c, ExportBody);
     const parsed = readBody(body);
     if ('error' in parsed) return c.json({ error: parsed.error }, 400);
     const source = await docxSourceBytes(c, body.sourceFileKey);
@@ -213,7 +229,7 @@ export function createExportRoutes(): Hono<HonoEnv> {
   });
 
   router.post('/pdf', async (c) => {
-    const body = await c.req.json<ExportBody>();
+    const body = await parseBody(c, ExportBody);
     const parsed = readBody(body);
     if ('error' in parsed) return c.json({ error: parsed.error }, 400);
     const subtitle = (body.subtitle ?? '').trim().slice(0, 200);
@@ -226,7 +242,7 @@ export function createExportRoutes(): Hono<HonoEnv> {
   });
 
   router.post('/pptx', async (c) => {
-    const parsed = readBody(await c.req.json<ExportBody>());
+    const parsed = readBody(await parseBody(c, ExportBody));
     if ('error' in parsed) return c.json({ error: parsed.error }, 400);
     try {
       const bytes = await markdownToPptx(parsed.markdown, parsed.title || undefined);
@@ -237,7 +253,7 @@ export function createExportRoutes(): Hono<HonoEnv> {
   });
 
   router.post('/xlsx', async (c) => {
-    const parsed = readSheet(await c.req.json<SheetBody>());
+    const parsed = readSheet(await parseBody(c, SheetBody));
     if ('error' in parsed) return c.json({ error: parsed.error }, 400);
     const bytes = rowsToXlsx({ columns: parsed.columns, rows: parsed.rows, ...(parsed.title ? { title: parsed.title } : {}) });
     return fileResponse(bytes, `${parsed.name}.xlsx`, XLSX_CT);

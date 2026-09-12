@@ -154,6 +154,7 @@ import { createWorkflowRoutes }     from './presentation/routes/workflowRoutes';
 import { createWorkflowDefinitionRoutes } from './presentation/routes/workflowDefinitionRoutes';
 import { createCreationSessionRoutes } from './presentation/routes/creationSessionRoutes';
 import { createCanvasInviteLinkRoutes } from './presentation/routes/canvasInviteLinkRoutes';
+import { createCanvasWidgetHostRoutes } from './presentation/routes/canvasWidgetHostRoutes';
 import { createCanvasJoinRoutes } from './presentation/routes/canvasJoinRoutes';
 import { createCreationSessionFolderRoutes } from './presentation/routes/creationSessionFolderRoutes';
 import { createPublicResumeRoutes } from './presentation/routes/publicResumeRoutes';
@@ -978,6 +979,8 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // '/folders' is: sharing is its own reason to change, and it must not be reached
   // through that router's '/:id' catch-alls. See `canvasInviteLinkRoutes.ts`.
   app.route('/api/creation-sessions', createCanvasInviteLinkRoutes(db));
+  // The board host's widget read — same reason: ahead of the '/:id' catch-alls.
+  app.route('/api/creation-sessions', createCanvasWidgetHostRoutes(db));
   app.route('/api/creation-sessions', createCreationSessionRoutes(db));
   // The invitee's half of a canvas invite link, INCLUDING the person who declines to
   // sign up. Unauthenticated by design and therefore never behind `authMiddleware` —

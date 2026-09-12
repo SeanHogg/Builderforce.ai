@@ -39,6 +39,14 @@ import {
   VoiceCloneReferenceMissing,
 } from '../../application/studio/voiceCloneService';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { parseOptionalBody, z } from './requestBody';
+
+/** `POST /:id/synthesize` — the handler answers "text is required" (422). */
+const SynthesizeBody = z.object({
+  text: z.string().nullish(),
+  speed: z.number().optional(),
+  language: z.string().optional(),
+});
 
 const CONSENT_TEXT_VERSION = 'v1';
 
@@ -234,9 +242,7 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
     const cloneId = Number(c.req.param('id'));
     if (!Number.isInteger(cloneId)) return c.json({ error: 'invalid clone id' }, 400);
 
-    const body = await c.req
-      .json<{ text?: string; speed?: number; language?: string }>()
-      .catch(() => ({}) as { text?: string; speed?: number; language?: string });
+    const body = await parseOptionalBody(c, SynthesizeBody);
     const text = (body.text ?? '').trim();
     if (!text) return c.json({ error: 'text is required' }, 422);
 

@@ -26,13 +26,29 @@ import { sendTransactionalEmail } from '../../application/email/sendEmail';
 import { headerHints } from '../../application/email/emailLocaleResolver';
 import { handleAssetSign, handleAssetUpload, handleTenantAssetRead } from './assetRoutes';
 import type { Env, HonoEnv } from '../../env';
-import type { BrainService, BrainTraceEventInput } from '../../application/brain/BrainService';
+import type { BrainService } from '../../application/brain/BrainService';
 import { learnFromPersistedTurns } from '../../application/brain/brainEvermindLearning';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { brainChatRoomName } from '../../infrastructure/relay/broadcastRoom';
 import { relayToRoom } from './realtimeRelay';
 import { limitParam, offsetParam } from './queryParams';
+import { parseBody, parseOptionalBody } from './requestBody';
+import {
+  AgentReplyBody,
+  AppendMessagesBody,
+  AppendTraceBody,
+  ClaimGuestRoomBody,
+  ConsolidateChatsBody,
+  CreateChatBody,
+  FetchUrlBody,
+  InviteAgentBody,
+  InviteMemberBody,
+  LinkTicketBody,
+  MarkReadBody,
+  MessageFeedbackBody,
+  UpdateChatBody,
+} from './brainRoutes.schemas';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -92,7 +108,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
 
   // POST /chats
   router.post('/chats', async (c) => {
-    const body = await c.req.json<{ title?: string; projectId?: number | null; capability?: string | null; mode?: string | null }>();
+    const body = await parseBody(c, CreateChatBody);
     const result = await brainService.createChat({
       tenantId: c.get('tenantId') as number,
       userId: c.get('userId') as string,
@@ -148,7 +164,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
 
-    const body = await c.req.json<{ title?: string; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null; mode?: string | null }>();
+    const body = await parseBody(c, UpdateChatBody);
     const tenantId = c.get('tenantId') as number;
     const result = await brainService.updateChat(
       id,
@@ -225,7 +241,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
   router.post('/chats/:id/read', async (c) => {
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
-    const body = await c.req.json<{ seq?: number }>().catch(() => ({} as { seq?: number }));
+    const body = await parseOptionalBody(c, MarkReadBody);
     const result = await brainService.markRead(
       id, c.get('tenantId') as number, c.get('userId') as string,
       typeof body.seq === 'number' ? body.seq : undefined,
@@ -239,13 +255,14 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
 
-    const body = await c.req.json<{ messages: Array<{ role: string; content: string; metadata?: string }> }>();
+    const body = await parseBody(c, AppendMessagesBody);
     const tenantId = c.get('tenantId') as number;
     const result = await brainService.appendMessages(
       id,
       tenantId,
       c.get('userId') as string,
-      body,
+      // An absent list still answers the service's own "messages array is required".
+      { messages: body.messages ?? [] },
     );
     if ('error' in result) {
       const status = result.error === 'Chat not found' ? 404 : 400;
@@ -344,7 +361,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const userId = c.get('userId') as string;
     if (!(await brainService.canAccess(id, tenantId, userId))) return c.json({ error: 'Chat not found' }, 404);
 
-    const body = await c.req.json<{ events?: BrainTraceEventInput[] }>().catch(() => ({} as { events?: BrainTraceEventInput[] }));
+    const body = await parseOptionalBody(c, AppendTraceBody);
     const result = await brainService.appendTrace(id, body.events ?? []);
     // Invalidate the cached read so the next GET reflects these events.
     await bumpCacheVersion(c.env as Env, traceVersionKey(id)).catch((error) => {
@@ -395,7 +412,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
   router.post('/chats/:id/tickets', async (c) => {
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
-    const body = await c.req.json<{ kind?: string; ref?: string | number; linkType?: 'linked' | 'created' }>().catch(() => ({} as { kind?: string; ref?: string | number; linkType?: 'linked' | 'created' }));
+    const body = await parseOptionalBody(c, LinkTicketBody);
     if (!body.kind || body.ref == null) return c.json({ error: 'kind and ref are required' }, 400);
     const svc = new ChatTicketService(db, c.env as Env);
     const result = await svc.linkTicket(c.get('tenantId') as number, id, c.get('userId') as string, {
@@ -453,7 +470,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
 
   // POST /chats/consolidate — merge source chats into a target (archive+redirect).
   router.post('/chats/consolidate', async (c) => {
-    const body = await c.req.json<{ targetChatId?: number; sourceChatIds?: number[] }>().catch(() => ({} as { targetChatId?: number; sourceChatIds?: number[] }));
+    const body = await parseOptionalBody(c, ConsolidateChatsBody);
     if (!body.targetChatId || !Array.isArray(body.sourceChatIds) || body.sourceChatIds.length === 0) {
       return c.json({ error: 'targetChatId and a non-empty sourceChatIds are required' }, 400);
     }
@@ -481,9 +498,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
    * is left running, because other people may still be in it.
    */
   router.post('/chats/claim-guest-room', async (c) => {
-    const body = await c.req
-      .json<{ code?: string; visitorId?: string }>()
-      .catch((): { code?: string; visitorId?: string } => ({}));
+    const body = await parseOptionalBody(c, ClaimGuestRoomBody);
     if (!isValidRoomCode(body.code)) return c.json({ error: 'Invalid room code' }, 400);
     if (!isValidVisitorId(body.visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
 
@@ -525,7 +540,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
   router.post('/chats/:id/agents', async (c) => {
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
-    const body = await c.req.json<{ agentRef?: string; agentKind?: string; role?: string }>().catch(() => ({} as { agentRef?: string; agentKind?: string; role?: string }));
+    const body = await parseOptionalBody(c, InviteAgentBody);
     if (!body.agentRef) return c.json({ error: 'agentRef is required' }, 400);
     const svc = new ChatTicketService(db, c.env as Env);
     const result = await svc.inviteAgent(c.get('tenantId') as number, id, c.get('userId') as string, {
@@ -568,7 +583,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{ email?: string }>().catch(() => ({} as { email?: string }));
+    const body = await parseOptionalBody(c, InviteMemberBody);
     if (!body.email) return c.json({ error: 'email is required' }, 400);
 
     const result = await brainService.inviteHuman(id, tenantId, userId, { email: String(body.email) }, c.env as Env);
@@ -627,7 +642,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
   router.post('/chats/:id/agent-reply', async (c) => {
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
-    const body = await c.req.json<{ agentRef?: string; agentName?: string }>().catch(() => ({} as { agentRef?: string; agentName?: string }));
+    const body = await parseOptionalBody(c, AgentReplyBody);
     if (!body.agentRef) return c.json({ error: 'agentRef is required' }, 400);
     // The agent runs its platform-tool loop with the TRIGGERING user's role/token,
     // so it can never exceed the human's own permissions.
@@ -658,7 +673,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
   // volume — graceful backpressure, refused with 429 once over the allowance.
   router.post('/fetch-url', rateLimitMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const { url } = await c.req.json<{ url?: string }>().catch(() => ({ url: undefined }));
+    const { url } = await parseOptionalBody(c, FetchUrlBody);
     if (!url || typeof url !== 'string') return c.json({ error: 'A url is required' }, 400);
 
     const cap = await enforceOutboundFetchCap(db, tenantId, c.env as Env);
@@ -809,7 +824,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid message id' }, 400);
 
-    const body = await c.req.json<{ feedback: 'up' | 'down' | null; toolName?: string | null; actionType?: string | null }>();
+    const body = await parseBody(c, MessageFeedbackBody);
     if (body.feedback !== 'up' && body.feedback !== 'down' && body.feedback !== null) {
       return c.json({ error: 'Invalid feedback value' }, 400);
     }

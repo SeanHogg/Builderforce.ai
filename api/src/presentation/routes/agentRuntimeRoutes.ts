@@ -38,6 +38,10 @@ import { openDispatchPullRequest } from '../../application/repos/openDispatchPul
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { isTerminalExecutionStatus } from '../../domain/shared/terminalStatus';
+import { parseBody } from './requestBody';
+// The host doors (agentHostRoutes) report into the same coordinator and open PRs
+// through the same helper, so both doors read ONE body contract.
+import { DispatchResultReport, PullRequestBody } from './agentHostRoutes.schemas';
 
 type RuntimeEnv = {
   AGENT_HOST_RELAY?: AgentHostRelayNamespace;
@@ -154,7 +158,7 @@ export function createAgentRuntimeRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:dispatchId/result', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const dispatchId = c.req.param('dispatchId');
-    const body = await c.req.json<{ status: 'completed' | 'failed' | 'cancelled'; output?: string; error?: string }>();
+    const body = await parseBody(c, DispatchResultReport);
 
     if (!isTerminalExecutionStatus(body.status)) {
       return c.json({ error: 'status must be completed | failed | cancelled' }, 400);
@@ -179,7 +183,7 @@ export function createAgentRuntimeRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:dispatchId/pull-request', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const dispatchId = c.req.param('dispatchId');
-    const body = await c.req.json<{ branch: string; base?: string; title?: string; body?: string }>();
+    const body = await parseBody(c, PullRequestBody);
 
     const env = c.env as RuntimeEnv;
     const secret = integrationCredentialSecret(env);

@@ -59,8 +59,6 @@ import {
   listChannels,
   recordChannelStatus,
   updateChannel,
-  type CreateChannelInput,
-  type UpdateChannelInput,
 } from '../../application/agentHost/agentHostChannels';
 import { agentDispatches } from '../../infrastructure/database/schema';
 import { taskInTenant } from '../../infrastructure/database/tenantScope';
@@ -72,7 +70,7 @@ import { invalidateProjectGovernance } from '../../application/runtime/runContex
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import type { AgentHostService } from '../../application/agentHost/AgentHostService';
-import { classifyContextFiles, normalizeMachineProfile, type AgentHostMachineProfileInput } from './agentHostAssignmentContext';
+import { classifyContextFiles, normalizeMachineProfile } from './agentHostAssignmentContext';
 import { TenantRole } from '../../domain/shared/types';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import { resolveScheduledAgentBinding } from '../../application/agentHost/scheduledAgentBinding';
@@ -83,6 +81,35 @@ import { isTerminalExecutionStatus } from '../../domain/shared/terminalStatus';
 import { sha256Hex } from '../../domain/shared/hash';
 import { verifyHmacHex } from '../../infrastructure/crypto/webhookHmac';
 import { excluded } from '../../infrastructure/database/upsert';
+import { parseBody, parseOptionalBody } from './requestBody';
+import {
+  AgentHostLimitsBody,
+  AgentHostStatusBody,
+  ApprovalRequestBody,
+  ChannelStatusBody,
+  CreateChannelBody,
+  CreateCronJobBody,
+  DeclaredCapabilitiesBody,
+  DirectorySyncBody,
+  ExecutionStateBody,
+  FileChangeBody,
+  HeartbeatBody,
+  HostDispatchResultBody,
+  PersonasBody,
+  ProjectContextBody,
+  PullRequestBody,
+  RegisterAgentHostBody,
+  RelayResultPayload,
+  ToolAuditBody,
+  UpdateChannelBody,
+  UpdateCronJobBody,
+  UsageSnapshotBody,
+  WorkspaceChangeBody,
+  isRootBodyIssue,
+  nullWhenNoJsonObject,
+} from './agentHostRoutes.schemas';
+import { settleLateSteersSafely } from '../../application/runtime/lateSteerFollowUp';
+import { registerLateSteerRoute } from './agentHostLateSteerRoute';
 
 // Extend HonoEnv bindings type to include the Durable Object
 type AgentHostHonoEnv = HonoEnv & {
@@ -354,9 +381,10 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   router.post('/', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId   = c.get('userId') as string;
-    const body     = await c.req.json<{ name: string; machineProfile?: AgentHostMachineProfileInput }>();
+    const body     = await parseBody(c, RegisterAgentHostBody);
+    const name     = body.name?.trim();
 
-    if (!body.name?.trim()) {
+    if (!name) {
       return c.json({ error: 'name is required' }, 400);
     }
 
@@ -364,7 +392,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const limitErr = await guard.checkAgentHostLimit(tenantId);
     if (limitErr) return c.json(limitErr, 402);
 
-    const slug    = body.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const slug    = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     // BuilderForce Agent key. Legacy already-issued `clk_*` keys still authenticate
     // (see llmRoutes + HashService), but new agents are minted as `bfa_*`.
     const rawKey  = generateApiKey('bfa');
@@ -375,7 +403,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       .insert(agentHosts)
       .values({
         tenantId,
-        name:         body.name.trim(),
+        name,
         slug,
         apiKeyHash:   keyHash,
         registeredBy: userId,
@@ -439,7 +467,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   router.patch('/:id/status', authMiddleware, requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const agentHostId = Number(c.req.param('id'));
-    const body = await c.req.json<{ status?: 'active' | 'inactive' | 'suspended' }>();
+    const body = await parseBody(c, AgentHostStatusBody);
 
     if (!body.status || !['active', 'inactive', 'suspended'].includes(body.status)) {
       return c.json({ error: 'status must be one of: active, inactive, suspended' }, 400);
@@ -480,7 +508,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   router.patch('/:id/limits', authMiddleware, requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const agentHostId = Number(c.req.param('id'));
-    const body = await c.req.json<{ tokenDailyLimit?: number | null }>();
+    const body = await parseBody(c, AgentHostLimitsBody);
 
     const limit = body.tokenDailyLimit === undefined ? undefined : body.tokenDailyLimit;
     if (limit !== null && limit !== undefined && (typeof limit !== 'number' || limit < 0 || !Number.isInteger(limit))) {
@@ -744,19 +772,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHost = await verifyAgentHostApiKey(agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
-    const body = await c.req.json<{
-      projectId?: number | null;
-      absPath: string;
-      status?: 'pending' | 'synced' | 'error';
-      metadata?: Record<string, unknown>;
-      errorMessage?: string | null;
-      files?: Array<{
-        relPath: string;
-        contentHash?: string;
-        sizeBytes?: number;
-        content?: string;
-      }>;
-    }>();
+    const body = await parseBody(c, DirectorySyncBody);
 
     const absPath = body.absPath?.trim();
     if (!absPath) return c.json({ error: 'absPath is required' }, 400);
@@ -831,7 +847,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
 
     if (body.files?.length) {
       const fileRows = body.files
-        .filter((file) => file.relPath?.trim())
+        .filter((file): file is typeof file & { relPath: string } => !!file.relPath?.trim())
         .map((file) => ({
           tenantId: agentHost.tenantId,
           agentHostId,
@@ -1037,16 +1053,10 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   router.post('/:id/cron', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const agentHostId   = Number(c.req.param('id'));
-    const body = await c.req.json<{
-      id?: string;
-      name: string;
-      schedule: string;
-      taskId?: number | null;
-      projectId?: number | null;
-      projectAgentId?: number | null;
-      enabled?: boolean;
-    }>();
-    if (!body.name?.trim() || !body.schedule?.trim()) {
+    const body = await parseBody(c, CreateCronJobBody);
+    const name = body.name?.trim();
+    const schedule = body.schedule?.trim();
+    if (!name || !schedule) {
       return c.json({ error: 'name and schedule are required' }, 400);
     }
     // RECONCILE THE THREE "assign an agent" NOTIONS before persisting. The executing
@@ -1066,8 +1076,8 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const insertData = {
       tenantId,
       agentHostId,
-      name: body.name.trim(),
-      schedule: body.schedule.trim(),
+      name,
+      schedule,
       taskId: body.taskId ?? null,
       projectId: body.projectId ?? null,
       projectAgentId: binding.projectAgentId,
@@ -1096,17 +1106,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       tenantId = tid as number;
     }
     const jobId    = c.req.param('jobId');
-    const body = await c.req.json<{
-      name?: string;
-      schedule?: string;
-      taskId?: number | null;
-      projectId?: number | null;
-      projectAgentId?: number | null;
-      enabled?: boolean;
-      lastRunAt?: string;
-      nextRunAt?: string;
-      lastStatus?: string;
-    }>();
+    const body = await parseBody(c, UpdateCronJobBody);
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.name != null)       updates.name = body.name.trim();
@@ -1174,7 +1174,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   });
 
   router.post('/:id/channels', authMiddleware, async (c) => {
-    const body = await c.req.json<CreateChannelInput>().catch(() => null);
+    const body = await parseBody(c, CreateChannelBody).catch(nullWhenNoJsonObject);
     if (!body) return c.json({ error: 'A JSON body is required' }, 400);
     try {
       const channel = await createChannel(
@@ -1189,7 +1189,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   });
 
   router.patch('/:id/channels/:channelId', authMiddleware, async (c) => {
-    const body = await c.req.json<UpdateChannelInput>().catch(() => null);
+    const body = await parseBody(c, UpdateChannelBody).catch(nullWhenNoJsonObject);
     if (!body) return c.json({ error: 'A JSON body is required' }, 400);
     try {
       const channel = await updateChannel(
@@ -1219,7 +1219,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const tenantId = (c as unknown as { get: (k: string) => unknown }).get('tenantId') as number;
     const agentHostId = Number(c.req.param('id'));
 
-    const body = await c.req.json<{ declaredCapabilities: string[] }>();
+    const body = await parseBody(c, DeclaredCapabilitiesBody);
     if (!Array.isArray(body.declaredCapabilities)) {
       return c.json({ error: 'declaredCapabilities must be an array' }, 400);
     }
@@ -1245,22 +1245,23 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHost = await verifyAgentHostApiKey(id, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
-    // Accept optional capabilities array from request body
-    let capabilitiesJson: string | undefined;
-    let machineProfile: AgentHostMachineProfileInput | null = null;
-    try {
-      const body = await c.req.json<{ capabilities?: string[]; machineProfile?: AgentHostMachineProfileInput }>();
-      if (Array.isArray(body.capabilities)) {
-        const caps = body.capabilities.filter((v) => typeof v === 'string');
-        capabilitiesJson = JSON.stringify(caps);
-      }
-      machineProfile = normalizeMachineProfile(body.machineProfile);
-    } catch (error) {
+    // Accept optional capabilities array from request body. The body is OPTIONAL: an
+    // absent/unparseable one is still a keepalive (logged, never refused). Both fields
+    // are type-guarded below, so no field-level shape can fail.
+    const body = await parseBody(c, HeartbeatBody).catch((error: unknown) => {
+      if (!isRootBodyIssue(error)) throw error;
       reportCaughtError(error, { source: "presentation/routes/agentHostRoutes.ts", operation: "createAgentHostRoutes", level: 'warning', context: { logMessage: '[agent-host] optional request body could not be parsed', details: {
         agentHostId: id,
-        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+        error: `${error.name}: ${error.message}`,
       } } });
+      return HeartbeatBody.parse({});
+    });
+    let capabilitiesJson: string | undefined;
+    if (Array.isArray(body.capabilities)) {
+      const caps = body.capabilities.filter((v) => typeof v === 'string');
+      capabilitiesJson = JSON.stringify(caps);
     }
+    const machineProfile = normalizeMachineProfile(body.machineProfile);
 
     await db
       .update(agentHosts)
@@ -1481,9 +1482,12 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
 
     let payload: unknown;
     try {
-      payload = await c.req.json();
-    } catch {
-      return c.json({ error: 'invalid_json' }, 400);
+      payload = await parseBody(c, RelayResultPayload);
+    } catch (error) {
+      // The frame is relayed verbatim, so the one failure is an unparseable body —
+      // answered in this endpoint's own `invalid_json` envelope, as before.
+      if (isRootBodyIssue(error)) return c.json({ error: 'invalid_json' }, 400);
+      throw error;
     }
 
     // Dispatch the remote.result into the SOURCE agentHost's relay (identified by agentHostId param)
@@ -1512,12 +1516,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHost = await verifyAgentHostApiKey(agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
-    const body = await c.req.json<{
-      dispatchId: string;
-      status: 'completed' | 'failed' | 'cancelled';
-      output?: string;
-      error?: string;
-    }>();
+    const body = await parseBody(c, HostDispatchResultBody);
     if (!body.dispatchId) return c.json({ error: 'dispatchId is required' }, 400);
     if (!isTerminalExecutionStatus(body.status)) {
       return c.json({ error: 'status must be completed | failed | cancelled' }, 400);
@@ -1640,13 +1639,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     if (!(await workspaceProjectInTenant(db, agentHost.tenantId, projectId))) {
       return c.json({ error: 'Project not found' }, 404);
     }
-    type WorkspaceChangeBody = {
-      taskId?: number | null;
-      agent?: string;
-      writes?: Array<{ path: string; content: string }>;
-      deletes?: string[];
-    };
-    const body = await c.req.json<WorkspaceChangeBody>().catch((): WorkspaceChangeBody => ({}));
+    const body = await parseOptionalBody(c, WorkspaceChangeBody);
     // `taskId` arrives in the BODY, so re-prove it belongs to this host's tenant
     // before anything is attributed to it (same rule as /file-change below).
     const taskId = Number(body.taskId);
@@ -1726,7 +1719,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const dispatchId = c.req.param('dispatchId');
-    const body = await c.req.json<{ branch: string; base?: string; title?: string; body?: string }>();
+    const body = await parseBody(c, PullRequestBody);
     const env = c.env as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
     const secret = integrationCredentialSecret(env);
 
@@ -1744,8 +1737,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHost = await verifyAgentHostApiKey(agentHostId, extractAgentHostKey(c));
     if (!agentHost) return c.text('Unauthorized', 401);
 
-    type FileChangeBody = { taskId?: number; executionId?: number; path?: string; change?: string; agent?: string };
-    const body = await c.req.json<FileChangeBody>().catch((): FileChangeBody => ({}));
+    const body = await parseOptionalBody(c, FileChangeBody);
     const taskId = Number(body.taskId);
     const executionId = Number(body.executionId);
     const path = typeof body.path === 'string' ? body.path.trim() : '';
@@ -1798,8 +1790,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHost = await verifyAgentHostApiKey(agentHostId, extractAgentHostKey(c));
     if (!agentHost) return c.text('Unauthorized', 401);
 
-    type StatusBody = { platform?: string; name?: string; status?: string; error?: string | null };
-    const body = await c.req.json<StatusBody>().catch((): StatusBody => ({}));
+    const body = await parseOptionalBody(c, ChannelStatusBody);
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (!body.platform || !name || !body.status) {
       return c.json({ error: 'platform, name and status are required' }, 400);
@@ -1825,7 +1816,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
 
     const taskId = Number(c.req.param('taskId'));
     if (!Number.isFinite(taskId)) return c.json({ error: 'invalid taskId' }, 400);
-    const body = await c.req.json<{ branch: string; base?: string; title?: string; body?: string }>();
+    const body = await parseBody(c, PullRequestBody);
     const env = c.env as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
     const secret = integrationCredentialSecret(env);
 
@@ -1845,15 +1836,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHost = await verifyAgentHostApiKey(agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
-    const body = await c.req.json<{
-      sessionKey?:       string;
-      inputTokens?:      number;
-      outputTokens?:     number;
-      contextTokens?:    number;
-      contextWindowMax?: number;
-      compactionCount?:  number;
-      ts?:               string;
-    }>();
+    const body = await parseBody(c, UsageSnapshotBody);
 
     await db.insert(usageSnapshots).values({
       tenantId:         agentHost.tenantId,
@@ -1970,18 +1953,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHost = await verifyAgentHostApiKey(agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
-    const body = await c.req.json<{
-      runId?:       string;
-      executionId?: number;
-      sessionKey?:  string;
-      toolCallId?:  string;
-      toolName?:    string;
-      category?:    string;
-      args?:        unknown;
-      result?:      string;
-      durationMs?:  number;
-      ts?:          string;
-    }>();
+    const body = await parseBody(c, ToolAuditBody);
 
     if (!body.toolName) return c.json({ error: 'toolName is required' }, 400);
 
@@ -2017,14 +1989,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHost = await verifyAgentHostApiKey(agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
-    const body = await c.req.json<{
-      kind?:        string;
-      actionType?:  string;
-      description?: string;
-      metadata?:    unknown;
-      expiresAt?:   string;
-      requestedBy?: string;
-    }>();
+    const body = await parseBody(c, ApprovalRequestBody);
 
     if (!body.actionType || !body.description) {
       return c.json({ error: 'actionType and description are required' }, 400);
@@ -2083,11 +2048,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHost = await verifyAgentHostApiKey(agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
-    const body = await c.req.json<{
-      status:        'running' | 'completed' | 'failed' | 'cancelled';
-      result?:       string;
-      errorMessage?: string;
-    }>();
+    const body = await parseBody(c, ExecutionStateBody);
 
     const valid = ['running', 'completed', 'failed', 'cancelled'];
     if (!valid.includes(body.status)) {
@@ -2114,8 +2075,17 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       .from(executions)
       .where(and(eq(executions.id, executionId), eq(executions.agentHostId, agentHostId)));
     if (!row) return c.json({ error: 'Execution not found' }, 404);
+    // Terminal: a steer still pending on the run never reached it — it is LATE and
+    // starts a follow-up run under the person who sent it (lateSteerFollowUp.ts).
+    if (body.status !== 'running') {
+      c.executionCtx.waitUntil(settleLateSteersSafely({ env: c.env as unknown as Env, db }, { executionId, tenantId: row.tenantId }));
+    }
     return c.json(row);
   });
+
+  // POST /api/agent-hosts/:id/late-steers — steers a host could not deliver because
+  // the run had already taken its last turn (see agentHostLateSteerRoute.ts).
+  registerLateSteerRoute(router, { db, verifyAgentHostApiKey, extractAgentHostKey });
 
   // -------------------------------------------------------------------------
   // GET /api/agent-hosts/:id/spec
@@ -2238,7 +2208,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHost   = await verifyAgentHostApiKey(agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
-    const body = await c.req.json<{ projectId?: number; governance?: string }>();
+    const body = await parseBody(c, ProjectContextBody);
 
     let projectId = body.projectId;
     if (!projectId) {
@@ -2311,7 +2281,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHost   = await verifyAgentHostApiKey(agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
-    const body = await c.req.json<{ personas: unknown[] }>();
+    const body = await parseBody(c, PersonasBody);
     if (!Array.isArray(body.personas)) {
       return c.json({ error: 'personas must be an array' }, 400);
     }

@@ -52,24 +52,24 @@ enum WideAreaGatewayDiscovery {
 
         guard let domain = CoderClawBonjour.wideAreaGatewayServiceDomain else { return [] }
         let domainTrimmed = domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))
-        let probeName = "_coderclaw-gw._tcp.\(domainTrimmed)"
-        guard let ptrLines = context.dig(
-            ["+short", "+time=1", "+tries=1", "@\(nameserver)", probeName, "PTR"],
-            min(defaultTimeoutSeconds, remaining()))?.split(whereSeparator: \.isNewline),
-            !ptrLines.isEmpty
-        else {
-            return []
+        // Query PTR for every gateway service type (current and legacy); keep each instance once.
+        var ptrNames: [String] = []
+        for probeName in self.probeNames(domainTrimmed: domainTrimmed) {
+            let lines = context.dig(
+                ["+short", "+time=1", "+tries=1", "@\(nameserver)", probeName, "PTR"],
+                min(defaultTimeoutSeconds, remaining()))?.split(whereSeparator: \.isNewline) ?? []
+            for raw in lines {
+                let ptr = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if ptr.isEmpty { continue }
+                let ptrName = ptr.hasSuffix(".") ? String(ptr.dropLast()) : ptr
+                if !ptrNames.contains(ptrName) { ptrNames.append(ptrName) }
+            }
         }
+        guard !ptrNames.isEmpty else { return [] }
 
         var beacons: [WideAreaGatewayBeacon] = []
-        for raw in ptrLines {
-            let ptr = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            if ptr.isEmpty { continue }
-            let ptrName = ptr.hasSuffix(".") ? String(ptr.dropLast()) : ptr
-            let suffix = "._coderclaw-gw._tcp.\(domainTrimmed)"
-            let rawInstanceName = ptrName.hasSuffix(suffix)
-                ? String(ptrName.dropLast(suffix.count))
-                : ptrName
+        for ptrName in ptrNames {
+            let rawInstanceName = self.instanceName(fromPTR: ptrName, domainTrimmed: domainTrimmed)
             let instanceName = self.decodeDnsSdEscapes(rawInstanceName)
 
             guard let srv = context.dig(
@@ -99,6 +99,22 @@ enum WideAreaGatewayDiscovery {
         }
 
         return beacons
+    }
+
+    /// `<type>.<domain>` PTR names for every browsed gateway service type.
+    static func probeNames(domainTrimmed: String) -> [String] {
+        CoderClawBonjour.gatewayServiceTypes.map { "\($0).\(domainTrimmed)" }
+    }
+
+    /// Strips the `.<type>.<domain>` suffix of whichever gateway service type the PTR names.
+    static func instanceName(fromPTR ptrName: String, domainTrimmed: String) -> String {
+        for serviceType in CoderClawBonjour.gatewayServiceTypes {
+            let suffix = ".\(serviceType).\(domainTrimmed)"
+            if ptrName.hasSuffix(suffix) {
+                return String(ptrName.dropLast(suffix.count))
+            }
+        }
+        return ptrName
     }
 
     private static func collectTailnetIPv4s(statusJson: String?) -> [String] {
@@ -155,7 +171,7 @@ enum WideAreaGatewayDiscovery {
     {
         guard let domain = CoderClawBonjour.wideAreaGatewayServiceDomain else { return nil }
         let domainTrimmed = domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))
-        let probeName = "_coderclaw-gw._tcp.\(domainTrimmed)"
+        let probeNames = self.probeNames(domainTrimmed: domainTrimmed)
 
         let ips = candidates
         candidates.removeAll(keepingCapacity: true)
@@ -192,11 +208,15 @@ enum WideAreaGatewayDiscovery {
                     let budget = deadline.timeIntervalSinceNow
                     if budget <= 0 { return }
 
-                    if let stdout = dig(
-                        ["+short", "+time=1", "+tries=1", "@\(ip)", probeName, "PTR"],
-                        min(defaultTimeoutSeconds, budget)),
-                        stdout.split(whereSeparator: \.isNewline).isEmpty == false
-                    {
+                    // A nameserver qualifies when it answers PTR for any gateway service type.
+                    let answered = probeNames.contains { probeName in
+                        guard let stdout = dig(
+                            ["+short", "+time=1", "+tries=1", "@\(ip)", probeName, "PTR"],
+                            min(defaultTimeoutSeconds, budget))
+                        else { return false }
+                        return stdout.split(whereSeparator: \.isNewline).isEmpty == false
+                    }
+                    if answered {
                         state.lock.lock()
                         if state.found == nil {
                             state.found = ip

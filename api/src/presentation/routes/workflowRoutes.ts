@@ -25,6 +25,57 @@ import { requirePermission } from '../middleware/requirePermission';
 import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseBody, z } from './requestBody';
+
+const WORKFLOW_TYPES = ['feature', 'bugfix', 'refactor', 'planning', 'adversarial', 'custom'] as const;
+const RUN_STATUSES = ['pending', 'running', 'completed', 'failed', 'cancelled'] as const;
+
+/** `agentHostId` stays optional: a host-authed caller supplies it via its header,
+ *  and the handler answers its own "agentHostId is required" otherwise. */
+const RegisterWorkflowBody = z.object({
+  id: z.string().nullish(),
+  agentHostId: z.number().nullish(),
+  projectId: z.number().nullish(),
+  specId: z.string().nullish(),
+  workflowType: z.enum(WORKFLOW_TYPES).nullish(),
+  status: z.enum(RUN_STATUSES).nullish(),
+  description: z.string().nullish(),
+});
+
+const HostResultBody = z.object({
+  tasks: z.array(z.object({
+    id: z.string(),
+    status: z.enum(RUN_STATUSES),
+    output: z.string().nullish(),
+    error: z.string().nullish(),
+  })).nullish(),
+  status: z.enum(['running', 'completed', 'failed', 'cancelled']).nullish(),
+});
+
+const PatchWorkflowBody = z.object({
+  status: z.enum(RUN_STATUSES).optional(),
+  description: z.string().nullish(),
+  projectId: z.number().nullish(),
+});
+
+/** `agentRole` / `description` stay optional so the handler's own message wins. */
+const AddWorkflowTaskBody = z.object({
+  id: z.string().nullish(),
+  agentRole: z.string().nullish(),
+  description: z.string().nullish(),
+  input: z.string().nullish(),
+  dependsOn: z.array(z.string()).nullish(),
+  status: z.enum(RUN_STATUSES).nullish(),
+  startedAt: z.string().optional(),
+});
+
+const PatchWorkflowTaskBody = z.object({
+  status: z.enum(RUN_STATUSES).optional(),
+  output: z.string().nullish(),
+  error: z.string().nullish(),
+  startedAt: z.string().optional(),
+  completedAt: z.string().optional(),
+});
 
 type WorkflowHonoEnv = HonoEnv;
 
@@ -39,15 +90,7 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const resolvedAgentHostId = requestAgentHostId(c);
 
-    const body = await c.req.json<{
-      id?:           string;
-      agentHostId?:       number;
-      projectId?:    number | null;
-      specId?:       string;
-      workflowType?: 'feature' | 'bugfix' | 'refactor' | 'planning' | 'adversarial' | 'custom';
-      status?:       'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
-      description?:  string;
-    }>();
+    const body = await parseBody(c, RegisterWorkflowBody);
 
     const effectiveAgentHostId = resolvedAgentHostId ?? body.agentHostId;
     if (!effectiveAgentHostId) return c.json({ error: 'agentHostId is required' }, 400);
@@ -137,10 +180,7 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
       .where(eq(workflows.id, id));
     if (!wf || wf.agentHostId !== host.id) return c.json({ error: 'Workflow not found' }, 404);
 
-    const body = await c.req.json<{
-      tasks?: Array<{ id: string; status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'; output?: string; error?: string }>;
-      status?: 'running' | 'completed' | 'failed' | 'cancelled';
-    }>();
+    const body = await parseBody(c, HostResultBody);
     const now = new Date();
     const isTerminal = (s: string) => s === 'completed' || s === 'failed' || s === 'cancelled';
 
@@ -226,11 +266,7 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
 
-    const body = await c.req.json<{
-      status?:      'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
-      description?: string;
-      projectId?:   number | null;
-    }>();
+    const body = await parseBody(c, PatchWorkflowBody);
 
     const now = new Date();
     await db
@@ -271,15 +307,7 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
     const [wf] = await db.select({ id: workflows.id }).from(workflows).where(and(eq(workflows.id, workflowId), eq(workflows.tenantId, tenantId)));
     if (!wf) return c.json({ error: 'Workflow not found' }, 404);
 
-    const body = await c.req.json<{
-      id?:          string;
-      agentRole:    string;
-      description:  string;
-      input?:       string;
-      dependsOn?:   string[];
-      status?:      'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
-      startedAt?:   string;
-    }>();
+    const body = await parseBody(c, AddWorkflowTaskBody);
 
     if (!body.agentRole || !body.description) {
       return c.json({ error: 'agentRole and description are required' }, 400);
@@ -457,13 +485,7 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
     const [wf] = await db.select({ id: workflows.id }).from(workflows).where(and(eq(workflows.id, workflowId), eq(workflows.tenantId, tenantId)));
     if (!wf) return c.json({ error: 'Workflow not found' }, 404);
 
-    const body = await c.req.json<{
-      status?:      'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
-      output?:      string;
-      error?:       string;
-      startedAt?:   string;
-      completedAt?: string;
-    }>();
+    const body = await parseBody(c, PatchWorkflowTaskBody);
 
     const now = new Date();
     await db

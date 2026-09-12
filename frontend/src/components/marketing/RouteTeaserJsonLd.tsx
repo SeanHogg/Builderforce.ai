@@ -1,3 +1,4 @@
+import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
 import { routeTeaserSchema } from '@/lib/routeTeaserMetadata';
 
@@ -8,8 +9,10 @@ import { routeTeaserSchema } from '@/lib/routeTeaserMetadata';
  * HTML a crawler receives, and a server route entry renders it there with no
  * client bundle cost. It decides its own visibility — `null` for a route whose
  * registry row carries no FAQ — so a route entry can mount it unconditionally.
+ * Async because the FAQ is catalog copy, resolved in the request's locale.
  */
-export default function RouteTeaserJsonLd({ pathname }: { pathname: string }) {
-  const data = routeTeaserSchema(pathname);
+export default async function RouteTeaserJsonLd({ pathname }: { pathname: string }) {
+  const t = await getTranslations();
+  const data = routeTeaserSchema(pathname, (key) => t(key as never));
   return data ? <JsonLd data={data} /> : null;
 }

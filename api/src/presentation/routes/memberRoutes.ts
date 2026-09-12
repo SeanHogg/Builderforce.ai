@@ -57,8 +57,8 @@ const clampDays = (raw: number, def: number, max: number) =>
  *  which are presence-only). The JSON columns stay `unknown`: they are stored as sent. */
 const ProfileBody = z.object({
   timezone: z.string().nullish(),
-  workHours: z.unknown(),
-  pto: z.unknown(),
+  workHours: z.unknown().optional(),
+  pto: z.unknown().optional(),
   responseSlaHours: z.number().nullish(),
   weeklyCapacityHours: z.number().nullish(),
   dailyCapacityPoints: z.number().nullish(),
@@ -66,9 +66,9 @@ const ProfileBody = z.object({
   rampFactor: z.number().nullish(),
   experienceLevel: z.enum(['junior', 'mid', 'senior', 'staff', 'principal']).nullish(),
   discipline: z.enum(['engineering', 'product', 'design', 'qa', 'devops', 'data', 'other']).nullish(),
-  skills: z.unknown(),
-  focusAreas: z.unknown(),
-  preferredTaskTypes: z.unknown(),
+  skills: z.unknown().optional(),
+  focusAreas: z.unknown().optional(),
+  preferredTaskTypes: z.unknown().optional(),
   availabilityStatus: z.enum(['available', 'busy', 'focus', 'ooo', 'on_call']).nullish(),
   availabilityUntil: z.string().nullish(),
   lastActiveAt: z.string().nullish(),

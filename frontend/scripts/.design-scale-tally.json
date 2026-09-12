@@ -409,7 +409,6 @@
     "components/ProjectOriginBadge.tsx": 1,
     "components/ProjectsContent.tsx": 5,
     "components/ProjectTable.tsx": 7,
-    "components/PromptInput.tsx": 3,
     "components/prompts/PromptVersionDiff.tsx": 2,
     "components/PsychometricEditor.tsx": 18,
     "components/PublishToMarketplaceModal.tsx": 6,

@@ -143,6 +143,18 @@ describe('mcpServerRoutes — JSON-RPC 2.0 / Streamable HTTP', () => {
     expect((await res.json() as any).error.code).toBe(-32700);
   });
 
+  it('JSON that is neither a request object nor a batch is an invalid request, in the JSON-RPC envelope', async () => {
+    for (const body of [5, 'initialize', null]) {
+      const res = await post(body);
+      expect(res.status).toBe(400);
+      const answer = await res.json() as any;
+      expect(answer.jsonrpc).toBe('2.0');
+      expect(answer.error.code).toBe(-32600);
+      // Never the API's own `{ error: string, issues }` shape — an MCP client cannot read it.
+      expect(answer.issues).toBeUndefined();
+    }
+  });
+
   it('a legacy batch answers only the requests and drops the notifications', async () => {
     const res = await post([
       { jsonrpc: '2.0', method: 'notifications/initialized' },

@@ -19,7 +19,12 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import { recordProspectEvent, resolveProspectPacket } from '../../application/sales/prospectShare';
 import { acceptQuote, declineQuote, requestControl } from '../../application/sales/prospectActions';
+import { parseOptionalBody, zJsonObject } from './requestBody';
 
+/**
+ * Every buyer body is read field-by-field through {@link clean} / `Number(...)`, so the
+ * schema is any JSON object (`zJsonObject`); an absent body still reads as `{}`.
+ */
 const clean = (value: unknown, max: number): string =>
   typeof value === 'string' ? value.trim().slice(0, max) : '';
 
@@ -51,7 +56,7 @@ export function createPublicProspectRoutes(db: Db): Hono<HonoEnv> {
   r.post('/:token/events', async (c) => {
     const token = c.req.param('token');
     if (!TOKEN_RE.test(token)) return c.json({ error: 'Not found' }, 404);
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+    const body = await parseOptionalBody(c, zJsonObject);
     const event = clean(body.event, 32);
     if (!isProspectEvent(event)) return c.json({ error: 'Unknown event' }, 400);
     const recorded = await recordProspectEvent(db, c.env as Env, {
@@ -68,7 +73,7 @@ export function createPublicProspectRoutes(db: Db): Hono<HonoEnv> {
   r.post('/:token/accept', async (c) => {
     const token = c.req.param('token');
     if (!TOKEN_RE.test(token)) return c.json({ error: 'Not found' }, 404);
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+    const body = await parseOptionalBody(c, zJsonObject);
     const quoteObjectId = clean(body.quoteObjectId, 64);
     if (!quoteObjectId) return c.json({ error: 'quoteObjectId is required' }, 400);
     const name = clean(body.name, 160);
@@ -92,7 +97,7 @@ export function createPublicProspectRoutes(db: Db): Hono<HonoEnv> {
   r.post('/:token/decline', async (c) => {
     const token = c.req.param('token');
     if (!TOKEN_RE.test(token)) return c.json({ error: 'Not found' }, 404);
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+    const body = await parseOptionalBody(c, zJsonObject);
     const quoteObjectId = clean(body.quoteObjectId, 64);
     if (!quoteObjectId) return c.json({ error: 'quoteObjectId is required' }, 400);
     const done = await declineQuote(db, c.env as Env, { token, quoteObjectId, reason: clean(body.reason, 600) });
@@ -112,7 +117,7 @@ export function createPublicProspectRoutes(db: Db): Hono<HonoEnv> {
     // The setting is honoured HERE and not only in the UI. A button the page hides is not
     // a control; a route that refuses is.
     if (!packet.settings.allowControlRequest) return c.json({ error: 'This link is view-only.' }, 403);
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+    const body = await parseOptionalBody(c, zJsonObject);
     const raised = await requestControl(db, c.env as Env, {
       token,
       requestedByName: clean(body.name, 160),

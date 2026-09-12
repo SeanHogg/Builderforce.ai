@@ -14,6 +14,8 @@ import { MeetingTranscriptList } from './MeetingTranscriptList';
 import { BrainPanel } from '@/components/brain/BrainPanel';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { Select } from '@/components/Select';
+import { PromptInput } from '@seanhogg/builderforce-brain-embedded';
+import { useAssistantGate } from '@/lib/academic/useAssistantGate';
 import { faultMessage } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 const TILE_SIZE_KEY = 'bf.meetingTileSize';
@@ -50,6 +52,7 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
   const [interim, setInterim] = useState('');
   const [agentBusy, setAgentBusy] = useState<Set<string>>(() => new Set());
   const [ask, setAsk] = useState('');
+  const assistantGate = useAssistantGate();
   const [askAgentRef, setAskAgentRef] = useState<string>('');
   const [directOnly, setDirectOnly] = useState(true);
   const isMobile = useIsMobile();
@@ -291,8 +294,16 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
                   </button>
                 ))}
               </div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                {agents.length > 1 && (
+              {/* The package's one-line composer (PRD 14 §136) — the same row an embed
+                  draws — obeying the exam gate every Brain composer obeys. */}
+              <PromptInput
+                value={ask}
+                onChange={setAsk}
+                onSubmit={sendAsk}
+                placeholder={t('askAgentPlaceholder')}
+                submitLabel={t('askSend')}
+                disabled={!assistantGate.assistantAllowed}
+                leading={agents.length > 1 ? (
                   <Select
                     value={askAgentRef}
                     onChange={(e) => setAskAgentRef(e.target.value)}
@@ -301,18 +312,8 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
                   >
                     {agents.map((a) => <option key={a.ref} value={a.ref}>{a.name}</option>)}
                   </Select>
-                )}
-                <input
-                  value={ask}
-                  onChange={(e) => setAsk(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); sendAsk(); } }}
-                  placeholder={t('askAgentPlaceholder')}
-                  style={{ flex: '1 1 220px', fontSize: 13, padding: '7px 10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
-                />
-                <button type="button" onClick={sendAsk} disabled={!ask.trim()} style={{ fontSize: 13, fontWeight: 700, padding: '7px 14px', borderRadius: 'var(--radius-md)', cursor: ask.trim() ? 'pointer' : 'default', background: 'var(--coral-bright)', color: 'var(--bg-deep)', border: 'none', opacity: ask.trim() ? 1 : 0.5 }}>
-                  {t('askSend')}
-                </button>
-              </div>
+                ) : undefined}
+              />
             </div>
           )}
 

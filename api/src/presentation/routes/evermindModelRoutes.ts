@@ -39,19 +39,36 @@ import {
 } from '../../application/llm/evermindToolCall';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { sha256Hex } from '../../domain/shared/hash';
+import { parseOptionalBody, z } from './requestBody';
 
 const EVERMIND_PIN_PREFIX = 'evermind/';
 
-interface PublishBody {
-  name?: unknown;
+// Every handler below type-guards its fields one by one (a miss answers its own
+// sentence), so fields stay `unknown`: the schemas refuse only a non-object body.
+const PublishBody = z.object({
+  name: z.unknown().optional(),
   /** base64-encoded EvermindModelPackage.toBlob() output. */
-  model?: unknown;
+  model: z.unknown().optional(),
   /** Tokenizer descriptor packaged alongside the model: { vocab, merges }. */
-  tokenizer?: unknown;
-  description?: unknown;
-  heldOutCorpus?: unknown;
-  qualityGate?: unknown;
-}
+  tokenizer: z.unknown().optional(),
+  description: z.unknown().optional(),
+  heldOutCorpus: z.unknown().optional(),
+  qualityGate: z.unknown().optional(),
+});
+const RollbackBody = z.object({ targetSlug: z.unknown().optional(), targetEvermindRef: z.unknown().optional() });
+const TestBody = z.object({
+  prompt: z.unknown().optional(),
+  /** Chat turns: objects the runtime reads `role`/`content` off; any other keys ride through. */
+  messages: z.array(z.looseObject({ role: z.unknown().optional(), content: z.unknown().optional() })).optional(),
+  maxTokens: z.unknown().optional(),
+  temperature: z.unknown().optional(),
+  tools: z.unknown().optional(),
+  tool_choice: z.unknown().optional(),
+});
+const GenerateMediaBody = z.object({
+  prompt: z.unknown().optional(), maxFrames: z.unknown().optional(), maxTokens: z.unknown().optional(), temperature: z.unknown().optional(), seed: z.unknown().optional(),
+});
+const BenchmarkBody = z.object({ corpus: z.unknown().optional(), topK: z.unknown().optional() });
 
 function decodeBase64(b64: string): Uint8Array {
   const bin = atob(b64);
@@ -74,7 +91,7 @@ export function createEvermindModelRoutes(db: Db): Hono<HonoEnv> {
     const userId = c.get('userId') as string | undefined;
     if (!c.env.UPLOADS) return c.json({ error: 'R2 artifact storage not configured' }, 503);
 
-    const body = (await c.req.json<PublishBody>().catch(() => ({}))) as PublishBody;
+    const body = await parseOptionalBody(c, PublishBody);
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     const modelB64 = typeof body.model === 'string' ? body.model : '';
     const tokenizer = body.tokenizer as { vocab?: unknown; merges?: unknown } | undefined;
@@ -162,7 +179,7 @@ export function createEvermindModelRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:slug/rollback', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const current = await resolveTenantModel(c.env as Env, db, tenantId, `${TENANT_MODEL_REF_PREFIX}${c.req.param('slug')}`);
-    const body = await c.req.json<{ targetSlug?: unknown; targetEvermindRef?: unknown }>().catch(() => ({} as { targetSlug?: unknown; targetEvermindRef?: unknown }));
+    const body = await parseOptionalBody(c, RollbackBody);
     const targetSlug = typeof body.targetSlug === 'string' ? body.targetSlug.trim() : '';
     if (!current || !current.baseModel?.startsWith(EVERMIND_PIN_PREFIX)) return c.json({ error: 'Published Evermind model not found' }, 404);
     const explicitRef = typeof body.targetEvermindRef === 'string' ? body.targetEvermindRef.trim() : '';
@@ -201,13 +218,9 @@ export function createEvermindModelRoutes(db: Db): Hono<HonoEnv> {
     }
     const ref = tm.baseModel.slice(EVERMIND_PIN_PREFIX.length);
 
-    const body = (await c.req.json<Record<string, unknown>>().catch(() => ({}))) as {
-      prompt?: unknown; messages?: unknown; maxTokens?: unknown; temperature?: unknown;
-      tools?: unknown; tool_choice?: unknown;
-    };
-    const messages = Array.isArray(body.messages)
-      ? (body.messages as Array<{ role?: unknown; content?: unknown }>)
-      : [{ role: 'user', content: typeof body.prompt === 'string' ? body.prompt : '' }];
+    const body = await parseOptionalBody(c, TestBody);
+    const messages: Array<{ role?: unknown; content?: unknown }> = body.messages
+      ?? [{ role: 'user', content: typeof body.prompt === 'string' ? body.prompt : '' }];
     if (messages.length === 0 || messages.every((m) => !m.content)) {
       return c.json({ error: 'prompt or messages is required' }, 400);
     }
@@ -259,9 +272,7 @@ export function createEvermindModelRoutes(db: Db): Hono<HonoEnv> {
     }
     const ref = tm.baseModel.slice(EVERMIND_PIN_PREFIX.length);
 
-    const body = (await c.req.json<{
-      prompt?: unknown; maxFrames?: unknown; maxTokens?: unknown; temperature?: unknown; seed?: unknown;
-    }>().catch(() => ({}))) as { prompt?: unknown; maxFrames?: unknown; maxTokens?: unknown; temperature?: unknown; seed?: unknown };
+    const body = await parseOptionalBody(c, GenerateMediaBody);
 
     try {
       const media = await evermindGenerateMedia(c.env.UPLOADS, ref, {
@@ -296,9 +307,7 @@ export function createEvermindModelRoutes(db: Db): Hono<HonoEnv> {
     }
     const ref = tm.baseModel.slice(EVERMIND_PIN_PREFIX.length);
 
-    const body = (await c.req.json<{ corpus?: unknown; topK?: unknown }>().catch(() => ({}))) as {
-      corpus?: unknown; topK?: unknown;
-    };
+    const body = await parseOptionalBody(c, BenchmarkBody);
     const corpus = typeof body.corpus === 'string' ? body.corpus.trim() : '';
     if (corpus.length < 20) {
       return c.json({ error: 'corpus is required — provide held-out text (≥ 20 chars) to score the model on' }, 400);

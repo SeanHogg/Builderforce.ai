@@ -1,6 +1,6 @@
 ## CoderClaw Node (Android) (internal)
 
-Modern Android node app: connects to the **Gateway WebSocket** (`_coderclaw-gw._tcp`) and exposes **Canvas + Chat + Camera**.
+Modern Android node app: connects to the **Gateway WebSocket** (discovered as `_builderforce-gw._tcp`, or `_coderclaw-gw._tcp` from older runtimes) and exposes **Canvas + Chat + Camera**.
 
 Notes:
 - The node keeps the connection alive via a **foreground service** (persistent notification with a Disconnect action).

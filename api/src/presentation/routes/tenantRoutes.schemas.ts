@@ -18,7 +18,7 @@ export const TenantNameBody = z.object({ name: z.string().optional() });
 export const DefaultAgentHostBody = z.object({ agentHostId: z.number().int().nullish() });
 
 /** `PUT /:id/navigation-features` — `validateNavigationFeatures` owns the id vocabulary. */
-export const NavigationFeaturesBody = z.object({ enabled: z.unknown() });
+export const NavigationFeaturesBody = z.object({ enabled: z.unknown().optional() });
 
 /** `POST /:id/add-ons/business-phone/checkout`. */
 export const BusinessPhoneCheckoutBody = z.object({ billingEmail: z.string().nullish() });

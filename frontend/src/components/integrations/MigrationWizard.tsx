@@ -297,6 +297,7 @@ export function MigrationWizard({ open, onClose, provider, providerLabel, creden
                 <Select value={tp.targetTaskType} onChange={(e) => patchType(tp.externalType, { targetTaskType: e.target.value })} style={{ ...inputStyle, width: 130 }}>
                   <option value="task">{t('migration.typeTask')}</option>
                   <option value="epic">{t('migration.typeEpic')}</option>
+                  <option value="bug">{t('migration.typeBug')}</option>
                 </Select>
                 <input style={{ ...inputStyle, width: 160 }} value={tp.targetStatus} placeholder="backlog" onChange={(e) => patchType(tp.externalType, { targetStatus: e.target.value })} />
               </div>

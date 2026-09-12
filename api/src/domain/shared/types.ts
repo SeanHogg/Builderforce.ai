@@ -90,6 +90,12 @@ export enum TaskType {
    *  incident's severity, status and affected system, bridged to a prodIncidents
    *  record (task.incidentId) that owns the MTTR/escalation lifecycle. */
   INCIDENT = 'incident',
+  /** A defect report (migration 1160) — the spec's / BurnRateOS's ItemType BUG.
+   *  Every other spec ItemType already had a platform owner (INITIATIVE →
+   *  `initiatives`, EPIC → EPIC, STORY/TASK → TASK, SUBTASK → TASK +
+   *  `parentTaskId`); a bug had none, so it is a kind value here rather than a
+   *  second work-item table. Runs and schedules exactly like a TASK. */
+  BUG = 'bug',
 }
 
 export enum AgentType {

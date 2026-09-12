@@ -39,7 +39,10 @@ import { startFollowUpRun, type FollowUpPriorRun, type FollowUpRunArgs, type Fol
 import type { ExecutionTaskRow } from './dispatchCloudRun';
 import { recordCloudToolEvent } from './cloudToolEvents';
 import { resolveCloudAgent } from './cloudAgent/agent';
-import { claimLateSteers, lateSteerOutcomeOf, recordLateSteerOutcome, repend, type ClaimedSteer } from './lateSteerStore';
+import {
+  claimLateSteers, lateSteerOutcomeOf, recordLateSteerOutcome, repend, resolveReportedSteerIds,
+  type ClaimedSteer, type ReportedSteer,
+} from './lateSteerStore';
 import type { LateSteerOutcomeKind } from './executionSteering';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 
@@ -73,10 +76,10 @@ export type LateSteerOutcome =
 export interface LateSteerPorts {
   loadExecution(executionId: number, tenantId?: number): Promise<LateSteerExecution | null>;
   loadTask(tenantId: number, taskId: number): Promise<ExecutionTaskRow | null>;
-  repend(executionId: number, messageIds: readonly number[]): Promise<void>;
-  claim(executionId: number, messageIds?: readonly number[]): Promise<ClaimedSteer[]>;
-  priorOutcome(executionId: number, messageIds: readonly number[]): Promise<{ outcome: LateSteerOutcomeKind | null; followUpExecutionId: number | null } | null>;
-  recordOutcome(messageIds: readonly number[], outcome: { outcome: LateSteerOutcomeKind; followUpExecutionId?: number | null; detail?: string | null }): Promise<void>;
+  repend(tenantId: number, executionId: number, messageIds: readonly number[]): Promise<void>;
+  claim(tenantId: number, executionId: number, messageIds?: readonly number[]): Promise<ClaimedSteer[]>;
+  priorOutcome(tenantId: number, executionId: number, messageIds: readonly number[]): Promise<{ outcome: LateSteerOutcomeKind | null; followUpExecutionId: number | null } | null>;
+  recordOutcome(tenantId: number, messageIds: readonly number[], outcome: { outcome: LateSteerOutcomeKind; followUpExecutionId?: number | null; detail?: string | null }): Promise<void>;
   agentLabel(tenantId: number, agentRef: string | undefined): Promise<string>;
   startFollowUp(args: FollowUpRunArgs): Promise<FollowUpRunOutcome>;
   timeline(event: {
@@ -104,17 +107,17 @@ export async function dispatchLateSteerFollowUp(
     // live loop drains (or the terminal chokepoint claims), then re-read — the run may
     // have settled between the report and the re-queue, and nobody else would see it.
     if (!ids) return { kind: 'deferred' };
-    await ports.repend(run.id, ids);
+    await ports.repend(run.tenantId, run.id, ids);
     run = await ports.loadExecution(input.executionId, input.tenantId);
     if (!run || !isTerminalExecutionStatus(run.status)) return { kind: 'deferred' };
   }
   const settled = run;
 
-  const claimed = await ports.claim(settled.id, ids);
+  const claimed = await ports.claim(settled.tenantId, settled.id, ids);
   if (claimed.length === 0) {
     if (!ids) return { kind: 'none' };
     // A retried frame, or a second chokepoint: already handled — say how, start nothing.
-    const prior = await ports.priorOutcome(settled.id, ids);
+    const prior = await ports.priorOutcome(settled.tenantId, settled.id, ids);
     return { kind: 'duplicate', outcome: prior?.outcome ?? null, followUpExecutionId: prior?.followUpExecutionId ?? null };
   }
 
@@ -131,8 +134,9 @@ export async function dispatchLateSteerFollowUp(
     detail: { text: directive, arrival: input.reason, messageIds: claimedIds, ...detail },
     result,
   });
+  const record = (outcome: Parameters<LateSteerPorts['recordOutcome']>[2]) => ports.recordOutcome(settled.tenantId, claimedIds, outcome);
   const drop = async (outcome: LateSteerOutcomeKind, reason: string, detail: string, extra: Record<string, unknown> = {}): Promise<void> => {
-    await ports.recordOutcome(claimedIds, { outcome, detail });
+    await record({ outcome, detail });
     await event(STEER_DROPPED_EVENT, { reason, ...extra }, detail);
   };
 
@@ -169,12 +173,12 @@ export async function dispatchLateSteerFollowUp(
 
   switch (outcome.kind) {
     case 'started':
-      await ports.recordOutcome(claimedIds, { outcome: 'started', followUpExecutionId: outcome.executionId });
+      await record({ outcome: 'started', followUpExecutionId: outcome.executionId });
       await event(STEER_FOLLOWED_UP_EVENT, { outcome: 'started', followUpExecutionId: outcome.executionId, submittedBy },
         `This message arrived after the run's last turn, so it started follow-up run #${outcome.executionId} on the same branch.`);
       return { kind: 'started', followUpExecutionId: outcome.executionId };
     case 'awaiting_approval':
-      await ports.recordOutcome(claimedIds, { outcome: 'awaiting_approval', detail: outcome.reason });
+      await record({ outcome: 'awaiting_approval', detail: outcome.reason });
       await event(STEER_FOLLOWED_UP_EVENT, { outcome: 'awaiting_approval', approvalId: outcome.approvalId, submittedBy },
         `This message arrived after the run's last turn; its follow-up run is waiting for manager approval (${outcome.reason}).`);
       return { kind: 'awaiting_approval', approvalId: outcome.approvalId };
@@ -187,6 +191,23 @@ export async function dispatchLateSteerFollowUp(
 /** The terminal chokepoint's entry: every steer still pending on a settled run is late. */
 export function settleLateSteers(ports: LateSteerPorts, args: { executionId: number; tenantId?: number }): Promise<LateSteerOutcome> {
   return dispatchLateSteerFollowUp(ports, { ...args, reason: 'run_ended' });
+}
+
+/**
+ * A self-hosted runtime's report of steers it could not deliver. Scoped twice: to the
+ * host's tenant, and to a run that was actually dispatched to THAT host — a host cannot
+ * report (and so start follow-ups for) another host's run.
+ */
+export async function reportHostLateSteers(
+  deps: LateSteerDeps,
+  input: { agentHostId: number; tenantId: number; executionId: number; reason: LateSteerReason; steers: readonly ReportedSteer[] },
+): Promise<LateSteerOutcome | { kind: 'not_found' }> {
+  const ports = lateSteerPorts(deps);
+  const run = await ports.loadExecution(input.executionId, input.tenantId);
+  if (!run || run.agentHostId !== input.agentHostId) return { kind: 'not_found' };
+  const messageIds = await resolveReportedSteerIds(deps.db, input.tenantId, run.id, input.steers);
+  if (messageIds.length === 0) return { kind: 'none' };
+  return dispatchLateSteerFollowUp(ports, { executionId: run.id, tenantId: input.tenantId, messageIds, reason: input.reason });
 }
 
 export interface LateSteerDeps {
@@ -236,10 +257,10 @@ export function lateSteerPorts(deps: LateSteerDeps): LateSteerPorts {
         .limit(1);
       return (row as ExecutionTaskRow | undefined) ?? null;
     },
-    repend: (executionId, ids) => repend(db, executionId, ids),
-    claim: (executionId, ids) => claimLateSteers(db, executionId, ids),
-    priorOutcome: (executionId, ids) => lateSteerOutcomeOf(db, executionId, ids),
-    recordOutcome: (ids, outcome) => recordLateSteerOutcome(db, ids, outcome),
+    repend: (tenantId, executionId, ids) => repend(db, tenantId, executionId, ids),
+    claim: (tenantId, executionId, ids) => claimLateSteers(db, tenantId, executionId, ids),
+    priorOutcome: (tenantId, executionId, ids) => lateSteerOutcomeOf(db, tenantId, executionId, ids),
+    recordOutcome: (tenantId, ids, outcome) => recordLateSteerOutcome(db, tenantId, ids, outcome),
     agentLabel: async (tenantId, agentRef) => (await resolveCloudAgent(env, tenantId, agentRef)).label ?? 'BuilderForce Agent',
     async startFollowUp(args) {
       const pending: Promise<unknown>[] = [];

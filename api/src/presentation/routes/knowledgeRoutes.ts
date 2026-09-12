@@ -62,6 +62,19 @@ import { knowledgeVersionKey } from '../../application/insights/versionKeys';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { parseBody, parseOptionalBody } from './requestBody';
+import {
+  AddCollaboratorBody,
+  AiDraftBody,
+  AssignTrainingBody,
+  CompleteKnowledgeCheckoutBody,
+  CreateDocumentBody,
+  KnowledgeCheckoutBody,
+  ListDocumentBody,
+  PublishDocumentBody,
+  ReplaceTagsBody,
+  UpdateDocumentBody,
+} from './knowledgeRoutes.schemas';
 
 const DOC_TYPES = ['sop', 'process', 'doc', 'postmortem', 'known_error'] as const;
 type DocType = (typeof DOC_TYPES)[number];
@@ -388,17 +401,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string;
     const segmentId = (c.get('segmentId') as string | undefined) ?? null;
-    const body = await c.req.json<{
-      title?: string;
-      summary?: string;
-      content?: string;
-      docType?: DocType;
-      projectId?: number | null;
-      requiresAck?: boolean;
-      tags?: string[];
-      /** Start from a curated standard-library template (fills title/content/docType/tags). */
-      templateKey?: string;
-    }>();
+    const body = await parseBody(c, CreateDocumentBody);
 
     // A template seeds defaults; explicit request fields still win. With the
     // create-modal gone, an untitled draft is valid — the editor renames inline.
@@ -441,15 +444,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
-    const body = await c.req.json<{
-      title?: string;
-      summary?: string | null;
-      content?: string;
-      docType?: DocType;
-      projectId?: number | null;
-      requiresAck?: boolean;
-      status?: 'draft' | 'published' | 'archived';
-    }>();
+    const body = await parseBody(c, UpdateDocumentBody);
 
     const doc = await loadDoc(tenantId, id);
     if (!doc) return c.json({ error: 'Document not found' }, 404);
@@ -498,7 +493,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
-    const body = await c.req.json<{ changeNote?: string }>().catch(() => ({} as { changeNote?: string }));
+    const body = await parseOptionalBody(c, PublishDocumentBody);
 
     const doc = await loadDoc(tenantId, id);
     if (!doc) return c.json({ error: 'Document not found' }, 404);
@@ -583,7 +578,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
   router.put('/documents/:id/tags', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const body = await c.req.json<{ tags?: string[] }>();
+    const body = await parseBody(c, ReplaceTagsBody);
     const doc = await loadDoc(tenantId, id);
     if (!doc) return c.json({ error: 'Document not found' }, 404);
     if (!canEditAccess(await accessFor(c, doc))) return c.json({ error: 'You do not have edit access to this document' }, 403);
@@ -740,7 +735,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const invitedBy = c.get('userId') as string;
     const id = c.req.param('id');
-    const body = await c.req.json<{ userId?: string; role?: 'editor' | 'viewer' }>();
+    const body = await parseBody(c, AddCollaboratorBody);
     const doc = await loadDoc(tenantId, id);
     if (!doc) return c.json({ error: 'Document not found' }, 404);
     if (!canEditAccess(await accessFor(c, doc))) return c.json({ error: 'You do not have access to manage this page' }, 403);
@@ -846,7 +841,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const assignedBy = c.get('userId') as string;
     const id = c.req.param('id');
-    const body = await c.req.json<{ userIds?: string[]; dueAt?: string | null }>();
+    const body = await parseBody(c, AssignTrainingBody);
     const doc = await loadDoc(tenantId, id);
     if (!doc) return c.json({ error: 'Document not found' }, 404);
 
@@ -893,12 +888,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
   router.post('/ai/draft', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{
-      prompt?: string;
-      docType?: DocType;
-      title?: string;
-      existingContent?: string;
-    }>();
+    const body = await parseBody(c, AiDraftBody);
     if (!body.prompt?.trim()) return c.json({ error: 'prompt is required' }, 400);
 
     const docType: DocType = (DOC_TYPES as readonly string[]).includes(body.docType ?? '')
@@ -1065,8 +1055,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     const access = await accessFor(c, doc);
     if (!canEditAccess(access)) return c.json({ error: 'Forbidden' }, 403);
 
-    type ListBody = { priceCents?: number; currency?: string; category?: string; visibility?: string };
-    const body = await c.req.json<ListBody>().catch((): ListBody => ({}));
+    const body = await parseOptionalBody(c, ListDocumentBody);
     const priceCents = Math.max(0, Math.round(Number(body.priceCents) || 0));
     const currency = typeof body.currency === 'string' && body.currency.trim()
       ? body.currency.trim().toUpperCase().slice(0, 8)
@@ -1149,9 +1138,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     if (listing.priceCents <= 0) return c.json({ free: true });
     if (await holdsKnowledgePurchase(db, tenantId, listingId)) return c.json({ purchased: true });
 
-    const body = await c.req
-      .json<{ returnUrl?: string; buyerEmail?: string }>()
-      .catch(() => ({} as { returnUrl?: string; buyerEmail?: string }));
+    const body = await parseOptionalBody(c, KnowledgeCheckoutBody);
     // The buyer comes back to the page they left, so the return url is theirs to
     // name — but only its origin and path are used, and the processor substitutes
     // the session id, so it cannot be turned into an open redirect carrying data.

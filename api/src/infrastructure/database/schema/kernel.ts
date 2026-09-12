@@ -1397,6 +1397,9 @@ export const agentTypeEnum = pgEnum('agent_type', [
 // into child tasks (parent_task_id) — see migration 0112.
 export const taskTypeEnum = pgEnum('task_type', [
   'task', 'epic', 'gap', 'security',
+  // Defect report (migration 1160): the spec/BurnRateOS ItemType BUG, the one work
+  // kind with no platform owner when the spec PM spine was unified onto `tasks`.
+  'bug',
   // Incident ticket (migration 0325): a first-class board card the Incident Manager
   // agent works, bridged to a prod_incidents record.
   'incident',
@@ -1412,7 +1415,7 @@ export const tenantStatusEnum = pgEnum('tenant_status', [
 ]);
 
 
-// `contributor` — migration 1150; authority order lives in `ROLE_ORDER`
+// `contributor` — migration 1155; authority order lives in `ROLE_ORDER`
 // (domain/shared/types.ts), not in this declaration order.
 export const tenantRoleEnum = pgEnum('tenant_role', [
   'owner', 'manager', 'developer', 'contributor', 'viewer',

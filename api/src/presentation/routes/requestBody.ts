@@ -38,6 +38,13 @@ export interface QueryContext {
   req: { query: () => Record<string, string> };
 }
 
+/**
+ * The one issue an UNPARSEABLE body answers with. Exported so an endpoint that owns a
+ * protocol envelope (JSON-RPC's `-32700 Parse error` vs `-32600 Invalid Request`)
+ * can tell "not JSON" from "JSON of the wrong shape" without matching a literal.
+ */
+export const INVALID_JSON_MESSAGE = 'Request body must be valid JSON';
+
 /** `[{ path: ['items', 0, 'id'], message }]` → `[{ path: 'items.0.id', message }]`. */
 function issuesOf(error: z.ZodError): RequestValidationIssue[] {
   return error.issues.map((issue) => ({
@@ -67,8 +74,8 @@ export async function parseBody<T>(c: BodyContext, schema: z.ZodType<T>): Promis
     raw = await c.req.json();
   } catch {
     throw new RequestValidationError(
-      [{ path: '', message: 'Request body must be valid JSON' }],
-      'Invalid request body — Request body must be valid JSON',
+      [{ path: '', message: INVALID_JSON_MESSAGE }],
+      `Invalid request body — ${INVALID_JSON_MESSAGE}`,
     );
   }
   return admit(schema, raw, 'body');
@@ -149,13 +156,17 @@ export const zNumberLike = z.union([z.number(), z.string()]);
 // `limit` of 10_000 is a page of `max`, exactly as `?limit=` already reads — so a
 // body field and a query param with the same name answer identically.
 
+// `.optional()` BEFORE the transform is load-bearing: in zod 4 a bare
+// `z.unknown().transform()` makes its object key required, so an absent `limit`
+// would be refused instead of defaulted. Optional-in, number-out.
+
 /** Any integer band: `def` when absent/junk, floored and clamped into `[min, max]`. */
 export const zBoundedInt = (options: BoundedIntOptions) =>
-  z.unknown().transform((raw) => boundedIntParam(raw, options));
+  z.unknown().optional().transform((raw) => boundedIntParam(raw, options));
 
 /** A page size: at least 1, at most `max`, `def` when absent or junk. */
 export const zLimit = (def: number, max: number) =>
-  z.unknown().transform((raw) => limitParam(raw, def, max));
+  z.unknown().optional().transform((raw) => limitParam(raw, def, max));
 
 /** A row offset: never negative, 0 when absent or junk. */
-export const zOffset = z.unknown().transform((raw) => offsetParam(raw));
+export const zOffset = z.unknown().optional().transform((raw) => offsetParam(raw));

@@ -29,6 +29,14 @@ import { toCsv, toHtmlTable, exportContentMeta, type ExportRow } from '../../app
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { positiveIntParam, daysParam } from './queryParams';
+import { parseOptionalBody, z, zNumberLike } from './requestBody';
+
+/** `POST /delay-taxonomy` — `isDelayReason` owns the reason vocabulary. */
+const DelayReasonBody = z.object({
+  taskId: zNumberLike.nullish(),
+  reasonCode: z.string().optional(),
+  notes: z.string().nullish(),
+});
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 
@@ -114,8 +122,7 @@ export function createEmpFeatureRoutes(db: Db): Hono<HonoEnv> {
   // Upserts on the per-task unique index so re-tagging replaces.
   router.post('/delay-taxonomy', requireRole(TenantRole.DEVELOPER), async (c) => {
     const { tenantId } = scope(c);
-    type Body = { taskId?: number; reasonCode?: string; notes?: string };
-    const body = await c.req.json<Body>().catch(() => ({} as Body));
+    const body = await parseOptionalBody(c, DelayReasonBody);
     const taskId = Number(body.taskId);
     if (!Number.isInteger(taskId) || taskId <= 0) return c.json({ error: 'taskId is required' }, 400);
     if (!isDelayReason(body.reasonCode)) return c.json({ error: 'invalid reasonCode' }, 400);

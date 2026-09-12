@@ -1,0 +1,295 @@
+/*
+ * The academic stations' own chrome — the face on a stand and the 2D panel behind it.
+ * Every colour is a token with a literal fallback, so both themes are covered and a
+ * missing variable degrades to something readable. Status is never colour alone: every
+ * tinted row or badge also says what it means in words.
+ */
+
+/* ── The face (rendered onto the stand through SurfacePanel) ──────────────────── */
+
+.face {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 20px;
+  min-height: 100%;
+  box-sizing: border-box;
+  background: var(--surface, #ffffff);
+  color: var(--text-primary, #111111);
+  font-family: var(--font-body, system-ui, sans-serif);
+  border-top: 6px solid var(--accent, #2563eb);
+}
+
+.face[data-tone='attention'] { border-top-color: var(--warning, #d97706); }
+
+.faceFigure {
+  font-size: 44px;
+  line-height: 1;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.faceHeadline {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.faceList {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 14px;
+  color: var(--text-secondary, #555555);
+}
+
+.faceList li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── The panel ────────────────────────────────────────────────────────────────── */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  color: var(--text-primary);
+}
+
+.banner,
+.insight {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border);
+  background: var(--surface-raised, var(--surface));
+  font-size: var(--font-size-small);
+  line-height: 1.45;
+}
+
+.banner[data-tone='attention'],
+.insight[data-tone='attention'] {
+  border-color: var(--warning-border, var(--warning));
+  background: var(--warning-bg, var(--surface-raised));
+  color: var(--warning-text, var(--text-primary));
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sectionBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sectionHead {
+  margin: 0;
+  font-size: var(--font-size-card-title, 1rem);
+  font-weight: 600;
+}
+
+.line {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.line[data-tone='attention'] { color: var(--warning-text, var(--text-primary)); }
+
+.cards,
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.card,
+.rowItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface);
+  font-size: var(--font-size-small);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rowItem[data-tone='attention'] { border-left: 4px solid var(--warning, #d97706); }
+
+.cardHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 6px 0 0;
+  padding: 1px 8px;
+  border-radius: var(--radius-full, 999px);
+  border: 1px solid var(--border);
+  font-size: var(--font-size-eyebrow);
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+th .badge { margin: 0 0 0 6px; }
+
+.badge[data-tone='attention'] {
+  border-color: var(--warning-border, var(--warning));
+  background: var(--warning-bg, transparent);
+  color: var(--warning-text, var(--text-primary));
+}
+
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.marker {
+  margin-right: 6px;
+  font-weight: 600;
+}
+
+.code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--font-size-small);
+}
+
+.action {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised, var(--surface));
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.action:hover { border-color: var(--accent); }
+.action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+}
+
+.field select {
+  min-height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-primary);
+}
+
+.meter {
+  position: relative;
+  height: 28px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border);
+  background: var(--surface-raised, var(--surface));
+  overflow: hidden;
+}
+
+.meterFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--success-bg, color-mix(in srgb, var(--accent) 22%, transparent));
+}
+
+.meter[data-tone='attention'] .meterFill { background: var(--warning-bg, color-mix(in srgb, var(--warning) 22%, transparent)); }
+
+.meterText {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 10px;
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The grid is the one thing allowed wider than the panel: it scrolls in its own box. */
+.tableScroll {
+  overflow-x: auto;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.table thead th {
+  font-size: var(--font-size-eyebrow);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.table tr[data-at-risk='true'] { background: var(--warning-bg, color-mix(in srgb, var(--warning) 12%, transparent)); }
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Touch: every control reaches a thumb-sized target. */
+@media (pointer: coarse) {
+  .action,
+  .field select { min-height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action { transition: none; }
+}

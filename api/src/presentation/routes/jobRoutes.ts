@@ -85,6 +85,19 @@ import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { closePipeline } from '../../application/hiring/pipeline';
 import { pipelineRefForPosting } from '../../domain/hiring/pipelineStages';
 import { excluded } from '../../infrastructure/database/upsert';
+import { parseBody, parseOptionalBody } from './requestBody';
+import {
+  AlertCreateBody,
+  AlertPatchBody,
+  DeclineProposalBody,
+  ExtractJobBody,
+  InviteResponseBody,
+  JobInviteBody,
+  JobMilestoneBody,
+  JobPostingBody,
+  NotificationReadBody,
+  ProposalBody,
+} from './jobRoutes.schemas';
 
 // `JOBS_PUBLIC_CACHE_KEY`, the posting-type vocabulary and the discipline vocabulary all
 // live with the writer now (`application/marketplace/jobPostings.ts` and `jobFilters.ts`).
@@ -443,7 +456,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
   // and left to find the posting again.
   router.post('/invites/:inviteId/respond', webAuthMiddleware, async (c) => {
     const db = requestDb(c);
-    const b = await c.req.json<{ accept?: boolean }>().catch((): { accept?: boolean } => ({}));
+    const b = await parseOptionalBody(c, InviteResponseBody);
     const result = await respondToInvite(db, c.env as Env, {
       userId: c.get('userId') as string,
       inviteId: c.req.param('inviteId'),
@@ -492,7 +505,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
   router.post('/alerts', webAuthMiddleware, async (c) => {
     const db = requestDb(c);
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{ name?: string; filters?: Record<string, unknown>; enabled?: boolean }>();
+    const body = await parseBody(c, AlertCreateBody);
     const name = String(body.name ?? '').trim().slice(0, 200);
     if (!name) return c.json({ error: 'name is required' }, 400);
     const tenantId = await seekerTenantId(db, c.env as Env, userId);
@@ -516,7 +529,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
   router.patch('/alerts/:id', webAuthMiddleware, async (c) => {
     const db = requestDb(c);
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{ name?: string; filters?: Record<string, unknown>; enabled?: boolean }>();
+    const body = await parseBody(c, AlertPatchBody);
     const tenantId = await seekerTenantId(db, c.env as Env, userId);
     if (tenantId === null) return c.json({ error: 'Not found' }, 404);
     const [existing] = await db.select({ filters: savedSearches.filters })
@@ -585,7 +598,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
       if (!extracted.ok) return c.json({ error: extracted.message, code: extracted.code }, 422);
       text = extracted.text;
     } else {
-      const body = await c.req.json<{ text?: string }>().catch(() => ({} as { text?: string }));
+      const body = await parseOptionalBody(c, ExtractJobBody);
       text = String(body.text ?? '').slice(0, 200_000);
     }
     if (text.trim().length < 40) return c.json({ error: 'That job description is too short to read' }, 400);
@@ -729,7 +742,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const jobId = c.req.param('id');
-    const b = await c.req.json<{ title?: string; description?: string; amountCents?: number; currency?: string; sequence?: number; dueAt?: string }>();
+    const b = await parseBody(c, JobMilestoneBody);
     const title = String(b.title ?? '').trim();
     if (!title) return c.json({ error: 'title is required' }, 400);
     const amountCents = Math.floor(Number(b.amountCents ?? 0));
@@ -747,7 +760,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
       title,
       description: b.description ?? null,
       amountCents,
-      currency: b.currency,
+      currency: b.currency ?? undefined,
       sequence: Number.isFinite(Number(b.sequence)) ? Number(b.sequence) : 0,
       dueAt: b.dueAt ? new Date(b.dueAt) : null,
       createdByUserId: c.get('userId') as string,
@@ -844,7 +857,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const pid = c.req.param('pid');
-    const b = await c.req.json<{ reason?: string }>().catch(() => ({} as { reason?: string }));
+    const b = await parseOptionalBody(c, DeclineProposalBody);
     const reason = typeof b.reason === 'string' && b.reason.trim() ? b.reason.slice(0, 2000) : null;
     const rows = await db
       .update(jobProposals)
@@ -944,8 +957,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
   // POST /:id/invites — invite ONE named freelancer. Idempotent per (posting, person).
   router.post('/:id/invites', authMiddleware, async (c) => {
     const db = requestDb(c);
-    const b = await c.req.json<{ freelancerUserId?: string; message?: string; expiresInDays?: number }>()
-      .catch((): { freelancerUserId?: string; message?: string; expiresInDays?: number } => ({}));
+    const b = await parseOptionalBody(c, JobInviteBody);
     const freelancerUserId = String(b.freelancerUserId ?? '').trim();
     if (!freelancerUserId) return c.json({ error: 'freelancerUserId is required' }, 400);
     const result = await createInvite(db, c.env as Env, {
@@ -1123,7 +1135,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
   // already had one, and stamped the ticket's back-ref onto whichever landed last.
   router.post('/', authMiddleware, async (c) => {
     const db = requestDb(c);
-    const b = await c.req.json<Record<string, unknown>>();
+    const b = await parseBody(c, JobPostingBody);
     try {
       const result = await upsertJobPosting(db, c.env as Env, {
         tenantId: c.get('tenantId') as number,
@@ -1143,7 +1155,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const b = await c.req.json<Record<string, unknown>>();
+    const b = await parseBody(c, JobPostingBody);
     const status = ['open', 'closed', 'filled'].includes(String(b.status ?? '')) ? String(b.status) : null;
     const postingType = postingTypeIfStated(b.postingType);
     const engagementType = hireShape(b.engagementType);
@@ -1320,7 +1332,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
     const db = requestDb(c);
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
-    const b = await c.req.json<{ coverNote?: string; rateCents?: number; milestones?: unknown; screeningAnswers?: unknown }>();
+    const b = await parseBody(c, ProposalBody);
     const [job] = await db
       .select({
         id: jobPostings.id,

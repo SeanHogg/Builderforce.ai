@@ -1,4 +1,4 @@
--- 1153 · Unify the spec's project-management spine onto the platform's owners.
+-- 1160 · Unify the spec's project-management spine onto the platform's owners.
 --
 -- DECIDED 2026-09-12 (operator): the PM spine in specs 01/04/05 is UNIFIED onto
 -- `projects` / `tasks` / `specs` rather than built beside them. The spec's
@@ -18,7 +18,7 @@
 --        action_items.promoted_work_item_ref   -> promoted_task_id  (FK tasks, SET NULL)
 --        product_ideas.promoted_work_item_ref  -> promoted_task_id  (FK tasks, SET NULL)
 --        sprint_financial_impact.sprint_ref    -> sprint_id         (FK sprints, CASCADE)
---        sprint_financial_impact.project_ref   -> project_id        (FK projects, SET NULL)
+--        sprint_financial_impact.project_ref   -> (retired: the sprint names its project)
 --        bottleneck_analysis.project_ref       -> project_id        (FK projects, CASCADE)
 --      A ref is resolved the two ways a caller could have written it — the numeric
 --      id or the human key (`tasks.key`, `projects.key`) — and only inside its own
@@ -56,7 +56,7 @@ BEGIN
        AND (t.id::text = btrim(e.work_item_ref) OR t.key = btrim(e.work_item_ref));
     SELECT count(*) INTO unresolved FROM task_effort_estimates WHERE task_id IS NULL;
     IF unresolved > 0 THEN
-      RAISE EXCEPTION '1153: % task_effort_estimates row(s) carry a work_item_ref that names no task in their tenant; resolve them before the column is dropped', unresolved;
+      RAISE EXCEPTION '1160: % task_effort_estimates row(s) carry a work_item_ref that names no task in their tenant; resolve them before the column is dropped', unresolved;
     END IF;
     DROP INDEX IF EXISTS idx_task_effort_estimates_item;
     ALTER TABLE task_effort_estimates DROP COLUMN work_item_ref;
@@ -79,7 +79,7 @@ BEGIN
        AND (t.id::text = btrim(e.work_item_ref) OR t.key = btrim(e.work_item_ref));
     SELECT count(*) INTO unresolved FROM task_time_entries WHERE task_id IS NULL;
     IF unresolved > 0 THEN
-      RAISE EXCEPTION '1153: % task_time_entries row(s) carry a work_item_ref that names no task in their tenant; resolve them before the column is dropped', unresolved;
+      RAISE EXCEPTION '1160: % task_time_entries row(s) carry a work_item_ref that names no task in their tenant; resolve them before the column is dropped', unresolved;
     END IF;
     DROP INDEX IF EXISTS idx_task_time_entries_item;
     ALTER TABLE task_time_entries DROP COLUMN work_item_ref;
@@ -104,7 +104,7 @@ BEGIN
     SELECT count(*) INTO unresolved FROM action_items
      WHERE promoted_work_item_ref IS NOT NULL AND promoted_task_id IS NULL;
     IF unresolved > 0 THEN
-      RAISE EXCEPTION '1153: % action_items row(s) were promoted to a work_item_ref that names no task in their tenant; resolve them before the column is dropped', unresolved;
+      RAISE EXCEPTION '1160: % action_items row(s) were promoted to a work_item_ref that names no task in their tenant; resolve them before the column is dropped', unresolved;
     END IF;
     ALTER TABLE action_items DROP COLUMN promoted_work_item_ref;
   END IF;
@@ -130,15 +130,18 @@ BEGIN
     SELECT count(*) INTO unresolved FROM product_ideas
      WHERE promoted_work_item_ref IS NOT NULL AND promoted_task_id IS NULL;
     IF unresolved > 0 THEN
-      RAISE EXCEPTION '1153: % product_ideas row(s) were promoted to a work_item_ref that names no task in their tenant; resolve them before the column is dropped', unresolved;
+      RAISE EXCEPTION '1160: % product_ideas row(s) were promoted to a work_item_ref that names no task in their tenant; resolve them before the column is dropped', unresolved;
     END IF;
     ALTER TABLE product_ideas DROP COLUMN promoted_work_item_ref;
   END IF;
 END $$;
 
--- ── 1e. sprint_financial_impact.{sprint_ref,project_ref} -> {sprint_id,project_id}
+-- ── 1e. sprint_financial_impact.sprint_ref -> sprint_id; project_ref retired ─────
+-- `project_ref` is NOT carried as a column: a sprint already names its project
+-- (`sprints.project_id`), so a project on the cost row would be a transitive
+-- dependency that can disagree with the sprint it costs. It is dropped only after
+-- proving every stored value AGREES with the sprint's own project.
 ALTER TABLE sprint_financial_impact ADD COLUMN IF NOT EXISTS sprint_id UUID REFERENCES sprints(id) ON DELETE CASCADE;
-ALTER TABLE sprint_financial_impact ADD COLUMN IF NOT EXISTS project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL;
 DO $$
 DECLARE unresolved INTEGER;
 BEGIN
@@ -149,16 +152,18 @@ BEGIN
      WHERE f.sprint_id IS NULL
        AND s.tenant_id = f.tenant_id
        AND s.id::text = btrim(f.sprint_ref);
-    UPDATE sprint_financial_impact f SET project_id = p.id
-      FROM projects p
-     WHERE f.project_id IS NULL
-       AND f.project_ref IS NOT NULL
-       AND p.tenant_id = f.tenant_id
-       AND (p.id::text = btrim(f.project_ref) OR p.key = btrim(f.project_ref));
-    SELECT count(*) INTO unresolved FROM sprint_financial_impact
-     WHERE sprint_id IS NULL OR (project_ref IS NOT NULL AND btrim(project_ref) <> '' AND project_id IS NULL);
+    SELECT count(*) INTO unresolved FROM sprint_financial_impact WHERE sprint_id IS NULL;
     IF unresolved > 0 THEN
-      RAISE EXCEPTION '1153: % sprint_financial_impact row(s) name a sprint or project that does not exist in their tenant; resolve them before the columns are dropped', unresolved;
+      RAISE EXCEPTION '1160: % sprint_financial_impact row(s) name a sprint that does not exist in their tenant; resolve them before the column is dropped', unresolved;
+    END IF;
+    SELECT count(*) INTO unresolved
+      FROM sprint_financial_impact f
+      JOIN sprints s ON s.id = f.sprint_id
+      LEFT JOIN projects p ON p.id = s.project_id
+     WHERE f.project_ref IS NOT NULL AND btrim(f.project_ref) <> ''
+       AND (p.id IS NULL OR (p.id::text <> btrim(f.project_ref) AND p.key <> btrim(f.project_ref)));
+    IF unresolved > 0 THEN
+      RAISE EXCEPTION '1160: % sprint_financial_impact row(s) carry a project_ref that disagrees with their sprint''s project; resolve them before the column is dropped', unresolved;
     END IF;
     DROP INDEX IF EXISTS uq_sprint_financial_impact_sprint;
     ALTER TABLE sprint_financial_impact DROP COLUMN sprint_ref;
@@ -184,13 +189,22 @@ BEGIN
     SELECT count(*) INTO unresolved FROM bottleneck_analysis
      WHERE project_ref IS NOT NULL AND btrim(project_ref) <> '' AND project_id IS NULL;
     IF unresolved > 0 THEN
-      RAISE EXCEPTION '1153: % bottleneck_analysis row(s) name a project that does not exist in their tenant; resolve them before the column is dropped', unresolved;
+      RAISE EXCEPTION '1160: % bottleneck_analysis row(s) name a project that does not exist in their tenant; resolve them before the column is dropped', unresolved;
     END IF;
     DROP INDEX IF EXISTS uq_bottleneck_analysis_period;
     ALTER TABLE bottleneck_analysis DROP COLUMN project_ref;
   END IF;
 END $$;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_bottleneck_analysis_project_period ON bottleneck_analysis (tenant_id, project_id, stage, period_start);
+
+-- ── 1g. task_type gains 'bug' ───────────────────────────────────────────────────
+-- The spec's (and BurnRateOS's) ItemType is INITIATIVE | EPIC | STORY | TASK | BUG |
+-- SUBTASK. Every one but BUG already has a platform owner — `initiatives`,
+-- task_type 'epic', 'task', and 'task' + `parent_task_id` — but a defect report had
+-- no kind to land in, so a migrated BUG would have silently become a 'task'. A new
+-- kind is a VALUE, not a table (the 0270 / 0290 / 0293 / 0325 precedent). Not used
+-- in this transaction, which is what lets ADD VALUE run inside it.
+ALTER TYPE task_type ADD VALUE IF NOT EXISTS 'bug';
 
 -- ── 2a. kanban_columns -> swimlanes ─────────────────────────────────────────────
 -- A lane already carries the key, name, position, terminal flag and the autonomy
@@ -209,7 +223,7 @@ BEGIN
      WHERE NOT EXISTS (SELECT 1 FROM boards b
                         WHERE b.tenant_id = kc.tenant_id AND b.id::text = btrim(kc.board_ref));
     IF unresolved > 0 THEN
-      RAISE EXCEPTION '1153: % kanban_columns row(s) name a board that does not exist in their tenant; resolve them before the table is folded into swimlanes', unresolved;
+      RAISE EXCEPTION '1160: % kanban_columns row(s) name a board that does not exist in their tenant; resolve them before the table is folded into swimlanes', unresolved;
     END IF;
     INSERT INTO swimlanes (tenant_id, segment_id, board_id, key, name, position, is_terminal,
                            gate, gate_source, wip_limit, color_token)
@@ -248,7 +262,7 @@ BEGIN
                         WHERE p.tenant_id = rp.tenant_id
                           AND (p.id::text = btrim(rp.project_ref) OR p.key = btrim(rp.project_ref)));
     IF unresolved > 0 THEN
-      RAISE EXCEPTION '1153: % release_plans row(s) name a project that does not exist in their tenant; resolve them before the table is folded into product_releases', unresolved;
+      RAISE EXCEPTION '1160: % release_plans row(s) name a project that does not exist in their tenant; resolve them before the table is folded into product_releases', unresolved;
     END IF;
     FOR r IN SELECT * FROM release_plans ORDER BY id LOOP
       pid := NULL;

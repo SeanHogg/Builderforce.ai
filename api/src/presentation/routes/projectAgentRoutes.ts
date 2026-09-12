@@ -25,8 +25,21 @@ import type { Env, HonoEnv } from '../../env';
 import { invalidateProjectGovernance } from '../../application/runtime/runContextSource';
 import type { Db } from '../../infrastructure/database/connection';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
+import { parseBody, z } from './requestBody';
 
 const VALID_KINDS = new Set(['workforce', 'registered']);
+
+/** `POST /` — the handler answers its own sentence for each missing field. */
+const AttachAgentBody = z.object({
+  projectId: z.number().nullish(),
+  agentKind: z.string().nullish(),
+  agentRef: z.string().nullish(),
+  name: z.string().nullish(),
+  role: z.string().nullish(),
+});
+
+/** `PUT /:id/governance` — absent/`null` clears it. */
+const AgentGovernanceBody = z.object({ governance: z.string().nullish() });
 
 export function createProjectAgentRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -55,13 +68,7 @@ export function createProjectAgentRoutes(db: Db): Hono<HonoEnv> {
   router.post('/', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId   = c.get('userId') as string;
-    const body     = await c.req.json<{
-      projectId: number;
-      agentKind: string;
-      agentRef:  string;
-      name:      string;
-      role?:     string;
-    }>();
+    const body     = await parseBody(c, AttachAgentBody);
 
     if (body.projectId == null) return c.json({ error: 'projectId is required' }, 400);
     if (!body.agentKind || !VALID_KINDS.has(body.agentKind)) {
@@ -138,7 +145,7 @@ export function createProjectAgentRoutes(db: Db): Hono<HonoEnv> {
   router.put('/:id/governance', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id       = Number(c.req.param('id'));
-    const body     = await c.req.json<{ governance: string }>();
+    const body     = await parseBody(c, AgentGovernanceBody);
 
     const [updated] = await db
       .update(projectAgents)

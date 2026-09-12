@@ -4,6 +4,7 @@ import type { HonoEnv } from '../../env';
 import type { UserId } from '../../domain/shared/types';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { getAccountBrainPreferences, setAccountBrainPreferences } from '../../application/brain/accountBrainPreferences';
+import { parseOptionalBody, zJsonObject } from './requestBody';
 
 /** Self-service user preferences within the active tenant. The kernel setting is
  * scoped by both the authenticated workspace and the authenticated user. */
@@ -14,7 +15,8 @@ export function createAccountBrainPreferenceRoutes(db: Db) {
     return c.json({ preferences });
   });
   router.put('/', authMiddleware, async (c) => {
-    const body = await c.req.json().catch(() => ({}));
+    // `parseAccountBrainPreferences` owns the per-field rules; the route only refuses a non-object.
+    const body = await parseOptionalBody(c, zJsonObject);
     const preferences = await setAccountBrainPreferences(db, c.get('tenantId'), c.get('userId') as UserId, body);
     return c.json({ preferences });
   });

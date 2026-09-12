@@ -50,7 +50,13 @@ export async function resolveEffectiveModelChoice(secrets: vscode.SecretStorage)
   const project = getSelectedProject();
   if (project) {
     const head = await getProjectEvermindHead(secrets, project.id).catch(() => undefined);
-    if (head?.inferenceEnabled && head.seeded) return { model: `${PROJECT_EVERMIND_PIN}${project.id}`, routingMode: "auto" };
+    // Every editor turn is a CODING turn, so the project's Evermind is the default only
+    // while it clears the coding-quality gate (≥90% of the frontier baseline on the
+    // coding eval, for the current head). The gateway enforces the same gate when it
+    // expands the pin; checking here keeps the chat from advertising a model it won't get.
+    if (head?.inferenceEnabled && head.seeded && head.codingGate?.qualified === true) {
+      return { model: `${PROJECT_EVERMIND_PIN}${project.id}`, routingMode: "auto" };
+    }
   }
   const model = await entitled(secrets, defaultModel());
   return { ...(model ? { model } : {}), routingMode: "auto" };

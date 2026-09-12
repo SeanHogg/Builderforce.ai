@@ -51,7 +51,6 @@ class GatewayDiscovery(
   private val nsd = context.getSystemService(NsdManager::class.java)
   private val connectivity = context.getSystemService(ConnectivityManager::class.java)
   private val dns = DnsResolver.getInstance()
-  private val serviceType = "_coderclaw-gw._tcp."
   private val wideAreaDomain = System.getenv("CODERCLAW_WIDE_AREA_DOMAIN")
   private val logTag = "CoderClaw/GatewayDiscovery"
 
@@ -69,7 +68,11 @@ class GatewayDiscovery(
   @Volatile private var lastWideAreaRcode: Int? = null
   @Volatile private var lastWideAreaCount: Int = 0
 
-  private val discoveryListener =
+  // One NSD listener per gateway service type: NsdManager does not reuse a listener across discoveries.
+  private val discoveryListeners: Map<String, NsdManager.DiscoveryListener> =
+    GatewayServiceTypes.all.associateWith { type -> discoveryListener(type) }
+
+  private fun discoveryListener(browsedType: String) =
     object : NsdManager.DiscoveryListener {
       override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {}
       override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {}
@@ -77,13 +80,13 @@ class GatewayDiscovery(
       override fun onDiscoveryStopped(serviceType: String) {}
 
       override fun onServiceFound(serviceInfo: NsdServiceInfo) {
-        if (serviceInfo.serviceType != this@GatewayDiscovery.serviceType) return
-        resolve(serviceInfo)
+        if (GatewayServiceTypes.match(serviceInfo.serviceType) != browsedType) return
+        resolve(serviceInfo, browsedType)
       }
 
       override fun onServiceLost(serviceInfo: NsdServiceInfo) {
         val serviceName = BonjourEscapes.decode(serviceInfo.serviceName)
-        val id = stableId(serviceName, "local.")
+        val id = stableId(browsedType, serviceName, "local.")
         localById.remove(id)
         publish()
       }
@@ -97,18 +100,22 @@ class GatewayDiscovery(
   }
 
   private fun startLocalDiscovery() {
-    try {
-      nsd.discoverServices(serviceType, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
-    } catch (_: Throwable) {
-      // ignore (best-effort)
+    for ((type, listener) in discoveryListeners) {
+      try {
+        nsd.discoverServices(type, NsdManager.PROTOCOL_DNS_SD, listener)
+      } catch (_: Throwable) {
+        // ignore (best-effort; the other type still browses)
+      }
     }
   }
 
   private fun stopLocalDiscovery() {
-    try {
-      nsd.stopServiceDiscovery(discoveryListener)
-    } catch (_: Throwable) {
-      // ignore (best-effort)
+    for (listener in discoveryListeners.values) {
+      try {
+        nsd.stopServiceDiscovery(listener)
+      } catch (_: Throwable) {
+        // ignore (best-effort)
+      }
     }
   }
 
@@ -126,7 +133,7 @@ class GatewayDiscovery(
       }
   }
 
-  private fun resolve(serviceInfo: NsdServiceInfo) {
+  private fun resolve(serviceInfo: NsdServiceInfo, serviceType: String) {
     nsd.resolveService(
       serviceInfo,
       object : NsdManager.ResolveListener {
@@ -146,7 +153,7 @@ class GatewayDiscovery(
         val canvasPort = txtInt(resolved, "canvasPort")
         val tlsEnabled = txtBool(resolved, "gatewayTls")
         val tlsFingerprint = txt(resolved, "gatewayTlsSha256")
-        val id = stableId(serviceName, "local.")
+        val id = stableId(serviceType, serviceName, "local.")
         localById[id] =
           GatewayEndpoint(
             stableId = id,
@@ -192,7 +199,7 @@ class GatewayDiscovery(
     }
   }
 
-  private fun stableId(serviceName: String, domain: String): String {
+  private fun stableId(serviceType: String, serviceName: String, domain: String): String {
     return "${serviceType}|${domain}|${normalizeName(serviceName)}"
   }
 
@@ -219,8 +226,34 @@ class GatewayDiscovery(
   }
 
   private suspend fun refreshUnicast(domain: String) {
+    val next = LinkedHashMap<String, GatewayEndpoint>()
+    var rcode: Int? = null
+    for (serviceType in GatewayServiceTypes.all) {
+      val (typeRcode, found) = refreshUnicastType(serviceType, domain) ?: continue
+      // The zone is reachable if any gateway service type answered NOERROR.
+      rcode = if (rcode == Rcode.NOERROR) rcode else typeRcode
+      next.putAll(found)
+    }
+    if (rcode == null) return
+
+    unicastById.clear()
+    unicastById.putAll(next)
+    lastWideAreaRcode = rcode
+    lastWideAreaCount = next.size
+    publish()
+
+    if (next.isEmpty()) {
+      Log.d(logTag, "wide-area discovery: 0 results in $domain (rcode=${Rcode.string(rcode)})")
+    }
+  }
+
+  /** PTR, SRV and TXT walk for one gateway service type; null when the PTR lookup itself failed. */
+  private suspend fun refreshUnicastType(
+    serviceType: String,
+    domain: String,
+  ): Pair<Int, Map<String, GatewayEndpoint>>? {
     val ptrName = "${serviceType}${domain}"
-    val ptrMsg = lookupUnicastMessage(ptrName, Type.PTR) ?: return
+    val ptrMsg = lookupUnicastMessage(ptrName, Type.PTR) ?: return null
     val ptrRecords = records(ptrMsg, Section.ANSWER).mapNotNull { it as? PTRRecord }
 
     val next = LinkedHashMap<String, GatewayEndpoint>()
@@ -262,7 +295,7 @@ class GatewayDiscovery(
       val canvasPort = txtIntValue(txt, "canvasPort")
       val tlsEnabled = txtBoolValue(txt, "gatewayTls")
       val tlsFingerprint = txtValue(txt, "gatewayTlsSha256")
-      val id = stableId(instanceName, domain)
+      val id = stableId(serviceType, instanceName, domain)
       next[id] =
         GatewayEndpoint(
           stableId = id,
@@ -278,29 +311,11 @@ class GatewayDiscovery(
         )
     }
 
-    unicastById.clear()
-    unicastById.putAll(next)
-    lastWideAreaRcode = ptrMsg.header.rcode
-    lastWideAreaCount = next.size
-    publish()
-
-    if (next.isEmpty()) {
-      Log.d(
-        logTag,
-        "wide-area discovery: 0 results for $ptrName (rcode=${Rcode.string(ptrMsg.header.rcode)})",
-      )
-    }
+    return ptrMsg.header.rcode to next
   }
 
   private fun decodeInstanceName(instanceFqdn: String, domain: String): String {
-    val suffix = "${serviceType}${domain}"
-    val withoutSuffix =
-      if (instanceFqdn.endsWith(suffix)) {
-        instanceFqdn.removeSuffix(suffix)
-      } else {
-        instanceFqdn.substringBefore(serviceType)
-      }
-    return normalizeName(stripTrailingDot(withoutSuffix))
+    return normalizeName(stripTrailingDot(GatewayServiceTypes.instanceLabel(instanceFqdn, domain)))
   }
 
   private fun stripTrailingDot(raw: String): String {

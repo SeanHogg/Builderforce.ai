@@ -59,10 +59,16 @@ describe('vocabularies are closed', () => {
 });
 
 describe('promotion is a one-way door', () => {
-  const body = fn(actions, 'promoteToWorkItem');
+  const body = fn(actions, 'promoteToTask');
 
   it('only sets the pointer when it is currently null', () => {
-    expect(body).toContain('isNull(actionItems.promotedWorkItemRef)');
+    expect(body).toContain('isNull(actionItems.promotedTaskId)');
+  });
+
+  it('refuses a ticket from another tenant before it writes the pointer', () => {
+    // The foreign key proves the ticket exists, not whose it is.
+    expect(body).toContain('taskInTenant(db, taskId, tenantId)');
+    expect(body.indexOf('taskInTenant(')).toBeLessThan(body.indexOf('.update(actionItems)'));
   });
 
   it('distinguishes not-found from already-promoted', () => {
@@ -168,7 +174,7 @@ describe('the routes keep the merge honest', () => {
   it('keeps capture and approval at member, and assertions about others at MANAGER', () => {
     expect(routes).toContain("router.post('/action-items', (c)");
     expect(routes).toContain("router.post('/approvals/:kind/:ref/act', (c)");
-    expect(routes).toContain("router.put('/sprints/:sprintRef/cost', manager");
+    expect(routes).toContain("router.put('/sprints/:sprintId/cost', manager");
     expect(routes).toContain("router.post('/approvals/:kind/:ref', manager");
   });
 
@@ -186,12 +192,47 @@ describe('the merge added no schema', () => {
   });
 
   it('does not resurrect kanban_columns or release_plans', () => {
-    // Both are duplicates of a richer Builderforce owner and are `transform`
-    // rather than `build` — giving either a feature path would create a second
-    // answer to a question the platform already answers.
+    // Both were duplicates of a richer Builderforce owner; migration 1160 folded
+    // them into `swimlanes` and `product_releases` and dropped them. Giving either
+    // a feature path again would create a second answer to a question the
+    // platform already answers.
     for (const src of [actions, cost, chain, routes]) {
       expect(src).not.toContain('kanbanColumns');
       expect(src).not.toContain('releasePlans');
     }
+  });
+});
+
+describe('the work item is a task (spec PM spine unified onto tasks, 2026-09-12)', () => {
+  it('addresses a work item by task id and a sprint by sprint id, never by a ref string', () => {
+    for (const src of [actions, cost, routes]) {
+      expect(src).not.toContain('workItemRef');
+      expect(src).not.toContain('sprintRef');
+      expect(src).not.toContain('projectRef');
+    }
+  });
+
+  it('checks the ticket is this tenant\'s before recording an estimate on it', () => {
+    const body = fn(cost, 'recordEstimate');
+    expect(body).toContain('taskInTenant(db, taskId, tenantId)');
+    expect(body.indexOf('taskInTenant(')).toBeLessThan(body.indexOf('db.transaction'));
+  });
+
+  it('checks the sprint is this tenant\'s before stamping its cost', () => {
+    const body = fn(cost, 'stampSprintCost');
+    expect(body).toContain('sprintInTenant(db, tenantId, sprintId)');
+    expect(body.indexOf('sprintInTenant(')).toBeLessThan(body.indexOf('.from(sprintFinancialImpact)'));
+  });
+
+  it('reads a sprint\'s project from the sprint, not from a copy on the cost row', () => {
+    const body = fn(cost, 'costTrend');
+    expect(body).toContain('eq(sprints.projectId, projectId)');
+    expect(body).toContain('.innerJoin(sprints, eq(sprints.id, sprintFinancialImpact.sprintId))');
+  });
+
+  it('rejects anything that is not a positive ticket id, and anything that is not a uuid sprint id', () => {
+    expect(cost).toContain("throw new AgileCostError('taskId is required and must be a ticket id')");
+    expect(cost).toContain("throw new AgileCostError('sprintId is required and must be a sprint id')");
+    expect(actions).toContain("throw new ActionItemError('taskId is required and must be a ticket id')");
   });
 });

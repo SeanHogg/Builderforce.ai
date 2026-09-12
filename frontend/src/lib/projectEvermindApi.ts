@@ -28,6 +28,24 @@ export interface ProjectEvermindHead {
   quarantinedAt?: string | null;
   /** Human-readable reason for the quarantine, shown to the operator. */
   quarantineReason?: string | null;
+  /** Whether this head may serve IDE coding turns (the 90% coding-eval gate). */
+  codingGate?: ProjectEvermindCodingGate | null;
+}
+
+/**
+ * The Evermind coding-quality gate (mirrors api `EvermindCodingGate`): a head serves
+ * IDE coding turns only when a coding eval recorded for THIS version scores ≥ `bar`
+ * (0.9) of the frontier baseline. Operator decision 2026-09-12.
+ */
+export interface ProjectEvermindCodingGate {
+  qualified: boolean;
+  reason: 'qualified' | 'unseeded' | 'quarantined' | 'no_eval' | 'stale_eval' | 'below_bar';
+  bar: number;
+  ratio: number | null;
+  headVersion: number;
+  evaluatedVersion: number | null;
+  baselineModel?: string | null;
+  dataset?: string | null;
 }
 
 /** One inspectable contribution the coordinator merged into a version. */
@@ -154,6 +172,8 @@ export interface ProjectEvermindContributions {
   quarantinedAt?: string | null;
   /** The probe-failure reason behind `quarantinedAt` (null when healthy). */
   quarantineReason?: string | null;
+  /** The coding-quality gate's verdict — "coding eval X% of baseline, needs 90%". */
+  codingGate?: ProjectEvermindCodingGate | null;
 }
 
 /** One Evermind a project targets (self or an IDE build under it). Mirrors api `targetsCore`. */

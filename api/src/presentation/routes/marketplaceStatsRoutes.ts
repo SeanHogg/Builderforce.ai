@@ -13,6 +13,10 @@ import { optionalWebUserId } from '../middleware/webAuthMiddleware';
 import { artifactLikes, artifactAssignments } from '../../infrastructure/database/schema';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseBody, z } from './requestBody';
+
+/** `POST /like` — the handler answers its own required / invalid-type messages. */
+const LikeBody = z.object({ artifactType: z.string().nullish(), artifactSlug: z.string().nullish() });
 
 // Mirrors the `artifact_type` enum (migration 0982: 'content' retired, 'agent'
 // admitted). Stats are likes/installs on a marketplace artifact, and a marketplace
@@ -43,7 +47,7 @@ export function createMarketplaceStatsRoutes(db: Db): Hono<HonoEnv> {
    */
   router.post('/like', authMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{ artifactType: string; artifactSlug: string }>();
+    const body = await parseBody(c, LikeBody);
     const { artifactType, artifactSlug } = body;
     if (!artifactType || !artifactSlug) {
       return c.json({ error: 'artifactType and artifactSlug are required' }, 400);

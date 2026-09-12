@@ -43,20 +43,28 @@ import { ResumeAiService } from '../../application/career/resumeAi';
 import {
   ResumeReviewService, RESUME_REVIEW_STATUSES, isResumeReviewStatus,
 } from '../../application/career/resumeReview';
+import { parseOptionalBody, z, zNumberLike } from './requestBody';
 
 /** Below this a "résumé" is a sentence, and every reading of it would be noise. */
 const MIN_RESUME_CHARS = 40;
 
-/**
- * Read a JSON body, treating an absent or malformed one as an empty object.
- *
- * Kept as one helper rather than a `.catch(() => ({}))` per handler because that inline
- * form widens the parsed type to a union with `{}`, and the fix people reach for when it
- * does is `any` — which turns every field read below into an unchecked one.
- */
-async function readJson<T>(c: { req: { json: <B>() => Promise<B> } }): Promise<Partial<T>> {
-  return c.req.json<Partial<T>>().catch(() => ({} as Partial<T>));
-}
+// ── Bodies ───────────────────────────────────────────────────────────────────
+// Every body here may be absent (`parseOptionalBody`): each handler answers a
+// missing résumé with its own sentence, which is the message a person reads.
+
+const RewriteBulletsBody = z.object({ resumeText: z.string().nullish(), limit: zNumberLike.nullish() });
+/** Each entry is `String()`ed and length-filtered by the handler. */
+const MergeBulletsBody = z.object({ resumeTexts: z.unknown().optional() });
+const GradeBody = z.object({ resumeText: z.string().nullish(), jobDescription: z.string().nullish() });
+const OpenReviewBody = z.object({
+  title: z.string().nullish(),
+  resumeText: z.string().nullish(),
+  jobDescription: z.string().nullish(),
+  note: z.string().nullish(),
+  reviewerUserIds: z.unknown().optional(),
+});
+const ReviewReplyBody = z.object({ body: z.string().nullish(), status: z.string().optional() });
+const ReviewStatusBody = z.object({ status: z.string().optional() });
 
 export function createCareerAiRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -68,7 +76,7 @@ export function createCareerAiRoutes(db: Db): Hono<HonoEnv> {
   // ── The three generative capabilities ────────────────────────────────────
 
   router.post('/rewrite-bullets', async (c) => {
-    const body = await readJson<{ resumeText?: string; limit?: number }>(c);
+    const body = await parseOptionalBody(c, RewriteBulletsBody);
     const resumeText = String(body.resumeText ?? '').trim();
     if (resumeText.length < MIN_RESUME_CHARS) return c.json({ error: 'Paste the résumé text first — there is nothing here to rewrite.' }, 400);
     const outcome = await ai(c).rewriteToXyz(c.get('tenantId'), resumeText, {
@@ -79,7 +87,7 @@ export function createCareerAiRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.post('/merge-bullets', async (c) => {
-    const body = await readJson<{ resumeTexts?: unknown }>(c);
+    const body = await parseOptionalBody(c, MergeBulletsBody);
     const texts = Array.isArray(body.resumeTexts)
       ? body.resumeTexts.map((value) => String(value ?? '').trim()).filter((value) => value.length >= MIN_RESUME_CHARS)
       : [];
@@ -89,7 +97,7 @@ export function createCareerAiRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.post('/grade', async (c) => {
-    const body = await readJson<{ resumeText?: string; jobDescription?: string }>(c);
+    const body = await parseOptionalBody(c, GradeBody);
     const resumeText = String(body.resumeText ?? '').trim();
     if (resumeText.length < MIN_RESUME_CHARS) return c.json({ error: 'Paste the résumé text first — there is nothing here to grade.' }, 400);
     const jobDescription = String(body.jobDescription ?? '').trim();
@@ -116,9 +124,7 @@ export function createCareerAiRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.post('/reviews', async (c) => {
-    const body = await readJson<{
-      title?: string; resumeText?: string; jobDescription?: string; note?: string; reviewerUserIds?: unknown;
-    }>(c);
+    const body = await parseOptionalBody(c, OpenReviewBody);
     const thread = await reviews(c).open(c.get('tenantId'), c.get('userId') ?? '', {
       title: String(body.title ?? ''),
       resumeText: String(body.resumeText ?? ''),
@@ -135,7 +141,7 @@ export function createCareerAiRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.post('/reviews/:id', async (c) => {
-    const body = await readJson<{ body?: string; status?: string }>(c);
+    const body = await parseOptionalBody(c, ReviewReplyBody);
     const status = isResumeReviewStatus(body.status) ? body.status : undefined;
     const thread = await reviews(c).reply(
       c.get('tenantId'), c.get('userId') ?? '', c.req.param('id'), String(body.body ?? ''), status,
@@ -144,7 +150,7 @@ export function createCareerAiRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.post('/reviews/:id/status', async (c) => {
-    const body = await readJson<{ status?: string }>(c);
+    const body = await parseOptionalBody(c, ReviewStatusBody);
     if (!isResumeReviewStatus(body.status)) return c.json({ error: `Status must be one of: ${RESUME_REVIEW_STATUSES.join(', ')}.` }, 400);
     const thread = await reviews(c).setStatus(c.get('tenantId'), c.get('userId') ?? '', c.req.param('id'), body.status);
     return thread ? c.json({ review: thread }) : c.json({ error: 'Review request not found.' }, 404);

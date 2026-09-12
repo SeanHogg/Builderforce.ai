@@ -80,6 +80,16 @@ import {
 
 
 
+import { parseOptionalBody, z } from './requestBody';
+
+/** `POST /deliverable-updates` — the handler answers its own required-field message. */
+const DeliverableUpdateBody = z.object({
+  scopeKind: z.string().nullish(),
+  scopeId: z.string().nullish(),
+  body: z.string().nullish(),
+  statusLabel: z.string().nullish(),
+});
+
 export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
@@ -325,8 +335,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   router.post('/deliverable-updates', requireRole(TenantRole.DEVELOPER), async (c) => {
     const { tenantId } = scope(c);
     const userId = (c as unknown as { get(k: string): string | undefined }).get('userId') ?? null;
-    type UpdateBody = { scopeKind?: string; scopeId?: string; body?: string; statusLabel?: string };
-    const body = await c.req.json<UpdateBody>().catch(() => ({} as UpdateBody));
+    const body = await parseOptionalBody(c, DeliverableUpdateBody);
     if (!DELIV_SCOPES.includes(body.scopeKind as never) || !body.scopeId || !body.body?.trim()) {
       return c.json({ error: 'scopeKind, scopeId and body are required' }, 400);
     }

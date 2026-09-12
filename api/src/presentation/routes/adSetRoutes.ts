@@ -39,6 +39,57 @@ import {
 } from '../../application/advertising/adSetService';
 import { AD_STATUSES, isAdObjective, type AdStatus } from '../../application/advertising/adsProviders';
 import { parseTargeting } from '../../application/advertising/adTargeting';
+import { parseOptionalBody, z, zNumberLike } from './requestBody';
+
+// Every body here is optional-shaped: the handlers answer their own worded 400 for a
+// missing name / campaign / objective / status, so those keys stay loose (`objective`
+// and `status` are handed to type guards; `targeting` to `parseTargeting`).
+const zAccountFields = {
+  connectionId: z.string().nullish(),
+  network: z.string().nullish(),
+};
+/** `null` clears a budget, absent leaves it alone — `budgetCents` owns the difference. */
+const zMoney = zNumberLike.nullish();
+
+const CreateAdSetBody = z.object({
+  ...zAccountFields,
+  campaignId: z.string().nullish(),
+  name: z.string().nullish(),
+  objective: z.unknown().optional(),
+  targeting: z.unknown().optional(),
+  dailyBudget: zMoney,
+  bid: zMoney,
+  startsAt: z.string().nullish(),
+  endsAt: z.string().nullish(),
+  launch: z.boolean().nullish(),
+});
+
+const UpdateAdSetBody = z.object({
+  ...zAccountFields,
+  name: z.string().nullish(),
+  status: z.unknown().optional(),
+  dailyBudget: zMoney,
+  bid: zMoney,
+  targeting: z.unknown().optional(),
+});
+
+const CreateAdBody = z.object({
+  ...zAccountFields,
+  adSetId: z.string().nullish(),
+  name: z.string().nullish(),
+  headline: z.string().nullish(),
+  body: z.string().nullish(),
+  callToAction: z.string().nullish(),
+  destinationUrl: z.string().nullish(),
+  creativeRef: z.string().nullish(),
+  launch: z.boolean().nullish(),
+});
+
+const UpdateAdBody = z.object({
+  ...zAccountFields,
+  name: z.string().nullish(),
+  status: z.unknown().optional(),
+});
 
 const isStatus = (value: unknown): value is AdStatus =>
   typeof value === 'string' && (AD_STATUSES as readonly string[]).includes(value);
@@ -102,12 +153,7 @@ export function createAdSetRoutes(db: Db): Hono<HonoEnv> {
   // same act as starting to spend, which is the same rule campaigns follow.
   r.post('/adsets', manager, async (c) => {
     const { env, tenantId } = ctx(c);
-    const body = await c.req.json().catch(() => ({})) as {
-      connectionId?: string; network?: string; campaignId?: string; name?: string;
-      objective?: string; targeting?: unknown;
-      dailyBudget?: number | string; bid?: number | string;
-      startsAt?: string; endsAt?: string; launch?: boolean;
-    };
+    const body = await parseOptionalBody(c, CreateAdSetBody);
 
     const name = (body.name ?? '').trim();
     if (!name) return c.json({ error: 'An ad set needs a name.' }, 400);
@@ -145,10 +191,7 @@ export function createAdSetRoutes(db: Db): Hono<HonoEnv> {
   r.patch('/adsets/:externalId', manager, async (c) => {
     const { env, tenantId } = ctx(c);
     const externalId = c.req.param('externalId');
-    const body = await c.req.json().catch(() => ({})) as {
-      connectionId?: string; network?: string; name?: string; status?: string;
-      dailyBudget?: number | string; bid?: number | string; targeting?: unknown;
-    };
+    const body = await parseOptionalBody(c, UpdateAdSetBody);
 
     if (body.status !== undefined && !isStatus(body.status)) {
       return c.json({ error: `Status must be one of: ${AD_STATUSES.join(', ')}.` }, 400);
@@ -193,11 +236,7 @@ export function createAdSetRoutes(db: Db): Hono<HonoEnv> {
 
   r.post('/ads', manager, async (c) => {
     const { env, tenantId } = ctx(c);
-    const body = await c.req.json().catch(() => ({})) as {
-      connectionId?: string; network?: string; adSetId?: string; name?: string;
-      headline?: string; body?: string; callToAction?: string;
-      destinationUrl?: string; creativeRef?: string; launch?: boolean;
-    };
+    const body = await parseOptionalBody(c, CreateAdBody);
 
     const name = (body.name ?? '').trim();
     if (!name) return c.json({ error: 'An ad needs a name.' }, 400);
@@ -229,9 +268,7 @@ export function createAdSetRoutes(db: Db): Hono<HonoEnv> {
   r.patch('/ads/:externalId', manager, async (c) => {
     const { env, tenantId } = ctx(c);
     const externalId = c.req.param('externalId');
-    const body = await c.req.json().catch(() => ({})) as {
-      connectionId?: string; network?: string; name?: string; status?: string;
-    };
+    const body = await parseOptionalBody(c, UpdateAdBody);
 
     if (body.status !== undefined && !isStatus(body.status)) {
       return c.json({ error: `Status must be one of: ${AD_STATUSES.join(', ')}.` }, 400);

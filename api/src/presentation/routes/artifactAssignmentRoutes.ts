@@ -33,6 +33,16 @@ import { loadAgentManifests, invalidateAgentManifests } from '../../application/
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
+import { parseBody, z } from './requestBody';
+
+/** `POST /` — the handler answers its own "X is required" for each missing field. */
+const AssignArtifactBody = z.object({
+  artifactType: z.enum(ArtifactType).optional(),
+  artifactSlug: z.string().nullish(),
+  scope: z.enum(AssignmentScope).optional(),
+  scopeId: z.number().nullish(),
+  config: z.string().optional(),
+});
 
 const VALID_TYPES = new Set(Object.values(ArtifactType));
 const VALID_SCOPES = new Set(Object.values(AssignmentScope));
@@ -93,13 +103,7 @@ export function createArtifactAssignmentRoutes(db: Db): Hono<HonoEnv> {
   router.post('/', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId   = c.get('userId') as string;
-    const body     = await c.req.json<{
-      artifactType: ArtifactType;
-      artifactSlug: string;
-      scope:        AssignmentScope;
-      scopeId:      number;
-      config?:      string;
-    }>();
+    const body     = await parseBody(c, AssignArtifactBody);
 
     if (!body.artifactType || !VALID_TYPES.has(body.artifactType)) {
       return c.json({ error: 'artifactType is required (skill|persona|content)' }, 400);

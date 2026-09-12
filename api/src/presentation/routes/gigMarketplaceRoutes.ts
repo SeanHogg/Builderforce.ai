@@ -54,6 +54,27 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { EvalJudge } from '../../application/eval/semanticEval';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
+import { parseOptionalBody, z, zJsonObject, zNumberLike } from './requestBody';
+
+// Bodies. Every read here tolerated an absent body, so all go through
+// `parseOptionalBody`. Fields the handler `Number()`s / `String()`s accept a number
+// or a string, as they always did; required-looking fields stay optional so the
+// handler's own "X required" answer still wins. `/publish` spreads its body into the
+// posting draft, whose reader (`upsertJobPosting`) owns every field — so it is
+// admitted as any JSON object with its keys intact.
+const UnpublishBody = z.object({ ticketId: zNumberLike.nullish() });
+const SaveTalentBody = z.object({
+  freelancerUserId: zNumberLike.nullish(),
+  list: z.string().nullish(),
+  note: z.string().nullish(),
+});
+const DeliverableBody = z.object({
+  engagementId: zNumberLike.nullish(),
+  title: z.string().nullish(),
+  body: z.string().nullish(),
+  ticketId: z.number().nullish(),
+});
+const DeliverableStatusBody = z.object({ status: z.string().nullish() });
 
 const mapPosting = (r: typeof jobPostings.$inferSelect) => ({
   id: r.id,
@@ -97,7 +118,7 @@ export function createGigMarketplaceRoutes(): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
     const db = requestDb(c);
-    const b = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+    const b = await parseOptionalBody(c, zJsonObject);
     const ticketId = typeof b.ticketId === 'number' ? Math.round(b.ticketId) : Number(b.ticketId);
     if (!Number.isFinite(ticketId)) return c.json({ error: 'ticketId required' }, 400);
 
@@ -130,7 +151,7 @@ export function createGigMarketplaceRoutes(): Hono<HonoEnv> {
   router.post('/unpublish', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const db = requestDb(c);
-    const b = await c.req.json<{ ticketId?: number }>().catch((): { ticketId?: number } => ({}));
+    const b = await parseOptionalBody(c, UnpublishBody);
     const ticketId = typeof b.ticketId === 'number' ? Math.round(b.ticketId) : Number(b.ticketId);
     if (!Number.isFinite(ticketId)) return c.json({ error: 'ticketId required' }, 400);
     await unpublishTicketPosting(db, c.env as Env, tenantId, ticketId);
@@ -174,8 +195,7 @@ export function createGigMarketplaceRoutes(): Hono<HonoEnv> {
   // POST /saved-talent — shortlist somebody (idempotent; a second save edits the note).
   router.post('/saved-talent', authMiddleware, async (c) => {
     const db = requestDb(c);
-    const b = await c.req.json<{ freelancerUserId?: string; list?: string; note?: string }>()
-      .catch((): { freelancerUserId?: string; list?: string; note?: string } => ({}));
+    const b = await parseOptionalBody(c, SaveTalentBody);
     const freelancerUserId = String(b.freelancerUserId ?? '').trim();
     if (!freelancerUserId) return c.json({ error: 'freelancerUserId is required' }, 400);
     const saved = await saveTalent(db, {
@@ -398,8 +418,7 @@ export function createDeliverableRoutes(accessDb: Db): Hono<HonoEnv> {
   // POST / — worker submits a deliverable proposal against the engaged scope.
   router.post('/', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const b = await c.req.json<{ engagementId?: string; title?: string; body?: string; ticketId?: number }>()
-      .catch((): { engagementId?: string; title?: string; body?: string; ticketId?: number } => ({}));
+    const b = await parseOptionalBody(c, DeliverableBody);
     const engagementId = String(b.engagementId ?? '');
     const grant = await access.getForUser(userId, engagementId);
     if (!grant) return c.json({ error: 'No access' }, 403);
@@ -562,7 +581,7 @@ export function createDeliverableRoutes(accessDb: Db): Hono<HonoEnv> {
   router.post('/:id/status', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const b = await c.req.json<{ status?: string }>().catch((): { status?: string } => ({}));
+    const b = await parseOptionalBody(c, DeliverableStatusBody);
     const status = ['accepted', 'changes_requested'].includes(b.status ?? '') ? (b.status as string) : null;
     if (!status) return c.json({ error: 'status must be accepted|changes_requested' }, 400);
     const db = requestDb(c);

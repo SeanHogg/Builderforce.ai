@@ -48,6 +48,7 @@ import { isValidCron, nextCronTime } from '../../domain/workflowSchedule';
 import { relayToRoom } from './realtimeRelay';
 import { broadcastCeremonyChanged, ceremonyRoomName } from '../../infrastructure/relay/broadcastRoom';
 import { daysParam, limitParam } from './queryParams';
+import { parseBody, parseOptionalBody, z } from './requestBody';
 
 /** Cache key for a project's ceremony schedules list. */
 function schedulesCacheKey(tenantId: number, segmentId: string, projectId: number): string {
@@ -57,6 +58,54 @@ function schedulesCacheKey(tenantId: number, segmentId: string, projectId: numbe
 /** The ceremony kinds that exist — mirrors ceremonySessions.kind exactly. Retros
  *  are a separate subsystem (retrospectives) and are deliberately not modelled here. */
 const CEREMONY_KINDS = new Set(['standup', 'planning']);
+
+/** A seated participant. Loose on purpose: a schedule stores its roster as a JSON
+ *  document, and a stored document never loses keys on the way in. */
+const CeremonyParticipant = z.looseObject({ kind: z.string(), ref: z.string(), name: z.string() });
+
+/** `projectId` stays optional so the handler's own "projectId is required" wins. */
+const StartSessionBody = z.object({
+  projectId: z.number().nullish(),
+  kind: z.string().nullish(),
+  participants: z.array(CeremonyParticipant).nullish(),
+});
+
+const AdvanceTurnBody = z.object({ currentTurn: z.number() });
+
+/** `attendance` stays optional so the handler's own verdict message wins. */
+const AttendanceCorrectionBody = z.object({
+  attendance: z.string().nullish(),
+  note: z.string().nullish(),
+});
+
+/** `projectId` / `cron` / `kind` stay loose so the handler's own messages win. */
+const CreateScheduleBody = z.object({
+  projectId: z.number().nullish(),
+  kind: z.string().nullish(),
+  cron: z.string().nullish(),
+  timezone: z.string().nullish(),
+  enabled: z.boolean().nullish(),
+  turnMode: z.string().nullish(),
+  turnSeconds: z.number().nullish(),
+  participantScope: z.string().nullish(),
+  participants: z.array(CeremonyParticipant).nullish(),
+  maxParticipants: z.number().nullish(),
+  autoDispatch: z.boolean().nullish(),
+});
+
+/** Every key present is written, so only the two clearable columns admit `null`. */
+const PatchScheduleBody = z.object({
+  kind: z.string().optional(),
+  cron: z.string().optional(),
+  timezone: z.string().optional(),
+  enabled: z.boolean().optional(),
+  turnMode: z.string().nullish(),
+  turnSeconds: z.number().nullish(),
+  participantScope: z.string().optional(),
+  participants: z.array(CeremonyParticipant).optional(),
+  maxParticipants: z.number().optional(),
+  autoDispatch: z.boolean().optional(),
+});
 
 /** Verdicts a human may assert (0366). 'unknown' is excluded on purpose: it means "this
  *  session has not concluded yet", which is a fact about the session, not a correction
@@ -199,11 +248,7 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
   // POST /sessions — start (or return the existing active) session.
   r.post('/sessions', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
-    const body = await c.req.json<{
-      projectId: number;
-      kind?: string;
-      participants?: Array<{ kind: string; ref: string; name: string }>;
-    }>();
+    const body = await parseBody(c, StartSessionBody);
     const kind = body.kind ?? 'standup';
     if (!body.projectId) return c.json({ error: 'projectId is required' }, 400);
 
@@ -264,7 +309,7 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
   r.patch('/sessions/:id/turn', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
     const id = c.req.param('id');
-    const body = await c.req.json<{ currentTurn: number }>();
+    const body = await parseBody(c, AdvanceTurnBody);
     const [session] = await db.select().from(ceremonySessions)
       .where(and(eq(ceremonySessions.id, id), eq(ceremonySessions.tenantId, tenantId), eq(ceremonySessions.segmentId, segmentId)));
     if (!session) return c.json({ error: 'Not found' }, 404);
@@ -380,8 +425,7 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId, segmentId } = scope(c);
     const id = c.req.param('id');
     const participantId = c.req.param('participantId');
-    type AttendanceBody = { attendance?: string; note?: string };
-    const body = await c.req.json<AttendanceBody>().catch(() => ({} as AttendanceBody));
+    const body = await parseOptionalBody(c, AttendanceCorrectionBody);
 
     if (!body.attendance || !CORRECTABLE_VERDICTS.has(body.attendance)) {
       return c.json({ error: 'attendance must be present, absent or excused' }, 400);
@@ -576,12 +620,7 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
 
   r.post('/schedules', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
-    const body = await c.req.json().catch(() => ({})) as {
-      projectId?: number; kind?: string; cron?: string; timezone?: string; enabled?: boolean;
-      turnMode?: string | null; turnSeconds?: number | null;
-      participantScope?: string; participants?: Array<{ kind: string; ref: string; name: string }>;
-      maxParticipants?: number; autoDispatch?: boolean;
-    };
+    const body = await parseOptionalBody(c, CreateScheduleBody);
     if (!body.projectId) return c.json({ error: 'projectId is required' }, 400);
     if (!body.cron || !isValidCron(body.cron)) return c.json({ error: 'A valid cron expression is required' }, 400);
     const kind = body.kind ?? 'standup';
@@ -614,12 +653,7 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
   r.patch('/schedules/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
     const id = c.req.param('id');
-    const body = await c.req.json().catch(() => ({})) as {
-      kind?: string; cron?: string; timezone?: string; enabled?: boolean;
-      turnMode?: string | null; turnSeconds?: number | null;
-      participantScope?: string; participants?: Array<{ kind: string; ref: string; name: string }>;
-      maxParticipants?: number; autoDispatch?: boolean;
-    };
+    const body = await parseOptionalBody(c, PatchScheduleBody);
     if (body.cron !== undefined && !isValidCron(body.cron)) return c.json({ error: 'Invalid cron expression' }, 400);
     if (body.kind !== undefined && !CEREMONY_KINDS.has(body.kind)) return c.json({ error: 'kind must be standup or planning' }, 400);
 

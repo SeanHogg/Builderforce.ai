@@ -5,15 +5,19 @@
  * `action_items` says it in its own docstring: "captured mid-discussion with no
  * board, no estimate and no lane". That is the whole justification for the table,
  * and it is the reason this is not a thin wrapper over `TaskService`. A retro
- * produces fifteen commitments in ten minutes; making each one a `work_items` row
+ * produces fifteen commitments in ten minutes; making each one a `tasks` row
  * means choosing a board, a lane and an estimate fifteen times, and the actual
  * outcome of that friction is that nobody records them at all.
  *
  * So an action item is deliberately cheap: a title, an owner, a due date. What it
- * has that a sticky note does not is {@link promoteToWorkItem} — the one-way door
+ * has that a sticky note does not is {@link promoteToTask} — the one-way door
  * from "we said we would" to "it is on the board", which stamps
- * `promoted_work_item_ref` so the commitment and the ticket stay joined and the
+ * `promoted_task_id` so the commitment and the ticket stay joined and the
  * retro can be replayed six weeks later to ask which commitments were real.
+ *
+ * The ticket is a `tasks` row — the spec's `WorkItem`, unified onto `tasks`
+ * (decided 2026-09-12; migration 1160 replaced the `promoted_work_item_ref`
+ * string with a typed foreign key).
  *
  * ── THE MERGE ───────────────────────────────────────────────────────────────
  * Three BurnRateOS modules wrote this shape and none of them shared it:
@@ -32,7 +36,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { actionItems } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { scopedToTenant, taskInTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
 import { registerObject } from '../kernel/ObjectRegistry';
 
@@ -194,34 +198,35 @@ export async function updateActionItem(
 /**
  * The one-way door: this commitment is now a ticket.
  *
- * ONE-WAY on purpose. `promoted_work_item_ref` is set only if it is currently
+ * ONE-WAY on purpose. `promoted_task_id` is set only if it is currently
  * null, so a second promotion cannot silently repoint the commitment at a
  * different ticket and orphan the first — which is how a retro ends up claiming
  * credit for work that was already tracked elsewhere. Re-promoting is a 409, not
  * a quiet overwrite.
  *
- * The work item itself is created by whoever owns work items; this records the
- * JOIN. Creating the ticket here would mean this module knowing about boards,
- * lanes and estimates, which is exactly the knowledge an action item exists to
- * not need.
+ * The ticket itself is created by whoever owns tickets (`TaskService`); this
+ * records the JOIN. Creating the ticket here would mean this module knowing about
+ * boards, lanes and estimates, which is exactly the knowledge an action item
+ * exists to not need. The ticket must be THIS tenant's: the foreign key proves it
+ * exists, not whose it is.
  */
-export async function promoteToWorkItem(
+export async function promoteToTask(
   db: Db,
   env: Env,
   tenantId: number,
   actor: ActorIdentity,
   id: number,
-  workItemRef: string,
+  taskId: number,
 ) {
-  const ref = workItemRef.trim();
-  if (!ref) throw new ActionItemError('workItemRef is required');
+  if (!Number.isInteger(taskId) || taskId <= 0) throw new ActionItemError('taskId is required and must be a ticket id');
+  if (!(await taskInTenant(db, taskId, tenantId))) throw new ActionItemError('ticket not found', 404);
 
   const [row] = await db
     .update(actionItems)
-    .set({ promotedWorkItemRef: ref, status: 'in_progress', updatedAt: new Date() })
+    .set({ promotedTaskId: taskId, status: 'in_progress', updatedAt: new Date() })
     .where(scopedToTenant(actionItems, tenantId, and(
       eq(actionItems.id, id),
-      isNull(actionItems.promotedWorkItemRef),
+      isNull(actionItems.promotedTaskId),
     )))
     .returning();
 
@@ -229,12 +234,12 @@ export async function promoteToWorkItem(
     // Distinguish "no such item" from "already promoted" — they need different
     // fixes and a single 404 sends the caller looking for the wrong one.
     const [existing] = await db
-      .select({ promoted: actionItems.promotedWorkItemRef })
+      .select({ promoted: actionItems.promotedTaskId })
       .from(actionItems)
       .where(scopedToTenant(actionItems, tenantId, eq(actionItems.id, id)))
       .limit(1);
     if (!existing) throw new ActionItemError('action item not found', 404);
-    throw new ActionItemError(`already promoted to ${existing.promoted}`, 409);
+    throw new ActionItemError(`already promoted to ticket ${existing.promoted}`, 409);
   }
 
   await recordActivity(env, db, {
@@ -243,7 +248,7 @@ export async function promoteToWorkItem(
     verb: 'action_item.promoted',
     targetType: 'action_item',
     targetId: String(id),
-    metadata: { workItemRef: ref },
+    metadata: { taskId },
   });
   return row;
 }
@@ -265,7 +270,7 @@ export async function sourceFollowThrough(db: Db, tenantId: number, source: Acti
       dropped: sql<number>`count(*) filter (where ${actionItems.status} = 'dropped')::int`,
       open: sql<number>`count(*) filter (where ${actionItems.status} in ('open','in_progress'))::int`,
       overdue: sql<number>`count(*) filter (where ${actionItems.status} in ('open','in_progress') and ${actionItems.dueAt} < now())::int`,
-      promoted: sql<number>`count(*) filter (where ${actionItems.promotedWorkItemRef} is not null)::int`,
+      promoted: sql<number>`count(*) filter (where ${actionItems.promotedTaskId} is not null)::int`,
     })
     .from(actionItems)
     .where(scopedToTenant(actionItems, tenantId, eq(actionItems.sourceRef, source.ref)));

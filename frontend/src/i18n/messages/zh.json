@@ -310,7 +310,9 @@
     "forkHint": "总结本对话，并基于该总结在新对话中继续",
     "sessionUnavailable": "需本对话已有若干条消息且当前没有正在进行的运行",
     "categoryLocal": "在此设备上",
-    "localDetail": "通过 {runtime} 在本机运行 —— 不消耗套餐额度，可离线使用。"
+    "localDetail": "通过 {runtime} 在本机运行 —— 不消耗套餐额度，可离线使用。",
+    "assessmentClosedBook": "闭卷考核进行中 — 结束前助手不可用。",
+    "assessmentAssisted": "辅助考核 — 助手的每一轮回复都会记录在诚信记录中。"
   },
   "repoContext": {
     "title": "添加仓库上下文",
@@ -559,6 +561,7 @@
       "typeTask": "任务",
       "typeEpic": "史诗",
       "typeGap": "缺口",
+      "typeBug": "缺陷",
       "usersIntro": "选择要邀请到此工作区的外部用户。",
       "noUsers": "未发现用户。",
       "userInvite": "邀请",
@@ -1756,6 +1759,7 @@
     "typeProduct": "产品",
     "typeDesign": "设计",
     "typeIncident": "事件",
+    "typeBug": "缺陷",
     "requiresRoleHint": "{role, select, viewer {需要观察者角色} contributor {需要协作者角色} developer {需要开发者角色} manager {需要管理者角色} owner {需要所有者角色} other {需要 {role} 角色}}",
     "tenantRoleLabel": "{role, select, viewer {观察者} contributor {协作者} developer {开发者} manager {管理者} owner {所有者} other {{role}}}",
     "tenantRoleDescription": "{role, select, viewer {对看板、工作项和团队成员的只读访问权限。} contributor {可编辑与你共享的画布；在工作区的其他地方为只读。} developer {构建和运行智能体、处理看板任务，并查看交付洞察。} manager {邀请成员、管理角色和集成，并查看所有洞察视图。} owner {完全控制权，包括账单、API 密钥以及删除工作区。} other {}}",
@@ -10729,6 +10733,10 @@
     "statusUnseeded": "尚未设置",
     "quarantinedBadge": "已隔离",
     "quarantinedHint": "此 Evermind 因输出不连贯而自动停用（{reason}）。请将其重新训练至连贯性达标后再启用推理。",
+    "codingGateQualified": "编码评测达到基线的 {pct}% — 已具备处理 IDE 编码请求的资格（要求 {bar}%）。",
+    "codingGateBelowBar": "编码评测为基线的 {pct}%，要求 {bar}% — IDE 编码请求仍由前沿模型处理。",
+    "codingGateNoEval": "此版本尚未记录编码评测 — 需达到前沿基线的 {bar}% 才能处理 IDE 编码请求。",
+    "codingGateStale": "编码评测记录于 v{evaluated}；当前版本为 v{head}。请重新评测 — 需达到前沿基线的 {bar}% 才能处理 IDE 编码请求。",
     "targetsTitle": "此项目下的 Evermind",
     "targetsHint": "此项目为其贡献学习的所有 Evermind。",
     "targetsEmpty": "尚未为此项目解析出任何 Evermind。",
@@ -15118,6 +15126,11 @@
     "revertConfirmAction": "回滚运行",
     "revertDone": "已回滚 — 已删除分支 {branch}（{commits} 个提交）。",
     "failedToRevert": "回滚此次运行失败",
+    "lateSteerContinued": "此消息在本次运行的最后一轮之后到达——已作为运行 #{id} 继续。",
+    "lateSteerOpenRun": "打开运行 #{id}",
+    "lateSteerAwaitingApproval": "此消息在本次运行的最后一轮之后到达——其后续运行正在等待经理审批。",
+    "lateSteerNotContinued": "此消息在本次运行的最后一轮之后到达——未启动后续运行：{reason}",
+    "lateSteerReleased": "此消息在本次运行被取消后到达——未送达。",
     "title": "智能体执行总开关",
     "disabledBody": "租户智能体执行已被阻止。VS Code 和 Brain 聊天、Canvas/Create 以及页面 MCP 工具仍可使用。",
     "enabledBody": "工作区紧急覆盖。禁用后将停止租户智能体，并阻止手动、定时、集成和自主的平台运行；交互式 VS Code 和 Brain 工作仍可使用。",
@@ -17958,6 +17971,206 @@
   "publicResume": {
     "loading": "正在加载简历…",
     "unavailable": "此简历链接不可用。"
+  },
+  "roomStations": {
+    "listHead": "房间里的工作台",
+    "open": "打开",
+    "openNamed": "打开{title}",
+    "dragHint": "{summary} · 拖动以移动",
+    "approvals": {
+      "title": "审批台",
+      "summary": "{count, plural, =0 {没有待处理的更改} other {# 项更改待审批}}",
+      "faceCount": "{count, plural, other {# 项更改等待签署}}",
+      "faceEmpty": "没有等待签署的更改。",
+      "intro": "对他人将要依赖的数字所做的更改，以及会发送到外部的操作，都会在这里等待，直到指定的人签署批准。",
+      "readOnly": "你可以查看待处理的内容，但只有此看板的编辑者才能签署批准。",
+      "empty": "没有待处理的内容。当助手或小组件更改预算、发票、报价或其他需要证明的数字时，该更改会显示在这里，直到有人签署批准。",
+      "waiting": "自 {when} 起等待",
+      "move": "{from} → {to}",
+      "by": "{actor} · {when}",
+      "source": "来源：{source}",
+      "unblocks": "签署后将解锁：{actions}",
+      "approve": "批准",
+      "approveAndRun": "批准并{action}",
+      "refuse": "拒绝",
+      "approved": "已批准「{title}」上的 {count, plural, other {# 项更改}}。",
+      "refused": "已拒绝「{title}」上的 {count, plural, other {# 项更改}}。",
+      "selfApproval": "这里等待的每一项更改都是你做的，因此批准它属于自我审批。请让其他人签署批准。",
+      "nothingPending": "此对象上已没有等待处理的更改。",
+      "actor": {
+        "human": "某人",
+        "agent": "某个智能体",
+        "brain": "Brain",
+        "system": "系统"
+      }
+    },
+    "metrics": {
+      "title": "指标看板",
+      "count": "{count, plural, other {# 个指标}}",
+      "summary": "{behind, plural, =0 {所有设定目标的指标都在正轨上。} other {# 个指标落后于目标。}}",
+      "noTargets": "这里的指标都还没有目标——为某个指标设定目标，即可看到它的走向。",
+      "errored": "{count, plural, other {# 个指标无法计算。}}",
+      "target": "目标 {target}",
+      "attainment": "达成目标的 {value}%",
+      "status": {
+        "ahead": "领先",
+        "on-track": "正常",
+        "behind": "落后",
+        "error": "无法计算"
+      },
+      "trend": "{name} 的趋势",
+      "error": "无法计算：{reason}",
+      "evidence": "基于 {total} 行中的 {matched} 行",
+      "derived": "由 {count, plural, other {# 个指标}}推导"
+    },
+    "widget": {
+      "summary": "第三方小组件",
+      "untitled": "小组件",
+      "loading": "正在加载小组件…",
+      "inPanel": "已在面板中打开",
+      "frameTitle": "{name}（第三方小组件）",
+      "navigated": "此小组件离开了其注册地址，因此看板已停止与它通信。",
+      "reload": "重新加载小组件",
+      "closed": "小组件已自行关闭。",
+      "reopen": "重新打开",
+      "permissions": "它可以：{permissions}。",
+      "noPermissions": "它只能在自己的框架内绘制。",
+      "permission": {
+        "boardRead": "读取此看板的标题",
+        "itemRead": "读取看板上对象的名称",
+        "itemWrite": "创建、编辑和删除对象",
+        "userRead": "查看你的显示名称",
+        "storageRead": "读取它自己保存的设置",
+        "storageWrite": "保存它自己的设置",
+        "notify": "在画布上显示通知"
+      }
+    },
+    "assessment": {
+      "title": "考核台",
+      "summary": "{count, plural, other {# 项作业}} · {live} 项进行中",
+      "untitled": "未命名",
+      "faceGate": {
+        "open": "助手可用",
+        "assisted": "辅助模式 — 每轮均被记录",
+        "closed": "闭卷 — 助手已关闭"
+      },
+      "mode": {
+        "open": "开放",
+        "assisted": "辅助",
+        "closed": "闭卷"
+      },
+      "gate": {
+        "open": "当前没有进行中的考核 — 此看板上的助手可用。",
+        "assisted": "辅助考核进行中 — 助手会回答，每一轮都会记录在学习者的诚信记录中。",
+        "closed": "闭卷考核进行中 — 在考核结束前，此看板及所有输入框中的助手均已关闭。"
+      },
+      "assignmentsHead": "作业",
+      "window": {
+        "beforeRelease": "未发布",
+        "open": "进行中",
+        "closed": "已结束"
+      },
+      "due": "截止时间 {date}",
+      "noDue": "未设置截止时间",
+      "extraTime": "{count, plural, other {# 名学习者}}获批延长时间 · 最晚截止 {date}",
+      "rubric": {
+        "ready": "评分量规已就绪",
+        "missing": "未关联评分量规 — 评分缺乏依据",
+        "noLevels": "评分量规未声明成就等级",
+        "noCriteria": "评分量规未声明评分标准",
+        "missingDescriptors": "评分量规：{criterion} 缺少 {count, plural, other {# 条描述}}",
+        "weightsZero": "评分量规：所有标准的权重均为零",
+        "totalMismatch": "评分量规总分为 {totalMarks}，但作业满分为 {maxMarks}"
+      },
+      "submissions": "已提交 {submitted} · 已评分 {marked}",
+      "integrityHead": "学术诚信",
+      "verdict": {
+        "undeclaredAssistance": "使用了辅助但未声明",
+        "closedBookViolation": "闭卷考核中使用了助手"
+      },
+      "assistantShare": "{percent}% 来自助手",
+      "integrityClear": "没有需要进行诚信沟通的提交。",
+      "declared": "{count, plural, other {# 份提交}}已声明所用辅助。",
+      "markHead": "待评分",
+      "mark": "评分",
+      "markNamed": "为 {name} 的提交评分",
+      "markNone": "没有已记录量规定位的待评分提交。"
+    },
+    "gradebook": {
+      "title": "成绩册",
+      "summary": "{count, plural, =0 {没有风险学习者} other {# 名风险学习者}}",
+      "untitled": "未命名成绩册",
+      "export": "导出 CSV",
+      "exportNamed": "将 {title} 导出为 CSV",
+      "empty": "暂无可汇总的学习者或作业。",
+      "atRiskHead": "{count, plural, =0 {没有风险学习者} other {# 名风险学习者}}",
+      "stats": "平均 {mean}% · 中位数 {median}% · 通过率 {passRate}%",
+      "statsNoMarks": "暂无已评分作业 · 通过率 {passRate}%",
+      "awaiting": "{count, plural, other {# 份提交}}等待评分",
+      "reason": {
+        "missing": "有缺交作业",
+        "failing": "低于及格线",
+        "both": "低于及格线且有缺交作业"
+      },
+      "missing": "缺交 {count}",
+      "tableLabel": "{title} 的成绩",
+      "column": {
+        "learner": "学习者",
+        "running": "当前 %",
+        "final": "最终 %",
+        "grade": "等级"
+      },
+      "atRisk": "有风险",
+      "moderationHead": "{count, plural, other {# 份答卷需要复核}}",
+      "moderationGap": "{learner}：一评 {first}，二评 {second}",
+      "moderationMissing": "{learner}：缺少二评"
+    },
+    "accessibility": {
+      "title": "无障碍审查",
+      "summary": "得分 {score}/100",
+      "distributable": "可分发 — 无阻断问题",
+      "blocked": "{count, plural, other {# 个阻断问题}}阻止分发",
+      "warnings": "{count, plural, other {# 个警告}}",
+      "scoreLabel": "无障碍得分",
+      "score": "{score}/100",
+      "findingsLabel": "无障碍问题",
+      "severity": {
+        "blocker": "阻断",
+        "warning": "警告"
+      },
+      "code": {
+        "missingAltText": "需要替代文本",
+        "missingCaptions": "需要字幕",
+        "missingTranscript": "需要文字稿",
+        "missingSummary": "需要数据的文字摘要",
+        "missingEquationAlt": "需要作者撰写的公式朗读文本",
+        "missingFormat": "需要替代格式"
+      },
+      "criterion": "WCAG {criterion}",
+      "raisedBy": "由 {source} 要求",
+      "none": "此看板上的所有作品都有文字替代。"
+    },
+    "citations": {
+      "title": "引文台",
+      "summary": "{count, plural, other {# 条参考文献}}",
+      "faceHead": "以 {style} 格式引用",
+      "style": {
+        "apa": "APA",
+        "harvard": "哈佛",
+        "ieee": "IEEE",
+        "mla": "MLA",
+        "chicago": "芝加哥",
+        "vancouver": "温哥华"
+      },
+      "styleLabel": "引文格式",
+      "export": "导出 BibTeX",
+      "exported": "已将 {count, plural, other {# 条参考文献}}导出为 BibTeX。",
+      "copied": "已复制 {citation} — 请粘贴到你正在写作的位置。",
+      "copyFailed": "无法访问剪贴板 — 引文为 {citation}。",
+      "listLabel": "参考文献",
+      "insert": "复制引文",
+      "insertNamed": "复制 {title} 的文内引文"
+    }
   },
   "creationCanvas": {
     "costToBuild": "构建成本",
@@ -23971,7 +24184,177 @@
       "strategistSubtitle": "为高影响力的活动制定策略、信息和受众。",
       "publishes": "发布",
       "measures": "衡量"
-    }
+    },
+    "llmCourse": {
+      "subject": "大语言模型是如何构建的",
+      "audience": "软件与机器学习从业者",
+      "description": "一条动手实践的学习路径：从模型需求和受治理的数据出发，贯穿分词、训练、评估、打包与运维。",
+      "module": {
+        "foundations": {
+          "title": "1. 定义模型",
+          "description": "把能力目标转化为可衡量的模型需求。"
+        },
+        "data": {
+          "title": "2. 构建数据集",
+          "description": "打造一个授权合规、具有代表性、防范污染的语料库。"
+        },
+        "tokenizer": {
+          "title": "3. 分词与架构",
+          "description": "把文本转化为模型输入，并选择站得住脚的规模。"
+        },
+        "training": {
+          "title": "4. 安全地训练",
+          "description": "开展可复现的预训练和指令微调。"
+        },
+        "evaluation": {
+          "title": "5. 评估与红队测试",
+          "description": "衡量能力、安全性、鲁棒性与成本。"
+        },
+        "delivery": {
+          "title": "6. 打包、部署与改进",
+          "description": "交付一个带版本、配有运营管控的模型。"
+        }
+      },
+      "lesson": {
+        "foundations-outcome": {
+          "title": "选定一个目标结果",
+          "objective": "定义模型必须稳定完成的一种行为。",
+          "content": "LLM 的本质是预测下一个 token。一个有用的产品，要为这种能力配上明确的受众、任务、上下文窗口、延迟目标、安全边界和评估计划。",
+          "activity": "写一句话的模型卡：“面向[受众]，模型将基于[证据]完成[行为]，当[指标]达成时即为成功。”"
+        },
+        "foundations-scale": {
+          "title": "选择合适的构建路径",
+          "objective": "比较提示工程、检索、微调和预训练。",
+          "content": "从能满足需求、成本最低的干预手段开始。提示工程改变指令，检索提供最新知识，微调改变行为，预训练则从语料中学习表征。",
+          "activity": "列出两个理由，说明你的目标为什么需要训练，而不是靠提示工程或检索。"
+        },
+        "data-corpus": {
+          "title": "获取并治理数据",
+          "objective": "建立一个可追溯、具备使用权的语料库。",
+          "content": "为每个数据源记录来源、许可、同意、保留期限、语言、领域和质量信号。在训练前删除密钥和个人数据。",
+          "activity": "起草一份数据集卡，写明允许的用途、排除项和已知的代表性缺口。"
+        },
+        "data-pipeline": {
+          "title": "清洗、去重与切分",
+          "objective": "防止数据泄漏和评估污染。",
+          "content": "统一编码、剔除低质量文档、先去重再切分，并预留绝不进入训练或提示开发的测试数据。",
+          "activity": "设计训练集、验证集和测试集的切分方案，并说明你将如何检测近似重复。"
+        },
+        "tokenizer-train": {
+          "title": "训练并检查分词器",
+          "objective": "衡量词表选择对你所在领域的影响。",
+          "content": "BPE 或 unigram 分词器会学习可复用的文本片段。检查切分率（fertility）、未知字节、多语言覆盖，以及对代码或领域术语的处理。",
+          "activity": "对 20 个有代表性的样本做分词，标出被切得过碎的词。"
+        },
+        "architecture-budget": {
+          "title": "规划模型形态与算力预算",
+          "objective": "理清参数、token、内存与吞吐量之间的关系。",
+          "content": "把层数、隐藏层宽度、注意力头数、上下文长度和参数量放在一起选定。在开跑之前估算训练 FLOPs、优化器内存、检查点大小和推理成本。",
+          "activity": "制作一张预算表，涵盖参数量、训练 token 数、加速器时长、存储和服务延迟。"
+        },
+        "training-run": {
+          "title": "配置训练任务",
+          "objective": "让训练可复现、可观测。",
+          "content": "对代码、数据、分词器、配置和随机种子做版本管理。跟踪损失、梯度范数、学习率、吞吐量、数据批次和检查点健康状况。",
+          "activity": "写一份开跑前检查清单，包括一次小规模过拟合测试和一次检查点恢复演练。"
+        },
+        "training-align": {
+          "title": "指令微调与对齐",
+          "objective": "教会模型完成任务，同时不抹掉基础能力。",
+          "content": "使用经过审核的指令—回复样本、明确的数据配比、留出任务和保守的超参数。在监督微调之后，可以用偏好优化进一步打磨行为。",
+          "activity": "编写三个指令样本，以及一套能区分正确性与文风的评分标准。"
+        },
+        "evaluation-suite": {
+          "title": "搭建评估套件",
+          "objective": "让每一项需求都对应一项测试。",
+          "content": "结合确定性检查、经过校准的模型评分细则、专家评审和对抗样例。报告不确定性，并按领域和受众拆分结果。",
+          "activity": "制作一份发布评分卡，为质量、安全、延迟和成本设定阈值。"
+        },
+        "evaluation-redteam": {
+          "title": "探查失效模式",
+          "objective": "在发布前发现有害或脆弱的行为。",
+          "content": "测试提示注入、数据提取、不安全建议、偏见、幻觉、长上下文退化、多语言表现和分布偏移。",
+          "activity": "写出五个滥用案例，并定义期望的拒绝或安全补全行为。"
+        },
+        "delivery-card": {
+          "title": "发布模型卡",
+          "objective": "记录预期用途、证据和局限。",
+          "content": "打包不可变的权重、分词器、推理配置、许可证、评估结果和模型卡。对产物签名，并保留一个可回滚的版本。",
+          "activity": "完成一份模型卡，涵盖预期用途、超出范围的用途、数据、评估、局限性和责任归属。"
+        },
+        "delivery-ops": {
+          "title": "运营学习闭环",
+          "objective": "监控质量，但不拿未经审核的反馈做训练。",
+          "content": "观察延迟、成本、漂移、安全事件和用户结果。让候选反馈依次经过审核、回归评估、审批，最后形成新版本。",
+          "activity": "画出晋升路径：从候选证据，到批准的数据集，再到经过评估的发布版本。"
+        }
+      },
+      "assessment": {
+        "foundations": {
+          "question": "什么时候才应考虑从零开始预训练模型？",
+          "choice": {
+            "a": "只要写提示词觉得麻烦的时候",
+            "b": "当你拥有独特的数据、充足的算力，并且有基础模型无法满足的需求时",
+            "c": "在定义评估之前",
+            "d": "为每一个私有知识库都这样做"
+          },
+          "explanation": "只有当需求和资源是更简单的方法无法满足时，预训练才是合理的。"
+        },
+        "data": {
+          "question": "为什么要在切分数据之前去重？",
+          "choice": {
+            "a": "为了增加 token 数量",
+            "b": "为了防止几乎相同的样本泄漏进评估",
+            "c": "为了省掉分词器",
+            "d": "为了保证事实准确"
+          },
+          "explanation": "跨切分的重复样本会抬高评估结果，掩盖泛化能力差的问题。"
+        },
+        "tokenizer": {
+          "question": "分词器的切分率（fertility）衡量的是什么？",
+          "choice": {
+            "a": "每个词或文本单元产生的 token 数",
+            "b": "GPU 利用率",
+            "c": "模型准确率",
+            "d": "数据集许可的质量"
+          },
+          "explanation": "切分率过高会让某个领域的处理效率低下，并压缩可用的上下文。"
+        },
+        "training": {
+          "question": "在正式的完整训练之前应该做什么？",
+          "choice": {
+            "a": "关闭检查点",
+            "b": "做一次小规模的端到端过拟合与恢复测试",
+            "c": "用测试集来调参",
+            "d": "发布模型卡"
+          },
+          "explanation": "在投入昂贵算力之前，一次小规模彩排能验证数据、代码、指标和恢复流程。"
+        },
+        "evaluation": {
+          "question": "只看一个平均基准分数是不够的，因为……",
+          "choice": {
+            "a": "基准测试从来都不管用",
+            "b": "它可能掩盖重要切片和安全案例中的失败",
+            "c": "延迟总是恒定的",
+            "d": "训练损失是唯一有效的指标"
+          },
+          "explanation": "发布决策需要按维度拆分的能力与安全证据。"
+        },
+        "delivery": {
+          "question": "哪些反馈应该自动进入下一轮训练集？",
+          "choice": {
+            "a": "所有用户对话",
+            "b": "只有经过审核、获得同意、符合政策的证据",
+            "c": "只有负面反馈",
+            "d": "任何高频提示"
+          },
+          "explanation": "人工审核与治理能防止隐私、数据投毒和质量方面的问题。"
+        }
+      }
+    },
+    "noticeGradebookExported": "成绩册已导出为 CSV：{count, plural, other {# 名学习者}}",
+    "noticeReferencesExported": "已将 {count, plural, other {# 条参考文献}}导出为 BibTeX",
+    "noticeReferencesExportEmpty": "暂无可导出的参考文献"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
@@ -25123,6 +25506,271 @@
       },
       "learning": {
         "description": "基于课程的学习路径、控制解锁的先修条件，以及工作区自有的 xAPI 学习记录存储（LRS）。"
+      }
+    },
+    "route": {
+      "brainstorm": {
+        "title": "头脑风暴",
+        "description": "用日常语言描述你想构建的东西，把它变成项目、任务、数据集和智能体工作。",
+        "seoDescription": "头脑风暴是 Builderforce.ai 中用日常语言开启工作的起点：探索一个想法，梳理有用的上下文，再把它变成相互关联的画布工作、项目、任务、数据集，或由智能体协助执行的工作。",
+        "highlight": {
+          "h1": {
+            "title": "用日常语言描述",
+            "desc": "先说出你想创造什么，把想法打磨成形，再决定它需要哪些产物、协作者或交付结构。"
+          },
+          "h2": {
+            "title": "它会调用真正的平台工具",
+            "desc": "Brain 接入了工具注册表：它能创建项目、起草规格、生成数据集、把工作分派给智能体——而不只是陪你聊天。"
+          },
+          "h3": {
+            "title": "立足于你的工作区",
+            "desc": "固定一个项目，Brain 就会结合该项目的上下文作答，让构思在你的工作所在之处无缝延续。"
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "Builderforce.ai 上的头脑风暴是什么？",
+            "answer": "头脑风暴是整页版的 Brain 助手——一个用日常语言交流的界面：你描述想构建的东西，Brain 把它变成项目、任务、数据集和智能体工作。它就是应用里随处可用的侧边抽屉中的那个 Brain，只是拥有了一整页的画布。"
+          },
+          "q2": {
+            "question": "Brain 真的会动手，还是只会聊天？",
+            "answer": "它会动手。Brain 连接着平台工具注册表和你所在租户的 MCP 扩展，因此能创建项目、起草规格和 PRD、启动数据集生成、给智能体分派任务——每一次工具调用都受你的审批关卡管控。"
+          },
+          "q3": {
+            "question": "开始头脑风暴前需要做什么设置吗？",
+            "answer": "不需要。登录、打开头脑风暴，然后直接输入。你也可以固定一个项目，让回答基于该代码库和上下文；但一个空白提示就足以开始把想法变成计划。"
+          }
+        }
+      },
+      "workflows": {
+        "title": "工作流构建器",
+        "description": "将智能体与工具编排成可重复、带审批关卡的工作流。",
+        "seoDescription": "Builderforce.ai 工作流构建器是一块拖放式、iPaaS 风格的画布，用来编排 LLM 逻辑——记忆、知识库和训练节点——并与你的智能体相连，在你的 agentHost 上运行，每一步都设有审批关卡。",
+        "highlight": {
+          "h1": {
+            "title": "像画流程图一样编排智能体",
+            "desc": "在拖放式画布上，把智能体、工具、记忆、知识库和训练节点连接成可重复的多步骤工作流。"
+          },
+          "h2": {
+            "title": "可配置的审批关卡",
+            "desc": "已配置的执行路径可以暂停，等待人工签核。策略解析出错时默认拒绝；每条已埋点路径的审计覆盖范围都会明确标注。"
+          },
+          "h3": {
+            "title": "内置编排模式",
+            "desc": "规划、功能开发、缺陷修复、重构和对抗式评审等工作流，通过依赖 DAG 协调七种专业角色。"
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "什么是工作流构建器？",
+            "answer": "它是一块可视化、iPaaS 风格的画布，用来编排你自己的 LLM 逻辑。你拖放并连接节点——智能体、工具、记忆、知识库和训练——组成可重复的工作流，在你的 agentHost 上运行，并在你选定的任何位置设置审批关卡。"
+          },
+          "q2": {
+            "question": "它和单个 AI 智能体有什么不同？",
+            "answer": "工作流通过依赖 DAG，在结构化步骤中协调多个专业智能体，而不是由一个智能体给出一条建议。内置模式可以端到端地完成规划、缺陷修复、重构和对抗式评审。"
+          },
+          "q3": {
+            "question": "能在工作流中要求人工审批吗？",
+            "answer": "可以。审批关卡能让任意步骤暂停，直到有人批准或拒绝，决定会记录在审计轨迹中。低风险步骤可以通过自动审批规则自动放行。"
+          }
+        }
+      },
+      "settings": {
+        "title": "设置",
+        "description": "管理你的工作区、成员、API 密钥和偏好设置。"
+      },
+      "tenants": {
+        "title": "工作区",
+        "description": "创建多租户工作区并在其间切换，按席位分配角色。"
+      },
+      "admin": {
+        "title": "平台管理",
+        "description": "平台管理、LLM 调用追踪与运维工具。"
+      },
+      "agent-worker": {
+        "title": "智能体执行器",
+        "description": "运行并监控在后台为你执行任务的智能体执行器。"
+      },
+      "projects": {
+        "seoDescription": "项目 / 任务是 Builderforce.ai 的工作管理界面——把工作组织进 AI 项目工作区，再通过看板、表格、日历和甘特图视图，在你的智能体团队中规划、分派和跟踪任务。"
+      },
+      "workforce": {
+        "seoDescription": "Workforce 网格在本地和远程 AgentHost 之间发现并分派工作——跨机器、跨租户共享算力，审批、对话和完整遥测尽在一处。",
+        "highlight": {
+          "h1": {
+            "title": "由智能体主机组成的网格",
+            "desc": "在本地和远程 AgentHost 之间发现并分派工作，通过 HMAC 签名、Bearer 认证的分派机制，跨机器、跨租户共享算力。"
+          },
+          "h2": {
+            "title": "审批与对话合二为一",
+            "desc": "批准需要人工介入的操作、直接与智能体对话、观看它们协作——全部在同一个 Workforce 界面完成。"
+          },
+          "h3": {
+            "title": "可观测的执行",
+            "desc": "受支持的任务和工作流路径会向时间线发送结构化遥测，包括可用的执行、用量和工具调用记录。"
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "什么是 Workforce 网格？",
+            "answer": "Workforce 是你发现和协调智能体主机的地方。它通过 HMAC 签名、Bearer 认证的分派机制，在本地和远程 AgentHost 之间分派工作——跨机器甚至跨租户共享算力——并智能路由到最匹配的节点。"
+          },
+          "q2": {
+            "question": "我能看到并审批智能体正在做的事吗？",
+            "answer": "可以。Workforce 界面汇集了审批请求、智能体对话，以及受支持的平台工作流所采集的执行遥测。"
+          },
+          "q3": {
+            "question": "它能跨多台机器工作吗？",
+            "answer": "能。借助机群注册、心跳和能力同步，你可以运行一组 AgentHost 并在它们之间路由任务，既可以远程分派到指定主机，也可以按能力自动路由。"
+          }
+        }
+      },
+      "skills": {
+        "seoDescription": "从 Builderforce.ai Workforce 市场安装或发布可复用的智能体技能。在租户或 agentHost 范围分配的技能，会在智能体启动时自动加载——内置 53 项技能，市场还在不断壮大。",
+        "highlight": {
+          "h1": {
+            "title": "能力的市场",
+            "desc": "浏览并安装可复用的智能体技能，或发布你自己的技能。平台内置 53 项技能，社区市场还在持续扩充。"
+          },
+          "h2": {
+            "title": "分配即自动加载",
+            "desc": "在租户或 agentHost 范围分配一项技能，它就会在运行中的智能体启动时自动加载——无需逐个智能体手动配置。"
+          },
+          "h3": {
+            "title": "按清晰条款发布",
+            "desc": "按照上架和结账时展示的卖家条款发布技能。"
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "Builderforce.ai 上的技能是什么？",
+            "answer": "技能是你可以赋予智能体的可复用能力。平台内置 53 项技能，另有一个市场供你浏览、安装或发布更多技能。在租户或 agentHost 范围分配的技能，会在智能体启动时自动加载。"
+          },
+          "q2": {
+            "question": "我可以发布自己的技能吗？",
+            "answer": "可以。你可以把技能发布到 Workforce 市场；在上架付费内容之前，会向你展示当前的费用和结算条款。"
+          },
+          "q3": {
+            "question": "技能是如何进入运行中的智能体的？",
+            "answer": "你在门户中按租户或 agentHost 范围分配技能；智能体启动时会自动加载分配给它的技能，因此能力会遵循你的分配规则，无需逐个智能体配置。"
+          }
+        }
+      },
+      "personas": {
+        "seoDescription": "在 Builderforce.ai 上，人设为你的智能体提供可复用的语气与行为档案。Pro 人设再加上一层心理测量人格，在运行时同时编译进提示指令和执行参数。",
+        "highlight": {
+          "h1": {
+            "title": "可复用的语气与行为",
+            "desc": "只需定义一次人设——语气、行为和做事风格——即可应用到多个智能体，让它们的输出始终保持一致。"
+          },
+          "h2": {
+            "title": "心理测量人格（Pro）",
+            "desc": "Pro 人设带有一组特质向量，会同时编译进提示指令和运行时执行参数，让智能体的行为真正与众不同。"
+          },
+          "h3": {
+            "title": "在整个团队中共享",
+            "desc": "人设是随智能体流转的可复用资产，你精心打磨一次的行为档案，就能装备整个智能体团队。"
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "Builderforce.ai 上的人设是什么？",
+            "answer": "人设是你附加给智能体的一份可复用的语气与行为档案，让它们的语气和做事风格在各项任务和团队成员之间保持一致。"
+          },
+          "q2": {
+            "question": "Pro 人格层带来了什么？",
+            "answer": "Pro 人设包含一份心理测量档案——一组特质向量，由平台在运行时同时编译进提示指令和执行参数（例如推理深度和温度），让每个智能体都拥有真正独特、可控的个性。"
+          },
+          "q3": {
+            "question": "人设可以在多个智能体之间复用吗？",
+            "answer": "可以。人设是可复用的资产——定义一次，就能应用到团队中任意数量的智能体上，无需每次重新描述行为。"
+          }
+        }
+      },
+      "content-manager": {
+        "seoDescription": "内容管理器让你撰写并共享可复用的内容块，供你的智能体和 Workforce 市场反复使用——为 AI 团队所依赖的文案与上下文提供唯一可信来源。",
+        "highlight": {
+          "h1": {
+            "title": "撰写可复用的内容",
+            "desc": "内容块只需创建一次，即可在智能体、工作流和市场中重复使用，无需到处复制文案。"
+          },
+          "h2": {
+            "title": "智能体共享的上下文",
+            "desc": "内容块会成为智能体可以调用的上下文，让它们的输出始终以你的标准口径和事实为依据。"
+          },
+          "h3": {
+            "title": "随时可上架市场",
+            "desc": "共享可供智能体和 Workforce 市场复用的内容，让优质上下文在整个工作区中不断累积价值。"
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "内容管理器是做什么用的？",
+            "answer": "它是你撰写和共享可复用内容块的地方——这些文案和上下文可以被你的智能体和 Workforce 市场复用——让你的对外口径和素材集中在一个标准位置。"
+          },
+          "q2": {
+            "question": "智能体如何使用这些内容？",
+            "answer": "内容块是智能体可以调用的共享上下文，让它们的输出与你的标准事实和口径保持一致，而不是每次都临场发挥。"
+          }
+        }
+      },
+      "security": {
+        "seoDescription": "Builderforce.ai 为智能体协助的工作提供全套管控，包括租户隔离、加密的集成凭据、基于角色的访问控制、设备信任、可配置的审批关卡，以及留存的执行记录。",
+        "highlight": {
+          "h1": {
+            "title": "让人始终承担责任",
+            "desc": "为关键操作配置人工审批关卡，并把审批决定作为执行记录的一部分留存下来。"
+          },
+          "h2": {
+            "title": "按范围隔离，全程加密",
+            "desc": "租户级访问控制和 AES-256-GCM 加密，保护为受支持集成所存储的凭据。"
+          },
+          "h3": {
+            "title": "RBAC 与设备信任",
+            "desc": "基于角色的访问控制、设备信任以及 HMAC 签名的主机间分派，确保只有合适的人和机器才能执行操作。"
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "Builderforce.ai 如何管控智能体能做什么？",
+            "answer": "通过人工介入的审批关卡：智能体在执行高影响操作前请求批准，执行会暂停，直到有人批准或拒绝，每个结果都会记录在完整的审计轨迹中。自动审批规则则让低风险操作自动放行。"
+          },
+          "q2": {
+            "question": "我的凭据和数据如何受到保护？",
+            "answer": "集成凭据采用 AES-256-GCM 加密，并按租户隔离。所有资源——项目、数据集、模型和智能体——都按租户隔离，不存在跨租户访问；主机间分派采用 HMAC 签名和 Bearer 认证。"
+          },
+          "q3": {
+            "question": "Builderforce.ai 能在物理隔离（离线）环境中运行吗？",
+            "answer": "采用 MIT 许可证的 BuilderForce Agents 运行时可以部署在私有基础设施上，并可使用本地模型。完全物理隔离的环境需要关闭托管协作、发布、远程评估及其他联网服务；在做出合规承诺之前，请对照部署指南验证所需的工作流程。"
+          }
+        }
+      },
+      "dashboard": {
+        "seoDescription": "Builderforce.ai 仪表板把最近的创作会话、进行中的工作和工作区动态汇集一处，让你随时接续一个想法，或一路跟进到交付。",
+        "highlight": {
+          "h1": {
+            "title": "回到你的创作情境",
+            "desc": "接续最近的画布会话，查看与之相关的工作、协作者和接下来要做的决定。"
+          },
+          "h2": {
+            "title": "从想法到行动",
+            "desc": "从你想创造的东西出发，再把有用的部分变成产物、项目、任务或智能体工作。"
+          },
+          "h3": {
+            "title": "一路跟进到交付",
+            "desc": "从画布转到项目、模型、智能体、审批和运营视图，全程不丢失最初的上下文。"
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "Builderforce.ai 仪表板上有什么？",
+            "answer": "仪表板是你工作区的指挥中心：工作区健康状况、最近的运行，以及 AI 团队正在做什么的实时视图。你可以从这里直接进入头脑风暴、项目、训练和 Workforce 网格。"
+          },
+          "q2": {
+            "question": "如何把一个想法变成落地的工作？",
+            "answer": "在仪表板的输入框里写下你想构建的东西，它会转入头脑风暴，把想法变成项目和任务，并在你的审批关卡管控下把工作分派给智能体。"
+          }
+        }
       }
     }
   },

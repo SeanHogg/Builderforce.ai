@@ -35,6 +35,7 @@ import { EvermindMaintenance } from './EvermindMaintenance';
 import { EvermindAnalyzer } from './EvermindAnalyzer';
 import { EvermindDiagnostics, useDiagnosticsCopy } from './EvermindDiagnostics';
 import { ConsoleTabs, type ConsoleTab } from './ConsoleTabs';
+import { CodingGateNote } from './CodingGateNote';
 import { buildEvermindDiagnostics } from './diagnosticsReport';
 import {
   C, italic, fieldLabel, fieldTitle, fieldHint, select, optionStyle, sectionBlock,
@@ -559,6 +560,7 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
         </p>
       )}
       {quarantined && <p style={warnBox} role="alert">{t.quarantinedHint(quarantineReason)}</p>}
+      {!loadFailed && <CodingGateNote gate={data?.codingGate} t={t} />}
       {nextAction && <NextActionCard action={nextAction} canAct={canManage && !busy && !inherited} onAction={() => {
         if (nextAction.id === 'test') setTab('test');
         else if (nextAction.id === 'teacher' || nextAction.id === 'merge' || nextAction.id === 'learn') setTab('teach');

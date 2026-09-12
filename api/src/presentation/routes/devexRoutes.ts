@@ -36,6 +36,14 @@ import type { Db } from '../../infrastructure/database/connection';
 import { positiveIntOrNull, daysParam } from './queryParams';
 import { positiveIntParam } from './queryParams';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
+import { parseBody, z, zJsonObject } from './requestBody';
+
+// Template and campaign writes read every field defensively (`typeof body.x === …`,
+// `normalizeQuestions(body.questions)`), so their bodies are admitted as any JSON
+// object (`zJsonObject`) and the per-field rules stay with the handler. A response's
+// answers/segments are handed to `validateAnswers` / `normalizeSegments`, which own
+// their shapes.
+const RespondBody = z.object({ answers: z.unknown().optional(), segments: z.unknown().optional() });
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 // The cross-tenant benchmark is the same for everyone and expensive to compute,
@@ -88,7 +96,7 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
 
   router.post('/templates', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (!name) return c.json({ error: 'name is required' }, 400);
     const questions = normalizeQuestions(body.questions);
@@ -108,7 +116,7 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId } = scope(c);
     const id = positiveIntOrNull(c.req.param('id'));
     if (id == null) return c.json({ error: 'invalid id' }, 400);
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (typeof body.name === 'string' && body.name.trim()) patch.name = body.name.trim().slice(0, 160);
     if (typeof body.description === 'string') patch.description = body.description;
@@ -169,7 +177,7 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
 
   router.post('/campaigns', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const title = typeof body.title === 'string' ? body.title.trim() : '';
     if (!title) return c.json({ error: 'title is required' }, 400);
     const templateId = positiveIntOrNull(typeof body.templateId === 'number' ? String(body.templateId) : (body.templateId as string | undefined));
@@ -203,7 +211,7 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId } = scope(c);
     const id = positiveIntOrNull(c.req.param('id'));
     if (id == null) return c.json({ error: 'invalid id' }, 400);
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const patch: Record<string, unknown> = {};
     if (typeof body.title === 'string' && body.title.trim()) patch.title = body.title.trim().slice(0, 200);
     if (typeof body.periodMonth === 'string' && /^\d{4}-\d{2}$/.test(body.periodMonth)) patch.periodMonth = body.periodMonth;
@@ -245,7 +253,7 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
       questions = normalizeQuestions(tpl?.questions ?? []);
     }
 
-    const body = await c.req.json<{ answers?: unknown; segments?: unknown }>();
+    const body = await parseBody(c, RespondBody);
     const { clean, errors } = validateAnswers(questions, body.answers);
     if (errors.length) return c.json({ error: 'invalid answers', details: errors }, 400);
     // Demographic tags for the segment heatmap / participation-by-segment — kept

@@ -32,6 +32,35 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import { scope } from './segmentTrackerRoutes';
 import { isDomain, type ObjectRegistry } from '../../application/kernel/ObjectRegistry';
 import type { HonoEnv } from '../../env';
+import { parseBody, z } from './requestBody';
+
+// `anchor` / `patch` are stored as JSON exactly as sent, so they stay untyped.
+const AnnotationBody = z.object({
+  kind: z.string().optional(),
+  body: z.string().nullish(),
+  value: z.string().nullish(),
+  label: z.string().nullish(),
+  anchor: z.unknown().optional(),
+  parentId: z.number().nullish(),
+});
+/** `memberRef` stays optional so the handler's own "memberRef is required" wins. */
+const MemberBody = z.object({
+  memberKind: z.string().nullish(),
+  memberRef: z.string().nullish(),
+  role: z.string().optional(),
+});
+const ShareBody = z.object({
+  scope: z.enum(['view', 'comment', 'edit']).optional(),
+  expiresAt: z.string().nullish(),
+  maxUses: z.number().nullish(),
+});
+const RevisionBody = z.object({
+  label: z.string().nullish(),
+  summary: z.string().nullish(),
+  patch: z.unknown().optional(),
+  snapshotKey: z.string().nullish(),
+  byteSize: z.number().nullish(),
+});
 
 /** Clamp a `?limit=`. The application layer clamps again — this one is so a
  *  nonsense query string never reaches it, that one is so a non-HTTP caller
@@ -107,9 +136,7 @@ export function createObjectRoutes(registry: ObjectRegistry): Hono<HonoEnv> {
     // orphan, which is the exact failure the registry exists to prevent.
     if (!(await registry.get(tenantId, objectId))) return c.json({ error: 'not found' }, 404);
 
-    const body = await c.req.json<{
-      kind?: string; body?: string; value?: string; label?: string; anchor?: unknown; parentId?: number;
-    }>();
+    const body = await parseBody(c, AnnotationBody);
     const row = await registry.addAnnotation({
       tenantId,
       objectId,
@@ -139,7 +166,7 @@ export function createObjectRoutes(registry: ObjectRegistry): Hono<HonoEnv> {
     const objectId = c.req.param('id');
     if (!(await registry.get(tenantId, objectId))) return c.json({ error: 'not found' }, 404);
 
-    const body = await c.req.json<{ memberKind?: string; memberRef?: string; role?: string }>();
+    const body = await parseBody(c, MemberBody);
     if (!body.memberRef) return c.json({ error: 'memberRef is required' }, 400);
     const row = await registry.addMember({
       tenantId,
@@ -174,7 +201,7 @@ export function createObjectRoutes(registry: ObjectRegistry): Hono<HonoEnv> {
     const objectId = c.req.param('id');
     if (!(await registry.get(tenantId, objectId))) return c.json({ error: 'not found' }, 404);
 
-    const body = await c.req.json<{ scope?: 'view' | 'comment' | 'edit'; expiresAt?: string; maxUses?: number }>();
+    const body = await parseBody(c, ShareBody);
     const created = await registry.createShare({
       tenantId,
       objectId,
@@ -207,9 +234,7 @@ export function createObjectRoutes(registry: ObjectRegistry): Hono<HonoEnv> {
     const objectId = c.req.param('id');
     if (!(await registry.get(tenantId, objectId))) return c.json({ error: 'not found' }, 404);
 
-    const body = await c.req.json<{
-      label?: string; summary?: string; patch?: unknown; snapshotKey?: string; byteSize?: number;
-    }>();
+    const body = await parseBody(c, RevisionBody);
     const row = await registry.recordRevision({
       tenantId,
       objectId,

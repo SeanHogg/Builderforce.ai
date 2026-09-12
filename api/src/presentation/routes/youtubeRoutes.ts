@@ -11,6 +11,17 @@ import {
   YOUTUBE_PROVIDER,
 } from '../../application/youtube/youtubePublishing';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { parseBody, z } from './requestBody';
+
+/** `POST /publish` — the handler answers its own required-field messages. */
+const PublishVideoBody = z.object({
+  connectionId: z.number().nullish(),
+  storageKey: z.string().nullish(),
+  title: z.string().nullish(),
+  description: z.string().optional(),
+  privacyStatus: z.string().nullish(),
+  mimeType: z.string().nullish(),
+});
 
 const DEFAULT_RETURN_TO = '/create';
 
@@ -64,8 +75,10 @@ export function createYouTubeRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.post('/publish', async (c) => {
+    // Read BEFORE the `try`: its catch answers 502 (YouTube failed), and a malformed
+    // body is the caller's 400, not an upstream failure.
+    const body = await parseBody(c, PublishVideoBody);
     try {
-      const body = await c.req.json<{ connectionId?: number; storageKey?: string; title?: string; description?: string; privacyStatus?: string; mimeType?: string }>();
       if (!Number.isInteger(body.connectionId) || !body.storageKey || !body.title?.trim()) return c.json({ error: 'connectionId, storageKey, and title are required.' }, 400);
       if (!['private', 'unlisted', 'public'].includes(body.privacyStatus ?? '')) return c.json({ error: 'privacyStatus must be private, unlisted, or public.' }, 400);
       if (!body.mimeType?.startsWith('video/')) return c.json({ error: 'A rendered video is required.' }, 400);

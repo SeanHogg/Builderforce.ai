@@ -310,7 +310,9 @@
     "forkHint": "Résume cette conversation et poursuit dans une nouvelle à partir de ce résumé",
     "sessionUnavailable": "Disponible dès que la conversation compte quelques messages et qu’aucune exécution n’est en cours",
     "categoryLocal": "Sur cet appareil",
-    "localDetail": "S’exécute sur cette machine via {runtime} — sans consommer le forfait, et fonctionne hors ligne."
+    "localDetail": "S’exécute sur cette machine via {runtime} — sans consommer le forfait, et fonctionne hors ligne.",
+    "assessmentClosedBook": "Une évaluation sans documents est en cours — l'assistant est indisponible jusqu'à sa clôture.",
+    "assessmentAssisted": "Évaluation assistée — chaque réponse de l'assistant est consignée dans le registre d'intégrité."
   },
   "repoContext": {
     "title": "Ajouter le contexte du dépôt",
@@ -559,6 +561,7 @@
       "typeTask": "Tâche",
       "typeEpic": "Épopée",
       "typeGap": "Écart",
+      "typeBug": "Bogue",
       "usersIntro": "Choisissez les utilisateurs externes à inviter dans cet espace de travail.",
       "noUsers": "Aucun utilisateur découvert.",
       "userInvite": "Inviter",
@@ -1756,6 +1759,7 @@
     "typeProduct": "Produit",
     "typeDesign": "Design",
     "typeIncident": "Incident",
+    "typeBug": "Bogue",
     "requiresRoleHint": "{role, select, viewer {Nécessite le rôle Observateur} contributor {Nécessite le rôle Contributeur} developer {Nécessite le rôle Développeur} manager {Nécessite le rôle Gestionnaire} owner {Nécessite le rôle Propriétaire} other {Nécessite le rôle {role}}}",
     "tenantRoleLabel": "{role, select, viewer {Observateur} contributor {Contributeur} developer {Développeur} manager {Gestionnaire} owner {Propriétaire} other {{role}}}",
     "tenantRoleDescription": "{role, select, viewer {Accès en lecture seule aux tableaux, au travail et à l’effectif.} contributor {Modifier les canevas partagés avec vous ; lecture seule partout ailleurs dans l’espace de travail.} developer {Créer et exécuter des agents, travailler le tableau et voir les analyses de livraison.} manager {Inviter des personnes, gérer les rôles et les intégrations, et voir toutes les vues d’analyse.} owner {Contrôle total, y compris la facturation, les clés d’API et la suppression de l’espace de travail.} other {}}",
@@ -10729,6 +10733,10 @@
     "statusUnseeded": "Non configuré",
     "quarantinedBadge": "En quarantaine",
     "quarantinedHint": "Cet Evermind s'est désactivé automatiquement après avoir produit une sortie incohérente ({reason}). Réentraînez-le au-delà du seuil de cohérence pour réactiver l'inférence.",
+    "codingGateQualified": "Évaluation de code : {pct} % de la référence — qualifié pour traiter les requêtes de code de l'IDE (seuil {bar} %).",
+    "codingGateBelowBar": "Évaluation de code : {pct} % de la référence, seuil {bar} % — les requêtes de code de l'IDE restent sur le modèle de pointe.",
+    "codingGateNoEval": "Aucune évaluation de code enregistrée pour cette version — il faut {bar} % de la référence de pointe pour traiter les requêtes de code de l'IDE.",
+    "codingGateStale": "L'évaluation de code a été enregistrée pour v{evaluated} ; la version actuelle est v{head}. Relancez-la — il faut {bar} % de la référence de pointe pour traiter les requêtes de code de l'IDE.",
     "targetsTitle": "Everminds de ce projet",
     "targetsHint": "Tous les Evermind auxquels ce projet contribue son apprentissage.",
     "targetsEmpty": "Aucun Evermind résolu pour ce projet pour l'instant.",
@@ -15118,6 +15126,11 @@
     "revertConfirmAction": "Annuler l’exécution",
     "revertDone": "Annulée — branche {branch} supprimée ({commits} commit(s)).",
     "failedToRevert": "Échec de l’annulation de cette exécution",
+    "lateSteerContinued": "Arrivé après le dernier tour de cette exécution — poursuivi dans l’exécution #{id}.",
+    "lateSteerOpenRun": "Ouvrir l’exécution #{id}",
+    "lateSteerAwaitingApproval": "Arrivé après le dernier tour de cette exécution — son exécution de suivi attend l’approbation d’un responsable.",
+    "lateSteerNotContinued": "Arrivé après le dernier tour de cette exécution — aucune exécution de suivi n’a démarré : {reason}",
+    "lateSteerReleased": "Arrivé après l’annulation de cette exécution — il n’a pas été transmis.",
     "title": "Coupe-circuit d’exécution des agents",
     "disabledBody": "L’exécution des agents du locataire est bloquée. Les chats VS Code et Brain, Canvas/Create et les outils MCP de la page restent disponibles.",
     "enabledBody": "Contournement d’urgence de l’espace de travail. La désactivation arrête les agents du locataire et bloque les exécutions manuelles, planifiées, d’intégration et autonomes de la plateforme ; le travail interactif dans VS Code et Brain reste disponible.",
@@ -17958,6 +17971,206 @@
   "publicResume": {
     "loading": "Chargement du CV…",
     "unavailable": "Ce lien de CV n’est pas disponible."
+  },
+  "roomStations": {
+    "listHead": "Postes de la salle",
+    "open": "Ouvrir",
+    "openNamed": "Ouvrir {title}",
+    "dragHint": "{summary} · faites glisser pour déplacer",
+    "approvals": {
+      "title": "Bureau des validations",
+      "summary": "{count, plural, =0 {Rien en attente} one {# modification en attente} other {# modifications en attente}}",
+      "faceCount": "{count, plural, one {# modification attend une signature} other {# modifications attendent une signature}}",
+      "faceEmpty": "Rien n’attend de signature.",
+      "intro": "Les modifications de chiffres sur lesquels quelqu’un s’appuiera, et les actions qui sortent de l’entreprise, attendent ici qu’une personne nommément désignée les signe.",
+      "readOnly": "Vous voyez ce qui est en attente, mais seule une personne pouvant modifier ce tableau peut le signer.",
+      "empty": "Rien n’est en attente. Quand l’assistant ou un widget modifie un budget, une facture, un devis ou un autre chiffre attesté, la modification apparaît ici jusqu’à ce que quelqu’un la signe.",
+      "waiting": "En attente depuis {when}",
+      "move": "{from} → {to}",
+      "by": "{actor} · {when}",
+      "source": "source : {source}",
+      "unblocks": "Signer ceci débloque : {actions}",
+      "approve": "Valider",
+      "approveAndRun": "Valider et {action}",
+      "refuse": "Refuser",
+      "approved": "{count, plural, one {# modification validée} other {# modifications validées}} sur {title}.",
+      "refused": "{count, plural, one {# modification refusée} other {# modifications refusées}} sur {title}.",
+      "selfApproval": "Vous avez fait toutes les modifications en attente ici : les valider serait de l’auto-validation. Demandez à quelqu’un d’autre de les signer.",
+      "nothingPending": "Plus rien n’est en attente sur cet objet.",
+      "actor": {
+        "human": "Une personne",
+        "agent": "Un agent",
+        "brain": "Brain",
+        "system": "Le système"
+      }
+    },
+    "metrics": {
+      "title": "Tableau des indicateurs",
+      "count": "{count, plural, one {# indicateur} other {# indicateurs}}",
+      "summary": "{behind, plural, =0 {Tous les indicateurs dotés d’un objectif sont sur la bonne voie.} one {# indicateur est en retard sur son objectif.} other {# indicateurs sont en retard sur leur objectif.}}",
+      "noTargets": "Aucun indicateur n’a encore d’objectif : donnez-lui en un pour voir dans quelle direction il va.",
+      "errored": "{count, plural, one {# indicateur ne peut pas être calculé.} other {# indicateurs ne peuvent pas être calculés.}}",
+      "target": "Objectif {target}",
+      "attainment": "{value} % de l’objectif",
+      "status": {
+        "ahead": "En avance",
+        "on-track": "En bonne voie",
+        "behind": "En retard",
+        "error": "Calcul impossible"
+      },
+      "trend": "Tendance de {name}",
+      "error": "Calcul impossible : {reason}",
+      "evidence": "Calculé sur {matched} lignes sur {total}",
+      "derived": "Dérivé de {count, plural, one {# indicateur} other {# indicateurs}}"
+    },
+    "widget": {
+      "summary": "Widget tiers",
+      "untitled": "Widget",
+      "loading": "Chargement du widget…",
+      "inPanel": "Ouvert dans le panneau",
+      "frameTitle": "{name} (widget tiers)",
+      "navigated": "Ce widget a quitté son adresse enregistrée : le tableau a cessé de communiquer avec lui.",
+      "reload": "Recharger le widget",
+      "closed": "Le widget s’est fermé.",
+      "reopen": "Rouvrir",
+      "permissions": "Il peut : {permissions}.",
+      "noPermissions": "Il ne peut dessiner que dans son propre cadre.",
+      "permission": {
+        "boardRead": "lire le titre de ce tableau",
+        "itemRead": "lire le nom des objets du tableau",
+        "itemWrite": "créer, modifier et supprimer des objets",
+        "userRead": "voir votre nom d’affichage",
+        "storageRead": "lire ses propres réglages enregistrés",
+        "storageWrite": "enregistrer ses propres réglages",
+        "notify": "afficher un avis sur le canevas"
+      }
+    },
+    "assessment": {
+      "title": "Bureau des évaluations",
+      "summary": "{count, plural, one {# devoir} other {# devoirs}} · {live} en cours",
+      "untitled": "Sans titre",
+      "faceGate": {
+        "open": "Assistant disponible",
+        "assisted": "Assistée — chaque échange est enregistré",
+        "closed": "Sans documents — assistant désactivé"
+      },
+      "mode": {
+        "open": "Ouverte",
+        "assisted": "Assistée",
+        "closed": "Sans documents"
+      },
+      "gate": {
+        "open": "Aucune évaluation en cours : l'assistant est disponible sur ce tableau.",
+        "assisted": "Une évaluation assistée est en cours : l'assistant répond et chaque échange est consigné dans le registre d'intégrité de l'apprenant.",
+        "closed": "Une évaluation sans documents est en cours : l'assistant est désactivé sur ce tableau et dans chaque zone de saisie jusqu'à sa clôture."
+      },
+      "assignmentsHead": "Devoirs",
+      "window": {
+        "beforeRelease": "Non publiée",
+        "open": "Ouverte",
+        "closed": "Close"
+      },
+      "due": "À rendre le {date}",
+      "noDue": "Aucune échéance",
+      "extraTime": "{count, plural, one {# apprenant bénéficie} other {# apprenants bénéficient}} d'un temps supplémentaire approuvé · dernière échéance {date}",
+      "rubric": {
+        "ready": "Grille prête pour la notation",
+        "missing": "Aucune grille liée : la notation n'a pas de fondement",
+        "noLevels": "La grille ne déclare aucun niveau de réussite",
+        "noCriteria": "La grille ne déclare aucun critère",
+        "missingDescriptors": "Grille : il manque {count, plural, one {# descripteur} other {# descripteurs}} pour {criterion}",
+        "weightsZero": "Grille : tous les critères ont un poids nul",
+        "totalMismatch": "La grille totalise {totalMarks}, mais le devoir est noté sur {maxMarks}"
+      },
+      "submissions": "{submitted} rendus · {marked} notés",
+      "integrityHead": "Intégrité",
+      "verdict": {
+        "undeclaredAssistance": "Aide utilisée sans être déclarée",
+        "closedBookViolation": "Assistant utilisé pendant une évaluation sans documents"
+      },
+      "assistantShare": "{percent} % provenant de l'assistant",
+      "integrityClear": "Aucun rendu ne nécessite d'entretien sur l'intégrité.",
+      "declared": "{count, plural, one {# rendu déclare} other {# rendus déclarent}} l'aide utilisée.",
+      "markHead": "Prêts à noter",
+      "mark": "Noter",
+      "markNamed": "Noter le rendu de {name}",
+      "markNone": "Aucun rendu en attente avec des positionnements sur la grille."
+    },
+    "gradebook": {
+      "title": "Carnet de notes",
+      "summary": "{count, plural, =0 {Aucun apprenant en difficulté} one {# apprenant en difficulté} other {# apprenants en difficulté}}",
+      "untitled": "Carnet de notes sans titre",
+      "export": "Exporter en CSV",
+      "exportNamed": "Exporter {title} en CSV",
+      "empty": "Aucun apprenant ni devoir à agréger pour l'instant.",
+      "atRiskHead": "{count, plural, =0 {Aucun apprenant en difficulté} one {# apprenant en difficulté} other {# apprenants en difficulté}}",
+      "stats": "Moyenne {mean} % · médiane {median} % · taux de réussite {passRate} %",
+      "statsNoMarks": "Aucun travail noté pour l'instant · taux de réussite {passRate} %",
+      "awaiting": "{count, plural, one {# rendu en attente de notation} other {# rendus en attente de notation}}",
+      "reason": {
+        "missing": "Travaux manquants",
+        "failing": "Sous la note de passage",
+        "both": "Sous la note de passage, avec des travaux manquants"
+      },
+      "missing": "{count, plural, one {# manquant} other {# manquants}}",
+      "tableLabel": "Notes de {title}",
+      "column": {
+        "learner": "Apprenant",
+        "running": "% actuel",
+        "final": "% final",
+        "grade": "Mention"
+      },
+      "atRisk": "En difficulté",
+      "moderationHead": "{count, plural, one {# copie à harmoniser} other {# copies à harmoniser}}",
+      "moderationGap": "{learner} : première note {first}, seconde note {second}",
+      "moderationMissing": "{learner} : seconde note manquante"
+    },
+    "accessibility": {
+      "title": "Audit d'accessibilité",
+      "summary": "Score de {score} sur 100",
+      "distributable": "Diffusable — aucun blocage",
+      "blocked": "{count, plural, one {# blocage empêche} other {# blocages empêchent}} la diffusion",
+      "warnings": "{count, plural, one {# avertissement} other {# avertissements}}",
+      "scoreLabel": "Score d'accessibilité",
+      "score": "{score} sur 100",
+      "findingsLabel": "Constats d'accessibilité",
+      "severity": {
+        "blocker": "Blocage",
+        "warning": "Avertissement"
+      },
+      "code": {
+        "missingAltText": "Texte alternatif requis",
+        "missingCaptions": "Sous-titres requis",
+        "missingTranscript": "Transcription requise",
+        "missingSummary": "Résumé textuel des données requis",
+        "missingEquationAlt": "Lecture de l'équation rédigée par l'auteur requise",
+        "missingFormat": "Format alternatif requis"
+      },
+      "criterion": "WCAG {criterion}",
+      "raisedBy": "Exigé par {source}",
+      "none": "Tous les éléments de ce tableau disposent de leurs alternatives textuelles."
+    },
+    "citations": {
+      "title": "Bureau des citations",
+      "summary": "{count, plural, one {# référence} other {# références}}",
+      "faceHead": "Citer en {style}",
+      "style": {
+        "apa": "APA",
+        "harvard": "Harvard",
+        "ieee": "IEEE",
+        "mla": "MLA",
+        "chicago": "Chicago",
+        "vancouver": "Vancouver"
+      },
+      "styleLabel": "Style de citation",
+      "export": "Exporter en BibTeX",
+      "exported": "{count, plural, one {# référence exportée} other {# références exportées}} en BibTeX.",
+      "copied": "{citation} copiée — collez-la là où vous rédigez.",
+      "copyFailed": "Le presse-papiers est indisponible — la citation est {citation}.",
+      "listLabel": "Références",
+      "insert": "Copier la citation",
+      "insertNamed": "Copier la citation dans le texte pour {title}"
+    }
   },
   "creationCanvas": {
     "costToBuild": "Coût de construction",
@@ -23971,7 +24184,177 @@
       "strategistSubtitle": "Définit la stratégie, le message et l’audience des campagnes à fort impact.",
       "publishes": "publie",
       "measures": "mesure"
-    }
+    },
+    "llmCourse": {
+      "subject": "Comment on construit un grand modèle de langage",
+      "audience": "Professionnels du logiciel et du machine learning",
+      "description": "Un parcours pratique qui va des exigences du modèle et de données gouvernées jusqu'à la tokenisation, l'entraînement, l'évaluation, le packaging et l'exploitation.",
+      "module": {
+        "foundations": {
+          "title": "1. Définir le modèle",
+          "description": "Transformer un objectif de capacité en exigences mesurables pour le modèle."
+        },
+        "data": {
+          "title": "2. Constituer le jeu de données",
+          "description": "Créer un corpus sous licence, représentatif et protégé contre la contamination."
+        },
+        "tokenizer": {
+          "title": "3. Tokenisation et architecture",
+          "description": "Traduire le texte en entrées du modèle et choisir une taille défendable."
+        },
+        "training": {
+          "title": "4. Entraîner en toute sécurité",
+          "description": "Mener un pré-entraînement et un instruction tuning reproductibles."
+        },
+        "evaluation": {
+          "title": "5. Évaluer et faire du red teaming",
+          "description": "Mesurer la capacité, la sécurité, la robustesse et le coût."
+        },
+        "delivery": {
+          "title": "6. Packager, déployer et améliorer",
+          "description": "Livrer un modèle versionné, doté de contrôles opérationnels."
+        }
+      },
+      "lesson": {
+        "foundations-outcome": {
+          "title": "Choisir un résultat",
+          "objective": "Définir un comportement que le modèle doit accomplir de façon fiable.",
+          "content": "Un LLM prédit le token suivant. Un produit utile encadre cette capacité par un public clair, une tâche, une fenêtre de contexte, un objectif de latence, une limite de sécurité et un plan d'évaluation.",
+          "activity": "Rédigez une fiche modèle en une phrase : « Pour [public], le modèle fera [comportement], à partir de [éléments probants], et réussit quand [métrique]. »"
+        },
+        "foundations-scale": {
+          "title": "Choisir la bonne voie de construction",
+          "objective": "Comparer prompting, récupération (RAG), fine-tuning et pré-entraînement.",
+          "content": "Commencez par l'intervention la moins coûteuse capable de satisfaire l'exigence. Le prompting modifie les instructions, la récupération apporte des connaissances à jour, le fine-tuning modifie le comportement et le pré-entraînement apprend des représentations à partir d'un corpus.",
+          "activity": "Donnez deux raisons pour lesquelles votre objectif exige un entraînement plutôt que du prompting ou de la récupération."
+        },
+        "data-corpus": {
+          "title": "Sourcer et gouverner les données",
+          "objective": "Créer un corpus traçable, assorti de droits d'utilisation.",
+          "content": "Consignez la provenance, la licence, le consentement, la durée de conservation, la langue, le domaine et les signaux de qualité de chaque source. Supprimez les secrets et les données personnelles avant l'entraînement.",
+          "activity": "Rédigez une fiche de jeu de données précisant les usages autorisés, les exclusions et les lacunes de représentation connues."
+        },
+        "data-pipeline": {
+          "title": "Nettoyer, dédupliquer et découper",
+          "objective": "Éviter les fuites et la contamination de l'évaluation.",
+          "content": "Normalisez l'encodage, retirez les documents de faible qualité, dédupliquez avant de découper et réservez des données de test qui ne pourront entrer ni dans l'entraînement ni dans la mise au point des prompts.",
+          "activity": "Concevez les découpages entraînement, validation et test, et expliquez comment vous détecterez les quasi-doublons."
+        },
+        "tokenizer-train": {
+          "title": "Entraîner et inspecter un tokeniseur",
+          "objective": "Mesurer l'effet des choix de vocabulaire sur votre domaine.",
+          "content": "Un tokeniseur BPE ou unigram apprend des fragments de texte réutilisables. Examinez la fertilité, les octets inconnus, la couverture multilingue et le traitement du code ou de la terminologie métier.",
+          "activity": "Tokenisez 20 échantillons représentatifs et signalez les mots trop fragmentés."
+        },
+        "architecture-budget": {
+          "title": "Budgéter la forme du modèle et le calcul",
+          "objective": "Relier paramètres, tokens, mémoire et débit.",
+          "content": "Choisissez ensemble le nombre de couches, la largeur cachée, les têtes d'attention, la longueur de contexte et le nombre de paramètres. Estimez les FLOPs d'entraînement, la mémoire de l'optimiseur, la taille des checkpoints et le coût d'inférence avant le lancement.",
+          "activity": "Construisez un tableau budgétaire pour les paramètres, les tokens d'entraînement, les heures d'accélérateur, le stockage et la latence de service."
+        },
+        "training-run": {
+          "title": "Configurer l'entraînement",
+          "objective": "Rendre l'entraînement reproductible et observable.",
+          "content": "Versionnez le code, les données, le tokeniseur, la configuration et les graines aléatoires. Suivez la perte, la norme du gradient, le taux d'apprentissage, le débit, les lots de données et la santé des checkpoints.",
+          "activity": "Rédigez une check-list de pré-lancement incluant un petit test de surapprentissage et un exercice de reprise sur checkpoint."
+        },
+        "training-align": {
+          "title": "Instruction tuning et alignement",
+          "objective": "Enseigner le comportement attendu sans effacer les capacités de base.",
+          "content": "Utilisez des exemples instruction-réponse relus, un mélange explicite, des tâches mises de côté et des hyperparamètres prudents. L'optimisation par préférences peut affiner le comportement après le fine-tuning supervisé.",
+          "activity": "Créez trois exemples d'instructions et une grille qui distingue l'exactitude du style."
+        },
+        "evaluation-suite": {
+          "title": "Construire une suite d'évaluation",
+          "objective": "Relier chaque exigence à un test.",
+          "content": "Combinez des vérifications déterministes, des grilles notées par modèle et calibrées, une revue d'experts et des cas adversariaux. Indiquez l'incertitude et ventilez les résultats par domaine et par public.",
+          "activity": "Établissez une grille de validation de mise en production avec des seuils de qualité, de sécurité, de latence et de coût."
+        },
+        "evaluation-redteam": {
+          "title": "Sonder les modes de défaillance",
+          "objective": "Découvrir les comportements nuisibles ou fragiles avant la mise en production.",
+          "content": "Testez l'injection de prompt, l'extraction de données, les conseils dangereux, les biais, les hallucinations, la dégradation en contexte long, le comportement multilingue et le décalage de distribution.",
+          "activity": "Rédigez cinq cas d'abus et définissez le refus ou la réponse sûre attendus."
+        },
+        "delivery-card": {
+          "title": "Publier la fiche modèle",
+          "objective": "Documenter l'usage prévu, les preuves et les limites.",
+          "content": "Packagez des poids immuables, le tokeniseur, la configuration d'inférence, les licences, les résultats d'évaluation et une fiche modèle. Signez les artefacts et conservez une version de repli.",
+          "activity": "Complétez une fiche modèle couvrant l'usage prévu, les usages hors périmètre, les données, les évaluations, les limites et la responsabilité."
+        },
+        "delivery-ops": {
+          "title": "Piloter la boucle d'apprentissage",
+          "objective": "Surveiller la qualité sans entraîner sur des retours non relus.",
+          "content": "Observez la latence, le coût, la dérive, les incidents de sécurité et les résultats pour les utilisateurs. Faites passer les retours candidats par la relecture, l'évaluation de non-régression, l'approbation, puis une nouvelle version.",
+          "activity": "Dessinez le chemin de promotion : des éléments candidats au jeu de données approuvé, puis à la version évaluée."
+        }
+      },
+      "assessment": {
+        "foundations": {
+          "question": "Quand faut-il envisager de pré-entraîner un modèle à partir de zéro ?",
+          "choice": {
+            "a": "Dès que les prompts deviennent contraignants",
+            "b": "Quand vous disposez de données distinctives, d'une puissance de calcul suffisante et d'une exigence que les modèles de base ne peuvent pas satisfaire",
+            "c": "Avant de définir les évaluations",
+            "d": "Pour chaque base de connaissances privée"
+          },
+          "explanation": "Le pré-entraînement ne se justifie que par des exigences et des ressources que des approches plus simples ne peuvent pas satisfaire."
+        },
+        "data": {
+          "question": "Pourquoi dédupliquer avant de découper les données ?",
+          "choice": {
+            "a": "Pour augmenter le nombre de tokens",
+            "b": "Pour empêcher des exemples quasi identiques de fuiter dans l'évaluation",
+            "c": "Pour se passer de tokeniseur",
+            "d": "Pour garantir l'exactitude factuelle"
+          },
+          "explanation": "Les doublons entre découpages gonflent les résultats d'évaluation et masquent une mauvaise généralisation."
+        },
+        "tokenizer": {
+          "question": "Que mesure la fertilité d'un tokeniseur ?",
+          "choice": {
+            "a": "Le nombre de tokens produits par mot ou unité de texte",
+            "b": "L'utilisation du GPU",
+            "c": "La précision du modèle",
+            "d": "La qualité de la licence du jeu de données"
+          },
+          "explanation": "Une fertilité élevée peut rendre un domaine inefficace et réduire le contexte utilisable."
+        },
+        "training": {
+          "question": "Que faut-il faire avant un entraînement complet ?",
+          "choice": {
+            "a": "Désactiver les checkpoints",
+            "b": "Lancer un petit test de bout en bout de surapprentissage et de reprise",
+            "c": "Utiliser le jeu de test pour le réglage",
+            "d": "Publier la fiche modèle"
+          },
+          "explanation": "Une petite répétition valide les données, le code, les métriques et la reprise avant d'engager un calcul coûteux."
+        },
+        "evaluation": {
+          "question": "Un seul score moyen de benchmark ne suffit pas, car…",
+          "choice": {
+            "a": "les benchmarks ne fonctionnent jamais",
+            "b": "il peut masquer des défaillances dans des segments importants et des cas de sécurité",
+            "c": "la latence est toujours constante",
+            "d": "la perte d'entraînement est la seule métrique valable"
+          },
+          "explanation": "Les décisions de mise en production exigent des preuves de capacité et de sécurité ventilées."
+        },
+        "delivery": {
+          "question": "Quels retours devraient entrer automatiquement dans le prochain jeu d'entraînement ?",
+          "choice": {
+            "a": "Toutes les conversations des utilisateurs",
+            "b": "Uniquement les éléments relus, consentis et conformes aux politiques",
+            "c": "Uniquement les retours négatifs",
+            "d": "N'importe quel prompt très fréquent"
+          },
+          "explanation": "La relecture humaine et la gouvernance évitent les défaillances de confidentialité, d'empoisonnement et de qualité."
+        }
+      }
+    },
+    "noticeGradebookExported": "Carnet de notes exporté en CSV : {count, plural, one {# apprenant} other {# apprenants}}",
+    "noticeReferencesExported": "{count, plural, one {# référence exportée} other {# références exportées}} en BibTeX",
+    "noticeReferencesExportEmpty": "Aucune référence à exporter pour l'instant"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",
@@ -25123,6 +25506,271 @@
       },
       "learning": {
         "description": "Des parcours d’apprentissage sur vos cours, les prérequis qui les déverrouillent, et le Learning Record Store xAPI de l’espace de travail."
+      }
+    },
+    "route": {
+      "brainstorm": {
+        "title": "Brainstorming",
+        "description": "Décrivez en langage courant ce que vous voulez construire et transformez-le en projets, tâches, jeux de données et travail confié à des agents.",
+        "seoDescription": "Le Brainstorming est le point de départ en langage naturel de Builderforce.ai : explorez une idée, rassemblez le contexte utile et transformez-la en travail connecté sur le canevas, en projets, en tâches, en jeux de données ou en exécution assistée par des agents.",
+        "highlight": {
+          "h1": {
+            "title": "Décrivez-le avec vos mots",
+            "desc": "Dites ce que vous voulez créer, puis faites mûrir l'idée avant de décider des livrables, des collaborateurs ou de la structure de livraison dont elle a besoin."
+          },
+          "h2": {
+            "title": "De vrais outils de la plateforme",
+            "desc": "Brain est relié à un registre d'outils : il peut créer des projets, rédiger des spécifications, générer des jeux de données et confier du travail à des agents — pas seulement en discuter."
+          },
+          "h3": {
+            "title": "Ancré dans votre espace de travail",
+            "desc": "Épinglez un projet et Brain répond avec son contexte : l'idéation se poursuit exactement là où vit déjà votre travail."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "Qu'est-ce que le Brainstorming sur Builderforce.ai ?",
+            "answer": "Le Brainstorming, c'est l'assistant Brain en pleine page : une interface en langage naturel où vous décrivez ce que vous voulez construire, et Brain le transforme en projets, tâches, jeux de données et travail pour vos agents. C'est le même Brain que celui du panneau latéral disponible partout dans l'application, avec un canevas pleine page."
+          },
+          "q2": {
+            "question": "Brain agit-il vraiment, ou se contente-t-il de discuter ?",
+            "answer": "Il agit. Brain est connecté au registre d'outils de la plateforme et aux extensions MCP de votre tenant : il peut créer des projets, rédiger des spécifications et des PRD, lancer la génération de jeux de données et attribuer des tâches à des agents — chaque appel d'outil restant soumis à vos points d'approbation."
+          },
+          "q3": {
+            "question": "Faut-il configurer quelque chose pour commencer ?",
+            "answer": "Non. Connectez-vous, ouvrez le Brainstorming et écrivez. Vous pouvez épingler un projet pour que les réponses s'appuient sur ce code et son contexte, mais une invite vierge suffit pour commencer à transformer une idée en plan."
+          }
+        }
+      },
+      "workflows": {
+        "title": "Concepteur de workflows",
+        "description": "Assemblez agents et outils en workflows reproductibles, soumis à des points d'approbation.",
+        "seoDescription": "Le Concepteur de workflows de Builderforce.ai est un canevas glisser-déposer, de type iPaaS, pour composer une logique LLM — nœuds de mémoire, de base de connaissances et d'entraînement — reliée à vos agents et exécutée sur vos agentHosts, avec des points d'approbation à chaque étape.",
+        "highlight": {
+          "h1": {
+            "title": "Composez vos agents comme un organigramme",
+            "desc": "Un canevas glisser-déposer relie agents, outils, mémoire, base de connaissances et nœuds d'entraînement en workflows reproductibles à plusieurs étapes."
+          },
+          "h2": {
+            "title": "Des points d'approbation configurables",
+            "desc": "Les chemins d'exécution configurés peuvent s'interrompre en attendant une validation humaine. En cas de doute, la résolution des politiques refuse par défaut ; la couverture d'audit est indiquée pour chaque chemin instrumenté."
+          },
+          "h3": {
+            "title": "Des modèles d'orchestration intégrés",
+            "desc": "Les workflows de planification, de développement de fonctionnalités, de correction de bugs, de refactorisation et de revue contradictoire coordonnent sept rôles spécialisés via un DAG de dépendances."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "Qu'est-ce que le Concepteur de workflows ?",
+            "answer": "C'est un canevas visuel de type iPaaS pour composer votre propre logique LLM. Vous glissez et reliez des nœuds — agents, outils, mémoire, base de connaissances et entraînement — pour former des workflows reproductibles qui s'exécutent sur vos agentHosts, avec des points d'approbation là où vous le souhaitez."
+          },
+          "q2": {
+            "question": "En quoi est-ce différent d'un agent IA unique ?",
+            "answer": "Un workflow coordonne plusieurs agents spécialisés à travers des étapes structurées, via un DAG de dépendances, au lieu de laisser un seul agent produire une seule suggestion. Les modèles intégrés mènent de bout en bout la planification, la correction de bugs, la refactorisation et la revue contradictoire."
+          },
+          "q3": {
+            "question": "Puis-je exiger une validation humaine dans un workflow ?",
+            "answer": "Oui. Les points d'approbation peuvent suspendre n'importe quelle étape jusqu'à ce qu'une personne l'approuve ou la rejette, et la décision est consignée dans la piste d'audit. Les étapes à faible risque peuvent passer automatiquement grâce à des règles d'approbation automatique."
+          }
+        }
+      },
+      "settings": {
+        "title": "Paramètres",
+        "description": "Gérez votre espace de travail, vos membres, vos clés d'API et vos préférences."
+      },
+      "tenants": {
+        "title": "Espaces de travail",
+        "description": "Créez des espaces de travail multi-tenant et passez de l'un à l'autre, avec des rôles par siège."
+      },
+      "admin": {
+        "title": "Administration de la plateforme",
+        "description": "Administration de la plateforme, traces LLM et outils d'exploitation."
+      },
+      "agent-worker": {
+        "title": "Exécuteur d'agents",
+        "description": "Lancez et supervisez les agents qui exécutent vos tâches en arrière-plan."
+      },
+      "projects": {
+        "seoDescription": "Projets / Tâches est l'espace de gestion du travail de Builderforce.ai : organisez le travail en espaces de projet IA, puis planifiez, attribuez et suivez les tâches de toute votre équipe d'agents grâce aux vues Kanban, tableau, calendrier et Gantt."
+      },
+      "workforce": {
+        "seoDescription": "Le maillage Workforce découvre et répartit le travail entre des AgentHosts locaux et distants — partage de capacité entre machines et tenants, avec approbations, conversations et télémétrie complète au même endroit.",
+        "highlight": {
+          "h1": {
+            "title": "Un maillage d'hôtes d'agents",
+            "desc": "Découvrez et répartissez le travail entre AgentHosts locaux et distants, en partageant la capacité entre machines et tenants grâce à des envois signés HMAC et authentifiés par Bearer."
+          },
+          "h2": {
+            "title": "Approbations et conversations réunies",
+            "desc": "Validez les actions qui demandent une intervention humaine, parlez directement aux agents et regardez-les collaborer — le tout depuis le même espace Workforce."
+          },
+          "h3": {
+            "title": "Une exécution instrumentée",
+            "desc": "Les chemins de tâches et de workflows pris en charge émettent une télémétrie structurée vers la chronologie, y compris les enregistrements disponibles d'exécution, d'utilisation et d'appels d'outils."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "Qu'est-ce que le maillage Workforce ?",
+            "answer": "Workforce est l'endroit où vous découvrez et coordonnez vos hôtes d'agents. Il répartit le travail entre AgentHosts locaux et distants — partage de capacité entre machines, voire entre tenants — via des envois signés HMAC et authentifiés par Bearer, avec un routage intelligent vers le pair le plus adapté."
+          },
+          "q2": {
+            "question": "Puis-je voir et approuver ce que font les agents ?",
+            "answer": "Oui. L'espace Workforce rassemble les demandes d'approbation, les conversations avec les agents et la télémétrie d'exécution collectée par les workflows pris en charge de la plateforme."
+          },
+          "q3": {
+            "question": "Fonctionne-t-il sur plusieurs machines ?",
+            "answer": "Oui. L'enregistrement de flotte, les signaux de vie et la synchronisation des capacités vous permettent d'exploiter une flotte d'AgentHosts et d'y router des tâches, par envoi à distance vers un hôte précis ou par routage automatique selon les capacités."
+          }
+        }
+      },
+      "skills": {
+        "seoDescription": "Installez ou publiez des compétences réutilisables pour vos agents depuis la marketplace Workforce de Builderforce.ai. Les compétences attribuées au niveau du tenant ou de l'agentHost se chargent automatiquement dans les agents au démarrage — 53 compétences intégrées et une marketplace qui s'agrandit.",
+        "highlight": {
+          "h1": {
+            "title": "Une marketplace de capacités",
+            "desc": "Parcourez et installez des compétences réutilisables pour vos agents, ou publiez les vôtres. 53 compétences sont intégrées d'office, complétées par une marketplace communautaire en pleine croissance."
+          },
+          "h2": {
+            "title": "Attribuées, puis chargées automatiquement",
+            "desc": "Attribuez une compétence au niveau du tenant ou de l'agentHost : elle se charge automatiquement dans les agents au démarrage, sans configuration manuelle agent par agent."
+          },
+          "h3": {
+            "title": "Publiez selon des conditions claires",
+            "desc": "Publiez une compétence selon les conditions vendeur affichées lors de la mise en vente et du paiement."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "Que sont les compétences sur Builderforce.ai ?",
+            "answer": "Les compétences sont des capacités réutilisables que vous pouvez donner à vos agents. Il existe 53 compétences intégrées, plus une marketplace où parcourir, installer ou publier d'autres compétences. Une compétence attribuée au niveau du tenant ou de l'agentHost est chargée automatiquement dans les agents au démarrage."
+          },
+          "q2": {
+            "question": "Puis-je publier mes propres compétences ?",
+            "answer": "Oui. Vous pouvez publier une compétence sur la marketplace Workforce ; les frais et conditions de versement en vigueur vous sont présentés avant la mise en vente de tout contenu payant."
+          },
+          "q3": {
+            "question": "Comment les compétences arrivent-elles dans un agent en cours d'exécution ?",
+            "answer": "Vous attribuez les compétences au niveau du tenant ou de l'agentHost dans le portail ; l'agent charge automatiquement ses compétences au démarrage, si bien que ses capacités suivent vos règles d'attribution sans configuration agent par agent."
+          }
+        }
+      },
+      "personas": {
+        "seoDescription": "Sur Builderforce.ai, les personas donnent à vos agents une voix et un profil de comportement réutilisables. Les personas Pro ajoutent une couche de personnalité psychométrique, compilée à l'exécution à la fois dans les directives du prompt et dans les paramètres d'exécution.",
+        "highlight": {
+          "h1": {
+            "title": "Une voix et un comportement réutilisables",
+            "desc": "Définissez une persona une seule fois — ton, comportement et style de travail — et appliquez-la à plusieurs agents pour que leurs productions restent cohérentes."
+          },
+          "h2": {
+            "title": "Personnalité psychométrique (Pro)",
+            "desc": "Les personas Pro portent un vecteur de traits compilé à la fois dans les directives du prompt et dans les paramètres d'exécution, pour des agents au comportement réellement distinct."
+          },
+          "h3": {
+            "title": "Partageables dans toute l'équipe",
+            "desc": "Les personas sont des ressources réutilisables qui accompagnent vos agents : un profil de comportement conçu une fois équipe toute votre main-d'œuvre agentique."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "Qu'est-ce qu'une persona sur Builderforce.ai ?",
+            "answer": "Une persona est une voix et un profil de comportement réutilisables que vous associez à vos agents, pour que leur ton et leur style de travail restent cohérents d'une tâche et d'un membre de l'équipe à l'autre."
+          },
+          "q2": {
+            "question": "Qu'apporte la couche de personnalité Pro ?",
+            "answer": "Les personas Pro comprennent un profil psychométrique — un vecteur de traits que la plateforme compile à l'exécution dans les directives du prompt et dans les paramètres d'exécution (comme la profondeur de raisonnement et la température), donnant à chaque agent une personnalité réellement distincte et maîtrisable."
+          },
+          "q3": {
+            "question": "Peut-on réutiliser une persona pour plusieurs agents ?",
+            "answer": "Oui. Les personas sont des ressources réutilisables : définissez-en une et appliquez-la à autant d'agents que vous le souhaitez, au lieu de redécrire leur comportement à chaque fois."
+          }
+        }
+      },
+      "content-manager": {
+        "seoDescription": "Le Gestionnaire de contenu vous permet de rédiger et de partager des blocs de contenu réutilisables par vos agents et la marketplace Workforce — une source de vérité unique pour les textes et le contexte sur lesquels s'appuie votre main-d'œuvre IA.",
+        "highlight": {
+          "h1": {
+            "title": "Rédigez du contenu réutilisable",
+            "desc": "Créez des blocs de contenu une seule fois et réutilisez-les dans vos agents, vos workflows et la marketplace, au lieu de dupliquer vos textes."
+          },
+          "h2": {
+            "title": "Un contexte partagé pour vos agents",
+            "desc": "Les blocs de contenu deviennent un contexte sur lequel vos agents peuvent s'appuyer, pour que leurs productions restent fidèles à vos messages et à vos faits de référence."
+          },
+          "h3": {
+            "title": "Prêt pour la marketplace",
+            "desc": "Partagez du contenu que vos agents et la marketplace Workforce peuvent réutiliser : le bon contexte fructifie dans tout votre espace de travail."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "À quoi sert le Gestionnaire de contenu ?",
+            "answer": "C'est là que vous rédigez et partagez des blocs de contenu réutilisables — textes et contexte que vos agents et la marketplace Workforce peuvent réutiliser — afin que vos messages et vos sources vivent en un seul endroit de référence."
+          },
+          "q2": {
+            "question": "Comment les agents utilisent-ils ce contenu ?",
+            "answer": "Les blocs de contenu servent de contexte partagé sur lequel les agents s'appuient : leurs productions restent cohérentes avec vos faits et vos messages de référence, au lieu d'être improvisées à chaque fois."
+          }
+        }
+      },
+      "security": {
+        "seoDescription": "Builderforce.ai fournit des contrôles pour le travail assisté par des agents : isolation des tenants, identifiants d'intégration chiffrés, accès basé sur les rôles, confiance des appareils, points d'approbation configurables et conservation des enregistrements d'exécution.",
+        "highlight": {
+          "h1": {
+            "title": "Des humains responsables",
+            "desc": "Configurez des points d'approbation humaine pour les actions lourdes de conséquences et conservez les décisions prises dans l'enregistrement d'exécution."
+          },
+          "h2": {
+            "title": "Cloisonné et chiffré",
+            "desc": "Des contrôles d'accès par tenant et un chiffrement AES-256-GCM protègent les identifiants stockés pour les intégrations prises en charge."
+          },
+          "h3": {
+            "title": "RBAC et confiance des appareils",
+            "desc": "Contrôle d'accès basé sur les rôles, confiance des appareils et envois inter-hôtes signés HMAC : seules les bonnes personnes et les bonnes machines peuvent agir."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "Comment Builderforce.ai encadre-t-il ce que les agents peuvent faire ?",
+            "answer": "Grâce à des points d'approbation avec intervention humaine : les agents demandent une approbation avant toute action à fort impact, l'exécution est suspendue jusqu'à ce qu'une personne approuve ou refuse, et chaque issue est consignée dans une piste d'audit complète. Des règles d'approbation automatique laissent passer les actions à faible risque."
+          },
+          "q2": {
+            "question": "Comment mes identifiants et mes données sont-ils protégés ?",
+            "answer": "Les identifiants d'intégration sont chiffrés en AES-256-GCM et cloisonnés par tenant. Toutes les ressources — projets, jeux de données, modèles et agents — sont isolées par tenant, sans accès croisé, et les envois inter-hôtes sont signés HMAC et authentifiés par Bearer."
+          },
+          "q3": {
+            "question": "Builderforce.ai peut-il fonctionner en environnement isolé (air-gapped) ?",
+            "answer": "Le runtime BuilderForce Agents, sous licence MIT, peut être déployé sur une infrastructure privée et utiliser des modèles locaux. Un environnement totalement isolé suppose de désactiver la collaboration hébergée, la publication, l'évaluation à distance et les autres services connectés ; validez le workflow requis à l'aide du guide de déploiement avant de prendre un engagement de conformité."
+          }
+        }
+      },
+      "dashboard": {
+        "seoDescription": "Votre tableau de bord Builderforce.ai rassemble vos sessions de création récentes, le travail en cours et les signaux de votre espace de travail en un seul endroit, pour reprendre une idée ou la suivre jusqu'à la livraison.",
+        "highlight": {
+          "h1": {
+            "title": "Retrouvez votre contexte créatif",
+            "desc": "Reprenez vos sessions récentes sur le canevas et voyez le travail, les collaborateurs et les prochaines décisions qui s'y rattachent."
+          },
+          "h2": {
+            "title": "De l'idée à l'action",
+            "desc": "Partez de ce que vous voulez créer, puis transformez les éléments utiles en livrables, projets, tâches ou travail pour vos agents."
+          },
+          "h3": {
+            "title": "Suivez le travail jusqu'à la livraison",
+            "desc": "Passez du canevas aux projets, modèles, agents, approbations et vues opérationnelles sans perdre le contexte d'origine."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "Que trouve-t-on sur le tableau de bord Builderforce.ai ?",
+            "answer": "Le tableau de bord est le centre de commande de votre espace de travail : son état de santé, les exécutions récentes et une vue en direct de ce que fait votre main-d'œuvre IA. De là, vous accédez directement au Brainstorming, aux projets, à l'entraînement et au maillage Workforce."
+          },
+          "q2": {
+            "question": "Comment passer d'une idée à un travail accompli ?",
+            "answer": "Saisissez ce que vous voulez construire dans le champ du tableau de bord : il est transmis au Brainstorming, qui transforme l'idée en projets et en tâches et confie le travail à vos agents sous le contrôle de vos points d'approbation."
+          }
+        }
       }
     }
   },

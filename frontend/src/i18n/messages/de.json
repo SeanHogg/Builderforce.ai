@@ -310,7 +310,9 @@
     "forkHint": "Fasst diesen Chat zusammen und setzt ihn in einem neuen Chat ab dieser Zusammenfassung fort",
     "sessionUnavailable": "Verfügbar, sobald der Chat einige Nachrichten hat und kein Lauf aktiv ist",
     "categoryLocal": "Auf diesem Gerät",
-    "localDetail": "Läuft über {runtime} auf diesem Rechner — kein Verbrauch des Kontingents, funktioniert offline."
+    "localDetail": "Läuft über {runtime} auf diesem Rechner — kein Verbrauch des Kontingents, funktioniert offline.",
+    "assessmentClosedBook": "Eine Prüfung ohne Hilfsmittel läuft – der Assistent ist bis zu ihrem Ende nicht verfügbar.",
+    "assessmentAssisted": "Unterstützte Prüfung – jede Antwort des Assistenten wird im Integritätsprotokoll festgehalten."
   },
   "repoContext": {
     "title": "Repository-Kontext hinzufügen",
@@ -559,6 +561,7 @@
       "typeTask": "Aufgabe",
       "typeEpic": "Epic",
       "typeGap": "Lücke",
+      "typeBug": "Fehler",
       "usersIntro": "Wähle, welche externen Benutzer in diesen Arbeitsbereich eingeladen werden.",
       "noUsers": "Keine Benutzer ermittelt.",
       "userInvite": "Einladen",
@@ -1756,6 +1759,7 @@
     "typeProduct": "Produkt",
     "typeDesign": "Design",
     "typeIncident": "Vorfall",
+    "typeBug": "Fehler",
     "requiresRoleHint": "{role, select, viewer {Erfordert die Rolle „Betrachter“} contributor {Erfordert die Rolle „Mitwirkender“} developer {Erfordert die Rolle „Entwickler“} manager {Erfordert die Rolle „Manager“} owner {Erfordert die Rolle „Eigentümer“} other {Erfordert die Rolle „{role}“}}",
     "tenantRoleLabel": "{role, select, viewer {Betrachter} contributor {Mitwirkender} developer {Entwickler} manager {Manager} owner {Eigentümer} other {{role}}}",
     "tenantRoleDescription": "{role, select, viewer {Nur-Lese-Zugriff auf Boards, Arbeit und Belegschaft.} contributor {Mit dir geteilte Canvases bearbeiten; überall sonst im Workspace nur Lesezugriff.} developer {Agenten erstellen und ausführen, das Board bearbeiten und Delivery-Insights sehen.} manager {Personen einladen, Rollen und Integrationen verwalten und alle Insight-Ansichten sehen.} owner {Volle Kontrolle, einschließlich Abrechnung, API-Schlüsseln und Löschen des Workspace.} other {}}",
@@ -10729,6 +10733,10 @@
     "statusUnseeded": "Nicht eingerichtet",
     "quarantinedBadge": "Unter Quarantäne",
     "quarantinedHint": "Dieses Evermind hat sich nach inkohärenter Ausgabe automatisch deaktiviert ({reason}). Trainiere es über die Kohärenzschwelle hinaus neu, um die Inferenz wieder zu aktivieren.",
+    "codingGateQualified": "Coding-Evaluierung bei {pct} % der Baseline — qualifiziert für IDE-Coding-Anfragen (erforderlich: {bar} %).",
+    "codingGateBelowBar": "Coding-Evaluierung bei {pct} % der Baseline, erforderlich: {bar} % — IDE-Coding-Anfragen bleiben beim Frontier-Modell.",
+    "codingGateNoEval": "Für diese Version ist keine Coding-Evaluierung erfasst — erforderlich sind {bar} % der Frontier-Baseline, bevor IDE-Coding-Anfragen bedient werden.",
+    "codingGateStale": "Die Coding-Evaluierung wurde für v{evaluated} erfasst; aktuell ist v{head}. Erneut ausführen — erforderlich sind {bar} % der Frontier-Baseline für IDE-Coding-Anfragen.",
     "targetsTitle": "Everminds unter diesem Projekt",
     "targetsHint": "Alle Everminds, zu denen dieses Projekt Lernen beiträgt.",
     "targetsEmpty": "Für dieses Projekt wurden noch keine Everminds aufgelöst.",
@@ -15118,6 +15126,11 @@
     "revertConfirmAction": "Lauf zurücknehmen",
     "revertDone": "Zurückgenommen — Branch {branch} gelöscht ({commits} Commit(s)).",
     "failedToRevert": "Lauf konnte nicht zurückgenommen werden",
+    "lateSteerContinued": "Nach dem letzten Zug dieses Laufs eingegangen — als Lauf #{id} fortgesetzt.",
+    "lateSteerOpenRun": "Lauf #{id} öffnen",
+    "lateSteerAwaitingApproval": "Nach dem letzten Zug dieses Laufs eingegangen — der Folgelauf wartet auf die Freigabe durch eine Führungskraft.",
+    "lateSteerNotContinued": "Nach dem letzten Zug dieses Laufs eingegangen — kein Folgelauf gestartet: {reason}",
+    "lateSteerReleased": "Nach dem Abbruch dieses Laufs eingegangen — nicht zugestellt.",
     "title": "Notabschaltung der Agentenausführung",
     "disabledBody": "Die Agentenausführung des Mandanten ist gesperrt. VS-Code- und Brain-Chats, Canvas/Create und die MCP-Werkzeuge der Seite bleiben verfügbar.",
     "enabledBody": "Notfall-Übersteuerung für den Arbeitsbereich. Das Deaktivieren stoppt die Agenten des Mandanten und sperrt manuelle, geplante, Integrations- und autonome Plattformläufe; interaktive Arbeit in VS Code und Brain bleibt verfügbar.",
@@ -17958,6 +17971,206 @@
   "publicResume": {
     "loading": "Lebenslauf wird geladen…",
     "unavailable": "Dieser Lebenslauf-Link ist nicht verfügbar."
+  },
+  "roomStations": {
+    "listHead": "Stationen im Raum",
+    "open": "Öffnen",
+    "openNamed": "{title} öffnen",
+    "dragHint": "{summary} · zum Verschieben ziehen",
+    "approvals": {
+      "title": "Freigabepult",
+      "summary": "{count, plural, =0 {Nichts offen} one {# Änderung offen} other {# Änderungen offen}}",
+      "faceCount": "{count, plural, one {# Änderung wartet auf eine Freigabe} other {# Änderungen warten auf eine Freigabe}}",
+      "faceEmpty": "Nichts wartet auf eine Freigabe.",
+      "intro": "Änderungen an Zahlen, auf die sich jemand verlassen wird, und Aktionen, die das Unternehmen verlassen, warten hier, bis eine namentlich benannte Person sie freigibt.",
+      "readOnly": "Du siehst, was offen ist, freigeben kann es aber nur, wer dieses Board bearbeiten darf.",
+      "empty": "Nichts ist offen. Wenn der Assistent oder ein Widget ein Budget, eine Rechnung, ein Angebot oder eine andere bestätigte Zahl ändert, erscheint die Änderung hier, bis jemand sie freigibt.",
+      "waiting": "Offen seit {when}",
+      "move": "{from} → {to}",
+      "by": "{actor} · {when}",
+      "source": "Quelle: {source}",
+      "unblocks": "Die Freigabe gibt frei: {actions}",
+      "approve": "Freigeben",
+      "approveAndRun": "Freigeben und {action}",
+      "refuse": "Ablehnen",
+      "approved": "{count, plural, one {# Änderung} other {# Änderungen}} an {title} freigegeben.",
+      "refused": "{count, plural, one {# Änderung} other {# Änderungen}} an {title} abgelehnt.",
+      "selfApproval": "Alle offenen Änderungen hier stammen von dir – sie freizugeben wäre eine Selbstfreigabe. Bitte jemand anderen, sie freizugeben.",
+      "nothingPending": "An diesem Objekt ist nichts mehr offen.",
+      "actor": {
+        "human": "Eine Person",
+        "agent": "Ein Agent",
+        "brain": "Brain",
+        "system": "Das System"
+      }
+    },
+    "metrics": {
+      "title": "Kennzahlen-Tafel",
+      "count": "{count, plural, one {# Kennzahl} other {# Kennzahlen}}",
+      "summary": "{behind, plural, =0 {Alle Kennzahlen mit Ziel liegen im Plan.} one {# Kennzahl liegt hinter dem Ziel.} other {# Kennzahlen liegen hinter dem Ziel.}}",
+      "noTargets": "Noch keine Kennzahl hat ein Ziel – gib einer ein Ziel, um zu sehen, wohin sie sich entwickelt.",
+      "errored": "{count, plural, one {# Kennzahl kann nicht berechnet werden.} other {# Kennzahlen können nicht berechnet werden.}}",
+      "target": "Ziel {target}",
+      "attainment": "{value} % des Ziels",
+      "status": {
+        "ahead": "Voraus",
+        "on-track": "Im Plan",
+        "behind": "Zurück",
+        "error": "Nicht berechenbar"
+      },
+      "trend": "Verlauf von {name}",
+      "error": "Nicht berechenbar: {reason}",
+      "evidence": "Aus {matched} von {total} Zeilen",
+      "derived": "Abgeleitet aus {count, plural, one {# Kennzahl} other {# Kennzahlen}}"
+    },
+    "widget": {
+      "summary": "Widget eines Drittanbieters",
+      "untitled": "Widget",
+      "loading": "Widget wird geladen …",
+      "inPanel": "Im Panel geöffnet",
+      "frameTitle": "{name} (Widget eines Drittanbieters)",
+      "navigated": "Dieses Widget hat seine registrierte Adresse verlassen, daher kommuniziert das Board nicht mehr mit ihm.",
+      "reload": "Widget neu laden",
+      "closed": "Das Widget hat sich selbst geschlossen.",
+      "reopen": "Wieder öffnen",
+      "permissions": "Es darf: {permissions}.",
+      "noPermissions": "Es darf nur in seinem eigenen Rahmen zeichnen.",
+      "permission": {
+        "boardRead": "den Titel dieses Boards lesen",
+        "itemRead": "die Namen der Objekte auf dem Board lesen",
+        "itemWrite": "Objekte erstellen, bearbeiten und entfernen",
+        "userRead": "deinen Anzeigenamen sehen",
+        "storageRead": "seine eigenen gespeicherten Einstellungen lesen",
+        "storageWrite": "seine eigenen Einstellungen speichern",
+        "notify": "einen Hinweis auf der Leinwand anzeigen"
+      }
+    },
+    "assessment": {
+      "title": "Prüfungspult",
+      "summary": "{count, plural, one {# Aufgabe} other {# Aufgaben}} · {live} laufend",
+      "untitled": "Ohne Titel",
+      "faceGate": {
+        "open": "Assistent verfügbar",
+        "assisted": "Unterstützt – jede Runde wird protokolliert",
+        "closed": "Ohne Hilfsmittel – Assistent aus"
+      },
+      "mode": {
+        "open": "Offen",
+        "assisted": "Unterstützt",
+        "closed": "Ohne Hilfsmittel"
+      },
+      "gate": {
+        "open": "Keine Prüfung läuft – der Assistent ist auf diesem Board verfügbar.",
+        "assisted": "Eine unterstützte Prüfung läuft – der Assistent antwortet, und jede Runde wird im Integritätsprotokoll der lernenden Person festgehalten.",
+        "closed": "Eine Prüfung ohne Hilfsmittel läuft – der Assistent ist auf diesem Board und in jedem Eingabefeld deaktiviert, bis sie endet."
+      },
+      "assignmentsHead": "Aufgaben",
+      "window": {
+        "beforeRelease": "Nicht freigegeben",
+        "open": "Offen",
+        "closed": "Geschlossen"
+      },
+      "due": "Fällig {date}",
+      "noDue": "Keine Frist festgelegt",
+      "extraTime": "{count, plural, one {# lernende Person hat} other {# Lernende haben}} genehmigte Zusatzzeit · späteste Frist {date}",
+      "rubric": {
+        "ready": "Bewertungsraster bereit",
+        "missing": "Kein Bewertungsraster verknüpft – die Bewertung hat keine Grundlage",
+        "noLevels": "Das Raster definiert keine Leistungsstufen",
+        "noCriteria": "Das Raster definiert keine Kriterien",
+        "missingDescriptors": "Raster: Für {criterion} {count, plural, one {fehlt # Deskriptor} other {fehlen # Deskriptoren}}",
+        "weightsZero": "Raster: Alle Kriterien haben die Gewichtung null",
+        "totalMismatch": "Das Raster ergibt {totalMarks} Punkte, die Aufgabe hat aber {maxMarks}"
+      },
+      "submissions": "{submitted} eingereicht · {marked} bewertet",
+      "integrityHead": "Integrität",
+      "verdict": {
+        "undeclaredAssistance": "Hilfe genutzt, nicht angegeben",
+        "closedBookViolation": "Assistent in einer Prüfung ohne Hilfsmittel genutzt"
+      },
+      "assistantShare": "{percent} % vom Assistenten",
+      "integrityClear": "Keine Einreichung erfordert ein Integritätsgespräch.",
+      "declared": "{count, plural, one {# Einreichung gibt} other {# Einreichungen geben}} die genutzte Hilfe an.",
+      "markHead": "Bereit zur Bewertung",
+      "mark": "Bewerten",
+      "markNamed": "Einreichung von {name} bewerten",
+      "markNone": "Keine wartende Einreichung mit erfassten Rastereinstufungen."
+    },
+    "gradebook": {
+      "title": "Notenbuch",
+      "summary": "{count, plural, =0 {Keine gefährdeten Lernenden} one {# gefährdete lernende Person} other {# gefährdete Lernende}}",
+      "untitled": "Notenbuch ohne Titel",
+      "export": "Als CSV exportieren",
+      "exportNamed": "{title} als CSV exportieren",
+      "empty": "Noch keine Lernenden oder Aufgaben zum Zusammenfassen.",
+      "atRiskHead": "{count, plural, =0 {Keine gefährdeten Lernenden} one {# gefährdete lernende Person} other {# gefährdete Lernende}}",
+      "stats": "Mittelwert {mean} % · Median {median} % · Bestehensquote {passRate} %",
+      "statsNoMarks": "Noch keine bewerteten Arbeiten · Bestehensquote {passRate} %",
+      "awaiting": "{count, plural, one {# Einreichung wartet} other {# Einreichungen warten}} auf Bewertung",
+      "reason": {
+        "missing": "Fehlende Arbeiten",
+        "failing": "Unter der Bestehensgrenze",
+        "both": "Unter der Bestehensgrenze, mit fehlenden Arbeiten"
+      },
+      "missing": "{count} fehlend",
+      "tableLabel": "Noten für {title}",
+      "column": {
+        "learner": "Lernende",
+        "running": "Aktuell %",
+        "final": "Endstand %",
+        "grade": "Note"
+      },
+      "atRisk": "Gefährdet",
+      "moderationHead": "{count, plural, one {# Arbeit braucht eine Zweitprüfung} other {# Arbeiten brauchen eine Zweitprüfung}}",
+      "moderationGap": "{learner}: Erstbewertung {first}, Zweitbewertung {second}",
+      "moderationMissing": "{learner}: Zweitbewertung fehlt"
+    },
+    "accessibility": {
+      "title": "Barrierefreiheitsprüfung",
+      "summary": "Punktzahl {score} von 100",
+      "distributable": "Verteilbar – keine Blocker",
+      "blocked": "{count, plural, one {# Blocker verhindert} other {# Blocker verhindern}} die Verteilung",
+      "warnings": "{count, plural, one {# Warnung} other {# Warnungen}}",
+      "scoreLabel": "Barrierefreiheits-Punktzahl",
+      "score": "{score} von 100",
+      "findingsLabel": "Barrierefreiheitsbefunde",
+      "severity": {
+        "blocker": "Blocker",
+        "warning": "Warnung"
+      },
+      "code": {
+        "missingAltText": "Alternativtext erforderlich",
+        "missingCaptions": "Untertitel erforderlich",
+        "missingTranscript": "Transkript erforderlich",
+        "missingSummary": "Textzusammenfassung der Daten erforderlich",
+        "missingEquationAlt": "Vom Autor verfasste Lesart der Formel erforderlich",
+        "missingFormat": "Alternatives Format erforderlich"
+      },
+      "criterion": "WCAG {criterion}",
+      "raisedBy": "Gefordert durch {source}",
+      "none": "Alle Artefakte auf diesem Board haben ihre Textalternativen."
+    },
+    "citations": {
+      "title": "Zitierpult",
+      "summary": "{count, plural, one {# Quelle} other {# Quellen}}",
+      "faceHead": "Zitieren im Stil {style}",
+      "style": {
+        "apa": "APA",
+        "harvard": "Harvard",
+        "ieee": "IEEE",
+        "mla": "MLA",
+        "chicago": "Chicago",
+        "vancouver": "Vancouver"
+      },
+      "styleLabel": "Zitierstil",
+      "export": "BibTeX exportieren",
+      "exported": "{count, plural, one {# Quelle} other {# Quellen}} als BibTeX exportiert.",
+      "copied": "{citation} kopiert – fügen Sie es dort ein, wo Sie schreiben.",
+      "copyFailed": "Die Zwischenablage ist nicht verfügbar – das Zitat lautet {citation}.",
+      "listLabel": "Quellen",
+      "insert": "Zitat kopieren",
+      "insertNamed": "Textzitat für {title} kopieren"
+    }
   },
   "creationCanvas": {
     "costToBuild": "Baukosten",
@@ -23971,7 +24184,177 @@
       "strategistSubtitle": "Legt Strategie, Botschaft und Zielgruppe für wirkungsvolle Kampagnen fest.",
       "publishes": "veröffentlicht",
       "measures": "misst"
-    }
+    },
+    "llmCourse": {
+      "subject": "Wie große Sprachmodelle gebaut werden",
+      "audience": "Fachleute aus Softwareentwicklung und ML",
+      "description": "Ein praxisnaher Weg von Modellanforderungen und kontrollierten Daten über Tokenisierung, Training und Evaluierung bis zu Packaging und Betrieb.",
+      "module": {
+        "foundations": {
+          "title": "1. Das Modell definieren",
+          "description": "Ein Fähigkeitsziel in messbare Modellanforderungen übersetzen."
+        },
+        "data": {
+          "title": "2. Den Datensatz aufbauen",
+          "description": "Einen lizenzierten, repräsentativen und kontaminationsbewussten Korpus erstellen."
+        },
+        "tokenizer": {
+          "title": "3. Tokenisierung und Architektur",
+          "description": "Text in Modelleingaben übersetzen und eine begründbare Größe wählen."
+        },
+        "training": {
+          "title": "4. Sicher trainieren",
+          "description": "Reproduzierbares Pretraining und Instruction Tuning durchführen."
+        },
+        "evaluation": {
+          "title": "5. Evaluieren und Red-Teaming",
+          "description": "Fähigkeit, Sicherheit, Robustheit und Kosten messen."
+        },
+        "delivery": {
+          "title": "6. Paketieren, bereitstellen und verbessern",
+          "description": "Ein versioniertes Modell mit betrieblichen Kontrollen ausliefern."
+        }
+      },
+      "lesson": {
+        "foundations-outcome": {
+          "title": "Ein Ergebnis festlegen",
+          "objective": "Ein Verhalten definieren, das das Modell zuverlässig beherrschen muss.",
+          "content": "Ein LLM sagt das nächste Token voraus. Ein nützliches Produkt stellt diese Fähigkeit in einen klaren Rahmen: Zielgruppe, Aufgabe, Kontextfenster, Latenzziel, Sicherheitsgrenze und Evaluierungsplan.",
+          "activity": "Schreiben Sie eine Model Card in einem Satz: „Für [Zielgruppe] wird das Modell [Verhalten] leisten, gestützt auf [Belege], und ist erfolgreich, wenn [Metrik].“"
+        },
+        "foundations-scale": {
+          "title": "Den richtigen Weg wählen",
+          "objective": "Prompting, Retrieval, Fine-Tuning und Pretraining vergleichen.",
+          "content": "Beginnen Sie mit dem günstigsten Eingriff, der die Anforderung erfüllen kann. Prompting ändert Anweisungen, Retrieval liefert aktuelles Wissen, Fine-Tuning ändert Verhalten, und Pretraining lernt Repräsentationen aus einem Korpus.",
+          "activity": "Nennen Sie zwei Gründe, warum Ihr Ziel Training statt Prompting oder Retrieval erfordert."
+        },
+        "data-corpus": {
+          "title": "Daten beschaffen und steuern",
+          "objective": "Einen nachvollziehbaren Korpus mit Nutzungsrechten erstellen.",
+          "content": "Erfassen Sie für jede Quelle Herkunft, Lizenz, Einwilligung, Aufbewahrung, Sprache, Domäne und Qualitätssignale. Entfernen Sie Secrets und personenbezogene Daten vor dem Training.",
+          "activity": "Entwerfen Sie eine Dataset Card mit zulässiger Nutzung, Ausschlüssen und bekannten Repräsentationslücken."
+        },
+        "data-pipeline": {
+          "title": "Bereinigen, deduplizieren und aufteilen",
+          "objective": "Datenlecks und kontaminierte Evaluierungen verhindern.",
+          "content": "Normalisieren Sie die Kodierung, entfernen Sie minderwertige Dokumente, deduplizieren Sie vor dem Aufteilen und reservieren Sie Testdaten, die weder ins Training noch in die Prompt-Entwicklung gelangen dürfen.",
+          "activity": "Entwerfen Sie Trainings-, Validierungs- und Test-Splits und legen Sie fest, wie Sie Beinahe-Duplikate erkennen."
+        },
+        "tokenizer-train": {
+          "title": "Einen Tokenizer trainieren und prüfen",
+          "objective": "Messen, wie sich die Wahl des Vokabulars auf Ihre Domäne auswirkt.",
+          "content": "Ein BPE- oder Unigram-Tokenizer lernt wiederverwendbare Textbausteine. Prüfen Sie Fertility, unbekannte Bytes, mehrsprachige Abdeckung und den Umgang mit Code oder Fachterminologie.",
+          "activity": "Tokenisieren Sie 20 repräsentative Beispiele und markieren Sie Wörter, die übermäßig zerfallen."
+        },
+        "architecture-budget": {
+          "title": "Modellform und Rechenbudget planen",
+          "objective": "Parameter, Tokens, Speicher und Durchsatz in Beziehung setzen.",
+          "content": "Wählen Sie Schichten, Hidden-Breite, Attention-Heads, Kontextlänge und Parameterzahl gemeinsam. Schätzen Sie Trainings-FLOPs, Optimizer-Speicher, Checkpoint-Größe und Inferenzkosten vor dem Lauf.",
+          "activity": "Erstellen Sie eine Budgettabelle für Parameter, Trainings-Tokens, Beschleunigerstunden, Speicher und Serving-Latenz."
+        },
+        "training-run": {
+          "title": "Den Trainingslauf konfigurieren",
+          "objective": "Einen Lauf reproduzierbar und beobachtbar machen.",
+          "content": "Versionieren Sie Code, Daten, Tokenizer, Konfiguration und Seeds. Verfolgen Sie Loss, Gradientennorm, Lernrate, Durchsatz, Daten-Batches und den Zustand der Checkpoints.",
+          "activity": "Schreiben Sie eine Preflight-Checkliste mit einem kleinen Overfitting-Test und einer Übung zur Checkpoint-Wiederherstellung."
+        },
+        "training-align": {
+          "title": "Instruction Tuning und Alignment",
+          "objective": "Aufgabenverhalten vermitteln, ohne Basisfähigkeiten zu löschen.",
+          "content": "Nutzen Sie geprüfte Instruktions-Antwort-Beispiele, eine explizite Datenmischung, zurückgehaltene Aufgaben und konservative Hyperparameter. Präferenzoptimierung kann das Verhalten nach dem überwachten Fine-Tuning weiter verfeinern.",
+          "activity": "Erstellen Sie drei Instruktionsbeispiele und ein Bewertungsschema, das Korrektheit von Stil unterscheidet."
+        },
+        "evaluation-suite": {
+          "title": "Eine Evaluierungssuite aufbauen",
+          "objective": "Jede Anforderung mit einem Test verknüpfen.",
+          "content": "Kombinieren Sie deterministische Prüfungen, kalibrierte modellbewertete Rubriken, Expertenreviews und adversarielle Fälle. Weisen Sie Unsicherheit aus und schlüsseln Sie Ergebnisse nach Domäne und Zielgruppe auf.",
+          "activity": "Erstellen Sie eine Release-Scorecard mit Schwellenwerten für Qualität, Sicherheit, Latenz und Kosten."
+        },
+        "evaluation-redteam": {
+          "title": "Fehlermodi ausloten",
+          "objective": "Schädliches oder fragiles Verhalten vor dem Release aufdecken.",
+          "content": "Testen Sie Prompt Injection, Datenextraktion, unsichere Ratschläge, Bias, Halluzinationen, Leistungsabfall bei langem Kontext, mehrsprachiges Verhalten und Verteilungsverschiebungen.",
+          "activity": "Schreiben Sie fünf Missbrauchsfälle und legen Sie das erwartete Ablehnungs- oder sichere Antwortverhalten fest."
+        },
+        "delivery-card": {
+          "title": "Die Model Card veröffentlichen",
+          "objective": "Vorgesehene Nutzung, Belege und Grenzen dokumentieren.",
+          "content": "Paketieren Sie unveränderliche Gewichte, Tokenizer, Inferenzkonfiguration, Lizenzen, Evaluierungsergebnisse und eine Model Card. Signieren Sie die Artefakte und halten Sie ein Rollback-Ziel vor.",
+          "activity": "Vervollständigen Sie eine Model Card zu vorgesehener Nutzung, nicht vorgesehener Nutzung, Daten, Evaluierungen, Einschränkungen und Verantwortlichkeit."
+        },
+        "delivery-ops": {
+          "title": "Den Lernkreislauf betreiben",
+          "objective": "Qualität überwachen, ohne mit ungeprüftem Feedback zu trainieren.",
+          "content": "Beobachten Sie Latenz, Kosten, Drift, Sicherheitsereignisse und Nutzerergebnisse. Leiten Sie Feedback-Kandidaten durch Review, Regressionsevaluierung, Freigabe und eine neue Version.",
+          "activity": "Zeichnen Sie den Beförderungspfad von Kandidatenbelegen über den freigegebenen Datensatz bis zum evaluierten Release."
+        }
+      },
+      "assessment": {
+        "foundations": {
+          "question": "Wann sollten Sie in Betracht ziehen, ein Modell von Grund auf vorzutrainieren?",
+          "choice": {
+            "a": "Immer wenn Prompts unbequem sind",
+            "b": "Wenn Sie besondere Daten, ausreichend Rechenleistung und eine Anforderung haben, die Basismodelle nicht erfüllen",
+            "c": "Bevor Sie Evaluierungen definieren",
+            "d": "Für jede private Wissensdatenbank"
+          },
+          "explanation": "Pretraining ist nur durch Anforderungen und Ressourcen gerechtfertigt, die einfachere Ansätze nicht abdecken können."
+        },
+        "data": {
+          "question": "Warum sollte vor dem Aufteilen der Daten dedupliziert werden?",
+          "choice": {
+            "a": "Um die Token-Anzahl zu erhöhen",
+            "b": "Damit nahezu identische Beispiele nicht in die Evaluierung gelangen",
+            "c": "Damit kein Tokenizer mehr nötig ist",
+            "d": "Um Faktentreue zu garantieren"
+          },
+          "explanation": "Duplikate über Splits hinweg blähen Evaluierungsergebnisse auf und verschleiern schwache Generalisierung."
+        },
+        "tokenizer": {
+          "question": "Was misst die Fertility eines Tokenizers?",
+          "choice": {
+            "a": "Erzeugte Tokens pro Wort oder Texteinheit",
+            "b": "GPU-Auslastung",
+            "c": "Modellgenauigkeit",
+            "d": "Lizenzqualität des Datensatzes"
+          },
+          "explanation": "Eine hohe Fertility kann eine Domäne ineffizient machen und den nutzbaren Kontext verringern."
+        },
+        "training": {
+          "question": "Was sollte vor einem vollständigen Trainingslauf passieren?",
+          "choice": {
+            "a": "Checkpoints deaktivieren",
+            "b": "Einen kleinen End-to-End-Test für Overfitting und Wiederherstellung durchführen",
+            "c": "Den Test-Split zum Tuning verwenden",
+            "d": "Die Model Card veröffentlichen"
+          },
+          "explanation": "Eine kleine Generalprobe prüft Daten, Code, Metriken und Wiederherstellung, bevor teure Rechenzeit beginnt."
+        },
+        "evaluation": {
+          "question": "Ein einzelner durchschnittlicher Benchmark-Wert reicht nicht aus, weil …",
+          "choice": {
+            "a": "Benchmarks nie funktionieren",
+            "b": "er Ausfälle in wichtigen Teilbereichen und Sicherheitsfällen verbergen kann",
+            "c": "die Latenz immer konstant ist",
+            "d": "der Trainings-Loss die einzig gültige Metrik ist"
+          },
+          "explanation": "Release-Entscheidungen brauchen aufgeschlüsselte Belege zu Fähigkeit und Sicherheit."
+        },
+        "delivery": {
+          "question": "Welches Feedback sollte automatisch in den nächsten Trainingsdatensatz einfließen?",
+          "choice": {
+            "a": "Alle Nutzerunterhaltungen",
+            "b": "Nur geprüfte, per Einwilligung freigegebene und richtlinienkonforme Belege",
+            "c": "Nur negatives Feedback",
+            "d": "Jeder häufig genutzte Prompt"
+          },
+          "explanation": "Menschliches Review und Governance verhindern Fehler bei Datenschutz, Datenvergiftung und Qualität."
+        }
+      }
+    },
+    "noticeGradebookExported": "Notenbuch als CSV exportiert: {count, plural, one {# lernende Person} other {# Lernende}}",
+    "noticeReferencesExported": "{count, plural, one {# Quelle} other {# Quellen}} als BibTeX exportiert",
+    "noticeReferencesExportEmpty": "Es gibt noch keine Quellen zum Exportieren"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",
@@ -25123,6 +25506,271 @@
       },
       "learning": {
         "description": "Lernpfade über deine Kurse, die Voraussetzungen, die sie freischalten, und der eigene xAPI Learning Record Store des Workspace."
+      }
+    },
+    "route": {
+      "brainstorm": {
+        "title": "Brainstorming",
+        "description": "Beschreiben Sie in eigenen Worten, was Sie bauen möchten, und machen Sie daraus Projekte, Aufgaben, Datensätze und Agentenarbeit.",
+        "seoDescription": "Brainstorming ist der Einstieg in Builderforce.ai in natürlicher Sprache: Erkunden Sie eine Idee, bündeln Sie den nötigen Kontext und machen Sie daraus vernetzte Canvas-Arbeit, Projekte, Aufgaben, Datensätze oder agentengestützte Umsetzung.",
+        "highlight": {
+          "h1": {
+            "title": "In eigenen Worten beschreiben",
+            "desc": "Sagen Sie, was Sie erschaffen möchten, und entwickeln Sie die Idee weiter, bevor Sie entscheiden, welche Artefakte, Mitwirkenden oder Lieferstrukturen sie braucht."
+          },
+          "h2": {
+            "title": "Echte Plattform-Tools",
+            "desc": "Brain ist an eine Tool-Registry angebunden: Es legt Projekte an, entwirft Spezifikationen, generiert Datensätze und weist Agenten Arbeit zu – statt nur darüber zu reden."
+          },
+          "h3": {
+            "title": "Verankert in Ihrem Workspace",
+            "desc": "Heften Sie ein Projekt an, und Brain antwortet mit dessen Kontext – so geht die Ideenfindung genau dort weiter, wo Ihre Arbeit bereits liegt."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "Was ist Brainstorming auf Builderforce.ai?",
+            "answer": "Brainstorming ist der Brain-Assistent als Vollbildseite – eine Oberfläche in natürlicher Sprache, in der Sie beschreiben, was Sie bauen möchten, und Brain daraus Projekte, Aufgaben, Datensätze und Agentenarbeit macht. Es ist derselbe Brain, der überall in der App als angedockte Seitenleiste bereitsteht – nur mit einem ganzseitigen Canvas."
+          },
+          "q2": {
+            "question": "Handelt Brain wirklich oder chattet es nur?",
+            "answer": "Es handelt. Brain ist mit der Tool-Registry der Plattform und den MCP-Erweiterungen Ihres Mandanten verbunden. So kann es Projekte anlegen, Spezifikationen und PRDs entwerfen, Datensatz-Generierungen starten und Agenten Aufgaben zuweisen – jeder Tool-Aufruf unterliegt Ihren Freigabe-Gates."
+          },
+          "q3": {
+            "question": "Muss ich vor dem Start etwas einrichten?",
+            "answer": "Nein. Melden Sie sich an, öffnen Sie Brainstorming und legen Sie los. Optional heften Sie ein Projekt an, damit die Antworten auf dieser Codebasis und ihrem Kontext beruhen – aber ein leerer Prompt genügt, um aus einer Idee einen Plan zu machen."
+          }
+        }
+      },
+      "workflows": {
+        "title": "Workflow-Builder",
+        "description": "Kombinieren Sie Agenten und Tools zu wiederholbaren Workflows mit Freigabe-Gates.",
+        "seoDescription": "Der Builderforce.ai Workflow-Builder ist ein Drag-and-drop-Canvas im iPaaS-Stil, auf dem Sie LLM-Logik zusammensetzen – Speicher-, Wissensdatenbank- und Trainingsknoten –, verbunden mit Ihren Agenten und ausgeführt auf Ihren agentHosts, mit Freigabe-Gates bei jedem Schritt.",
+        "highlight": {
+          "h1": {
+            "title": "Agenten wie ein Flussdiagramm kombinieren",
+            "desc": "Ein Drag-and-drop-Canvas verbindet Agenten, Tools, Speicher, Wissensdatenbank und Trainingsknoten zu wiederholbaren, mehrstufigen Workflows."
+          },
+          "h2": {
+            "title": "Konfigurierbare Freigabe-Gates",
+            "desc": "Konfigurierte Ausführungspfade können anhalten, bis ein Mensch zustimmt. Im Zweifel verweigert die Richtlinienauflösung; die Audit-Abdeckung ist für jeden instrumentierten Pfad ausgewiesen."
+          },
+          "h3": {
+            "title": "Integrierte Orchestrierungsmuster",
+            "desc": "Workflows für Planung, Feature-Entwicklung, Bugfixing, Refactoring und adversarielles Review koordinieren sieben Spezialistenrollen über einen Abhängigkeits-DAG."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "Was ist der Workflow-Builder?",
+            "answer": "Ein visueller Canvas im iPaaS-Stil, auf dem Sie Ihre eigene LLM-Logik zusammensetzen. Sie ziehen Knoten – Agenten, Tools, Speicher, Wissensdatenbank und Training – auf die Fläche und verbinden sie zu wiederholbaren Workflows, die auf Ihren agentHosts laufen, mit Freigabe-Gates, wo immer Sie sie brauchen."
+          },
+          "q2": {
+            "question": "Was unterscheidet das von einem einzelnen KI-Agenten?",
+            "answer": "Ein Workflow koordiniert mehrere spezialisierte Agenten über strukturierte Schritte hinweg mithilfe eines Abhängigkeits-DAG, statt dass ein einzelner Agent einen einzigen Vorschlag liefert. Integrierte Muster führen Planung, Bugfixing, Refactoring und adversarielles Review durchgängig aus."
+          },
+          "q3": {
+            "question": "Kann ich innerhalb eines Workflows eine menschliche Freigabe verlangen?",
+            "answer": "Ja. Freigabe-Gates können jeden Schritt anhalten, bis eine Person ihn genehmigt oder ablehnt; die Entscheidung wird im Audit-Trail festgehalten. Schritte mit geringem Risiko können über Regeln zur automatischen Freigabe direkt durchlaufen."
+          }
+        }
+      },
+      "settings": {
+        "title": "Einstellungen",
+        "description": "Verwalten Sie Workspace, Mitglieder, API-Schlüssel und Präferenzen."
+      },
+      "tenants": {
+        "title": "Workspaces",
+        "description": "Erstellen Sie mandantenfähige Workspaces und wechseln Sie zwischen ihnen – mit Rollen pro Platz."
+      },
+      "admin": {
+        "title": "Plattform-Administration",
+        "description": "Plattformverwaltung, LLM-Traces und Betriebswerkzeuge."
+      },
+      "agent-worker": {
+        "title": "Agent-Worker",
+        "description": "Starten und überwachen Sie Agent-Worker, die Ihre Aufgaben im Hintergrund ausführen."
+      },
+      "projects": {
+        "seoDescription": "Projekte / Aufgaben ist der Bereich für Arbeitsmanagement in Builderforce.ai: Organisieren Sie Arbeit in KI-Projekt-Workspaces und planen, verteilen und verfolgen Sie Aufgaben über Ihre gesamte Agenten-Belegschaft – in Board-, Tabellen-, Kalender- und Gantt-Ansicht."
+      },
+      "workforce": {
+        "seoDescription": "Das Workforce-Mesh findet lokale und entfernte AgentHosts und verteilt Arbeit auf sie – Kapazität wird über Maschinen und Mandanten hinweg geteilt, mit Freigaben, Chats und vollständiger Telemetrie an einem Ort.",
+        "highlight": {
+          "h1": {
+            "title": "Ein Mesh aus Agent-Hosts",
+            "desc": "Finden Sie lokale und entfernte AgentHosts und verteilen Sie Arbeit auf sie – Kapazität wird über Maschinen und Mandanten hinweg geteilt, per HMAC-signierter, Bearer-authentifizierter Zuteilung."
+          },
+          "h2": {
+            "title": "Freigaben und Chats an einem Ort",
+            "desc": "Genehmigen Sie Human-in-the-Loop-Aktionen, sprechen Sie direkt mit Agenten und sehen Sie ihnen bei der Zusammenarbeit zu – alles in derselben Workforce-Oberfläche."
+          },
+          "h3": {
+            "title": "Instrumentierte Ausführung",
+            "desc": "Unterstützte Aufgaben- und Workflow-Pfade senden strukturierte Telemetrie an die Zeitleiste, einschließlich verfügbarer Ausführungs-, Nutzungs- und Tool-Aufruf-Protokolle."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "Was ist das Workforce-Mesh?",
+            "answer": "In der Workforce finden und koordinieren Sie Ihre Agent-Hosts. Sie verteilt Arbeit auf lokale und entfernte AgentHosts – Kapazität wird über Maschinen und sogar Mandanten hinweg geteilt – per HMAC-signierter, Bearer-authentifizierter Zuteilung und mit intelligentem Routing zum am besten passenden Peer."
+          },
+          "q2": {
+            "question": "Kann ich sehen und freigeben, was Agenten tun?",
+            "answer": "Ja. Die Workforce-Oberfläche bündelt Freigabeanfragen, Agenten-Unterhaltungen und die Ausführungstelemetrie, die von unterstützten Plattform-Workflows erfasst wird."
+          },
+          "q3": {
+            "question": "Funktioniert das über mehrere Maschinen hinweg?",
+            "answer": "Ja. Flottenregistrierung, Heartbeats und Fähigkeitsabgleich ermöglichen es Ihnen, eine Flotte von AgentHosts zu betreiben und Aufgaben zwischen ihnen zu routen – per Remote-Zuteilung an einen bestimmten Host oder automatisch nach Fähigkeiten."
+          }
+        }
+      },
+      "skills": {
+        "seoDescription": "Installieren oder veröffentlichen Sie wiederverwendbare Agenten-Skills über den Workforce-Marktplatz von Builderforce.ai. Skills, die auf Mandanten- oder agentHost-Ebene zugewiesen sind, werden beim Start automatisch in laufende Agenten geladen – 53 integrierte Skills plus ein wachsender Marktplatz.",
+        "highlight": {
+          "h1": {
+            "title": "Ein Marktplatz für Fähigkeiten",
+            "desc": "Durchsuchen und installieren Sie wiederverwendbare Agenten-Skills oder veröffentlichen Sie eigene. 53 Skills sind bereits integriert, dazu kommt ein wachsender Community-Marktplatz."
+          },
+          "h2": {
+            "title": "Zuweisen – der Rest lädt automatisch",
+            "desc": "Weisen Sie einen Skill auf Mandanten- oder agentHost-Ebene zu, und er wird beim Start automatisch in laufende Agenten geladen – ohne manuelle Einrichtung pro Agent."
+          },
+          "h3": {
+            "title": "Veröffentlichen zu klaren Konditionen",
+            "desc": "Veröffentlichen Sie einen Skill zu den Verkäuferbedingungen, die beim Einstellen und beim Checkout angezeigt werden."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "Was sind Skills auf Builderforce.ai?",
+            "answer": "Skills sind wiederverwendbare Fähigkeiten, die Sie Ihren Agenten mitgeben. Es gibt 53 integrierte Skills und einen Marktplatz, auf dem Sie weitere finden, installieren oder veröffentlichen. Ein auf Mandanten- oder agentHost-Ebene zugewiesener Skill wird beim Start automatisch in laufende Agenten geladen."
+          },
+          "q2": {
+            "question": "Kann ich eigene Skills veröffentlichen?",
+            "answer": "Ja. Sie können einen Skill auf dem Workforce-Marktplatz veröffentlichen; die aktuellen Gebühren und Auszahlungsbedingungen werden Ihnen angezeigt, bevor Sie kostenpflichtige Inhalte einstellen."
+          },
+          "q3": {
+            "question": "Wie gelangen Skills in einen laufenden Agenten?",
+            "answer": "Sie weisen Skills im Portal auf Mandanten- oder agentHost-Ebene zu; der Agent lädt die ihm zugewiesenen Skills beim Start automatisch. So folgen seine Fähigkeiten Ihren Zuweisungsregeln – ohne Konfiguration pro Agent."
+          }
+        }
+      },
+      "personas": {
+        "seoDescription": "Personas geben Ihren Agenten auf Builderforce.ai eine wiederverwendbare Stimme und ein Verhaltensprofil. Pro-Personas ergänzen eine psychometrische Persönlichkeitsebene, die zur Laufzeit sowohl in Prompt-Anweisungen als auch in Ausführungsparameter kompiliert wird.",
+        "highlight": {
+          "h1": {
+            "title": "Wiederverwendbare Stimme und Verhalten",
+            "desc": "Definieren Sie eine Persona einmal – Tonalität, Verhalten und Arbeitsstil – und wenden Sie sie auf mehrere Agenten an, damit deren Ergebnisse konsistent bleiben."
+          },
+          "h2": {
+            "title": "Psychometrische Persönlichkeit (Pro)",
+            "desc": "Pro-Personas tragen einen Merkmalsvektor, der zur Laufzeit sowohl in Prompt-Anweisungen als auch in Ausführungsparameter kompiliert wird – für wirklich unterschiedliches Agentenverhalten."
+          },
+          "h3": {
+            "title": "Teilbar in der ganzen Belegschaft",
+            "desc": "Personas sind wiederverwendbare Assets, die mit den Agenten mitwandern: Ein einmal ausgearbeitetes Verhaltensprofil stattet Ihre gesamte Belegschaft aus."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "Was ist eine Persona auf Builderforce.ai?",
+            "answer": "Eine Persona ist eine wiederverwendbare Stimme samt Verhaltensprofil, die Sie Agenten zuordnen, damit Tonalität und Arbeitsstil über Aufgaben und Teammitglieder hinweg konsistent bleiben."
+          },
+          "q2": {
+            "question": "Was bringt die Pro-Persönlichkeitsebene?",
+            "answer": "Pro-Personas enthalten ein psychometrisches Profil – einen Merkmalsvektor, den die Plattform zur Laufzeit sowohl in Prompt-Anweisungen als auch in Ausführungsparameter (etwa Denktiefe und Temperatur) kompiliert. So erhält jeder Agent eine wirklich eigene, steuerbare Persönlichkeit."
+          },
+          "q3": {
+            "question": "Lassen sich Personas für mehrere Agenten wiederverwenden?",
+            "answer": "Ja. Personas sind wiederverwendbare Assets – definieren Sie eine einmal und wenden Sie sie auf beliebig viele Agenten in Ihrer Belegschaft an, statt das Verhalten jedes Mal neu zu beschreiben."
+          }
+        }
+      },
+      "content-manager": {
+        "seoDescription": "Mit dem Content Manager erstellen und teilen Sie wiederverwendbare Inhaltsbausteine, die Ihre Agenten und der Workforce-Marktplatz nutzen können – eine zentrale Quelle für die Texte und den Kontext, auf die Ihre KI-Belegschaft zurückgreift.",
+        "highlight": {
+          "h1": {
+            "title": "Wiederverwendbare Inhalte erstellen",
+            "desc": "Erstellen Sie Inhaltsbausteine einmal und nutzen Sie sie in Agenten, Workflows und auf dem Marktplatz wieder, statt Texte zu duplizieren."
+          },
+          "h2": {
+            "title": "Gemeinsamer Kontext für Agenten",
+            "desc": "Inhaltsbausteine werden zu Kontext, auf den Ihre Agenten zugreifen – so bleiben ihre Ergebnisse bei Ihren verbindlichen Botschaften und Fakten."
+          },
+          "h3": {
+            "title": "Bereit für den Marktplatz",
+            "desc": "Teilen Sie Inhalte, die Ihre Agenten und der Workforce-Marktplatz wiederverwenden können – so wächst guter Kontext in Ihrem gesamten Workspace."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "Wofür ist der Content Manager da?",
+            "answer": "Hier erstellen und teilen Sie wiederverwendbare Inhaltsbausteine – Texte und Kontext, die Ihre Agenten und der Workforce-Marktplatz nutzen können –, damit Ihre Botschaften und Quellmaterialien an einem verbindlichen Ort liegen."
+          },
+          "q2": {
+            "question": "Wie nutzen Agenten diese Inhalte?",
+            "answer": "Inhaltsbausteine dienen als gemeinsamer Kontext, auf den Agenten zugreifen. So bleiben ihre Ergebnisse im Einklang mit Ihren verbindlichen Fakten und Botschaften, statt jedes Mal zu improvisieren."
+          }
+        }
+      },
+      "security": {
+        "seoDescription": "Builderforce.ai bietet Kontrollen für agentengestützte Arbeit, darunter Mandantenisolation, verschlüsselte Integrations-Anmeldedaten, rollenbasierten Zugriff, Gerätevertrauen, konfigurierbare Freigabe-Gates und aufbewahrte Ausführungsprotokolle.",
+        "highlight": {
+          "h1": {
+            "title": "Menschen bleiben verantwortlich",
+            "desc": "Konfigurieren Sie menschliche Freigabe-Gates für folgenreiche Aktionen und bewahren Sie die getroffenen Entscheidungen als Teil des Ausführungsprotokolls auf."
+          },
+          "h2": {
+            "title": "Abgegrenzt und verschlüsselt",
+            "desc": "Mandantenbezogene Zugriffskontrollen und AES-256-GCM-Verschlüsselung schützen die für unterstützte Integrationen gespeicherten Anmeldedaten."
+          },
+          "h3": {
+            "title": "RBAC und Gerätevertrauen",
+            "desc": "Rollenbasierte Zugriffskontrolle, Gerätevertrauen und HMAC-signierte Zuteilung zwischen Hosts sorgen dafür, dass nur die richtigen Personen und Maschinen handeln können."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "Wie steuert Builderforce.ai, was Agenten tun dürfen?",
+            "answer": "Über Human-in-the-Loop-Freigabe-Gates: Agenten bitten vor Aktionen mit großer Tragweite um Freigabe, die Ausführung pausiert, bis eine Person zustimmt oder ablehnt, und jedes Ergebnis wird in einem vollständigen Audit-Trail festgehalten. Regeln zur automatischen Freigabe lassen risikoarme Aktionen direkt passieren."
+          },
+          "q2": {
+            "question": "Wie werden meine Anmeldedaten und Daten geschützt?",
+            "answer": "Integrations-Anmeldedaten werden mit AES-256-GCM verschlüsselt und pro Mandant abgegrenzt. Alle Ressourcen – Projekte, Datensätze, Modelle und Agenten – sind pro Mandant isoliert, ohne mandantenübergreifenden Zugriff, und die Zuteilung zwischen Hosts ist HMAC-signiert und Bearer-authentifiziert."
+          },
+          "q3": {
+            "question": "Kann Builderforce.ai air-gapped betrieben werden?",
+            "answer": "Die MIT-lizenzierte Laufzeitumgebung BuilderForce Agents lässt sich auf privater Infrastruktur betreiben und kann lokale Modelle nutzen. Eine vollständig air-gapped Umgebung setzt voraus, dass gehostete Zusammenarbeit, Veröffentlichung, Remote-Evaluierung und andere vernetzte Dienste deaktiviert werden; prüfen Sie den benötigten Workflow anhand des Bereitstellungsleitfadens, bevor Sie eine Compliance-Zusage machen."
+          }
+        }
+      },
+      "dashboard": {
+        "seoDescription": "Ihr Builderforce.ai-Dashboard bündelt aktuelle Creation Sessions, laufende Arbeit und Workspace-Signale an einem Ort – so greifen Sie eine Idee wieder auf oder begleiten sie bis zur Auslieferung.",
+        "highlight": {
+          "h1": {
+            "title": "Zurück in Ihren kreativen Kontext",
+            "desc": "Setzen Sie aktuelle Canvas-Sessions fort und sehen Sie die zugehörige Arbeit, die Beteiligten und die nächsten Entscheidungen."
+          },
+          "h2": {
+            "title": "Von der Idee zur Umsetzung",
+            "desc": "Beginnen Sie mit dem, was Sie erschaffen möchten, und machen Sie die brauchbaren Teile zu Artefakten, Projekten, Aufgaben oder Agentenarbeit."
+          },
+          "h3": {
+            "title": "Arbeit bis zur Auslieferung begleiten",
+            "desc": "Wechseln Sie vom Canvas zu Projekten, Modellen, Agenten, Freigaben und Betriebsansichten, ohne den ursprünglichen Kontext zu verlieren."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "Was zeigt das Builderforce.ai-Dashboard?",
+            "answer": "Das Dashboard ist die Kommandozentrale Ihres Workspace: sein Zustand, die letzten Ausführungen und eine Live-Ansicht dessen, was Ihre KI-Belegschaft gerade tut. Von hier springen Sie direkt ins Brainstorming, zu Projekten, zum Training und ins Workforce-Mesh."
+          },
+          "q2": {
+            "question": "Wie wird aus einer Idee erledigte Arbeit?",
+            "answer": "Geben Sie im Dashboard-Eingabefeld ein, was Sie bauen möchten. Es wird an Brainstorming übergeben, das die Idee in Projekte und Aufgaben zerlegt und die Arbeit unter Ihren Freigabe-Gates an Ihre Agenten verteilt."
+          }
+        }
       }
     }
   },

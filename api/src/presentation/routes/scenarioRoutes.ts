@@ -68,6 +68,15 @@ import {
   type Outcome,
   type RiskBand,
 } from '../../application/finance/churnPrediction';
+import { parseBody, parseOptionalBody, zJsonObject } from './requestBody';
+
+/**
+ * Every write here reads its body field by field through `str` / `num` /
+ * `String(...)` and lets the application layer own the rules, so the one shape
+ * the schema asserts is "a JSON object" — an array or scalar is a 400, never a
+ * TypeError.
+ */
+const ScenarioWriteBody = zJsonObject;
 
 const handle = async (run: () => Promise<Response>): Promise<Response> => {
   try {
@@ -121,7 +130,7 @@ export function createScenarioRoutes(db: Db): Hono<HonoEnv> {
     Response.json({ calibration: await modelCalibration(db, tenant(c)) })));
 
   router.post('/churn', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, ScenarioWriteBody);
     return Response.json(await predict(db, c.env as Env, tenant(c), await who(c), {
       accountRef: String(body.accountRef ?? ''),
       probability: num(body.probability) ?? Number.NaN,
@@ -132,7 +141,7 @@ export function createScenarioRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.post('/churn/:accountRef/outcome', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, ScenarioWriteBody);
     return Response.json(await recordOutcome(
       db, c.env as Env, tenant(c), await who(c),
       c.req.param('accountRef'), String(body.outcome ?? '') as Outcome,
@@ -150,7 +159,7 @@ export function createScenarioRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.post('/calculations', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, ScenarioWriteBody);
     return Response.json(await saveCalculation(db, tenant(c), {
       name: String(body.name ?? ''),
       formula: String(body.formula ?? ''),
@@ -170,7 +179,7 @@ export function createScenarioRoutes(db: Db): Hono<HonoEnv> {
     Response.json(await roiFor(db, tenant(c), { kind: c.req.param('kind'), ref: c.req.param('ref') }))));
 
   router.post('/roi/:kind/:ref', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, ScenarioWriteBody);
     const periodAt = new Date(String(body.periodAt ?? ''));
     if (Number.isNaN(periodAt.getTime())) throw new ScenarioError('periodAt must be a date', 400);
     return Response.json(await recordRoiPeriod(
@@ -181,7 +190,7 @@ export function createScenarioRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.put('/roi/:kind/:ref/payback', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, ScenarioWriteBody);
     const investment = num(body.investment);
     if (investment === undefined) throw new ScenarioError('investment is required', 400);
     return Response.json(await stampPayback(
@@ -198,7 +207,7 @@ export function createScenarioRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.post('/', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, ScenarioWriteBody);
     return Response.json(await createScenario(db, c.env as Env, tenant(c), await who(c), {
       name: String(body.name ?? ''),
       ...(str(body.kind) !== undefined ? { kind: str(body.kind) as ScenarioKind } : {}),
@@ -214,7 +223,7 @@ export function createScenarioRoutes(db: Db): Hono<HonoEnv> {
     Response.json(await setBaseline(db, c.env as Env, tenant(c), await who(c), rowId(c.req.param('id'))))));
 
   router.put('/:id/assumptions/:key', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, ScenarioWriteBody);
     return Response.json(await setAssumption(db, tenant(c), rowId(c.req.param('id')), {
       key: c.req.param('key'),
       label: str(body.label) ?? null,
@@ -234,7 +243,7 @@ export function createScenarioRoutes(db: Db): Hono<HonoEnv> {
     Response.json(await computeBreakEven(db, c.env as Env, tenant(c), await who(c), rowId(c.req.param('id'))))));
 
   router.post('/:id/simulate', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>().catch((): Record<string, unknown> => ({}));
+    const body = await parseOptionalBody(c, ScenarioWriteBody);
     return Response.json(await runMonteCarlo(
       db, c.env as Env, tenant(c), await who(c), rowId(c.req.param('id')),
       {

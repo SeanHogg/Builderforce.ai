@@ -1,5 +1,20 @@
 import { statusResponse } from '../middleware/errorResponse';
-import { isClientError, statusOf } from '../../domain/shared/errors';
+import { isClientError, statusOf, RequestValidationError } from '../../domain/shared/errors';
+import { parseOptionalBody } from './requestBody';
+import {
+  ByoPrecedenceBody,
+  ChatCompletionBody,
+  EmbeddingsBody,
+  ImageGenerationBody,
+  McpCallBody,
+  OpenRouterConnectionBody,
+  OpenRouterConnectionUpdateBody,
+  ProviderKeyBody,
+  ResponsesBody,
+  RunOutcomeBody,
+  gatewayRefusalBody,
+  parseGatewayBody,
+} from './llmRoutes.schemas';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * builderforceLLM routes — OpenAI-compatible LLM proxy.
@@ -1051,10 +1066,14 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
   }
   const { visitorId, roomCode } = identity;
 
-  const body = await c.req.json<ChatCompletionRequest>().catch(() => null);
-  if (!body || !Array.isArray(body.messages) || body.messages.length === 0) {
+  const parsed = await parseGatewayBody(c, ChatCompletionBody);
+  if (parsed instanceof RequestValidationError) {
+    return c.json(gatewayRefusalBody(parsed, 'messages array is required', 'messages'), 400);
+  }
+  if (!parsed.messages || parsed.messages.length === 0) {
     return c.json({ error: 'messages array is required' }, 400);
   }
+  const body: ChatCompletionRequest = { ...parsed, messages: parsed.messages };
 
   const ip = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null;
   const guest = new GuestChatService(requestDb(c));
@@ -1334,8 +1353,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
     const gated = requireOpenRouterEntitlement(c, access);
     if (gated) return gated;
-    const body = await c.req.json<{ label?: unknown; models?: unknown; apiKey?: unknown }>()
-      .catch(() => ({} as { label?: unknown; models?: unknown; apiKey?: unknown }));
+    const body = await parseOptionalBody(c, OpenRouterConnectionBody);
     const result = await upsertOpenRouterConnection(c.env, access.tenantId, {
       label: typeof body.label === 'string' ? body.label : '',
       models: Array.isArray(body.models) ? body.models.filter((m: unknown): m is string => typeof m === 'string') : [],
@@ -1355,8 +1373,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     if (gated) return gated;
     const id = Number(c.req.param('id'));
     if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'invalid connection id' }, 400);
-    const body = await c.req.json<{ label?: unknown; models?: unknown; apiKey?: unknown; clearKey?: unknown }>()
-      .catch(() => ({} as { label?: unknown; models?: unknown; apiKey?: unknown; clearKey?: unknown }));
+    const body = await parseOptionalBody(c, OpenRouterConnectionUpdateBody);
     const result = await upsertOpenRouterConnection(c.env, access.tenantId, {
       id,
       label: typeof body.label === 'string' ? body.label : '',
@@ -1552,7 +1569,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
   router.put('/provider-keys/priority', async (c) => {
     let access: TenantAccess;
     try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
-    const body = await c.req.json<{ order?: unknown }>().catch(() => ({} as { order?: unknown }));
+    const body = await parseOptionalBody(c, ByoPrecedenceBody);
     if (!Array.isArray(body.order)) return c.json({ error: 'order must be an array' }, 400);
     const parsed = body.order.map(parsePrecedenceRef);
     if (parsed.some((entry) => entry === null)) {
@@ -1567,8 +1584,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
     const provider = c.req.param('provider');
     if (!isSupportedProvider(provider)) return c.json({ error: 'unsupported provider' }, 400);
-    const body = await c.req.json<{ apiKey?: string; baseUrl?: string; model?: string }>()
-      .catch(() => ({} as { apiKey?: string; baseUrl?: string; model?: string }));
+    const body = await parseOptionalBody(c, ProviderKeyBody);
 
     // `ollama-local` stores a composed `<apiKey>::<baseUrl>::<model>` sentinel (see
     // `ollamaLocal.ts`) instead of a bare credential — baseUrl/model are REQUIRED
@@ -1637,9 +1653,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         },
       }, 401);
     }
-    let body: Record<string, unknown>;
-    try { body = await c.req.json<Record<string, unknown>>(); }
-    catch { return c.json({ error: { message: 'Invalid JSON body', type: 'invalid_request_error' } }, 400); }
+    // Forwarded verbatim; a miss keeps this endpoint's OpenAI-style error envelope.
+    const body = await parseGatewayBody(c, ResponsesBody);
+    if (body instanceof RequestValidationError) {
+      return c.json({ error: { message: gatewayRefusalBody(body, 'Invalid JSON body').error, type: 'invalid_request_error' } }, 400);
+    }
     const upstream = await fetch('https://chatgpt.com/backend-api/codex/responses', {
       method: 'POST',
       headers: {
@@ -1968,9 +1986,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     } catch (err) {
       return respondToAccessError(c, err);
     }
-    const body = await c.req
-      .json<{ extensionId?: string; tool?: string; arguments?: unknown }>()
-      .catch(() => ({} as { extensionId?: string; tool?: string; arguments?: unknown }));
+    const body = await parseOptionalBody(c, McpCallBody);
     if (!body.extensionId || !body.tool) {
       return c.json({ error: 'extensionId and tool are required' }, 400);
     }
@@ -2019,10 +2035,16 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       return respondToAccessError(c, err);
     }
 
-    const body = await c.req.json<ChatCompletionRequest>();
-    if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
+    // Loose on purpose: every SDK field (tools, response_format, temperature, vendor
+    // extras…) rides through to the vendor untouched — see llmRoutes.schemas.ts.
+    const parsed = await parseGatewayBody(c, ChatCompletionBody);
+    if (parsed instanceof RequestValidationError) {
+      return c.json(gatewayRefusalBody(parsed, 'messages array is required', 'messages'), 400);
+    }
+    if (!parsed.messages || parsed.messages.length === 0) {
       return c.json({ error: 'messages array is required' }, 400);
     }
+    const body: ChatCompletionRequest = { ...parsed, messages: parsed.messages };
 
     // ── Client reasoning intent (VS Code chat "Thinking" toggle) ───────────
     // OPTIONAL vendor-neutral `reasoning: { level: 'low'|'medium'|'high' }`, omitted
@@ -2055,8 +2077,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // Evermind version (evermind/<ref>) at call time — the cloud/IDE replica
     // pulling the latest learned model on each run (pull-on-boundary).
     if (typeof bodyAny.model === 'string' && bodyAny.model.startsWith(PROJECT_EVERMIND_MODEL_PREFIX)) {
-      const expanded = await resolveProjectEvermindModelPin(c.env as Env, requestDb(c), access.tenantId, bodyAny.model);
-      bodyAny.model = expanded.model; // undefined when unseeded → plan default
+      // The pin's callers are the IDE (VS Code chat/agent turns) and on-prem agent
+      // hosts — coding surfaces — so expansion applies the coding-quality gate (≥90%
+      // of the frontier baseline on the coding eval). Closed → plan default, not an error.
+      const expanded = await resolveProjectEvermindModelPin(c.env as Env, requestDb(c), access.tenantId, bodyAny.model, { purpose: 'coding' });
+      bodyAny.model = expanded.model; // undefined when unseeded / off / gate closed → plan default
     }
     if (typeof bodyAny.model === 'string' && bodyAny.model.startsWith(TENANT_MODEL_REF_PREFIX)) {
       const tm = await resolveTenantModel(c.env as Env, requestDb(c), access.tenantId, bodyAny.model);
@@ -2903,7 +2928,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     } catch (err) {
       return respondToAccessError(c, err);
     }
-    const body = await c.req.json().catch(() => ({}));
+    const body = await parseOptionalBody(c, RunOutcomeBody);
 
     // Validation + normalization is the SHARED contract (`@builderforce/learned-routing`),
     // the same module the on-prem host builds its body from — so the door and the only
@@ -3149,15 +3174,10 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'Embeddings vendor not configured (missing OPENROUTER_API_KEY and VOYAGE_API_KEY)' }, 503);
     }
 
-    const body = await c.req.json<{
-      model?: string;
-      input: string | string[];
-      metadata?: Record<string, unknown>;
-      [key: string]: unknown;
-    }>().catch(() => null);
-
-    if (!body || (typeof body.input !== 'string' && !Array.isArray(body.input))) {
-      return c.json({ error: '`input` must be a string or array of strings' }, 400);
+    // Loose: every key but model/input/metadata is forwarded to the embeddings vendor.
+    const body = await parseGatewayBody(c, EmbeddingsBody);
+    if (body instanceof RequestValidationError) {
+      return c.json(gatewayRefusalBody(body, '`input` must be a string or array of strings', 'input'), 400);
     }
     // Embedding spend belongs to a ticket/project too — a RAG index rebuild is real
     // cost against real work. Validated against THIS tenant before it is written.
@@ -3248,10 +3268,15 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       return respondToAccessError(c, err);
     }
 
-    const body = await c.req.json<ImageGenerationRequest>().catch(() => null);
-    if (!body || typeof body.prompt !== 'string' || body.prompt.trim().length === 0) {
+    // Loose: the whole body is handed to the image proxy (size, n, response_format, extras…).
+    const parsed = await parseGatewayBody(c, ImageGenerationBody);
+    if (parsed instanceof RequestValidationError) {
+      return c.json(gatewayRefusalBody(parsed, '`prompt` is required and must be a non-empty string', 'prompt'), 400);
+    }
+    if (parsed.prompt.trim().length === 0) {
       return c.json({ error: '`prompt` is required and must be a non-empty string' }, 400);
     }
+    const body: ImageGenerationRequest = parsed;
 
     // Validate that at least one image vendor key is bound before dispatching.
     if (!c.env.TOGETHER_API_KEY && !c.env.FLUX_API_KEY) {

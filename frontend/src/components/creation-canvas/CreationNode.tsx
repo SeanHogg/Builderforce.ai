@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import ReactMarkdown from 'react-markdown';
 import { DOCUMENT_REMARK_PLUGINS, MARKDOWN_REHYPE_PLUGINS } from '@/lib/markdownPipeline';
+import { MathAwareText } from '@/components/academic/MathAwareText';
 import { Avatar, evermindLearnedStatus, evermindNextAction } from '@seanhogg/builderforce-brain-ui';
 import type { CreationNodeData, CreationObjectKind } from './types';
 import {
@@ -55,6 +56,7 @@ import { controlLabels, readGameControls } from '@/lib/gamePoster';
 import { canvasBuildBinding } from '@/lib/canvasBuild';
 import { canvasWebPageUrl, WEB_PAGE_KINDS } from '@/lib/canvasWebPage';
 import { canvasViewport, resourceIdOfType } from '@builderforce/creation-canvas-contract';
+import { CanvasWidgetNodeBody } from '@/components/canvas-widgets/CanvasWidgetHost';
 import { formatBytes } from '@/lib/formatBytes';
 import { mailboxFilterParts, type MailboxFilter } from '@/lib/mailboxApi';
 import { dashboardWidgetsPatch, readDashboardWidgets } from '@/lib/canvasDashboard';
@@ -164,7 +166,7 @@ function asRecord(value: unknown, fallback: Record<string, unknown>): Record<str
 }
 
 function AuthoredContent({ data, fallback }: { data: CreationNodeData; fallback: string }) {
-  return <p className={styles.authoredContent}>{authoredText(data) || fallback}</p>;
+  return <MathAwareText className={styles.authoredContent} text={authoredText(data) || fallback} />;
 }
 
 /**
@@ -242,7 +244,7 @@ function CourseBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patch:
         <header><small>{t('module')}</small><h3>{active.title}</h3><p>{active.description}</p></header>
         {active.lessons.map((item) => <details key={item.id} open={!completed.has(item.id)}>
           <summary><span>{completed.has(item.id) ? '✓' : '○'}</span><b>{item.title}</b><small>{t('minutes', { count: item.durationMinutes })}</small></summary>
-          <div className={styles.courseLesson}><strong>{t('objective')}</strong><p>{item.objective}</p><p>{item.content}</p><strong>{t('practice')}</strong><p>{item.activity}</p><button type="button" disabled={!onEdit} onClick={(event) => { event.stopPropagation(); toggleLesson(item.id); }}>{completed.has(item.id) ? t('markIncomplete') : t('markComplete')}</button></div>
+          <div className={styles.courseLesson}><strong>{t('objective')}</strong><MathAwareText text={item.objective} /><MathAwareText text={item.content} /><strong>{t('practice')}</strong><MathAwareText text={item.activity} /><button type="button" disabled={!onEdit} onClick={(event) => { event.stopPropagation(); toggleLesson(item.id); }}>{completed.has(item.id) ? t('markIncomplete') : t('markComplete')}</button></div>
         </details>)}
         {/* The knowledge check is a one-question practice set, run by the SAME
             component the Practice object uses — so the answer is graded once,
@@ -3030,6 +3032,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {data.kind === 'diagram' && <DiagramBody data={data} />}
         {data.kind === 'file' && <FileBody data={data} />}
         {data.kind === 'kpi' && <KpiBody data={data} />}
+        <CanvasWidgetNodeBody objectId={id} resourceId={data.resourceId} />
         {data.kind === 'erd' && <ErdBody data={data} />}
         {data.kind === 'datasource' && <DataSourceBody data={data} />}
         {data.kind === 'dataContract' && <DataContractBody data={data} />}

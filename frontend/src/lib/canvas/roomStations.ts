@@ -1,5 +1,6 @@
 import { resourceIdOfType } from '@builderforce/creation-canvas-contract';
 import { CANVAS_WIDGET_RESOURCE_TYPE } from '@builderforce/canvas-widget-protocol';
+import { auditsKind } from '@/lib/academic/accessibility';
 import { boardMetricDefinitions } from './boardMetrics';
 import { placeCreationInRoom } from './roomCreations';
 import type { RoomSessionPlacement } from './roomSession';
@@ -76,7 +77,20 @@ export const ROOM_STATION_SPECS: readonly RoomStationSpec[] = [
         : [];
     }),
   },
+  // TEACHING AND SCHOLARSHIP. Each stands only once the board holds what it reads — a
+  // gradebook board in a room with no gradebook is furniture, as the metrics board is.
+  whenAnyKind('assessment', ['assignment']),
+  whenAnyKind('gradebook', ['gradebook']),
+  // Whatever the audit has rules for (`auditsKind`), so the station and the findings
+  // cannot disagree about what is audited.
+  { id: 'accessibility', instances: (objects) => (objects.some((object) => auditsKind(String(object.data.kind ?? ''))) ? [{ key: 'accessibility', station: 'accessibility' }] : []) },
+  whenAnyKind('citations', ['citation', 'bibliography']),
 ];
+
+/** A single-instance station that stands while any object of one of `kinds` is on the board. */
+function whenAnyKind(id: string, kinds: readonly string[]): RoomStationSpec {
+  return { id, instances: (objects) => (objects.some((object) => kinds.includes(String(object.data.kind ?? ''))) ? [{ key: id, station: id }] : []) };
+}
 
 /** Every station standing in the room for this board, in registry order. */
 export function roomStationInstances(

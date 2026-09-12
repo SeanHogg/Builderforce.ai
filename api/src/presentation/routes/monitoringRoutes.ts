@@ -24,12 +24,43 @@ import { monitoringVersionKey, incidentVersionKey } from '../../application/insi
 import { MonitoringService, type MonitorType } from '../../application/monitoring/MonitoringService';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseOptionalBody, z, zJsonObject } from './requestBody';
 
-interface MonitorBody {
-  label?: string; description?: string; posX?: number; posY?: number;
-  monitorType?: MonitorType; config?: Record<string, unknown>; affectedSystem?: string;
-  severity?: string; escalationPolicyId?: string; projectId?: number; active?: boolean;
-}
+const zMonitorType = z.enum(['heartbeat', 'http_check', 'webhook', 'metric_threshold', 'manual']) satisfies z.ZodType<MonitorType>;
+
+/** Create AND patch a board. `name` stays optional so the create's own "name is required" wins. */
+const BoardBody = z.object({
+  name: z.string().optional(),
+  projectId: z.number().nullish(),
+  imageKey: z.string().nullish(),
+  imageWidth: z.number().nullish(),
+  imageHeight: z.number().nullish(),
+});
+
+/**
+ * Create AND patch a monitor. Nullable columns take `null` (clears on a patch);
+ * NOT NULL ones (label, position, type, severity, active) are optional only.
+ * `config` is stored whole as JSON, so every key is kept.
+ */
+const MonitorBody = z.object({
+  label: z.string().optional(),
+  description: z.string().nullish(),
+  posX: z.number().optional(),
+  posY: z.number().optional(),
+  monitorType: zMonitorType.optional(),
+  config: zJsonObject.nullish(),
+  affectedSystem: z.string().nullish(),
+  severity: z.string().optional(),
+  escalationPolicyId: z.string().nullish(),
+  projectId: z.number().nullish(),
+  active: z.boolean().optional(),
+});
+
+const TestSignalBody = z.object({
+  status: z.enum(['ok', 'breach']).optional(),
+  value: z.number().optional(),
+  message: z.string().nullish(),
+});
 
 export function createMonitoringRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -49,7 +80,7 @@ export function createMonitoringRoutes(db: Db): Hono<HonoEnv> {
   });
   router.post('/boards', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const b = (await c.req.json().catch(() => ({}))) as { name?: string; projectId?: number; imageKey?: string; imageWidth?: number; imageHeight?: number };
+    const b = await parseOptionalBody(c, BoardBody);
     if (!b.name?.trim()) return c.json({ error: 'name is required' }, 400);
     const row = await new MonitoringService(db).createBoard(tenantId, { name: b.name, projectId: b.projectId ?? null, imageKey: b.imageKey ?? null, imageWidth: b.imageWidth ?? null, imageHeight: b.imageHeight ?? null });
     await invalidate(c, tenantId);
@@ -63,7 +94,7 @@ export function createMonitoringRoutes(db: Db): Hono<HonoEnv> {
   });
   router.patch('/boards/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const b = (await c.req.json().catch(() => ({}))) as { name?: string; projectId?: number | null; imageKey?: string; imageWidth?: number; imageHeight?: number };
+    const b = await parseOptionalBody(c, BoardBody);
     await new MonitoringService(db).updateBoard(tenantId, c.req.param('id'), b);
     await invalidate(c, tenantId);
     return c.json({ ok: true });
@@ -78,11 +109,11 @@ export function createMonitoringRoutes(db: Db): Hono<HonoEnv> {
   // ── Monitors ─────────────────────────────────────────────────────────────
   router.post('/boards/:id/monitors', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const b = (await c.req.json().catch(() => ({}))) as MonitorBody;
+    const b = await parseOptionalBody(c, MonitorBody);
     if (!b.label?.trim()) return c.json({ error: 'label is required' }, 400);
     const row = await new MonitoringService(db).createMonitor(tenantId, c.req.param('id'), {
       label: b.label, description: b.description ?? null, posX: b.posX, posY: b.posY,
-      monitorType: b.monitorType, config: b.config, affectedSystem: b.affectedSystem ?? null,
+      monitorType: b.monitorType, config: b.config ?? undefined, affectedSystem: b.affectedSystem ?? null,
       severity: b.severity, escalationPolicyId: b.escalationPolicyId ?? null, projectId: b.projectId ?? null,
     });
     await invalidate(c, tenantId);
@@ -106,8 +137,9 @@ export function createMonitoringRoutes(db: Db): Hono<HonoEnv> {
   });
   router.patch('/monitors/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const b = (await c.req.json().catch(() => ({}))) as MonitorBody;
-    await new MonitoringService(db).updateMonitor(tenantId, c.req.param('id'), b);
+    const b = await parseOptionalBody(c, MonitorBody);
+    // `config` is NOT NULL: a null reads as "not changing it", never a failed write.
+    await new MonitoringService(db).updateMonitor(tenantId, c.req.param('id'), { ...b, config: b.config ?? undefined });
     await invalidate(c, tenantId);
     return c.json({ ok: true });
   });
@@ -119,7 +151,7 @@ export function createMonitoringRoutes(db: Db): Hono<HonoEnv> {
   });
   router.post('/monitors/:id/test-signal', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const b = (await c.req.json().catch(() => ({}))) as { status?: 'ok' | 'breach'; value?: number; message?: string };
+    const b = await parseOptionalBody(c, TestSignalBody);
     const res = await new MonitoringService(db).recordSignal(tenantId, c.req.param('id'), { status: b.status, value: b.value, message: b.message ?? null }, c.env);
     await invalidate(c, tenantId);
     return c.json(res);

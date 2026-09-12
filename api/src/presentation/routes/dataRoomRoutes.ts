@@ -35,6 +35,18 @@ import {
 import { SignatureError } from '../../application/signature/signatureEngine';
 import { TemplateError } from '../../application/legal/documentTemplates';
 import { WatermarkError } from '../../application/security/documentWatermark';
+import { parseBody, z } from './requestBody';
+
+/** `POST /:id/share` — `shareDataRoom` owns the required-recipient rules. */
+const ShareDataRoomBody = z.object({
+  recipientName: z.string().nullish(),
+  recipientEmail: z.string().nullish(),
+  firmPartyRef: z.string().nullish(),
+  permission: z.string().nullish(),
+  expiresAt: z.string().nullish(),
+  jurisdiction: z.string().nullish(),
+  purpose: z.string().nullish(),
+});
 
 const handle = async (run: () => Promise<Response>): Promise<Response> => {
   try {
@@ -70,7 +82,7 @@ export function createDataRoomRoutes(db: Db): Hono<HonoEnv> {
    * is gated at on the canvas.
    */
   router.post('/:id/share', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, ShareDataRoomBody);
     const result = await shareDataRoom(db, c.env as Env, c.get('tenantId') as number, {
       dataRoomId: roomId(c.req.param('id')),
       recipientName: String(body.recipientName ?? ''),

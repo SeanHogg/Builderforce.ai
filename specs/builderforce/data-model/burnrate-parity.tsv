@@ -1,6 +1,4 @@
 disposition	target	domain	source_tables	br_modules	br_endpoints	note
-transform	kanban_columns	Delivery & work	kanban_columns	kanban	45	duplicate of swimlanes, which carries agents, gates and parking semantics
-transform	release_plans	Delivery & work	release_plans	productManagement	86	duplicate of product_releases, which is already feature-reached
 transform	billing_plans	Finance	billing_plans	ai billing pricingAggregator systemAdmin	141	pricing → transform_existing (PlanLimits/pricingConfiguration is canonical)
 transform	business_pricing_models	Finance	business_pricing_models	businessIntelligence pitchDeck pricingAggregator	118	pricing → transform_existing
 transform	payment_methods	Finance	payment_methods	billing	52	providers → stripe retain_reconcile

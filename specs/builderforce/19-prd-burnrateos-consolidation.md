@@ -281,10 +281,14 @@ EntityBrowser” do not satisfy them.
   every feature used by an active BurnRateOS tenant is classified, and under the deprecation
   directive the classification is binary — an extracted capability has a tested Builderforce
   workflow, or it has an explicit customer-approved retirement/export. §9 resolves all 106 source
-  modules: **76 at full parity, 18 partial, 1 gap, 11 stateless**, and
-  [`burnrate-parity.tsv`](../data-model/burnrate-parity.tsv) now reads **build 0 · transform 9 ·
-  retire 4**. Every one of the 18 partial modules is partial only in `transform`/`retire` targets —
-  pricing, affiliates, blog, phone, and the three duplicates §9.7 found. **Zero new tables were
+  modules: **78 at full parity, 16 partial, 1 gap, 11 stateless**, and
+  [`burnrate-parity.tsv`](../data-model/burnrate-parity.tsv) now reads **build 0 · transform 7 ·
+  retire 4**. (76 / 18 and transform 9 at closure; on 2026-09-12 migration 1160 folded two of the
+  three §9.7 duplicates, `kanban_columns` → `swimlanes` and `release_plans` → `product_releases`,
+  when the spec PM spine was unified onto `projects`/`tasks`/`specs`, bringing `kanban` and
+  `productManagement` to 100%.) Every one of the 16 partial modules is partial only in
+  `transform`/`retire` targets — pricing, affiliates, blog, phone, and the remaining §9.7
+  duplicate (`ri_sequences`). **Zero new tables were
   added.** **CAVEAT, and it is the distinction this whole PRD draws:** this closes the BEHAVIOUR
   half. The *data* half — the Data gate below — is untouched, and no BurnRateOS row has moved.
 - [x] **C-suite Canvas execution gate:** map all 48 CxO intents to existing Creation Canvas
@@ -756,7 +760,7 @@ Two honest qualifications, both decisions rather than gaps:
    casualty now needs a NAMED decision rather than a boundary.** Duplicate application structure is
    still retired and non-target data is still exported rather than used to justify schema; what
    changed is that "outside the IDEA → REAL boundary" is no longer by itself a reason not to build.
-   [§9](#9--deprecation-parity-audit--2026-08-25) carries the resulting register, now **0 build, 9
+   [§9](#9--deprecation-parity-audit--2026-08-25) carries the resulting register, now **0 build, 7
    transform, 4 retire** — every casualty is a named decision rather than an omission.
 2. **§5 lists seven decisions** — tenancy axis, web push, three either/or capability calls, the
    credits-vs-caps pricing model, and the Neon tier. Each changes what gets built. §3.2 closed the
@@ -1006,8 +1010,8 @@ to one question — the outcome §2 exists to prevent:
 
 | Target | Existing owner | Why it wins |
 |---|---|---|
-| `kanban_columns` | `swimlanes` | Carries agents, `gate`/`gate_source`, parking-vs-terminal semantics and completion ranking. `kanban_columns` adds only a colour token. |
-| `release_plans` | `product_releases` | Same shape, already feature-reached. |
+| `kanban_columns` | `swimlanes` | Carries agents, `gate`/`gate_source`, parking-vs-terminal semantics and completion ranking. `kanban_columns` adds only a colour token and a WIP limit. **Folded and dropped by migration 1160 (2026-09-12)**; `swimlanes` gained `wip_limit` + `color_token`. |
+| `release_plans` | `product_releases` | Same shape, already feature-reached. **Folded and dropped by migration 1160 (2026-09-12)**, its registered `objects` re-pointed. |
 | `ri_sequences` | the canvas-object cadence | `sequenceRunner.ts` runs cadences as a sweep over "who is due" rather than a timer per person, an argument that module makes at length and that this schema has already applied twice. A second sequence table means two answers to "what is about to be sent to this person". |
 
 #### The pattern, for anyone extending this

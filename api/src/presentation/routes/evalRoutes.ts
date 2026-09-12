@@ -19,7 +19,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import { parseBody } from './requestBody';
+import { parseBody, parseOptionalBody } from './requestBody';
 import { evaluateResponse, type EvalJudge } from '../../application/eval/semanticEval';
 import { gatewayJudge } from '../../application/eval/gatewayJudge';
 import { benchmarkTrend, listCases, summarizeTrend, upsertCase } from '../../application/eval/agentBenchmark';
@@ -28,6 +28,14 @@ import { evaluateVariant } from '../../application/eval/variantEval';
 import { resolveTenantPlan } from '../../application/tenant/tenantPlanSnapshot';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+
+/** `POST /` — the handler answers its own "question and answer are required". */
+const EvalBody = z.object({
+  question: z.string().nullish(),
+  answer: z.string().nullish(),
+  context: z.string().nullish(),
+  judge: z.boolean().nullish(),
+});
 
 /** A benchmark case: a stable prompt plus what a good answer must contain. */
 const benchmarkCaseSchema = z.object({
@@ -47,7 +55,7 @@ export function createEvalRoutes(db: Db): Hono<HonoEnv> {
   // ── POST /api/eval ──────────────────────────────────────────────────────
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json().catch(() => ({}));
+    const body = await parseOptionalBody(c, EvalBody);
     const question = typeof body?.question === 'string' ? body.question : '';
     const answer = typeof body?.answer === 'string' ? body.answer : '';
     const context = typeof body?.context === 'string' ? body.context : undefined;

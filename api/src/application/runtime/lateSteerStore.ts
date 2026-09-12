@@ -8,13 +8,12 @@
  * loop step, a claim happens exactly once per steer, ever (`late_claimed_at`), and that
  * once is the idempotency guarantee a retried frame relies on.
  *
- * Every query is scoped by `execution_id`; the caller has already proved the execution
- * belongs to the tenant (see `lateSteerFollowUp.ts`).
+ * Every query is tenant-scoped AND execution-scoped.
  */
 import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { executionMessages } from '../../infrastructure/database/schema';
-import { acrossTenants } from '../../infrastructure/database/tenantScope';
+import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { LateSteerOutcomeKind } from './executionSteering';
 
 /** One late steer, as claimed. `sentBy` is the person the follow-up runs under. */
@@ -36,10 +35,10 @@ export interface ReportedSteer {
  * it consumed here is what stops the terminal chokepoint from ALSO treating an applied
  * steer as undelivered and starting a follow-up for work the run already did.
  */
-export async function markSteerRelayed(db: Db, messageId: number): Promise<void> {
+export async function markSteerRelayed(db: Db, tenantId: number, messageId: number): Promise<void> {
   await db.update(executionMessages)
     .set({ consumedAt: new Date() })
-    .where(and(eq(executionMessages.id, messageId), isNull(executionMessages.consumedAt)));
+    .where(scopedToTenant(executionMessages, tenantId, eq(executionMessages.id, messageId), isNull(executionMessages.consumedAt)));
 }
 
 /**
@@ -48,11 +47,12 @@ export async function markSteerRelayed(db: Db, messageId: number): Promise<void>
  * terminal state landed. Pending, they are drained by the live loop or claimed by the
  * run's terminal chokepoint; either way they are not lost. Never touches a claimed row.
  */
-export async function repend(db: Db, executionId: number, messageIds: readonly number[]): Promise<void> {
+export async function repend(db: Db, tenantId: number, executionId: number, messageIds: readonly number[]): Promise<void> {
   if (messageIds.length === 0) return;
   await db.update(executionMessages)
     .set({ consumedAt: null })
-    .where(and(
+    .where(scopedToTenant(
+      executionMessages, tenantId,
       eq(executionMessages.executionId, executionId),
       eq(executionMessages.role, 'user'),
       inArray(executionMessages.id, [...messageIds]),
@@ -67,11 +67,12 @@ export async function repend(db: Db, executionId: number, messageIds: readonly n
  * concurrent callers can never both claim the same steer — the second gets nothing and
  * dispatches nothing. Oldest first: the order the person sent them.
  */
-export async function claimLateSteers(db: Db, executionId: number, messageIds?: readonly number[]): Promise<ClaimedSteer[]> {
+export async function claimLateSteers(db: Db, tenantId: number, executionId: number, messageIds?: readonly number[]): Promise<ClaimedSteer[]> {
   const now = new Date();
   const rows = await db.update(executionMessages)
     .set({ lateClaimedAt: now, consumedAt: now })
-    .where(and(
+    .where(scopedToTenant(
+      executionMessages, tenantId,
       eq(executionMessages.executionId, executionId),
       eq(executionMessages.role, 'user'),
       isNull(executionMessages.lateClaimedAt),
@@ -84,6 +85,7 @@ export async function claimLateSteers(db: Db, executionId: number, messageIds?: 
 /** What an already-claimed steer became — the answer to a duplicate report. */
 export async function lateSteerOutcomeOf(
   db: Db,
+  tenantId: number,
   executionId: number,
   messageIds: readonly number[],
 ): Promise<{ outcome: LateSteerOutcomeKind | null; followUpExecutionId: number | null } | null> {
@@ -91,7 +93,8 @@ export async function lateSteerOutcomeOf(
   const [row] = await db
     .select({ outcome: executionMessages.lateOutcome, followUpExecutionId: executionMessages.followUpExecutionId })
     .from(executionMessages)
-    .where(and(
+    .where(scopedToTenant(
+      executionMessages, tenantId,
       eq(executionMessages.executionId, executionId),
       inArray(executionMessages.id, [...messageIds]),
       isNotNull(executionMessages.lateClaimedAt),
@@ -103,6 +106,7 @@ export async function lateSteerOutcomeOf(
 /** Record what the claimed steers became, so the thread can say so. */
 export async function recordLateSteerOutcome(
   db: Db,
+  tenantId: number,
   messageIds: readonly number[],
   outcome: { outcome: LateSteerOutcomeKind; followUpExecutionId?: number | null; detail?: string | null },
 ): Promise<void> {
@@ -113,7 +117,7 @@ export async function recordLateSteerOutcome(
       followUpExecutionId: outcome.followUpExecutionId ?? null,
       lateDetail: outcome.detail ? outcome.detail.slice(0, 1000) : null,
     })
-    .where(inArray(executionMessages.id, [...messageIds]));
+    .where(scopedToTenant(executionMessages, tenantId, inArray(executionMessages.id, [...messageIds])));
 }
 
 /**
@@ -121,18 +125,24 @@ export async function recordLateSteerOutcome(
  * trusted only if the row is a user steer of THIS execution; a frame without one (sent
  * by an API that predates the id) is matched to the newest unclaimed steer with its text.
  */
-export async function resolveReportedSteerIds(db: Db, executionId: number, steers: readonly ReportedSteer[]): Promise<number[]> {
+export async function resolveReportedSteerIds(db: Db, tenantId: number, executionId: number, steers: readonly ReportedSteer[]): Promise<number[]> {
   const byId = steers.map((s) => s.messageId).filter((n): n is number => typeof n === 'number' && Number.isSafeInteger(n) && n > 0);
   const byText = [...new Set(steers.filter((s) => s.messageId == null).map((s) => s.text.trim()).filter(Boolean))];
   const ids = new Set<number>();
   if (byId.length > 0) {
     const rows = await db.select({ id: executionMessages.id }).from(executionMessages)
-      .where(and(eq(executionMessages.executionId, executionId), eq(executionMessages.role, 'user'), inArray(executionMessages.id, byId)));
+      .where(scopedToTenant(
+        executionMessages, tenantId,
+        eq(executionMessages.executionId, executionId),
+        eq(executionMessages.role, 'user'),
+        inArray(executionMessages.id, byId),
+      ));
     for (const r of rows) ids.add(r.id);
   }
   if (byText.length > 0) {
     const rows = await db.select({ id: executionMessages.id, text: executionMessages.text }).from(executionMessages)
-      .where(and(
+      .where(scopedToTenant(
+        executionMessages, tenantId,
         eq(executionMessages.executionId, executionId),
         eq(executionMessages.role, 'user'),
         isNull(executionMessages.lateClaimedAt),

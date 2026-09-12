@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePolledResource } from '@/hooks/usePolledResource';
 import { useTranslations } from 'next-intl';
 import {
@@ -37,6 +37,7 @@ import { ObservabilityContent } from '../ObservabilityContent';
 import { TaskChangesPanel } from './TaskChangesPanel';
 import { PullRequestPanel } from './PullRequestPanel';
 import { RunThinkingPanel, thinkingEventsOf } from './RunThinkingPanel';
+import { LateSteerNote } from './LateSteerNote';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
 import { formatUsdSpend } from '@/lib/formatSpend';
@@ -364,6 +365,13 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   // user steers across a reload — the WS echo is cross-isolate-lossy, so without
   // this a sent direction vanished on refresh.
   const persistedMessages = trace?.trace.messages ?? [];
+  // Steers that arrived after the run's last turn — each continued as a follow-up run
+  // (or says why not). Keyed by text so the note follows the steer whichever source
+  // (live stream or persisted thread) ends up rendering it.
+  const lateSteers = useMemo(
+    () => new Map(persistedMessages.flatMap((m) => (m.role === 'user' && m.followUp ? [[m.text, m.followUp] as const] : []))),
+    [persistedMessages],
+  );
   const thread = useMemo(() => {
     const persistedUserTexts = new Set(persistedMessages.filter((m) => m.role === 'user').map((m) => m.text));
     const streamUserTexts = new Set(stream.messages.filter((m) => m.role === 'user').map((m) => m.text));
@@ -568,6 +576,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
     // one — we switch to the new execution once it's created.) Rolled back below if
     // the post fails.
     if (isLive) setSentMessages((prev) => [...prev, text]);
+    else setRerunError(null);
     try {
       const res = await runtimeApi.postMessage(selectedId, text);
       if (res.resumed) {
@@ -582,7 +591,10 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
         setSelectedId(res.rerun.executionId);
         onTaskChanged?.();
       }
-    } catch {
+    } catch (err) {
+      // A follow-up the server refused (e.g. an entitlement: the token allowance or the
+      // cloud-run cap) says WHY, instead of silently handing the draft back.
+      if (!isLive) setRerunError(faultMessage(err, t('failedToRerun')));
       // Roll back the optimistic echo (if any) and restore the draft for retry.
       if (isLive) {
         setSentMessages((prev) => {
@@ -881,15 +893,25 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                     {isRunning ? t('agentWorking') : isPaused ? t('awaitingAnswer') : t('noOutput')}
                   </div>
                 ) : (
-                  thread.map((m, i) => (
-                    <ChatMessageBubble
-                      key={i}
-                      role={m.role}
-                      content={m.text}
-                      label={m.role === 'assistant' ? (runAgentName || t('agent')) : t('you')}
-                      avatar={m.role === 'assistant' ? (runAgentName ? runAgentName.charAt(0).toUpperCase() : '🤖') : undefined}
-                    />
-                  ))
+                  thread.map((m, i) => {
+                    const followUp = m.role === 'user' ? lateSteers.get(m.text) : undefined;
+                    return (
+                      <Fragment key={i}>
+                        <ChatMessageBubble
+                          role={m.role}
+                          content={m.text}
+                          label={m.role === 'assistant' ? (runAgentName || t('agent')) : t('you')}
+                          avatar={m.role === 'assistant' ? (runAgentName ? runAgentName.charAt(0).toUpperCase() : '🤖') : undefined}
+                        />
+                        {followUp && (
+                          <LateSteerNote
+                            followUp={followUp}
+                            onOpenRun={(executionId) => { void loadExecutions(true).then(() => setSelectedId(executionId)); }}
+                          />
+                        )}
+                      </Fragment>
+                    );
+                  })
                 )}
               </div>
 

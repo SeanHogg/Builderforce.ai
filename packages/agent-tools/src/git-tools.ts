@@ -399,6 +399,11 @@ function buildPushCommand(opts: { allowBaseBranch?: boolean; repo?: string }): s
     // `-u` so a brand-new ticket branch gets its upstream on the first push.
     'git push -u origin "$CUR"',
     'echo "Pushed $CUR to origin"',
+    // Report where the push LANDED — the branch header (`## main...origin/main`, with any
+    // `[ahead N]` still owed) plus whatever is still uncommitted. That is the evidence a
+    // host needs to call the change shipped, so the push verifies itself rather than
+    // depending on the agent remembering a separate status call. Never fails the push.
+    'git status --short --branch 2>/dev/null || true',
   ].join("\n");
 }
 
@@ -488,8 +493,8 @@ function publishToolResult(action: string, r: { ok: boolean; stdout?: string; ex
   if (r.exitCode === 5 || /\bON_BASE_BRANCH\b/.test(out)) {
     return fail(
       action === "push"
-        ? "you are on the BASE branch (main/master) and `allowBaseBranch` was not set — pushing here bypasses review. Open a pull request instead (git_commit with a `branch`, then open_pull_request). If the human has explicitly asked you to push the base branch, re-call with allowBaseBranch:true; they will be prompted to approve it."
-        : "you are on the BASE branch (main/master) and `allowBaseBranch` was not set — committing here bypasses review. Pass `branch` to git_commit to work on a ticket branch (it is created for you), then open_pull_request. If the human has explicitly asked you to commit to the base branch directly, re-call with allowBaseBranch:true; they will be prompted to approve it.",
+        ? "you are on the BASE branch (main/master) and `allowBaseBranch` was not set — pushing here bypasses pull-request review. Open a pull request instead (git_commit with a `branch`, then open_pull_request). If the human has explicitly asked you to push the base branch, or your session instructions make you the reviewer of your own change and you have self-reviewed it, re-call with allowBaseBranch:true; they will be prompted to approve it."
+        : "you are on the BASE branch (main/master) and `allowBaseBranch` was not set — committing here bypasses pull-request review. Pass `branch` to git_commit to work on a ticket branch (it is created for you), then open_pull_request. If the human has explicitly asked you to commit to the base branch directly, or your session instructions make you the reviewer of your own change and you have self-reviewed it, re-call with allowBaseBranch:true; they will be prompted to approve it.",
     );
   }
   if (r.exitCode === 6 || /\bNOTHING_STAGED\b/.test(out)) {
@@ -548,7 +553,7 @@ async function runPublishTool(
 export const gitCommitTool: ToolDefinition = defineTool({
   name: "git_commit",
   description:
-    "Commit the files you changed. You must list the exact `paths` to commit — the working tree is shared with the human using it, so committing everything would sweep up their unrelated in-flight work; run git_status/git_diff first if you are unsure what you touched. The DEFAULT route is a TICKET BRANCH: pass `branch` to name it (created for you if it does not exist), then use open_pull_request so the work is reviewed. Without `branch`, a commit is refused while you are on the base branch (main/master) — unless the human has EXPLICITLY asked you to commit to main directly, in which case pass allowBaseBranch:true (they will be prompted to approve it) and follow with git_push allowBaseBranch:true.",
+    "Commit the files you changed. You must list the exact `paths` to commit — the working tree is shared with the human using it, so committing everything would sweep up their unrelated in-flight work; run git_status/git_diff first if you are unsure what you touched. The DEFAULT route is a TICKET BRANCH: pass `branch` to name it (created for you if it does not exist), then use open_pull_request so the work is reviewed. Without `branch`, a commit is refused while you are on the base branch (main/master) — unless the human has EXPLICITLY asked you to commit to main directly, or your session instructions make you the reviewer of your own change (a local editor session, after you have verified and self-reviewed it); then pass allowBaseBranch:true (the human is prompted to approve it) and follow with git_push allowBaseBranch:true.",
   parameters: {
     type: "object",
     properties: {
@@ -581,7 +586,7 @@ export const gitCommitTool: ToolDefinition = defineTool({
 export const gitPushTool: ToolDefinition = defineTool({
   name: "git_push",
   description:
-    "Push the current branch to origin (setting its upstream on the first push). Pushing the BASE branch (main/master) is refused unless you pass allowBaseBranch — that path skips review, so only set it when the human has explicitly asked for it, and expect them to be prompted to approve it. The normal route is a ticket branch: git_commit with a `branch`, git_push, then open_pull_request.",
+    "Push the current branch to origin (setting its upstream on the first push), then report where it landed (`git status --short --branch`). Pushing the BASE branch (main/master) is refused unless you pass allowBaseBranch — that path skips pull-request review, so only set it when the human has explicitly asked for it, or when your session instructions make you the reviewer of your own change (a local editor session, after verifying and self-reviewing it); the human is prompted to approve it either way. Otherwise the route is a ticket branch: git_commit with a `branch`, git_push, then open_pull_request.",
   parameters: {
     type: "object",
     properties: {

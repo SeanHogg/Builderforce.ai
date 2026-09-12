@@ -1,3 +1,60 @@
+## ✅ RESOLVED 2026-09-12 — The VSIX agent reviews its own change, ships it, and closes the ticket (no more 75% parking)
+
+Reported on chat #103: a local VS Code run edited code, `tickets.from_delta` opened its ticket in
+`in_review` (75%), and the run stopped — #2426 and #2466 ("Code change … from Brain chat") sat in
+review with the edits uncommitted. In the extension NOTHING can review that ticket: the run is local,
+no other agent reaches the working tree, and the only completer (`shippedToBaseBranch` →
+`completeShippedTickets`) needs a verified push to main — which the IDE persona told the agent NOT to
+do ("default route is review: branch + PR; push main only when explicitly asked").
+
+- **The contract** — `brain-embedded/src/selfReviewShip.ts` (`selfReviewShipDirective`): in a session
+  that can commit AND push (`canShipHere` in `localWorkspaceTools.ts`), the agent IS the reviewer:
+  VERIFY → SELF-REVIEW (`git_diff`, fix, `builtin_reviews_record` verdict complete on the ticket) →
+  SHIP (`git_commit`/`git_push` with `allowBaseBranch:true`, exact paths; the host approval prompt is
+  the human's review of the review) → CLOSE. PR/branch on request; leave it uncommitted when told.
+  Injected by the shared loop, so the webview Brain and the native participant both get it.
+  `idePersona.ts`, `chatWorkLinkingDirective`, and the `git_commit`/`git_push` descriptions + the
+  ON_BASE_BRANCH refusal were reworded to match (no more contradicting "default route is review").
+- **The enforcement** (a loop gate, not only advice) — `leftChangeUnshipped` + `unshippedChangeNudge`:
+  a turn that changed code, on a host that can ship, for a change request, with no commit/push/PR even
+  ATTEMPTED, is re-prompted once (`loop.recover_unshipped_change`). Quiet on "don't commit", on a
+  declined/failed publish (reported, never retried), and on the web Brain. The re-prompt reuses the
+  stall path's requeue (extracted `requeueWithNudge`, one copy).
+- **The push verifies itself** — `buildPushCommand` now prints `git status --short --branch` after
+  pushing; `shippedToBaseBranch` accepts the push step's own output as the observation.
+- **Bug fixed on the way: an EARLIER run's push closed a LATER run's ticket.** `c.trace` is a per-chat
+  window spanning every run in the session and was read whole. New `RunCell.runStartedAt` +
+  `runTrace(c)` scope both the ship check and the gate to the current run. `shippedToBaseBranch` also
+  now refuses when a file the run touched is still dirty/untracked in the confirming status
+  (`dirtyPathsOf`), and `gitCommandPattern` sees `git -C <repo> push` (it stopped at the path before).
+- Tests: `selfReviewShip.test.ts` (12), `shipVerification.test.ts` (+7), `localWorkspaceTools.test.ts`
+  (+1), `brainRunStore.test.ts` (+4 loop tests: directive present; edit-then-stop re-prompted and the
+  push closes #2466; "don't commit" left alone; earlier run's push cannot close a later ticket),
+  `git-publish.test.ts` (+1). VSIX 2026.9.45; brain-embedded 2026.9.13.
+
+## ✅ RESOLVED 2026-09-12 — Placing an object inside a collapsed frame expands it (operator decision)
+
+Frame membership is geometric (object centre inside the frame's rect), so an object placed at a
+collapsed frame's coordinates — by drop, drag, paste, import, a Brain tool or an adopted
+collaborator board — landed inside a section nobody could see. Decision 2026-09-12: auto-expand.
+
+- ONE pure rule, `framesToExpandForPlacement(before, after, placedIds)` in
+  `domains/canvas/domain/canvasFrame.ts`: every collapsed frame whose EXPANDED rect encloses a
+  placed object's centre opens (nested collapsed frames all open). It leaves shut a frame that
+  already contained the object (so dragging a collapsed frame with its members does not pop it) and
+  a frame collapsed in the same change (deliberate hiding by a collaborator or a Brain turn).
+- ONE hook point that every placement path shares: `useExpandFramesOnPlacement` diffs the board's
+  nodes state (new or moved objects = placed), waits for a drag to finish, and writes the expand
+  with `expandFrames` — the same `withFrameCollapsed` resize the frame's own toggle now uses, so the
+  collapse maths exists once. The expand lands in the same undo step as the placement and syncs like
+  a manual expand. Skipped for viewers, during undo/redo, and on the first board load.
+- `CreationCanvas.tsx` gained only the imports and the hook call (no logic).
+- Tests: 8 new pure-rule cases, the application module, and the hook (drop/paste/Brain placement
+  expand; load/viewer/undo do not). `src/domains/canvas` — 226 tests green; tsgo, ESLint and the
+  architecture/react-hooks ratchets green.
+- Known behaviour, by design: adopting a collaborator's board that put a NEW object inside a frame
+  already collapsed locally opens it and syncs the expand back.
+
 ## ✅ RESOLVED 2026-09-12 — Cloudflare's managed challenge on the builderforce.ai zone is off (operator action)
 
 The zone served a `403` + `cf-mitigated: challenge` to every datacenter caller on every hostname

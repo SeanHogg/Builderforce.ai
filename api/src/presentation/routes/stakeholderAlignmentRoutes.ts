@@ -11,6 +11,28 @@ import {
 } from '../../application/stakeholderAlignment/stakeholderAlignment.types';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { scope } from './segmentTrackerRoutes';
+import { parseBody, z, zJsonObject } from './requestBody';
+
+// Bodies. Every field a handler answers its own "X is required" / "must be" message
+// for stays optional here, so that message still wins.
+const MapEntryBody = z.object({
+  initiativeId: z.string().nullish(),
+  stakeholderRef: z.string().nullish(),
+  displayName: z.string().nullish(),
+  role: z.string().nullish(),
+  teamScope: z.string().nullish(),
+  priority: z.string().nullish(),
+});
+/** `answers` is checked key-by-key by the handler and stored whole — every key kept. */
+const HealthProfileBody = z.object({ answers: zJsonObject.nullish() });
+const PriorityBody = z.object({
+  stakeholderRef: z.string().nullish(),
+  teamScope: z.string().nullish(),
+  priorityKey: z.string().nullish(),
+  rationale: z.string().optional(),
+});
+const SignoffRequestBody = z.object({ subjectRef: z.string().nullish(), summary: z.string().nullish() });
+const SignoffResponseBody = z.object({ response: z.string().nullish(), comment: z.string().optional() });
 
 const RESPONSES = new Set<StakeholderResponse>(['approve', 'approve_with_comment', 'block']);
 const ANSWERS = new Set<StakeholderAnswer>(['yes', 'no', 'unknown']);
@@ -41,14 +63,7 @@ export function createStakeholderAlignmentRoutes(db: Db): Hono<HonoEnv> {
     const projectId = projectIdOf(c.req.param('projectId'));
     if (!projectId) return c.json({ error: 'invalid projectId' }, 400);
     if (!await service.projectExists(tenantId, projectId)) return c.json({ error: 'project not found' }, 404);
-    const body = await c.req.json<{
-      initiativeId?: string | null;
-      stakeholderRef?: string;
-      displayName?: string;
-      role?: string;
-      teamScope?: string | null;
-      priority?: string | null;
-    }>();
+    const body = await parseBody(c, MapEntryBody);
     if (!body.stakeholderRef?.trim() || !body.displayName?.trim()) return c.json({ error: 'stakeholderRef and displayName are required' }, 400);
     if (body.role !== 'required_approver' && body.role !== 'informed') return c.json({ error: 'role must be required_approver or informed' }, 400);
     const row = await service.upsertMapEntry(tenantId, segmentId, {
@@ -69,7 +84,7 @@ export function createStakeholderAlignmentRoutes(db: Db): Hono<HonoEnv> {
     const projectId = projectIdOf(c.req.param('projectId'));
     if (!projectId) return c.json({ error: 'invalid projectId' }, 400);
     if (!await service.projectExists(tenantId, projectId)) return c.json({ error: 'project not found' }, 404);
-    const body = await c.req.json<{ answers?: Partial<Record<StakeholderQuestionKey, StakeholderAnswer>> }>();
+    const body = await parseBody(c, HealthProfileBody);
     const keys = STAKEHOLDER_ALIGNMENT_QUESTIONS.map((question) => question.key);
     if (!body.answers || keys.some((key) => !ANSWERS.has(body.answers?.[key] as StakeholderAnswer))) {
       return c.json({ error: `answers must include ${keys.join(', ')} using yes, no, or unknown` }, 400);
@@ -94,7 +109,7 @@ export function createStakeholderAlignmentRoutes(db: Db): Hono<HonoEnv> {
     const projectId = projectIdOf(c.req.param('projectId'));
     if (!projectId) return c.json({ error: 'invalid projectId' }, 400);
     if (!await service.projectExists(tenantId, projectId)) return c.json({ error: 'project not found' }, 404);
-    const body = await c.req.json<{ stakeholderRef?: string; teamScope?: string; priorityKey?: string; rationale?: string }>();
+    const body = await parseBody(c, PriorityBody);
     if (!body.stakeholderRef?.trim() || !body.teamScope?.trim() || !body.priorityKey?.trim()) {
       return c.json({ error: 'stakeholderRef, teamScope, and priorityKey are required' }, 400);
     }
@@ -115,7 +130,7 @@ export function createStakeholderAlignmentRoutes(db: Db): Hono<HonoEnv> {
     const projectId = projectIdOf(c.req.param('projectId'));
     if (!projectId) return c.json({ error: 'invalid projectId' }, 400);
     if (!await service.projectExists(tenantId, projectId)) return c.json({ error: 'project not found' }, 404);
-    const body = await c.req.json<{ subjectRef?: string; summary?: string }>();
+    const body = await parseBody(c, SignoffRequestBody);
     if (!body.subjectRef?.trim() || !body.summary?.trim()) return c.json({ error: 'subjectRef and summary are required' }, 400);
     try {
       return c.json(await service.requestSignoff(tenantId, segmentId, projectId, body.subjectRef, body.summary, c.get('userId')), 201);
@@ -126,7 +141,7 @@ export function createStakeholderAlignmentRoutes(db: Db): Hono<HonoEnv> {
 
   router.post('/reviews/:reviewId/respond', manager, async (c) => {
     const { tenantId, segmentId } = scope(c);
-    const body = await c.req.json<{ response?: string; comment?: string }>();
+    const body = await parseBody(c, SignoffResponseBody);
     if (!RESPONSES.has(body.response as StakeholderResponse)) {
       return c.json({ error: 'a valid response is required' }, 400);
     }

@@ -32,6 +32,17 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
 import { recordVisitorEvent } from '../../application/marketing/VisitorEventService';
 import { isValidVisitorId } from '../../application/marketing/MarketingService';
 import { VISITOR_JOURNEY_KINDS } from '../../domain/marketing/VisitorJourney';
+import { parseBody, z, zJsonObject } from './requestBody';
+
+/**
+ * The native batch as the SDKs send it: an array of events, `{ events: [...] }`, or
+ * one bare event — the adapter accepts all three and reads every field defensively,
+ * so the body is any JSON value. Refusing a shape here would drop a genuine SDK batch.
+ */
+const NativeBatchBody = z.unknown();
+
+/** OTLP/JSON is always an `Export*ServiceRequest` object; the otlp adapter walks it. */
+const OtlpJsonBody = zJsonObject;
 
 /** Pull the ingest key from `Authorization: Bearer <key>` or `?key=`. */
 function readIngestKey(c: { req: { header: (n: string) => string | undefined; query: (n: string) => string | undefined } }): string | null {
@@ -222,8 +233,8 @@ export function createQualityIngestRoutes(db: Db): Hono<HonoEnv> {
     const caller = await resolveCallerTenant(db, c);
     if (!caller) return c.json({ error: 'Invalid or missing credential' }, 401);
 
-    let body: unknown;
-    try { body = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
+    // Any JSON object: `parseClientErrorReport` owns the per-field rules and messages.
+    const body = await parseBody(c, zJsonObject);
 
     const parsed = parseClientErrorReport(body);
     if ('error' in parsed) return c.json({ error: parsed.error }, 400);
@@ -247,8 +258,7 @@ export function createQualityIngestRoutes(db: Db): Hono<HonoEnv> {
     const collector = await resolveCollectorByKey(db, key);
     if (!collector) return c.json({ error: 'Invalid ingest key' }, 401);
 
-    let body: unknown;
-    try { body = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
+    const body = await parseBody(c, NativeBatchBody);
 
     const events = getErrorAdapter('native').normalize(body);
     const result = await ingestForCollector(db, c.env as Env, collector, events);
@@ -268,12 +278,15 @@ export function createQualityIngestRoutes(db: Db): Hono<HonoEnv> {
 
     const contentType = (c.req.header('Content-Type') ?? '').toLowerCase();
     let otlpJson: unknown;
+    // The catch is this endpoint's envelope for ANY unreadable body — a protobuf that
+    // will not decode, JSON that will not parse, or JSON that is not an object — so an
+    // exporter sees the one `Invalid OTLP body` 400 it always has, never a 500.
     try {
       if (contentType.includes('protobuf')) {
         const bytes = new Uint8Array(await c.req.arrayBuffer());
         otlpJson = kind === 'logs' ? otlpLogsToJson(bytes) : otlpTracesToJson(bytes);
       } else {
-        otlpJson = await c.req.json();
+        otlpJson = await parseBody(c, OtlpJsonBody);
       }
     } catch {
       return c.json({ error: 'Invalid OTLP body' }, 400);

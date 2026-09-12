@@ -13,8 +13,19 @@ import { ideProxy, newTraceId } from '../../application/llm/LlmProxyService';
 import { tenantProxyForPlan } from '../../application/llm/tenantProxy';
 import { logTrace, backfillTraceUsage, backfillTraceResponseBody } from '../../application/llm/traceLogger';
 import { wrapStreamForTrace } from '../../application/llm/streamTrace';
+import { parseBody, z, zNumberLike } from './requestBody';
 
 const IDE_PREFIX = 'ide/';
+
+/** A chat turn. Forwarded whole to a workforce agent, so extra keys are kept. */
+const ChatMessage = z.looseObject({ role: z.string(), content: z.string() });
+
+/** `POST /chat` — the handler refuses a missing/empty `messages` itself; `projectId` is `Number()`d. */
+const IdeChatBody = z.object({
+  projectId: zNumberLike.nullish(),
+  model: z.string().nullish(),
+  messages: z.array(ChatMessage).nullish(),
+});
 
 /** Build project context from R2: file list + package.json (and optionally index.html) for tech stack. */
 async function buildProjectContext(
@@ -45,7 +56,7 @@ export function createIdeAiRoutes(projectService: ProjectService): Hono<HonoEnv>
   router.use('*', authMiddleware);
 
   router.post('/chat', async (c) => {
-    const body = await c.req.json<{ projectId?: string | number; model?: string; messages: Array<{ role: string; content: string }> }>();
+    const body = await parseBody(c, IdeChatBody);
     if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
       return c.json({ error: 'messages array is required' }, 400);
     }

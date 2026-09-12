@@ -1,3 +1,5 @@
+import { createTranslator } from 'next-intl';
+import { defaultMessages } from '@/i18n/catalog';
 import { practiceProgress, type CanvasPracticeAttempt, type CanvasPracticeQuestion } from './canvasPractice';
 
 export const COURSE_SCHEMA = 'https://builderforce.ai/schemas/course/v1' as const;
@@ -40,67 +42,105 @@ const lesson = (id: string, title: string, objective: string, content: string, a
   id, title, objective, content, activity, durationMinutes,
 });
 
-/** A complete, editable worked course—not placeholder copy. Brain can replace
- * any field through the registry contract, while this gives the blog CTA a
- * useful local result even when the network model is unavailable. */
-export function buildLlmCourse(): CanvasCourse {
-  const modules: CourseModule[] = [
-    {
-      id: 'foundations', title: '1. Define the model', description: 'Turn a capability goal into measurable model requirements.',
-      lessons: [
-        lesson('foundations-outcome', 'Choose an outcome', 'Define one behavior the model must perform reliably.', 'An LLM predicts the next token. A useful product wraps that capability in a clear audience, task, context window, latency target, safety boundary, and evaluation plan.', 'Write a one-sentence model card: “For [audience], the model will [behavior], using [evidence], and succeeds when [metric].”'),
-        lesson('foundations-scale', 'Pick the right build path', 'Compare prompting, retrieval, fine-tuning, and pretraining.', 'Start with the least expensive intervention that can meet the requirement. Prompting changes instructions, retrieval supplies current knowledge, fine-tuning changes behavior, and pretraining learns representations from a corpus.', 'List two reasons your goal requires training rather than prompting or retrieval.'),
-      ],
-      assessment: { question: 'When should you consider pretraining a model from scratch?', choices: ['Whenever prompts are inconvenient', 'When you have distinctive data, sufficient compute, and a requirement base models cannot meet', 'Before defining evaluations', 'For every private knowledge base'], answer: 1, explanation: 'Pretraining is justified only by requirements and resources that simpler approaches cannot satisfy.' },
+/**
+ * The translator the worked course is minted through: a key under the canvas's
+ * `creationCanvas` namespace in, a string out. The canvas passes its own board
+ * translator (`canvasText`), which is the same seam every other persisted default
+ * title on the board is minted through — so the course lands in the BOARD's
+ * language and stays there after every later edit, exactly like its title does.
+ */
+export type CourseTextTranslator = (key: string) => string;
+
+/**
+ * The worked LLM course's STRUCTURE — module ids, lesson ids, which choice is
+ * correct. Its copy is catalog data under `creationCanvas.llmCourse.*`, in five
+ * languages, and nowhere in this file: the course is persisted into the board the
+ * moment it is created, so an English literal here was English on every zh, es,
+ * fr and de board that ever asked for it.
+ */
+const LLM_COURSE_SHAPE = [
+  { id: 'foundations', lessons: ['foundations-outcome', 'foundations-scale'], answer: 1 },
+  { id: 'data', lessons: ['data-corpus', 'data-pipeline'], answer: 1 },
+  { id: 'tokenizer', lessons: ['tokenizer-train', 'architecture-budget'], answer: 0 },
+  { id: 'training', lessons: ['training-run', 'training-align'], answer: 1 },
+  { id: 'evaluation', lessons: ['evaluation-suite', 'evaluation-redteam'], answer: 1 },
+  { id: 'delivery', lessons: ['delivery-card', 'delivery-ops'], answer: 1 },
+] as const;
+const LLM_COURSE_CHOICES = ['a', 'b', 'c', 'd'] as const;
+const LLM_COURSE_LESSON_FIELDS = ['title', 'objective', 'content', 'activity'] as const;
+
+let englishCourseText: CourseTextTranslator | null = null;
+
+/** The English catalog as a course translator — the default for callers with no
+ *  board (the marketplace pack's stored copy, tests). Built once, on first use. */
+function englishText(): CourseTextTranslator {
+  if (!englishCourseText) {
+    const t = createTranslator({ locale: 'en', messages: defaultMessages as never });
+    englishCourseText = (key) => t(`creationCanvas.${key}` as never);
+  }
+  return englishCourseText;
+}
+
+/**
+ * A complete, editable worked course—not placeholder copy. Brain can replace any
+ * field through the registry contract, while this gives the blog CTA a useful
+ * local result even when the network model is unavailable.
+ *
+ * @param t The board's `creationCanvas` translator. Omitted → English.
+ * @param language The board's locale, recorded on the course (and so on the
+ *   exported SCORM package's `<html lang>`).
+ */
+export function buildLlmCourse(t: CourseTextTranslator = englishText(), language = 'en-US'): CanvasCourse {
+  const s = (key: string) => t(`llmCourse.${key}`);
+  const modules: CourseModule[] = LLM_COURSE_SHAPE.map((shape) => ({
+    id: shape.id,
+    title: s(`module.${shape.id}.title`),
+    description: s(`module.${shape.id}.description`),
+    lessons: shape.lessons.map((id) => lesson(id, s(`lesson.${id}.title`), s(`lesson.${id}.objective`), s(`lesson.${id}.content`), s(`lesson.${id}.activity`))),
+    assessment: {
+      question: s(`assessment.${shape.id}.question`),
+      choices: LLM_COURSE_CHOICES.map((choice) => s(`assessment.${shape.id}.choice.${choice}`)),
+      answer: shape.answer,
+      explanation: s(`assessment.${shape.id}.explanation`),
     },
-    {
-      id: 'data', title: '2. Build the dataset', description: 'Create a licensed, representative, contamination-aware corpus.',
-      lessons: [
-        lesson('data-corpus', 'Source and govern data', 'Create a traceable corpus with usage rights.', 'Record provenance, license, consent, retention, language, domain, and quality signals for every source. Remove secrets and personal data before training.', 'Draft a dataset card with allowed use, exclusions, and known representation gaps.'),
-        lesson('data-pipeline', 'Clean, deduplicate, and split', 'Prevent leakage and evaluation contamination.', 'Normalize encoding, remove low-quality documents, deduplicate before splitting, and reserve test data that cannot enter training or prompt development.', 'Design train, validation, and test splits and state how you will detect near-duplicates.'),
-      ],
-      assessment: { question: 'Why deduplicate before creating data splits?', choices: ['To increase token count', 'To prevent near-identical examples leaking into evaluation', 'To remove the need for a tokenizer', 'To guarantee factuality'], answer: 1, explanation: 'Cross-split duplicates inflate evaluation results and hide poor generalization.' },
-    },
-    {
-      id: 'tokenizer', title: '3. Tokenization and architecture', description: 'Translate text into model inputs and choose a defensible scale.',
-      lessons: [
-        lesson('tokenizer-train', 'Train and inspect a tokenizer', 'Measure how vocabulary choices affect your domain.', 'A BPE or unigram tokenizer learns reusable text pieces. Inspect fertility, unknown bytes, multilingual coverage, and handling of code or domain terminology.', 'Tokenize 20 representative samples and flag words that fragment excessively.'),
-        lesson('architecture-budget', 'Budget model shape and compute', 'Relate parameters, tokens, memory, and throughput.', 'Choose layers, hidden width, attention heads, context length, and parameter count together. Estimate training FLOPs, optimizer memory, checkpoint size, and inference cost before the run.', 'Create a budget table for parameters, training tokens, accelerator hours, storage, and serving latency.'),
-      ],
-      assessment: { question: 'What does tokenizer fertility measure?', choices: ['Tokens produced per word or text unit', 'GPU utilization', 'Model accuracy', 'Dataset license quality'], answer: 0, explanation: 'High fertility can make a domain inefficient and reduce usable context.' },
-    },
-    {
-      id: 'training', title: '4. Train safely', description: 'Run reproducible pretraining and instruction tuning.',
-      lessons: [
-        lesson('training-run', 'Configure the training run', 'Make a run reproducible and observable.', 'Version code, data, tokenizer, configuration, and seeds. Track loss, gradient norm, learning rate, throughput, data batches, and checkpoint health.', 'Write a preflight checklist including a tiny overfit test and checkpoint recovery drill.'),
-        lesson('training-align', 'Instruction tune and align', 'Teach task behavior without erasing base capability.', 'Use reviewed instruction-response examples, an explicit mixture, held-out tasks, and conservative hyperparameters. Preference optimization can refine behavior after supervised fine-tuning.', 'Create three instruction examples and a rubric that distinguishes correctness from style.'),
-      ],
-      assessment: { question: 'What should happen before a full training run?', choices: ['Disable checkpoints', 'Run a small end-to-end overfit and recovery test', 'Use the test split for tuning', 'Publish the model card'], answer: 1, explanation: 'A small rehearsal validates data, code, metrics, and recovery before expensive compute begins.' },
-    },
-    {
-      id: 'evaluation', title: '5. Evaluate and red-team', description: 'Measure capability, safety, robustness, and cost.',
-      lessons: [
-        lesson('evaluation-suite', 'Build an evaluation suite', 'Connect every requirement to a test.', 'Combine deterministic checks, model-graded rubrics with calibration, expert review, and adversarial cases. Report uncertainty and slice results by domain and audience.', 'Create a release scorecard with thresholds for quality, safety, latency, and cost.'),
-        lesson('evaluation-redteam', 'Probe failure modes', 'Discover harmful or brittle behavior before release.', 'Test prompt injection, data extraction, unsafe advice, bias, hallucination, long-context degradation, multilingual behavior, and distribution shift.', 'Write five abuse cases and define the expected refusal or safe-completion behavior.'),
-      ],
-      assessment: { question: 'A single average benchmark score is insufficient because…', choices: ['benchmarks never work', 'it can hide failures in important slices and safety cases', 'latency is always constant', 'training loss is the only valid metric'], answer: 1, explanation: 'Release decisions need disaggregated capability and safety evidence.' },
-    },
-    {
-      id: 'delivery', title: '6. Package, deploy, and improve', description: 'Ship a versioned model with operational controls.',
-      lessons: [
-        lesson('delivery-card', 'Publish the model card', 'Document intended use, evidence, and limits.', 'Package immutable weights, tokenizer, inference configuration, licenses, evaluation results, and a model card. Sign artifacts and retain a rollback target.', 'Complete a model card covering intended use, out-of-scope use, data, evaluations, limitations, and ownership.'),
-        lesson('delivery-ops', 'Operate the learning loop', 'Monitor quality without training on unreviewed feedback.', 'Observe latency, cost, drift, safety events, and user outcomes. Route candidate feedback through review, regression evaluation, approval, and a new version.', 'Draw the promotion path from candidate evidence to approved dataset to evaluated release.'),
-      ],
-      assessment: { question: 'Which feedback should automatically enter the next training set?', choices: ['All user conversations', 'Only reviewed, consented, policy-compliant evidence', 'Only negative feedback', 'Any high-volume prompt'], answer: 1, explanation: 'Human review and governance prevent privacy, poisoning, and quality failures.' },
-    },
-  ];
+  }));
   return {
-    schema: COURSE_SCHEMA, version: '1.0.0', language: 'en-US', audience: 'Software and ML practitioners',
-    description: 'A hands-on path from model requirements and governed data through tokenization, training, evaluation, packaging, and operations.',
+    schema: COURSE_SCHEMA, version: '1.0.0', language, audience: s('audience'),
+    description: s('description'),
     estimatedMinutes: modules.flatMap((item) => item.lessons).reduce((sum, item) => sum + item.durationMinutes, 0),
-    subject: 'How large language models are built',
+    subject: s('subject'),
     passingScore: 80, modules, completedLessonIds: [],
   };
+}
+
+/**
+ * Is this the worked LLM course (in any language)? Recognized by its STRUCTURE —
+ * the module ids — never by its copy, which is exactly what differs per board.
+ * Lets a surface that places a stored copy (the marketplace pack) re-mint it in
+ * the board's language instead of writing the English one.
+ */
+export function isWorkedLlmCourse(course: unknown): boolean {
+  const modules = (course as Partial<CanvasCourse> | null | undefined)?.modules;
+  return Array.isArray(modules)
+    && modules.length === LLM_COURSE_SHAPE.length
+    && LLM_COURSE_SHAPE.every((shape, index) => modules[index]?.id === shape.id);
+}
+
+/** Every catalog key the worked course reads, relative to `creationCanvas` — the
+ *  ratchet's input, so a locale missing one fails a test rather than persisting a
+ *  dotted key into somebody's course. */
+export function llmCourseCatalogKeys(): string[] {
+  return [
+    ...['subject', 'audience', 'description'],
+    ...LLM_COURSE_SHAPE.flatMap((shape) => [
+      `module.${shape.id}.title`,
+      `module.${shape.id}.description`,
+      ...shape.lessons.flatMap((id) => LLM_COURSE_LESSON_FIELDS.map((field) => `lesson.${id}.${field}`)),
+      `assessment.${shape.id}.question`,
+      `assessment.${shape.id}.explanation`,
+      ...LLM_COURSE_CHOICES.map((choice) => `assessment.${shape.id}.choice.${choice}`),
+    ]),
+  ].map((key) => `llmCourse.${key}`);
 }
 
 /**

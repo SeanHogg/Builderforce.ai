@@ -21,11 +21,21 @@ import {
   summarizeActionRatings,
   normalizeRatingValue,
   RATING_SUMMARY_DAYS_DEFAULT,
-  type ActionRatingInput,
 } from '../../application/llm/actionRatings';
 import { resolveTenantPlan } from '../../application/tenant/tenantPlanSnapshot';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
+import { parseOptionalBody, z } from './requestBody';
+
+/**
+ * A `Partial<ActionRatingInput>`. The body is SPREAD into `recordActionRating`, which
+ * normalizes every other field itself (surface, kind, tool, rating…), so unknown keys
+ * ride through untouched; only the two fields this route reads directly are typed.
+ */
+const RatingBody = z.looseObject({
+  subjectRef: z.string().optional(),
+  resolvedModel: z.string().nullish(),
+});
 
 export function createLlmRatingRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -36,7 +46,7 @@ export function createLlmRatingRoutes(db: Db): Hono<HonoEnv> {
     const userId = (c.get('userId') as string | undefined) ?? '';
     if (!userId) return c.json({ error: 'Sign in to rate a response' }, 401);
 
-    const body = await c.req.json<Partial<ActionRatingInput>>().catch((): Partial<ActionRatingInput> => ({}));
+    const body = await parseOptionalBody(c, RatingBody);
     if (!body.subjectRef) return c.json({ error: 'subjectRef is required' }, 400);
 
     // The plan is stamped on the row so the rollup can separate "the free pool was

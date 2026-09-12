@@ -1,8 +1,8 @@
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono, type Context } from 'hono';
 import { and, count, desc, eq, inArray } from 'drizzle-orm';
-import { TaskService, type UpdateTaskDto } from '../../application/task/TaskService';
-import { TaskPriority, AgentType, TaskStatus, TaskType } from '../../domain/shared/types';
+import { TaskService } from '../../application/task/TaskService';
+import { TaskStatus, TaskType } from '../../domain/shared/types';
 import { ConflictError } from '../../domain/shared/errors';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware, requestActor, requireRole } from '../middleware/authMiddleware';
@@ -30,7 +30,6 @@ import { buildTicketContext } from '../../application/task/ticketContext';
 import {
   applyDecompositionCleanup,
   findDecompositionCleanupCandidates,
-  type CleanupSelection,
 } from '../../application/task/decompositionCleanup';
 import { loadPlanVerdictsForTasks } from '../../application/planning/planVerdictStore';
 import { pmoVersionKey } from './pmoRoutes';
@@ -54,6 +53,18 @@ import { broadcastProjectChanged } from '../../infrastructure/relay/broadcastRoo
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
 import { taskAssigneesCacheKey } from '../../application/task/taskAssigneeCache';
+import { parseBody, parseOptionalBody } from './requestBody';
+import {
+  AddDependencyBody,
+  ConvertTypeBody,
+  CreateTaskBody,
+  DecomposeBody,
+  DecompositionCleanupBody,
+  LinkSpecBody,
+  MoveTaskBody,
+  RunNowBody,
+  UpdateTaskBody,
+} from './taskRoutes.schemas';
 
 /** Per-task linked-PRD counts via one grouped query [1266]. Best-effort: returns
  *  an empty map (not an error) where `task_specs` (migration 0098) isn't applied,
@@ -328,8 +339,8 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // POST /api/tasks/decomposition-cleanup/apply — archive/merge SELECTED ids only.
   router.post('/decomposition-cleanup/apply', requirePermission(PERMISSIONS.TASK_WRITE), async (c) => {
     const tenantId = c.get('tenantId');
-    const body = await c.req.json<{ projectId?: number; selections?: CleanupSelection[] }>();
-    const selections = Array.isArray(body.selections) ? body.selections : [];
+    const body = await parseBody(c, DecompositionCleanupBody);
+    const selections = body.selections ?? [];
     if (selections.length === 0) return c.json({ error: 'selections is required and must be non-empty' }, 400);
     const projectId = typeof body.projectId === 'number' && body.projectId > 0 ? body.projectId : undefined;
 
@@ -453,7 +464,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // edit tickets.
   router.post('/:id/run-now', requireRole(TenantRole.DEVELOPER), requirePermission(PERMISSIONS.TASK_ASSIGN), async (c) => {
     const id = Number(c.req.param('id'));
-    const body: { chatId?: unknown } = await c.req.json<{ chatId?: unknown }>().catch(() => ({}));
+    const body = await parseOptionalBody(c, RunNowBody);
     const chatId = typeof body.chatId === 'number' && Number.isSafeInteger(body.chatId) && body.chatId > 0
       ? body.chatId
       : undefined;
@@ -689,7 +700,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // and cross-project edges at write time (see taskDependencies.addDependency).
   router.post('/:id/dependencies', requirePermission(PERMISSIONS.TASK_WRITE), async (c) => {
     const successorTaskId = Number(c.req.param('id'));
-    const body = await c.req.json<{ predecessorTaskId?: number; depType?: string }>();
+    const body = await parseBody(c, AddDependencyBody);
     const predecessorTaskId = Number(body.predecessorTaskId);
     if (!Number.isFinite(predecessorTaskId) || predecessorTaskId <= 0) {
       return c.json({ error: 'predecessorTaskId is required' }, 400);
@@ -711,22 +722,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   router.post('/:id/decompose', requirePermission(PERMISSIONS.TASK_WRITE), async (c) => {
     const id = Number(c.req.param('id'));
     if (!(await loadTenantTask(id, c.get('tenantId')))) return c.json({ error: 'Task not found' }, 404);
-    const body = await c.req.json<{
-      children: Array<{
-        title: string;
-        description?: string | null;
-        priority?: TaskPriority;
-        assignedUserId?: string | null;
-        assignedAgentHostId?: number | null;
-        assignedAgentRef?: string | null;
-        /** Working-day size — drives the child's scheduled window. */
-        estimateDays?: number | null;
-        /** Index of the EARLIER sibling that must finish first (finish-to-start). */
-        dependsOnIndex?: number | null;
-      }>;
-      /** Reconcile an already-decomposed Epic instead of being rejected as a duplicate. */
-      replace?: boolean;
-    }>();
+    const body = await parseBody(c, DecomposeBody);
     if (!Array.isArray(body.children) || body.children.length === 0) {
       return c.json({ error: 'children is required and must be non-empty' }, 400);
     }
@@ -756,21 +752,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
 
   // POST /api/tasks
   router.post('/', requirePermission(PERMISSIONS.TASK_WRITE), async (c) => {
-    const body = await c.req.json<{
-      projectId: number;
-      title: string;
-      description?: string | null;
-      priority?: TaskPriority;
-      assignedAgentType?: AgentType | null;
-      assignedAgentHostId?: number | null;
-      assignedAgentRef?: string | null;
-      assignedUserId?: string | null;
-      taskType?: TaskType;
-      parentTaskId?: number | null;
-      startDate?: string | null;
-      dueDate?: string | null;
-      persona?: string | null;
-    }>();
+    const body = await parseBody(c, CreateTaskBody);
     // WHO opened it, resolved from the request and handed to the service — which is
     // where the ONE creation-attribution row is now written (`activity/taskCreated.ts`).
     // Resolving it here rather than after the create is what keeps a human-opened ticket
@@ -807,34 +789,13 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   router.patch('/:id', requirePermission(PERMISSIONS.TASK_WRITE), async (c) => {
     const id = Number(c.req.param('id'));
     if (!(await loadTenantTask(id, c.get('tenantId')))) return c.json({ error: 'Task not found' }, 404);
-    const body = await c.req.json<{
-      title?: string;
-      description?: string | null;
-      status?: string;
-      priority?: TaskPriority;
-      taskType?: TaskType;
-      parentTaskId?: number | null;
-      sprintId?: string | null;
-      releaseId?: string | null;
-      storyPoints?: number | null;
-      businessValue?: number | null;
-      assignedAgentType?: AgentType | null;
-      assignedAgentHostId?: number | null;
-      assignedAgentRef?: string | null;
-      assignedUserId?: string | null;
-      githubPrUrl?: string | null;
-      githubPrNumber?: number | null;
-      startDate?: string | null;
-      dueDate?: string | null;
-      persona?: string | null;
-      archived?: boolean;
-    }>();
+    const body = await parseBody(c, UpdateTaskBody);
     // A human setting business value on the board pins the source to 'manual' so the
     // AI Manager never overwrites the number (it only backfills unscored/AI tickets).
     if (body.businessValue !== undefined) {
-      (body as UpdateTaskDto).businessValueSource = 'manual';
+      body.businessValueSource = 'manual';
       if (body.businessValue !== null) {
-        (body as UpdateTaskDto).businessValueRationale = 'Set by a team member.';
+        body.businessValueRationale = 'Set by a team member.';
       }
     }
     // Capture the pre-update status + owner so a status change can be recorded as a
@@ -976,7 +937,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // POST /api/tasks/:id/move — reassign a task to another project ("board").
   router.post('/:id/move', requirePermission(PERMISSIONS.TASK_WRITE), async (c) => {
     const id = Number(c.req.param('id'));
-    const body = await c.req.json<{ projectId: number }>();
+    const body = await parseBody(c, MoveTaskBody);
     // The task leaves one project's tree and joins another's — bump both.
     const [before] = await db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, id)).limit(1);
     const task = await taskService.moveTask(id, body.projectId, c.get('tenantId'));
@@ -1032,7 +993,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const id = Number(c.req.param('id'));
     const before = await loadTenantTask(id, c.get('tenantId'));
     if (!before) return c.json({ error: 'Task not found' }, 404);
-    const body = await c.req.json<{ target?: WorkItemKind }>();
+    const body = await parseBody(c, ConvertTypeBody);
     const target = body.target;
     if (target !== 'task' && target !== 'epic' && target !== 'objective') {
       return c.json({ error: 'target must be task|epic|objective' }, 400);

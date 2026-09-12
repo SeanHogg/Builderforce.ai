@@ -43,6 +43,39 @@ import { isUniqueViolation } from '../../infrastructure/database/uniqueViolation
 import { daysParam, limitParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
+import { parseBody, parseOptionalBody, z } from './requestBody';
+
+// Request bodies. Every field the handler answers its own "X is required" /
+// "must be one of" message for stays optional so that message still wins.
+const CreateCollectorBody = z.object({
+  projectId: z.number().nullish(),
+  name: z.string().optional(),
+  defaultProjectId: z.number().nullish(),
+});
+/** `graceHours` absent (or null) is the 72h default; 0 is the immediate revoke. */
+const RotateKeyBody = z.object({ graceHours: z.number().nullish() });
+const UpdateCollectorBody = z.object({
+  name: z.string().optional(),
+  enabled: z.boolean().optional(),
+  status: z.string().optional(),
+  /** null detaches the default project; absent leaves it alone. */
+  defaultProjectId: z.number().nullish(),
+});
+const AttachIntegrationBody = z.object({
+  provider: z.string().optional(),
+  secret: z.string().nullish(),
+  apiToken: z.string().nullish(),
+  scope: z.string().nullish(),
+  baseUrl: z.string().nullish(),
+});
+const CreateRuleBody = z.object({
+  matchField: z.string().optional(),
+  matchOp: z.string().optional(),
+  matchValue: z.string().optional(),
+  projectId: z.number().optional(),
+  priority: z.number().nullish(),
+});
+const TriageGroupBody = z.object({ status: z.string().optional() });
 
 /** Encryption secret for sealing webhook/pull credentials (same resolver integrations use). */
 function integrationSecret(env: Env): string {
@@ -173,7 +206,7 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
   router.post('/collectors', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
-    const body = await c.req.json<{ projectId?: number | null; name?: string; defaultProjectId?: number | null }>();
+    const body = await parseBody(c, CreateCollectorBody);
     if (!body.name) return c.json({ error: 'name is required' }, 400);
 
     // Validate any referenced project belongs to the tenant.
@@ -227,7 +260,7 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
   router.post('/collectors/:id/rotate-key', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const body = await c.req.json<{ graceHours?: number }>().catch(() => ({} as { graceHours?: number }));
+    const body = await parseOptionalBody(c, RotateKeyBody);
     const requested = typeof body.graceHours === 'number' && Number.isFinite(body.graceHours)
       ? body.graceHours
       : DEFAULT_KEY_GRACE_HOURS;
@@ -271,7 +304,7 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
   router.patch('/collectors/:id', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const body = await c.req.json<{ name?: string; enabled?: boolean; status?: string; defaultProjectId?: number | null }>();
+    const body = await parseBody(c, UpdateCollectorBody);
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (body.name !== undefined) patch.name = body.name;
     if (body.enabled !== undefined) patch.enabled = body.enabled;
@@ -406,7 +439,7 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
     const id = c.req.param('id');
     if (!(await loadCollector(tenantId, id))) return c.json({ error: 'Collector not found' }, 404);
 
-    const body = await c.req.json<{ provider?: string; secret?: string | null; apiToken?: string | null; scope?: string | null; baseUrl?: string | null }>();
+    const body = await parseBody(c, AttachIntegrationBody);
     const meta = body.provider ? getQualitySourceMeta(body.provider) : undefined;
     if (!meta || !meta.supportsWebhook) {
       return c.json({ error: 'provider must be a webhook source (sentry, posthog, logrocket)' }, 400);
@@ -499,7 +532,7 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
     if (!collector) return c.json({ error: 'Collector not found' }, 404);
     if (collector.projectId != null) return c.json({ error: 'Mapping rules apply only to a tenant-level collector' }, 400);
 
-    const body = await c.req.json<{ matchField?: string; matchOp?: string; matchValue?: string; projectId?: number; priority?: number }>();
+    const body = await parseBody(c, CreateRuleBody);
     if (!body.matchField || !isValidMatchField(body.matchField)) return c.json({ error: `matchField must be one of ${MAPPING_FIELDS.join(', ')} or tag:<key>` }, 400);
     const matchOp = body.matchOp && MAPPING_OPS.includes(body.matchOp) ? body.matchOp : 'equals';
     if (!body.matchValue) return c.json({ error: 'matchValue is required' }, 400);
@@ -685,7 +718,7 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
   router.patch('/groups/:id', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const body = await c.req.json<{ status?: string }>();
+    const body = await parseBody(c, TriageGroupBody);
     if (!body.status || !['unresolved', 'resolved', 'ignored'].includes(body.status)) {
       return c.json({ error: 'status must be unresolved | resolved | ignored' }, 400);
     }

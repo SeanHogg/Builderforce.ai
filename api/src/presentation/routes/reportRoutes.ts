@@ -49,6 +49,32 @@ import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/rea
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { excluded } from '../../infrastructure/database/upsert';
+import { parseBody, parseOptionalBody, z } from './requestBody';
+
+// ---------------------------------------------------------------------------
+// Request bodies
+// ---------------------------------------------------------------------------
+
+/** `reportType` / `schedule` stay optional so the handler's own "… are required" wins. */
+const CreateScheduleBody = z.object({
+  reportType: z.string().nullish(),
+  schedule: z.string().nullish(),
+  deliveryHour: z.number().nullish(),
+  recipients: z.array(z.string()).optional(),
+  subjectKind: z.string().nullish(),
+  subjectRef: z.string().nullish(),
+});
+const UpdateScheduleBody = z.object({
+  deliveryHour: z.number().optional(),
+  recipients: z.array(z.string()).optional(),
+  isEnabled: z.boolean().optional(),
+});
+const SubscriptionsBody = z.array(z.object({ reportType: z.string(), isSubscribed: z.boolean() }));
+/** `status` stays optional so the handler's own "status must be one of" wins. */
+const TriageFeedbackBody = z.object({
+  status: z.string().nullish(),
+  taskId: z.number().nullish(),
+});
 
 // ---------------------------------------------------------------------------
 // Report generation helpers
@@ -744,14 +770,7 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
   // ── POST /api/reports/schedules ───────────────────────────────────────────
   router.post('/schedules', requirePermission(PERMISSIONS.REPORT_EXPORT), requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{
-      reportType: string;
-      schedule: string;
-      deliveryHour?: number;
-      recipients: string[];
-      subjectKind?: string | null;
-      subjectRef?: string | null;
-    }>();
+    const body = await parseBody(c, CreateScheduleBody);
 
     if (!body.reportType || !body.schedule || !Array.isArray(body.recipients)) {
       return c.json({ error: 'reportType, schedule, and recipients[] are required' }, 400);
@@ -790,11 +809,7 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
 
-    const body = await c.req.json<Partial<{
-      deliveryHour: number;
-      recipients: string[];
-      isEnabled: boolean;
-    }>>();
+    const body = await parseBody(c, UpdateScheduleBody);
 
     const [updated] = await db.update(reportSchedules)
       .set({
@@ -839,7 +854,7 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
   router.post('/subscriptions', requirePermission(PERMISSIONS.REPORT_READ), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId   = c.get('userId') as string;
-    const body = await c.req.json<Array<{ reportType: string; isSubscribed: boolean }>>();
+    const body = await parseBody(c, SubscriptionsBody);
 
     if (!Array.isArray(body)) return c.json({ error: 'body must be an array of { reportType, isSubscribed }' }, 400);
 
@@ -944,3 +959,4 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
 
   return router;
 }
+                                   

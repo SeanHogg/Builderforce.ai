@@ -1,4 +1,4 @@
--- 1150 — `contributor`: the workspace seat a canvas share grants.
+-- 1155 — `contributor`: the workspace seat a canvas share grants.
 --
 -- Operator decision 2026-09-12. A canvas invite (addressed email or forwardable
 -- link) that grants EDIT on a board used to seat the invitee as a workspace
@@ -16,6 +16,6 @@
 -- `ADD VALUE IF NOT EXISTS` is idempotent. PostgreSQL 12+ permits it inside the
 -- runner's per-file transaction as long as nothing in the SAME transaction uses
 -- the new value — which is why the re-grade of existing collaborators is its own
--- migration (1151), applied in the next transaction.
+-- migration (1156), applied in the next transaction.
 
 ALTER TYPE tenant_role ADD VALUE IF NOT EXISTS 'contributor' BEFORE 'viewer';

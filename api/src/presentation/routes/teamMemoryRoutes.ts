@@ -23,6 +23,16 @@ import type { TeamMemoryEntry } from '../../openapi/schema';
 import { remember } from '../../application/memory/memoryService';
 import { listTeamMemoryEntries, teamMemoryKey } from '../../application/memory/teamMemoryFeed';
 import { limitParam } from './queryParams';
+import { parseBody, z } from './requestBody';
+
+/** One run summary from an agent host. The handler answers its own required-field messages. */
+const TeamMemoryBody = z.object({
+  agentHostId: z.string().nullish(),
+  runId: z.string().nullish(),
+  summary: z.string().nullish(),
+  tags: z.array(z.string()).nullish(),
+  timestamp: z.string().nullish(),
+});
 
 export function createTeamMemoryRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -57,13 +67,7 @@ export function createTeamMemoryRoutes(db: Db): Hono<HonoEnv> {
 
     if (!tenantId) return c.text('Unauthorized', 401);
 
-    const body = await c.req.json<{
-      agentHostId?: string;
-      runId: string;
-      summary: string;
-      tags?: string[];
-      timestamp?: string;
-    }>();
+    const body = await parseBody(c, TeamMemoryBody);
 
     if (!body.runId?.trim()) return c.json({ error: 'runId is required' }, 400);
     if (!body.summary?.trim()) return c.json({ error: 'summary is required' }, 400);

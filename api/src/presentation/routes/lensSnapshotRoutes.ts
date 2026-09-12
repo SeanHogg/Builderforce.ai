@@ -22,6 +22,14 @@ import {
 } from '../../application/reports/lensSnapshots';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseOptionalBody, z } from './requestBody';
+
+/** `POST /snapshots/capture` — an unknown cadence falls back to monthly, as it always did. */
+const CaptureSnapshotBody = z.object({
+  lens: z.string().nullish(),
+  period: z.string().nullish(),
+  cadence: z.string().nullish(),
+});
 
 const CADENCES = SNAPSHOT_CADENCES;
 
@@ -51,8 +59,7 @@ export function createLensSnapshotRoutes(db: Db): Hono<HonoEnv> {
   // ── POST /snapshots/capture — capture-now for a lens/period ───────────────
   router.post('/snapshots/capture', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    type CaptureBody = { lens?: string; period?: string; cadence?: SnapshotCadence };
-    const body = await c.req.json<CaptureBody>().catch(() => ({} as CaptureBody));
+    const body = await parseOptionalBody(c, CaptureSnapshotBody);
     const lens = body.lens;
     if (!lens || !isSnapshotableLens(lens)) {
       return c.json({ error: `lens must be one of: ${SNAPSHOTABLE_LENSES.join(', ')}` }, 400);

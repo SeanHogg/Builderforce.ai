@@ -209,7 +209,7 @@ export { createPayloadBudget } from './transcriptBudget';
 
 // Did the run's change actually SHIP? The evidence a run holds first-hand when it
 // pushed straight to the base branch — the case no merge webhook can ever see.
-export { shippedToBaseBranch, parseGitShortStatus, BASE_BRANCHES } from './shipVerification';
+export { shippedToBaseBranch, parseGitShortStatus, dirtyPathsOf, BASE_BRANCHES } from './shipVerification';
 export type { GitShortStatus } from './shipVerification';
 
 // Loop guard: the per-run tally of which targets have been read, and the advisory the
@@ -315,8 +315,20 @@ export {
   isCodeChangeTool,
   isUnscopedMutationTool,
   canChangeCodeHere,
+  canShipHere,
   localToolsIn,
 } from './localWorkspaceTools';
+
+// SELF-REVIEW SHIP — in a local editor session the agent is its own change's reviewer:
+// verify, review, commit, push, and the in_review ticket closes. Directive + loop gate.
+export {
+  selfReviewShipDirective,
+  leftChangeUnshipped,
+  unshippedChangeNudge,
+  attemptedPublish,
+  declinesShipping,
+} from './selfReviewShip';
+export type { UnshippedChangeInput } from './selfReviewShip';
 
 // Chat MODE — conversation (`chat`) vs execution (`work`). The single source for what
 // a mode MEANS to the model, shared by the web Brain, the VS Code webview and the
@@ -454,3 +466,5 @@ export {
   PMO_FOCUS_PARAM,
   type ArtifactKind,
 } from './artifactRoute';
+// UI (PRD 14 §136) — the embeddable one-line composer. Host-translated, router-free.
+export { PromptInput, type PromptInputProps } from './ui/PromptInput';

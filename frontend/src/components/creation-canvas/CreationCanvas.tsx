@@ -136,6 +136,7 @@ import { CARD_ACTS } from '@/domains/canvas/application/cardActs';
 import { formatResourceRef, parseResourceRef } from '@builderforce/creation-canvas-contract';
 import { canvasPlacementFlags } from '@/domains/canvas/domain/canvasObject';
 import { CardActProvider, useCardActRunnerFor, type CardActBoardBinding } from './cardActRunner';
+import { CanvasBoardBridgeProvider, useCanvasBoardBridgeFor } from './canvasBoardBridge';
 import { KindDetailsActions } from './KindDetailsActions';
 import { syncSocialCampaign as syncCampaignUseCase } from '@/domains/marketing/application/SyncSocialCampaign';
 import { socialCampaignGateway } from '@/domains/marketing/infrastructure/socialCampaignGateway';
@@ -218,7 +219,7 @@ import { describeSocialFilter, socialApi, totalEngagement, type SocialCampaign, 
 import { canvasSocialToolRedirect, isSocialNetworkName, socialCampaignNodeData, socialFeedPatch, socialPostNodeData, socialPostProjection } from '@/lib/canvasSocial';
 import { canvasMediaSource, describePublicMediaProblem, isCanvasMediaKind, resolvePublicMediaUrls } from '@/lib/canvasPublicMedia';
 import { trackActivity } from '@/lib/activity/tracker';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { analyzeDependencies, appendCanvasVideoSource, canvasGameToolRedirect, canvasImageToolRedirect, canvasToolRequiresAccount, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, findingFingerprint, normalizeQaSteps, CANVAS_GAME_ACCOUNT_GATE, CANVAS_GAME_TOOL, CANVAS_CORPUS_ACCOUNT_GATE, CANVAS_IMAGE_ACCOUNT_GATE, CANVAS_IMAGE_TOOL, CANVAS_QA_ACCOUNT_GATE, CANVAS_REALIZE_ACCOUNT_GATE, CANVAS_SCREENSHOT_ACCOUNT_GATE, CANVAS_SCREENSHOT_TOOL, CANVAS_SOCIAL_ACCOUNT_GATE, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, DATA_PURPOSES, GAME_PLATFORMS, isGamePlatform, LAWFUL_BASES, QA_FINDING_TYPES, QA_SEVERITIES, QA_STEP_ACTIONS, type CanvasVideoSource, type CreationConnectionKind, type DataPurpose, type DataUsePolicy, type DependencyAnalysis, type LawfulBasis, type QaFindingSeverity, type QaFindingType } from '@builderforce/creation-canvas-contract';
 import { createCanvasRealization, listRealizationTargets, primaryRealizationDoc, rankRealizationIdea, type RealizationView } from '@/lib/canvasRealize';
@@ -434,7 +435,7 @@ import { CanvasBuildPanel } from './CanvasBuildPanel';
 import { gamePayloadFrom } from '@/lib/gameTargets';
 import { useLocalizedModalities, useModalityCopy } from '@/lib/useModalityCopy';
 import type { ProjectModality } from '@/lib/modality';
-import { buildLlmCourse, buildScormPackage, courseFromNode } from '@/lib/courseLms';
+import { buildLlmCourse, buildScormPackage, courseFromNode, isWorkedLlmCourse } from '@/lib/courseLms';
 import { executeModelComparison } from '@/lib/modelComparison';
 import { normalizeModelComparisonIds } from '@/lib/modelComparisonRequest';
 import { authoredWebsiteProblem, patchWebsiteHero, websiteHeroFrom, websiteThemeFrom } from './websiteWysiwyg';
@@ -1012,6 +1013,9 @@ export function projectEvermindNodePatch(head: ProjectEvermindHead, activity: Pr
 
 function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialBuildOpen = false, initialBuildChatId, initialBuildTicket, initialPrompt, initialPresent = false, initialModelComparisonIds = [], stageActive = true, hostSurfaces, initialSurface }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialBuildChatId?: number | null; initialBuildTicket?: { kind: string; ref: string } | null; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean; hostSurfaces?: CanvasSurfaceNodes; initialSurface?: CanvasSurfaceId }) {
   const fmt = useFormat();
+  /** The board's language — recorded on content minted INTO the board (the worked
+   *  course's `language`), alongside the copy `canvasText` mints in it. */
+  const locale = useLocale();
   const t = useTranslations('creationCanvas');
   const errorText = useErrorText();
   /**
@@ -4053,7 +4057,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       framePurpose: t('flowStep.framePurpose'),
     });
     const center = flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 260 };
-    const created = template.objects.map((item) => { const node = newNode(item.kind, { x: center.x + item.x - 520, y: center.y + item.y - 180 }); node.data = { ...node.data, ...(item.data ?? {}), ...(item.title ? { title: item.title } : {}) }; return node; });
+    const created = template.objects.map((item) => {
+      const node = newNode(item.kind, { x: center.x + item.x - 520, y: center.y + item.y - 180 });
+      node.data = { ...node.data, ...(item.data ?? {}), ...(item.title ? { title: item.title } : {}) };
+      // The pack stores the worked LLM course as ENGLISH (it is module data, built
+      // with no board). Placing it re-mints it through the board's translator, so a
+      // zh board's course is written in Chinese — the course is persisted, and an
+      // English copy written here would stay English after every later edit.
+      if (node.data.kind === 'course' && isWorkedLlmCourse(node.data.course)) node.data = { ...node.data, course: buildLlmCourse(canvasText, locale) };
+      return node;
+    });
     const createdEdges = (template.connections ?? []).map((edge) => ({ id: crypto.randomUUID(), source: created[edge.source].id, target: created[edge.target].id, type: 'smoothstep', label: edge.label }));
     // An edge that declares a `ref` also WIRES it: the source card's title lands in the
     // named field on the target, which is the form every canvas reference already takes.
@@ -4073,7 +4086,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNodes((current) => [...current, ...placeAppendedRef.current(current, created)]); setEdges((current) => [...current, ...createdEdges]); setTemplateOpen(false); setNotice(t('noticeTemplateAddedMarketplace', { name: templateText(template, 'name') }));
     trackActivity('creation_object_pack_added', { sessionId, metadata: { clientSurface: canvasSurface(), templateId: template.id, objectKinds: template.objects.map((item) => item.kind) } });
     window.setTimeout(() => void flowRef.current?.fitView({ nodes: created.map(({ id }) => ({ id })), padding: .2, duration: 400 }), 0);
-  }, [canEdit, sessionId, setEdges, setNodes, t, templateText]);
+  }, [canEdit, canvasText, locale, sessionId, setEdges, setNodes, t, templateText]);
 
   const addFramePreset = useCallback((preset: FramePreset) => {
     if (!canEdit) return;
@@ -9745,7 +9758,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const request = requestText.toLowerCase();
       if (/\b(?:course|training|lms|academy|learn)\b/.test(request) && /\b(?:llm|language model)\b/.test(request)) {
         const brain = nodes.find((node) => node.data.kind === 'chat');
-        const course: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 420, y: 180 }, data: { kind: 'course', title: t('runtimeObject.llmCourse'), status: t('runtimeObject.status.readyToLearn'), subtitle: t('runtimeObject.llmCourseSubtitle'), course: buildLlmCourse() } };
+        const course: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 420, y: 180 }, data: { kind: 'course', title: t('runtimeObject.llmCourse'), status: t('runtimeObject.status.readyToLearn'), subtitle: t('runtimeObject.llmCourseSubtitle'), course: buildLlmCourse(canvasText, locale) } };
         const lab: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1020, y: 230 }, data: { ...createDefaultCreationData('code'), title: t('runtimeObject.llmLab'), status: t('runtimeObject.status.practiceWorkspace'), language: 'python', code: '# Build your tokenizer, model, and training loop here\n' } };
         setNodes((current) => [...current, ...placeAppendedRef.current(current, [course, lab])]);
         setEdges((current) => associateBrainWithArtifacts([...current, { id: crypto.randomUUID(), source: course.id, target: lab.id, type: 'smoothstep', label: 'practice', animated: true, data: { connectionKind: 'reference' } }], brain?.id || '', [course.id], 'Created with Brain'));
@@ -9782,7 +9795,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       clearComposer();
       setNotice(t('noticeEvaluationAdded'));
     }, 850);
-  }, [appendTimeline, canvasActions, canvasNotices, confirm, currentUserId, describeTurnError, disableBrainModel, effectiveSelectedIds, edges, evermindProjectId, lastTurnProvenance, members, memoryEnabled, modelSelection, nodes, openNodeInspector, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, setNotice, stage, t, thinking, timeline, title]);
+  }, [appendTimeline, canvasActions, canvasNotices, canvasText, confirm, currentUserId, locale, describeTurnError, disableBrainModel, effectiveSelectedIds, edges, evermindProjectId, lastTurnProvenance, members, memoryEnabled, modelSelection, nodes, openNodeInspector, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, setNotice, stage, t, thinking, timeline, title]);
 
   useEffect(() => {
     if (!hydrated.current || modelComparisonStarted.current || comparisonModelIds.length < 2) return;
@@ -11759,6 +11772,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     () => [...rosterMembers, ...boardAgentOccupants(seatedAgents)],
     [rosterMembers, seatedAgents],
   );
+  // The board as the room's stations and a framed third-party widget read and edit it.
+  const boardBridge = useCanvasBoardBridgeFor({ sessionId, title, persistence, objects: nodes, act: cardActBoard, patch: cardsEditable ? updateNodeData : null, remove: cardsEditable ? deleteObjects : null, selfId: rosterSelfId, occupants: roomOccupants });
 
   const brainSurfaceOpen = !presentMode && brainDock.open;
   const brainCollaborators = useMemo(
@@ -12398,7 +12413,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     {/* Same reasoning for the card-act runner: a card's action button is drawn deep in
         the inspector, and handing it a callback would have meant one more entry in a
         prop list that already carries fifty. Published once, read where it is needed. */}
-    <CardActProvider runner={runCardActOnObject}>
+    <CardActProvider runner={runCardActOnObject}><CanvasBoardBridgeProvider value={boardBridge}>
     <div
       ref={shellRef}
       className={`${styles.canvasShell} app-full-height`}
@@ -12849,15 +12864,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             // What the session is worth, read back. Board-scoped for the same reason
             // `app` is — the metrics are about the whole session, not one card.
             insights: <CanvasInsightsSurface onExit={() => setSurface('graph')} />,
-            // THE ROOM, with the session in it. Board-scoped like `app` and `insights`:
-            // its subject is the whole session, so there is no card to enter it from. It
-            // is handed the roster and the live presence map the host already holds —
-            // the room owns no membership of its own, because the session already has
-            // one and a second would be a second answer to "who is here" — and the
-            // projection's input, which it draws small on the table and, when pressed,
-            // full size through `renderSession`. `Canvas3DView` wears the room's (X) on
-            // the corner of its own planes; that (X) and its Escape are the frame's
-            // minimise, and its commands still ride the ONE bar.
+            // THE ROOM, with the session in it — board-scoped like `app` and `insights`.
+            // It is handed the roster and live presence the host already holds (no second
+            // answer to "who is here") and the projection's input, drawn small on the table
+            // and full size through `renderSession`, whose (X) and Escape minimise it. Its
+            // stations read the board through `CanvasBoardBridgeProvider`, not props.
             room: <CanvasRoomSurface
               sessionId={sessionId}
               sessionTitle={title}
@@ -13251,7 +13262,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         onStepChange={prepareTourStep}
       />
     </div>
-    </CardActProvider>
+    </CanvasBoardBridgeProvider></CardActProvider>
     </CanvasSurfaceProvider>
   );
 }

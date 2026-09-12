@@ -4,6 +4,7 @@ import {
   isLocalWorkspaceTool,
   isUnscopedMutationTool,
   canChangeCodeHere,
+  canShipHere,
   localToolsIn,
   memoryToolsIn,
   isProjectMemoryTool,
@@ -53,6 +54,16 @@ describe('the local workspace toolset', () => {
     // The web Brain: platform tools only, so dispatching is its only route to a change.
     expect(canChangeCodeHere(['builtin_tasks_create', 'builtin_chats_dispatch_agent'])).toBe(false);
     expect(canChangeCodeHere([])).toBe(false);
+  });
+
+  /**
+   * Only a session that can LAND its change is told it is that change's reviewer (and
+   * re-prompted for leaving it unshipped) — commit without push lands nothing.
+   */
+  it('answers whether THIS run can ship its own change: commit AND push', () => {
+    expect(canShipHere(['edit_file', 'git_commit', 'git_push'])).toBe(true);
+    expect(canShipHere(['edit_file', 'git_commit'])).toBe(false);
+    expect(canShipHere(['builtin_tasks_create', 'builtin_chats_dispatch_agent'])).toBe(false);
   });
 
   /**

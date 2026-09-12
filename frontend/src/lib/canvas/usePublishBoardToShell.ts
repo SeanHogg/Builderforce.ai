@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { assessmentGate, liveAssessmentMode, type AssessmentGate } from '@/lib/academic/assessment';
 import { canvasProjectId, canvasProjectNodes } from '@/lib/canvasProjectRef';
+import { useClock } from '@/lib/useClock';
 import type { CreationNodeData } from '@/components/creation-canvas/types';
 import { useOptionalActiveCanvas } from './ActiveCanvasContext';
 
@@ -43,11 +44,7 @@ export function usePublishBoardToShell(
     publishProjectIds?.(sessionId, boardProjectIds);
   }, [boardProjectIds, publishProjectIds, sessionId]);
 
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), ASSESSMENT_CLOCK_MS);
-    return () => window.clearInterval(timer);
-  }, []);
+  const now = useClock(ASSESSMENT_CLOCK_MS);
   const mode = useMemo(
     () => liveAssessmentMode(nodes.map((node) => node.data as unknown as Record<string, unknown>), now),
     [nodes, now],

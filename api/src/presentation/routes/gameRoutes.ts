@@ -36,6 +36,7 @@ import {
 import { isGameTarget } from '../../application/game/gameTarget';
 import { ROBLOX_SECRETS } from '../../application/game/robloxCloud';
 import { IOS_SIGNING_SECRETS } from '../../application/game/adapters/ios';
+import { parseOptionalBody, z, type BodyContext } from './requestBody';
 
 /** A generated game is a document, not a payload; well above any real one. */
 const MAX_GAME_BYTES = 400_000;
@@ -43,20 +44,21 @@ const MAX_GAME_BYTES = 400_000;
 const assertProject = (db: Db, tenantId: number, raw: string) =>
   findProjectForTenant(db, tenantId, Number(raw));
 
-interface GameBody {
-  title?: unknown;
-  brief?: unknown;
-  html?: unknown;
-  subdomain?: unknown;
-  universeId?: unknown;
-  placeId?: unknown;
-  slug?: unknown;
-}
+/** Every field is optional and checked by the handler that reads it. */
+const GameBodySchema = z.object({
+  title: z.unknown().optional(),
+  brief: z.unknown().optional(),
+  html: z.unknown().optional(),
+  subdomain: z.unknown().optional(),
+  universeId: z.unknown().optional(),
+  placeId: z.unknown().optional(),
+  slug: z.unknown().optional(),
+});
+type GameBody = z.infer<typeof GameBodySchema>;
 
 /** A body that failed to parse is an empty one, not a failure — every field is
  *  optional and validated individually, so a shared reader keeps that in one place. */
-const readBody = (c: { req: { json: <T>() => Promise<T> } }): Promise<GameBody> =>
-  c.req.json<GameBody>().catch(() => ({}) as GameBody);
+const readBody = (c: BodyContext): Promise<GameBody> => parseOptionalBody(c, GameBodySchema);
 
 const optionalString = (value: unknown): string | null =>
   typeof value === 'string' && value.trim() ? value.trim() : null;

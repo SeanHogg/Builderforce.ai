@@ -117,7 +117,7 @@ describe('census: stops counting the human_gate cohort for a workspace with the 
 });
 
 describe('the conduct step asks the gate before it closes anything', () => {
-  const source = readFileSync(fileURLToPath(new URL('./ManagerService.ts', import.meta.url)), 'utf8');
+  const source = readFileSync(fileURLToPath(new URL('./ManagerService.ts', import.meta.url).href), 'utf8');
   const conduct = source.slice(source.indexOf('async function coordinatePullRequests'));
 
   it('decides the review gate BEFORE the one completion path', () => {

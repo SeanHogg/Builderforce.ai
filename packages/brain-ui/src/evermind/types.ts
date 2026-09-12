@@ -106,6 +106,24 @@ export interface EvermindEvalPoint {
   evalSize: number;
 }
 
+/**
+ * The Evermind CODING-QUALITY gate's verdict (mirrors api `EvermindCodingGate`).
+ * Operator decision 2026-09-12: a head serves IDE coding turns only when a coding eval
+ * recorded for THIS version scores ≥ `bar` (0.9) of the frontier baseline.
+ */
+export interface EvermindCodingGateView {
+  qualified: boolean;
+  reason: 'qualified' | 'unseeded' | 'quarantined' | 'no_eval' | 'stale_eval' | 'below_bar';
+  /** The bar the server applied (fraction, e.g. 0.9) — never restated client-side. */
+  bar: number;
+  /** Recorded score ÷ baseline score, or null when no usable eval is recorded. */
+  ratio: number | null;
+  headVersion: number;
+  evaluatedVersion: number | null;
+  baselineModel?: string | null;
+  dataset?: string | null;
+}
+
 /** The head summary + live learning activity for a project's Evermind. */
 export interface EvermindConsoleData {
   version: number;
@@ -147,6 +165,9 @@ export interface EvermindConsoleData {
   quarantinedAt?: string | null;
   /** The probe-failure reason behind {@link quarantinedAt} (present when quarantined). */
   quarantineReason?: string | null;
+  /** Whether this head may serve IDE coding turns (the 90% coding-eval gate). Absent on
+   *  an older server — the console then says nothing about it. */
+  codingGate?: EvermindCodingGateView | null;
 }
 
 /**
@@ -396,6 +417,12 @@ export interface EvermindConsoleLabels {
   // Quarantine (auto-disabled after incoherent serves)
   quarantinedBadge: string;
   quarantinedHint: (reason: string) => string;
+  // Coding-quality gate (serves IDE coding turns only at ≥ bar of the frontier baseline).
+  // Percentages arrive as whole numbers (e.g. 87, 90).
+  codingGateQualified: (pct: number, barPct: number) => string;
+  codingGateBelowBar: (pct: number, barPct: number) => string;
+  codingGateNoEval: (barPct: number) => string;
+  codingGateStale: (evaluatedVersion: number, headVersion: number, barPct: number) => string;
   // Targets ("Everminds under this project")
   targetsTitle: string;
   targetsHint: string;
@@ -611,6 +638,11 @@ export const DEFAULT_EVERMIND_LABELS: EvermindConsoleLabels = {
   quarantinedBadge: 'Quarantined',
   quarantinedHint: (reason) =>
     `This Evermind auto-disabled after producing incoherent output (${reason}). Retrain it past the coherence bar to re-enable inference.`,
+  codingGateQualified: (pct, bar) => `Coding eval ${pct}% of baseline — qualified to serve IDE coding turns (needs ${bar}%).`,
+  codingGateBelowBar: (pct, bar) => `Coding eval ${pct}% of baseline, needs ${bar}% — IDE coding turns stay on the frontier model.`,
+  codingGateNoEval: (bar) => `No coding eval recorded for this version — needs ${bar}% of the frontier baseline before it can serve IDE coding turns.`,
+  codingGateStale: (evaluated, head, bar) =>
+    `Coding eval was recorded for v${evaluated}; the head is now v${head}. Re-run it — needs ${bar}% of the frontier baseline to serve IDE coding turns.`,
   targetsTitle: 'Everminds under this project',
   targetsHint: 'Every Evermind this project contributes learning to.',
   targetsEmpty: 'No Everminds resolved for this project yet.',

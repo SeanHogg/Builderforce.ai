@@ -24,6 +24,7 @@ import { submitFeedback, type FeedbackTarget } from '../../application/feedback/
 import { respondToFeedbackSubmit } from './feedbackHttp';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseBody, zJsonObject } from './requestBody';
 
 /** Pull the ingest key from `Authorization: Bearer <key>` or `?key=` (beacon path). */
 function readIngestKey(c: { req: { header: (n: string) => string | undefined; query: (n: string) => string | undefined } }): string | null {
@@ -106,8 +107,9 @@ export function createFeedbackIngestRoutes(db: Db): Hono<HonoEnv> {
       return c.json({ error: 'Origin not allowed for this collector' }, 403);
     }
 
-    let body: unknown;
-    try { body = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
+    // Any JSON object: `normalizeFeedback` owns the per-field rules (and their
+    // messages), so the schema only refuses a body that is not an object at all.
+    const body = await parseBody(c, zJsonObject);
 
     const normalized = normalizeFeedback(body);
     if (!normalized.ok) return c.json({ error: normalized.error }, 400);

@@ -2,7 +2,7 @@
  * Schema — Delivery & work, owned by the **Manager** (PRD 20 §3).
  *
  * Root entity `work_item`. 123 source tables in → 54 out, 48 of them absorbed by
- * the kernel — 52 since migration 1153 folded `kanban_columns` into `swimlanes`
+ * the kernel — 52 since migration 1160 folded `kanban_columns` into `swimlanes`
  * and `release_plans` into `product_releases`. Builderforce contributed 37 of the
  * survivors — it owns this domain the way hired.video owns hiring.
  *
@@ -975,7 +975,7 @@ export const swimlanes = pgTable('swimlanes', {
   // (default), 'hard' = block the auto-advance until required checks are satisfied.
   requirementGate:  varchar('requirement_gate', { length: 8 }).notNull().default('soft'),
   /** The two KanbanColumn attributes (spec 01 §6) a lane had no home for, added
-   *  when migration 1153 folded `kanban_columns` in: a per-lane WIP limit (null =
+   *  when migration 1160 folded `kanban_columns` in: a per-lane WIP limit (null =
    *  unlimited, 0 = closed) and a design-token colour. Columns on the lane, not a
    *  second column table — a new attribute of a lane is a value on the lane. */
   wipLimit:      integer('wip_limit'),
@@ -1434,6 +1434,18 @@ export const projectEvermind = pgTable('project_evermind', {
   serveFailureStreak: integer('serve_failure_streak').notNull().default(0),
   quarantinedAt:     timestamp('quarantined_at'),
   quarantineReason:  text('quarantine_reason'),
+  /**
+   * The Evermind CODING-QUALITY GATE's evidence (migration 1157): the latest coding
+   * eval, stamped with the head version it scored. The head may serve coding turns
+   * only while `codingEvalVersion === version` AND score ÷ baseline ≥ 0.9 — see
+   * `evermindCodingGate.ts`. NULL = never evaluated (gate closed).
+   */
+  codingEvalVersion:       integer('coding_eval_version'),
+  codingEvalScore:         real('coding_eval_score'),
+  codingEvalBaselineScore: real('coding_eval_baseline_score'),
+  codingEvalBaselineModel: text('coding_eval_baseline_model'),
+  codingEvalDataset:       text('coding_eval_dataset'),
+  codingEvalAt:            timestamp('coding_eval_at'),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({
@@ -3288,7 +3300,8 @@ export const alertEvents = pgTable('alert_events', {
 
 // ═══ PRD 20 §5 step 2 — target-schema tables ═══
 //
-// Delivery & work — the Manager's fifteen remaining targets (PRD 20 §3.2).
+// Delivery & work — the Manager's fifteen remaining targets (PRD 20 §3.2); thirteen
+// since migration 1160 folded `kanban_columns` and `release_plans` onto their owners.
 //
 // 123 source tables in → 54 out, 48 absorbed by the kernel. The two biggest
 // absorptions are the reason this domain finally has invariants to enforce:
@@ -3304,7 +3317,7 @@ export const alertEvents = pgTable('alert_events', {
 // repo carried before any merge (§5 step 0), and both are `work_items` kinds now.
 
 // `kanban_columns` was a board column beside `swimlanes` — a second answer to "what
-// lanes does this board have". Migration 1153 folded its rows into `swimlanes`
+// lanes does this board have". Migration 1160 folded its rows into `swimlanes`
 // (which gained `wip_limit` + `color_token`) and dropped it.
 
 /** A commitment coming out of a conversation. Distinct from a `tasks` row:
@@ -3323,7 +3336,7 @@ export const actionItems = pgTable('action_items', {
   dueAt:       timestamp('due_at'),
   /** 'open' | 'done' | 'promoted' | 'dropped'. */
   status:      varchar('status', { length: 16 }).notNull().default('open'),
-  /** The ticket this commitment was promoted to (migration 1153 — was a
+  /** The ticket this commitment was promoted to (migration 1160 — was a
    *  `promoted_work_item_ref` string). SET NULL: deleting the ticket must not
    *  delete the record that the commitment was made. */
   promotedTaskId: integer('promoted_task_id').references(() => tasks.id, { onDelete: 'set null' }),
@@ -3375,7 +3388,7 @@ export const signOffs = pgTable('sign_offs', {
 ]);
 
 // `release_plans` was a release beside `product_releases` — the release a task's
-// `release_id` actually points at. Migration 1153 folded its rows (and re-pointed
+// `release_id` actually points at. Migration 1160 folded its rows (and re-pointed
 // their kernel `objects`) into `product_releases` and dropped it.
 
 /** An estimate on one ticket. A row rather than a column because estimates
@@ -3385,7 +3398,7 @@ export const signOffs = pgTable('sign_offs', {
 export const taskEffortEstimates = pgTable('task_effort_estimates', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull(),
-  /** The ticket estimated (migration 1153 — was a `work_item_ref` string). */
+  /** The ticket estimated (migration 1160 — was a `work_item_ref` string). */
   taskId:      integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
   /** 'points' | 'hours' | 'tshirt'. */
   unit:        varchar('unit', { length: 16 }).notNull().default('points'),
@@ -3398,7 +3411,7 @@ export const taskEffortEstimates = pgTable('task_effort_estimates', {
   isCurrent:   boolean('is_current').notNull().default(true),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
-  index('idx_task_effort_estimates_item').on(t.tenantId, t.workItemRef, t.estimatedAt),
+  index('idx_task_effort_estimates_task').on(t.tenantId, t.taskId, t.estimatedAt),
 ]);
 
 /** Time booked against a work item. Distinct from `timesheets` (Finance), which
@@ -3407,7 +3420,8 @@ export const taskEffortEstimates = pgTable('task_effort_estimates', {
 export const taskTimeEntries = pgTable('task_time_entries', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull(),
-  workItemRef: varchar('work_item_ref', { length: 64 }).notNull(),
+  /** The ticket the time was booked against (migration 1160 — was a `work_item_ref` string). */
+  taskId:      integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
   workerRef:   varchar('worker_ref', { length: 64 }).notNull(),
   startedAt:   timestamp('started_at'),
   endedAt:     timestamp('ended_at'),
@@ -3420,7 +3434,7 @@ export const taskTimeEntries = pgTable('task_time_entries', {
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
-  index('idx_task_time_entries_item').on(t.tenantId, t.workItemRef, t.startedAt),
+  index('idx_task_time_entries_task').on(t.tenantId, t.taskId, t.startedAt),
   index('idx_task_time_entries_worker').on(t.tenantId, t.workerRef, t.startedAt),
 ]);
 
@@ -3470,7 +3484,8 @@ export const syncConflictResolutions = pgTable('sync_conflict_resolutions', {
 export const bottleneckAnalysis = pgTable('bottleneck_analysis', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull(),
-  projectRef:  varchar('project_ref', { length: 64 }),
+  /** The project measured (migration 1160 — was a `project_ref` string); null = workspace-wide. */
+  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
   stage:       varchar('stage', { length: 64 }).notNull(),
   periodStart: timestamp('period_start').notNull(),
   periodEnd:   timestamp('period_end').notNull(),
@@ -3483,7 +3498,7 @@ export const bottleneckAnalysis = pgTable('bottleneck_analysis', {
   recommendation: text('recommendation'),
   computedAt:  timestamp('computed_at').notNull().defaultNow(),
 }, (t) => [
-  uniqueIndex('uq_bottleneck_analysis_period').on(t.tenantId, t.projectRef, t.stage, t.periodStart),
+  uniqueIndex('uq_bottleneck_analysis_project_period').on(t.tenantId, t.projectId, t.stage, t.periodStart),
 ]);
 
 /** Who has how much room, by period. */
@@ -3510,8 +3525,10 @@ export const capacityHeatmaps = pgTable('capacity_heatmaps', {
 export const sprintFinancialImpact = pgTable('sprint_financial_impact', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull(),
-  sprintRef:   varchar('sprint_ref', { length: 64 }).notNull(),
-  projectRef:  varchar('project_ref', { length: 64 }),
+  /** The sprint costed (migration 1160 — was a `sprint_ref` string). There is no
+   *  project column: the sprint names its project (`sprints.project_id`), and a
+   *  copy here would be a transitive dependency free to disagree with it. */
+  sprintId:    uuid('sprint_id').notNull().references(() => sprints.id, { onDelete: 'cascade' }),
   laborCost:   numeric('labor_cost', { precision: 16, scale: 2 }).notNull().default('0'),
   toolingCost: numeric('tooling_cost', { precision: 16, scale: 2 }).notNull().default('0'),
   aiCost:      numeric('ai_cost', { precision: 16, scale: 2 }).notNull().default('0'),
@@ -3520,7 +3537,7 @@ export const sprintFinancialImpact = pgTable('sprint_financial_impact', {
   computedAt:  timestamp('computed_at').notNull().defaultNow(),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
-  uniqueIndex('uq_sprint_financial_impact_sprint').on(t.tenantId, t.sprintRef),
+  uniqueIndex('uq_sprint_financial_impact_sprint_id').on(t.tenantId, t.sprintId),
 ]);
 
 /** A company inside a portfolio. The portfolio itself is a `work_items` row of

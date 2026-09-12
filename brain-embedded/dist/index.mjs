@@ -2777,7 +2777,7 @@ async function runAgentLoop(args) {
   const ctx = new Ctx(args.messages, signal);
   const startStep = Math.max(0, budget.startStep ?? 0);
   const maxThisCall = budget.maxSteps ?? Number.POSITIVE_INFINITY;
-  const stepCap = budget.stepCap ?? Number.POSITIVE_INFINITY;
+  const stepCap = () => budget.stepCap ?? Number.POSITIVE_INFINITY;
   const failureStreakCap = budget.failureStreakCap ?? DEFAULT_TOOL_FAILURE_STREAK;
   ctx.step = startStep;
   ctx.output = args.initialOutput ?? "";
@@ -2787,7 +2787,7 @@ async function runAgentLoop(args) {
   let failuresTripped = false;
   let awaitingInput;
   const isCancelled = async () => Boolean(signal?.aborted) || Boolean(await hooks.isCancelled?.(ctx));
-  for (; ctx.step < stepCap && !finished && ctx.stepInCall < maxThisCall; ctx.step++, ctx.stepInCall++) {
+  for (; ctx.step < stepCap() && !finished && ctx.stepInCall < maxThisCall; ctx.step++, ctx.stepInCall++) {
     if (await isCancelled()) {
       cancelled = true;
       break;
@@ -2880,7 +2880,7 @@ async function runAgentLoop(args) {
       break;
     }
   }
-  const exhausted = !finished && !cancelled && !awaitingInput && (failuresTripped || ctx.step >= stepCap);
+  const exhausted = !finished && !cancelled && !awaitingInput && (failuresTripped || ctx.step >= stepCap());
   return {
     ok,
     output: ctx.output,
@@ -6082,6 +6082,87 @@ function artifactRoutePath(kind, ref, projectId) {
     }
   }
 }
+
+// src/ui/PromptInput.tsx
+import { jsx as jsx4, jsxs } from "react/jsx-runtime";
+var rowStyle = { display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end", width: "100%" };
+var fieldStyle = {
+  flex: "1 1 200px",
+  minWidth: 0,
+  minHeight: 42,
+  boxSizing: "border-box",
+  background: "var(--bg-base, #fff)",
+  color: "var(--text-primary, #111)",
+  fontSize: "0.875rem",
+  fontFamily: "inherit",
+  lineHeight: 1.4,
+  padding: "10px 12px",
+  borderRadius: "var(--radius-lg, 10px)",
+  border: "1px solid var(--border-subtle, #c8c8c8)",
+  resize: "none"
+};
+var buttonStyle = (enabled) => ({
+  flex: "0 0 auto",
+  minWidth: 42,
+  height: 42,
+  padding: "0 16px",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  border: "1px solid var(--border-subtle, #c8c8c8)",
+  borderRadius: "var(--radius-lg, 10px)",
+  background: enabled ? "var(--accent, #2563eb)" : "var(--bg-elevated, #eee)",
+  color: enabled ? "var(--text-on-accent, #fff)" : "var(--text-muted, #666)",
+  cursor: enabled ? "pointer" : "not-allowed",
+  fontSize: "1rem",
+  fontWeight: 700
+});
+function PromptInput({
+  value,
+  onChange,
+  onSubmit,
+  placeholder,
+  submitLabel,
+  ariaLabel,
+  disabled = false,
+  busy = false,
+  leading,
+  secondaryContent,
+  rows = 1,
+  className,
+  submitOnEnter = true
+}) {
+  const canSubmit = value.trim().length > 0 && !disabled && !busy;
+  const submit = () => {
+    if (canSubmit) onSubmit();
+  };
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    submit();
+  };
+  const handleKeyDown = (event) => {
+    if (!submitOnEnter || event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    submit();
+  };
+  const shared = {
+    value,
+    placeholder,
+    disabled,
+    "aria-label": ariaLabel ?? placeholder,
+    onChange: (event) => onChange(event.target.value),
+    onKeyDown: handleKeyDown,
+    style: fieldStyle
+  };
+  return /* @__PURE__ */ jsxs("form", { onSubmit: handleSubmit, className, style: { display: "flex", flexDirection: "column", gap: 6, width: "100%" }, children: [
+    /* @__PURE__ */ jsxs("div", { style: rowStyle, children: [
+      leading,
+      rows <= 1 ? /* @__PURE__ */ jsx4("input", { type: "text", ...shared }) : /* @__PURE__ */ jsx4("textarea", { rows, ...shared }),
+      /* @__PURE__ */ jsx4("button", { type: "submit", disabled: !canSubmit, "aria-label": submitLabel, title: submitLabel, "aria-busy": busy || void 0, style: buttonStyle(canSubmit), children: /* @__PURE__ */ jsx4("span", { "aria-hidden": "true", children: busy ? "\u2026" : "\u2191" }) })
+    ] }),
+    secondaryContent && /* @__PURE__ */ jsx4("div", { style: { fontSize: "0.75rem", color: "var(--text-muted, #666)" }, children: secondaryContent })
+  ] });
+}
 export {
   ADDRESSED_TO_META_KEY,
   API_VERSION_PROBE_TIMEOUT_MS,
@@ -6119,6 +6200,7 @@ export {
   PMO_FOCUS_PARAM,
   PROJECT_EVERMIND_MODEL_PREFIX,
   PROVENANCE_META_KEY,
+  PromptInput,
   READ_FILE_RESULT_CHARS,
   RESTING_CHAT_MODE,
   REVISIT_HARD_AT,

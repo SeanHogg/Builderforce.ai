@@ -900,7 +900,7 @@ BR	scheduled_check_ins	Platform & observability	primitive	question_set
 BR	check_in_responses	People & HR	primitive	response
 BR	meeting_transcripts	Platform & observability	primitive	rendition
 BR	kanban_boards	Delivery & work	merged	boards
-BR	kanban_columns	Delivery & work	keep	kanban_columns
+BR	kanban_columns	Delivery & work	merged	swimlanes
 BR	work_items	Delivery & work	keep	work_items
 BR	deliveries	Platform & observability	primitive	webhook
 BR	task_effort_estimates	Delivery & work	keep	task_effort_estimates
@@ -963,7 +963,7 @@ BR	workflow_automations	Agents & runtime	merged	(folded into a sibling)
 BR	features	Investor & portfolio	primitive	work_item
 BR	experiments	Growth & marketing	keep	experiments
 BR	feature_adoption	Platform & observability	merged	(folded into a sibling)
-BR	release_plans	Delivery & work	keep	release_plans
+BR	release_plans	Delivery & work	merged	product_releases
 BR	approval_workflows	Delivery & work	merged	(folded into a sibling)
 BR	approval_requests	Delivery & work	merged	(folded into a sibling)
 BR	approval_actions	Delivery & work	keep	approval_actions

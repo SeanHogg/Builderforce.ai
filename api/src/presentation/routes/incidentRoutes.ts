@@ -49,6 +49,111 @@ import { parseDefinition } from '../../domain/workflowGraph';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { parseOptionalBody, z } from './requestBody';
+
+// ── Request bodies ────────────────────────────────────────────────────────────
+// Every field the handler answers its own "X is required" message for stays
+// optional so that message still wins. Fields the services default with `??`
+// accept null; NOT NULL columns written straight from a patch are optional only.
+
+const zRotationKind = z.enum(['manual', 'daily', 'weekly']) satisfies z.ZodType<RotationKind>;
+const zIncidentSeverity = z.enum(['sev1', 'sev2', 'sev3', 'sev4']) satisfies z.ZodType<IncidentSeverity>;
+const zIncidentStatus = z.enum(['open', 'acknowledged', 'mitigated', 'resolved']) satisfies z.ZodType<IncidentStatus>;
+
+const CreateRotationBody = z.object({
+  name: z.string().optional(),
+  description: z.string().nullish(),
+  rotationKind: zRotationKind.nullish(),
+  projectId: z.number().nullish(),
+});
+const UpdateRotationBody = z.object({
+  name: z.string().optional(),
+  description: z.string().nullish(),
+  rotationKind: zRotationKind.optional(),
+  active: z.boolean().optional(),
+  currentIndex: z.number().optional(),
+});
+const AddRotationMemberBody = z.object({
+  memberRef: z.string().optional(),
+  displayName: z.string().nullish(),
+  position: z.number().nullish(),
+});
+const CreatePolicyBody = z.object({
+  name: z.string().optional(),
+  description: z.string().nullish(),
+  matchSeverity: z.string().nullish(),
+  projectId: z.number().nullish(),
+});
+const AddLevelBody = z.object({
+  level: z.number().nullish(),
+  afterMinutes: z.number().nullish(),
+  targetKind: z.string().nullish(),
+  targetRef: z.string().nullish(),
+  notifyTeams: z.boolean().nullish(),
+  notifySlack: z.boolean().nullish(),
+  notifyEmail: z.boolean().nullish(),
+});
+/** Create AND patch a contact; `name` is NOT NULL, the rest clear with null. */
+const ContactBody = z.object({
+  name: z.string().optional(),
+  roleTitle: z.string().nullish(),
+  company: z.string().nullish(),
+  email: z.string().nullish(),
+  phone: z.string().nullish(),
+  teamsId: z.string().nullish(),
+  notes: z.string().nullish(),
+});
+const OpenIncidentBody = z.object({
+  title: z.string().optional(),
+  description: z.string().nullish(),
+  severity: zIncidentSeverity.nullish(),
+  source: z.string().nullish(),
+  affectedSystem: z.string().nullish(),
+  projectId: z.number().nullish(),
+  escalationPolicyId: z.string().nullish(),
+  openWarRoom: z.boolean().nullish(),
+  page: z.boolean().nullish(),
+});
+const ImplicatedTaskBody = z.object({
+  taskId: z.number().optional(),
+  relation: z.string().nullish(),
+  note: z.string().nullish(),
+});
+const UpdateIncidentBody = z.object({
+  severity: zIncidentSeverity.optional(),
+  status: zIncidentStatus.optional(),
+  impact: z.string().nullish(),
+  rootCause: z.string().nullish(),
+});
+const ClassifyBody = z.object({ system: z.string().optional() });
+const NoteBody = z.object({ message: z.string().optional() });
+const PostmortemBody = z.object({
+  summary: z.string().nullish(),
+  rootCause: z.string().nullish(),
+  impact: z.string().nullish(),
+  contributingFactors: z.string().nullish(),
+  resolution: z.string().nullish(),
+  whatWentWell: z.string().nullish(),
+  whatWentWrong: z.string().nullish(),
+  docType: z.enum(['postmortem', 'known_error']).optional(),
+  // The service drops items with a blank title, so a missing one is a dropped item.
+  actionItems: z.array(z.object({
+    title: z.string().nullish().transform((v) => v ?? ''),
+    detail: z.string().nullish(),
+  })).optional(),
+});
+/** One rung; `normaliseWhyChain` trims and drops blank statements itself. */
+const WhyStepBody = z.object({
+  statement: z.string().nullish().transform((v) => v ?? ''),
+  isRoot: z.boolean().nullish().transform((v) => v ?? undefined),
+}) satisfies z.ZodType<WhyStepInput>;
+const WhysBody = z.object({ whys: z.array(WhyStepBody).optional() });
+const RunWorkflowBody = z.object({
+  definitionId: z.string().optional(),
+  runtime: z.string().optional(),
+  agentHostId: z.number().nullish(),
+  cloudAgentRef: z.string().nullish(),
+});
 
 export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -66,15 +171,15 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
   });
   router.post('/on-call/rotations', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const b = (await c.req.json().catch(() => ({}))) as { name?: string; description?: string; rotationKind?: RotationKind; projectId?: number };
+    const b = await parseOptionalBody(c, CreateRotationBody);
     if (!b.name?.trim()) return c.json({ error: 'name is required' }, 400);
-    const row = await new OnCallService(db).createRotation(tenantId, { name: b.name, description: b.description ?? null, rotationKind: b.rotationKind, projectId: b.projectId ?? null });
+    const row = await new OnCallService(db).createRotation(tenantId, { name: b.name, description: b.description ?? null, rotationKind: b.rotationKind ?? undefined, projectId: b.projectId ?? null });
     await invalidate(c, tenantId);
     return c.json({ rotation: row }, 201);
   });
   router.patch('/on-call/rotations/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const b = (await c.req.json().catch(() => ({}))) as { name?: string; description?: string; rotationKind?: RotationKind; active?: boolean; currentIndex?: number };
+    const b = await parseOptionalBody(c, UpdateRotationBody);
     await new OnCallService(db).updateRotation(tenantId, c.req.param('id'), b);
     await invalidate(c, tenantId);
     return c.json({ ok: true });
@@ -87,9 +192,9 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
   });
   router.post('/on-call/rotations/:id/members', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const b = (await c.req.json().catch(() => ({}))) as { memberRef?: string; displayName?: string; position?: number };
+    const b = await parseOptionalBody(c, AddRotationMemberBody);
     if (!b.memberRef?.trim()) return c.json({ error: 'memberRef is required' }, 400);
-    const row = await new OnCallService(db).addMember(tenantId, c.req.param('id'), { memberRef: b.memberRef, displayName: b.displayName ?? null, position: b.position });
+    const row = await new OnCallService(db).addMember(tenantId, c.req.param('id'), { memberRef: b.memberRef, displayName: b.displayName ?? null, position: b.position ?? undefined });
     await invalidate(c, tenantId);
     return c.json({ member: row }, 201);
   });
@@ -109,7 +214,7 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
   });
   router.post('/escalation/policies', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const b = (await c.req.json().catch(() => ({}))) as { name?: string; description?: string; matchSeverity?: string; projectId?: number };
+    const b = await parseOptionalBody(c, CreatePolicyBody);
     if (!b.name?.trim()) return c.json({ error: 'name is required' }, 400);
     const row = await new EscalationService(db).createPolicy(tenantId, { name: b.name, description: b.description ?? null, matchSeverity: b.matchSeverity ?? null, projectId: b.projectId ?? null });
     await invalidate(c, tenantId);
@@ -123,11 +228,11 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
   });
   router.post('/escalation/policies/:id/levels', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const b = (await c.req.json().catch(() => ({}))) as { level?: number; afterMinutes?: number; targetKind?: string; targetRef?: string; notifyTeams?: boolean; notifySlack?: boolean; notifyEmail?: boolean };
+    const b = await parseOptionalBody(c, AddLevelBody);
     if (b.afterMinutes == null) return c.json({ error: 'afterMinutes is required' }, 400);
     const row = await new EscalationService(db).addLevel(tenantId, c.req.param('id'), {
-      level: b.level, afterMinutes: b.afterMinutes, targetKind: b.targetKind, targetRef: b.targetRef ?? null,
-      notifyTeams: b.notifyTeams, notifySlack: b.notifySlack, notifyEmail: b.notifyEmail,
+      level: b.level ?? undefined, afterMinutes: b.afterMinutes, targetKind: b.targetKind ?? undefined, targetRef: b.targetRef ?? null,
+      notifyTeams: b.notifyTeams ?? undefined, notifySlack: b.notifySlack ?? undefined, notifyEmail: b.notifyEmail ?? undefined,
     });
     await invalidate(c, tenantId);
     return c.json({ level: row }, 201);
@@ -149,7 +254,7 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
   });
   router.post('/contacts', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const b = (await c.req.json().catch(() => ({}))) as { name?: string; roleTitle?: string; company?: string; email?: string; phone?: string; teamsId?: string; notes?: string };
+    const b = await parseOptionalBody(c, ContactBody);
     if (!b.name?.trim()) return c.json({ error: 'name is required' }, 400);
     const [row] = await db.insert(businessContacts).values({
       tenantId, name: b.name.slice(0, 255), roleTitle: b.roleTitle ?? null, company: b.company ?? null,
@@ -160,7 +265,7 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
   });
   router.patch('/contacts/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    const b = await parseOptionalBody(c, ContactBody);
     const set: Record<string, unknown> = { updatedAt: new Date() };
     for (const k of ['name', 'roleTitle', 'company', 'email', 'phone', 'teamsId', 'notes'] as const) if (b[k] !== undefined) set[k] = b[k];
     await db.update(businessContacts).set(set).where(and(eq(businessContacts.id, c.req.param('id')), eq(businessContacts.tenantId, tenantId)));
@@ -184,11 +289,11 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
   });
   router.post('/', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const b = (await c.req.json().catch(() => ({}))) as { title?: string; description?: string; severity?: IncidentSeverity; source?: string; affectedSystem?: string; projectId?: number; escalationPolicyId?: string; openWarRoom?: boolean; page?: boolean };
+    const b = await parseOptionalBody(c, OpenIncidentBody);
     if (!b.title?.trim()) return c.json({ error: 'title is required' }, 400);
     const svc = new IncidentService(db);
     const res = await svc.openIncident(tenantId, {
-      title: b.title, description: b.description ?? null, severity: b.severity, source: b.source ?? 'manual',
+      title: b.title, description: b.description ?? null, severity: b.severity ?? undefined, source: b.source ?? 'manual',
       affectedSystem: b.affectedSystem ?? null, projectId: b.projectId ?? null, escalationPolicyId: b.escalationPolicyId ?? null,
       openWarRoom: b.openWarRoom === true, actorRef: `u:${c.get('userId') as string | undefined ?? 'system'}`,
     });
@@ -215,9 +320,9 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
   });
   router.post('/:id/implicated', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const b = (await c.req.json().catch(() => ({}))) as { taskId?: number; relation?: string; note?: string };
+    const b = await parseOptionalBody(c, ImplicatedTaskBody);
     if (typeof b.taskId !== 'number') return c.json({ error: 'taskId is required' }, 400);
-    await new IncidentService(db).linkImplicatedTask(tenantId, c.req.param('id'), { taskId: b.taskId, relation: b.relation, note: b.note, createdBy: (c.get('userId') as string | undefined) ?? null });
+    await new IncidentService(db).linkImplicatedTask(tenantId, c.req.param('id'), { taskId: b.taskId, relation: b.relation ?? undefined, note: b.note, createdBy: (c.get('userId') as string | undefined) ?? null });
     await invalidate(c, tenantId);
     return c.json({ ok: true });
   });
@@ -229,14 +334,14 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
   });
   router.patch('/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const b = (await c.req.json().catch(() => ({}))) as { severity?: IncidentSeverity; status?: IncidentStatus; impact?: string; rootCause?: string };
+    const b = await parseOptionalBody(c, UpdateIncidentBody);
     await new IncidentService(db).updateIncident(tenantId, c.req.param('id'), { ...b, actorRef: `u:${c.get('userId') as string | undefined ?? 'system'}` });
     await invalidate(c, tenantId);
     return c.json({ ok: true });
   });
   router.post('/:id/classify', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const b = (await c.req.json().catch(() => ({}))) as { system?: string };
+    const b = await parseOptionalBody(c, ClassifyBody);
     if (!b.system?.trim()) return c.json({ error: 'system is required' }, 400);
     await new IncidentService(db).classify(tenantId, c.req.param('id'), b.system, `u:${c.get('userId') as string | undefined ?? 'system'}`);
     await invalidate(c, tenantId);
@@ -244,7 +349,7 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
   });
   router.post('/:id/notes', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const b = (await c.req.json().catch(() => ({}))) as { message?: string };
+    const b = await parseOptionalBody(c, NoteBody);
     if (!b.message?.trim()) return c.json({ error: 'message is required' }, 400);
     await new IncidentService(db).addEvent(tenantId, c.req.param('id'), { kind: 'note', actorRef: `u:${c.get('userId') as string | undefined ?? 'system'}`, message: b.message });
     return c.json({ ok: true }, 201);
@@ -291,11 +396,7 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
   });
   router.post('/:id/postmortem', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const b = (await c.req.json().catch(() => ({}))) as {
-      summary?: string; rootCause?: string; impact?: string; contributingFactors?: string; resolution?: string;
-      whatWentWell?: string; whatWentWrong?: string; docType?: 'postmortem' | 'known_error';
-      actionItems?: Array<{ title: string; detail?: string }>;
-    };
+    const b = await parseOptionalBody(c, PostmortemBody);
     const res = await new IncidentService(db).publishPostmortem(tenantId, c.req.param('id'), {
       ...b, actorRef: `u:${c.get('userId') as string | undefined ?? 'system'}`,
     }, c.env);
@@ -320,7 +421,7 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
   // renumbering pass after every delete — see PostmortemWhyService.
   router.put('/:id/whys', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const b = (await c.req.json().catch(() => ({}))) as { whys?: WhyStepInput[] };
+    const b = await parseOptionalBody(c, WhysBody);
     if (!Array.isArray(b.whys)) return c.json({ error: 'whys must be an array' }, 400);
     const userId = c.get('userId') as string | undefined;
     const whys = await new PostmortemWhyService(db).replaceChain(tenantId, c.req.param('id'), b.whys, {
@@ -393,7 +494,7 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:id/run-workflow', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const incidentId = c.req.param('id');
-    const b = (await c.req.json().catch(() => ({}))) as { definitionId?: string; runtime?: string; agentHostId?: number; cloudAgentRef?: string };
+    const b = await parseOptionalBody(c, RunWorkflowBody);
     if (!b.definitionId) return c.json({ error: 'definitionId is required' }, 400);
 
     const detail = await new IncidentService(db).getIncident(tenantId, incidentId);

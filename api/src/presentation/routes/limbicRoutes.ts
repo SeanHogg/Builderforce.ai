@@ -1,4 +1,3 @@
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Limbic gateway route.
  *
@@ -41,18 +40,23 @@ import {
   buildUserPersonalityBlock,
   resolvePsychometricProfile,
 } from '../../application/artifact/capabilityContext';
+import { parseOptionalBody, z } from './requestBody';
 
-interface LimbicBlockBody {
-  text?: unknown;
+/**
+ * Handed whole to `resolvePsychometricProfile`, which type-guards every field itself —
+ * so every field stays `unknown` and the object stays loose.
+ */
+const LimbicBlockBody = z.looseObject({
+  text: z.unknown().optional(),
   /** Inline psychometric profile (JSON string OR object) — resolved with no DB read. */
-  psychometric?: unknown;
+  psychometric: z.unknown().optional(),
   /** Load this human user's `users.psychometric`. */
-  userId?: unknown;
+  userId: z.unknown().optional(),
   /** Load this agent's `ide_agents.psychometric`. */
-  agentId?: unknown;
+  agentId: z.unknown().optional(),
   /** Load this persona's psychometric (platform/marketplace persona slug). */
-  personaId?: unknown;
-}
+  personaId: z.unknown().optional(),
+});
 
 export function createLimbicRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -70,14 +74,8 @@ export function createLimbicRoutes(db: Db): Hono<HonoEnv> {
    * }
    */
   router.post('/block', authMiddleware, async (c) => {
-    let body: LimbicBlockBody = {};
-    try {
-      body = (await c.req.json()) as LimbicBlockBody;
-    } catch (error) {
-      /* empty / non-JSON body → neutral appraisal, no profile */
-
-      reportCaughtError(error, { source: "presentation/routes/limbicRoutes.ts", operation: "createLimbicRoutes" });
-    }
+    // Empty / non-JSON body → neutral appraisal, no profile.
+    const body = await parseOptionalBody(c, LimbicBlockBody);
     const text = typeof body.text === 'string' ? body.text : '';
 
     // The agent leg is tenant-scoped, so pass the caller's tenant: an authenticated

@@ -110,6 +110,7 @@ import { getRoutingTable, MIN_SAMPLES, type RoutingScope } from '../llm/routingT
 import { resolveTenantModel } from '../llm/tenantModelService';
 import { reasoningParamsForModel } from '../llm/reasoningCapability';
 import { contributeTextToProjectEverminds } from '../llm/projectEvermind';
+import { resolveEvermindCodingRoute } from '../llm/evermindCodingEvalStore';
 import { modelSupportsTools } from '../llm/vendors';
 import { scoreRunOutcome, finalizeLearnWeight, runProducedOutput } from './scoreRunOutcome';
 import { recordCloudToolEvent } from './cloudToolEvents';
@@ -415,7 +416,10 @@ async function imageRunTurn(
   const byoBlocked = await refuseCloudRunWithoutByo(db, { tenantId, cloudAgentRef, executionId }, creds);
   if (byoBlocked) return { ok: false, error: byoBlocked.message, code: byoBlocked.code };
   const { anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, vendorKeys: tenantVendorKeys } = creds;
+  // Evermind coding gate — undefined unless the pin is an `evermind/<ref>` route.
+  const evermindCoding = await resolveEvermindCodingRoute(env, db, tenantId, model);
   const pick = pickCloudModel(model, ctx.effectivePlan, ctx.premiumOverride, {
+    ...(evermindCoding ? { evermindCoding } : {}),
     // Context-aware seed: a small-window model isn't picked for a big turn.
     estimatedTokens: estimateRequestTokens(args.messages, args.tools),
     byoVendors: byoVendorIdsFromCredentials(creds),
@@ -1066,13 +1070,22 @@ async function runCloudToolLoop(
   const requestedInferenceModel = typeof effectiveModel === 'string' && effectiveModel.startsWith('evermind/')
     ? effectiveModel
     : undefined;
-  const projectInferenceModel = requestedInferenceModel && modelSupportsTools(requestedInferenceModel)
+  // …and every turn of this loop is a CODING turn, so the pin must also clear the
+  // Evermind coding-quality gate (a recorded coding eval ≥ 90% of the frontier baseline
+  // for this exact head version — operator decision 2026-09-12). Closed → the pin is
+  // dropped and the run takes the normal coding selection; never an error.
+  const evermindCoding = requestedInferenceModel
+    ? await resolveEvermindCodingRoute(env, db, tenantId, requestedInferenceModel)
+    : undefined;
+  const projectInferenceModel = requestedInferenceModel && evermindCoding?.qualified && modelSupportsTools(requestedInferenceModel)
     ? requestedInferenceModel
     : undefined;
   if (requestedInferenceModel && !projectInferenceModel) {
     console.warn(
-      `[evermind] refusing to pin ${requestedInferenceModel} for a tool-driven agent run (no tool-calling); `
-      + 'selecting from the coding pool instead',
+      evermindCoding?.qualified
+        ? `[evermind] refusing to pin ${requestedInferenceModel} for a tool-driven agent run (no tool-calling); selecting from the coding pool instead`
+        : `[evermind] not pinning ${requestedInferenceModel} for a coding run — coding-eval gate closed `
+          + `(${evermindCoding?.gate?.reason ?? 'not a project head'}); selecting from the coding pool instead`,
     );
   }
 
@@ -1143,6 +1156,8 @@ async function runCloudToolLoop(
   const pick = projectInferenceModel
     ? { model: projectInferenceModel, strict: true as const }
     : pickCloudModel(effectiveModel, routing.effectivePlan, routing.premiumOverride, {
+        // Carries the gate's verdict so a closed-gate Evermind pin is dropped here too.
+        ...(evermindCoding ? { evermindCoding } : {}),
         actionType: learned.actionType,
         actionStats: learned.actionStats,
         bias: opts?.routingBias,

@@ -28,6 +28,11 @@ import { listGatewayMcpTools, callGatewayMcpTool, resolveGatewayMcpTool } from '
 import { describeToolSurfaces, resolveToolSurface, TOOL_SURFACES } from '../../application/llm/toolSurfaces';
 import { requireTenantAccess, type TenantAccess } from './llmRoutes';
 import type { Env, HonoEnv } from '../../env';
+import { RequestValidationError } from '../../domain/shared/errors';
+import { INVALID_JSON_MESSAGE, parseBody, z } from './requestBody';
+
+/** One JSON-RPC message, or a batch of them (older clients). `handleRpc` checks each one. */
+const JsonRpcBody = z.union([z.looseObject({}), z.array(z.unknown())]);
 
 /** Protocol revisions this server can speak, newest first. */
 const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'] as const;
@@ -233,11 +238,21 @@ export function createMcpServerRoutes(): Hono<HonoEnv> {
       );
     }
 
-    let body: unknown;
+    // Both refusals keep the protocol's envelope — an MCP client cannot read the
+    // API's `{ error, issues }` shape. Not JSON is -32700; JSON that is neither a
+    // request object nor a batch (a bare string, a number, null) is -32600.
+    let body: z.infer<typeof JsonRpcBody>;
     try {
-      body = await c.req.json();
-    } catch {
-      return c.json(rpcError(null, JSON_RPC.PARSE_ERROR, 'Request body is not valid JSON'), 400);
+      body = await parseBody(c, JsonRpcBody);
+    } catch (error) {
+      if (!(error instanceof RequestValidationError)) throw error;
+      const unparseable = error.issues.some((issue) => issue.message === INVALID_JSON_MESSAGE);
+      return c.json(
+        unparseable
+          ? rpcError(null, JSON_RPC.PARSE_ERROR, 'Request body is not valid JSON')
+          : rpcError(null, JSON_RPC.INVALID_REQUEST, 'Invalid JSON-RPC 2.0 request'),
+        400,
+      );
     }
 
     const authToken = (c.req.header('Authorization') ?? '').replace(/^Bearer\s+/i, '') || null;

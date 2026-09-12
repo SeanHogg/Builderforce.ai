@@ -45,6 +45,7 @@
       "@builderforce/agent-loop": ["../../../packages/agent-loop/src/index.ts"],
       "@builderforce/ide-file-contract": ["../../../packages/ide-file-contract/src/index.ts"],
       "@builderforce/ide-templates": ["../../../packages/ide-templates/src/index.ts"],
+      "@builderforce/canvas-widget-protocol": ["../../../packages/canvas-widget-protocol/src/index.ts"],
       // The three Next couplings, resolved to the shims the bundler also uses —
       // so types and runtime agree on what `useTranslations` / `useRouter` are.
       "next-intl": ["./src/shims/next-intl.ts"],

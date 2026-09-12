@@ -3,7 +3,6 @@ blog	9	1	0	0	blog_posts
 system	11	2	1	50	system_features
 pricingAggregator	3	9	5	56	billing_plans business_pricing_models plan_features system_features
 referrals	4	3	2	67	referral_entries
-kanban	45	4	3	75	kanban_columns
 featureVoting	8	5	4	80	system_features
 pricing	23	12	10	83	plan_features system_features
 revenueIntelligence	19	6	5	83	ri_sequences
@@ -11,7 +10,6 @@ aiProductivity	27	7	6	86	ai_voice_agent_calls
 billing	52	16	14	88	billing_plans payment_methods
 accounts	24	8	7	88	system_features
 ai	9	8	7	88	billing_plans
-productManagement	86	8	7	88	release_plans
 businessIntelligence	83	22	20	91	business_pricing_models pricing_simulations
 customerEngagement	34	11	10	91	affiliate_referrals
 usageTracking	18	13	12	92	system_features
@@ -28,6 +26,7 @@ scratchPad	39	13	13	100
 auth	30	12	12	100	
 dashboard	8	10	10	100	
 bookings	26	8	8	100	
+productManagement	86	8	8	100	
 businessProfiles	18	7	7	100	
 marketplace	15	7	7	100	
 companies	16	6	6	100	
@@ -43,6 +42,7 @@ predictiveAnalytics	3	5	5	100
 revenueAnalytics	6	5	5	100	
 agileCost	11	4	4	100	
 commsOps	11	4	4	100	
+kanban	45	4	4	100	
 onboarding	10	4	4	100	
 planningPoker	28	4	4	100	
 systemAdmin/security	7	4	4	100	

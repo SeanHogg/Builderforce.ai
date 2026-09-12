@@ -514,6 +514,94 @@ describe('a run that ships its change closes its own ticket', () => {
   });
 });
 
+describe('a local run is its own reviewer: it ships its change instead of parking it at 75%', () => {
+  const persistence = { sendMessages: async () => [] };
+  const TICKET = [{ kind: 'task', ref: '2466', status: 'in_review', exists: true }];
+  const IDE_TOOLS = ['edit_file', 'git_status', 'git_diff', 'git_commit', 'git_push', 'run_command'].map((name) => ({
+    type: 'function' as const,
+    function: { name, description: name, parameters: {} },
+  }));
+
+  /** A scripted model: each entry is one turn — a tool call, or final text. */
+  function scripted(turns: Array<{ name: string; args: unknown } | string>) {
+    const calls: { name: string; args: unknown }[] = [];
+    const systems: string[] = [];
+    let turn = 0;
+    const stream: BrainStreamFn = async (opts) => {
+      const sys = opts.messages.find((m) => m.role === 'system');
+      if (sys && typeof sys.content === 'string') systems.push(sys.content);
+      if (opts.tools === undefined) return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
+      turn += 1;
+      const t = turns[turn - 1] ?? 'Done.';
+      if (typeof t === 'string') return { text: t, toolCalls: [], finishReason: 'stop' };
+      return { text: '', toolCalls: [{ id: `c${turn}`, name: t.name, args: JSON.stringify(t.args) }], finishReason: 'tool_calls' };
+    };
+    const runTool = async (name: string, args: unknown) => {
+      calls.push({ name, args });
+      if (name === 'builtin_chats_list_tickets') return TICKET;
+      if (name === 'git_push') return { ok: true, action: 'push', output: 'Pushed main to origin\n## main...origin/main' };
+      return { ok: true };
+    };
+    return { stream, runTool, calls, systems };
+  }
+  const doneUpdate = (calls: { name: string; args: unknown }[]) =>
+    calls.find((c) => c.name === 'builtin_tasks_update' && (c.args as { status?: string }).status === 'done');
+
+  it('tells a session that can commit and push that it IS the reviewer', async () => {
+    const { stream, runTool, systems } = scripted(['Nothing to change.']);
+    await startRun(4801, { resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool, stream, persistence, userTurn: 'fix the deep link' });
+    expect(systems[0]).toContain('SHIP YOUR OWN CHANGE');
+  });
+
+  it('sends back a turn that edited and stopped, and the verified push closes the ticket', async () => {
+    // The measured chat #103 shape: edit, report, stop — with the edit uncommitted and
+    // its delta ticket parked in review. The loop re-prompts once; the model ships.
+    const { stream, runTool, calls } = scripted([
+      { name: 'edit_file', args: { path: 'src/a.ts', old_string: 'x', new_string: 'y' } },
+      'I fixed the deep link in src/a.ts.',
+      { name: 'git_commit', args: { message: 'fix deep link', paths: ['src/a.ts'], allowBaseBranch: true } },
+      { name: 'git_push', args: { allowBaseBranch: true } },
+      'Shipped as abc123 — pushed to main.',
+    ]);
+    await startRun(4802, { resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool, stream, persistence, userTurn: 'fix the deep link' });
+    expect(getRunTrace(4802).some((e) => e.label === 'loop.recover_unshipped_change')).toBe(true);
+    expect(calls.some((c) => c.name === 'git_push')).toBe(true);
+    // The push's own status is the verification — no separate git_status was needed.
+    expect(doneUpdate(calls)?.args).toMatchObject({ id: 2466, status: 'done' });
+  });
+
+  it('does not re-prompt when the user said not to commit', async () => {
+    const { stream, runTool, calls } = scripted([
+      { name: 'edit_file', args: { path: 'src/a.ts', old_string: 'x', new_string: 'y' } },
+      'Edited src/a.ts; left uncommitted as asked.',
+    ]);
+    await startRun(4803, { resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool, stream, persistence, userTurn: "fix the deep link but don't commit" });
+    expect(getRunTrace(4803).some((e) => e.label === 'loop.recover_unshipped_change')).toBe(false);
+    expect(doneUpdate(calls)).toBeUndefined();
+  });
+
+  it("never lets an EARLIER run's push close a LATER run's unshipped ticket", async () => {
+    // The trace is a per-chat window spanning every run in the session. Reading all of
+    // it, the second run below found the first run's push-to-main and closed a ticket
+    // whose change was still sitting uncommitted on disk.
+    const first = scripted([
+      { name: 'edit_file', args: { path: 'src/a.ts', old_string: 'x', new_string: 'y' } },
+      { name: 'git_commit', args: { message: 'a', paths: ['src/a.ts'], allowBaseBranch: true } },
+      { name: 'git_push', args: { allowBaseBranch: true } },
+      'Shipped.',
+    ]);
+    await startRun(4804, { resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool: first.runTool, stream: first.stream, persistence, userTurn: 'fix a and push' });
+    expect(doneUpdate(first.calls)).toBeDefined();
+
+    const second = scripted([
+      { name: 'edit_file', args: { path: 'src/b.ts', old_string: 'x', new_string: 'y' } },
+      'Edited src/b.ts; left uncommitted as asked.',
+    ]);
+    await startRun(4804, { resolvedSystemPrompt: 'sys', projectId: 11, tools: IDE_TOOLS, runTool: second.runTool, stream: second.stream, persistence, userTurn: "now tweak b, don't commit" });
+    expect(doneUpdate(second.calls)).toBeUndefined();
+  });
+});
+
 describe('what the model is handed for a large read (chat #99, the loop that never edited)', () => {
   const persistence = { sendMessages: async () => [] };
   const TOOLS = [

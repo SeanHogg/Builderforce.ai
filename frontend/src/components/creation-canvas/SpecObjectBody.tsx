@@ -18,6 +18,7 @@ import {
 // makes the component self-sufficient, which is also what lets it be unit-tested.
 import '@/lib/specObjectSets';
 import { renderTex } from '@/lib/academic/mathTex';
+import { MathAwareText } from '@/components/academic/MathAwareText';
 import {
   citationFromNode, citationsFromBibliographyNode, citationStyleOf,
   formatBibliography, formatReference, isBibliographySort, defaultSortFor,
@@ -270,7 +271,7 @@ function FieldSection({ field, data, board, t, verdict }: {
 
     case 'text': {
       const text = fieldText(fmt, raw, verdict);
-      return text ? <p className={styles.founderText}><small>{label}</small>{text}</p> : null;
+      return text ? <MathAwareText className={styles.founderText} lead={<small>{label}</small>} text={text} /> : null;
     }
 
     case 'chips': {

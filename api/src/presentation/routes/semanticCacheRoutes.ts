@@ -12,8 +12,14 @@ import { Hono } from 'hono';
 import type { HonoEnv } from '../../env';
 import { requireTenantAccess, respondToAccessError } from './llmRoutes';
 import { semanticInvalidate, semanticLookup, semanticStore } from '../../application/llm/semanticCache';
+import { parseOptionalBody, z } from './requestBody';
 
 const DEFAULT_THRESHOLD = 0.92;
+
+// Every field is type-checked by hand below (a miss answers its own sentence), so the
+// schemas only refuse a body that is not a JSON object.
+const LookupBody = z.object({ embedding: z.unknown().optional(), threshold: z.unknown().optional(), namespace: z.unknown().optional() });
+const StoreBody = z.object({ embedding: z.unknown().optional(), response: z.unknown().optional(), namespace: z.unknown().optional() });
 
 /** Keep namespaces to safe, bounded KV-key characters (tenant scoping is separate). */
 function sanitizeNamespace(ns: unknown): string {
@@ -39,9 +45,7 @@ export function createSemanticCacheRoutes(): Hono<HonoEnv> {
       return respondToAccessError(c, err);
     }
 
-    const body = await c.req
-      .json<{ embedding?: unknown; threshold?: unknown; namespace?: unknown }>()
-      .catch(() => ({} as { embedding?: unknown; threshold?: unknown; namespace?: unknown }));
+    const body = await parseOptionalBody(c, LookupBody);
 
     if (!Array.isArray(body.embedding) || body.embedding.length === 0) {
       return c.json({ error: 'embedding (number[]) is required' }, 400);
@@ -63,9 +67,7 @@ export function createSemanticCacheRoutes(): Hono<HonoEnv> {
       return respondToAccessError(c, err);
     }
 
-    const body = await c.req
-      .json<{ embedding?: unknown; response?: unknown; namespace?: unknown }>()
-      .catch(() => ({} as { embedding?: unknown; response?: unknown; namespace?: unknown }));
+    const body = await parseOptionalBody(c, StoreBody);
 
     if (!Array.isArray(body.embedding) || typeof body.response !== 'string') {
       return c.json({ error: 'embedding (number[]) and response (string) are required' }, 400);

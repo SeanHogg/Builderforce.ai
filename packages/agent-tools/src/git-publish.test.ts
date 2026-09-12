@@ -132,6 +132,17 @@ describe("git_push", () => {
     await gitPushTool.execute({}, sh as never);
     expect(sh.scripts[0]).toContain('git push -u origin "$CUR"');
   });
+
+  it("reports where the push LANDED, after pushing, without ever failing the push on it", async () => {
+    // The branch header after the push is the evidence a host needs to call the change
+    // shipped (and close its ticket) — so the push verifies itself instead of depending
+    // on the agent remembering a separate git_status call.
+    const sh = recordingShell();
+    await gitPushTool.execute({ allowBaseBranch: true }, sh as never);
+    const script = sh.scripts[0];
+    expect(script).toContain("git status --short --branch 2>/dev/null || true");
+    expect(script.indexOf("git status --short --branch")).toBeGreaterThan(script.indexOf("git push -u origin"));
+  });
 });
 
 describe("open_pull_request", () => {

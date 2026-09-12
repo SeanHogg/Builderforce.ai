@@ -40,6 +40,7 @@ import type { ToolService } from '../../application/tools/ToolService';
 import type { AuditRunner } from '../../application/tools/AuditRunner';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseOptionalBody, z, zNumberLike } from './requestBody';
 
 const SHORT_TTL = { kvTtlSeconds: 120, l1TtlMs: 15_000 };
 
@@ -47,18 +48,40 @@ function rfpVersionKey(tenantId: number): string {
   return `rfp:t:${tenantId}`;
 }
 
-interface RequestBody {
-  title?: string;
-  requesterOrgName?: string | null;
-  requesterBrand?: unknown;
-  requirements?: string | null;
-  sourceMode?: 'new' | 'existing_project';
-  basedOnProjectId?: number | null;
-  marginPct?: number | null;
-  marketingPct?: number | null;
-  contingencyPct?: number | null;
-  dueDate?: string | null;
-}
+/** An RFP request's editable fields. `title` stays optional so the create
+ *  handler's own "title is required" answer still wins; `requesterOrgName` /
+ *  `requirements` are `.toString()`ed, so a number was always accepted;
+ *  `requesterBrand` is stored as a JSON document and keeps every key. */
+const RfpRequestBody = z.object({
+  title: z.string().nullish(),
+  requesterOrgName: zNumberLike.nullish(),
+  requesterBrand: z.unknown().optional(),
+  requirements: zNumberLike.nullish(),
+  sourceMode: z.enum(['new', 'existing_project']).optional(),
+  basedOnProjectId: z.number().nullish(),
+  marginPct: z.number().nullish(),
+  marketingPct: z.number().nullish(),
+  contingencyPct: z.number().nullish(),
+  dueDate: z.string().nullish(),
+});
+
+/** PATCH `String()`s the title, so a number was always accepted there. */
+const RfpRequestPatchBody = RfpRequestBody.extend({ title: zNumberLike.optional() });
+
+const RiskEntryPatchBody = z.object({
+  status: z.string().optional(),
+  ownerUserId: z.string().nullish(),
+  detail: z.string().nullish(),
+});
+
+const BrandPaletteBody = z.object({ palette: z.unknown().optional() });
+
+const BrandExtractBody = z.object({ url: zNumberLike.nullish() });
+
+const PortfolioMatchBody = z.object({
+  requirements: z.string().nullish(),
+  excludeProjectId: z.number().nullish(),
+});
 
 async function listRfp(db: Db, tenantId: number) {
   const requests = await db
@@ -107,7 +130,7 @@ export function createRfpRoutes(db: Db, toolService: ToolService, auditRunner: A
     const tenantId = c.get('tenantId') as number;
     const segmentId = c.get('segmentId') as string | undefined;
     const userId = c.get('userId') as string | undefined;
-    const body = await c.req.json<RequestBody>().catch(() => ({} as RequestBody));
+    const body = await parseOptionalBody(c, RfpRequestBody);
     if (!body.title?.trim()) return c.json({ error: 'title is required' }, 400);
     const sourceMode = body.sourceMode === 'existing_project' ? 'existing_project' : 'new';
     const [row] = await db.insert(rfpRequests).values({
@@ -144,7 +167,7 @@ export function createRfpRoutes(db: Db, toolService: ToolService, auditRunner: A
   router.patch('/requests/:id', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const body = await c.req.json<RequestBody>().catch(() => ({} as RequestBody));
+    const body = await parseOptionalBody(c, RfpRequestPatchBody);
     const set: Record<string, unknown> = { updatedAt: new Date() };
     if (body.title !== undefined) set.title = String(body.title).trim().slice(0, 255);
     if (body.requesterOrgName !== undefined) set.requesterOrgName = body.requesterOrgName?.toString().trim().slice(0, 255) || null;
@@ -282,7 +305,7 @@ export function createRfpRoutes(db: Db, toolService: ToolService, auditRunner: A
 
   router.patch('/risks/:id', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ status?: string; ownerUserId?: string | null; detail?: string | null }>().catch(() => ({} as { status?: string; ownerUserId?: string | null; detail?: string | null }));
+    const body = await parseOptionalBody(c, RiskEntryPatchBody);
     const row = await updateRegisterEntry(db, tenantId, c.req.param('id'), {
       ...(body.status === 'open' || body.status === 'accepted' || body.status === 'mitigated' || body.status === 'closed' ? { status: body.status } : {}),
       ...(body.ownerUserId !== undefined ? { ownerUserId: body.ownerUserId } : {}),
@@ -302,7 +325,7 @@ export function createRfpRoutes(db: Db, toolService: ToolService, auditRunner: A
 
   router.put('/brand', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ palette?: unknown }>().catch(() => ({} as { palette?: unknown }));
+    const body = await parseOptionalBody(c, BrandPaletteBody);
     // Normalised on the way in, so an invalid hex can never reach a rendered
     // document - the same guarantee the requester palette already had.
     const palette = normalizePalette(body.palette ?? null, DEFAULT_TENANT_PALETTE);
@@ -315,7 +338,7 @@ export function createRfpRoutes(db: Db, toolService: ToolService, auditRunner: A
   // READ rather than hand-entered off a screenshot. Server-side because a
   // browser cannot fetch a third-party origin's stylesheet.
   router.post('/brand/extract', requireRole(TenantRole.DEVELOPER), async (c) => {
-    const body = await c.req.json<{ url?: string }>().catch(() => ({} as { url?: string }));
+    const body = await parseOptionalBody(c, BrandExtractBody);
     const result = await extractSitePalette(String(body.url ?? ''));
     if ('error' in result) return c.json(result, 400);
     return c.json(result);
@@ -325,7 +348,7 @@ export function createRfpRoutes(db: Db, toolService: ToolService, auditRunner: A
   router.post('/portfolio-match', requireRole(TenantRole.VIEWER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const env = c.env as Env;
-    const body = await c.req.json<{ requirements?: string; excludeProjectId?: number | null }>().catch(() => ({} as { requirements?: string; excludeProjectId?: number | null }));
+    const body = await parseOptionalBody(c, PortfolioMatchBody);
     const matches = await matchPortfolio(env, db, tenantId, body.requirements ?? '', body.excludeProjectId ?? null);
     return c.json({ matches });
   });

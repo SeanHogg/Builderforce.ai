@@ -28,6 +28,7 @@ import {
   type PlatformBroadcastService,
 } from '../../application/marketing/PlatformBroadcastService';
 import { relayToRoom } from './realtimeRelay';
+import { parseOptionalBody, z, zJsonObject } from './requestBody';
 
 /**
  * Guest (logged-out) Brain chat — PUBLIC session, usage and shared-ROOM routes.
@@ -58,15 +59,64 @@ const GUEST_TOKEN_TTL_SECONDS = 3600;
 /** The verified guest behind a room request. */
 type GuestAuth = { visitorId: string; roomCode: string | null };
 
+// ── Request bodies ────────────────────────────────────────────────────────────
+// Every body here was read with `.catch(() => ({}))`, so an absent body still reads
+// as `{}` and the handler's own "Invalid visitor id" / "X is required" answers win
+// (those fields stay optional). The visitor id is validated by `isValidVisitorId`.
+
+/**
+ * First-touch attribution. Best-effort by design: a malformed touch used to fail
+ * `ensureLead` inside `waitUntil` and be swallowed while the session was still
+ * minted — so a bad touch is DROPPED here (`.catch`), never a refused session.
+ */
+const MarketingTouchBody = z.object({
+  landingPath: z.string().nullish(),
+  referrer: z.string().nullish(),
+  userAgent: z.string().nullish(),
+  utm: z.record(z.string(), z.string()).nullish(),
+}) satisfies z.ZodType<MarketingTouch>;
+const zTouch = MarketingTouchBody.optional().catch(undefined);
+
+const SessionBody = z.object({ visitorId: z.string().nullish(), touch: zTouch });
+/** The prompt fields are parsed (and refused as `skipped`, still 202) by `GuestPromptService`. */
+const PromptBody = z.object({
+  visitorId: z.string().nullish(),
+  prompt: z.unknown().optional(),
+  surface: z.unknown().optional(),
+  sessionRef: z.unknown().optional(),
+  visitId: z.unknown().optional(),
+  mode: z.unknown().optional(),
+  touch: zTouch,
+});
+const BroadcastEventBody = z.object({ visitorId: z.string().nullish(), kind: z.string().nullish() });
+const ResearchSearchBody = z.object({ query: z.string().nullish() });
+const ResearchFetchBody = z.object({ url: z.string().nullish() });
+/** `queries` is filtered to non-blank strings and `outline` compared `=== true` by the handler. */
+const ResearchGeocodeBody = z.object({
+  queries: z.unknown().optional(),
+  context: z.string().nullish(),
+  countryCodes: z.string().nullish(),
+  outline: z.unknown().optional(),
+});
 /** Body of `POST /rooms` (open) and `POST /rooms/:code/join`. */
-interface RoomEntryBody {
-  visitorId?: string;
-  name?: string;
-  title?: string;
+const RoomEntryBody = z.object({
+  visitorId: z.string().nullish(),
+  name: z.string().nullish(),
+  title: z.string().nullish(),
   /** Which surface opened the room — decides where its invite link points. */
-  surface?: string;
-  touch?: MarketingTouch;
-}
+  surface: z.string().nullish(),
+  touch: zTouch,
+});
+/** Entries without string `content` are skipped by the handler, as they always were. */
+const RoomMessagesBody = z.object({
+  messages: z.array(z.object({
+    role: z.unknown().optional(),
+    content: z.unknown().optional(),
+    metadata: z.string().nullish(),
+  }).nullable()).nullish(),
+});
+const RoomCanvasBody = z.object({ snapshot: z.string().nullish() });
+const RoomTitleBody = z.object({ title: z.string().nullish() });
 
 export function createGuestRoutes(
   guest: GuestChatService,
@@ -89,9 +139,7 @@ export function createGuestRoutes(
     if (!guestBrainEnabled(c.env)) {
       return c.json({ error: 'Guest chat is disabled.', code: 'guest_brain_disabled' }, 503);
     }
-    const body = await c.req
-      .json<{ visitorId?: string; touch?: MarketingTouch }>()
-      .catch((): { visitorId?: string; touch?: MarketingTouch } => ({}));
+    const body = await parseOptionalBody(c, SessionBody);
     if (!isValidVisitorId(body.visitorId)) {
       return c.json({ error: 'Invalid visitor id' }, 400);
     }
@@ -144,9 +192,7 @@ export function createGuestRoutes(
   // daily ceiling inside the service, a length cap in the domain, and nothing
   // stored but the text and where it was typed.
   router.post('/prompt', async (c) => {
-    const body = await c.req
-      .json<{ visitorId?: string; prompt?: string; surface?: string; sessionRef?: string; visitId?: string; mode?: string; touch?: MarketingTouch }>()
-      .catch((): Record<string, never> => ({}));
+    const body = await parseOptionalBody(c, PromptBody);
     if (!isValidVisitorId(body.visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
     const visitorId = body.visitorId;
 
@@ -190,9 +236,7 @@ export function createGuestRoutes(
   router.post('/messages/:id/event', async (c) => {
     const broadcastId = Number(c.req.param('id'));
     if (!Number.isInteger(broadcastId) || broadcastId <= 0) return c.json({ error: 'Invalid message id' }, 400);
-    const body = await c.req
-      .json<{ visitorId?: string; kind?: string }>()
-      .catch((): Record<string, never> => ({}));
+    const body = await parseOptionalBody(c, BroadcastEventBody);
     if (!isValidVisitorId(body.visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
     if (!BROADCAST_EVENTS.includes(body.kind as BroadcastEvent)) {
       return c.json({ error: 'Unknown event kind' }, 400);
@@ -256,7 +300,7 @@ export function createGuestRoutes(
   router.post('/research/search', async (c) => {
     const charged = await chargeGuestCall(c);
     if (charged instanceof Response) return charged;
-    const { query } = await c.req.json<{ query?: string }>().catch((): { query?: string } => ({}));
+    const { query } = await parseOptionalBody(c, ResearchSearchBody);
     if (typeof query !== 'string' || !query.trim()) return c.json({ error: 'A query is required' }, 400);
     return c.json(await guestWebSearch(c.env as Env, query.trim().slice(0, 400)));
   });
@@ -264,7 +308,7 @@ export function createGuestRoutes(
   router.post('/research/fetch', async (c) => {
     const charged = await chargeGuestCall(c);
     if (charged instanceof Response) return charged;
-    const { url } = await c.req.json<{ url?: string }>().catch((): { url?: string } => ({}));
+    const { url } = await parseOptionalBody(c, ResearchFetchBody);
     if (typeof url !== 'string' || !url.trim()) return c.json({ error: 'A url is required' }, 400);
     try {
       return c.json(await guestWebFetch(c.env as Env, url.trim()));
@@ -277,9 +321,7 @@ export function createGuestRoutes(
   router.post('/research/geocode', async (c) => {
     const charged = await chargeGuestCall(c);
     if (charged instanceof Response) return charged;
-    const body = await c.req
-      .json<{ queries?: unknown; context?: string; countryCodes?: string; outline?: boolean }>()
-      .catch((): Record<string, never> => ({}));
+    const body = await parseOptionalBody(c, ResearchGeocodeBody);
     // Deliberately NOT sliced here: `geocodeBatch` owns the cap and REPORTS it as
     // `truncated`, and a silent slice in the route would turn a half-plotted map into
     // one that claims to be whole.
@@ -350,12 +392,13 @@ export function createGuestRoutes(
     const impl = guestCareerTool(entry);
     if (!impl) return c.json({ error: `"${advertised}" is unavailable.`, code: 'guest_tool_unknown' }, 404);
 
-    const args = await c.req.json<Record<string, unknown>>().catch((): Record<string, unknown> => ({}));
+    // Any JSON object — the tool's own implementation validates its arguments.
+    const args = await parseOptionalBody(c, zJsonObject);
     try {
       // These tools take no context: they are pure over their arguments, which is the
       // property that made them guest-safe. The cast supplies the shape the signature
       // asks for without handing an anonymous caller a database or a tenant.
-      const result = await impl.run(undefined as never, args ?? {});
+      const result = await impl.run(undefined as never, args);
       return c.json(result as Record<string, unknown>);
     } catch (error) {
       // A validation refusal ("paste your résumé first") is information the model should
@@ -386,7 +429,7 @@ export function createGuestRoutes(
   router.post('/rooms', async (c) => {
     const blocked = roomsAvailable(c);
     if (blocked) return blocked;
-    const body = await c.req.json<RoomEntryBody>().catch((): RoomEntryBody => ({}));
+    const body = await parseOptionalBody(c, RoomEntryBody);
     if (!isValidVisitorId(body.visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
     const visitorId = body.visitorId;
 
@@ -414,7 +457,7 @@ export function createGuestRoutes(
     if (blocked) return blocked;
     const code = c.req.param('code');
     if (!isValidRoomCode(code)) return c.json({ error: 'Invalid room code' }, 400);
-    const body = await c.req.json<RoomEntryBody>().catch((): RoomEntryBody => ({}));
+    const body = await parseOptionalBody(c, RoomEntryBody);
     if (!isValidVisitorId(body.visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
     const visitorId = body.visitorId;
 
@@ -464,12 +507,10 @@ export function createGuestRoutes(
     if (!isValidRoomCode(code)) return c.json({ error: 'Invalid room code' }, 400);
     const auth = await authenticate(c, code);
     if (!auth) return c.json({ error: 'Not a member of this session.', code: 'guest_room_forbidden' }, 401);
-    const body = await c.req
-      .json<{ messages?: Array<{ role?: string; content?: string; metadata?: string | null }> }>()
-      .catch((): { messages?: [] } => ({}));
-    const messages = (body.messages ?? [])
-      .filter((m) => typeof m?.content === 'string')
-      .map((m) => ({ role: typeof m.role === 'string' ? m.role : 'user', content: m.content as string, metadata: m.metadata ?? null }));
+    const body = await parseOptionalBody(c, RoomMessagesBody);
+    const messages = (body.messages ?? []).flatMap((m) => (m && typeof m.content === 'string'
+      ? [{ role: typeof m.role === 'string' ? m.role : 'user', content: m.content, metadata: m.metadata ?? null }]
+      : []));
     const created = await appendGuestRoomMessages(c.env as Env, code, messages);
     if (!created) return c.json({ error: 'This shared session has ended.', code: 'guest_room_unavailable' }, 410);
     return c.json({ created });
@@ -498,7 +539,7 @@ export function createGuestRoutes(
     if (!isValidRoomCode(code)) return c.json({ error: 'Invalid room code' }, 400);
     const auth = await authenticate(c, code);
     if (!auth) return c.json({ error: 'Not a member of this session.', code: 'guest_room_forbidden' }, 401);
-    const { snapshot } = await c.req.json<{ snapshot?: string }>().catch((): { snapshot?: string } => ({}));
+    const { snapshot } = await parseOptionalBody(c, RoomCanvasBody);
     if (typeof snapshot !== 'string') return c.json({ error: 'snapshot is required' }, 400);
     const result = await putGuestRoomCanvas(c.env as Env, code, snapshot);
     if (!result) return c.json({ error: 'This shared session has ended.', code: 'guest_room_unavailable' }, 410);
@@ -511,7 +552,7 @@ export function createGuestRoutes(
     if (!isValidRoomCode(code)) return c.json({ error: 'Invalid room code' }, 400);
     const auth = await authenticate(c, code);
     if (!auth) return c.json({ error: 'Not a member of this session.', code: 'guest_room_forbidden' }, 401);
-    const { title } = await c.req.json<{ title?: string }>().catch((): { title?: string } => ({}));
+    const { title } = await parseOptionalBody(c, RoomTitleBody);
     await setGuestRoomTitle(c.env as Env, code, title ?? '');
     return c.json({ ok: true });
   });

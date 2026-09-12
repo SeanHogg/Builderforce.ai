@@ -27,6 +27,13 @@ import {
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { positiveIntParam, daysParam } from './queryParams';
+import { parseOptionalBody, z } from './requestBody';
+
+/** `PATCH /benchmarking/profile` — a blank field keeps its current value. */
+const BenchmarkProfileBody = z.object({
+  industry: z.string().nullish(),
+  sizeBand: z.string().nullish(),
+});
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 
@@ -92,7 +99,7 @@ export function createBenchmarkingRoutes(db: Db): Hono<HonoEnv> {
   router.patch('/benchmarking/profile', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
     const env = c.env as Env;
-    const body = await c.req.json<{ industry?: unknown; sizeBand?: unknown }>().catch(() => ({}) as { industry?: unknown; sizeBand?: unknown });
+    const body = await parseOptionalBody(c, BenchmarkProfileBody);
 
     const current = await getBenchmarkProfile(db, tenantId);
     const industry = typeof body.industry === 'string' && body.industry.trim()

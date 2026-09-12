@@ -45,8 +45,9 @@ import { selectToolsForTurn } from './selectTools';
 import { routerToolSpecs, isRouterTool, handleRouterCall } from './toolRouter';
 import { setLastResolvedModel, withObservedModel, forgetResolvedModels } from './lastResolvedModel';
 import { isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, linkedTicketsToComplete, isReadOnlyPlatformTool } from './chatWorkLinking';
-import { isCodeChangeTool, canChangeCodeHere, localToolsIn, memoryToolsIn } from './localWorkspaceTools';
+import { isCodeChangeTool, canChangeCodeHere, canShipHere, localToolsIn, memoryToolsIn } from './localWorkspaceTools';
 import { shippedToBaseBranch } from './shipVerification';
+import { selfReviewShipDirective, leftChangeUnshipped, unshippedChangeNudge } from './selfReviewShip';
 import { toolActivity, activityTarget, type BrainRunActivity } from './runActivity';
 import { ReadCoverage, revisitAdvisory, withAdvisory } from './readCoverage';
 import { FailureTally, failureReason, repeatedFailureAdvisory } from './repeatedFailure';
@@ -408,6 +409,14 @@ interface RunCell {
    *  is new (and sends nothing when the first edit was the only one). */
   deltaRecordedFiles: string[];
   /**
+   * When the CURRENT run started (ISO, same clock as trace `ts`). The trace is a
+   * per-CHAT sliding window that spans every run in the session, so any question about
+   * "what did THIS run do" must be asked of {@link runTrace}, never of `trace` — reading
+   * the whole window let an earlier run's push-to-main close a later run's unshipped
+   * ticket. A timestamp rather than an index because the window splices from the front.
+   */
+  runStartedAt: string;
+  /**
    * Cached compressed-memory of the run's older turns. When the transcript exceeds
    * {@link HISTORY_TOKEN_BUDGET} the loop SUMMARIZES the bulky middle (instead of
    * dropping it, which made a weak model re-read and thrash into "LOOP EXHAUSTED"),
@@ -478,6 +487,7 @@ function makeCell(): RunCell {
     touchedFiles: [],
     deltaTicketId: null,
     deltaRecordedFiles: [],
+    runStartedAt: '',
     compactMemo: null,
     snapshot: EMPTY_SNAPSHOT,
   };
@@ -578,6 +588,12 @@ function pushTrace(c: RunCell, ev: BrainTraceEvent): void {
   // Bound a single run's trace so a long tool-chain can't grow without limit.
   if (c.trace.length > MAX_TRACE_EVENTS) c.trace.splice(0, c.trace.length - MAX_TRACE_EVENTS);
   emit(c);
+}
+
+/** The trace events THIS run produced — see {@link RunCell.runStartedAt}. */
+function runTrace(c: RunCell): BrainTraceEvent[] {
+  const from = c.runStartedAt;
+  return from ? c.trace.filter((e) => e.ts >= from) : c.trace;
 }
 
 /** Cap on the persisted step RESULT (chars). The live trace keeps the full result;
@@ -1184,6 +1200,7 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
   c.touchedFiles = [];
   c.deltaTicketId = null;
   c.deltaRecordedFiles = [];
+  c.runStartedAt = nowIso();
   // Fresh abort handle for this run, so Stop can cancel the LLM stream and unwind
   // the loop (a stale, already-aborted controller never bleeds into a new run).
   c.abort = new AbortController();
@@ -1250,8 +1267,10 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
     // And if the run MERGED its change to the base branch, the review lane is moot —
     // the code is live. Runs last, after the mint above, so a ticket this run created
     // and then shipped is completed rather than left at 50% forever. Gated on real
-    // evidence of a push that landed, not on the run merely having touched files.
-    if (!aborted && c.codeChanged && req.projectId != null && req.runTool && shippedToBaseBranch(c.trace)) {
+    // evidence of a push that landed, not on the run merely having touched files — and
+    // on THIS run's trace only, with this run's files no longer dirty (an earlier run's
+    // push, or a push that left this change uncommitted, is not this change shipping).
+    if (!aborted && c.codeChanged && req.projectId != null && req.runTool && shippedToBaseBranch(runTrace(c), { touchedFiles: c.touchedFiles })) {
       await completeShippedTickets(chatId, c, req).catch(() => { /* never fail the run on the backstop */ });
     }
     // The run is over: nothing is in flight, so no indicator may claim otherwise.
@@ -1659,6 +1678,11 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // consistent with the post-run backstop, which reads the same set.
   const canEditHere = canChangeCodeHere(catalogToolNames);
   systemPrompt = `${systemPrompt}\n\n${chatModeDirective(runMode, chatId, { canEditHere })}\n\n${turnOptimizationDirective()}`;
+  // A session that can commit AND push holds the only copy of its change — nobody else
+  // will review or land it — so it is told it IS the reviewer (see `selfReviewShip.ts`).
+  // Rides both modes: it only binds a turn that changes code.
+  const canShip = canShipHere(catalogToolNames);
+  if (canShip) systemPrompt = `${systemPrompt}\n\n${selfReviewShipDirective(chatId)}`;
 
   // A bare "Fix" / "do it" / "go ahead" has no subject of its own — it points at the
   // proposal in the previous assistant turn. Read as a fresh, contextless request it
@@ -1726,6 +1750,10 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // promise. The stall budget (`agent-stall`) bounds these recoveries on its own — a
   // run has no iteration ceiling to fall back on.
   let announcementRecoveries = 0;
+  // One re-prompt per run for a code change left unshipped (see `selfReviewShip.ts`).
+  // One, not a budget: the second time the model stops short it has read the contract
+  // twice, and its answer — including "I cannot ship this because…" — is the answer.
+  let shipRecoveryUsed = false;
   // The model this run is CURRENTLY talking to, and every model it has already tried.
   // Both change when a model burns its whole stall budget without emitting a single
   // tool call: re-prompting such a model is spent, so the run fails over to another
@@ -2067,11 +2095,13 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         requestText: userRequest,
       };
       const shape = stallShape(stallInput);
-      if (runTool && shouldRecoverStalledTurn(stallInput)) {
-        announcementRecoveries += 1;
-        const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
-        // Keep what the user already watched stream in, as its own durable block —
-        // same treatment a narration-before-tool-calls turn gets.
+      /**
+       * Send the turn back with a correction instead of accepting it as the answer.
+       * Keeps what the user already watched stream in as its own durable block (the same
+       * treatment a narration-before-tool-calls turn gets), then queues the nudge. Shared
+       * by every re-prompt below so they cannot drift on what "re-prompted" leaves behind.
+       */
+      const requeueWithNudge = async (nudge: string): Promise<void> => {
         const narration = canonicalTurnText(result.text);
         if (narration) {
           const meta = provenanceMetadata(result);
@@ -2079,7 +2109,12 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           recordAppended(c, narrationMsg);
         }
         convo.push({ role: 'assistant', content: result.text });
-        convo.push({ role: 'user', content: stallRecoveryNudge(lastChance, shape) });
+        convo.push({ role: 'user', content: nudge });
+      };
+      if (runTool && shouldRecoverStalledTurn(stallInput)) {
+        announcementRecoveries += 1;
+        const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
+        await requeueWithNudge(stallRecoveryNudge(lastChance, shape));
         // Durable: "the loop caught this and re-prompted" is a fact a triage report must
         // still carry after a reload. Live-only, a reopened chat showed nine narrating
         // turns and no sign the loop had ever fought back. The SHAPE rides along, because
@@ -2093,6 +2128,32 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           result: shape === 'handed-off'
             ? `Model ended by telling the user to run the commands itself holds tools for — re-prompted to run them (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`
             : `Model announced a tool call without making one — re-prompted (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`,
+        });
+        c.streamingText = '';
+        emit(c);
+        return { action: 'continue' };
+      }
+
+      // The turn CHANGED code and is ending without having even tried to ship it. In a
+      // local session that change has no other reviewer: accepted as-is, its delta ticket
+      // parks in `in_review` (75%) with nothing that will ever move it. Sent back once
+      // with the self-review ship contract. Quiet when the user said not to commit, when
+      // a commit/push/PR was attempted (a declined or failed publish is a result to
+      // report, not to retry), and on any host that cannot commit and push.
+      if (runTool && !shipRecoveryUsed && leftChangeUnshipped({
+        codeChanged: c.codeChanged,
+        toolNames: catalogToolNames,
+        requestText: userRequest,
+        events: runTrace(c),
+      })) {
+        shipRecoveryUsed = true;
+        await requeueWithNudge(unshippedChangeNudge());
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: 'message',
+          label: 'loop.recover_unshipped_change',
+          args: { step: iter, files: c.touchedFiles.slice(0, 20) },
+          result: 'Run changed code and ended without committing or pushing it — re-prompted to verify, self-review and ship (this local session is the change\'s only reviewer).',
         });
         c.streamingText = '';
         emit(c);

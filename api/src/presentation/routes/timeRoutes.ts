@@ -19,6 +19,17 @@ import { computeMemberDailyHours, isoDay } from '../../application/timeTracking/
 import { pmoVersionKey } from './pmoRoutes';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseBody, z, zNumberLike } from './requestBody';
+
+/** `POST /entries` — ids and minutes are `Number()`ed; the handler answers its own messages. */
+const TimeEntryBody = z.object({
+  taskId: zNumberLike.nullish(),
+  minutes: zNumberLike.nullish(),
+  entryDate: z.string().nullish(),
+  note: z.string().nullish(),
+  memberKind: z.string().nullish(),
+  memberRef: z.string().nullish(),
+});
 
 const MEMBER_KINDS = new Set(['human', 'cloud_agent', 'host_agent']);
 const clampDays = (raw: number, def: number, max: number) =>
@@ -43,7 +54,7 @@ export function createTimeRoutes(db: Db): Hono<HonoEnv> {
   router.post('/entries', async (c) => {
     const { tenantId, segmentId } = scope(c);
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{ taskId?: number; minutes?: number; entryDate?: string; note?: string; memberKind?: string; memberRef?: string }>();
+    const body = await parseBody(c, TimeEntryBody);
 
     const taskId = Number(body.taskId);
     if (!Number.isFinite(taskId) || taskId <= 0) return c.json({ error: 'taskId is required' }, 400);

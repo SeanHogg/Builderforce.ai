@@ -20,6 +20,7 @@ import {
 import type { HonoEnv } from '../../env';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseBody, z } from './requestBody';
 
 const SCOPES: AssignmentScope[] = [
   'project',
@@ -29,6 +30,16 @@ const SCOPES: AssignmentScope[] = [
   'brain',
   'global',
 ];
+
+/** `POST /` — the handler refuses a missing agentKind/agentRef itself. */
+const AssignBody = z.object({
+  agentKind: z.string().nullish(),
+  agentRef: z.string().nullish(),
+  scope: z.enum(SCOPES),
+  scopeId: z.string().nullish(),
+  executionScope: z.enum(['project', 'global']).optional(),
+  role: z.string().optional(),
+});
 
 export function createAgentAssignmentRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -49,14 +60,7 @@ export function createAgentAssignmentRoutes(db: Db): Hono<HonoEnv> {
 
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{
-      agentKind: string;
-      agentRef: string;
-      scope: AssignmentScope;
-      scopeId?: string | null;
-      executionScope?: ExecutionScope;
-      role?: string;
-    }>();
+    const body = await parseBody(c, AssignBody);
     if (!body.agentKind || !body.agentRef) return c.json({ error: 'agentKind and agentRef are required' }, 400);
     if (!SCOPES.includes(body.scope)) return c.json({ error: `scope must be one of: ${SCOPES.join(', ')}` }, 400);
 

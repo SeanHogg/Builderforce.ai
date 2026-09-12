@@ -99,7 +99,7 @@ enum RuntimeLocator {
             [
                 "Found \(kind.rawValue) \(found) at \(path) but need >= \(required).",
                 "PATH searched: \(searchPaths.joined(separator: ":"))",
-                "Upgrade Node and rerun coderclaw.",
+                "Upgrade Node and rerun builderforce.",
             ].joined(separator: "\n")
         case let .versionParse(kind, raw, path, searchPaths):
             [

@@ -38,7 +38,8 @@ import { COMPARE_ARENAS } from '@/lib/content';
 import { FAMILIES, FAMILY_IDS, kindLabelKey } from '@/lib/marketplaceFamilies';
 import { BLOG_TOPICS } from '@/lib/blogTopics';
 import { METHOD_STEPS, PROOF_FORMS, methodStepKey, proofFormKey } from '@/lib/methodology';
-import { destinationPitchKey, teaserDestinationIds } from '@/lib/routeMarketing';
+import { destinationPitchKey, routeMarketingCatalogKeys, teaserDestinationIds } from '@/lib/routeMarketing';
+import { llmCourseCatalogKeys } from '@/lib/courseLms';
 import { RESUME_TEMPLATES } from '@/lib/canvasResume';
 import { CANVAS_SESSION_ACTIONS } from '@/lib/canvasSessionActions';
 import { OUTCOME_METRIC_FAMILY_ORDER, OUTCOME_METRIC_MESSAGE_KEYS } from '@/lib/outcomeMetrics';
@@ -464,6 +465,13 @@ describe('message catalogs', () => {
       ...teaserDestinationIds().map((id) => `routeMarketing.${destinationPitchKey(id)}`),
       'routeMarketing.generic.title',
       'routeMarketing.generic.description',
+      // Tier 1 — the hand-authored surfaces' hero, highlights, FAQ and SEO copy.
+      // The registry names these keys at runtime, so no `t('…')` literal exists
+      // for `check-i18n-keys` to see; this is the only place a missing one shows.
+      ...routeMarketingCatalogKeys(),
+      // The worked LLM course, minted into the board in the board's language. A
+      // gap here is persisted into somebody's course as a dotted key.
+      ...llmCourseCatalogKeys().map((key) => `creationCanvas.${key}`),
       'methodology.youAreHere',
       // `referencePanel.crumb` is deliberately absent: it takes a `{seat}`
       // argument, and this list formats with none. The every-message-formats

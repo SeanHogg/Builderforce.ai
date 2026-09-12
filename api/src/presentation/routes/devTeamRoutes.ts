@@ -19,6 +19,30 @@ import { devTeams, devTeamMembers, contributors, contributorDailyMetrics } from 
 import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseBody, z } from './requestBody';
+
+/** `name` stays optional so the handler's own "name is required" wins. */
+const CreateTeamBody = z.object({
+  name: z.string().nullish(),
+  description: z.string().nullish(),
+  parentTeamId: z.number().nullish(),
+  managerId: z.number().nullish(),
+});
+/**
+ * Spread straight into `.set(...)`, so the schema IS the column allowlist — a key it
+ * does not name (`tenantId`, `id`) is stripped rather than written.
+ */
+const UpdateTeamBody = z.object({
+  name: z.string().optional(),
+  description: z.string().nullish(),
+  parentTeamId: z.number().nullish(),
+  managerId: z.number().nullish(),
+});
+/** `contributorId` stays optional so the handler's own "contributorId is required" wins. */
+const AddMemberBody = z.object({
+  contributorId: z.number().nullish(),
+  memberRole: z.string().nullish(),
+});
 
 export function createDevTeamRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -28,12 +52,7 @@ export function createDevTeamRoutes(db: Db): Hono<HonoEnv> {
   // POST /api/dev-teams
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{
-      name: string;
-      description?: string;
-      parentTeamId?: number | null;
-      managerId?: number | null;
-    }>();
+    const body = await parseBody(c, CreateTeamBody);
 
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
 
@@ -102,12 +121,7 @@ export function createDevTeamRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(devTeams.id, id), eq(devTeams.tenantId, tenantId)));
     if (!existing) return c.json({ error: 'Team not found' }, 404);
 
-    const body = await c.req.json<Partial<{
-      name: string;
-      description: string | null;
-      parentTeamId: number | null;
-      managerId: number | null;
-    }>>();
+    const body = await parseBody(c, UpdateTeamBody);
 
     const [updated] = await db
       .update(devTeams)
@@ -146,10 +160,7 @@ export function createDevTeamRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(devTeams.id, id), eq(devTeams.tenantId, tenantId)));
     if (!team) return c.json({ error: 'Team not found' }, 404);
 
-    const body = await c.req.json<{
-      contributorId: number;
-      memberRole?: string;
-    }>();
+    const body = await parseBody(c, AddMemberBody);
 
     if (!body.contributorId) return c.json({ error: 'contributorId is required' }, 400);
 

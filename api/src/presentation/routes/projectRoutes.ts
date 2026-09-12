@@ -26,6 +26,14 @@ import { llmUsageLog } from '../../infrastructure/database/schema';
 import { resolveUsageDatabase } from '../../application/llm/usageLedger';
 import { completeJson } from '../../application/llm/completeJson';
 import { asJsonObject } from '../../domain/shared/json';
+import { parseBody } from './requestBody';
+import {
+  CreateProjectBody,
+  PatchProjectBody,
+  ProjectCodeChangesBody,
+  ScaffoldProjectBody,
+  UpsertProjectBody,
+} from './projectRoutes.schemas';
 
 type SourceControlProvider = 'github' | 'bitbucket';
 
@@ -658,7 +666,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   router.post('/:id/insights/code-changes', requirePermission(PERMISSIONS.PROJECT_WRITE), async (c) => {
     const tenantId = c.get('tenantId');
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{ codeChanges?: number; executionId?: number | null }>();
+    const body = await parseBody(c, ProjectCodeChangesBody);
 
     if (!Number.isFinite(body.codeChanges)) {
       return c.json({ error: 'codeChanges is required' }, 400);
@@ -681,23 +689,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
 
   // POST /api/projects
   router.post('/', requirePermission(PERMISSIONS.PROJECT_WRITE), async (c) => {
-    const body = await c.req.json<{
-      key?: string;
-      name: string;
-      description?: string | null;
-      /** IDE: template to seed initial files (e.g. "vanilla"). */
-      template?: string | null;
-      rootWorkingDirectory?: string | null;
-      sourceControlIntegrationId?: number | null;
-      sourceControlRepoFullName?: string | null;
-      sourceControlRepoUrl?: string | null;
-      githubRepoUrl?: string | null;
-      governance?: string | null;
-      /** IDE project type: 'designer' | 'video' | 'evermind' | 'finetune' | 'voice'. Defaults to 'designer'. */
-      modality?: string | null;
-      /** Where the project was born — 'ide' tags it for the Designer badge. */
-      origin?: string | null;
-    }>();
+    const body = await parseBody(c, CreateProjectBody);
     const tenantId = c.get('tenantId');
     const name = body.name?.trim();
     if (!name) return c.json({ error: 'name is required' }, 400);
@@ -731,7 +723,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       tenantId,
     });
     await provisionProject(c.env as Env, db, tenantId, project, {
-      kanbanTemplateId: (body as { kanbanTemplateId?: string }).kanbanTemplateId,
+      kanbanTemplateId: body.kanbanTemplateId,
     });
     return c.json(project.toPlain(), 201);
   });
@@ -739,16 +731,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   // POST /api/projects/upsert
   router.post('/upsert', requirePermission(PERMISSIONS.PROJECT_WRITE), async (c) => {
     const tenantId = c.get('tenantId');
-    const body = await c.req.json<{
-      name: string;
-      description?: string | null;
-      rootWorkingDirectory?: string | null;
-      sourceControlIntegrationId?: number | null;
-      sourceControlRepoFullName?: string | null;
-      sourceControlRepoUrl?: string | null;
-      githubRepoUrl?: string | null;
-      governance?: string | null;
-    }>();
+    const body = await parseBody(c, UpsertProjectBody);
 
     const name = body.name?.trim();
     if (!name) return c.json({ error: 'name is required' }, 400);
@@ -816,24 +799,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   router.patch('/:id', requirePermission(PERMISSIONS.PROJECT_WRITE), async (c) => {
     const rawId = c.req.param('id');
     const tenantId = c.get('tenantId');
-    const body = await c.req.json<{
-      key?: string;
-      name?: string;
-      description?: string | null;
-      template?: string | null;
-      rootWorkingDirectory?: string | null;
-      status?: ProjectStatus;
-      sourceControlIntegrationId?: number | null;
-      sourceControlRepoFullName?: string | null;
-      sourceControlRepoUrl?: string | null;
-      githubRepoUrl?: string | null;
-      modality?: string | null;
-      /** Explicit project deadline as an ISO/date string, or null to clear it. */
-      dueDate?: string | null;
-      /** Explicit project start as an ISO/date string, or null to clear it. This is
-       *  what the Gantt writes when a bar's left edge is dragged. */
-      startDate?: string | null;
-    }>();
+    const body = await parseBody(c, PatchProjectBody);
 
     // Both project dates read the same tri-state rule (set / clear / leave alone)
     // via the shared parser, so the Gantt can move either end of a bar and neither
@@ -887,11 +853,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   // POST /api/projects/scaffold
   router.post('/scaffold', requirePermission(PERMISSIONS.PROJECT_WRITE), async (c) => {
     const tenantId = c.get('tenantId');
-    const body = await c.req.json<{
-      prompt: string;
-      rootWorkingDirectory?: string | null;
-      agentHostId?: number | null;
-    }>();
+    const body = await parseBody(c, ScaffoldProjectBody);
 
     const prompt = body.prompt?.trim();
     if (!prompt) return c.json({ error: 'prompt is required' }, 400);

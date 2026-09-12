@@ -275,6 +275,65 @@ export const importReferencesAct: CardAct = {
   },
 };
 
+/**
+ * `gradebook.export` — the whole matrix as CSV, through `gradebookCsv`, the same
+ * quoting the module argues for (a learner name with a comma must not shift a row).
+ *
+ * Computed from the SAME cached matrix the card's own fields derive from, so the file
+ * a module lead sends the exam board and the numbers on the card cannot disagree.
+ */
+export const exportGradebookAct: CardAct = {
+  kind: 'gradebook' as CreationObjectKind,
+  actions: ['export'],
+  run({ object, board, t }) {
+    const { matrix, bands } = gradebookOf(object.data as unknown as Record<string, unknown>, specBoardOf(board.objects));
+    if (!matrix.rows.length || !matrix.columns.length) return { notice: t('noticeGradebookEmpty') };
+    return {
+      download: {
+        text: gradebookCsv(matrix, gradebookStats(matrix, bands)),
+        filename: `${exportFilenameStem(String(object.data.title ?? ''), 'gradebook')}.csv`,
+        mimeType: 'text/csv',
+      },
+      notice: t('noticeGradebookExported', { count: matrix.rows.length }),
+    };
+  },
+};
+
+/** A reference list as BibTeX, named after the card it came from. */
+function bibtexOutcome(records: readonly CitationRecord[], title: unknown, t: (key: string, values?: Record<string, string | number>) => string) {
+  const usable = records.filter((record) => record.title);
+  if (!usable.length) return { notice: t('noticeReferencesExportEmpty') };
+  return {
+    download: {
+      text: toBibtex(usable),
+      filename: `${exportFilenameStem(String(title ?? ''), 'references')}.bib`,
+      mimeType: 'application/x-bibtex',
+    },
+    notice: t('noticeReferencesExported', { count: usable.length }),
+  };
+}
+
+/**
+ * `bibliography.export` and `citation.export` — BibTeX, the format every reference
+ * manager and every LaTeX build reads, so a list assembled on the board leaves it in
+ * the shape the manuscript actually needs.
+ */
+export const exportReferencesAct: CardAct = {
+  kind: 'bibliography' as CreationObjectKind,
+  actions: ['export'],
+  run({ object, t }) {
+    return bibtexOutcome(citationsFromBibliographyNode(object.data as unknown as Record<string, unknown>), object.data.title, t);
+  },
+};
+
+export const exportCitationAct: CardAct = {
+  kind: 'citation' as CreationObjectKind,
+  actions: ['export'],
+  run({ object, t }) {
+    return bibtexOutcome([citationFromNode(object.data as unknown as Record<string, unknown>)], object.data.title, t);
+  },
+};
+
 export const TEACHING_CARD_ACTS: readonly CardAct[] = [
   distributeAssignmentAct,
   importCohortRosterAct,
@@ -282,4 +341,7 @@ export const TEACHING_CARD_ACTS: readonly CardAct[] = [
   markSubmissionAct,
   validateCurriculumMapAct,
   importReferencesAct,
+  exportGradebookAct,
+  exportReferencesAct,
+  exportCitationAct,
 ];

@@ -31,9 +31,10 @@ final class GatewayDiscoveryModel {
     var statusText: String = "Idle"
     private(set) var debugLog: [DebugLogEntry] = []
 
+    // Keyed by browse target (`<type>|<domain>`): one browser per gateway service type per domain.
     private var browsers: [String: NWBrowser] = [:]
-    private var gatewaysByDomain: [String: [DiscoveredGateway]] = [:]
-    private var statesByDomain: [String: NWBrowser.State] = [:]
+    private var gatewaysByBrowser: [String: [DiscoveredGateway]] = [:]
+    private var statesByBrowser: [String: NWBrowser.State] = [:]
     private var debugLoggingEnabled = false
     private var lastStableIDs = Set<String>()
 
@@ -52,26 +53,28 @@ final class GatewayDiscoveryModel {
         if !self.browsers.isEmpty { return }
         self.appendDebugLog("start()")
 
-        for domain in CoderClawBonjour.gatewayServiceDomains {
+        // One browser per (gateway service type, domain), so current and legacy runtimes are both found.
+        for target in CoderClawBonjour.gatewayBrowseTargets {
+            let key = target.key
             let params = NWParameters.tcp
             params.includePeerToPeer = true
             let browser = NWBrowser(
-                for: .bonjour(type: CoderClawBonjour.gatewayServiceType, domain: domain),
+                for: .bonjour(type: target.serviceType, domain: target.domain),
                 using: params)
 
             browser.stateUpdateHandler = { [weak self] state in
                 Task { @MainActor in
                     guard let self else { return }
-                    self.statesByDomain[domain] = state
+                    self.statesByBrowser[key] = state
                     self.updateStatusText()
-                    self.appendDebugLog("state[\(domain)]: \(Self.prettyState(state))")
+                    self.appendDebugLog("state[\(key)]: \(Self.prettyState(state))")
                 }
             }
 
             browser.browseResultsChangedHandler = { [weak self] results, _ in
                 Task { @MainActor in
                     guard let self else { return }
-                    self.gatewaysByDomain[domain] = results.compactMap { result -> DiscoveredGateway? in
+                    self.gatewaysByBrowser[key] = results.compactMap { result -> DiscoveredGateway? in
                         switch result.endpoint {
                         case let .service(name, _, _, _):
                             let decodedName = BonjourEscapes.decode(name)
@@ -103,8 +106,8 @@ final class GatewayDiscoveryModel {
                 }
             }
 
-            self.browsers[domain] = browser
-            browser.start(queue: DispatchQueue(label: "bot.molt.ios.gateway-discovery.\(domain)"))
+            self.browsers[key] = browser
+            browser.start(queue: DispatchQueue(label: "bot.molt.ios.gateway-discovery.\(key)"))
         }
     }
 
@@ -114,14 +117,14 @@ final class GatewayDiscoveryModel {
             browser.cancel()
         }
         self.browsers = [:]
-        self.gatewaysByDomain = [:]
-        self.statesByDomain = [:]
+        self.gatewaysByBrowser = [:]
+        self.statesByBrowser = [:]
         self.gateways = []
         self.statusText = "Stopped"
     }
 
     private func recomputeGateways() {
-        let next = self.gatewaysByDomain.values
+        let next = self.gatewaysByBrowser.values
             .flatMap(\.self)
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
@@ -137,7 +140,7 @@ final class GatewayDiscoveryModel {
 
     private func updateStatusText() {
         self.statusText = GatewayDiscoveryStatusText.make(
-            states: Array(self.statesByDomain.values),
+            states: Array(self.statesByBrowser.values),
             hasBrowsers: !self.browsers.isEmpty)
     }
 

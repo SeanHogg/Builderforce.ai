@@ -39,8 +39,10 @@ const mapPath = resolve(here, '..', '..', 'specs', 'builderforce', 'data-model',
 /** The roster totals PRD 20 §3 enumerates. If the map stops agreeing with these,
  *  one of the two is wrong and the build should say so rather than pick a winner.
  *  362, not 363, since `team_memory` was folded into `agent_memory` (0442) and
- *  dropped (1131) — its map row reads `merged`, and PRD 20 §3 says so. */
-const EXPECTED = { rows: 1130, keeps: 362, kernel: 25, total: 387 };
+ *  dropped (1131) — its map row reads `merged`, and PRD 20 §3 says so. 360 since
+ *  1160 folded `kanban_columns` into `swimlanes` and `release_plans` into
+ *  `product_releases` (the spec PM spine unified onto the platform's owners). */
+const EXPECTED = { rows: 1130, keeps: 360, kernel: 25, total: 385 };
 const MOVES = new Set(['keep', 'merged', 'primitive', 'flatten', 'session']);
 
 if (!existsSync(mapPath)) {

@@ -372,6 +372,10 @@ export interface BfProjectEvermindHead {
   contributions?: number;
   inferenceEnabled: boolean;
   seeded: boolean;
+  /** The Evermind CODING gate (api `evermindCodingGate`): may this head serve IDE coding
+   *  turns — a coding eval recorded for THIS version ≥ 90% of the frontier baseline.
+   *  Absent on an older api, which the chat treats as closed. */
+  codingGate?: { qualified: boolean; reason?: string; ratio?: number | null; bar?: number };
 }
 
 // Single-process, short-TTL cache (shared ttlCache): the head is slow-changing yet

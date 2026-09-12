@@ -1,6 +1,6 @@
--- 1151 — Re-grade canvas collaborators from `developer` to `contributor`.
+-- 1156 — Re-grade canvas collaborators from `developer` to `contributor`.
 --
--- Migration 1150 added the `contributor` tier; `tenantRoleForSessionRole` now seats
+-- Migration 1155 added the `contributor` tier; `tenantRoleForSessionRole` now seats
 -- every NEW board editor/runner/owner there. This moves the people already seated
 -- through a canvas invitation under the old rule.
 --

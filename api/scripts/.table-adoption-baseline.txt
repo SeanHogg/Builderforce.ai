@@ -57,7 +57,6 @@ interview_question_sets
 inventory_items
 job_items
 job_websites
-kanban_columns
 kpi_formulas
 learning_cohorts
 list_items
@@ -93,7 +92,6 @@ ramp_times
 recruiter_agent_followups
 recruiter_outreach_sequences
 referral_entries
-release_plans
 report_approvals
 retained_search_firms
 ri_sequences

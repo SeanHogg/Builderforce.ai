@@ -1,7 +1,27 @@
 import { Hono } from 'hono';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { recordVisitorEvents, type VisitorEventInput } from '../../application/marketing/VisitorEventService';
+import { recordVisitorEvents } from '../../application/marketing/VisitorEventService';
+import { RequestValidationError } from '../../domain/shared/errors';
+import { parseOptionalBody, z } from './requestBody';
+
+/**
+ * A journey batch. Nothing here can refuse: `recordVisitorEvents` validates the
+ * visitor id (answering `invalid_visitor`) and every event field itself, so the
+ * schema's job is only to guarantee `events` is an array of OBJECTS — a `null` or
+ * scalar entry used to reach `event.kind` as a TypeError.
+ */
+const VisitorEventBody = z.looseObject({
+  kind: z.unknown().optional(), visitId: z.unknown().optional(), persona: z.unknown().optional(),
+  path: z.unknown().optional(), metadata: z.unknown().optional(), occurredAt: z.unknown().optional(),
+});
+const VisitorBatchBody = z.object({
+  visitorId: z.unknown().optional(),
+  events: z.preprocess(
+    (value) => (Array.isArray(value) ? value.filter((e) => e !== null && typeof e === 'object' && !Array.isArray(e)) : []),
+    z.array(VisitorEventBody),
+  ),
+});
 
 /**
  * The anonymous visitor journey — the PUBLIC write path.
@@ -31,14 +51,17 @@ export function createVisitorRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
   router.post('/events', async (c) => {
-    const body = await c.req
-      .json<{ visitorId?: string; events?: VisitorEventInput[] }>()
-      .catch((): Record<string, never> => ({}));
+    // A body that is not an object at all (an array, a string) reads as an empty
+    // batch rather than a 400: this endpoint answers 202 for every outcome.
+    const body = await parseOptionalBody(c, VisitorBatchBody).catch((e: unknown) => {
+      if (e instanceof RequestValidationError) return VisitorBatchBody.parse({});
+      throw e;
+    });
 
     const result = await recordVisitorEvents(db, c.env as Env, {
       visitorId: body.visitorId,
       ip: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
-      events: Array.isArray(body.events) ? body.events : [],
+      events: body.events,
     });
 
     return result.ok

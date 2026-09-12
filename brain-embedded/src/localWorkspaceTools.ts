@@ -152,6 +152,16 @@ export function canChangeCodeHere(toolNames: readonly string[]): boolean {
 }
 
 /**
+ * Whether THIS run can PUBLISH its own change — commit AND push. The VS Code host
+ * advertises both; the web Brain advertises neither. Read by the self-review ship
+ * contract (`selfReviewShip.ts`): only a session that can land its change is told it is
+ * that change's reviewer, and only such a session is re-prompted for leaving it unshipped.
+ */
+export function canShipHere(toolNames: readonly string[]): boolean {
+  return toolNames.includes('git_commit') && toolNames.includes('git_push');
+}
+
+/**
  * The local workspace tools this run actually has, out of a catalog. Handed to the
  * per-turn selector as always-advertised, so the surface's own capability is never a
  * casualty of relevance trimming.

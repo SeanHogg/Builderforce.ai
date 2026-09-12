@@ -19,20 +19,38 @@ import {
   type AgentRegistrationScope,
   type AgentRegistrationUpdate,
 } from '../../application/agent/AgentRegistrationService';
+import { parseBody, z } from './requestBody';
 
-type RegistrationInput = {
-  name?: unknown;
-  framework?: unknown;
-  protocol?: unknown;
-  endpoint?: unknown;
-  agentHostId?: unknown;
-  externalAgentId?: unknown;
-  credentialRef?: unknown;
-  declaredCapabilities?: unknown;
-  discoveredCapabilities?: unknown;
-  agentCard?: unknown;
-  metadata?: unknown;
-};
+/**
+ * Every field is read through its own normalizer (`cleanOptionalString`,
+ * `normalizeFramework`, `normalizeJsonObject`, …), which owns the per-field rule
+ * and its sentence — so the schema insists only on a JSON object and names the
+ * keys that are read. `agentCard`/`metadata` pass through whole.
+ */
+const RegistrationBody = z.object({
+  name: z.unknown().optional(),
+  framework: z.unknown().optional(),
+  protocol: z.unknown().optional(),
+  endpoint: z.unknown().optional(),
+  agentHostId: z.unknown().optional(),
+  externalAgentId: z.unknown().optional(),
+  credentialRef: z.unknown().optional(),
+  declaredCapabilities: z.unknown().optional(),
+  discoveredCapabilities: z.unknown().optional(),
+  agentCard: z.unknown().optional(),
+  metadata: z.unknown().optional(),
+});
+
+/** `PATCH /:id` — the create fields plus the lifecycle status the handler checks itself. */
+const RegistrationPatchBody = RegistrationBody.extend({ status: z.unknown().optional() });
+
+/** `POST /:id/capabilities` — the runtime's report, normalized field by field. */
+const CapabilityReportBody = z.object({
+  capabilities: z.unknown().optional(),
+  agentCard: z.unknown().optional(),
+  healthStatus: z.unknown().optional(),
+  externalAgentId: z.unknown().optional(),
+});
 
 function cleanOptionalString(value: unknown, field: string, max: number): string | null {
   if (value == null || value === '') return null;
@@ -99,9 +117,10 @@ export function createAgentRegistrationRoutes(service: AgentRegistrationService)
   });
 
   router.post('/', requireRole(TenantRole.MANAGER), async (c) => {
-    let body: RegistrationInput;
+    // Read ABOVE the try: its catch answers every Error as a bare `{ error }`, which
+    // would flatten a shape failure's field-path envelope into a sentence.
+    const body = await parseBody(c, RegistrationBody);
     try {
-      body = await c.req.json<RegistrationInput>();
       const name = cleanOptionalString(body.name, 'name', 255);
       if (!name) throw new Error('name is required');
       const framework = normalizeFramework(body.framework);
@@ -142,8 +161,8 @@ export function createAgentRegistrationRoutes(service: AgentRegistrationService)
   });
 
   router.patch('/:id', requireRole(TenantRole.MANAGER), async (c) => {
+    const body = await parseBody(c, RegistrationPatchBody);
     try {
-      const body = await c.req.json<RegistrationInput & { status?: unknown }>();
       const existing = await service.get(c.req.param('id'), scope(c));
       if (!existing) return c.json({ error: 'Agent registration not found' }, 404);
       const update: AgentRegistrationUpdate = {};
@@ -190,8 +209,8 @@ export function createAgentRegistrationRoutes(service: AgentRegistrationService)
     if (!isManager(c) && (!machine || machine.kind !== 'agent_host' || machine.agentHostId !== existing.agentHostId)) {
       return c.json({ error: 'Only a manager or the bound AgentHost may report capabilities' }, 403);
     }
+    const body = await parseBody(c, CapabilityReportBody);
     try {
-      const body = await c.req.json<{ capabilities?: unknown; agentCard?: unknown; healthStatus?: unknown; externalAgentId?: unknown }>();
       const row = await service.update(existing.id, scope(c), {
         discoveredCapabilities: normalizeCapabilities(body.capabilities, 'capabilities'),
         ...(body.agentCard !== undefined ? { agentCard: normalizeJsonObject(body.agentCard, 'agentCard', 65_536) } : {}),

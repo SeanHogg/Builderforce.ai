@@ -14,7 +14,7 @@ import { and, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import {
   resolveCloudSurface, chooseCloudExecutor, probeContainerHealth, cloudAgentTypeLabel,
-  isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, buildFollowUpPayload, withDefaultModel, withExecutor,
+  isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, withDefaultModel, withExecutor,
 } from '../../application/runtime/cloudDispatch';
 import { verifyContainerRunToken } from '../../application/runtime/containerRunToken';
 import { launchContainerRun, type ContainerRunTarget } from '../../application/runtime/containerRunLauncher';
@@ -54,7 +54,7 @@ import { resolveActorFromContext } from '../../application/activity/activityLog'
 import { unreadCountsForUser } from '../../application/brain/chatReadState';
 import { ExecutionStatus, TenantRole } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
-import { parseBody, z, zNonEmptyString, zPositiveInt } from './requestBody';
+import { parseBody, parseOptionalBody, z, zNonEmptyString, zNumberLike, zPositiveInt } from './requestBody';
 import { parseJsonArray } from '../../domain/shared/json';
 import type { Execution } from '../../domain/execution/Execution';
 import type { Env, HonoEnv } from '../../env';
@@ -157,14 +157,19 @@ function projectHiredAgent(r: { id: string; name: string | null; bio: string | n
 }
 
 
-type ExecutionTelemetryBody = {
-  inputTokens?: number;
-  outputTokens?: number;
-  contextTokens?: number;
-  contextWindowMax?: number;
-  compactionCount?: number;
-  ts?: string;
-};
+/**
+ * `POST /executions/:id/telemetry` — an optional body. Every counter goes through
+ * the handler's own `num()` coercion, which accepts anything, so none is typed
+ * here; `ts` is `new Date(...)`d and falls back to now when invalid.
+ */
+const ExecutionTelemetryBody = z.object({
+  inputTokens: z.unknown().optional(),
+  outputTokens: z.unknown().optional(),
+  contextTokens: z.unknown().optional(),
+  contextWindowMax: z.unknown().optional(),
+  compactionCount: z.unknown().optional(),
+  ts: zNumberLike.nullish(),
+});
 
 function parseOptionalNumber(value: string | undefined | null): number | null {
   if (!value) return null;
@@ -1038,9 +1043,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // carry DEVELOPER). Not a read — a viewer must not be able to forge usage.
   router.post('/executions/:id/telemetry', requireRole(TenantRole.DEVELOPER), async (c) => {
     const id = Number(c.req.param('id'));
-    const body = await c.req
-      .json<ExecutionTelemetryBody>()
-      .catch((): ExecutionTelemetryBody => ({}));
+    const body = await parseOptionalBody(c, ExecutionTelemetryBody);
 
     const execution = await runtimeService.getExecution(id);
     const plain = execution.toPlain();
@@ -1576,7 +1579,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         // steer or reports it back as late (lateSteerFollowUp.ts). Undelivered, it stays
         // pending and the run's terminal chokepoint settles it.
         if (relayed?.ok && messageId != null) {
-          await markSteerRelayed(db, messageId).catch((error) => reportCaughtError(error, { source: "presentation/routes/runtimeRoutes.ts", operation: "createRuntimeRoutes", level: 'warning', context: { logMessage: '[runtime-steer] could not mark relayed steer delivered', details: { tenantId, executionId: id, messageId, error } } }));
+          await markSteerRelayed(db, tenantId, messageId).catch((error) => reportCaughtError(error, { source: "presentation/routes/runtimeRoutes.ts", operation: "createRuntimeRoutes", level: 'warning', context: { logMessage: '[runtime-steer] could not mark relayed steer delivered', details: { tenantId, executionId: id, messageId, error } } }));
         }
       }
 

@@ -44,6 +44,7 @@ import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveActorFromContext } from '../../application/activity/activityLog';
+import { parseBody, parseOptionalBody, z, zJsonObject } from './requestBody';
 import {
   WebSurfaceError,
   addBlock,
@@ -71,6 +72,13 @@ import {
   upsertSeoPage,
   websiteTree,
 } from '../../application/marketing/webSurface';
+
+/** The public SEO impression beacon. A visitor's browser sends it fire-and-forget,
+ *  so it NEVER refuses: a missing/non-string `path`, or a body that is not an object
+ *  at all, reads as "nothing to count" and the endpoint still answers 204. */
+const SeoImpressionBody = z
+  .object({ path: z.string().optional().catch(undefined) })
+  .catch({});
 
 const handle = async (run: () => Promise<Response>): Promise<Response> => {
   try {
@@ -119,7 +127,7 @@ export function createWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
     Response.json(await landingPageDetail(db, tenant(c), pageId(c.req.param('id'))))));
 
   router.post('/landing-pages', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const page = await createLandingPage(
       db,
       c.env as Env,
@@ -138,7 +146,7 @@ export function createWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.patch('/landing-pages/:id', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const patch: Parameters<typeof updateLandingPage>[5] = {};
     if (body.slug !== undefined) patch.slug = String(body.slug);
     if (body.title !== undefined) patch.title = String(body.title);
@@ -171,7 +179,7 @@ export function createWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
    *  unrecognised target is rejected rather than defaulted, because defaulting
    *  here silently turns "this campaign is over" into "still editing". */
   router.post('/landing-pages/:id/unpublish', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>().catch((): Record<string, unknown> => ({}));
+    const body = await parseOptionalBody(c, zJsonObject);
     const to = str(body.to);
     if (to !== 'draft' && to !== 'ended' && to !== 'archived') {
       throw new WebSurfaceError("to must be 'draft', 'ended' or 'archived'", 400);
@@ -186,7 +194,7 @@ export function createWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
   // ── Blocks ────────────────────────────────────────────────────────────────
 
   router.post('/landing-pages/:id/blocks', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const kind = str(body.kind);
     if (!kind) throw new WebSurfaceError('kind is required', 400);
     const block = await addBlock(db, tenant(c), pageId(c.req.param('id')), {
@@ -201,7 +209,7 @@ export function createWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
   /** Declared BEFORE `/blocks/:blockId` — Hono matches in registration order, and
    *  a literal `order` would otherwise be swallowed as a block id. */
   router.put('/landing-pages/:id/blocks/order', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const order = Array.isArray(body.order) ? body.order : null;
     if (!order || !order.every((v) => typeof v === 'number' && Number.isFinite(v))) {
       throw new WebSurfaceError('order must be an array of block ids', 400);
@@ -212,7 +220,7 @@ export function createWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.patch('/landing-pages/:id/blocks/:blockId', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const patch: Parameters<typeof updateBlock>[4] = {};
     if (body.kind !== undefined) patch.kind = String(body.kind);
     if (body.content !== undefined) patch.content = body.content;
@@ -233,7 +241,7 @@ export function createWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
     Response.json({ tree: await websiteTree(db, tenant(c)) })));
 
   router.post('/website', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const page = await createWebsitePage(
       db, c.env as Env, tenant(c),
       await resolveActorFromContext(c.env as Env, db, c),
@@ -252,7 +260,7 @@ export function createWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.patch('/website/:id', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const patch: Parameters<typeof updateWebsitePage>[5] = {};
     if (body.path !== undefined) patch.path = String(body.path);
     if (body.title !== undefined) patch.title = String(body.title);
@@ -282,7 +290,7 @@ export function createWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
     Response.json({ patterns: await seoPatternSummary(db, tenant(c)) })));
 
   router.post('/seo', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const pattern = str(body.pattern);
     if (!pattern) throw new WebSurfaceError('pattern is required', 400);
     return Response.json(await upsertSeoPage(db, tenant(c), {
@@ -296,7 +304,7 @@ export function createWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.post('/seo/retire', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, zJsonObject);
     const pattern = str(body.pattern);
     if (!pattern) throw new WebSurfaceError('pattern is required', 400);
     return Response.json(await retireSeoPattern(db, tenant(c), pattern));
@@ -364,8 +372,8 @@ export function createPublicWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
   /** An SEO impression — the denominator the conversion counter never had. 204
    *  with no body, for the same reason the landing-page counters return none. */
   router.post('/:tenantId/seo/impression', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
-    if (typeof body.path === 'string' && body.path) {
+    const body = await parseOptionalBody(c, SeoImpressionBody);
+    if (body.path) {
       await recordSeoImpression(db, ownerParam(c.req.param('tenantId')), body.path);
     }
     return new Response(null, { status: 204 });

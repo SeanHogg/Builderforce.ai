@@ -69,6 +69,28 @@ import {
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
 import { MAX_DELTA_B64_CHARS, parseDeltaLearnRequest } from '../../application/llm/evermindDeltaLearn';
 import { dispatchProjectEvermindLearn } from '../../application/llm/evermindDeltaDispatch';
+import { codingEvalFromReports, evermindQualifiesForCoding } from '../../application/llm/evermindCodingGate';
+import { recordProjectEvermindCodingEval } from '../../application/llm/evermindCodingEvalStore';
+import { parseOptionalBody, z, zJsonObject } from './requestBody';
+
+// ── Request bodies ────────────────────────────────────────────────────────────
+// Every handler type-guards its fields one by one and answers its own sentence for a
+// miss, so fields stay `unknown`: the schemas refuse only a body that is not an object.
+const PromptBody = z.object({ prompt: z.unknown().optional() });
+const RecallBody = z.object({ query: z.unknown().optional(), chatId: z.unknown().optional() });
+const LearnTextBody = z.object({ text: z.unknown().optional(), weight: z.unknown().optional(), prompt: z.unknown().optional() });
+const ExtractMemoriesBody = z.object({ entries: z.unknown().optional() });
+const SeedBody = z.object({ model: z.unknown().optional(), tokenizer: z.unknown().optional(), name: z.unknown().optional() });
+/** `/seed-from-model` and `/reseed`: a published Studio model slug + optional display name. */
+const SlugNameBody = z.object({ slug: z.unknown().optional(), name: z.unknown().optional() });
+const ModeBody = z.object({ mode: z.unknown().optional() });
+const InferenceBody = z.object({ enabled: z.unknown().optional(), force: z.unknown().optional() });
+const TeacherBody = z.object({ model: z.unknown().optional() });
+const ProbeBody = z.object({
+  prompt: z.unknown().optional(), maxTokens: z.unknown().optional(), temperature: z.unknown().optional(), seed: z.unknown().optional(),
+});
+const CleanupBody = z.object({ pending: z.unknown().optional(), qaCache: z.unknown().optional() });
+const AnalyzeBody = z.object({ apply: z.unknown().optional(), limit: z.unknown().optional(), findings: z.unknown().optional() });
 
 /** Verify the project exists AND belongs to this tenant (IDOR guard). */
 async function ownsProject(db: Db, tenantId: number, projectId: number): Promise<boolean> {
@@ -126,7 +148,7 @@ async function headCore(env: Env, db: Db, tenantId: number, projectId: number): 
   const effectiveId = await resolveEffectiveEvermindProjectId(env, db, tenantId, projectId);
   const head = await getProjectEvermindHead(env, db, tenantId, effectiveId);
   const inherited = effectiveId !== projectId;
-  return json({ version: head.version, ref: head.ref, mode: head.mode, name: head.name, contributions: head.contributions, inferenceEnabled: head.inferenceEnabled, teacherModel: head.teacherModel, lastLearnedAt: head.lastLearnedAt, seeded: head.version > 0, quarantinedAt: head.quarantinedAt, quarantineReason: head.quarantineReason, inherited, ...(inherited ? { inheritedFromProjectId: effectiveId } : {}) });
+  return json({ version: head.version, ref: head.ref, mode: head.mode, name: head.name, contributions: head.contributions, inferenceEnabled: head.inferenceEnabled, teacherModel: head.teacherModel, lastLearnedAt: head.lastLearnedAt, seeded: head.version > 0, quarantinedAt: head.quarantinedAt, quarantineReason: head.quarantineReason, codingGate: evermindQualifiesForCoding(head), inherited, ...(inherited ? { inheritedFromProjectId: effectiveId } : {}) });
 }
 
 /**
@@ -206,7 +228,7 @@ async function contributionStatusCore(env: Env, db: Db, tenantId: number, projec
  */
 async function validateCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
-  const body = (await c.req.json<{ prompt?: unknown }>().catch(() => ({}))) as { prompt?: unknown };
+  const body = await parseOptionalBody(c, PromptBody);
   const prompt = typeof body.prompt === 'string' ? body.prompt : '';
   if (!prompt.trim()) return json({ error: 'prompt is required' }, 400);
   return json(await validateProjectEvermindRecall(env, db, tenantId, projectId, prompt));
@@ -221,8 +243,7 @@ async function validateCore(env: Env, db: Db, tenantId: number, projectId: numbe
  */
 async function recallCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
-  const body = (await c.req.json<{ query?: unknown; chatId?: unknown }>().catch(() => ({}))) as
-    { query?: unknown; chatId?: unknown };
+  const body = await parseOptionalBody(c, RecallBody);
   const query = typeof body.query === 'string' ? body.query : '';
   // The ASKING conversation. Optional: a global chat, or a caller that tracks none,
   // recalls project-wide exactly as before. When present, this chat's own memories
@@ -275,7 +296,9 @@ async function learnCore(env: Env, db: Db, tenantId: number, projectId: number, 
   if (Number.isFinite(declared) && declared > MAX_DELTA_B64_CHARS + DELTA_ENVELOPE_BYTES) {
     return json({ error: `delta too large (max ${MAX_DELTA_B64_CHARS} base64 characters)` }, 413);
   }
-  const parsed = parseDeltaLearnRequest(await c.req.json().catch(() => null));
+  // `parseDeltaLearnRequest` owns the delta contract (and reads an absent body as `{}`);
+  // the route only refuses a body that is not a JSON object.
+  const parsed = parseDeltaLearnRequest(await parseOptionalBody(c, zJsonObject));
   if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
   const result = await dispatchProjectEvermindLearn(env, tenantId, projectId, parsed.request);
   return json(result.body, result.status);
@@ -296,7 +319,7 @@ async function learnTextCore(env: Env, db: Db, tenantId: number, projectId: numb
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const inheritedBlock = await refuseInheritedWrite(env, db, tenantId, projectId);
   if (inheritedBlock) return inheritedBlock;
-  const body = (await c.req.json<{ text?: unknown; weight?: unknown; prompt?: unknown }>().catch(() => ({}))) as { text?: unknown; weight?: unknown; prompt?: unknown };
+  const body = await parseOptionalBody(c, LearnTextBody);
   const text = typeof body.text === 'string' ? body.text : '';
   if (!text.trim()) return json({ error: 'text is required' }, 400);
   const prompt = typeof body.prompt === 'string' ? body.prompt : undefined;
@@ -321,7 +344,7 @@ async function extractMemoriesCore(env: Env, db: Db, tenantId: number, projectId
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const inheritedBlock = await refuseInheritedWrite(env, db, tenantId, projectId);
   if (inheritedBlock) return inheritedBlock;
-  const body = (await c.req.json<{ entries?: unknown }>().catch(() => ({}))) as { entries?: unknown };
+  const body = await parseOptionalBody(c, ExtractMemoriesBody);
   if (!Array.isArray(body.entries)) return json({ error: 'entries[] is required' }, 400);
   const entries: MemoryExtractEntry[] = [];
   for (const raw of body.entries) {
@@ -381,9 +404,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
     if (!c.env.UPLOADS) return c.json({ error: 'R2 artifact storage not configured' }, 503);
 
-    const body = (await c.req.json<{ model?: unknown; tokenizer?: unknown; name?: unknown }>().catch(() => ({}))) as {
-      model?: unknown; tokenizer?: unknown; name?: unknown;
-    };
+    const body = await parseOptionalBody(c, SeedBody);
     const modelB64 = typeof body.model === 'string' ? body.model : '';
     const tokenizer = body.tokenizer as { vocab?: unknown; merges?: unknown } | undefined;
     if (!modelB64) return c.json({ error: 'model (base64 .evermind) is required' }, 400);
@@ -427,7 +448,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
     const env = c.env as Env;
 
-    const body = (await c.req.json<{ slug?: unknown; name?: unknown }>().catch(() => ({}))) as { slug?: unknown; name?: unknown };
+    const body = await parseOptionalBody(c, SlugNameBody);
     const slug = typeof body.slug === 'string' ? body.slug.trim() : '';
     if (!slug) return c.json({ error: 'slug (a published Evermind model) is required' }, 400);
 
@@ -450,7 +471,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
     const inheritedBlock = await refuseInheritedWrite(c.env as Env, db, tenantId, projectId);
     if (inheritedBlock) return inheritedBlock;
-    const body = (await c.req.json<{ mode?: unknown }>().catch(() => ({}))) as { mode?: unknown };
+    const body = await parseOptionalBody(c, ModeBody);
     const mode = body.mode === 'offline-frozen' || body.mode === 'connected' ? (body.mode as ProjectEvermindMode) : null;
     if (!mode) return c.json({ error: "mode must be 'connected' or 'offline-frozen'" }, 400);
     await setProjectEvermindMode(c.env as Env, db, tenantId, projectId, mode);
@@ -470,7 +491,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
     const inheritedBlock = await refuseInheritedWrite(c.env as Env, db, tenantId, projectId);
     if (inheritedBlock) return inheritedBlock;
-    const body = (await c.req.json<{ enabled?: unknown; force?: unknown }>().catch(() => ({}))) as { enabled?: unknown; force?: unknown };
+    const body = await parseOptionalBody(c, InferenceBody);
     if (typeof body.enabled !== 'boolean') return c.json({ error: 'enabled (boolean) is required' }, 400);
     const head = await getProjectEvermindHead(env, db, tenantId, projectId);
     if (body.enabled && head.version <= 0) {
@@ -494,6 +515,41 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ ok: true, inferenceEnabled: result.inferenceEnabled });
   });
 
+  /**
+   * RECORD A CODING EVAL (manager) — the write path from builderforce-memory's
+   * `EvalHarness` into the Evermind coding-quality gate (operator decision 2026-09-12:
+   * Evermind serves IDE coding turns only at ≥ 90% of the frontier baseline).
+   *
+   * Body: `{ version, evermind: EvalReport, baseline: EvalReport, baselineModel? }` —
+   * the same coding dataset run through the harness against this head and against the
+   * frontier baseline. Both reports must be the SAME eval (dataset + case count) or the
+   * ratio compares nothing (400). `version` must still be the head: a merge in between
+   * makes the eval stale, so it is refused with 409 + `headVersion` rather than vouching
+   * for weights it never scored. Returns the gate's new verdict. Recording an eval never
+   * turns inference ON — it only lets an already-enabled head serve coding turns.
+   */
+  router.post('/:projectId/evermind/coding-eval', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = t(c);
+    const projectId = pid(c);
+    const env = c.env as Env;
+    if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    const inheritedBlock = await refuseInheritedWrite(env, db, tenantId, projectId);
+    if (inheritedBlock) return inheritedBlock;
+    // `codingEvalFromReports` owns the report contract; the route only refuses a non-object.
+    const body = await parseOptionalBody(c, zJsonObject);
+    const parsed = codingEvalFromReports({
+      version: typeof body.version === 'number' ? body.version : Number.NaN,
+      evermind: body.evermind,
+      baseline: body.baseline,
+      baselineModel: body.baselineModel,
+      evaluatedAt: new Date(),
+    });
+    if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+    const result = await recordProjectEvermindCodingEval(env, db, tenantId, projectId, parsed.eval);
+    if (!result.ok) return c.json({ error: result.error, headVersion: result.headVersion }, 409);
+    return c.json({ ok: true, codingGate: result.gate });
+  });
+
   /** Pin/clear the frontier-LLM TEACHER (manager). Body: { model: string | null }.
    *  A non-empty model id makes the coordinator distill runs through that frontier
    *  model; null/empty clears it (self-learning on raw run text only). */
@@ -503,7 +559,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
     const inheritedBlock = await refuseInheritedWrite(c.env as Env, db, tenantId, projectId);
     if (inheritedBlock) return inheritedBlock;
-    const body = (await c.req.json<{ model?: unknown }>().catch(() => ({}))) as { model?: unknown };
+    const body = await parseOptionalBody(c, TeacherBody);
     if (body.model != null && typeof body.model !== 'string') {
       return c.json({ error: 'model must be a string or null' }, 400);
     }
@@ -555,9 +611,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     const head = await getProjectEvermindHead(env, db, tenantId, effectiveId);
     if (head.version <= 0 || !head.ref) return c.json({ error: 'this project’s Evermind is not set up yet' }, 409);
 
-    const body = (await c.req.json<{ prompt?: unknown; maxTokens?: unknown; temperature?: unknown; seed?: unknown }>().catch(() => ({}))) as {
-      prompt?: unknown; maxTokens?: unknown; temperature?: unknown; seed?: unknown;
-    };
+    const body = await parseOptionalBody(c, ProbeBody);
     const prompt = typeof body.prompt === 'string' ? body.prompt.trim().slice(0, 2000) : '';
     const opts = {
       ...(typeof body.maxTokens === 'number' ? { maxTokens: Math.min(Math.max(16, body.maxTokens), 512) } : {}),
@@ -614,7 +668,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     if (inheritedBlock) return inheritedBlock;
     if (!env.UPLOADS) return c.json({ error: 'R2 artifact storage not configured' }, 503);
 
-    const body = (await c.req.json<{ slug?: unknown; name?: unknown }>().catch(() => ({}))) as { slug?: unknown; name?: unknown };
+    const body = await parseOptionalBody(c, SlugNameBody);
     const slug = typeof body.slug === 'string' ? body.slug.trim() : '';
     const name = typeof body.name === 'string' ? body.name : undefined;
 
@@ -661,7 +715,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
     const inheritedBlock = await refuseInheritedWrite(c.env as Env, db, tenantId, projectId);
     if (inheritedBlock) return inheritedBlock;
-    const body = (await c.req.json<{ pending?: unknown; qaCache?: unknown }>().catch(() => ({}))) as { pending?: unknown; qaCache?: unknown };
+    const body = await parseOptionalBody(c, CleanupBody);
     const doPending = body.pending !== false;
     const doQa = body.qaCache !== false;
 
@@ -698,9 +752,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     const gate = await requireFrontierAccess(c);
     if (gate) return gate;
 
-    const body = (await c.req.json<{ apply?: unknown; limit?: unknown; findings?: unknown }>().catch(() => ({}))) as {
-      apply?: unknown; limit?: unknown; findings?: unknown;
-    };
+    const body = await parseOptionalBody(c, AnalyzeBody);
     const limit = typeof body.limit === 'number' ? body.limit : undefined;
     // Analysis + repair both operate on the head this project actually serves from.
     const effectiveId = await resolveEffectiveEvermindProjectId(env, db, tenantId, projectId);

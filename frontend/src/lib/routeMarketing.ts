@@ -34,9 +34,15 @@ import { classifyShell, isOperatorOnlyRoute } from './shellRouting';
  *                  than a lock icon, and `noindex`, because a page with the same
  *                  body at forty URLs is duplicate content by definition.
  *
- * Tiers 2 and 3 carry no English in this file — their copy is i18n keys resolved
- * by `<RouteMarketing>`, which is what lets them exist at all: 28 destinations ×
- * five locales is a catalog entry each, not 28 hand-written pages.
+ * NO TIER CARRIES ENGLISH IN THIS FILE. Tier 1 used to — ~160 literals of hero,
+ * highlight, FAQ and SEO copy, served in English to every locale and into every
+ * localized `<head>` — under a standing decision that marketing copy stayed
+ * English. The operator reversed it on 2026-09-12 ("translate all marketing
+ * strings"), so the registry now holds STRUCTURE and catalog keys
+ * (`routeMarketing.route.<slug>.*`), and {@link getRouteMarketing} resolves them
+ * through the caller's translator. The only text still arriving as text is what
+ * `content.ts` owns (the product-surface rows and the Projects FAQ); localizing
+ * that is `content.ts`'s job, and a row switches to a key the day it has one.
  */
 export interface RouteHighlight {
   title: string;
@@ -52,6 +58,7 @@ export interface RouteFigure {
   caption: string;
 }
 
+/** A route's teaser copy, RESOLVED — every field already in the visitor's language. */
 export interface RouteMarketing {
   icon: string;
   title: string;
@@ -69,6 +76,38 @@ export interface RouteMarketing {
 }
 
 /**
+ * Copy as the registry holds it: a catalog KEY (resolved in the visitor's locale)
+ * or text another module owns and localizes (a `PRODUCT_SECTIONS` row, the
+ * Projects FAQ). Never English typed into this file.
+ */
+type Copy = { key: string } | string;
+
+/**
+ * The translator {@link getRouteMarketing} resolves keys through — a FULL catalog
+ * key in, a string out. The narrowest slice of next-intl's `t` this module uses,
+ * so a client component (`useTranslations()`), a server head (`getTranslations()`)
+ * and a test (`createTranslator`) can all hand one in.
+ */
+export type RouteMarketingTranslate = (key: string) => string;
+
+interface RouteMarketingSource {
+  icon: string;
+  title: Copy;
+  description: Copy;
+  highlights?: { title: Copy; desc: Copy }[];
+  figures?: RouteFigure[];
+  faq?: { question: Copy; answer: Copy }[];
+  relatedSurface?: string;
+  seoDescription?: Copy;
+}
+
+type DetailSource = Omit<RouteMarketingSource, 'icon' | 'title' | 'description'>;
+
+/** Where this file's own copy lives in the catalogs. */
+const ROUTE_NS = 'routeMarketing.route';
+const routeKey = (slug: string, field: string): Copy => ({ key: `${ROUTE_NS}.${slug}.${field}` });
+
+/**
  * The marketed surfaces, keyed by PATH.
  *
  * Two corrections over the naive `fromSurfaces[s.href] = …`, both of which were
@@ -80,7 +119,7 @@ export interface RouteMarketing {
  * own row: four surfaces link into `/projects`, and last-wins had `/projects`
  * titled "Workforce Kanban & Templates".
  */
-const fromSurfaces: Record<string, RouteMarketing> = {};
+const fromSurfaces: Record<string, RouteMarketingSource> = {};
 for (const section of PRODUCT_SECTIONS) {
   for (const s of section.surfaces) {
     if (!s.href.startsWith('/')) continue;
@@ -90,152 +129,62 @@ for (const section of PRODUCT_SECTIONS) {
   }
 }
 
-const extra: Record<string, RouteMarketing> = {
+/** An authed route that is not a marketed surface: its own title and pitch, keyed. */
+const ownRow = (slug: string, icon: string): RouteMarketingSource => ({
+  icon,
+  title: routeKey(slug, 'title'),
+  description: routeKey(slug, 'description'),
+});
+
+const extra: Record<string, RouteMarketingSource> = {
   // `/brainstorm` and `/training` carried a full DETAILS body (highlights, FAQ,
   // SEO copy) and no base, so the overlay landed on the generic default: a page
   // headed "This is part of Builderforce.ai" with three Brain Storm highlights
   // under it. A DETAILS key without a base row is now a test failure.
-  '/brainstorm': { icon: '🧠', title: 'Brain Storm', description: 'Describe what you want to build in plain language and turn it into projects, tasks, datasets, and agent work.' },
-  '/workflows': { icon: '🔀', title: 'Workflow Builder', description: 'Compose agents and tools into repeatable, approval-gated workflows.' },
-  '/settings': { icon: '⚙', title: 'Settings', description: 'Manage your workspace, members, API keys, and preferences.' },
-  '/tenants': { icon: '🏢', title: 'Workspaces', description: 'Create and switch between multi-tenant workspaces with per-seat roles.' },
-  '/admin': { icon: '⚙', title: 'Platform Admin', description: 'Platform administration, LLM traces, and operator tooling.' },
-  '/agent-worker': { icon: '🤖', title: 'Agent Worker', description: 'Run and monitor background agent workers executing your tasks.' },
+  '/brainstorm': ownRow('brainstorm', '🧠'),
+  '/workflows': ownRow('workflows', '🔀'),
+  '/settings': ownRow('settings', '⚙'),
+  '/tenants': ownRow('tenants', '🏢'),
+  '/admin': ownRow('admin', '⚙'),
+  '/agent-worker': ownRow('agent-worker', '🤖'),
 };
+
+/**
+ * A route's marketing body, as STRUCTURE: how many highlights and FAQ entries it
+ * carries, each one a catalog entry under `routeMarketing.route.<slug>` —
+ * `seoDescription`, `highlight.h<n>.{title,desc}`, `faq.q<n>.{question,answer}`.
+ * The related-article surface is the slug, which every overlay already shared.
+ */
+function detail(slug: string, counts: { highlights?: number; faq?: number } = {}): DetailSource {
+  const range = (n = 0) => Array.from({ length: n }, (_, i) => i + 1);
+  return {
+    relatedSurface: slug,
+    seoDescription: routeKey(slug, 'seoDescription'),
+    ...(counts.highlights ? { highlights: range(counts.highlights).map((n) => ({ title: routeKey(slug, `highlight.h${n}.title`), desc: routeKey(slug, `highlight.h${n}.desc`) })) } : {}),
+    ...(counts.faq ? { faq: range(counts.faq).map((n) => ({ question: routeKey(slug, `faq.q${n}.question`), answer: routeKey(slug, `faq.q${n}.answer`) })) } : {}),
+  };
+}
 
 /**
  * Per-route marketing body, FAQ, SEO copy, and related-article surface. This is
  * the content that turns a thin "sign in" gate into a real feature page for
  * logged-out visitors and crawlers. Keyed by route path (longest-prefix match).
  */
-const DETAILS: Record<string, Omit<RouteMarketing, 'icon' | 'title' | 'description'>> = {
-  '/brainstorm': {
-    relatedSurface: 'brainstorm',
-    seoDescription:
-      'Brain Storm is a plain-language starting point inside Builderforce.ai: explore an idea, shape useful context, and turn it into connected canvas work, projects, tasks, datasets, or agent-assisted execution.',
-    highlights: [
-      { title: 'Describe it in plain language', desc: 'Say what you want to create, then develop the idea before deciding which artifacts, collaborators, or delivery structure it needs.' },
-      { title: 'It calls real platform tools', desc: 'The Brain is wired to a tool registry: it can create projects, draft specs, generate datasets, and assign work to agents — not just chat about it.' },
-      { title: 'Grounded in your workspace', desc: 'Pin a project and the Brain answers with that context, so ideation continues exactly where your work already lives.' },
-    ],
-    faq: [
-      { question: 'What is Brain Storm on Builderforce.ai?', answer: 'Brain Storm is the full-page Brain assistant — a plain-language interface where you describe what you want to build and the Brain turns it into projects, tasks, datasets, and agent work. It is the same Brain available as a docked drawer everywhere in the app, given a full-page canvas.' },
-      { question: 'Does the Brain actually do things, or just chat?', answer: 'It acts. The Brain is connected to a platform tool registry and your tenant\'s MCP extensions, so it can create projects, draft specs and PRDs, kick off dataset generation, and assign tasks to agents — every tool call governed by your approval gates.' },
-      { question: 'Do I need to set anything up to start brainstorming?', answer: 'No. Sign in, open Brain Storm, and type. You can optionally pin a project so answers are grounded in that codebase and context, but a blank prompt is enough to start turning an idea into a plan.' },
-    ],
-  },
-  '/workflows': {
-    relatedSurface: 'workflows',
-    seoDescription:
-      'The Builderforce.ai Workflow Builder is a drag-and-drop, IPAAS-style canvas for composing LLM logic — memory, knowledge-base, and training nodes — wired to your agents and run on your agentHosts with approval gates at every step.',
-    highlights: [
-      { title: 'Compose agents like a flowchart', desc: 'A drag-and-drop canvas wires agents, tools, memory, knowledge-base, and training nodes into repeatable, multi-step workflows.' },
-      { title: 'Configurable approval gates', desc: 'Configured execution paths can pause for human sign-off. Policy resolution fails closed; audit coverage is stated for each instrumented path.' },
-      { title: 'Built-in orchestration patterns', desc: 'Planning, feature-dev, bug-fix, refactor, and adversarial-review workflows coordinate seven specialist roles through a dependency DAG.' },
-    ],
-    faq: [
-      { question: 'What is the Workflow Builder?', answer: 'It is a visual, IPAAS-style canvas for composing your own LLM logic. You drag and connect nodes — agents, tools, memory, knowledge-base, and training — into repeatable workflows that run on your agentHosts with approval gates wherever you choose.' },
-      { question: 'How is this different from a single AI agent?', answer: 'A workflow coordinates multiple specialist agents across structured steps through a dependency DAG, instead of one agent producing a single suggestion. Built-in patterns run planning, bug-fix, refactor, and adversarial-review end to end.' },
-      { question: 'Can I require human approval inside a workflow?', answer: 'Yes. Approval gates can suspend any step until a person approves or rejects it, with the decision recorded in the audit trail. Low-risk steps can pass automatically via auto-approval rules.' },
-    ],
-  },
-  '/projects': {
-    relatedSurface: 'projects',
-    seoDescription:
-      'Projects / Tasks is the work-management surface of Builderforce.ai — organize work into AI project workspaces, then plan, assign, and track tasks across your agent workforce with board, table, calendar, and Gantt views.',
-    faq: PROJECTS_TASKS_FAQ,
-  },
-  '/workforce': {
-    relatedSurface: 'workforce',
-    seoDescription:
-      'The Workforce mesh discovers and dispatches work across local and remote AgentHosts — capacity sharing across machines and tenants, with approvals, chats, and full telemetry in one place.',
-    highlights: [
-      { title: 'A mesh of agent hosts', desc: 'Discover and dispatch work across local and remote AgentHosts, sharing capacity across machines and tenants with HMAC-signed, Bearer-authenticated dispatch.' },
-      { title: 'Approvals and chats together', desc: 'Approve human-in-the-loop actions, talk to agents directly, and watch them collaborate — all from the same Workforce surface.' },
-      { title: 'Instrumented execution', desc: 'Supported task and workflow paths emit structured telemetry to the timeline, including available execution, usage, and tool-call records.' },
-    ],
-    faq: [
-      { question: 'What is the Workforce mesh?', answer: 'The Workforce is where you discover and coordinate your agent hosts. It dispatches work across local and remote AgentHosts — capacity sharing across machines and even tenants — using HMAC-signed, Bearer-authenticated dispatch, with smart routing to the best-matched peer.' },
-      { question: 'Can I see and approve what agents are doing?', answer: 'Yes. The Workforce surface brings together approval requests, agent conversations, and the execution telemetry captured by supported platform workflows.' },
-      { question: 'Does it work across multiple machines?', answer: 'Yes. Fleet registration, heartbeats, and capability sync let you run a fleet of AgentHosts and route tasks across them, with remote dispatch to a specific host or auto-routing by capability.' },
-    ],
-  },
-  '/skills': {
-    relatedSurface: 'skills',
-    seoDescription:
-      'Install or publish reusable agent skills from the Builderforce.ai Workforce marketplace. Skills assigned at tenant or agentHost scope load automatically into running agents at startup — 53 built-in plus a growing marketplace.',
-    highlights: [
-      { title: 'A marketplace of capabilities', desc: 'Browse and install reusable agent skills, or publish your own. 53 skills ship built-in, with a growing community marketplace on top.' },
-      { title: 'Assigned, then auto-loaded', desc: 'Assign a skill at tenant or agentHost scope and it loads automatically into running agents at startup — no manual wiring per agent.' },
-      { title: 'Publish under clear terms', desc: 'Publish a skill under the seller terms shown at listing and checkout.' },
-    ],
-    faq: [
-      { question: 'What are skills on Builderforce.ai?', answer: 'Skills are reusable capabilities you can give your agents. There are 53 built-in skills plus a marketplace where you browse, install, or publish more. A skill assigned at tenant or agentHost scope is loaded automatically into running agents at startup.' },
-      { question: 'Can I publish my own skills?', answer: 'Yes. You can publish a skill to the Workforce marketplace; current fees and payout terms are shown before you list paid content.' },
-      { question: 'How do skills get into a running agent?', answer: 'You assign skills at tenant or agentHost scope in the portal; the agent loads its assigned skills automatically when it starts, so capabilities follow your assignment rules without per-agent configuration.' },
-    ],
-  },
-  '/personas': {
-    relatedSurface: 'personas',
-    seoDescription:
-      'Personas give your agents a reusable voice and behavior profile on Builderforce.ai. Pro personas add a psychometric personality layer compiled into both prompt directives and execution parameters at run time.',
-    highlights: [
-      { title: 'Reusable voice and behavior', desc: 'Define a persona once — tone, behavior, and operating style — and apply it across agents so their output stays consistent.' },
-      { title: 'Psychometric personality (Pro)', desc: 'Pro personas carry a trait vector compiled into both prompt directives and run-time execution parameters, for genuinely distinct agent behavior.' },
-      { title: 'Shareable across the workforce', desc: 'Personas are reusable assets that travel with agents, so a behavior profile you craft once equips your whole workforce.' },
-    ],
-    faq: [
-      { question: 'What is a persona on Builderforce.ai?', answer: 'A persona is a reusable voice and behavior profile you attach to agents, so their tone and operating style stay consistent across tasks and team members.' },
-      { question: 'What does the Pro personality layer add?', answer: 'Pro personas include a psychometric profile — a trait vector compiled by the platform into both prompt directives and execution parameters (such as reasoning depth and temperature) at run time, giving each agent a genuinely distinct, controllable personality.' },
-      { question: 'Can personas be reused across agents?', answer: 'Yes. Personas are reusable assets — define one and apply it to any number of agents across your workforce, instead of re-describing behavior every time.' },
-    ],
-  },
-  '/content-manager': {
-    relatedSurface: 'content-manager',
-    seoDescription:
-      'The Content Manager lets you author and share reusable content blocks your agents and the Workforce marketplace can reuse — a single source of truth for the copy and context your AI workforce draws on.',
-    highlights: [
-      { title: 'Author reusable content', desc: 'Create content blocks once and reuse them across agents, workflows, and the marketplace instead of duplicating copy.' },
-      { title: 'Shared context for agents', desc: 'Content blocks become context your agents can draw on, keeping their output grounded in your canonical messaging and facts.' },
-      { title: 'Marketplace-ready', desc: 'Share content your agents and the Workforce marketplace can reuse, so good context compounds across your workspace.' },
-    ],
-    faq: [
-      { question: 'What is the Content Manager for?', answer: 'It is where you author and share reusable content blocks — copy and context that your agents and the Workforce marketplace can reuse — so your messaging and source material live in one canonical place.' },
-      { question: 'How do agents use this content?', answer: 'Content blocks act as shared context agents can draw on, keeping their output consistent with your canonical facts and messaging rather than improvising each time.' },
-    ],
-  },
-  '/security': {
-    relatedSurface: 'security',
-    seoDescription:
-      'Builderforce.ai provides controls for agent-assisted work, including tenant isolation, encrypted integration credentials, role-based access, device trust, configurable approval gates, and retained execution records.',
-    highlights: [
-      { title: 'Keep people accountable', desc: 'Configure human approval gates for consequential actions and retain the resulting decisions as part of the execution record.' },
-      { title: 'Scoped and encrypted', desc: 'Tenant-scoped access controls and AES-256-GCM encryption protect credentials stored for supported integrations.' },
-      { title: 'RBAC and device trust', desc: 'Role-based access control, device trust, and HMAC-signed inter-host dispatch mean only the right people and machines can act.' },
-    ],
-    faq: [
-      { question: 'How does Builderforce.ai govern what agents can do?', answer: 'Through human-in-the-loop approval gates: agents request approval before high-impact actions, execution suspends until a person approves or rejects, and every outcome is recorded in a full audit trail. Auto-approval rules let low-risk actions through automatically.' },
-      { question: 'How are my credentials and data protected?', answer: 'Integration credentials are encrypted with AES-256-GCM and scoped per tenant. All resources — projects, datasets, models, and agents — are isolated per tenant with no cross-tenant access, and inter-host dispatch is HMAC-signed and Bearer-authenticated.' },
-      { question: 'Can Builderforce.ai run air-gapped?', answer: 'The MIT-licensed BuilderForce Agents runtime can be deployed on private infrastructure and can use local models. A fully air-gapped environment requires disabling hosted collaboration, publishing, remote evaluation, and other connected services; validate the required workflow against the deployment guide before making a compliance commitment.' },
-    ],
-  },
-  '/dashboard': {
-    relatedSurface: 'dashboard',
-    seoDescription:
-      'Your Builderforce.ai dashboard brings recent creation sessions, active work, and workspace signals into one place so you can resume an idea or follow it into delivery.',
-    highlights: [
-      { title: 'Return to your creative context', desc: 'Resume recent canvas sessions and see the work, collaborators, and next decisions connected to them.' },
-      { title: 'From idea to action', desc: 'Start with what you want to create, then turn the useful parts into artifacts, projects, tasks, or agent work.' },
-      { title: 'Follow work into delivery', desc: 'Move from the canvas to projects, models, agents, approvals, and operating views without losing the original context.' },
-    ],
-    faq: [
-      { question: 'What is on the Builderforce.ai dashboard?', answer: 'The dashboard is your workspace command center: workspace health, recent runs, and a live view of what your AI workforce is doing. From here you can jump into Brain Storm, projects, training, and the workforce mesh.' },
-      { question: 'How do I go from an idea to work getting done?', answer: 'Type what you want to build into the dashboard prompt and it routes into Brain Storm, which turns the idea into projects and tasks and assigns the work to your agents under your approval gates.' },
-    ],
-  },
+const DETAILS: Record<string, DetailSource> = {
+  '/brainstorm': detail('brainstorm', { highlights: 3, faq: 3 }),
+  '/workflows': detail('workflows', { highlights: 3, faq: 3 }),
+  // The Projects FAQ is shared with the Projects marketing surfaces, so it stays
+  // where they read it (`content.ts`) rather than being copied under this slug.
+  '/projects': { ...detail('projects'), faq: PROJECTS_TASKS_FAQ },
+  '/workforce': detail('workforce', { highlights: 3, faq: 3 }),
+  '/skills': detail('skills', { highlights: 3, faq: 3 }),
+  '/personas': detail('personas', { highlights: 3, faq: 3 }),
+  '/content-manager': detail('content-manager', { highlights: 3, faq: 2 }),
+  '/security': detail('security', { highlights: 3, faq: 3 }),
+  '/dashboard': detail('dashboard', { highlights: 3, faq: 2 }),
 };
 
-const REGISTRY: Record<string, RouteMarketing> = { ...fromSurfaces, ...extra };
+const REGISTRY: Record<string, RouteMarketingSource> = { ...fromSurfaces, ...extra };
 
 /**
  * Every registry a signed-out visitor's path could belong to.
@@ -389,18 +338,57 @@ function longestPrefixMatch<T>(pathname: string, map: Record<string, T>): { key:
   return best;
 }
 
+/** One piece of registry copy, in the translator's locale. */
+function resolve(copy: Copy, t: RouteMarketingTranslate): string {
+  return typeof copy === 'string' ? copy : t(copy.key);
+}
+
 /**
- * The hand-authored copy for this route, or `null` when it has none.
+ * The hand-authored copy for this route in the visitor's language, or `null` when
+ * it has none.
  *
  * Null rather than a default: a default returned here is a default nobody can
  * see coming, and the caller is the only place that knows whether it can fall
  * back to a destination (tier 2) before it falls back to the method (tier 3).
+ *
+ * The translator is REQUIRED, not defaulted to English: an optional one is how a
+ * server head ends up shipping the English title to a zh visitor because one
+ * call site forgot to pass it.
  */
-export function getRouteMarketing(pathname: string): RouteMarketing | null {
+export function getRouteMarketing(pathname: string, t: RouteMarketingTranslate): RouteMarketing | null {
   const base = REGISTRY[pathname] ?? longestPrefixMatch(pathname, REGISTRY)?.val ?? null;
   if (!base) return null;
   const details = DETAILS[pathname] ?? longestPrefixMatch(pathname, DETAILS)?.val;
-  return details ? { ...base, ...details } : base;
+  const source: RouteMarketingSource = details ? { ...base, ...details } : base;
+  return {
+    icon: source.icon,
+    title: resolve(source.title, t),
+    description: resolve(source.description, t),
+    ...(source.seoDescription ? { seoDescription: resolve(source.seoDescription, t) } : {}),
+    ...(source.highlights ? { highlights: source.highlights.map((h) => ({ title: resolve(h.title, t), desc: resolve(h.desc, t) })) } : {}),
+    ...(source.faq ? { faq: source.faq.map((f) => ({ question: resolve(f.question, t), answer: resolve(f.answer, t) })) } : {}),
+    ...(source.figures ? { figures: source.figures } : {}),
+    ...(source.relatedSurface ? { relatedSurface: source.relatedSurface } : {}),
+  };
+}
+
+/**
+ * Every catalog key the registry resolves — the ratchet's input. A key that is
+ * absent from a locale renders its dotted path as a hero title or FAQ answer,
+ * which is why `messages.test.ts` checks this list in all five catalogs.
+ */
+export function routeMarketingCatalogKeys(): string[] {
+  const keys = new Set<string>();
+  const add = (copy: Copy | undefined) => { if (copy && typeof copy !== 'string') keys.add(copy.key); };
+  const sources: Partial<RouteMarketingSource>[] = [...Object.values(REGISTRY), ...Object.values(DETAILS)];
+  for (const source of sources) {
+    add(source.title);
+    add(source.description);
+    add(source.seoDescription);
+    for (const h of source.highlights ?? []) { add(h.title); add(h.desc); }
+    for (const f of source.faq ?? []) { add(f.question); add(f.answer); }
+  }
+  return [...keys].sort();
 }
 
 /** i18n key for a destination's one-line marketing pitch, under `routeMarketing`. */

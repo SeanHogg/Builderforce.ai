@@ -105,6 +105,7 @@ import { accountBrainPreferencesApi } from '@/lib/accountBrainPreferencesApi';
 import { AssigneeProfilesProvider } from '../workforce/AssigneeProfilesContext';
 import AssigneeHovercard from '../workforce/AssigneeHovercard';
 import { faultText } from '@/lib/apiClient';
+import { useAssistantGate } from '@/lib/academic/useAssistantGate';
 /**
  * Clock time for a message sent today, calendar date for anything older.
  *
@@ -1033,9 +1034,12 @@ export function BrainPanel({
     resetKey: chats.activeChat?.id ?? null,
   });
 
+  // The exam gate — the composer already refuses, and so must every other path into a
+  // send (a suggestion, a replayed prompt): a refusal, never a silent allow.
+  const assistantGate = useAssistantGate();
   const handleSend = useCallback(async () => {
     const text = input.trim();
-    if (!text) return;
+    if (!text || !assistantGate.assistantAllowed) return;
     setInput('');
     // Audited engagement signal: interacting with the AI agent is billable activity.
     trackActivity('agent_message', { weight: 2 });
@@ -1047,7 +1051,7 @@ export function BrainPanel({
     // the turn: a participant is talked to (no BRAIN run); null runs the BRAIN.
     const ok = await conv.send(text, { addressedTo: recipient });
     if (!ok) setInput((cur) => cur || text);
-  }, [input, conv, queuedTurns, recipient]);
+  }, [assistantGate.assistantAllowed, input, conv, queuedTurns, recipient]);
 
   // Capture execution: copy the Brain run's LLM/tool/error trace + transcript to
   // the clipboard — the Brain twin of the Observability/Logs "Copy triage info"

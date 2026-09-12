@@ -41,8 +41,26 @@ import { gatewayIntentRefiner } from '../../application/dashboards/gatewayIntent
 import { resolveTenantPlan } from '../../application/tenant/tenantPlanSnapshot';
 import type { IntentRefiner } from '../../application/dashboards/nlQuery';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { parseOptionalBody, z, zNumberLike } from './requestBody';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
+
+// Bodies. Free-text fields the handler `.toString()`s / `String()`s accept a number,
+// as they always did; required-looking fields stay optional so the handler's own
+// "X is required" answer still wins.
+const AskQueryBody = z.object({ question: zNumberLike.nullish(), refine: z.boolean().nullish() });
+const CreateDashboardBody = z.object({ name: zNumberLike.nullish(), isDefault: z.boolean().nullish() });
+const PatchDashboardBody = z.object({ name: z.string().nullish(), isDefault: z.boolean().nullish() });
+/** `config` is stored as the widget's JSON document, so it keeps every key. */
+const AddWidgetBody = z.object({
+  metricKey: zNumberLike.nullish(),
+  widgetKey: z.string().nullish(),
+  viz: zNumberLike.nullish(),
+  title: z.string().nullish(),
+  config: z.unknown().optional(),
+  position: z.number().nullish(),
+});
+const PatchWidgetBody = AddWidgetBody.omit({ widgetKey: true });
 
 /**
  * The canonical read-through cache, bound to this request's env, handed to the
@@ -99,7 +117,7 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
   // `.explanation` / `.matchedMetric` and must keep working unchanged.
   router.post('/query', async (c) => {
     const { tenantId } = scope(c);
-    const body = await c.req.json<{ question?: string; refine?: boolean }>().catch(() => ({}) as { question?: string; refine?: boolean });
+    const body = await parseOptionalBody(c, AskQueryBody);
     const question = (body.question ?? '').toString().trim();
     if (!question) return c.json({ error: 'question is required' }, 400);
 
@@ -183,7 +201,7 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
 
   router.post('/dashboards', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
-    const body = await c.req.json<{ name?: string; isDefault?: boolean }>().catch(() => ({}) as { name?: string; isDefault?: boolean });
+    const body = await parseOptionalBody(c, CreateDashboardBody);
     const name = (body.name ?? '').toString().trim();
     if (!name) return c.json({ error: 'name is required' }, 400);
     const createdBy = c.get('userId') as string | undefined;
@@ -220,7 +238,7 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId, segmentId } = scope(c);
     const id = positiveIntOrNull(c.req.param('id'));
     if (id == null) return c.json({ error: 'invalid id' }, 400);
-    const body = await c.req.json<{ name?: string; isDefault?: boolean }>().catch(() => ({}) as { name?: string; isDefault?: boolean });
+    const body = await parseOptionalBody(c, PatchDashboardBody);
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (typeof body.name === 'string' && body.name.trim()) patch.name = body.name.trim();
     if (typeof body.isDefault === 'boolean') patch.isDefault = body.isDefault;
@@ -260,7 +278,7 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
     if (dashboardId == null) return c.json({ error: 'invalid id' }, 400);
     if (!(await ownsDashboard(tenantId, dashboardId))) return c.json({ error: 'not found' }, 404);
 
-    const body = await c.req.json<{ metricKey?: string; widgetKey?: string; viz?: string; title?: string; config?: unknown; position?: number }>().catch(() => ({}) as { metricKey?: string; widgetKey?: string; viz?: string; title?: string; config?: unknown; position?: number });
+    const body = await parseOptionalBody(c, AddWidgetBody);
     // A widget is EITHER a rich registry widget (widgetKey) OR a scalar metric.
     const widgetKey = cleanWidgetKey(body.widgetKey);
     const metricKey = widgetKey ? null : (body.metricKey ?? '').toString();
@@ -291,7 +309,7 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
     const widgetId = positiveIntOrNull(c.req.param('wid'));
     if (dashboardId == null || widgetId == null) return c.json({ error: 'invalid id' }, 400);
 
-    const body = await c.req.json<{ metricKey?: string; viz?: string; title?: string; config?: unknown; position?: number }>().catch(() => ({}) as { metricKey?: string; viz?: string; title?: string; config?: unknown; position?: number });
+    const body = await parseOptionalBody(c, PatchWidgetBody);
     const patch: Record<string, unknown> = {};
     if (body.metricKey !== undefined) {
       if (!isMetricKey(String(body.metricKey))) return c.json({ error: 'unknown metric_key' }, 400);

@@ -74,13 +74,23 @@ export function parseGitShortStatus(output: string): GitShortStatus | null {
   };
 }
 
+/**
+ * A raw shell `git <verb>`, however git's own options precede the verb. The options
+ * that TAKE A VALUE (`-C <path>`, `-c <key=value>`) are matched as a pair: a
+ * multi-checkout workspace runs `git -C Builderforce.ai push`, and a pattern that only
+ * skipped single-token flags stopped at the path and never saw the verb.
+ */
+export function gitCommandPattern(verbs: string): RegExp {
+  return new RegExp(`\\bgit\\s+(?:-[Cc]\\s+\\S+\\s+|-\\S+\\s+|--\\S+(?:=\\S+)?\\s+)*(?:${verbs})\\b`, 'i');
+}
+
 /** A push has landed when a successful shell step ran `git push`. */
-const GIT_PUSH = /\bgit\s+(?:-\S+\s+|--\S+(?:=\S+)?\s+)*push\b/i;
+const GIT_PUSH = gitCommandPattern('push');
 /** A status observation, whether from the tool or from a raw shell call. */
-const GIT_STATUS_CMD = /\bgit\s+(?:-\S+\s+|--\S+(?:=\S+)?\s+)*status\b/i;
+const GIT_STATUS_CMD = gitCommandPattern('status');
 
 /** The shell command a step ran, from either `{ command }` or `{ cmd }` args. */
-function commandOf(ev: BrainTraceEvent): string {
+export function commandOf(ev: BrainTraceEvent): string {
   const a = ev.args as { command?: unknown; cmd?: unknown } | undefined;
   if (typeof a?.command === 'string') return a.command;
   if (typeof a?.cmd === 'string') return a.cmd;
@@ -123,13 +133,55 @@ function isPush(ev: BrainTraceEvent): boolean {
 }
 
 /**
+ * The file paths `git status --short` lists as changed or untracked, repo-relative.
+ * A rename line (`R  old -> new`) yields the new path; git's quoting of paths with
+ * spaces is undone.
+ */
+export function dirtyPathsOf(output: string): string[] {
+  const out: string[] = [];
+  for (const raw of output.split('\n')) {
+    const line = raw.replace(/\r$/, '');
+    if (line.length < 4 || line.startsWith('##')) continue;
+    let path = line.slice(3);
+    const arrow = path.indexOf(' -> ');
+    if (arrow >= 0) path = path.slice(arrow + 4);
+    path = path.trim().replace(/^"(.*)"$/, '$1');
+    if (path) out.push(path);
+  }
+  return out;
+}
+
+/**
+ * Is a workspace-relative file the run touched still listed as dirty? Status paths are
+ * relative to the REPOSITORY, which sits one or more folders below the workspace root
+ * in a multi-checkout workspace, so a touched path matches when it IS the status path
+ * or ends with `/<status path>`.
+ */
+function touchedStillDirty(touched: readonly string[], dirty: readonly string[]): boolean {
+  const norm = (p: string) => p.replace(/\\/g, '/').replace(/^\.\//, '');
+  const d = dirty.map(norm);
+  return touched.map(norm).some((t) => d.some((p) => t === p || t.endsWith(`/${p}`)));
+}
+
+/**
  * Did this run push its work to a base branch and verify it landed?
  *
- * Requires a successful push, and then a status — recorded AFTER it — showing a base
- * branch, an upstream, and nothing left to push. Order matters: a status taken
- * BEFORE the push says nothing about whether the push worked.
+ * Requires a successful push, and then a status — recorded AT OR AFTER it — showing a
+ * base branch, an upstream, and nothing left to push. Order matters: a status taken
+ * BEFORE the push says nothing about whether the push worked. The push step itself
+ * counts as the observation when its own output carries the status header — the
+ * `git_push` tool prints `git status --short --branch` after pushing, so the declared
+ * route verifies itself instead of depending on the model remembering a follow-up call.
+ *
+ * `touchedFiles` (workspace-relative) closes the last hole: a push of SOME commit while
+ * the change this run made is still uncommitted. When the confirming status lists any
+ * touched file as modified or untracked, the change did not ship, whatever the header
+ * says.
  */
-export function shippedToBaseBranch(events: BrainTraceEvent[]): boolean {
+export function shippedToBaseBranch(
+  events: readonly BrainTraceEvent[],
+  opts?: { touchedFiles?: readonly string[] },
+): boolean {
   const steps = events.filter((e) => e.category === 'tool');
 
   let pushedAt = -1;
@@ -138,14 +190,18 @@ export function shippedToBaseBranch(events: BrainTraceEvent[]): boolean {
   }
   if (pushedAt < 0) return false;
 
-  for (let i = pushedAt + 1; i < steps.length; i += 1) {
+  const touched = opts?.touchedFiles ?? [];
+  for (let i = pushedAt; i < steps.length; i += 1) {
     const ev = steps[i];
     if (!succeeded(ev)) continue;
-    const isStatus = ev.label === 'git_status' || GIT_STATUS_CMD.test(commandOf(ev));
+    const isStatus = i === pushedAt || ev.label === 'git_status' || GIT_STATUS_CMD.test(commandOf(ev));
     if (!isStatus) continue;
-    const status = parseGitShortStatus(outputOf(ev));
+    const output = outputOf(ev);
+    const status = parseGitShortStatus(output);
     if (!status) continue;
-    if (status.branch && BASE_BRANCHES.has(status.branch) && status.upstream && status.ahead === 0) return true;
+    if (!(status.branch && BASE_BRANCHES.has(status.branch) && status.upstream && status.ahead === 0)) continue;
+    if (touched.length > 0 && touchedStillDirty(touched, dirtyPathsOf(output))) continue;
+    return true;
   }
   return false;
 }

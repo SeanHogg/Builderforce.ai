@@ -65,10 +65,13 @@ public final class GatewayDiscoveryModel {
     public var gateways: [DiscoveredGateway] = []
     public var statusText: String = "Idle"
 
+    // Browsers, their raw results and states are keyed by browse target (`<type>|<domain>`).
+    // Results are merged per domain, because both gateway service types can answer in one domain.
     private var browsers: [String: NWBrowser] = [:]
+    private var resultsByBrowser: [String: Set<NWBrowser.Result>] = [:]
     private var resultsByDomain: [String: Set<NWBrowser.Result>] = [:]
     private var gatewaysByDomain: [String: [DiscoveredGateway]] = [:]
-    private var statesByDomain: [String: NWBrowser.State] = [:]
+    private var statesByBrowser: [String: NWBrowser.State] = [:]
     private var localIdentity: LocalIdentity
     private let localDisplayName: String?
     private let filterLocalGateways: Bool
@@ -91,17 +94,20 @@ public final class GatewayDiscoveryModel {
     public func start() {
         if !self.browsers.isEmpty { return }
 
-        for domain in CoderClawBonjour.gatewayServiceDomains {
+        // One browser per (gateway service type, domain), so current and legacy runtimes are both found.
+        for target in CoderClawBonjour.gatewayBrowseTargets {
+            let key = target.key
+            let domain = target.domain
             let params = NWParameters.tcp
             params.includePeerToPeer = true
             let browser = NWBrowser(
-                for: .bonjour(type: CoderClawBonjour.gatewayServiceType, domain: domain),
+                for: .bonjour(type: target.serviceType, domain: domain),
                 using: params)
 
             browser.stateUpdateHandler = { [weak self] state in
                 Task { @MainActor in
                     guard let self else { return }
-                    self.statesByDomain[domain] = state
+                    self.statesByBrowser[key] = state
                     self.updateStatusText()
                 }
             }
@@ -109,14 +115,15 @@ public final class GatewayDiscoveryModel {
             browser.browseResultsChangedHandler = { [weak self] results, _ in
                 Task { @MainActor in
                     guard let self else { return }
-                    self.resultsByDomain[domain] = results
+                    self.resultsByBrowser[key] = results
+                    self.resultsByDomain[domain] = self.mergedResults(for: domain)
                     self.updateGateways(for: domain)
                     self.recomputeGateways()
                 }
             }
 
-            self.browsers[domain] = browser
-            browser.start(queue: DispatchQueue(label: "ai.coderclaw.macos.gateway-discovery.\(domain)"))
+            self.browsers[key] = browser
+            browser.start(queue: DispatchQueue(label: "ai.coderclaw.macos.gateway-discovery.\(key)"))
         }
 
         self.scheduleWideAreaFallback()
@@ -140,9 +147,10 @@ public final class GatewayDiscoveryModel {
             browser.cancel()
         }
         self.browsers = [:]
+        self.resultsByBrowser = [:]
         self.resultsByDomain = [:]
         self.gatewaysByDomain = [:]
-        self.statesByDomain = [:]
+        self.statesByBrowser = [:]
         self.resolvedServiceByID = [:]
         self.pendingServiceResolvers.values.forEach { $0.cancel() }
         self.pendingServiceResolvers = [:]
@@ -322,6 +330,15 @@ public final class GatewayDiscoveryModel {
             || env["XCTestSessionIdentifier"] != nil
     }
 
+    /// A domain's results are the union across every gateway service type browsed in it.
+    private func mergedResults(for domain: String) -> Set<NWBrowser.Result> {
+        CoderClawBonjour.gatewayBrowseTargets
+            .filter { $0.domain == domain }
+            .reduce(into: Set<NWBrowser.Result>()) { merged, target in
+                merged.formUnion(self.resultsByBrowser[target.key] ?? [])
+            }
+    }
+
     private func updateGatewaysForAllDomains() {
         for domain in self.resultsByDomain.keys {
             self.updateGateways(for: domain)
@@ -330,7 +347,7 @@ public final class GatewayDiscoveryModel {
 
     private func updateStatusText() {
         self.statusText = GatewayDiscoveryStatusText.make(
-            states: Array(self.statesByDomain.values),
+            states: Array(self.statesByBrowser.values),
             hasBrowsers: !self.browsers.isEmpty)
     }
 

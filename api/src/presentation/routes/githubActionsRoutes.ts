@@ -72,6 +72,19 @@ import { renderAgentRunnerScript } from '../../application/runtime/githubActions
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
+import { parseOptionalBody, z, zJsonObject } from './requestBody';
+
+/**
+ * The runner's op envelope (`renderAgentRunnerScript` posts `{ executionId, op, args }`).
+ * Both identity fields stay optional so an absent/empty body keeps answering the
+ * route's own "must include executionId and op" 400. `args` is handed to
+ * `handleContainerOp` whole, so every key it carries is kept.
+ */
+const OpBody = z.object({
+  executionId: z.number().optional(),
+  op: z.string().optional(),
+  args: zJsonObject.nullish(),
+});
 
 export function createGitHubActionsRoutes(db: Db, runtimeService: RuntimeService): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -114,12 +127,8 @@ export function createGitHubActionsRoutes(db: Db, runtimeService: RuntimeService
     const verified = await verifyGitHubOidcToken(env, token, BUILDERFORCE_AGENT_OIDC_AUDIENCE);
     if (!verified.ok) return c.json({ error: verified.error }, 401);
 
-    const body = (await c.req.json().catch(() => null)) as {
-      executionId?: number;
-      op?: string;
-      args?: Record<string, unknown>;
-    } | null;
-    if (!body?.executionId || !body.op) {
+    const body = await parseOptionalBody(c, OpBody);
+    if (!body.executionId || !body.op) {
       return c.json({ error: 'Body must include executionId and op.' }, 400);
     }
 

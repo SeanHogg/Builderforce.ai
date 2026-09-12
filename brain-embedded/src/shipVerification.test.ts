@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseGitShortStatus, shippedToBaseBranch, BASE_BRANCHES } from './shipVerification';
+import { parseGitShortStatus, shippedToBaseBranch, dirtyPathsOf, BASE_BRANCHES } from './shipVerification';
 import type { BrainTraceEvent } from './brainTriage';
 
 let seq = 0;
@@ -44,6 +44,11 @@ describe('shippedToBaseBranch', () => {
     // The exact shape of the reported run: edit, commit+push, then a status showing
     // main tracking origin/main with nothing left to push.
     expect(shippedToBaseBranch([push(), status('## main...origin/main')])).toBe(true);
+  });
+
+  it('sees a raw push aimed at one checkout of a multi-repo workspace (`git -C <repo> push`)', () => {
+    const scoped = step('run_command', { command: 'git -C Builderforce.ai push origin main' }, { ok: true, output: 'main -> main' });
+    expect(shippedToBaseBranch([scoped, status('## main...origin/main')])).toBe(true);
   });
 
   it('accepts a status taken via run_command rather than the tool', () => {
@@ -107,6 +112,48 @@ describe('shippedToBaseBranch', () => {
 
   it('is empty-safe', () => {
     expect(shippedToBaseBranch([])).toBe(false);
+  });
+
+  it('accepts the git_push tool\'s OWN post-push status as the verification', () => {
+    // The tool now prints `git status --short --branch` after pushing, so the declared
+    // route verifies itself — no separate status call has to be remembered.
+    const toolPush = step('git_push', { allowBaseBranch: true, repo: 'Builderforce.ai' },
+      { ok: true, action: 'push', output: 'Pushed main to origin\n## main...origin/main' });
+    expect(shippedToBaseBranch([toolPush])).toBe(true);
+  });
+
+  it('refuses when the push\'s own status still shows commits ahead', () => {
+    const toolPush = step('git_push', { allowBaseBranch: true },
+      { ok: true, action: 'push', output: 'Pushed main to origin\n## main...origin/main [ahead 1]' });
+    expect(shippedToBaseBranch([toolPush])).toBe(false);
+  });
+
+  it('refuses when a file THIS run touched is still uncommitted after the push', () => {
+    // Some commit reached main, but not the change this run made — that change did not
+    // ship, whatever the header says. Touched paths are workspace-relative; status paths
+    // are repo-relative, so the match is by suffix.
+    const toolPush = step('git_push', { allowBaseBranch: true, repo: 'Builderforce.ai' },
+      { ok: true, action: 'push', output: 'Pushed main to origin\n## main...origin/main\n M brain-embedded/src/a.ts' });
+    expect(shippedToBaseBranch([toolPush], { touchedFiles: ['Builderforce.ai/brain-embedded/src/a.ts'] })).toBe(false);
+    // Someone else's dirty file is not this run's concern.
+    expect(shippedToBaseBranch([toolPush], { touchedFiles: ['Builderforce.ai/brain-embedded/src/b.ts'] })).toBe(true);
+  });
+
+  it('refuses when a file this run CREATED is still untracked', () => {
+    const toolPush = step('git_push', { allowBaseBranch: true },
+      { ok: true, action: 'push', output: 'Pushed main to origin\n## main...origin/main\n?? src/new.ts' });
+    expect(shippedToBaseBranch([toolPush], { touchedFiles: ['src/new.ts'] })).toBe(false);
+  });
+});
+
+describe('dirtyPathsOf', () => {
+  it('lists modified, untracked and renamed paths, and skips the header', () => {
+    expect(dirtyPathsOf('## main...origin/main\n M a.ts\n?? b/c.ts\nR  old.ts -> new.ts\n D "with space.ts"'))
+      .toEqual(['a.ts', 'b/c.ts', 'new.ts', 'with space.ts']);
+  });
+
+  it('is empty for a clean tree', () => {
+    expect(dirtyPathsOf('## main...origin/main')).toEqual([]);
   });
 });
 

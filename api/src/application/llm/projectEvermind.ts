@@ -43,6 +43,7 @@ import { rankEvermindRecall, hashRecallPrompt, type RankedRecall } from './everm
 import { tierRecallByChat } from './evermindChatTiering';
 import type { RecordedSkipReason } from './evermindTeacher';
 import type { EvermindCoherenceAssessment } from './evermindRuntime';
+import { codingEvalFromRow, evermindQualifiesForCoding, type EvermindCodingEval, type EvermindCodingGate } from './evermindCodingGate';
 
 /** R2 key prefix under which per-project Evermind model versions live. */
 export const PROJECT_EVERMIND_ROOT = 'evermind/project';
@@ -82,6 +83,12 @@ export interface ProjectEvermindHead {
   quarantinedAt: string | null;
   /** Human-readable reason the head was quarantined (shown in the console). null when not. */
   quarantineReason: string | null;
+  /**
+   * The latest recorded CODING eval (Evermind's score vs the frontier baseline's on the
+   * same eval, stamped with the version it scored), or null/absent when never
+   * evaluated. Read only through the ONE coding gate, {@link evermindQualifiesForCoding}.
+   */
+  codingEval?: EvermindCodingEval | null;
 }
 
 /** Stable base path for a project's model versions. */
@@ -140,7 +147,7 @@ export async function getProjectEvermindHead(
         .where(and(eq(projectEvermind.tenantId, tenantId), eq(projectEvermind.projectId, projectId)))
         .limit(1);
       if (!row || row.version <= 0) {
-        return { tenantId, projectId, name: row?.name ?? 'Project Evermind', version: 0, mode: toMode(row?.mode), contributions: row?.contributions ?? 0, inferenceEnabled: row?.inferenceEnabled ?? false, teacherModel: row?.teacherModel ?? null, lastLearnedAt: row?.lastLearnedAt?.toISOString() ?? null, ref: null, quarantinedAt: row?.quarantinedAt?.toISOString() ?? null, quarantineReason: row?.quarantineReason ?? null };
+        return { tenantId, projectId, name: row?.name ?? 'Project Evermind', version: 0, mode: toMode(row?.mode), contributions: row?.contributions ?? 0, inferenceEnabled: row?.inferenceEnabled ?? false, teacherModel: row?.teacherModel ?? null, lastLearnedAt: row?.lastLearnedAt?.toISOString() ?? null, ref: null, quarantinedAt: row?.quarantinedAt?.toISOString() ?? null, quarantineReason: row?.quarantineReason ?? null, codingEval: row ? codingEvalFromRow(row) : null };
       }
       return {
         tenantId,
@@ -155,6 +162,7 @@ export async function getProjectEvermindHead(
         ref: projectEvermindRef(tenantId, projectId, row.version),
         quarantinedAt: row.quarantinedAt?.toISOString() ?? null,
         quarantineReason: row.quarantineReason ?? null,
+        codingEval: codingEvalFromRow(row),
       };
     },
     { kvTtlSeconds: 60 },
@@ -574,11 +582,13 @@ export async function resolveProjectEvermindModelPin(
   db: Db,
   tenantId: number,
   model: string,
+  /** `purpose: 'coding'` applies the coding-quality gate (see {@link resolveProjectInferenceModel}). */
+  opts: { purpose?: 'coding' } = {},
 ): Promise<{ matched: boolean; model: string | undefined }> {
   if (!model.startsWith(PROJECT_EVERMIND_MODEL_PREFIX)) return { matched: false, model };
   const projectId = Number(model.slice(PROJECT_EVERMIND_MODEL_PREFIX.length).trim());
   if (!Number.isInteger(projectId) || projectId <= 0) return { matched: true, model: undefined };
-  const resolved = await resolveProjectInferenceModel(env, db, tenantId, projectId);
+  const resolved = await resolveProjectInferenceModel(env, db, tenantId, projectId, opts);
   return { matched: true, model: resolved };
 }
 
@@ -596,10 +606,20 @@ export async function resolveProjectInferenceModel(
   db: Db,
   tenantId: number,
   projectId: number,
+  /**
+   * `purpose: 'coding'` — the turn is a CODING turn (an agent task run, an IDE/VS Code
+   * completion). Such a turn additionally needs the coding-quality gate open
+   * ({@link evermindQualifiesForCoding}: a recorded coding eval ≥ 90% of the frontier
+   * baseline for THIS head version). Closed → undefined, so the caller keeps its normal
+   * model — the same graceful fallback as inference being off. Operator decision
+   * 2026-09-12.
+   */
+  opts: { purpose?: 'coding' } = {},
 ): Promise<string | undefined> {
   if (!Number.isInteger(projectId) || projectId <= 0) return undefined;
   const head = await getProjectEvermindHead(env, db, tenantId, projectId);
   if (!head.inferenceEnabled || !head.ref) return undefined;
+  if (opts.purpose === 'coding' && !evermindQualifiesForCoding(head).qualified) return undefined;
   return `evermind/${head.ref}`;
 }
 
@@ -1208,6 +1228,9 @@ export interface ProjectEvermindContributions {
   quarantinedAt: string | null;
   /** The probe-failure reason behind `quarantinedAt` (null when healthy). */
   quarantineReason: string | null;
+  /** The coding-quality gate's verdict for this head — "coding eval X% of baseline,
+   *  needs 90%" in the console. See {@link evermindQualifiesForCoding}. */
+  codingGate: EvermindCodingGate;
 }
 
 /**
@@ -1246,6 +1269,7 @@ export async function getProjectEvermindContributions(
         affect: computeProjectAffect(activity.recent, restProfile),
         quarantinedAt: head.quarantinedAt,
         quarantineReason: head.quarantineReason,
+        codingGate: evermindQualifiesForCoding(head),
       };
     },
     { kvTtlSeconds: 10 },

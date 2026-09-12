@@ -16,7 +16,7 @@ import { JobRoleService } from '../../application/kanban/jobRoleService';
 import { KanbanTemplateService } from '../../application/kanban/kanbanTemplateService';
 import { RosterService } from '../../application/kanban/rosterService';
 import { RoleAssignmentService } from '../../application/kanban/roleAssignmentService';
-import { TicketAuditService, type SignoffVerdict, type SignoffContribution } from '../../application/audit/ticketAuditService';
+import { TicketAuditService, type SignoffVerdict } from '../../application/audit/ticketAuditService';
 import { TicketParticipantsService } from '../../application/kanban/ticketParticipants';
 import { isAgentRefRoleCapable, humanIsRoleCapable, resolveMemberDisplayName } from '../../application/kanban/roleCapability';
 import { BUILTIN_ROLES } from '../../application/kanban/roleCatalog';
@@ -26,6 +26,141 @@ import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { recordActivity, cloudAgentActor, resolveHumanActor } from '../../application/activity/activityLog';
 import { coordinateTicket } from '../../application/manager/coordinateTicket';
 import { buildRuntimeService } from '../../buildRuntimeService';
+import { parseBody, z, zJsonObject } from './requestBody';
+
+// ── Bodies ───────────────────────────────────────────────────────────────────
+// Role, assignment and template bodies are handed to their services, which own
+// the "X is required" sentences. A required string the service refuses blank
+// defaults to '' here, so a missing one still gets the service's own sentence;
+// vocabularies the services store as-is are checked here. Lane fields the columns
+// default (`is_terminal`, `gate`, `requirement_gate`, `is_required`, `position`)
+// take those same defaults when absent, exactly as the insert used to.
+
+const DISCIPLINE = z.enum(['engineering', 'product', 'design', 'qa', 'devops', 'data', 'security', 'other']);
+const RESPONSIBILITY = z.enum(['owner', 'reviewer', 'contributor']);
+const TEMPLATE_VISIBILITY = z.enum(['private', 'tenant', 'public']);
+
+/** `JobRoleWrite` — create refuses a blank name; update ignores one. */
+const JobRoleBody = z.object({
+  name: z.string().default(''),
+  key: z.string().optional(),
+  description: z.string().optional(),
+  discipline: DISCIPLINE.optional(),
+  color: z.string().optional(),
+  icon: z.string().optional(),
+});
+
+/** `RoleAssignmentWrite`. */
+const RoleAssignmentBody = z.object({
+  roleKey: z.string().default(''),
+  assigneeKind: z.enum(['agent', 'human', 'hire']),
+  assigneeRef: z.string().default(''),
+  assigneeName: z.string().nullish(),
+  projectId: z.number().nullish(),
+});
+
+/** `LaneRequirement` — an absent position is the requirement's index, as `writeLanes` did. */
+const LaneRequirementBody = z.object({
+  kind: z.enum(['role', 'diagnostic', 'review']),
+  ref: z.string(),
+  responsibility: RESPONSIBILITY.optional(),
+  isRequired: z.boolean().default(true),
+  description: z.string().optional(),
+  position: z.number().optional(),
+  ticketType: z.string().nullish(),
+  quorum: z.number().nullish(),
+  condition: z.enum(['is_security', 'has_ui_change', 'is_data_change', 'has_pr']).nullish(),
+});
+
+/** `TemplateLane` — an absent position is the lane's index, as `writeLanes` did. */
+const TemplateLaneBody = z.object({
+  key: z.string(),
+  name: z.string(),
+  position: z.number().optional(),
+  isTerminal: z.boolean().default(false),
+  gate: z.enum(['auto', 'human']).default('auto'),
+  requirementGate: z.enum(['off', 'soft', 'hard']).default('soft'),
+  requirements: z.array(LaneRequirementBody)
+    .transform((requirements) => requirements.map((r, j) => ({ ...r, position: r.position ?? j }))),
+});
+
+const TemplateLanesBody = z.array(TemplateLaneBody)
+  .transform((lanes) => lanes.map((lane, i) => ({ ...lane, position: lane.position ?? i })));
+
+/** Every field `KanbanTemplateService.update` reads. */
+const TemplateUpdateBody = z.object({
+  name: z.string().optional(),
+  description: z.string().optional(),
+  category: z.string().optional(),
+  teamType: z.string().optional(),
+  priceCents: z.number().nullish(),
+  pricingModel: z.string().nullish(),
+  priceUnit: z.string().nullish(),
+  lanes: TemplateLanesBody.optional(),
+});
+
+/** Every field `KanbanTemplateService.create` reads — it refuses a blank name itself. */
+const TemplateCreateBody = TemplateUpdateBody.extend({
+  name: z.string().default(''),
+  slug: z.string().optional(),
+  parentTemplateId: z.string().nullish(),
+  forkFrom: z.string().optional(),
+});
+
+const TemplatePublicationBody = z.object({
+  published: z.boolean(),
+  visibility: TEMPLATE_VISIBILITY.optional(),
+  priceCents: z.number().nullish(),
+  pricingModel: z.string().nullish(),
+  priceUnit: z.string().nullish(),
+});
+
+/** The handler refuses a missing template id itself. */
+const ApplyTemplateBody = z.object({ templateId: z.string().nullish() });
+
+/**
+ * `SignoffContribution` — stored as JSON as sent, so unknown keys are KEPT
+ * (`looseObject`); the known ones are checked by type.
+ */
+const SignoffContributionBody = z.looseObject({
+  executionId: z.number().optional(),
+  prdRevision: z.number().optional(),
+  prUrl: z.string().optional(),
+  diffFiles: z.array(z.string()).optional(),
+  reviewThreadRef: z.string().optional(),
+  toolRunId: z.string().optional(),
+  autoAttested: z.boolean().optional(),
+});
+
+/**
+ * A role sign-off. `verdict` and `memberKind` fall back (to `approved` / `human`)
+ * when unrecognised, as they always did; the handler refuses a missing `roleKey`.
+ */
+const SignoffBody = z.object({
+  roleKey: z.string().nullish(),
+  laneKey: z.string().nullish(),
+  verdict: z.string().nullish(),
+  summary: z.string().nullish(),
+  memberKind: z.string().nullish(),
+  memberRef: z.string().nullish(),
+  contribution: SignoffContributionBody.nullish(),
+  waiveReason: z.string().nullish(),
+});
+
+/** Resource Assessment — the handler refuses a missing `roleKey` itself. */
+const AddParticipantBody = z.object({
+  roleKey: z.string().nullish(),
+  responsibility: RESPONSIBILITY.optional(),
+  stageKey: z.string().nullish(),
+  note: z.string().nullish(),
+});
+
+/** `assignParticipant` refuses a blank role/assignee and an unknown kind with its own sentences. */
+const AssignParticipantBody = z.object({
+  roleKey: z.string().nullish(),
+  assigneeRef: z.string().nullish(),
+  assigneeKind: z.string().nullish(),
+});
 
 /** Create a child work-item task under a parent ticket — injected from the composition
  *  root (needs TaskService's key allocation). Absent ⇒ materialize endpoint 503s. */
@@ -79,16 +214,20 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
 
   router.post('/roles', async (c) => {
     if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
+    // Bodies are read ABOVE the try throughout this router: its catch answers every
+    // throw as a bare `{ error }`, which would flatten a shape refusal's field paths.
+    const body = await parseBody(c, JobRoleBody);
     try {
-      const role = await roleService.create(env(c), c.get('tenantId') as number, await c.req.json());
+      const role = await roleService.create(env(c), c.get('tenantId') as number, body);
       return c.json({ role }, 201);
     } catch (e) { return c.json({ error: (e as Error).message }, 400); }
   });
 
   router.patch('/roles/:key', async (c) => {
     if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
+    const body = await parseBody(c, JobRoleBody);
     try {
-      await roleService.update(env(c), c.get('tenantId') as number, c.req.param('key'), await c.req.json());
+      await roleService.update(env(c), c.get('tenantId') as number, c.req.param('key'), body);
       return c.json({ ok: true });
     } catch (e) { return c.json({ error: (e as Error).message }, 400); }
   });
@@ -113,8 +252,9 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
   router.post('/role-assignments', async (c) => {
     if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
     const tenantId = c.get('tenantId') as number;
+    const body = await parseBody(c, RoleAssignmentBody);
     try {
-      const assignment = await assignmentService.create(env(c), tenantId, (c.get('userId') as string) ?? null, await c.req.json());
+      const assignment = await assignmentService.create(env(c), tenantId, (c.get('userId') as string) ?? null, body);
       await rosterService.invalidate(env(c), tenantId);
       return c.json({ assignment }, 201);
     } catch (e) { return c.json({ error: (e as Error).message }, 400); }
@@ -142,16 +282,18 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
 
   router.post('/templates', async (c) => {
     if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
+    const body = await parseBody(c, TemplateCreateBody);
     try {
-      const t = await templateService.create(env(c), c.get('tenantId') as number, (c.get('userId') as string) ?? null, await c.req.json());
+      const t = await templateService.create(env(c), c.get('tenantId') as number, (c.get('userId') as string) ?? null, body);
       return c.json({ template: t }, 201);
     } catch (e) { return c.json({ error: (e as Error).message }, 400); }
   });
 
   router.patch('/templates/:id', async (c) => {
     if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
+    const body = await parseBody(c, TemplateUpdateBody);
     try {
-      const t = await templateService.update(env(c), c.get('tenantId') as number, c.req.param('id'), await c.req.json());
+      const t = await templateService.update(env(c), c.get('tenantId') as number, c.req.param('id'), body);
       return c.json({ template: t });
     } catch (e) { return c.json({ error: (e as Error).message }, 400); }
   });
@@ -166,8 +308,8 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
 
   router.post('/templates/:id/publish', async (c) => {
     if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
+    const body = await parseBody(c, TemplatePublicationBody);
     try {
-      const body = await c.req.json<{ published: boolean; visibility?: 'private' | 'tenant' | 'public'; priceCents?: number | null; pricingModel?: string | null; priceUnit?: string | null }>();
       await templateService.setPublication(env(c), c.get('tenantId') as number, c.req.param('id'), body);
       return c.json({ ok: true });
     } catch (e) { return c.json({ error: (e as Error).message }, 400); }
@@ -186,7 +328,7 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
     if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
     const tenantId = c.get('tenantId') as number;
     const projectId = Number(c.req.param('projectId'));
-    const { templateId } = await c.req.json<{ templateId: string }>();
+    const { templateId } = await parseBody(c, ApplyTemplateBody);
     if (!templateId) return c.json({ error: 'templateId is required' }, 400);
     const [project] = await db.select({ id: projects.id, name: projects.name }).from(projects).where(scopedToTenant(projects, tenantId, eq(projects.id, projectId))).limit(1);
     if (!project) return c.json({ error: 'project not found' }, 404);
@@ -228,10 +370,7 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
   router.post('/tasks/:taskId/signoff', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const taskId = Number(c.req.param('taskId'));
-    const body = await c.req.json<{
-      roleKey: string; laneKey?: string; verdict?: SignoffVerdict; summary?: string;
-      memberKind?: string; memberRef?: string; contribution?: SignoffContribution; waiveReason?: string;
-    }>();
+    const body = await parseBody(c, SignoffBody);
     if (!body.roleKey) return c.json({ error: 'roleKey is required' }, 400);
     const verdict: SignoffVerdict = ['approved', 'changes_requested', 'waived', 'delegated'].includes(body.verdict as string) ? (body.verdict as SignoffVerdict) : 'approved';
     if ((verdict === 'waived' || verdict === 'delegated') && !body.waiveReason?.trim() && !body.summary?.trim()) {
@@ -321,7 +460,7 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
     if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
     const tenantId = c.get('tenantId') as number;
     const taskId = Number(c.req.param('taskId'));
-    const body = await c.req.json<{ roleKey: string; responsibility?: 'owner' | 'reviewer' | 'contributor'; stageKey?: string; note?: string }>();
+    const body = await parseBody(c, AddParticipantBody);
     if (!body.roleKey) return c.json({ error: 'roleKey is required' }, 400);
     const participant = await participantsService.addParticipant(env(c), tenantId, taskId, {
       roleKey: body.roleKey, responsibility: body.responsibility, stageKey: body.stageKey, note: body.note,
@@ -344,7 +483,7 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
     if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
     const tenantId = c.get('tenantId') as number;
     const taskId = Number(c.req.param('taskId'));
-    const body = await c.req.json<{ roleKey?: string; assigneeRef?: string; assigneeKind?: 'agent' | 'user' }>();
+    const body = await parseBody(c, AssignParticipantBody);
     try {
       const result = await participantsService.assignParticipant(env(c), tenantId, taskId, {
         roleKey: body.roleKey ?? '',

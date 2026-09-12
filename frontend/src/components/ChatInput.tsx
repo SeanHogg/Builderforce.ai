@@ -9,6 +9,7 @@ import { effortProfile, type DirectedRecipient } from '@seanhogg/builderforce-br
 import { CHAT_MODES, CHAT_MODE_ICON, type BrainEffort, type ChatMode } from '@/lib/brain';
 import { PlanBadge } from '@/components/PlanBadge';
 import { Icon } from '@/components/ui/Icon';
+import { useAssistantGate } from '@/lib/academic/useAssistantGate';
 export type { ChatModelOptions, ChatModelSelection } from '@seanhogg/builderforce-brain-ui';
 
 /** Browser Web Speech API (not in all TS libs). */
@@ -366,7 +367,10 @@ export function ChatInput({
     el.setSelectionRange(end, end);
   }, [focusToken]);
   const router = useRouter();
-  const canSubmit = value.trim().length > 0 && !disabled;
+  // THE exam gate (`lib/academic/assessment.ts`): a closed-book assessment live on the
+  // board on stage refuses every turn from every composer — this one included.
+  const gate = useAssistantGate();
+  const canSubmit = value.trim().length > 0 && !disabled && gate.assistantAllowed;
   // "Activated" once the user is typing in / focused on the composer — the whole
   // box lights up in accent (blue), the same treatment as the VS Code composer so
   // the experience matches across every modality.
@@ -585,6 +589,13 @@ export function ChatInput({
 
   return (
     <form onSubmit={handleSubmit} className={className} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--chat-ctl-gap, 6px)' }}>
+      {/* Why the composer refuses, or that it is being recorded — said in words, never
+          left to a greyed box a learner has to guess the reason for. */}
+      {gate.mode !== 'open' && (
+        <p role="status" data-testid="composer-assessment-gate" data-mode={gate.mode} style={{ margin: 0, fontSize: 'var(--font-size-small)', color: gate.assistantAllowed ? 'var(--text-secondary)' : 'var(--error-text)' }}>
+          {gate.assistantAllowed ? t('assessmentAssisted') : t('assessmentClosedBook')}
+        </p>
+      )}
       <PromptPanel
         active={active}
         onDrop={onAttach ? handleDrop : undefined}
@@ -613,7 +624,7 @@ export function ChatInput({
             onPaste={onAttach ? handlePaste : undefined}
             placeholder={placeholder}
             aria-label={ariaLabel ?? placeholder}
-            disabled={disabled}
+            disabled={disabled || !gate.assistantAllowed}
             rows={rows}
             style={{ ...inputStyle, flexBasis: '100%', minWidth: '100%' }}
           />

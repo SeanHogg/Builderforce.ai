@@ -99,13 +99,14 @@ const TRANSFORM = {
   pricing_simulations: 'pricing → transform_existing',
   system_features: 'pricing → transform_existing (feature gating is canonical in BF)',
   payment_methods: 'providers → stripe retain_reconcile',
-  // Found by DOING the merge (PRD 19 §9.7), not by policy v1. Both are strict
-  // duplicates of a Builderforce owner that is already feature-reached and
-  // strictly richer, so giving either a feature path would create a SECOND
+  // Found by DOING the merge (PRD 19 §9.7), not by policy v1. A strict
+  // duplicate of a Builderforce owner that is already feature-reached and
+  // strictly richer, so giving it a feature path would create a SECOND
   // answer to a question the platform already answers — the outcome §2 exists
-  // to prevent. Their rows transform onto the existing owner.
-  kanban_columns: 'duplicate of swimlanes, which carries agents, gates and parking semantics',
-  release_plans: 'duplicate of product_releases, which is already feature-reached',
+  // to prevent. Its rows transform onto the existing owner.
+  // (`kanban_columns` and `release_plans` were the other two; migration 1160
+  // folded them into `swimlanes` / `product_releases` and dropped them, so their
+  // map rows read `merged` and they are no longer register targets at all.)
   ri_sequences: 'duplicate of the canvas-object cadence sequenceRunner.ts already runs as a sweep',
 };
 

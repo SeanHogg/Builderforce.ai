@@ -11,6 +11,16 @@ import type { TenantService } from '../../application/tenant/TenantService';
 import { landPendingInvitations } from '../../application/tenant/pendingInvitationLanding';
 import { provisionBuiltinAgents } from '../../application/agent/provisionBuiltinAgents';
 import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
+import { parseOptionalBody, z } from './requestBody';
+
+/** `POST /tenants` — an absent body reads as a missing name, which the handler refuses itself. */
+const CreateWorkspaceBody = z.object({ name: z.string().nullish() });
+
+/** `POST /connect` — a bare heartbeat is valid; both fields have defaults. */
+const ConnectBody = z.object({
+  machineName: z.string().nullish(),
+  extensionVersion: z.string().nullish(),
+});
 
 /**
  * VS Code coder-agent connection tracking + in-editor workspace (tenant) management.
@@ -49,7 +59,7 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
   // POST /api/vscode/tenants — create a workspace; the caller becomes its owner.
   router.post('/tenants', async (c) => {
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{ name?: string }>().catch(() => ({}) as { name?: string });
+    const body = await parseOptionalBody(c, CreateWorkspaceBody);
     const name = body.name?.trim();
     if (!name) return c.json({ error: 'name is required' }, 400);
     const tenant = await tenantService.createTenant({ name, ownerUserId: userId });
@@ -84,9 +94,7 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
   router.post('/connect', async (c) => {
     const userId = c.get('userId') as string;
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req
-      .json<{ machineName?: string; extensionVersion?: string }>()
-      .catch(() => ({} as { machineName?: string; extensionVersion?: string }));
+    const body = await parseOptionalBody(c, ConnectBody);
     const machineName = (body.machineName ?? '').slice(0, 255) || 'vscode';
     const extensionVersion = (body.extensionVersion ?? '').slice(0, 32) || null;
 

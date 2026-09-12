@@ -52,6 +52,13 @@ import {
 } from "./builderforce-relay-helpers.js";
 import { resolveCodingSession } from "./coding-session-broker.js";
 import { createSteeringChannel, type SteeringChannel } from "./relay-steering.js";
+import {
+  buildLateSteerReport,
+  createLateSteerRegistry,
+  lateSteerFromFrame,
+  type LateSteer,
+  type LateSteerReason,
+} from "./relay-late-steers.js";
 import { resolveRemoteResult } from "./remote-result-broker.js";
 import { dispatchResultToRemoteAgentNode, type RemoteDispatchOptions } from "./remote-subagent.js";
 import { createGitRepoSync } from "./repo-sync.js";
@@ -150,6 +157,9 @@ export class BuilderforceRelayService implements IRelayService {
    *  `execution.message` frame from the portal reaches the live SDK run as its
    *  next user turn instead of a chat session the run never reads. */
   private readonly v2Steering = new Map<number, SteeringChannel>();
+  /** Steers that reached a V2 run after its last turn: held until the run has reported
+   *  its terminal state, then handed to the API, which starts a follow-up run. */
+  private readonly lateSteers = createLateSteerRegistry();
   /** Tracks pending remote task correlations so results can be sent back. */
   private pendingRemoteCorrelations = new Map<
     string,
@@ -451,6 +461,7 @@ export class BuilderforceRelayService implements IRelayService {
     if (payload.executionId != null) {
       this.v2Aborts.set(payload.executionId, abortController);
       this.v2Steering.set(payload.executionId, steering);
+      this.lateSteers.open(payload.executionId);
     }
 
     // Drive the on-prem loop through the SHARED `AgentEngine` contract (the same
@@ -544,6 +555,13 @@ export class BuilderforceRelayService implements IRelayService {
           ...(payload.repo?.repoId ? { repoId: payload.repo.repoId } : {}),
           defaultBranch: payload.repo?.defaultBranch ?? null,
         });
+      }
+      // Hand back any steer that arrived after the last turn — only now, once the run has
+      // reported its terminal state and pushed its branch, so the API starts the follow-up
+      // on a finished run and the follow-up builds on this run's committed work.
+      if (payload.executionId != null) {
+        const late = this.lateSteers.drain(payload.executionId);
+        if (late.length > 0) void this.reportLateSteers(payload.executionId, "run_finishing", late);
       }
     }
   }
@@ -682,6 +700,51 @@ export class BuilderforceRelayService implements IRelayService {
       });
     } catch (err) {
       logDebug(`[builderforce-relay] tool-audit persist failed: ${String(err)}`);
+    }
+  }
+
+  /**
+   * Hand steers this host could not deliver back to the API, which starts a follow-up
+   * run for them (`POST /api/agent-hosts/:id/late-steers` → `dispatchLateSteerFollowUp`,
+   * idempotent on each steer's row id). If the API cannot be reached, or takes none of
+   * them, the steer is still never silent: the pre-decision `steer.dropped` row is
+   * written, naming why.
+   */
+  private async reportLateSteers(
+    executionId: number,
+    reason: LateSteerReason,
+    steers: LateSteer[],
+  ): Promise<void> {
+    const base = normalizeBaseUrl(this.opts.baseUrl);
+    const url = `${base}/api/agent-hosts/${this.opts.agentNodeId}/late-steers`;
+    let handled = false;
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.opts.apiKey}`,
+        },
+        body: JSON.stringify(buildLateSteerReport(executionId, reason, steers)),
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (res.ok) {
+        const body = (await res.json().catch(() => null)) as { outcome?: { kind?: unknown } } | null;
+        handled = typeof body?.outcome?.kind === "string" && body.outcome.kind !== "none";
+      }
+    } catch (err) {
+      logDebug(`[builderforce-relay] late-steer report failed: ${String(err)}`);
+    }
+    if (handled) return;
+    for (const steer of steers) {
+      void this.persistToolAudit({
+        executionId,
+        toolName: "steer.dropped",
+        category: "message",
+        args: { text: steer.text, reason },
+        result:
+          "This message arrived after the run's last turn and could not be handed back for a follow-up run; send it again as a follow-up.",
+      });
     }
   }
 
@@ -1228,25 +1291,24 @@ export class BuilderforceRelayService implements IRelayService {
         const channel = executionId != null ? this.v2Steering.get(executionId) : undefined;
         const accepted = channel ? channel.push(msg.text) : false;
         if (accepted) break;
-        // Not delivered — no live run, or the run's last turn had already returned and
-        // its input stream was closed. The API marked the steer consumed when it sent
-        // it, so without this row the message would vanish with no trace anywhere: say
-        // so on the timeline (the same durable audit `steer.applied` writes), and log it.
-        const reason = channel ? "run_finishing" : "no_live_run";
-        logWarn(
-          `[builderforce] steering message for execution ${executionId ?? "?"} dropped: ${reason === "run_finishing" ? "the run was finishing" : "no live V2 run"}`,
-        );
-        if (executionId != null) {
-          void this.persistToolAudit({
-            executionId,
-            toolName: "steer.dropped",
-            category: "message",
-            args: { text: msg.text, reason },
-            result: reason === "run_finishing"
-              ? "The run had already finished its last turn when this message arrived; send it as a follow-up."
-              : "No live run was found for this execution; send it as a follow-up.",
-          });
+        // Not delivered — the run's last turn had already returned (its input stream is
+        // closed), or this host holds no live run for the execution. Operator decision
+        // 2026-09-12: spend the tokens. The steer goes back to the API, which starts a
+        // follow-up run on the same branch (relay-late-steers.ts). A finishing run's steer
+        // is HELD until that run has reported its terminal state; with no run here it
+        // goes back at once (if the run is live elsewhere, the API re-queues it there).
+        const steer = lateSteerFromFrame(msg);
+        if (executionId == null || !steer) break;
+        if (this.lateSteers.hold(executionId, steer)) {
+          logWarn(
+            `[builderforce] steer for execution ${executionId} arrived after the run's last turn — it will continue as a follow-up run`,
+          );
+          break;
         }
+        logWarn(
+          `[builderforce] steer for execution ${executionId} has no live V2 run on this host — handing it back for a follow-up run`,
+        );
+        void this.reportLateSteers(executionId, "no_live_run", [steer]);
         break;
       }
 

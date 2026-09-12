@@ -104,6 +104,7 @@ targets:
         NSAppTransportSecurity:
           NSAllowsArbitraryLoadsInWebContent: true
         NSBonjourServices:
+          - _builderforce-gw._tcp
           - _coderclaw-gw._tcp
         NSCameraUsageDescription: CoderClaw can capture photos or short video clips when requested via the gateway.
         NSLocationWhenInUseUsageDescription: CoderClaw uses your location when you allow location sharing.

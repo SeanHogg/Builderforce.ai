@@ -21,6 +21,10 @@ import { projectRepositories, projects } from '../../infrastructure/database/sch
 import { verifyGitHubOidcToken } from '../../application/ide/githubOidc';
 import { publishStaticSite, assetsFromFormData } from '../../application/ide/publishStaticSite';
 import { recordWorkerDeployment } from '../../application/backend';
+import { parseOptionalBody, z } from './requestBody';
+
+/** The deploy workflow reports the URL it published; the handler answers "url is required". */
+const WorkerDeploymentBody = z.object({ url: z.string().nullish() });
 
 export function createDeployRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -105,7 +109,7 @@ export function createDeployRoutes(): Hono<HonoEnv> {
     const verified = await verifyGitHubOidcToken(c.env, token);
     if (!verified.ok) return c.json({ error: verified.error }, 401);
 
-    const body = await c.req.json<{ url?: unknown }>().catch(() => ({}) as { url?: unknown });
+    const body = await parseOptionalBody(c, WorkerDeploymentBody);
     if (typeof body.url !== 'string' || !body.url.trim()) {
       return c.json({ error: 'url is required' }, 400);
     }

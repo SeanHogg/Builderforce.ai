@@ -310,7 +310,9 @@
     "forkHint": "Summarize this chat and continue in a new one from that summary",
     "sessionUnavailable": "Available once this chat has a few messages and no run in flight",
     "categoryLocal": "On this device",
-    "localDetail": "Runs on this machine via {runtime} — no plan usage, works offline."
+    "localDetail": "Runs on this machine via {runtime} — no plan usage, works offline.",
+    "assessmentClosedBook": "A closed-book assessment is live — the assistant is unavailable until it closes.",
+    "assessmentAssisted": "Assisted assessment — every assistant turn is recorded on the integrity ledger."
   },
   "repoContext": {
     "title": "Add repository context",
@@ -559,6 +561,7 @@
       "typeTask": "Task",
       "typeEpic": "Epic",
       "typeGap": "Gap",
+      "typeBug": "Bug",
       "usersIntro": "Choose which external users to invite to this workspace.",
       "noUsers": "No users discovered.",
       "userInvite": "Invite",
@@ -1756,6 +1759,7 @@
     "typeProduct": "Product",
     "typeDesign": "Design",
     "typeIncident": "Incident",
+    "typeBug": "Bug",
     "requiresRoleHint": "{role, select, viewer {Requires Viewer role} contributor {Requires Contributor role} developer {Requires Developer role} manager {Requires Manager role} owner {Requires Owner role} other {Requires {role} role}}",
     "tenantRoleLabel": "{role, select, viewer {Viewer} contributor {Contributor} developer {Developer} manager {Manager} owner {Owner} other {{role}}}",
     "tenantRoleDescription": "{role, select, viewer {Read-only access to boards, work, and the workforce.} contributor {Edit the canvases shared with you; read-only everywhere else in the workspace.} developer {Build and run agents, work the board, and see delivery insights.} manager {Invite people, manage roles and integrations, and see every insight lens.} owner {Full control, including billing, API keys, and deleting the workspace.} other {}}",
@@ -10729,6 +10733,10 @@
     "statusUnseeded": "Not set up",
     "quarantinedBadge": "Quarantined",
     "quarantinedHint": "This Evermind auto-disabled after producing incoherent output ({reason}). Retrain it past the coherence bar to re-enable inference.",
+    "codingGateQualified": "Coding eval {pct}% of baseline — qualified to serve IDE coding turns (needs {bar}%).",
+    "codingGateBelowBar": "Coding eval {pct}% of baseline, needs {bar}% — IDE coding turns stay on the frontier model.",
+    "codingGateNoEval": "No coding eval recorded for this version — needs {bar}% of the frontier baseline before it can serve IDE coding turns.",
+    "codingGateStale": "Coding eval was recorded for v{evaluated}; the head is now v{head}. Re-run it — needs {bar}% of the frontier baseline to serve IDE coding turns.",
     "targetsTitle": "Everminds under this project",
     "targetsHint": "Every Evermind this project contributes learning to.",
     "targetsEmpty": "No Everminds resolved for this project yet.",
@@ -15118,6 +15126,11 @@
     "revertConfirmAction": "Revert run",
     "revertDone": "Reverted — deleted branch {branch} ({commits} commit(s)).",
     "failedToRevert": "Failed to revert this run",
+    "lateSteerContinued": "Arrived after this run's last turn — continued as run #{id}.",
+    "lateSteerOpenRun": "Open run #{id}",
+    "lateSteerAwaitingApproval": "Arrived after this run's last turn — its follow-up run is waiting for manager approval.",
+    "lateSteerNotContinued": "Arrived after this run's last turn — no follow-up run started: {reason}",
+    "lateSteerReleased": "Arrived after this run was cancelled — it was not delivered.",
     "title": "Agent execution kill switch",
     "disabledBody": "Tenant agent execution is blocked. VS Code and Brain chats, Canvas/Create, and page MCP tools remain available.",
     "enabledBody": "Emergency workspace override. Disabling stops tenant agents and blocks manual, scheduled, integration, and autonomous platform runs; interactive VS Code and Brain work remains available.",
@@ -17958,6 +17971,206 @@
   "publicResume": {
     "loading": "Loading résumé…",
     "unavailable": "This résumé link is unavailable."
+  },
+  "roomStations": {
+    "listHead": "Stations in the room",
+    "open": "Open",
+    "openNamed": "Open {title}",
+    "dragHint": "{summary} · drag to move",
+    "approvals": {
+      "title": "Approval desk",
+      "summary": "{count, plural, =0 {Nothing waiting} one {# change waiting} other {# changes waiting}}",
+      "faceCount": "{count, plural, one {# change waiting on a signature} other {# changes waiting on a signature}}",
+      "faceEmpty": "Nothing is waiting on a signature.",
+      "intro": "Changes to figures someone will rely on, and acts that leave the building, wait here until a named person signs them off.",
+      "readOnly": "You can see what is waiting, but only an editor of this board can sign it off.",
+      "empty": "Nothing is waiting. When the assistant or a widget changes a budget, an invoice, a quote or another attested figure, the change appears here until someone signs it off.",
+      "waiting": "Waiting since {when}",
+      "move": "{from} → {to}",
+      "by": "{actor} · {when}",
+      "source": "from {source}",
+      "unblocks": "Signing this unblocks: {actions}",
+      "approve": "Approve",
+      "approveAndRun": "Approve and {action}",
+      "refuse": "Refuse",
+      "approved": "Approved {count, plural, one {# change} other {# changes}} on {title}.",
+      "refused": "Refused {count, plural, one {# change} other {# changes}} on {title}.",
+      "selfApproval": "You made every change waiting here, so approving it would be self-approval. Ask someone else to sign it off.",
+      "nothingPending": "Nothing on this object is waiting any more.",
+      "actor": {
+        "human": "A person",
+        "agent": "An agent",
+        "brain": "Brain",
+        "system": "The system"
+      }
+    },
+    "metrics": {
+      "title": "Metrics board",
+      "count": "{count, plural, one {# metric} other {# metrics}}",
+      "summary": "{behind, plural, =0 {Every metric with a target is on track.} one {# metric is behind target.} other {# metrics are behind target.}}",
+      "noTargets": "No metric here has a target yet — give one a target to see which way it is heading.",
+      "errored": "{count, plural, one {# metric cannot be computed.} other {# metrics cannot be computed.}}",
+      "target": "Target {target}",
+      "attainment": "{value}% of target",
+      "status": {
+        "ahead": "Ahead",
+        "on-track": "On track",
+        "behind": "Behind",
+        "error": "Cannot compute"
+      },
+      "trend": "Trend for {name}",
+      "error": "Cannot compute: {reason}",
+      "evidence": "From {matched} of {total} rows",
+      "derived": "Derived from {count, plural, one {# metric} other {# metrics}}"
+    },
+    "widget": {
+      "summary": "Third-party widget",
+      "untitled": "Widget",
+      "loading": "Loading the widget…",
+      "inPanel": "Open in the panel",
+      "frameTitle": "{name} (third-party widget)",
+      "navigated": "This widget left its registered address, so the board stopped talking to it.",
+      "reload": "Reload the widget",
+      "closed": "The widget closed itself.",
+      "reopen": "Reopen",
+      "permissions": "It can: {permissions}.",
+      "noPermissions": "It can only draw inside its own frame.",
+      "permission": {
+        "boardRead": "read this board's title",
+        "itemRead": "read the names of objects on the board",
+        "itemWrite": "create, edit and remove objects",
+        "userRead": "see your display name",
+        "storageRead": "read its own saved settings",
+        "storageWrite": "save its own settings",
+        "notify": "show a notice on the canvas"
+      }
+    },
+    "assessment": {
+      "title": "Assessment desk",
+      "summary": "{count, plural, one {# assignment} other {# assignments}} · {live} live",
+      "untitled": "Untitled",
+      "faceGate": {
+        "open": "Assistant available",
+        "assisted": "Assisted — every turn recorded",
+        "closed": "Closed book — assistant off"
+      },
+      "mode": {
+        "open": "Open",
+        "assisted": "Assisted",
+        "closed": "Closed book"
+      },
+      "gate": {
+        "open": "No assessment is live — the assistant is available on this board.",
+        "assisted": "An assisted assessment is live — the assistant answers, and every turn is recorded on the learner's integrity ledger.",
+        "closed": "A closed-book assessment is live — the assistant is off on this board and in every composer until it closes."
+      },
+      "assignmentsHead": "Assignments",
+      "window": {
+        "beforeRelease": "Not released",
+        "open": "Open",
+        "closed": "Closed"
+      },
+      "due": "Due {date}",
+      "noDue": "No deadline set",
+      "extraTime": "{count, plural, one {# learner has} other {# learners have}} approved extra time · latest deadline {date}",
+      "rubric": {
+        "ready": "Rubric ready to mark",
+        "missing": "No rubric linked — marking has no basis",
+        "noLevels": "Rubric declares no achievement levels",
+        "noCriteria": "Rubric declares no criteria",
+        "missingDescriptors": "Rubric: {criterion} is missing {count, plural, one {# descriptor} other {# descriptors}}",
+        "weightsZero": "Rubric: every criterion weight is zero",
+        "totalMismatch": "Rubric totals {totalMarks} but the assignment is out of {maxMarks}"
+      },
+      "submissions": "{submitted} submitted · {marked} marked",
+      "integrityHead": "Integrity",
+      "verdict": {
+        "undeclaredAssistance": "Assistance used, not declared",
+        "closedBookViolation": "Assistant used in a closed-book assessment"
+      },
+      "assistantShare": "{percent}% from the assistant",
+      "integrityClear": "No submission needs an integrity conversation.",
+      "declared": "{count, plural, one {# submission declares} other {# submissions declare}} the assistance used.",
+      "markHead": "Ready to mark",
+      "mark": "Mark",
+      "markNamed": "Mark {name}'s submission",
+      "markNone": "Nothing is waiting with rubric placements recorded."
+    },
+    "gradebook": {
+      "title": "Gradebook",
+      "summary": "{count, plural, =0 {No learner at risk} one {# learner at risk} other {# learners at risk}}",
+      "untitled": "Untitled gradebook",
+      "export": "Export CSV",
+      "exportNamed": "Export {title} as CSV",
+      "empty": "No learners or assignments to aggregate yet.",
+      "atRiskHead": "{count, plural, =0 {No learner at risk} one {# learner at risk} other {# learners at risk}}",
+      "stats": "Mean {mean}% · median {median}% · pass rate {passRate}%",
+      "statsNoMarks": "No marked work yet · pass rate {passRate}%",
+      "awaiting": "{count, plural, one {# submission is} other {# submissions are}} awaiting marking",
+      "reason": {
+        "missing": "Missing work",
+        "failing": "Below the pass mark",
+        "both": "Below the pass mark, with missing work"
+      },
+      "missing": "{count} missing",
+      "tableLabel": "Marks for {title}",
+      "column": {
+        "learner": "Learner",
+        "running": "Running %",
+        "final": "Final %",
+        "grade": "Grade"
+      },
+      "atRisk": "At risk",
+      "moderationHead": "{count, plural, one {# script needs moderation} other {# scripts need moderation}}",
+      "moderationGap": "{learner}: first mark {first}, second mark {second}",
+      "moderationMissing": "{learner}: second mark missing"
+    },
+    "accessibility": {
+      "title": "Accessibility audit",
+      "summary": "Score {score} of 100",
+      "distributable": "Distributable — no blockers",
+      "blocked": "{count, plural, one {# blocker stops} other {# blockers stop}} distribution",
+      "warnings": "{count, plural, one {# warning} other {# warnings}}",
+      "scoreLabel": "Accessibility score",
+      "score": "{score} of 100",
+      "findingsLabel": "Accessibility findings",
+      "severity": {
+        "blocker": "Blocker",
+        "warning": "Warning"
+      },
+      "code": {
+        "missingAltText": "Needs alt text",
+        "missingCaptions": "Needs captions",
+        "missingTranscript": "Needs a transcript",
+        "missingSummary": "Needs a text summary of its data",
+        "missingEquationAlt": "Needs an authored reading of the equation",
+        "missingFormat": "Needs an alternative format"
+      },
+      "criterion": "WCAG {criterion}",
+      "raisedBy": "Required by {source}",
+      "none": "Every artifact on this board has its text alternatives."
+    },
+    "citations": {
+      "title": "Citations desk",
+      "summary": "{count, plural, one {# reference} other {# references}}",
+      "faceHead": "Cite in {style}",
+      "style": {
+        "apa": "APA",
+        "harvard": "Harvard",
+        "ieee": "IEEE",
+        "mla": "MLA",
+        "chicago": "Chicago",
+        "vancouver": "Vancouver"
+      },
+      "styleLabel": "Citation style",
+      "export": "Export BibTeX",
+      "exported": "{count, plural, one {# reference exported} other {# references exported}} as BibTeX.",
+      "copied": "Copied {citation} — paste it where you are writing.",
+      "copyFailed": "The clipboard is unavailable — the citation is {citation}.",
+      "listLabel": "References",
+      "insert": "Copy citation",
+      "insertNamed": "Copy the in-text citation for {title}"
+    }
   },
   "creationCanvas": {
     "scopeKind": "Scope",
@@ -23971,7 +24184,177 @@
       "strategistSubtitle": "Defines strategy, messaging, and audience for high-impact campaigns.",
       "publishes": "publishes",
       "measures": "measures"
-    }
+    },
+    "llmCourse": {
+      "subject": "How large language models are built",
+      "audience": "Software and ML practitioners",
+      "description": "A hands-on path from model requirements and governed data through tokenization, training, evaluation, packaging, and operations.",
+      "module": {
+        "foundations": {
+          "title": "1. Define the model",
+          "description": "Turn a capability goal into measurable model requirements."
+        },
+        "data": {
+          "title": "2. Build the dataset",
+          "description": "Create a licensed, representative, contamination-aware corpus."
+        },
+        "tokenizer": {
+          "title": "3. Tokenization and architecture",
+          "description": "Translate text into model inputs and choose a defensible scale."
+        },
+        "training": {
+          "title": "4. Train safely",
+          "description": "Run reproducible pretraining and instruction tuning."
+        },
+        "evaluation": {
+          "title": "5. Evaluate and red-team",
+          "description": "Measure capability, safety, robustness, and cost."
+        },
+        "delivery": {
+          "title": "6. Package, deploy, and improve",
+          "description": "Ship a versioned model with operational controls."
+        }
+      },
+      "lesson": {
+        "foundations-outcome": {
+          "title": "Choose an outcome",
+          "objective": "Define one behavior the model must perform reliably.",
+          "content": "An LLM predicts the next token. A useful product wraps that capability in a clear audience, task, context window, latency target, safety boundary, and evaluation plan.",
+          "activity": "Write a one-sentence model card: “For [audience], the model will [behavior], using [evidence], and succeeds when [metric].”"
+        },
+        "foundations-scale": {
+          "title": "Pick the right build path",
+          "objective": "Compare prompting, retrieval, fine-tuning, and pretraining.",
+          "content": "Start with the least expensive intervention that can meet the requirement. Prompting changes instructions, retrieval supplies current knowledge, fine-tuning changes behavior, and pretraining learns representations from a corpus.",
+          "activity": "List two reasons your goal requires training rather than prompting or retrieval."
+        },
+        "data-corpus": {
+          "title": "Source and govern data",
+          "objective": "Create a traceable corpus with usage rights.",
+          "content": "Record provenance, license, consent, retention, language, domain, and quality signals for every source. Remove secrets and personal data before training.",
+          "activity": "Draft a dataset card with allowed use, exclusions, and known representation gaps."
+        },
+        "data-pipeline": {
+          "title": "Clean, deduplicate, and split",
+          "objective": "Prevent leakage and evaluation contamination.",
+          "content": "Normalize encoding, remove low-quality documents, deduplicate before splitting, and reserve test data that cannot enter training or prompt development.",
+          "activity": "Design train, validation, and test splits and state how you will detect near-duplicates."
+        },
+        "tokenizer-train": {
+          "title": "Train and inspect a tokenizer",
+          "objective": "Measure how vocabulary choices affect your domain.",
+          "content": "A BPE or unigram tokenizer learns reusable text pieces. Inspect fertility, unknown bytes, multilingual coverage, and handling of code or domain terminology.",
+          "activity": "Tokenize 20 representative samples and flag words that fragment excessively."
+        },
+        "architecture-budget": {
+          "title": "Budget model shape and compute",
+          "objective": "Relate parameters, tokens, memory, and throughput.",
+          "content": "Choose layers, hidden width, attention heads, context length, and parameter count together. Estimate training FLOPs, optimizer memory, checkpoint size, and inference cost before the run.",
+          "activity": "Create a budget table for parameters, training tokens, accelerator hours, storage, and serving latency."
+        },
+        "training-run": {
+          "title": "Configure the training run",
+          "objective": "Make a run reproducible and observable.",
+          "content": "Version code, data, tokenizer, configuration, and seeds. Track loss, gradient norm, learning rate, throughput, data batches, and checkpoint health.",
+          "activity": "Write a preflight checklist including a tiny overfit test and checkpoint recovery drill."
+        },
+        "training-align": {
+          "title": "Instruction tune and align",
+          "objective": "Teach task behavior without erasing base capability.",
+          "content": "Use reviewed instruction-response examples, an explicit mixture, held-out tasks, and conservative hyperparameters. Preference optimization can refine behavior after supervised fine-tuning.",
+          "activity": "Create three instruction examples and a rubric that distinguishes correctness from style."
+        },
+        "evaluation-suite": {
+          "title": "Build an evaluation suite",
+          "objective": "Connect every requirement to a test.",
+          "content": "Combine deterministic checks, model-graded rubrics with calibration, expert review, and adversarial cases. Report uncertainty and slice results by domain and audience.",
+          "activity": "Create a release scorecard with thresholds for quality, safety, latency, and cost."
+        },
+        "evaluation-redteam": {
+          "title": "Probe failure modes",
+          "objective": "Discover harmful or brittle behavior before release.",
+          "content": "Test prompt injection, data extraction, unsafe advice, bias, hallucination, long-context degradation, multilingual behavior, and distribution shift.",
+          "activity": "Write five abuse cases and define the expected refusal or safe-completion behavior."
+        },
+        "delivery-card": {
+          "title": "Publish the model card",
+          "objective": "Document intended use, evidence, and limits.",
+          "content": "Package immutable weights, tokenizer, inference configuration, licenses, evaluation results, and a model card. Sign artifacts and retain a rollback target.",
+          "activity": "Complete a model card covering intended use, out-of-scope use, data, evaluations, limitations, and ownership."
+        },
+        "delivery-ops": {
+          "title": "Operate the learning loop",
+          "objective": "Monitor quality without training on unreviewed feedback.",
+          "content": "Observe latency, cost, drift, safety events, and user outcomes. Route candidate feedback through review, regression evaluation, approval, and a new version.",
+          "activity": "Draw the promotion path from candidate evidence to approved dataset to evaluated release."
+        }
+      },
+      "assessment": {
+        "foundations": {
+          "question": "When should you consider pretraining a model from scratch?",
+          "choice": {
+            "a": "Whenever prompts are inconvenient",
+            "b": "When you have distinctive data, sufficient compute, and a requirement base models cannot meet",
+            "c": "Before defining evaluations",
+            "d": "For every private knowledge base"
+          },
+          "explanation": "Pretraining is justified only by requirements and resources that simpler approaches cannot satisfy."
+        },
+        "data": {
+          "question": "Why deduplicate before creating data splits?",
+          "choice": {
+            "a": "To increase token count",
+            "b": "To prevent near-identical examples leaking into evaluation",
+            "c": "To remove the need for a tokenizer",
+            "d": "To guarantee factuality"
+          },
+          "explanation": "Cross-split duplicates inflate evaluation results and hide poor generalization."
+        },
+        "tokenizer": {
+          "question": "What does tokenizer fertility measure?",
+          "choice": {
+            "a": "Tokens produced per word or text unit",
+            "b": "GPU utilization",
+            "c": "Model accuracy",
+            "d": "Dataset license quality"
+          },
+          "explanation": "High fertility can make a domain inefficient and reduce usable context."
+        },
+        "training": {
+          "question": "What should happen before a full training run?",
+          "choice": {
+            "a": "Disable checkpoints",
+            "b": "Run a small end-to-end overfit and recovery test",
+            "c": "Use the test split for tuning",
+            "d": "Publish the model card"
+          },
+          "explanation": "A small rehearsal validates data, code, metrics, and recovery before expensive compute begins."
+        },
+        "evaluation": {
+          "question": "A single average benchmark score is insufficient because…",
+          "choice": {
+            "a": "benchmarks never work",
+            "b": "it can hide failures in important slices and safety cases",
+            "c": "latency is always constant",
+            "d": "training loss is the only valid metric"
+          },
+          "explanation": "Release decisions need disaggregated capability and safety evidence."
+        },
+        "delivery": {
+          "question": "Which feedback should automatically enter the next training set?",
+          "choice": {
+            "a": "All user conversations",
+            "b": "Only reviewed, consented, policy-compliant evidence",
+            "c": "Only negative feedback",
+            "d": "Any high-volume prompt"
+          },
+          "explanation": "Human review and governance prevent privacy, poisoning, and quality failures."
+        }
+      }
+    },
+    "noticeGradebookExported": "Gradebook exported as CSV: {count, plural, one {# learner} other {# learners}}",
+    "noticeReferencesExported": "{count, plural, one {# reference exported} other {# references exported}} as BibTeX",
+    "noticeReferencesExportEmpty": "There are no references to export yet"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
@@ -25123,6 +25506,271 @@
       },
       "learning": {
         "description": "Learning paths over your courses, the prerequisites that gate them, and the workspace’s own xAPI Learning Record Store."
+      }
+    },
+    "route": {
+      "brainstorm": {
+        "title": "Brain Storm",
+        "description": "Describe what you want to build in plain language and turn it into projects, tasks, datasets, and agent work.",
+        "seoDescription": "Brain Storm is a plain-language starting point inside Builderforce.ai: explore an idea, shape useful context, and turn it into connected canvas work, projects, tasks, datasets, or agent-assisted execution.",
+        "highlight": {
+          "h1": {
+            "title": "Describe it in plain language",
+            "desc": "Say what you want to create, then develop the idea before deciding which artifacts, collaborators, or delivery structure it needs."
+          },
+          "h2": {
+            "title": "It calls real platform tools",
+            "desc": "The Brain is wired to a tool registry: it can create projects, draft specs, generate datasets, and assign work to agents — not just chat about it."
+          },
+          "h3": {
+            "title": "Grounded in your workspace",
+            "desc": "Pin a project and the Brain answers with that context, so ideation continues exactly where your work already lives."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "What is Brain Storm on Builderforce.ai?",
+            "answer": "Brain Storm is the full-page Brain assistant — a plain-language interface where you describe what you want to build and the Brain turns it into projects, tasks, datasets, and agent work. It is the same Brain available as a docked drawer everywhere in the app, given a full-page canvas."
+          },
+          "q2": {
+            "question": "Does the Brain actually do things, or just chat?",
+            "answer": "It acts. The Brain is connected to a platform tool registry and your tenant's MCP extensions, so it can create projects, draft specs and PRDs, kick off dataset generation, and assign tasks to agents — every tool call governed by your approval gates."
+          },
+          "q3": {
+            "question": "Do I need to set anything up to start brainstorming?",
+            "answer": "No. Sign in, open Brain Storm, and type. You can optionally pin a project so answers are grounded in that codebase and context, but a blank prompt is enough to start turning an idea into a plan."
+          }
+        }
+      },
+      "workflows": {
+        "title": "Workflow Builder",
+        "description": "Compose agents and tools into repeatable, approval-gated workflows.",
+        "seoDescription": "The Builderforce.ai Workflow Builder is a drag-and-drop, IPAAS-style canvas for composing LLM logic — memory, knowledge-base, and training nodes — wired to your agents and run on your agentHosts with approval gates at every step.",
+        "highlight": {
+          "h1": {
+            "title": "Compose agents like a flowchart",
+            "desc": "A drag-and-drop canvas wires agents, tools, memory, knowledge-base, and training nodes into repeatable, multi-step workflows."
+          },
+          "h2": {
+            "title": "Configurable approval gates",
+            "desc": "Configured execution paths can pause for human sign-off. Policy resolution fails closed; audit coverage is stated for each instrumented path."
+          },
+          "h3": {
+            "title": "Built-in orchestration patterns",
+            "desc": "Planning, feature-dev, bug-fix, refactor, and adversarial-review workflows coordinate seven specialist roles through a dependency DAG."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "What is the Workflow Builder?",
+            "answer": "It is a visual, IPAAS-style canvas for composing your own LLM logic. You drag and connect nodes — agents, tools, memory, knowledge-base, and training — into repeatable workflows that run on your agentHosts with approval gates wherever you choose."
+          },
+          "q2": {
+            "question": "How is this different from a single AI agent?",
+            "answer": "A workflow coordinates multiple specialist agents across structured steps through a dependency DAG, instead of one agent producing a single suggestion. Built-in patterns run planning, bug-fix, refactor, and adversarial-review end to end."
+          },
+          "q3": {
+            "question": "Can I require human approval inside a workflow?",
+            "answer": "Yes. Approval gates can suspend any step until a person approves or rejects it, with the decision recorded in the audit trail. Low-risk steps can pass automatically via auto-approval rules."
+          }
+        }
+      },
+      "settings": {
+        "title": "Settings",
+        "description": "Manage your workspace, members, API keys, and preferences."
+      },
+      "tenants": {
+        "title": "Workspaces",
+        "description": "Create and switch between multi-tenant workspaces with per-seat roles."
+      },
+      "admin": {
+        "title": "Platform Admin",
+        "description": "Platform administration, LLM traces, and operator tooling."
+      },
+      "agent-worker": {
+        "title": "Agent Worker",
+        "description": "Run and monitor background agent workers executing your tasks."
+      },
+      "projects": {
+        "seoDescription": "Projects / Tasks is the work-management surface of Builderforce.ai — organize work into AI project workspaces, then plan, assign, and track tasks across your agent workforce with board, table, calendar, and Gantt views."
+      },
+      "workforce": {
+        "seoDescription": "The Workforce mesh discovers and dispatches work across local and remote AgentHosts — capacity sharing across machines and tenants, with approvals, chats, and full telemetry in one place.",
+        "highlight": {
+          "h1": {
+            "title": "A mesh of agent hosts",
+            "desc": "Discover and dispatch work across local and remote AgentHosts, sharing capacity across machines and tenants with HMAC-signed, Bearer-authenticated dispatch."
+          },
+          "h2": {
+            "title": "Approvals and chats together",
+            "desc": "Approve human-in-the-loop actions, talk to agents directly, and watch them collaborate — all from the same Workforce surface."
+          },
+          "h3": {
+            "title": "Instrumented execution",
+            "desc": "Supported task and workflow paths emit structured telemetry to the timeline, including available execution, usage, and tool-call records."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "What is the Workforce mesh?",
+            "answer": "The Workforce is where you discover and coordinate your agent hosts. It dispatches work across local and remote AgentHosts — capacity sharing across machines and even tenants — using HMAC-signed, Bearer-authenticated dispatch, with smart routing to the best-matched peer."
+          },
+          "q2": {
+            "question": "Can I see and approve what agents are doing?",
+            "answer": "Yes. The Workforce surface brings together approval requests, agent conversations, and the execution telemetry captured by supported platform workflows."
+          },
+          "q3": {
+            "question": "Does it work across multiple machines?",
+            "answer": "Yes. Fleet registration, heartbeats, and capability sync let you run a fleet of AgentHosts and route tasks across them, with remote dispatch to a specific host or auto-routing by capability."
+          }
+        }
+      },
+      "skills": {
+        "seoDescription": "Install or publish reusable agent skills from the Builderforce.ai Workforce marketplace. Skills assigned at tenant or agentHost scope load automatically into running agents at startup — 53 built-in plus a growing marketplace.",
+        "highlight": {
+          "h1": {
+            "title": "A marketplace of capabilities",
+            "desc": "Browse and install reusable agent skills, or publish your own. 53 skills ship built-in, with a growing community marketplace on top."
+          },
+          "h2": {
+            "title": "Assigned, then auto-loaded",
+            "desc": "Assign a skill at tenant or agentHost scope and it loads automatically into running agents at startup — no manual wiring per agent."
+          },
+          "h3": {
+            "title": "Publish under clear terms",
+            "desc": "Publish a skill under the seller terms shown at listing and checkout."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "What are skills on Builderforce.ai?",
+            "answer": "Skills are reusable capabilities you can give your agents. There are 53 built-in skills plus a marketplace where you browse, install, or publish more. A skill assigned at tenant or agentHost scope is loaded automatically into running agents at startup."
+          },
+          "q2": {
+            "question": "Can I publish my own skills?",
+            "answer": "Yes. You can publish a skill to the Workforce marketplace; current fees and payout terms are shown before you list paid content."
+          },
+          "q3": {
+            "question": "How do skills get into a running agent?",
+            "answer": "You assign skills at tenant or agentHost scope in the portal; the agent loads its assigned skills automatically when it starts, so capabilities follow your assignment rules without per-agent configuration."
+          }
+        }
+      },
+      "personas": {
+        "seoDescription": "Personas give your agents a reusable voice and behavior profile on Builderforce.ai. Pro personas add a psychometric personality layer compiled into both prompt directives and execution parameters at run time.",
+        "highlight": {
+          "h1": {
+            "title": "Reusable voice and behavior",
+            "desc": "Define a persona once — tone, behavior, and operating style — and apply it across agents so their output stays consistent."
+          },
+          "h2": {
+            "title": "Psychometric personality (Pro)",
+            "desc": "Pro personas carry a trait vector compiled into both prompt directives and run-time execution parameters, for genuinely distinct agent behavior."
+          },
+          "h3": {
+            "title": "Shareable across the workforce",
+            "desc": "Personas are reusable assets that travel with agents, so a behavior profile you craft once equips your whole workforce."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "What is a persona on Builderforce.ai?",
+            "answer": "A persona is a reusable voice and behavior profile you attach to agents, so their tone and operating style stay consistent across tasks and team members."
+          },
+          "q2": {
+            "question": "What does the Pro personality layer add?",
+            "answer": "Pro personas include a psychometric profile — a trait vector compiled by the platform into both prompt directives and execution parameters (such as reasoning depth and temperature) at run time, giving each agent a genuinely distinct, controllable personality."
+          },
+          "q3": {
+            "question": "Can personas be reused across agents?",
+            "answer": "Yes. Personas are reusable assets — define one and apply it to any number of agents across your workforce, instead of re-describing behavior every time."
+          }
+        }
+      },
+      "content-manager": {
+        "seoDescription": "The Content Manager lets you author and share reusable content blocks your agents and the Workforce marketplace can reuse — a single source of truth for the copy and context your AI workforce draws on.",
+        "highlight": {
+          "h1": {
+            "title": "Author reusable content",
+            "desc": "Create content blocks once and reuse them across agents, workflows, and the marketplace instead of duplicating copy."
+          },
+          "h2": {
+            "title": "Shared context for agents",
+            "desc": "Content blocks become context your agents can draw on, keeping their output grounded in your canonical messaging and facts."
+          },
+          "h3": {
+            "title": "Marketplace-ready",
+            "desc": "Share content your agents and the Workforce marketplace can reuse, so good context compounds across your workspace."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "What is the Content Manager for?",
+            "answer": "It is where you author and share reusable content blocks — copy and context that your agents and the Workforce marketplace can reuse — so your messaging and source material live in one canonical place."
+          },
+          "q2": {
+            "question": "How do agents use this content?",
+            "answer": "Content blocks act as shared context agents can draw on, keeping their output consistent with your canonical facts and messaging rather than improvising each time."
+          }
+        }
+      },
+      "security": {
+        "seoDescription": "Builderforce.ai provides controls for agent-assisted work, including tenant isolation, encrypted integration credentials, role-based access, device trust, configurable approval gates, and retained execution records.",
+        "highlight": {
+          "h1": {
+            "title": "Keep people accountable",
+            "desc": "Configure human approval gates for consequential actions and retain the resulting decisions as part of the execution record."
+          },
+          "h2": {
+            "title": "Scoped and encrypted",
+            "desc": "Tenant-scoped access controls and AES-256-GCM encryption protect credentials stored for supported integrations."
+          },
+          "h3": {
+            "title": "RBAC and device trust",
+            "desc": "Role-based access control, device trust, and HMAC-signed inter-host dispatch mean only the right people and machines can act."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "How does Builderforce.ai govern what agents can do?",
+            "answer": "Through human-in-the-loop approval gates: agents request approval before high-impact actions, execution suspends until a person approves or rejects, and every outcome is recorded in a full audit trail. Auto-approval rules let low-risk actions through automatically."
+          },
+          "q2": {
+            "question": "How are my credentials and data protected?",
+            "answer": "Integration credentials are encrypted with AES-256-GCM and scoped per tenant. All resources — projects, datasets, models, and agents — are isolated per tenant with no cross-tenant access, and inter-host dispatch is HMAC-signed and Bearer-authenticated."
+          },
+          "q3": {
+            "question": "Can Builderforce.ai run air-gapped?",
+            "answer": "The MIT-licensed BuilderForce Agents runtime can be deployed on private infrastructure and can use local models. A fully air-gapped environment requires disabling hosted collaboration, publishing, remote evaluation, and other connected services; validate the required workflow against the deployment guide before making a compliance commitment."
+          }
+        }
+      },
+      "dashboard": {
+        "seoDescription": "Your Builderforce.ai dashboard brings recent creation sessions, active work, and workspace signals into one place so you can resume an idea or follow it into delivery.",
+        "highlight": {
+          "h1": {
+            "title": "Return to your creative context",
+            "desc": "Resume recent canvas sessions and see the work, collaborators, and next decisions connected to them."
+          },
+          "h2": {
+            "title": "From idea to action",
+            "desc": "Start with what you want to create, then turn the useful parts into artifacts, projects, tasks, or agent work."
+          },
+          "h3": {
+            "title": "Follow work into delivery",
+            "desc": "Move from the canvas to projects, models, agents, approvals, and operating views without losing the original context."
+          }
+        },
+        "faq": {
+          "q1": {
+            "question": "What is on the Builderforce.ai dashboard?",
+            "answer": "The dashboard is your workspace command center: workspace health, recent runs, and a live view of what your AI workforce is doing. From here you can jump into Brain Storm, projects, training, and the workforce mesh."
+          },
+          "q2": {
+            "question": "How do I go from an idea to work getting done?",
+            "answer": "Type what you want to build into the dashboard prompt and it routes into Brain Storm, which turns the idea into projects and tasks and assigns the work to your agents under your approval gates."
+          }
+        }
       }
     }
   },

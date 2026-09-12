@@ -9,17 +9,21 @@
  *   GET    /api/delivery-flow/action-items              open commitments        member
  *   POST   /api/delivery-flow/action-items              capture one             member
  *   PATCH  /api/delivery-flow/action-items/:id          edit / close            member
- *   POST   /api/delivery-flow/action-items/:id/promote  -> a work item          member
+ *   POST   /api/delivery-flow/action-items/:id/promote  -> a ticket {taskId}    member
  *   GET    /api/delivery-flow/action-items/overdue      the standup's agenda    member
  *   GET    /api/delivery-flow/action-items/follow-through?sourceRef=  did we keep them
  *
- *   GET    /api/delivery-flow/estimates/:workItemRef    current + history       member
- *   POST   /api/delivery-flow/estimates                 record one              member
+ *   GET    /api/delivery-flow/estimates/:taskId         current + history       member
+ *   POST   /api/delivery-flow/estimates                 record one {taskId}     member
  *   GET    /api/delivery-flow/estimates-accuracy        spread by estimator     member
  *
- *   GET    /api/delivery-flow/sprints/:sprintRef/cost   what it cost            member
- *   PUT    /api/delivery-flow/sprints/:sprintRef/cost   stamp it                MANAGER
- *   GET    /api/delivery-flow/sprint-cost-trend         the trend line          member
+ *   GET    /api/delivery-flow/sprints/:sprintId/cost    what it cost            member
+ *   PUT    /api/delivery-flow/sprints/:sprintId/cost    stamp it                MANAGER
+ *   GET    /api/delivery-flow/sprint-cost-trend?projectId=  the trend line      member
+ *
+ * The work item a commitment is promoted to, and the one an estimate is ON, is a
+ * `tasks` row addressed by its id (the spec's PM spine unified onto `tasks`,
+ * decided 2026-09-12); a sprint is a `sprints` row addressed by its uuid.
  *
  *   GET    /api/delivery-flow/approvals/queue           what I must decide      member
  *   GET    /api/delivery-flow/approvals/:kind/:ref      the chain and verdict    member
@@ -45,7 +49,7 @@ import {
   createActionItem,
   listActionItems,
   overdueActionItems,
-  promoteToWorkItem,
+  promoteToTask,
   sourceFollowThrough,
   updateActionItem,
   type ActionStatus,
@@ -70,6 +74,24 @@ import {
   queueFor,
   type Approver,
 } from '../../application/approval/approvalChain';
+import { positiveIntParam } from './queryParams';
+import { parseBody, z, zJsonObject } from './requestBody';
+
+/**
+ * Most writes here read their body field by field through `str` / `num` /
+ * `when` / `String(...)` and let the application layer own the rules, so the
+ * shape asserted is "a JSON object" — an array or scalar is a 400, not a TypeError.
+ */
+const DeliveryWriteBody = zJsonObject;
+
+/**
+ * Opening a chain reads each approver's `ref` / `kind` / `step` off an OBJECT, so
+ * each entry must be one (a `null` entry used to be a TypeError). A missing or
+ * null list is still the empty chain `openChain` refuses in its own words.
+ */
+const OpenChainBody = z.object({
+  approvers: z.array(zJsonObject).nullish(),
+});
 
 const handle = async (run: () => Promise<Response>): Promise<Response> => {
   try {
@@ -166,9 +188,9 @@ export function createDeliveryFlowRoutes(db: Db): Hono<HonoEnv> {
 
   router.post('/action-items/:id/promote', (c) => handle(async () => {
     const body = await c.req.json<Record<string, unknown>>();
-    return Response.json(await promoteToWorkItem(
+    return Response.json(await promoteToTask(
       db, c.env as Env, tenant(c), await who(c),
-      rowId(c.req.param('id')), String(body.workItemRef ?? ''),
+      rowId(c.req.param('id')), num(body.taskId) ?? Number.NaN,
     ));
   }));
 
@@ -177,11 +199,11 @@ export function createDeliveryFlowRoutes(db: Db): Hono<HonoEnv> {
   router.get('/estimates-accuracy', (c) => handle(async () =>
     Response.json({ byEstimator: await estimateAccuracy(db, tenant(c)) })));
 
-  router.get('/estimates/:workItemRef', (c) => handle(async () => {
-    const ref = c.req.param('workItemRef');
+  router.get('/estimates/:taskId', (c) => handle(async () => {
+    const taskId = rowId(c.req.param('taskId'));
     const [current, history] = await Promise.all([
-      currentEstimate(db, tenant(c), ref),
-      estimateHistory(db, tenant(c), ref),
+      currentEstimate(db, tenant(c), taskId),
+      estimateHistory(db, tenant(c), taskId),
     ]);
     return Response.json({ current, history });
   }));
@@ -189,7 +211,7 @@ export function createDeliveryFlowRoutes(db: Db): Hono<HonoEnv> {
   router.post('/estimates', (c) => handle(async () => {
     const body = await c.req.json<Record<string, unknown>>();
     return Response.json(await recordEstimate(db, tenant(c), {
-      workItemRef: String(body.workItemRef ?? ''),
+      taskId: num(body.taskId) ?? Number.NaN,
       ...(str(body.unit) !== undefined ? { unit: str(body.unit) as EstimateUnit } : {}),
       value: num(body.value) ?? null,
       tshirt: str(body.tshirt) ?? null,
@@ -202,21 +224,20 @@ export function createDeliveryFlowRoutes(db: Db): Hono<HonoEnv> {
   // ── Sprint economics ──────────────────────────────────────────────────────
 
   router.get('/sprint-cost-trend', (c) => handle(async () => {
-    const projectRef = c.req.query('projectRef');
-    return Response.json({ sprints: await costTrend(db, tenant(c), projectRef) });
+    const projectId = positiveIntParam(c.req.query('projectId'));
+    return Response.json({ sprints: await costTrend(db, tenant(c), projectId) });
   }));
 
-  router.get('/sprints/:sprintRef/cost', (c) => handle(async () => {
-    const economics = await sprintEconomics(db, tenant(c), c.req.param('sprintRef'));
+  router.get('/sprints/:sprintId/cost', (c) => handle(async () => {
+    const economics = await sprintEconomics(db, tenant(c), c.req.param('sprintId'));
     if (!economics) return Response.json({ error: 'No cost has been stamped for that sprint.' }, { status: 404 });
     return Response.json(economics);
   }));
 
-  router.put('/sprints/:sprintRef/cost', manager, (c) => handle(async () => {
+  router.put('/sprints/:sprintId/cost', manager, (c) => handle(async () => {
     const body = await c.req.json<Record<string, unknown>>();
     return Response.json(await stampSprintCost(db, c.env as Env, tenant(c), await who(c), {
-      sprintRef: c.req.param('sprintRef'),
-      projectRef: str(body.projectRef) ?? null,
+      sprintId: c.req.param('sprintId'),
       ...(num(body.laborCost) !== undefined ? { laborCost: num(body.laborCost) as number } : {}),
       ...(num(body.toolingCost) !== undefined ? { toolingCost: num(body.toolingCost) as number } : {}),
       ...(num(body.aiCost) !== undefined ? { aiCost: num(body.aiCost) as number } : {}),
@@ -236,10 +257,9 @@ export function createDeliveryFlowRoutes(db: Db): Hono<HonoEnv> {
     Response.json(await chainState(db, tenant(c), { kind: c.req.param('kind'), ref: c.req.param('ref') }))));
 
   router.post('/approvals/:kind/:ref', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
-    const raw = Array.isArray(body.approvers) ? body.approvers : [];
-    const approvers: Approver[] = raw.map((a) => {
-      const o = a as Record<string, unknown>;
+    const body = await parseBody(c, OpenChainBody);
+    const raw = body.approvers ?? [];
+    const approvers: Approver[] = raw.map((o) => {
       return {
         ref: String(o.ref ?? ''),
         ...(o.kind === 'role' || o.kind === 'agent' ? { kind: o.kind } : {}),

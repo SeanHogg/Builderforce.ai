@@ -22,7 +22,7 @@ import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { SecurityReviewService } from '../../application/security/SecurityReviewService';
-import { SecurityTicketAccessService, type SecurityAudiences } from '../../application/security/SecurityTicketAccessService';
+import { SecurityTicketAccessService } from '../../application/security/SecurityTicketAccessService';
 import { SecurityAuditService } from '../../application/security/SecurityAuditService';
 import { dispatchSecurityAudit } from '../../application/security/securityDispatch';
 import {
@@ -33,9 +33,45 @@ import {
 } from '../../application/security/webSecurityScan';
 import { ScanTargetError } from '../../application/security/WebSecurityScanner';
 import { availableAdvisoryFeeds } from '../../application/security/advisoryFeed';
-import { ingestWebScanStage, type WebScanStageIngestPayload } from '../../application/security/webScanContainerStages';
+import { ingestWebScanStage } from '../../application/security/webScanContainerStages';
+import { WEB_SCAN_STAGE_IDS } from '../../application/security/webScanStages';
+import type { TlsObservation } from '../../application/security/tlsCertificateScan';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseBody, parseOptionalBody, z, zNumberLike } from './requestBody';
+
+/**
+ * What the web-scan container posts back — {@link WebScanStageIngestPayload}, which
+ * the ingest owns. `tls` is handed whole to the TLS evaluator, which reads its
+ * nested certificate description; it is admitted as an object and never stripped.
+ */
+const WebScanStageBody = z.object({
+  auditId: z.number(),
+  token: z.string(),
+  stage: z.enum(WEB_SCAN_STAGE_IDS),
+  error: z.string().optional(),
+  tls: z.custom<TlsObservation>((value) => typeof value === 'object' && value !== null).optional(),
+  cve: z.object({ headers: z.record(z.string(), z.string()), body: z.string() }).optional(),
+});
+
+/** `code` stays optional so the handler's own "code is required" answer wins. */
+const CodeReviewBody = z.object({ code: z.string().nullish(), context: z.string().optional() });
+
+/** Audience flags are read with `!!`, and ids are `String()`ed. */
+const AccessConfigBody = z.object({
+  audiences: z.object({
+    humans: z.unknown().optional(),
+    hired: z.unknown().optional(),
+    talent: z.unknown().optional(),
+  }).nullish(),
+  allowUserIds: z.array(zNumberLike).nullish(),
+  allowAgentRefs: z.array(zNumberLike).nullish(),
+});
+
+const AuditRunBody = z.object({ projectId: z.number().nullish() });
+
+/** Shared by the scan-target config and the run-now scan. */
+const ScanTargetBody = z.object({ url: z.string().nullish(), projectId: z.number().nullish() });
 
 export function createSecurityReviewRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -51,8 +87,7 @@ export function createSecurityReviewRoutes(db: Db): Hono<HonoEnv> {
   // from the request body — a container is never asked which workspace it is in, so
   // it can never claim the wrong one.
   router.post('/internal/web-scan-stage', async (c) => {
-    const body = await c.req.json<WebScanStageIngestPayload>().catch(() => null);
-    if (!body) return c.json({ error: 'invalid payload' }, 400);
+    const body = await parseBody(c, WebScanStageBody);
     const result = await ingestWebScanStage(db, c.env as Env, body);
     if (!result.ok) return c.json({ error: result.reason }, result.status);
     return c.json(result);
@@ -64,7 +99,7 @@ export function createSecurityReviewRoutes(db: Db): Hono<HonoEnv> {
   // one-shot compute), so there is nothing stable to cache.
   router.post('/review', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ code?: string; context?: string }>();
+    const body = await parseBody(c, CodeReviewBody);
     if (!body.code?.trim()) return c.json({ error: 'code is required' }, 400);
 
     const svc = new SecurityReviewService(db, c.env as Env);
@@ -83,15 +118,7 @@ export function createSecurityReviewRoutes(db: Db): Hono<HonoEnv> {
   router.put('/access', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
-    const body = await c.req.json<{
-      audiences?: Partial<SecurityAudiences>;
-      allowUserIds?: string[];
-      allowAgentRefs?: string[];
-    }>().catch(() => ({} as {
-      audiences?: Partial<SecurityAudiences>;
-      allowUserIds?: string[];
-      allowAgentRefs?: string[];
-    }));
+    const body = await parseOptionalBody(c, AccessConfigBody);
     const audiences = body.audiences
       ? { humans: !!body.audiences.humans, hired: !!body.audiences.hired, talent: !!body.audiences.talent }
       : undefined;
@@ -125,7 +152,7 @@ export function createSecurityReviewRoutes(db: Db): Hono<HonoEnv> {
   router.post('/audits/run', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
-    const body = await c.req.json<{ projectId?: number }>().catch(() => ({} as { projectId?: number }));
+    const body = await parseOptionalBody(c, AuditRunBody);
     const auditId = await dispatchSecurityAudit(c.env as Env, db, {
       tenantId,
       projectId: typeof body.projectId === 'number' ? body.projectId : undefined,
@@ -161,7 +188,7 @@ export function createSecurityReviewRoutes(db: Db): Hono<HonoEnv> {
   // PUT /web-scan/config — set the website this project scans (manager+).
   router.put('/web-scan/config', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ url?: string | null; projectId?: number }>().catch(() => ({} as { url?: string | null; projectId?: number }));
+    const body = await parseOptionalBody(c, ScanTargetBody);
     const projectId = await resolveScanProject(db, tenantId, typeof body.projectId === 'number' ? body.projectId : undefined);
     if (projectId == null) return c.json({ error: 'No project to configure — create a project first.' }, 409);
     try {
@@ -178,7 +205,7 @@ export function createSecurityReviewRoutes(db: Db): Hono<HonoEnv> {
   router.post('/web-scan/run', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
-    const body = await c.req.json<{ url?: string; projectId?: number }>().catch(() => ({} as { url?: string; projectId?: number }));
+    const body = await parseOptionalBody(c, ScanTargetBody);
     const projectId = await resolveScanProject(db, tenantId, typeof body.projectId === 'number' ? body.projectId : undefined);
     if (projectId == null) return c.json({ error: 'No project to file findings into — create a project first.' }, 409);
 

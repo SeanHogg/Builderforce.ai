@@ -540,7 +540,10 @@ export async function startDispatchedExecution(
   // static flag that could only ever say "never".
   const projectEvermindPin = agent.baseModel
     ? undefined
-    : await resolveProjectInferenceModel(env as Env, db, tenantId, taskRow.projectId);
+    // An agent TASK run is a coding turn on every surface, so the project head must
+    // also clear the coding-quality gate (≥90% of the frontier baseline on the coding
+    // eval, for this exact version) — closed → no pin → today's model selection.
+    : await resolveProjectInferenceModel(env as Env, db, tenantId, taskRow.projectId, { purpose: 'coding' });
   const effectivePayload = withDefaultModel(payload, agent.baseModel ?? projectEvermindPin);
 
   const message: DispatchMessage = {

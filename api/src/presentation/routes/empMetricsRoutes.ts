@@ -35,6 +35,14 @@ import { coachingNotes } from '../../infrastructure/database/schema';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { positiveIntParam, daysParam } from './queryParams';
+import { parseOptionalBody, z } from './requestBody';
+
+/** `POST /coaching-notes` — the handler answers its own required-field messages. */
+const CoachingNoteBody = z.object({
+  memberKind: z.string().nullish(),
+  memberRef: z.string().nullish(),
+  note: z.string().nullish(),
+});
 
 const MEMBER_KINDS = new Set(['human', 'cloud_agent', 'host_agent']);
 const MANAGER = requireRole(TenantRole.MANAGER);
@@ -104,8 +112,7 @@ export function createEmpMetricsRoutes(db: Db): Hono<HonoEnv> {
   router.post('/coaching-notes', MANAGER, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const authorId = c.get('userId') as string | undefined;
-    type NoteBody = { memberKind?: string; memberRef?: string; note?: string };
-    const body = await c.req.json<NoteBody>().catch(() => ({} as NoteBody));
+    const body = await parseOptionalBody(c, CoachingNoteBody);
     const kind = body.memberKind;
     const ref = body.memberRef;
     const note = (body.note ?? '').trim();

@@ -30,13 +30,15 @@ import MarketingFaq from './marketing/MarketingFaq';
  * cannot get in should at least leave knowing how the thing works.
  *
  * All per-route copy lives in lib/routeMarketing.ts (structure) and the message
- * catalogs (destination + generic copy, five locales); this component only
- * renders them and decides its own section visibility.
+ * catalogs (every tier's copy, five locales); this component only renders them
+ * and decides its own section visibility.
  */
 function RouteMarketingContent({ pathname, tab }: { pathname: string; tab: string | null }) {
   const t = useTranslations('routeMarketing');
   const tNav = useTranslations('nav');
-  const m = getRouteMarketing(pathname);
+  // Root-scoped: the registry names FULL catalog keys (`routeMarketing.route.*`).
+  const tAll = useTranslations();
+  const m = getRouteMarketing(pathname, (key) => tAll(key as never));
   // Resolved even when `m` exists: the destination is what places this route in
   // the arc (Idea → Make → Run → Measure) for the method band, and it owns the
   // tab list, so a marketed surface gets both too.

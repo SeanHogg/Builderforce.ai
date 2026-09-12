@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+import { createTranslator } from 'next-intl';
 import en from '@/i18n/messages/en.json';
 import { getRouteMarketing, indexableTeaserRoutes, noindexTeaserRoutes } from './routeMarketing';
 import { routeTeaserMetadata, routeTeaserSchema } from './routeTeaserMetadata';
@@ -12,12 +13,18 @@ import { classifyShell } from './shellRouting';
  * missing key is visible to the assertions below rather than silently "set".
  */
 vi.mock('next-intl/server', () => ({
-  getTranslations: async (namespace: string) => (key: string) => {
-    let node: unknown = (en as Record<string, unknown>)[namespace];
+  // No namespace = root-scoped, the way `routeTeaserMetadata` asks for the
+  // registry's full `routeMarketing.route.*` keys.
+  getTranslations: async (namespace?: string) => (key: string) => {
+    let node: unknown = namespace ? (en as Record<string, unknown>)[namespace] : en;
     for (const part of key.split('.')) node = (node as Record<string, unknown> | undefined)?.[part];
-    return typeof node === 'string' ? node : `${namespace}.${key}`;
+    return typeof node === 'string' ? node : namespace ? `${namespace}.${key}` : key;
   },
 }));
+
+/** The English catalog as the registry's translator — what the server components pass. */
+const tEnglish = createTranslator({ locale: 'en', messages: en as never, onError: () => {} });
+const translate = (key: string) => tEnglish(key as never);
 
 const APP_DIR = resolve(__dirname, '../app');
 
@@ -70,10 +77,10 @@ describe('routeTeaserMetadata', () => {
   });
 
   it('emits the teaser FAQ JSON-LD for a route with a FAQ, and nothing for one without', () => {
-    const graph = (routeTeaserSchema('/workforce')?.['@graph'] ?? []) as { '@type': string }[];
+    const graph = (routeTeaserSchema('/workforce', translate)?.['@graph'] ?? []) as { '@type': string }[];
     expect(graph.map((node) => node['@type'])).toContain('FAQPage');
-    expect(getRouteMarketing('/inbox')?.faq).toBeUndefined();
-    expect(routeTeaserSchema('/inbox')).toBeNull();
+    expect(getRouteMarketing('/inbox', translate)?.faq).toBeUndefined();
+    expect(routeTeaserSchema('/inbox', translate)).toBeNull();
   });
 });
 
@@ -102,7 +109,7 @@ describe('every indexable app route serves its own head', () => {
   it('renders the FAQ JSON-LD where the registry carries one', () => {
     const missing = appRoutes.filter((route) => {
       const { head } = routeSources(route);
-      if (!routeTeaserSchema(route)) return false;
+      if (!routeTeaserSchema(route, translate)) return false;
       return !/<(?:RouteTeaserJsonLd|JsonLd)\b/.test(head);
     });
     expect(missing).toEqual([]);

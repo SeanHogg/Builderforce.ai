@@ -3,19 +3,18 @@
  * not deliver because the run had already taken its last turn (`run_finishing`) or was
  * not live on the host (`no_live_run`).
  *
- * The route only authenticates, scopes and parses; what HAPPENS to the steers is the one
- * application use case every surface shares (`dispatchLateSteerFollowUp`): a follow-up
- * run on the same branch, idempotent on the steer's row id, entitlements standing.
+ * The route only authenticates and parses; scoping the report to the host's own run and
+ * deciding what HAPPENS to the steers is the one application use case every surface
+ * shares (`lateSteerFollowUp.ts`): a follow-up run on the same branch, idempotent on the
+ * steer's row id, entitlements standing.
  *
  * Registered onto the agent-host router from here rather than grown into it.
  */
-import { and, eq } from 'drizzle-orm';
 import type { Context, Hono } from 'hono';
 import type { Env, HonoEnv } from '../../env';
-import type { Db } from '../../infrastructure/database/connection';
-import { executions } from '../../infrastructure/database/schema';
-import { dispatchLateSteerFollowUp, lateSteerPorts, type LateSteerReason } from '../../application/runtime/lateSteerFollowUp';
-import { resolveReportedSteerIds, type ReportedSteer } from '../../application/runtime/lateSteerStore';
+import { reportHostLateSteers, type LateSteerDeps, type LateSteerReason } from '../../application/runtime/lateSteerFollowUp';
+import type { ReportedSteer } from '../../application/runtime/lateSteerStore';
+import { parseBody, zJsonObject } from './requestBody';
 
 /** The reasons a HOST may report (the terminal-chokepoint `run_ended` is server-side). */
 const HOST_REASONS: readonly LateSteerReason[] = ['run_finishing', 'no_live_run'];
@@ -24,7 +23,7 @@ const MAX_TEXT = 20_000;
 
 export type LateSteerReport = { executionId: number; reason: LateSteerReason; steers: ReportedSteer[] };
 
-/** Parse a host's report. Pure, so the accepted wire shape is testable. */
+/** Read a host's report off its (already JSON-object) body. Pure, so the accepted wire shape is testable. */
 export function parseLateSteerReport(body: unknown): { ok: true; report: LateSteerReport } | { ok: false; error: string } {
   const b = (body && typeof body === 'object' ? body : {}) as { executionId?: unknown; reason?: unknown; steers?: unknown };
   const executionId = typeof b.executionId === 'number' && Number.isSafeInteger(b.executionId) && b.executionId > 0 ? b.executionId : null;
@@ -45,7 +44,7 @@ export function parseLateSteerReport(body: unknown): { ok: true; report: LateSte
 export function registerLateSteerRoute<E extends HonoEnv>(
   router: Hono<E>,
   deps: {
-    db: Db;
+    db: LateSteerDeps['db'];
     verifyAgentHostApiKey: (id: number, key?: string) => Promise<{ tenantId: number | string } | null | undefined>;
     extractAgentHostKey: (c: Context<E>) => string | undefined;
   },
@@ -55,26 +54,15 @@ export function registerLateSteerRoute<E extends HonoEnv>(
     const agentHost = await deps.verifyAgentHostApiKey(agentHostId, deps.extractAgentHostKey(c));
     if (!agentHost) return c.text('Unauthorized', 401);
 
-    const parsed = parseLateSteerReport(await c.req.json<unknown>().catch(() => null));
+    const parsed = parseLateSteerReport(await parseBody(c, zJsonObject));
     if (!parsed.ok) return c.json({ error: parsed.error }, 400);
-    const { report } = parsed;
-    const tenantId = Number(agentHost.tenantId);
 
-    // Only the host the run was dispatched to may report its steers.
-    const [exec] = await deps.db
-      .select({ id: executions.id, agentHostId: executions.agentHostId })
-      .from(executions)
-      .where(and(eq(executions.id, report.executionId), eq(executions.tenantId, tenantId)))
-      .limit(1);
-    if (!exec || exec.agentHostId !== agentHostId) return c.json({ error: 'Execution not found' }, 404);
-
-    const messageIds = await resolveReportedSteerIds(deps.db, exec.id, report.steers);
-    if (messageIds.length === 0) return c.json({ ok: true, outcome: { kind: 'none' } });
-
-    const outcome = await dispatchLateSteerFollowUp(
-      lateSteerPorts({ env: c.env as unknown as Env, db: deps.db, waitUntil: (p) => c.executionCtx.waitUntil(p) }),
-      { executionId: exec.id, tenantId, messageIds, reason: report.reason },
+    const outcome = await reportHostLateSteers(
+      { env: c.env as unknown as Env, db: deps.db, waitUntil: (p) => c.executionCtx.waitUntil(p) },
+      { agentHostId, tenantId: Number(agentHost.tenantId), ...parsed.report },
     );
+    // Only the host the run was dispatched to may report its steers.
+    if (outcome.kind === 'not_found') return c.json({ error: 'Execution not found' }, 404);
     return c.json({ ok: true, outcome });
   });
 }

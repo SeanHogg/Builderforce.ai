@@ -7,7 +7,7 @@
  * from context and return no badge class.
  */
 
-export type TaskType = 'task' | 'epic' | 'gap' | 'security' | 'product' | 'design' | 'incident';
+export type TaskType = 'task' | 'epic' | 'gap' | 'security' | 'product' | 'design' | 'incident' | 'bug';
 
 const TASK_TYPE_BADGE_CLASS: Record<string, string | null> = {
   task: null,
@@ -25,6 +25,10 @@ const TASK_TYPE_BADGE_CLASS: Record<string, string | null> = {
   // "urgent / live outage" — a distinct orange badge, set apart from the red SECURITY
   // and amber GAP badges. Theme-safe (translucent bg + saturated text), never one-theme hex.
   incident: 'badge-orange',
+  // A BUG ticket (migration 1160 — the spec/BurnRateOS ItemType BUG, landed as a
+  // task_type value when the spec PM spine was unified onto `tasks`) reads as "a
+  // defect to fix": its own yellow badge, distinct from the amber GAP.
+  bug: 'badge-yellow',
 };
 
 /** Badge CSS class for a task type, or `null` to render no type badge. */
@@ -40,6 +44,7 @@ const TASK_TYPE_LABEL_KEY: Record<string, string> = {
   product: 'typeProduct',
   design: 'typeDesign',
   incident: 'typeIncident',
+  bug: 'typeBug',
 };
 
 /** i18n key (under the `common` namespace) for a task type's short label. */

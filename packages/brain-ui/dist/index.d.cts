@@ -1478,6 +1478,23 @@ interface EvermindEvalPoint {
     delta: number;
     evalSize: number;
 }
+/**
+ * The Evermind CODING-QUALITY gate's verdict (mirrors api `EvermindCodingGate`).
+ * Operator decision 2026-09-12: a head serves IDE coding turns only when a coding eval
+ * recorded for THIS version scores ≥ `bar` (0.9) of the frontier baseline.
+ */
+interface EvermindCodingGateView {
+    qualified: boolean;
+    reason: 'qualified' | 'unseeded' | 'quarantined' | 'no_eval' | 'stale_eval' | 'below_bar';
+    /** The bar the server applied (fraction, e.g. 0.9) — never restated client-side. */
+    bar: number;
+    /** Recorded score ÷ baseline score, or null when no usable eval is recorded. */
+    ratio: number | null;
+    headVersion: number;
+    evaluatedVersion: number | null;
+    baselineModel?: string | null;
+    dataset?: string | null;
+}
 /** The head summary + live learning activity for a project's Evermind. */
 interface EvermindConsoleData {
     version: number;
@@ -1519,6 +1536,9 @@ interface EvermindConsoleData {
     quarantinedAt?: string | null;
     /** The probe-failure reason behind {@link quarantinedAt} (present when quarantined). */
     quarantineReason?: string | null;
+    /** Whether this head may serve IDE coding turns (the 90% coding-eval gate). Absent on
+     *  an older server — the console then says nothing about it. */
+    codingGate?: EvermindCodingGateView | null;
 }
 /**
  * One Evermind a project targets — its own head, or the head of an IDE build grouped
@@ -1760,6 +1780,10 @@ interface EvermindConsoleLabels {
     statusUnseeded: string;
     quarantinedBadge: string;
     quarantinedHint: (reason: string) => string;
+    codingGateQualified: (pct: number, barPct: number) => string;
+    codingGateBelowBar: (pct: number, barPct: number) => string;
+    codingGateNoEval: (barPct: number) => string;
+    codingGateStale: (evaluatedVersion: number, headVersion: number, barPct: number) => string;
     targetsTitle: string;
     targetsHint: string;
     targetsEmpty: string;

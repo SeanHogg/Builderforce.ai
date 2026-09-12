@@ -37,7 +37,7 @@ import {
 import { PUBLIC_LIST_CACHE_KEY } from './workforceRoutes';
 import { publicAgentScope } from '../../application/marketplace/publicAgentScope';
 import { completeJson } from '../../application/llm/completeJson';
-import { parseBody, z, zNonEmptyString, zOptionalString, zPositiveInt } from './requestBody';
+import { parseBody, parseOptionalBody, z, zNonEmptyString, zOptionalString, zPositiveInt } from './requestBody';
 import {
   ideProxy,
   readProxyChoice,
@@ -251,6 +251,12 @@ const zProjectId = z.union([zPositiveInt, z.string().trim().regex(/^[1-9]\d*$/)]
 /** A key that must be PRESENT (`z.unknown()` alone admits an absent key). */
 const zPresent = z.unknown().refine((v) => v !== undefined, { message: 'Required' });
 
+/** `POST /projects/:projectId/enable-deploys` — an optional body; every field has a default. */
+const EnableDeploysBody = z.object({
+  repoId: z.string().nullish(),
+  subdomain: z.string().nullish(),
+  distDir: z.string().optional(),
+});
 const RestoreVersionBody = z.object({ path: zNonEmptyString, at: z.coerce.number() });
 const ImportRepoBody = z.object({ repoId: zNonEmptyString, ref: zOptionalString });
 const CommitBody = z.object({ repoId: zNonEmptyString, message: zOptionalString, branch: zOptionalString });
@@ -599,9 +605,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
-    const body = await c.req
-      .json<{ repoId?: string; subdomain?: string; distDir?: string }>()
-      .catch(() => ({} as { repoId?: string; subdomain?: string; distDir?: string }));
+    const body = await parseOptionalBody(c, EnableDeploysBody);
 
     // Default to the repo already bound to this project, so the common case
     // needs no argument at all.

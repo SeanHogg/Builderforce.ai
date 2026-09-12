@@ -49,6 +49,7 @@ import { bumpEventTriggerListeners } from '../../application/workflow/eventTrigg
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { parseBody, parseOptionalBody, z } from './requestBody';
 
 /** Normalize an incoming graph payload to a well-formed WorkflowDefinition. */
 function coerceDefinition(input: unknown): WorkflowDefinition {
@@ -62,15 +63,36 @@ function coerceDefinition(input: unknown): WorkflowDefinition {
   return { nodes: [], edges: [] };
 }
 
-interface RunTargetInput {
-  runTargetRuntime?: string;
-  runTargetAgentHostId?: number | null;
-  runTargetCloudAgentRef?: string | null;
+/** The fields a create and a PATCH share. `null` is meaningful on a PATCH (unbind
+ *  the project, clear the description), so the clearable ones admit it. */
+const definitionFields = {
+  description: z.string().nullish(),
+  /** The graph — handed to `coerceDefinition` whole, so nodes/edges keep every key. */
+  definition: z.unknown().optional(),
+  /** The canvas's own two-value select ('builderforce' | 'campaign-strategist'). */
+  runTarget: z.string().nullish(),
+  /** The canvas's own gate ('autonomous' | 'required'). */
+  approvalMode: z.string().nullish(),
+  runTargetRuntime: z.string().nullish(),
+  runTargetAgentHostId: z.number().nullish(),
+  runTargetCloudAgentRef: z.string().nullish(),
   /** Project this workflow belongs to; null = tenant-wide (independent). */
-  projectId?: number | null;
+  projectId: z.number().nullish(),
   /** 'project' = runs under the bound project; 'global' = tenant-wide. */
-  executionScope?: string;
-}
+  executionScope: z.string().nullish(),
+};
+
+/** `name` stays optional so the handler's own "name is required" answer wins. */
+const CreateDefinitionBody = z.object({ name: z.string().nullish(), ...definitionFields });
+/** A present `name` is trimmed and written, so it must be a string when sent. */
+const PatchDefinitionBody = z.object({ name: z.string().optional(), ...definitionFields });
+const ImportDefinitionBody = z.object({ name: z.string().nullish(), yaml: z.string().nullish() });
+const RunDefinitionBody = z.object({
+  agentHostId: z.number().nullish(),
+  runtime: z.string().nullish(),
+  cloudAgentRef: z.string().nullish(),
+});
+const ForkDefinitionBody = z.object({ name: z.string().nullish(), projectId: z.number().nullish() });
 
 export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -288,15 +310,7 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const segmentId = c.get('segmentId') ?? null;
-    const body = await c.req.json<{
-      name?: string;
-      description?: string;
-      definition?: unknown;
-      /** The canvas's own two-value select ('builderforce' | 'campaign-strategist'). */
-      runTarget?: string;
-      /** The canvas's own gate ('autonomous' | 'required'). */
-      approvalMode?: string;
-    } & RunTargetInput>();
+    const body = await parseBody(c, CreateDefinitionBody);
     if (!body.name || !body.name.trim()) return c.json({ error: 'name is required' }, 400);
 
     // ── THE CANVAS'S AUTHORED RUN TARGET ───────────────────────────────────────
@@ -338,7 +352,7 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
   // Registered before /:id routes; `/import` is a distinct path so no collision.
   router.post('/import', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ name?: string; yaml?: string }>();
+    const body = await parseBody(c, ImportDefinitionBody);
     if (!body.yaml || !body.yaml.trim()) return c.json({ error: 'yaml is required' }, 400);
 
     let def: WorkflowDefinition;
@@ -429,14 +443,7 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
   router.patch('/:id', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const body = await c.req.json<{
-      name?: string;
-      description?: string;
-      definition?: unknown;
-      /** The canvas's own two-value select — see the create route. */
-      runTarget?: string;
-      approvalMode?: string;
-    } & RunTargetInput>();
+    const body = await parseBody(c, PatchDefinitionBody);
 
     const [existing] = await db
       .select()
@@ -527,11 +534,7 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:id/run', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const body = await c.req.json<{
-      agentHostId?: number;
-      runtime?: string;
-      cloudAgentRef?: string;
-    }>();
+    const body = await parseBody(c, RunDefinitionBody);
 
     const [defRow] = await db
       .select()
@@ -599,7 +602,7 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const segmentId = c.get('segmentId') ?? null;
     const id = c.req.param('id');
-    const body = await c.req.json<{ name?: string; projectId?: number | null }>().catch(() => ({} as { name?: string; projectId?: number | null }));
+    const body = await parseOptionalBody(c, ForkDefinitionBody);
 
     const [src] = await db
       .select()

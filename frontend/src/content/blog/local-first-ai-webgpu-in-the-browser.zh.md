@@ -10,7 +10,7 @@ SitePoint 最近发布了一份出色的蓝图，讲解如何完全在浏览器�
 
 ## 1. 计算层：我们自带 WGSL 内核
 
-指南建议借助框架（Web-LLM、Transformers.js）把 Transformer 的数学运算映射到 GPU 工作组上。我们则往下多走了一层。Builderforce 的引擎自带为 Mamba **状态空间模型****手写的 WGSL 内核**——其选择性扫描（S6）核心以 Kogge-Stone 并行前缀扫描实现，在 GPU 上以 O(log N) 运行，并采用数值稳定的 softplus 和零阶保持离散化。
+指南建议借助框架（Web-LLM、Transformers.js）把 Transformer 的数学运算映射到 GPU 工作组上。我们则往下多走了一层。Builderforce 的引擎为 Mamba **状态空间模型**配备了**手写的 WGSL 内核**——其选择性扫描（S6）核心以 Kogge-Stone 并行前缀扫描实现，在 GPU 上以 O(log N) 运行，并采用数值稳定的 softplus 和零阶保持离散化。
 
 关键在于，我们的内核实现了**反向传播**，而不仅仅是前向传播。这意味着我们不只是在端侧*运行*模型——我们还在端侧**训练**模型，基于你自己的代码执行真正的 AdamW 梯度更新，全部在标签页内完成。SitePoint 的指南止步于推理；而正是这项能力，让[“记忆优先”的学习](/blog/evermind-self-updating-model)和[浏览器内 LoRA 微调](/blog/webgpu-lora-explained)成为可能。
 

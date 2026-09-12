@@ -70,6 +70,9 @@ import type { AuditRunner } from '../../application/tools/AuditRunner';
 import { SignatureError } from '../../application/signature/signatureEngine';
 import { TemplateError } from '../../application/legal/documentTemplates';
 import { WatermarkError } from '../../application/security/documentWatermark';
+// Each handler type-guards every field it reads, so the body is any JSON object; an
+// absent body stays `{}` (the service answers "name is required" etc. itself).
+import { parseOptionalBody, zJsonObject } from './requestBody';
 
 /** One failure translation for the whole group, so the mapping from a rejected
  *  input to a status code exists once rather than in each handler — and an
@@ -124,7 +127,7 @@ export function createInvestorRoutes(
     Response.json({ companies: await listCompanies(db, c.get('tenantId') as number) })));
 
   router.post('/companies', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+    const body = await parseOptionalBody(c, zJsonObject);
     const company = await createCompany(db, c.env as Env, c.get('tenantId') as number, {
       name: String(body.name ?? ''),
       website: typeof body.website === 'string' ? body.website : null,
@@ -155,7 +158,7 @@ export function createInvestorRoutes(
   }));
 
   router.post('/companies/:id/projects', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+    const body = await parseOptionalBody(c, zJsonObject);
     const projectId = Number(body.projectId);
     if (!Number.isFinite(projectId) || projectId <= 0) throw new CompanyError('projectId is required.', 400);
     await linkProjectToCompany(db, c.env as Env, c.get('tenantId') as number, {
@@ -193,7 +196,7 @@ export function createInvestorRoutes(
    * have — which is a larger authority than sharing one room, not a smaller one.
    */
   router.post('/companies/:id/investors', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+    const body = await parseOptionalBody(c, zJsonObject);
     const grant = await inviteInvestorToCompany(db, c.env as Env, c.get('tenantId') as number, {
       companyId: companyIdFrom(c.req.param('id')),
       recipientName: String(body.recipientName ?? ''),
@@ -234,7 +237,7 @@ export function createInvestorRoutes(
     Response.json({ packs: await listCompanyPacks(db, c.get('tenantId') as number, companyIdFrom(c.req.param('id'))) })));
 
   router.post('/companies/:id/pack', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+    const body = await parseOptionalBody(c, zJsonObject);
     const userId = (c.get('userId') as string | undefined) ?? '';
     const pack = await buildFundraisingPack(packDeps(c.env as Env), c.get('tenantId') as number, userId, {
       companyId: companyIdFrom(c.req.param('id')),

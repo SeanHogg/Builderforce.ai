@@ -22,6 +22,10 @@ import { getRecommendations, dismissRecommendationCached, getSpaceMetrics } from
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { positiveIntParam, daysParam } from './queryParams';
+import { parseOptionalBody, z } from './requestBody';
+
+/** `POST /recommendations/dismiss` — the handler answers "recKey is required". */
+const DismissRecommendationBody = z.object({ recKey: z.string().nullish() });
 
 
 // The cache keys these reads use live in `application/insights/versionKeys.ts`
@@ -44,7 +48,7 @@ export function createRecommendationsRoutes(db: Db): Hono<HonoEnv> {
   // the dismissal then bumps the version token so the cached list drops it.
   router.post('/recommendations/dismiss', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    const body = await c.req.json<{ recKey?: unknown }>().catch(() => ({} as { recKey?: unknown }));
+    const body = await parseOptionalBody(c, DismissRecommendationBody);
     const recKey = typeof body.recKey === 'string' ? body.recKey.trim() : '';
     if (!recKey || recKey.length > 120) return c.json({ error: 'recKey is required' }, 400);
     const userId = (c.get('userId') as string | undefined) ?? null;

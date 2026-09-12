@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { createTranslator } from 'next-intl';
 import en from '@/i18n/messages/en.json';
+import zh from '@/i18n/messages/zh.json';
 import {
   destinationForRoute,
   destinationPitchKey,
@@ -9,8 +11,10 @@ import {
   isNoindexTeaserRoute,
   marketedRoutes,
   noindexTeaserRoutes,
+  routeMarketingCatalogKeys,
   teaserDestinationIds,
   teaserDestinationPitchKey,
+  type RouteMarketingTranslate,
 } from './routeMarketing';
 
 /** The `routeMarketing` namespace as a nested object, for key lookups. */
@@ -19,6 +23,14 @@ const NS = en.routeMarketing as unknown as Record<string, Record<string, { descr
 function pitchFor(groupId: string): string | undefined {
   return NS.destination?.[groupId]?.description;
 }
+
+/** A root-scoped translator over a real catalog — what the teaser and its head pass. */
+function translatorFor(messages: Record<string, unknown>, locale: string): RouteMarketingTranslate {
+  const t = createTranslator({ locale, messages: messages as never, onError: () => {} });
+  return (key) => t(key as never);
+}
+const tEn = translatorFor(en, 'en');
+const tZh = translatorFor(zh, 'zh');
 
 describe('the marketed registry', () => {
   it('keys every surface by PATH, never by link', () => {
@@ -33,8 +45,8 @@ describe('the marketed registry', () => {
   it('gives a destination its OWN row when several surfaces link into it', () => {
     // Four Orchestrate surfaces link into /projects. Last-wins had the route
     // titled "Workforce Kanban & Templates"; first-wins keeps the destination.
-    expect(getRouteMarketing('/projects')?.title).toBe('Projects / Tasks');
-    expect(getRouteMarketing('/workforce')?.title).toBe('Workforce Mesh');
+    expect(getRouteMarketing('/projects', tEn)?.title).toBe('Projects / Tasks');
+    expect(getRouteMarketing('/workforce', tEn)?.title).toBe('Workforce Mesh');
   });
 
   it('backs every DETAILS overlay with a base row', () => {
@@ -45,13 +57,44 @@ describe('the marketed registry', () => {
   });
 
   it('merges the overlay onto its base', () => {
-    const brainstorm = getRouteMarketing('/brainstorm');
+    const brainstorm = getRouteMarketing('/brainstorm', tEn);
     expect(brainstorm?.title).toBe('Brain Storm');
     expect(brainstorm?.faq?.length).toBeGreaterThan(0);
   });
 
   it('resolves a child route to its parent surface', () => {
-    expect(getRouteMarketing('/settings/members')?.title).toBe(getRouteMarketing('/settings')?.title);
+    expect(getRouteMarketing('/settings/members', tEn)?.title).toBe(getRouteMarketing('/settings', tEn)?.title);
+  });
+});
+
+/**
+ * The registry used to carry ~160 English literals that every locale received —
+ * hero, highlights, FAQ and the SEO description that went into a zh visitor's
+ * `<head>`. It now carries keys, so the two properties worth asserting are that
+ * every key it names exists, and that a non-English translator actually changes
+ * what comes out.
+ */
+describe('localized registry copy', () => {
+  it('names only keys the default catalog has', () => {
+    const missing = routeMarketingCatalogKeys().filter((key) => tEn(key) === key);
+    expect(missing).toEqual([]);
+  });
+
+  it('resolves the hand-authored copy in the visitor’s language', () => {
+    const zhBrainstorm = getRouteMarketing('/brainstorm', tZh);
+    const enBrainstorm = getRouteMarketing('/brainstorm', tEn);
+    expect(zhBrainstorm?.title).toBe(tZh('routeMarketing.route.brainstorm.title'));
+    expect(zhBrainstorm?.seoDescription).not.toBe(enBrainstorm?.seoDescription);
+    expect(zhBrainstorm?.highlights?.map((h) => h.title)).not.toEqual(enBrainstorm?.highlights?.map((h) => h.title));
+    expect(zhBrainstorm?.faq?.length).toBe(enBrainstorm?.faq?.length);
+  });
+
+  it('never renders a dotted key as copy', () => {
+    for (const route of marketedRoutes()) {
+      const m = getRouteMarketing(route, tZh);
+      const strings = [m?.title, m?.description, m?.seoDescription, ...(m?.highlights ?? []).flatMap((h) => [h.title, h.desc]), ...(m?.faq ?? []).flatMap((f) => [f.question, f.answer])];
+      for (const value of strings) expect(value ?? '', route).not.toMatch(/^routeMarketing\./);
+    }
   });
 });
 
@@ -59,7 +102,7 @@ describe('the destination tier', () => {
   it('names a route no surface markets', () => {
     // The route from the report: /inbox had no registry entry and so met the
     // generic gate. It is a nav row, so it has a name, an icon and a pitch.
-    expect(getRouteMarketing('/inbox')).toBeNull();
+    expect(getRouteMarketing('/inbox', tEn)).toBeNull();
     expect(destinationForRoute('/inbox')?.id).toBe('inbox');
   });
 
@@ -110,7 +153,7 @@ describe('indexing', () => {
     // Its body is identical at every route that reaches it, so indexing it files
     // the same page under dozens of URLs.
     expect(destinationForRoute('/compile')).toBeUndefined();
-    expect(getRouteMarketing('/compile')).toBeNull();
+    expect(getRouteMarketing('/compile', tEn)).toBeNull();
     expect(isNoindexTeaserRoute('/compile')).toBe(true);
   });
 

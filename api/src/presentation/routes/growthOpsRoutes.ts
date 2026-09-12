@@ -113,6 +113,34 @@ import {
   type ProgressStatus,
 } from '../../application/tenant/onboardingFlows';
 import { countries, country, stages, supportedCountries } from '../../application/kernel/platformVocabulary';
+import { parseBody, parseOptionalBody } from './requestBody';
+import {
+  BrandKitBody,
+  ChecklistBody,
+  ContentItemBody,
+  CreateTestBody,
+  EmailBody,
+  EmbedLayoutBody,
+  FlowBody,
+  HeatmapBody,
+  InviteBody,
+  JoinListBody,
+  JoinRegionBody,
+  JourneyBody,
+  LearnVideoBody,
+  NurtureFlowBody,
+  OutcomeBody,
+  OutreachBody,
+  ProgressBody,
+  ScreenshotBody,
+  SegmentBody,
+  SkipFlowBody,
+  StatusBody,
+  StopTestBody,
+  TaskBody,
+  TouchpointBody,
+  VariantsBody,
+} from './growthOpsRoutes.schemas';
 
 const handle = async (run: () => Promise<Response>): Promise<Response> => {
   try {
@@ -133,10 +161,7 @@ const rowId = (raw: string): number => {
   return Math.floor(id);
 };
 
-const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
-const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
-const when = (v: unknown): Date | undefined => {
-  const s = str(v);
+const when = (s: string | null | undefined): Date | undefined => {
   if (!s) return undefined;
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) throw new ExperimentError('That is not a date.', 400);
@@ -170,13 +195,13 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
     Response.json({ tests: await listTests(db, tenant(c), c.req.query('status') as TestStatus | undefined) })));
 
   router.post('/tests', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, CreateTestBody);
     return Response.json(await createTest(db, tenant(c), {
       key: String(body.key ?? ''),
       name: String(body.name ?? ''),
-      hypothesis: str(body.hypothesis) ?? null,
-      primaryMetric: str(body.primaryMetric) ?? null,
-      minimumSample: num(body.minimumSample) ?? null,
+      hypothesis: body.hypothesis ?? null,
+      primaryMetric: body.primaryMetric ?? null,
+      minimumSample: body.minimumSample ?? null,
     }), { status: 201 });
   }));
 
@@ -184,28 +209,24 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
     Response.json(await variantResults(db, tenant(c), rowId(c.req.param('id'))))));
 
   router.put('/tests/:id/variants', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
-    const raw = Array.isArray(body.variants) ? body.variants : [];
+    const body = await parseBody(c, VariantsBody);
     return Response.json({
-      variants: await setVariants(db, tenant(c), rowId(c.req.param('id')), raw.map((v) => {
-        const o = v as Record<string, unknown>;
-        return {
-          key: String(o.key ?? ''),
-          name: String(o.name ?? ''),
-          ...(typeof o.isControl === 'boolean' ? { isControl: o.isControl } : {}),
-          trafficPercent: num(o.trafficPercent) ?? 0,
-          payload: o.payload,
-        };
-      })),
+      variants: await setVariants(db, tenant(c), rowId(c.req.param('id')), (body.variants ?? []).map((o) => ({
+        key: String(o.key ?? ''),
+        name: String(o.name ?? ''),
+        ...(o.isControl != null ? { isControl: o.isControl } : {}),
+        trafficPercent: o.trafficPercent ?? 0,
+        payload: o.payload,
+      }))),
     });
   }));
 
   router.post('/tests/:id/segments', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, SegmentBody);
     return Response.json(await addSegment(db, tenant(c), rowId(c.req.param('id')), {
       name: String(body.name ?? ''),
-      rule: (body.rule ?? {}) as Record<string, unknown>,
-      ...(typeof body.isExclusion === 'boolean' ? { isExclusion: body.isExclusion } : {}),
+      rule: body.rule ?? {},
+      ...(body.isExclusion != null ? { isExclusion: body.isExclusion } : {}),
     }), { status: 201 });
   }));
 
@@ -213,7 +234,7 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
     Response.json(await startTest(db, c.env as Env, tenant(c), await who(c), rowId(c.req.param('id'))))));
 
   router.post('/tests/:id/stop', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>().catch((): Record<string, unknown> => ({}));
+    const body = await parseOptionalBody(c, StopTestBody);
     return Response.json(await stopTest(
       db, c.env as Env, tenant(c), await who(c), rowId(c.req.param('id')), body.concluded === true,
     ));
@@ -242,12 +263,12 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
     Response.json({ journeys: await listJourneys(db, tenant(c)) })));
 
   router.post('/journeys', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, JourneyBody);
     return Response.json(await createJourney(db, tenant(c), {
       name: String(body.name ?? ''),
-      persona: str(body.persona) ?? null,
-      stages: Array.isArray(body.stages) ? body.stages.map((s) => String(s)) : [],
-      description: str(body.description) ?? null,
+      persona: body.persona ?? null,
+      stages: (body.stages ?? []).map((s) => String(s)),
+      description: body.description ?? null,
     }), { status: 201 });
   }));
 
@@ -255,16 +276,16 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
     Response.json(await journeyFunnel(db, tenant(c), rowId(c.req.param('id'))))));
 
   router.post('/journeys/:id/touchpoints', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, TouchpointBody);
     const occurredAt = when(body.occurredAt);
     return Response.json(await recordTouchpoint(db, tenant(c), {
       journeyId: rowId(c.req.param('id')),
       stage: String(body.stage ?? ''),
-      subjectRef: str(body.subjectRef) ?? null,
-      visitorId: str(body.visitorId) ?? null,
-      channel: str(body.channel) ?? null,
-      label: str(body.label) ?? null,
-      attribution: num(body.attribution) ?? null,
+      subjectRef: body.subjectRef ?? null,
+      visitorId: body.visitorId ?? null,
+      channel: body.channel ?? null,
+      label: body.label ?? null,
+      attribution: body.attribution ?? null,
       ...(occurredAt ? { occurredAt } : {}),
     }), { status: 201 });
   }));
@@ -278,14 +299,14 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
     Response.json({ brandKits: await listBrandKits(db, tenant(c)) })));
 
   router.post('/brand', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, BrandKitBody);
     return Response.json(await createBrandKit(db, tenant(c), {
       name: String(body.name ?? ''),
       palette: body.palette,
       typography: body.typography,
-      voice: str(body.voice) ?? null,
-      logoArtifactId: str(body.logoArtifactId) ?? null,
-      logoDarkArtifactId: str(body.logoDarkArtifactId) ?? null,
+      voice: body.voice ?? null,
+      logoArtifactId: body.logoArtifactId ?? null,
+      logoDarkArtifactId: body.logoDarkArtifactId ?? null,
     }), { status: 201 });
   }));
 
@@ -309,14 +330,14 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.post('/content', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, ContentItemBody);
     return Response.json(await createContentItem(db, c.env as Env, tenant(c), await who(c), {
       title: String(body.title ?? ''),
       format: String(body.format ?? ''),
-      channel: str(body.channel) ?? null,
-      brief: str(body.brief) ?? null,
-      ownerRef: str(body.ownerRef) ?? (c.get('userId') as string | undefined) ?? null,
-      artifactId: str(body.artifactId) ?? null,
+      channel: body.channel ?? null,
+      brief: body.brief ?? null,
+      ownerRef: body.ownerRef ?? (c.get('userId') as string | undefined) ?? null,
+      artifactId: body.artifactId ?? null,
     }), { status: 201 });
   }));
 
@@ -326,15 +347,15 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
     Response.json({ emails: await listEmails(db, tenant(c)) })));
 
   router.put('/emails/:key', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, EmailBody);
     return Response.json(await upsertEmail(db, tenant(c), {
       key: c.req.param('key'),
       name: String(body.name ?? ''),
-      subject: str(body.subject) ?? null,
-      bodyHtml: str(body.bodyHtml) ?? null,
-      bodyText: str(body.bodyText) ?? null,
+      subject: body.subject ?? null,
+      bodyHtml: body.bodyHtml ?? null,
+      bodyText: body.bodyText ?? null,
       variables: body.variables,
-      ...(typeof body.isTemplate === 'boolean' ? { isTemplate: body.isTemplate } : {}),
+      ...(body.isTemplate != null ? { isTemplate: body.isTemplate } : {}),
     }));
   }));
 
@@ -348,16 +369,16 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
     Response.json({ flows: await listNurtureFlows(db, tenant(c), c.req.query('status') as FlowStatus | undefined) })));
 
   router.put('/nurture', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, NurtureFlowBody);
     return Response.json(await saveNurtureFlow(db, tenant(c), {
-      ...(num(body.id) !== undefined ? { id: num(body.id) as number } : {}),
+      ...(body.id != null ? { id: body.id } : {}),
       name: String(body.name ?? ''),
-      goal: str(body.goal) ?? null,
-      steps: Array.isArray(body.steps) ? body.steps : [],
+      goal: body.goal ?? null,
+      steps: body.steps ?? [],
       entryRule: body.entryRule,
       exitRule: body.exitRule,
-      ...(str(body.status) !== undefined ? { status: str(body.status) as FlowStatus } : {}),
-      ownerRef: str(body.ownerRef) ?? null,
+      ...(body.status != null ? { status: body.status as FlowStatus } : {}),
+      ownerRef: body.ownerRef ?? null,
     }));
   }));
 
@@ -367,15 +388,15 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
     Response.json({ videos: await videosForSurface(db, tenant(c), c.req.param('surface')) })));
 
   router.post('/learn', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
-    const videoId = num(body.videoId);
-    if (videoId === undefined) throw new ContentError('videoId is required', 400);
+    const body = await parseBody(c, LearnVideoBody);
+    const videoId = body.videoId;
+    if (videoId == null) throw new ContentError('videoId is required', 400);
     return Response.json(await attachLearnVideo(db, tenant(c), {
       videoId,
       surface: String(body.surface ?? ''),
       title: String(body.title ?? ''),
-      featureKey: str(body.featureKey) ?? null,
-      ...(num(body.position) !== undefined ? { position: num(body.position) as number } : {}),
+      featureKey: body.featureKey ?? null,
+      ...(body.position != null ? { position: body.position } : {}),
     }), { status: 201 });
   }));
 
@@ -383,18 +404,18 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
     Response.json({ pipeline: await outreachPipeline(db, tenant(c)) })));
 
   router.post('/podcasts', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, OutreachBody);
     return Response.json(await recordOutreach(db, tenant(c), {
       showName: String(body.showName ?? ''),
-      hostName: str(body.hostName) ?? null,
-      contactEmail: str(body.contactEmail) ?? null,
-      audienceSize: num(body.audienceSize) ?? null,
-      topicPitch: str(body.topicPitch) ?? null,
+      hostName: body.hostName ?? null,
+      contactEmail: body.contactEmail ?? null,
+      audienceSize: body.audienceSize ?? null,
+      topicPitch: body.topicPitch ?? null,
     }), { status: 201 });
   }));
 
   router.patch('/podcasts/:id', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, StatusBody);
     return Response.json(await advanceOutreach(
       db, c.env as Env, tenant(c), await who(c),
       rowId(c.req.param('id')), String(body.status ?? '') as OutreachStatus,
@@ -416,7 +437,7 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.post('/heatmaps', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, HeatmapBody);
     const periodStart = when(body.periodStart);
     const periodEnd = when(body.periodEnd);
     if (!periodStart || !periodEnd) throw new PageInsightError('periodStart and periodEnd are required', 400);
@@ -424,18 +445,18 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
       path: String(body.path ?? ''),
       clickMap: body.clickMap,
       scrollMap: body.scrollMap,
-      sampleCount: num(body.sampleCount) ?? 0,
+      sampleCount: body.sampleCount ?? 0,
       periodStart,
       periodEnd,
     }), { status: 201 });
   }));
 
   router.post('/heatmaps/:id/screenshots', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, ScreenshotBody);
     return Response.json(await addScreenshot(db, tenant(c), rowId(c.req.param('id')), {
-      artifactId: str(body.artifactId) ?? null,
-      viewportWidth: num(body.viewportWidth) ?? 0,
-      viewportHeight: num(body.viewportHeight) ?? null,
+      artifactId: body.artifactId ?? null,
+      viewportWidth: body.viewportWidth ?? 0,
+      viewportHeight: body.viewportHeight ?? null,
       ...(body.themeMode === 'dark' ? { themeMode: 'dark' as const } : {}),
     }), { status: 201 });
   }));
@@ -455,11 +476,11 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
     Response.json({ layouts: await listEmbedLayouts(db, tenant(c)) })));
 
   router.put('/embeds/:widgetKey', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, EmbedLayoutBody);
     return Response.json(await setEmbedLayout(db, tenant(c), {
       widgetKey: c.req.param('widgetKey'),
-      hostPattern: str(body.hostPattern) ?? null,
-      ...(str(body.mode) !== undefined ? { mode: str(body.mode) as EmbedMode } : {}),
+      hostPattern: body.hostPattern ?? null,
+      ...(body.mode != null ? { mode: body.mode as EmbedMode } : {}),
       config: body.config,
     }));
   }));
@@ -479,12 +500,12 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
     Response.json(await conversionFunnel(db, tenant(c), c.req.query('listKey')))));
 
   router.post('/waitlist/join', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, JoinListBody);
     return Response.json(await joinList(db, tenant(c), {
       listKey: String(body.listKey ?? ''),
       email: String(body.email ?? ''),
-      name: str(body.name) ?? null,
-      referrer: str(body.referrer) ?? null,
+      name: body.name ?? null,
+      referrer: body.referrer ?? null,
     }), { status: 201 });
   }));
 
@@ -498,18 +519,18 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
   };
 
   router.post('/waitlist/regions/join', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, JoinRegionBody);
     return Response.json(await joinRegion(db, tenant(c), {
       email: String(body.email ?? ''),
-      country: await knownCountry(c, str(body.country) ?? null),
-      region: str(body.region) ?? null,
-      source: str(body.source) ?? null,
+      country: await knownCountry(c, body.country ?? null),
+      region: body.region ?? null,
+      source: body.source ?? null,
     }), { status: 201 });
   }));
 
   router.post('/waitlist/invite', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
-    const emails = Array.isArray(body.emails) ? body.emails.map((e) => String(e)) : [];
+    const body = await parseBody(c, InviteBody);
+    const emails = (body.emails ?? []).map((e) => String(e));
     return Response.json(await inviteFromList(
       db, c.env as Env, tenant(c), await who(c), String(body.listKey ?? ''), emails,
     ));
@@ -521,8 +542,8 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
     ))));
 
   router.post('/waitlist/outcome', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
-    const outcome = str(body.outcome);
+    const body = await parseBody(c, OutcomeBody);
+    const outcome = body.outcome;
     if (outcome !== 'joined' && outcome !== 'declined') {
       throw new WaitlistError("outcome must be 'joined' or 'declined'", 400);
     }
@@ -544,12 +565,12 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
     })));
 
   router.post('/onboarding/flows', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, FlowBody);
     return Response.json(await createFlow(db, tenant(c), {
       key: String(body.key ?? ''),
       name: String(body.name ?? ''),
-      ...(str(body.audience) !== undefined ? { audience: str(body.audience) as Audience } : {}),
-      description: str(body.description) ?? null,
+      ...(body.audience != null ? { audience: body.audience as Audience } : {}),
+      description: body.description ?? null,
     }), { status: 201 });
   }));
 
@@ -557,26 +578,26 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
     Response.json(await flowDefinition(db, tenant(c), rowId(c.req.param('id'))))));
 
   router.post('/onboarding/flows/:id/checklists', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, ChecklistBody);
     return Response.json(await addChecklist(db, tenant(c), rowId(c.req.param('id')), {
       name: String(body.name ?? ''),
-      summary: str(body.summary) ?? null,
-      ...(typeof body.isRequired === 'boolean' ? { isRequired: body.isRequired } : {}),
+      summary: body.summary ?? null,
+      ...(body.isRequired != null ? { isRequired: body.isRequired } : {}),
     }), { status: 201 });
   }));
 
   router.post('/onboarding/checklists/:id/tasks', manager, (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, TaskBody);
     return Response.json(await addTask(db, tenant(c), rowId(c.req.param('id')), {
       key: String(body.key ?? ''),
       title: String(body.title ?? ''),
-      description: str(body.description) ?? null,
-      actionHref: str(body.actionHref) ?? null,
+      description: body.description ?? null,
+      actionHref: body.actionHref ?? null,
       ...(body.completionKind === 'event' || body.completionKind === 'query'
         ? { completionKind: body.completionKind }
         : {}),
       completionRule: body.completionRule,
-      ...(typeof body.isRequired === 'boolean' ? { isRequired: body.isRequired } : {}),
+      ...(body.isRequired != null ? { isRequired: body.isRequired } : {}),
     }), { status: 201 });
   }));
 
@@ -590,27 +611,27 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
     ))));
 
   router.put('/onboarding/progress', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
-    const flowId = num(body.flowId);
-    const taskId = num(body.taskId);
-    if (flowId === undefined || taskId === undefined) {
+    const body = await parseBody(c, ProgressBody);
+    const flowId = body.flowId;
+    const taskId = body.taskId;
+    if (flowId == null || taskId == null) {
       throw new OnboardingError('flowId and taskId are required', 400);
     }
     return Response.json(await setProgress(db, tenant(c), {
       flowId,
       taskId,
-      subjectRef: str(body.subjectRef) ?? String(c.get('userId') ?? ''),
+      subjectRef: body.subjectRef ?? String(c.get('userId') ?? ''),
       status: String(body.status ?? '') as ProgressStatus,
-      skippedReason: str(body.skippedReason) ?? null,
+      skippedReason: body.skippedReason ?? null,
     }));
   }));
 
   router.post('/onboarding/flows/:id/skip', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>().catch((): Record<string, unknown> => ({}));
+    const body = await parseOptionalBody(c, SkipFlowBody);
     return Response.json(await completeFlow(
       db, c.env as Env, tenant(c), await who(c), rowId(c.req.param('id')),
-      str(body.subjectRef) ?? String(c.get('userId') ?? ''),
-      str(body.reason) ?? 'skipped by the user',
+      body.subjectRef ?? String(c.get('userId') ?? ''),
+      body.reason ?? 'skipped by the user',
     ));
   }));
 

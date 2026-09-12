@@ -23,6 +23,7 @@ import { useCanvasSurfaceActions } from './canvasSurfaceActions';
 import { RoomCreationItem } from './world3d/RoomCreationItem';
 import { RoomScene } from './world3d/RoomScene';
 import { RoomSessionDiorama } from './world3d/RoomSessionDiorama';
+import { RoomStationList, RoomStationPanel, RoomStationStands, useRoomStationInstances } from './room-stations/RoomStations';
 import styles from './CanvasRoomSurface.module.css';
 
 /**
@@ -178,6 +179,14 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
   const placement = useMemo(() => placeSessionInRoom(spot), [spot]);
   const [dragging, setDragging] = useState(false);
 
+  // The STATIONS standing in the room — the approval desk, the metrics board, widgets
+  // on stands — declared as registry data (`lib/canvas/roomStations.ts` +
+  // `room-stations/registry.tsx`), read off the board bridge, never branched on here.
+  const stations = useRoomStationInstances();
+  const [stationKey, setStationKey] = useState<string | null>(null);
+  const openStation = stations.find((station) => station.key === stationKey) ?? null;
+  const closeStation = useCallback(() => setStationKey(null), []);
+
   /** What one creation is called, what it is, and how its Open button is named. */
   const labelsOf = useCallback((creation: RoomCreation) => {
     const title = creation.title || t('creation.untitled');
@@ -273,7 +282,8 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
       onKeyDown={(event) => {
         if (event.key !== 'Escape') return;
         event.stopPropagation();
-        if (sessionOpen) minimizeSession(); else onExit();
+        // An open station panel is the innermost level, so Escape closes it first.
+        if (openStation) closeStation(); else if (sessionOpen) minimizeSession(); else onExit();
       }}
     >
       {!webgl ? (
@@ -363,6 +373,14 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
                       />
                     );
                   })}
+                  <RoomStationStands
+                    instances={stations}
+                    sessionId={sessionId}
+                    palette={palette}
+                    openKey={stationKey}
+                    onOpen={setStationKey}
+                    onDragChange={setDragging}
+                  />
                 </RoomScene>
               </Canvas>
               <p className={styles.hint}>{t('navigateHint')}</p>
@@ -383,8 +401,12 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
               </span>
             </div>
           ))}
+          {/* Every station, as a row with its Open — the keyboard and screen-reader path
+              to each, and the whole of them on a device without WebGL. */}
+          <RoomStationList instances={stations} onOpen={setStationKey} />
         </div>
       )}
+      <RoomStationPanel instance={openStation} onClose={closeStation} />
     </section>
   );
 }

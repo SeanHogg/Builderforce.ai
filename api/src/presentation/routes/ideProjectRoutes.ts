@@ -25,6 +25,7 @@ import { ensureProjectTemplate } from '../../application/project/projectTemplate
 import { applyEvermindRecipe, toEvermindRecipeId } from '../../application/llm/evermindRecipes';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
+import { parseBody, z } from './requestBody';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -36,6 +37,30 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const MODALITIES = new Set(['designer', 'mobile', 'webmobile', 'video', 'evermind', 'finetune', 'voice', 'llm']);
 
 const listCacheKey = (tenantId: number) => `ide-projects:list:${tenantId}`;
+
+/**
+ * `POST /` — the handler refuses a blank name itself; an unknown modality falls
+ * back to `designer`. The Evermind recipe inputs are type-guarded / normalized by
+ * the handler (`toEvermindRecipeId`), so they are admitted as-is.
+ */
+const CreateIdeProjectBody = z.object({
+  name: z.string().nullish(),
+  modality: z.string().nullish(),
+  containerProjectId: z.number().nullish(),
+  template: z.string().nullish(),
+  workflowDefinitionId: z.string().nullish(),
+  evermindRecipe: z.unknown().optional(),
+  evermindTeacherModel: z.unknown().optional(),
+  evermindSeedModelSlug: z.unknown().optional(),
+});
+
+/** `PATCH /:id` — `null` ungroups / detaches the workflow. */
+const UpdateIdeProjectBody = z.object({
+  name: z.string().optional(),
+  containerProjectId: z.number().nullish(),
+  workflowDefinitionId: z.string().nullish(),
+  status: z.string().optional(),
+});
 
 export function createIdeProjectRoutes(projectService: ProjectService, db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -148,18 +173,9 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
   // POST /api/ide-projects — create an IDE project + its backing storage project.
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{
-      name?: string;
-      modality?: string;
-      containerProjectId?: number | null;
-      template?: string | null;
-      workflowDefinitionId?: string | null;
-      // Evermind modality: the one-click Evermind recipe (+ its optional inputs) that
-      // provisions the new project's model. See application/llm/evermindRecipes.
-      evermindRecipe?: string | null;
-      evermindTeacherModel?: string | null;
-      evermindSeedModelSlug?: string | null;
-    }>();
+    // Evermind modality: the one-click Evermind recipe (+ its optional inputs) that
+    // provisions the new project's model. See application/llm/evermindRecipes.
+    const body = await parseBody(c, CreateIdeProjectBody);
     const name = body.name?.trim();
     if (!name) return c.json({ error: 'name is required' }, 400);
     const modality = body.modality && MODALITIES.has(body.modality) ? body.modality : 'designer';
@@ -266,12 +282,7 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
     const tenantId = c.get('tenantId') as number;
     const existing = await fetchOne(tenantId, c.req.param('id'));
     if (!existing) return c.json({ error: 'IDE project not found' }, 404);
-    const body = await c.req.json<{
-      name?: string;
-      containerProjectId?: number | null;
-      workflowDefinitionId?: string | null;
-      status?: string;
-    }>();
+    const body = await parseBody(c, UpdateIdeProjectBody);
 
     const set: Partial<typeof ideProjects.$inferInsert> = { updatedAt: new Date() };
     if (body.name !== undefined) {
