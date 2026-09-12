@@ -251,6 +251,11 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   // way `website`/`document` are authored rather than composed. Opens directly into
   // the `world` surface (see `creationObjectSurfaces.ts`) where props are placed.
   { kind: 'world', label: '3D space', icon: '⬢', group: 'Build', createData: () => ({ kind: 'world', title: 'Untitled 3D space', status: 'Draft', world: emptyCanvasWorldScene() }) },
+  // THE ROOM THE SESSION MEETS IN. Placing one makes it the room from now on
+  // (`activatedAt` — see `lib/canvas/roomDesigns.ts`), so "add a kitchen" is a kitchen
+  // the next time anybody opens the Room. The layout names a preset; the designer in
+  // the Room writes the full `roomDesign` the moment anything is moved.
+  { kind: 'room', label: 'Room design', icon: '⌂', group: 'Build', createData: () => ({ kind: 'room', title: 'Boardroom', status: 'Draft', roomLayout: 'boardroom', activatedAt: new Date().toISOString() }) },
   // AI video/3D generation — opens directly into the `scene3d` surface bound to
   // itself (see `creationObjectSurfaces.ts`), where a prompt and a model produce a
   // clip via the studio engine. Distinct from `world` (hand-placed props) and from
@@ -584,6 +589,8 @@ const BASE_MUTABLE_FIELDS = {
   // Hand-authored (see the registry entry): no `mediaKind`/`capabilityId`/`mcpTool`
   // siblings — `world` is the whole authored state, same as `website`/`document`.
   world: ['content', 'world'],
+  // A preset by name, or the whole design; and when it was last chosen as the room.
+  room: ['content', 'roomLayout', 'roomDesign', 'activatedAt'],
   // AI generation, not authoring: the whole `CanvasSceneSpec` (model, prompt, params,
   // Mamba state, produced clip) lives under the one `scene` field — same single-field
   // shape `world` uses, for the same reason.

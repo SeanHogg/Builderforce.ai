@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import {
-  defaultCanvasRoomDesign, roomLayoutDesign,
+  defaultCanvasRoomDesign, isRoomLayoutId, roomLayoutDesign,
   type CanvasRoomDesign, type RoomLayoutId,
 } from '@builderforce/creation-canvas-contract';
 import { activeRoomDesign, roomDesignObjectsOf, type RoomDesignObject } from '@/lib/canvas/roomDesigns';
@@ -50,7 +50,8 @@ export function useRoomDesign(): RoomDesignState {
       return;
     }
     edits.add('room', {
-      title: t('newRoomTitle', { layout: t(`layout.${layout === 'custom' ? 'custom' : layout}`) }),
+      // Named after what it is — "Boardroom", "Office kitchen" — until somebody renames it.
+      title: t(`layout.${isRoomLayoutId(layout) ? layout : 'custom'}`),
       roomDesign: next,
       roomLayout: layout,
       activatedAt: new Date().toISOString(),

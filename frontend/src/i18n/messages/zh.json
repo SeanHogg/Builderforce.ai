@@ -20785,7 +20785,8 @@
       "transclusion": "嵌入文档",
       "calendar": "日历",
       "component": "组件",
-      "flowStep": "步骤"
+      "flowStep": "步骤",
+      "room": "房间设计"
     },
     "twilioSetup": {
       "title": "Twilio 集成",
@@ -23500,7 +23501,8 @@
         "tool": "工具",
         "creative": "创意素材",
         "survey": "问卷",
-        "book": "书籍"
+        "book": "书籍",
+        "room": "房间设计"
       },
       "launchHint": {
         "play": "买家可在浏览器中直接试玩。",
@@ -23894,7 +23896,8 @@
         "geometry": "检查是否真的能制作出来",
         "instrument": "先作答，再在零回复下查看结果",
         "system": "在所有对外步骤都被拦截的情况下试运行",
-        "deployment": "线上地址"
+        "deployment": "线上地址",
+        "space": "走一遍并确认每个人都有座位"
       },
       "state": {
         "draft": "草稿",
@@ -24024,6 +24027,96 @@
           "openButton": "打开",
           "back": "返回会议室",
           "hint": "{count, plural, =0 {空 · 拖动移动} other {# 个对象 · 拖动移动}}"
+        },
+        "open": "打开房间",
+        "walkHint": "WASD 或方向键行走 · 空格跳跃 · 拖动环视 · 滚轮缩放",
+        "mode": {
+          "label": "你在房间里的方式",
+          "look": "观看",
+          "walk": "行走",
+          "design": "设计",
+          "lookHint": "环绕房间，移动其中的物品",
+          "walkHint": "以你自己的身份在房间里行走——其他人能看到你移动",
+          "designHint": "布置房间：家具、墙壁和地板",
+          "toDoor": "回到门口"
+        },
+        "level": {
+          "play": "游玩",
+          "playNamed": "在房间里游玩 {title}",
+          "back": "返回房间",
+          "empty": "这个场景还没有可以行走的部件。",
+          "openFull": "全屏打开"
+        },
+        "design": {
+          "hint": "拖动物件来移动 · 按 R 旋转 · 按 Delete 删除",
+          "rail": "房间设计器",
+          "rooms": "这个房间",
+          "meetHere": "在这里开会",
+          "meetingHere": "正在这里开会",
+          "summary": "{seats, plural, =0 {没有座位} other {# 个座位}} · {pieces, plural, other {# 件物品}} · {area} 平方米",
+          "standupNote": "这是每个会话默认的站会房间。选择一个布局或添加一件物品，它就会成为本次会话自己的房间。",
+          "presets": "从这里开始",
+          "presetHint": "选择布局会替换此房间中的家具。撤销可以恢复。",
+          "layout": {
+            "standup": "站会房间",
+            "boardroom": "董事会会议室",
+            "kitchen": "办公室茶水间",
+            "openPlan": "开放式办公区",
+            "custom": "自定义房间"
+          },
+          "furniture": "添加家具",
+          "kind": {
+            "tableRound": "圆桌",
+            "tableLong": "长桌",
+            "desk": "办公桌",
+            "counter": "台面",
+            "chair": "椅子",
+            "stool": "凳子",
+            "sofa": "沙发",
+            "partition": "隔板",
+            "whiteboard": "白板",
+            "screen": "屏幕",
+            "poster": "海报",
+            "shelf": "架子",
+            "fridge": "冰箱",
+            "plant": "植物",
+            "lamp": "灯",
+            "rug": "地毯",
+            "model": "你的模型"
+          },
+          "uploadModel": "上传 3D 模型",
+          "uploadModelHint": "支持 STL、OBJ、glTF、GLB 或 STEP。它会以合适的尺寸放在房间里，并可拉伸。",
+          "modelFormat": "该文件不是房间可以显示的 3D 模型。请使用 STL、OBJ、glTF、GLB 或 STEP。",
+          "uploading": "正在上传…",
+          "uploadFailed": "上传未成功，请重试。",
+          "selected": "选中的物品",
+          "noSelection": "点击房间里的物品来修改它。",
+          "rotateLeft": "向左转",
+          "rotateRight": "向右转",
+          "pieceWidth": "宽度",
+          "pieceHeight": "高度",
+          "pieceDepth": "深度",
+          "color": "颜色",
+          "resetColor": "默认颜色",
+          "image": "图片",
+          "imagePlaceholder": "https://… 要显示在上面的图片",
+          "uploadImage": "上传图片",
+          "clearImage": "移除图片",
+          "remove": "移除物品",
+          "room": "墙壁和地板",
+          "floorWidth": "地板宽度（米）",
+          "floorDepth": "地板进深（米）",
+          "wallHeight": "墙壁高度（米）",
+          "floorColor": "地板颜色",
+          "wallColor": "墙壁颜色",
+          "resetColors": "默认颜色",
+          "share": "分享这个房间",
+          "download": "下载设计",
+          "uploadDesign": "上传设计",
+          "uploadDesignFailed": "该文件不是房间设计。",
+          "sell": "在市场中出售",
+          "sellHint": "其他团队可以安装此房间的副本并在其中开会。",
+          "saveFirst": "修改房间中的任何内容，它就会成为一个可以出售的设计。"
         }
       },
       "page": {
@@ -24156,6 +24249,14 @@
           "score": "已收集 {collected}/{total}",
           "hits": "受击 {count} 次",
           "won": "已到达目标！"
+        },
+        "touch": {
+          "label": "移动",
+          "forward": "向前走",
+          "back": "向后走",
+          "left": "向左移",
+          "right": "向右移",
+          "jump": "跳跃"
         }
       },
       "backToBoard": "返回画板",
@@ -24490,7 +24591,8 @@
       "sticky": "用于在画布上随手记录想法的便签。",
       "stopwatch": "记录某件事实际花了多久。所有人看到的是同一个计时。",
       "transclusion": "在这里实时显示另一篇知识文档 —— 而不是它的副本。",
-      "flowStep": "一个可执行步骤——模型调用、集成调用或分支判断——与周围的步骤相连。"
+      "flowStep": "一个可执行步骤——模型调用、集成调用或分支判断——与周围的步骤相连。",
+      "room": "本次会话开会的房间——董事会会议室、办公室茶水间、开放式办公区——逐件布置，并可在 3D 中行走。"
     },
     "previewWidth": "预览宽度",
     "viewportName": {
@@ -27630,7 +27732,8 @@
       "tool": "工具",
       "creative": "创意素材",
       "book": "书籍",
-      "survey": "问卷"
+      "survey": "问卷",
+      "room": "房间设计"
     },
     "launchVerb": {
       "play": "试玩",

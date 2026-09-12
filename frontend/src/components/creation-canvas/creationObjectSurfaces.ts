@@ -35,6 +35,9 @@ const AUTHORING_SURFACE: Partial<Record<CreationObjectKind, CanvasSurfaceId>> = 
   // A place: camera, props, colliders. No card can preview a space you walk through,
   // any more than one previews a running build — same reason `game` opens in `play`.
   world: 'world',
+  // The room's design opens the ROOM — board-scoped, so it carries no target; the room
+  // reads which design is in use off the board itself.
+  room: 'room',
   // AI VIDEO/3D GENERATION. Deliberately `scene3d` and not `timeline`: the product
   // decision is that generation is its own surface — the generation panel, entered
   // from the scene's card — rather than a mode of the multi-track editor. (The id once

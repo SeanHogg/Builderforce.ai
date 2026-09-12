@@ -1,5 +1,7 @@
-'use client';
-
+/*
+ * No `'use client'` — imported only from `BrainDock`, `CreationNode` and `CanvasChatSurface`, all inside the canvas's own
+ * client boundary. See the `use-client-is-a-declaration` rule.
+ */
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import styles from './CreationCanvas.module.css';

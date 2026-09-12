@@ -41,10 +41,11 @@ export function RoomWalk({ design, cameraView, walkerColor, respawnNonce, onMove
   const hw = design.floor.width / 2;
   const hd = design.floor.depth / 2;
   const wall = design.wall.height;
+  // Keyed by the floor alone — see `roomDesignSpawn`: a moved chair is not a respawn.
   const spawn = useMemo<CanvasWorldTransform>(() => {
-    const at = roomDesignSpawn(design);
+    const at = roomDesignSpawn({ width: hw * 2, depth: hd * 2 });
     return { position: [at.position[0], SPAWN_HEIGHT, at.position[2]], rotation: [0, at.yaw, 0], scale: [1, 1, 1] };
-  }, [design]);
+  }, [hw, hd]);
 
   const solids = useMemo(() => design.furniture.filter((item) => ROOM_FURNITURE_SPECS[item.kind].solid), [design.furniture]);
 

@@ -781,12 +781,17 @@ function spaceChecks(input: StageInput): StageCheck[] {
   const geometry = roomDesignGeometry(design);
   found.push(check('space.floor', 'runs', 'pass', `${design.floor.width} × ${design.floor.depth} m floor`));
 
+  // The defensive read already keeps every CENTRE on the floor, so the question is
+  // whether the piece's footprint — turned by its yaw — crosses a wall.
   const outside = design.furniture.filter((item) => {
     const spec = ROOM_FURNITURE_SPECS[item.kind];
     const halfX = (spec.footprint[0] * item.scale[0]) / 2;
     const halfZ = (spec.footprint[2] * item.scale[2]) / 2;
-    const reach = Math.max(halfX, halfZ);
-    return Math.abs(item.position[0]) - reach > geometry.halfWidth + 0.01 || Math.abs(item.position[2]) - reach > geometry.halfDepth + 0.01;
+    const cos = Math.abs(Math.cos(item.yaw));
+    const sin = Math.abs(Math.sin(item.yaw));
+    const extentX = cos * halfX + sin * halfZ;
+    const extentZ = sin * halfX + cos * halfZ;
+    return Math.abs(item.position[0]) + extentX > geometry.halfWidth + 0.01 || Math.abs(item.position[2]) + extentZ > geometry.halfDepth + 0.01;
   });
   found.push(outside.length
     ? check(

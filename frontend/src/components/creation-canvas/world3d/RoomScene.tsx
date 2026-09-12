@@ -10,6 +10,7 @@ import {
   bodyColor, seatPlacement,
   type RoomPalette, type RoomSeat,
 } from '@/lib/canvas/roomSeating';
+import type { RoomSpeech } from '@/lib/canvas/roomSpeech';
 import { PeerAvatar } from './PeerAvatar';
 
 /**
@@ -27,6 +28,13 @@ import { PeerAvatar } from './PeerAvatar';
  * tell "nobody joined" from "nobody has spoken". So the room places the whole roster
  * and marks who is actually HERE — a lit plate for a peer the relay has heard from, a
  * dimmed one for a member who is on the board rather than in the room.
+ *
+ * ── WHY AGENTS SPEAK OVER THEIR HEADS ────────────────────────────────────────
+ * When several agents answer one turn, a room where the only sign any of them
+ * spoke is a scroll of text in a side panel is not a meeting. So each reply is
+ * drawn over the head of the agent who gave it, and an agent still working says
+ * so. What each seat is saying is read off the conversation by the host
+ * (`lib/canvas/roomSpeech.ts`); this scene only puts it over the right seat.
  *
  * ── LOOKING AND WALKING ──────────────────────────────────────────────────────
  * The camera orbits by default — the right way to see every face at a standup. When
@@ -46,11 +54,22 @@ export interface RoomSceneProps {
   orbit?: boolean;
   /** A body NOT drawn at its seat — the viewer's, while their walker is their body. */
   hiddenUserId?: string | null;
+  /** What each seat is saying, keyed by `RoomSeat.userId` (`lib/canvas/roomSpeech.ts`). */
+  speech?: ReadonlyMap<string, RoomSpeech>;
+  /** Shown over an agent still working on its reply. Translated by the host. */
+  thinkingLabel?: string;
   children?: ReactNode;
 }
 
+/** A seat's bubble: its reply, or the thinking line while it works; nothing otherwise. */
+function bubbleFor(said: RoomSpeech | undefined, thinkingLabel: string | undefined): { text: string; pending: boolean } | null {
+  const text = said?.text ?? (said?.pending ? thinkingLabel : undefined);
+  return said && text ? { text, pending: said.pending } : null;
+}
+
 export function RoomScene({
-  seats, palette, design, unknownLabel, controlsEnabled = true, orbit = true, hiddenUserId = null, children,
+  seats, palette, design, unknownLabel, controlsEnabled = true, orbit = true, hiddenUserId = null,
+  speech, thinkingLabel, children,
 }: RoomSceneProps) {
   const width = design.floor.width;
   const depth = design.floor.depth;
@@ -116,6 +135,7 @@ export function RoomScene({
           color={bodyColor(seat.userId, palette, seat.isSelf)}
           label={seat.displayName || unknownLabel}
           live={seat.present}
+          speech={bubbleFor(speech?.get(seat.userId), thinkingLabel)}
         />
       ))}
 

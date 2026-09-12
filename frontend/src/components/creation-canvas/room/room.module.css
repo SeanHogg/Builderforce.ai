@@ -24,9 +24,9 @@
   display: inline-flex;
   gap: 2px;
   padding: 3px;
-  border: 1px solid var(--border, #333);
+  border: 1px solid var(--canvas-line);
   border-radius: var(--radius-full);
-  background: color-mix(in srgb, var(--surface, #1a1a1a) 88%, transparent);
+  background: color-mix(in srgb, var(--canvas-panel) 88%, transparent);
   pointer-events: auto;
 }
 
@@ -36,18 +36,18 @@
   border: 0;
   border-radius: var(--radius-full);
   background: transparent;
-  color: var(--text-secondary, #a0a0a0);
+  color: var(--canvas-muted);
   font-size: var(--font-size-small);
   font-weight: 600;
   cursor: pointer;
 }
 
 .modeButton:hover,
-.modeButton:focus-visible { color: var(--text-primary, #f5f5f5); outline: none; }
+.modeButton:focus-visible { color: var(--canvas-ink); outline: none; }
 
 .modeButton[aria-pressed='true'] {
-  background: var(--accent, #6d5dfc);
-  color: var(--text-on-accent, #fff);
+  background: var(--canvas-accent);
+  color: var(--canvas-accent-ink);
 }
 
 /* ── Designer rail ────────────────────────────────────────────────────────── */
@@ -58,16 +58,16 @@
   flex-direction: column;
   min-height: 0;
   overflow-y: auto;
-  border-left: 1px solid var(--border, #333);
-  background: var(--surface-raised, var(--surface, #1a1a1a));
-  color: var(--text-primary, #f5f5f5);
+  border-left: 1px solid var(--canvas-line);
+  background: var(--canvas-panel);
+  color: var(--canvas-ink);
 }
 
 .section {
   display: grid;
   gap: 8px;
   padding: 12px;
-  border-bottom: 1px solid var(--border, #333);
+  border-bottom: 1px solid var(--canvas-line);
 }
 
 .sectionHead {
@@ -75,14 +75,14 @@
   font-size: var(--font-size-eyebrow);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-secondary, #a0a0a0);
+  color: var(--canvas-muted);
 }
 
 .hint {
   margin: 0;
   font-size: var(--font-size-eyebrow);
   line-height: 1.45;
-  color: var(--text-secondary, #a0a0a0);
+  color: var(--canvas-muted);
 }
 
 .tiles {
@@ -95,10 +95,10 @@
 .action {
   min-height: 34px;
   padding: 6px 8px;
-  border: 1px solid var(--border, #333);
+  border: 1px solid var(--canvas-line);
   border-radius: var(--radius-sm);
-  background: var(--surface, #1a1a1a);
-  color: var(--text-primary, #f5f5f5);
+  background: var(--canvas-panel);
+  color: var(--canvas-ink);
   font-size: var(--font-size-small);
   line-height: 1.25;
   text-align: center;
@@ -106,16 +106,16 @@
 }
 
 .tile:hover, .tile:focus-visible,
-.action:hover, .action:focus-visible { border-color: var(--accent, #6d5dfc); outline: none; }
+.action:hover, .action:focus-visible { border-color: var(--canvas-accent); outline: none; }
 
-.tile[aria-pressed='true'] { border-color: var(--accent, #6d5dfc); box-shadow: inset 0 0 0 1px var(--accent, #6d5dfc); }
+.tile[aria-pressed='true'] { border-color: var(--canvas-accent); box-shadow: inset 0 0 0 1px var(--canvas-accent); }
 
 .tile:disabled, .action:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .danger {
   composes: action;
-  border-color: var(--danger-border, var(--border, #333));
-  color: var(--danger-text, var(--text-primary, #f5f5f5));
+  border-color: var(--tone-danger-mark);
+  color: var(--tone-danger-ink);
 }
 
 .row {
@@ -131,7 +131,7 @@
   align-items: center;
   gap: 8px;
   font-size: var(--font-size-small);
-  color: var(--text-secondary, #a0a0a0);
+  color: var(--canvas-muted);
 }
 
 .field input[type='number'],
@@ -141,10 +141,10 @@
   width: 100%;
   min-height: 30px;
   padding: 3px 6px;
-  border: 1px solid var(--border, #333);
+  border: 1px solid var(--canvas-line);
   border-radius: var(--radius-sm);
-  background: var(--surface, #1a1a1a);
-  color: var(--text-primary, #f5f5f5);
+  background: var(--canvas-panel);
+  color: var(--canvas-ink);
   font-size: var(--font-size-small);
 }
 
@@ -152,7 +152,7 @@
   width: 40px;
   height: 28px;
   padding: 0;
-  border: 1px solid var(--border, #333);
+  border: 1px solid var(--canvas-line);
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
@@ -171,18 +171,18 @@
 }
 
 .roomName strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.roomName small { font-size: var(--font-size-eyebrow); color: var(--text-secondary, #a0a0a0); }
+.roomName small { font-size: var(--font-size-eyebrow); color: var(--canvas-muted); }
 
 .status {
   margin: 0;
   font-size: var(--font-size-eyebrow);
-  color: var(--text-secondary, #a0a0a0);
+  color: var(--canvas-muted);
 }
 
 .error {
   margin: 0;
   font-size: var(--font-size-eyebrow);
-  color: var(--danger-text, var(--text-primary, #f5f5f5));
+  color: var(--tone-danger-ink);
 }
 
 .fileInput { display: none; }
@@ -195,7 +195,7 @@
   display: flex;
   flex-direction: column;
   isolation: isolate;
-  background: var(--surface, #1a1a1a);
+  background: var(--canvas-panel);
 }
 
 .levelStrip {
@@ -204,7 +204,7 @@
   align-items: center;
   gap: 6px 12px;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--border, #333);
+  border-bottom: 1px solid var(--canvas-line);
 }
 
 .levelTitle {
@@ -217,7 +217,7 @@
 
 .levelNote {
   font-size: var(--font-size-eyebrow);
-  color: var(--text-secondary, #a0a0a0);
+  color: var(--canvas-muted);
 }
 
 .levelBack {
@@ -227,15 +227,15 @@
   gap: 6px;
   min-height: 34px;
   padding: 0 12px;
-  border: 1px solid var(--border, #333);
+  border: 1px solid var(--canvas-line);
   border-radius: var(--radius-full);
-  background: var(--surface-raised, var(--surface, #1a1a1a));
-  color: var(--text-primary, #f5f5f5);
+  background: var(--canvas-panel);
+  color: var(--canvas-ink);
   font-size: var(--font-size-small);
   cursor: pointer;
 }
 
-.levelBack:hover, .levelBack:focus-visible { border-color: var(--accent, #6d5dfc); outline: none; }
+.levelBack:hover, .levelBack:focus-visible { border-color: var(--canvas-accent); outline: none; }
 
 .levelViewport {
   position: relative;
@@ -248,7 +248,7 @@
   margin: auto;
   padding: 24px;
   font-size: var(--font-size-small);
-  color: var(--text-secondary, #a0a0a0);
+  color: var(--canvas-muted);
   text-align: center;
 }
 
@@ -257,7 +257,7 @@
     flex: 0 0 auto;
     max-height: 42vh;
     border-left: 0;
-    border-top: 1px solid var(--border, #333);
+    border-top: 1px solid var(--canvas-line);
   }
   .levelBackLabel { display: none; }
 }

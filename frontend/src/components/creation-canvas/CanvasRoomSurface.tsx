@@ -17,6 +17,7 @@ import { spatialPeers, type LivePresenceMap } from '@/lib/canvas/livePresence';
 import { ROOM_PALETTES, assignRoomSeats, roomSeatPlacement, type RoomOccupant } from '@/lib/canvas/roomSeating';
 import { DEFAULT_ROOM_SESSION_SPOT, placeSessionInRoom } from '@/lib/canvas/roomSession';
 import type { RoomCreation } from '@/lib/canvas/roomCreations';
+import type { RoomSpeech } from '@/lib/canvas/roomSpeech';
 import { roomSpotKey } from '@/lib/canvas/roomSpots';
 import { useRoomSpot } from '@/lib/canvas/useRoomSpot';
 import { CanvasBarGroup } from './CanvasBarGroup';
@@ -70,6 +71,11 @@ import styles from './CanvasRoomSurface.module.css';
  * things in it (their captions), and in its rail. A control group on the session bar
  * once pushed the bar under the Brain panel; that is not repeated.
  *
+ * ── WHY AGENTS SPEAK HERE ────────────────────────────────────────────────────────
+ * When several agents answer a turn, each reply is drawn over the head of the agent
+ * who gave it, and an agent still working shows that it is — handed in as `speech`,
+ * which the host reads off the conversation. The room decides only where it goes.
+ *
  * ── WHAT IT OWNS ─────────────────────────────────────────────────────────────────
  * Where bodies are, who is here, where the session sits, which mode the reader is in,
  * and announcing its own presence (`useBodyAnnouncer` — seated, walking, or handed to
@@ -117,6 +123,12 @@ export interface CanvasRoomSurfaceProps<T extends Canvas3DNode> {
   onOpenCreation: (creation: RoomCreation) => void;
   /** Put the room's design on sale. Absent when this viewer cannot publish. */
   onPublishRoom?: ((roomObjectId: string) => void) | undefined;
+  /**
+   * What each agent at the table is saying — its reply to the latest turn, or that it
+   * is still working — keyed by seat. Read off the conversation by the host
+   * (`lib/canvas/roomSpeech.ts`); the room only draws it over the right head.
+   */
+  speech?: ReadonlyMap<string, RoomSpeech>;
   /** Arrive with the session already open — a model comparison lands in depth. */
   sessionInitiallyOpen?: boolean;
   onExit: () => void;
@@ -134,6 +146,7 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
   creations,
   onOpenCreation,
   onPublishRoom,
+  speech,
   sessionInitiallyOpen = false,
   onExit,
 }: CanvasRoomSurfaceProps<T>) {
@@ -291,6 +304,8 @@ export function CanvasRoomSurface<T extends Canvas3DNode>({
                     controlsEnabled={!dragging}
                     orbit={!walking}
                     hiddenUserId={walking ? currentUserId : null}
+                    speech={speech}
+                    thinkingLabel={t('thinking')}
                   >
                     <RoomFurnitureLayer design={design} palette={palette} designing={designing ? designer.designing : undefined} />
                     {scene && <RoomSessionDiorama

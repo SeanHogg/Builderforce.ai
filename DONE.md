@@ -1,3 +1,31 @@
+## ✅ RESOLVED 2026-09-12 — Room: agents answer as themselves and speak over their heads; Call, Standup and Copy diagnostics work there
+
+Reported from the Room: "@Manager @CFO @Counsel …" came back as ONE reply labelled Brain that role-played
+the agents ("**CMO:** …"); Call and Standup were greyed out; there was no way to copy diagnostics.
+
+- **@-mentions pick the agents** (`frontend/src/lib/canvas/agentMentions.ts`). The canvas never read a mention
+  to decide who took part: a turn reached only selected or Brain-wired agents (cap 3), so with Counsel selected
+  Manager and CFO were never asked. `mentionedBoardAgents` resolves `@Name` against every agent card (name, seat
+  or roster ref; whole word; any script), one per agent, capped at `MAX_ADDRESSED_AGENTS` = 8. With no mention the
+  old selected/connected rule stands. The group chat's `addressedCanvasAgents` now uses the same matcher.
+- **Agents without a runtime still answer.** Device-only boards run every card as a draft persona, as before. On a
+  signed-in board the cards the canonical group turn cannot reach answer TALK-ONLY (no canvas tools) instead of
+  being skipped, which is what left an addressed agent silent and Brain speaking for it.
+- **Brain stops speaking for them.** The Brain directive (`canvasAiSystemPrompt.ts`) forbids writing in another
+  participant's voice; the synthesis prompt ends with one summary line per agent, then what was created.
+- **Speech over their heads** (`lib/canvas/roomSpeech.ts`, `world3d/PeerSpeechBubble.tsx`). Each agent's reply
+  to the latest turn floats over its seat, "Thinking…" while it works; a new question clears the table. Keyed by
+  `boardAgentOccupantId`, extracted from `boardAgentOccupants` with `uniqueBoardAgents`.
+- **Call:** a guest's press opens the account prompt (`gateCallTitle/Body`) instead of a dead glyph.
+- **Standup** (`useCanvasStandupAction`): one turn @-addressing every agent at the table (`standupRoundPrompt`),
+  so each reports in its own name and Brain summarises; it also files the ceremony when a workspace and project
+  resolve. It was disabled on every device-only board; the record belongs to a project, not the board.
+- **Copy diagnostics in every Brain header** (`canvasDiagnosticsContext.tsx`, `CopyButton` `bare`). The canvas
+  publishes its report builder once; `BrainSurfaceActions` (split out of `BrainDock.tsx`, 452 → 351 lines) draws
+  the copy glyph in the dock, the Brain Object and the chat surface.
+- Tests: `agentMentions.test.ts`, `roomSpeech.test.ts`; the creation-canvas, session-action, surface and agent-chat
+  suites pass; whole-project `tsgo --noEmit` clean. Not visually verified in a browser (the room needs WebGL).
+
 ## ✅ RESOLVED 2026-09-12 — `agent-runtime`'s browser/server tests flaked under full-suite CI load
 
 `pnpm test:fast` (`vitest.unit.config.ts`, 3 parallel workers on CI) intermittently failed

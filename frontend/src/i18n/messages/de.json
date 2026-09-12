@@ -20785,7 +20785,8 @@
       "transclusion": "Transklusion",
       "calendar": "Kalender",
       "component": "Komponente",
-      "flowStep": "Schritt"
+      "flowStep": "Schritt",
+      "room": "Raumgestaltung"
     },
     "twilioSetup": {
       "title": "Twilio-Integration",
@@ -23500,7 +23501,8 @@
         "tool": "Werkzeug",
         "creative": "Kreativ-Asset",
         "survey": "Umfrage",
-        "book": "Buch"
+        "book": "Buch",
+        "room": "Raumgestaltung"
       },
       "launchHint": {
         "play": "Käufer spielen es im Browser.",
@@ -23894,7 +23896,8 @@
         "geometry": "prüft, ob es sich wirklich fertigen lässt",
         "instrument": "beantwortet es und liest dann die Auswertung ohne Antworten",
         "system": "lässt es trocken laufen, jeder ausgehende Schritt simuliert",
-        "deployment": "die Live-Adresse"
+        "deployment": "die Live-Adresse",
+        "space": "begeht ihn und prüft, ob alle einen Platz haben"
       },
       "state": {
         "draft": "Entwurf",
@@ -24024,6 +24027,96 @@
           "openButton": "Öffnen",
           "back": "Zurück zum Raum",
           "hint": "{count, plural, =0 {Leer · ziehen zum Verschieben} one {# Objekt · ziehen zum Verschieben} other {# Objekte · ziehen zum Verschieben}}"
+        },
+        "open": "Raum öffnen",
+        "walkHint": "WASD oder Pfeiltasten zum Gehen · Leertaste zum Springen · Ziehen zum Umsehen · Mausrad zum Zoomen",
+        "mode": {
+          "label": "Wie du im Raum bist",
+          "look": "Ansehen",
+          "walk": "Gehen",
+          "design": "Gestalten",
+          "lookHint": "Um den Raum kreisen und verschieben, was darin steht",
+          "walkHint": "Als du selbst durch den Raum gehen — andere sehen dich",
+          "designHint": "Den Raum einrichten: Möbel, Wände und Boden",
+          "toDoor": "Zurück zur Tür"
+        },
+        "level": {
+          "play": "Spielen",
+          "playNamed": "{title} hier im Raum spielen",
+          "back": "Zurück zum Raum",
+          "empty": "Dieser Ort hat noch keine begehbaren Teile.",
+          "openFull": "Im Vollbild öffnen"
+        },
+        "design": {
+          "hint": "Stück ziehen zum Verschieben · R zum Drehen · Entf zum Entfernen",
+          "rail": "Raumgestalter",
+          "rooms": "Dieser Raum",
+          "meetHere": "Hier treffen",
+          "meetingHere": "Treffen hier",
+          "summary": "{seats, plural, =0 {Keine Plätze} one {# Platz} other {# Plätze}} · {pieces, plural, one {# Stück} other {# Stücke}} · {area} m²",
+          "standupNote": "Das ist der Standup-Raum, mit dem jede Sitzung beginnt. Wähle ein Layout oder füge ein Stück hinzu, und er wird zum eigenen Raum dieser Sitzung.",
+          "presets": "Beginnen mit",
+          "presetHint": "Ein Layout ersetzt die Möbel in diesem Raum. Rückgängig holt sie zurück.",
+          "layout": {
+            "standup": "Standup-Raum",
+            "boardroom": "Konferenzraum",
+            "kitchen": "Büroküche",
+            "openPlan": "Großraumbüro",
+            "custom": "Eigener Raum"
+          },
+          "furniture": "Möbel hinzufügen",
+          "kind": {
+            "tableRound": "Runder Tisch",
+            "tableLong": "Langer Tisch",
+            "desk": "Schreibtisch",
+            "counter": "Theke",
+            "chair": "Stuhl",
+            "stool": "Hocker",
+            "sofa": "Sofa",
+            "partition": "Trennwand",
+            "whiteboard": "Whiteboard",
+            "screen": "Bildschirm",
+            "poster": "Poster",
+            "shelf": "Regal",
+            "fridge": "Kühlschrank",
+            "plant": "Pflanze",
+            "lamp": "Lampe",
+            "rug": "Teppich",
+            "model": "Dein Modell"
+          },
+          "uploadModel": "3D-Modell hochladen",
+          "uploadModelHint": "STL, OBJ, glTF, GLB oder STEP. Es steht in sinnvoller Größe im Raum und lässt sich strecken.",
+          "modelFormat": "Diese Datei ist kein 3D-Modell, das der Raum anzeigen kann. Verwende STL, OBJ, glTF, GLB oder STEP.",
+          "uploading": "Wird hochgeladen…",
+          "uploadFailed": "Der Upload hat nicht geklappt. Versuche es erneut.",
+          "selected": "Ausgewähltes Stück",
+          "noSelection": "Klicke auf ein Stück im Raum, um es zu ändern.",
+          "rotateLeft": "Nach links drehen",
+          "rotateRight": "Nach rechts drehen",
+          "pieceWidth": "Breite",
+          "pieceHeight": "Höhe",
+          "pieceDepth": "Tiefe",
+          "color": "Farbe",
+          "resetColor": "Standardfarbe",
+          "image": "Bild",
+          "imagePlaceholder": "https://… ein Bild, das darauf erscheint",
+          "uploadImage": "Bild hochladen",
+          "clearImage": "Bild entfernen",
+          "remove": "Stück entfernen",
+          "room": "Wände und Boden",
+          "floorWidth": "Bodenbreite (m)",
+          "floorDepth": "Bodentiefe (m)",
+          "wallHeight": "Wandhöhe (m)",
+          "floorColor": "Bodenfarbe",
+          "wallColor": "Wandfarbe",
+          "resetColors": "Standardfarben",
+          "share": "Diesen Raum teilen",
+          "download": "Gestaltung herunterladen",
+          "uploadDesign": "Gestaltung hochladen",
+          "uploadDesignFailed": "Diese Datei ist keine Raumgestaltung.",
+          "sell": "Im Marketplace verkaufen",
+          "sellHint": "Andere Teams installieren eine Kopie dieses Raums und treffen sich darin.",
+          "saveFirst": "Ändere irgendetwas im Raum, und er wird zu einer Gestaltung, die du verkaufen kannst."
         }
       },
       "page": {
@@ -24156,6 +24249,14 @@
           "score": "{collected}/{total} eingesammelt",
           "hits": "{count} Treffer",
           "won": "Ziel erreicht!"
+        },
+        "touch": {
+          "label": "Bewegung",
+          "forward": "Vorwärts gehen",
+          "back": "Rückwärts gehen",
+          "left": "Schritt nach links",
+          "right": "Schritt nach rechts",
+          "jump": "Springen"
         }
       },
       "backToBoard": "Zurück zum Board",
@@ -24490,7 +24591,8 @@
       "sticky": "Freies Notizzettel für schnelle Gedanken auf der Arbeitsfläche.",
       "stopwatch": "Miss, wie lange etwas wirklich dauert. Alle sehen dieselbe Uhr.",
       "transclusion": "Zeig hier ein anderes Wissensdokument, live – keine Kopie davon.",
-      "flowStep": "Ein ausführbarer Schritt — Modellaufruf, Integration oder Entscheidung — verbunden mit den Schritten daneben."
+      "flowStep": "Ein ausführbarer Schritt — Modellaufruf, Integration oder Entscheidung — verbunden mit den Schritten daneben.",
+      "room": "Der Raum, in dem sich diese Sitzung trifft — ein Konferenzraum, eine Büroküche, ein Großraumbüro —, Stück für Stück eingerichtet und in 3D begehbar."
     },
     "previewWidth": "Vorschaubreite",
     "viewportName": {
@@ -27630,7 +27732,8 @@
       "tool": "Werkzeug",
       "creative": "Kreativ-Asset",
       "book": "Buch",
-      "survey": "Umfrage"
+      "survey": "Umfrage",
+      "room": "Raumgestaltung"
     },
     "launchVerb": {
       "play": "Spielen",

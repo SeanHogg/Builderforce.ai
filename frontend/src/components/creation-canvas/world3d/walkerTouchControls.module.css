@@ -35,16 +35,16 @@
   -webkit-user-select: none;
   width: 52px;
   height: 52px;
-  border: 1px solid var(--border, #333);
+  border: 1px solid var(--canvas-line);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--surface, #1a1a1a) 82%, transparent);
-  color: var(--text-primary, #f5f5f5);
+  background: color-mix(in srgb, var(--canvas-panel) 82%, transparent);
+  color: var(--canvas-ink);
   font-size: var(--font-size-card-title);
   line-height: 1;
   cursor: pointer;
 }
 
-.button:active { background: var(--accent, #6d5dfc); color: var(--text-on-accent, #fff); }
+.button:active { background: var(--canvas-accent); color: var(--canvas-accent-ink); }
 
 .button[data-slot='up'] { grid-area: up; }
 .button[data-slot='left'] { grid-area: left; }

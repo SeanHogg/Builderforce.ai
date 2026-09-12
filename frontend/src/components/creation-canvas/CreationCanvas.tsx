@@ -23,7 +23,7 @@ import '@xyflow/react/dist/style.css';
 import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasSocialIcon, CleanLayoutIcon, DepthIcon, DisclosureIcon, DropToLayersIcon, FitViewIcon, LayerGuidesIcon, MarqueeSelectIcon, MinimapIcon, MoreActionsIcon, ProveIdeaIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
 import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
 import type { CanvasRoomSurfaceProps } from './CanvasRoomSurface';
-import { ROOM_CREATION_TOOL_NOTE, isRoomCreationKind, type RoomCreation } from '@/lib/canvas/roomCreations';
+import { ROOM_CREATION_TOOL_NOTE, leadsToRoom, roomToolNote, type RoomCreation } from '@/lib/canvas/roomCreations';
 import { roomCreationsOf } from './roomCreationsOf';
 import { useCanvasStandupAction } from './useCanvasStandupAction';
 import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
@@ -67,6 +67,9 @@ import { BRAND_BINDING_FIELD, CANVAS_PRESENCE_FRAME, canvasScreenshotToolRedirec
 import { CanvasCommandBar } from './CanvasCommandBar';
 import { TeamBar } from '@/components/team/TeamBar';
 import { boardAgentOccupants, boardAgents } from '@/lib/canvas/boardAgents';
+import { mentionedBoardAgents } from '@/lib/canvas/agentMentions';
+import { roomSpeech } from '@/lib/canvas/roomSpeech';
+import { CanvasDiagnosticsProvider } from './canvasDiagnosticsContext';
 import type { CanvasSessionActionId } from '@/lib/canvasSessionActions';
 import { CanvasChatSurface } from './CanvasChatSurface';
 import { CanvasAppSurface } from './CanvasAppSurface';
@@ -137,6 +140,7 @@ import { formatResourceRef, parseResourceRef } from '@builderforce/creation-canv
 import { canvasPlacementFlags } from '@/domains/canvas/domain/canvasObject';
 import { CardActProvider, useCardActRunnerFor, type CardActBoardBinding } from './cardActRunner';
 import { CanvasBoardBridgeProvider, useCanvasBoardBridgeFor } from './canvasBoardBridge';
+import { CanvasSpacePresenceProvider, type CanvasSpacePresenceValue } from './canvasSpacePresence';
 import { KindDetailsActions } from './KindDetailsActions';
 import { syncSocialCampaign as syncCampaignUseCase } from '@/domains/marketing/application/SyncSocialCampaign';
 import { socialCampaignGateway } from '@/domains/marketing/infrastructure/socialCampaignGateway';
@@ -8653,7 +8657,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const width = Number(args.width); const height = Number(args.height);
       if (Number.isFinite(width) || Number.isFinite(height)) node.style = { width: Number.isFinite(width) ? Math.max(240, Math.min(width, 2_400)) : undefined, height: Number.isFinite(height) ? Math.max(130, Math.min(height, 1_800)) : undefined };
       stage.addObject(`Add ${node.data.kind} “${node.data.title}”`, node);
-      return { ok: true, proposed: true, object: { id: node.id, kind: node.data.kind, title: node.data.title }, mutableFields: creationObjectDefinition(args.kind).mutableFields, ...(isRoomCreationKind(args.kind) ? { instruction: ROOM_CREATION_TOOL_NOTE } : {}) };
+      return { ok: true, proposed: true, object: { id: node.id, kind: node.data.kind, title: node.data.title }, mutableFields: creationObjectDefinition(args.kind).mutableFields, ...(roomToolNote(args.kind) ? { instruction: roomToolNote(args.kind) } : {}) };
     },
   }, {
     name: 'canvas_update_object',
@@ -9496,10 +9500,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         });
       };
       clearComposer();
-      const connectedAgentNodes = nodes.filter((node) => node.data.kind === 'agent' && (
-        effectiveSelectedIds.includes(node.id)
-        || edges.some((edge) => (edge.source === brainId && edge.target === node.id) || (edge.target === brainId && edge.source === node.id))
-      )).slice(0, 3);
+      // WHO THIS TURN IS FOR. An @-mention names its agents outright, wherever they are on
+      // the board; without one, the agents in reach (selected, or wired to Brain) answer.
+      // Mentions used to reach only the model: "@Manager @CFO @Counsel" with Counsel
+      // selected asked Counsel alone, and Brain wrote the other two's parts for them.
+      const mentionedIds = new Set(mentionedBoardAgents(requestText, boardAgents(nodes)).map((agent) => agent.objectId));
+      const connectedAgentNodes = mentionedIds.size
+        ? nodes.filter((node) => mentionedIds.has(node.id))
+        : nodes.filter((node) => node.data.kind === 'agent' && (
+          effectiveSelectedIds.includes(node.id)
+          || edges.some((edge) => (edge.source === brainId && edge.target === node.id) || (edge.target === brainId && edge.source === node.id))
+        )).slice(0, 3);
       setActiveAgentIds(new Set(connectedAgentNodes.map((agent) => agent.id)));
       const confirmCanvasAction = ({ name, args }: { name: string; args: unknown }) => {
         let preview = '';
@@ -9518,6 +9529,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         /** Specialist replies actually gathered this turn — what decides whether the
          *  Brain runs as a synthesis or simply answers the request. */
         let contributions = 0;
+        const canonicalObjectIds = new Set<string>();
         const canonicalAgents = connectedAgentNodes.flatMap((agent) => {
           // Two ways a card names a REAL agent: a canonical `agent:<id>` resource, or the
           // `ide_agents.id` a seated built-in teammate carries (`cmo-t14`, see
@@ -9531,6 +9543,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             ?? (agent.data.builtinAgent === true && typeof agent.data.agentRef === 'string' && agent.data.agentRef.trim()
               ? agent.data.agentRef.trim()
               : undefined);
+          if (ref) canonicalObjectIds.add(agent.id);
           return ref ? [{ ref, name: agent.data.title || 'Specialist agent', role: typeof agent.data.role === 'string' ? agent.data.role : undefined }] : [];
         });
         if (persistence === 'server' && canonicalAgents.length) {
@@ -9564,17 +9577,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             const detail = describeTurnError(error, 'noticeAgentGroupFailed');
             appendTimeline('system', t('noticeAgentGroupTurnFailed', { reason: detail }), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:agent-group-error`);
           }
-        } else if (persistence !== 'server' && connectedAgentNodes.length) {
-          // Guest drafts cannot call the tenant workforce runtime. Keep ideation
-          // useful, but do not present these local personas as canonical agents.
-          //
-          // GUESTS ONLY, now explicitly. A signed-in board whose agent cards carry no
-          // runtime ref used to land here too, and this branch is a full tool loop per
-          // card with the whole canvas vocabulary: on a tenant board that meant an
-          // "invited specialist" building the user's app before Brain did. A card
-          // without a runtime behind it is a card; the agents that can answer are the
-          // canonical ones above.
-          for (const agent of connectedAgentNodes) {
+        }
+        // AGENTS WITH NO RUNTIME BEHIND THEM still answer, in their own names. On a board
+        // that lives only on this device that is every card: guest drafts cannot call the
+        // tenant workforce runtime, so each is a local persona with the canvas tools, and
+        // is never presented as a canonical agent. On a signed-in board it is the cards the
+        // canonical turn above could not reach, and those answer TALK-ONLY, with no canvas
+        // tools. They used to be skipped outright, because a full tool loop per card had an
+        // "invited specialist" building the user's app before Brain did; but a skipped
+        // card left an @-addressed agent with no reply, and Brain wrote one for it.
+        const draftAgentNodes = persistence === 'server'
+          ? connectedAgentNodes.filter((node) => !canonicalObjectIds.has(node.id))
+          : connectedAgentNodes;
+        if (draftAgentNodes.length) {
+          for (const agent of draftAgentNodes) {
             const name = agent.data.title || 'Draft specialist';
             const ref = agent.id;
             try {
@@ -9582,7 +9598,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 prompt: 'Contribute a specialist perspective to the latest request.', canvasSnapshot: turnSnapshot(stage.nodes()),
                 guestTurnId: requestMessageId,
                 guestTurnInput: request,
-                persistence, canvasActions, notices: canvasNotices, routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
+                persistence, canvasActions: persistence === 'server' ? [] : canvasActions, notices: canvasNotices, routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
                 autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
                 disabledModels: brainRuntime.current.disabledModels,
                 onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel,
@@ -9616,7 +9632,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           // connected but produced nothing (no runtime, or a failed group turn) leave the
           // Brain answering the request itself, against the transcript it actually has.
           prompt: contributions > 0
-            ? `Synthesize the invited agents' perspectives and complete the user's requested outcome. Resolve disagreements, make the final Canvas changes, and state what was actually created.`
+            ? `The invited agents have each replied above, under their own names. Complete the user's requested outcome from what they said: resolve disagreements and make the final Canvas changes. Do not repeat or rewrite their replies, and never speak for an agent who did not reply. End with a short summary: one line per agent with their key point, then what was actually created.`
             : request,
           // The board as it is NOW — after the invited agents' work landed on it — not
           // as it was when the turn began. See `turnSnapshot`.
@@ -9962,8 +9978,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (materializedAdditions.length) setSelectedId(materializedAdditions[materializedAdditions.length - 1]!.node.id);
     else if (selectedId && deletedObjectIds.has(selectedId)) { setSelectedId(null); setSelectedIds([]); }
     // A 3D creation stands in the ROOM — that is where it is walked round and opened
-    // from — so a turn that made one takes the reader there, on every device.
-    if (materializedAdditions.some((change) => isRoomCreationKind(change.node.data.kind))) setSurface('room');
+    // from — and a room design IS the room, so a turn that made either takes the
+    // reader there, on every device.
+    if (materializedAdditions.some((change) => leadsToRoom(change.node.data.kind))) setSurface('room');
     if (layoutViewportRef.current().narrow && materializedAdditions.length) {
       const brainId = nodes.find((node) => node.data.kind === 'chat')?.id;
       const focusIds = [brainId, ...materializedAdditions.map((change) => change.node.id)].filter((id): id is string => !!id);
@@ -11772,8 +11789,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     () => [...rosterMembers, ...boardAgentOccupants(seatedAgents)],
     [rosterMembers, seatedAgents],
   );
+  // What each agent at the table is saying this turn, drawn over its head in the room.
+  const roomSpeechBySeat = useMemo(
+    () => roomSpeech(timeline, seatedAgents, activeAgentIds),
+    [activeAgentIds, seatedAgents, timeline],
+  );
   // The board as the room's stations and a framed third-party widget read and edit it.
   const boardBridge = useCanvasBoardBridgeFor({ sessionId, title, persistence, objects: nodes, act: cardActBoard, patch: cardsEditable ? updateNodeData : null, remove: cardsEditable ? deleteObjects : null, selfId: rosterSelfId, occupants: roomOccupants });
+  // Who is walking which space — a level played in the room, a game on its own surface.
+  // Published once, read by any walker by object id (`useSpacePresence`).
+  const spacePresence = useMemo<CanvasSpacePresenceValue>(
+    () => ({ live: livePresence, selfId: rosterSelfId, members: rosterMembers, send: sendPresence }),
+    [livePresence, rosterMembers, rosterSelfId, sendPresence],
+  );
 
   const brainSurfaceOpen = !presentMode && brainDock.open;
   const brainCollaborators = useMemo(
@@ -12071,8 +12099,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * the same entry rather than by two copies of the same `onClick`.
    */
   // The standup beside the call. The hook resolves the project (scope, then this
-  // board's) and owns the ceremony; this file learns one handler.
-  const standupAction = useCanvasStandupAction(rosterMembers, boardProjectId, persistence === 'server', setNotice);
+  // board's), owns the ceremony and asks the agents at the table for their updates
+  // through the ordinary turn path; this file learns one handler.
+  const standupAction = useCanvasStandupAction({
+    members: rosterMembers, agents: seatedAgents, boardProjectId,
+    ceremonyEnabled: hasAccount, onError: setNotice, onAgentRound: startCanvasTurn,
+  });
   const sessionActionHandlers: Record<CanvasSessionActionId, CanvasSessionActionHandler> = (() => {
     // Every one of these can be pressed from the ••• sheet as well as from the bar, and a
     // sheet that stays open over the panel it just opened is a sheet in the way. Wrapping
@@ -12099,7 +12131,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       //   `available` — a call is ALREADY running, so the dock at the bottom of the
       //                 shell is the control from now on and this one withdraws rather
       //                 than sitting beside it lit up doing nothing.
-      call: { ...act(() => liveRoom?.start()), disabled: !liveRoom?.canStart, available: liveRoom?.live !== true },
+      //   A GUEST is the exception to `disabled`: their press opens the account prompt,
+      //   which answers "why can I not call" where a dimmed glyph said nothing.
+      call: {
+        ...act(() => (liveRoom?.canStart ? liveRoom.start() : requireAccount('call', t('gateCallTitle'), t('gateCallBody')))),
+        disabled: !liveRoom || (!liveRoom.canStart && hasAccount),
+        available: liveRoom?.live !== true,
+      },
       standup: { ...act(standupAction.run), active: standupAction.active, disabled: standupAction.disabled },
       // A local canvas opens the SAME share sheet a saved one does. It used to open a
       // sign-up gate, which answered a question nobody asked: they wanted to show
@@ -12413,7 +12451,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     {/* Same reasoning for the card-act runner: a card's action button is drawn deep in
         the inspector, and handing it a callback would have meant one more entry in a
         prop list that already carries fifty. Published once, read where it is needed. */}
-    <CardActProvider runner={runCardActOnObject}><CanvasBoardBridgeProvider value={boardBridge}>
+    <CardActProvider runner={runCardActOnObject}><CanvasBoardBridgeProvider value={boardBridge}><CanvasSpacePresenceProvider value={spacePresence}><CanvasDiagnosticsProvider value={buildDiagnostics}>
     <div
       ref={shellRef}
       className={`${styles.canvasShell} app-full-height`}
@@ -12873,6 +12911,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               sessionId={sessionId}
               sessionTitle={title}
               members={roomOccupants}
+              speech={roomSpeechBySeat}
               currentUserId={rosterSelfId}
               live={livePresence}
               onPresence={sendPresence}
@@ -12891,6 +12930,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               />}
               creations={roomCreations}
               onOpenCreation={openRoomCreation}
+              // A designed room goes on sale through the same publish panel as any card.
+              {...(canEdit ? { onPublishRoom: openPublishPanel } : {})}
               sessionInitiallyOpen={comparisonModelIds.length >= 2}
               onExit={() => setSurface('graph')}
             />,
@@ -12919,6 +12960,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               // sharing model for games. Playing is when a person wants both.
               players={rosterMembers}
               onInvite={() => setShareOpen(true)}
+              objectId={surfaceNode.id}
             /> : null,
             site: surfaceNode ? <CanvasSiteSurface
               data={surfaceNode.data}
@@ -13262,7 +13304,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         onStepChange={prepareTourStep}
       />
     </div>
-    </CanvasBoardBridgeProvider></CardActProvider>
+    </CanvasDiagnosticsProvider></CanvasSpacePresenceProvider></CanvasBoardBridgeProvider></CardActProvider>
     </CanvasSurfaceProvider>
   );
 }

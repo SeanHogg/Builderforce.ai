@@ -40,6 +40,15 @@ export function isRoomCreationKind(kind: CreationObjectKind): boolean {
   return ROOM_CREATION_KINDS.has(kind);
 }
 
+/**
+ * Whether a Brain turn that adds this kind takes the reader to the room: every
+ * creation that stands in it, and the room's own design (`room`) — which is not a
+ * thing IN the room but the room itself, so it is not a creation.
+ */
+export function leadsToRoom(kind: CreationObjectKind): boolean {
+  return kind === 'room' || isRoomCreationKind(kind);
+}
+
 /** One creation as the room reads it. Built from a board object by `roomCreationsOf`. */
 export interface RoomCreation {
   id: string;
@@ -69,6 +78,18 @@ export interface RoomCreation {
  * One sentence, shared by every tool that can add a room kind.
  */
 export const ROOM_CREATION_TOOL_NOTE = 'It stands in the Room: the canvas takes the reader there as soon as it lands, and the Open button on it plays or edits it at full size.';
+
+/**
+ * What Brain is told when it designs the room itself. It names the two fields that
+ * make a `room` more than a title, because a title-only room is refused as a shell.
+ */
+export const ROOM_DESIGN_TOOL_NOTE = 'It is the room this session meets in: the canvas takes the reader to the Room as soon as it lands, where it can be walked and rearranged. Set roomLayout to standup, boardroom, kitchen or openPlan, or send a complete roomDesign ({ floor: { width, depth }, wall: { height }, furniture: [{ kind, position: [x, 0, z], yaw, scale: [1, 1, 1] }] }).';
+
+/** The note a tool result carries for a kind that lands in the room, or null. */
+export function roomToolNote(kind: CreationObjectKind): string | null {
+  if (kind === 'room') return ROOM_DESIGN_TOOL_NOTE;
+  return isRoomCreationKind(kind) ? ROOM_CREATION_TOOL_NOTE : null;
+}
 
 /** Metres a model stands tall on its plinth, whatever units its file was written in. */
 export const ROOM_MODEL_SIZE = 0.9;

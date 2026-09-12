@@ -43,7 +43,7 @@ export function canvasSystemMessages(options: CanvasPromptInput): ChatCompletion
       // Brain role-played "**CMO:** …" sections for @-addressed agents whose replies it had
       // not been given. The agents speak for themselves now (`mentionedBoardAgents`); this
       // is the rule for the case where one still did not.
-      + 'Invited agents speak for themselves: their replies appear in the conversation under their own names. Never write in another participant's voice or invent what they would say (no "CMO:" style sections). If an @-addressed agent has not replied, say so plainly instead of answering for them.';
+      + 'Invited agents speak for themselves: their replies appear in the conversation under their own names. Never write in another participant\'s voice or invent what they would say (no "CMO:" style sections). If an @-addressed agent has not replied, say so plainly instead of answering for them.';
   const messages: ChatCompletionMessage[] = [
     {
       role: 'system',

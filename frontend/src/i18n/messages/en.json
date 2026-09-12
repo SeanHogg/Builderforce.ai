@@ -20785,7 +20785,8 @@
       "transclusion": "Transclusion",
       "calendar": "Calendar",
       "component": "Component",
-      "flowStep": "Step"
+      "flowStep": "Step",
+      "room": "Room design"
     },
     "twilioSetup": {
       "title": "Twilio integration",
@@ -23500,7 +23501,8 @@
         "tool": "Tool",
         "creative": "Creative asset",
         "survey": "Survey",
-        "book": "Book"
+        "book": "Book",
+        "room": "Room design"
       },
       "launchHint": {
         "play": "Buyers play it in the browser.",
@@ -23894,7 +23896,8 @@
         "geometry": "checks it can actually be made",
         "instrument": "takes it, then reads the results on zero responses",
         "system": "dry-runs it with every outbound step stubbed",
-        "deployment": "the live address"
+        "deployment": "the live address",
+        "space": "walks it and checks everyone has a seat"
       },
       "state": {
         "draft": "Draft",
@@ -24024,6 +24027,96 @@
           "openButton": "Open",
           "back": "Back to the room",
           "hint": "{count, plural, =0 {Empty · drag to move} one {# object · drag to move} other {# objects · drag to move}}"
+        },
+        "open": "Open the room",
+        "walkHint": "WASD or arrow keys to walk · Space to jump · drag to look · scroll to zoom",
+        "mode": {
+          "label": "How you are in the room",
+          "look": "Look",
+          "walk": "Walk",
+          "design": "Design",
+          "lookHint": "Orbit the room and move what stands in it",
+          "walkHint": "Walk the room as yourself — others see you move",
+          "designHint": "Lay the room out: furniture, walls and floor",
+          "toDoor": "Back to the door"
+        },
+        "level": {
+          "play": "Play",
+          "playNamed": "Play {title} here, in the room",
+          "back": "Back to the room",
+          "empty": "This place has no parts to walk yet.",
+          "openFull": "Open full screen"
+        },
+        "design": {
+          "hint": "Drag a piece to move it · R to turn it · Delete to remove it",
+          "rail": "Room designer",
+          "rooms": "This room",
+          "meetHere": "Meet here",
+          "meetingHere": "Meeting here",
+          "summary": "{seats, plural, =0 {No seats} one {# seat} other {# seats}} · {pieces, plural, one {# piece} other {# pieces}} · {area} m²",
+          "standupNote": "This is the standup room every session starts in. Pick a layout or add a piece and it becomes this session’s own room.",
+          "presets": "Start from",
+          "presetHint": "A layout replaces the furniture in this room. Undo brings it back.",
+          "layout": {
+            "standup": "Standup room",
+            "boardroom": "Boardroom",
+            "kitchen": "Office kitchen",
+            "openPlan": "Open floor plan",
+            "custom": "Custom room"
+          },
+          "furniture": "Add furniture",
+          "kind": {
+            "tableRound": "Round table",
+            "tableLong": "Long table",
+            "desk": "Desk",
+            "counter": "Counter",
+            "chair": "Chair",
+            "stool": "Stool",
+            "sofa": "Sofa",
+            "partition": "Partition",
+            "whiteboard": "Whiteboard",
+            "screen": "Screen",
+            "poster": "Poster",
+            "shelf": "Shelf",
+            "fridge": "Fridge",
+            "plant": "Plant",
+            "lamp": "Lamp",
+            "rug": "Rug",
+            "model": "Your model"
+          },
+          "uploadModel": "Upload a 3D model",
+          "uploadModelHint": "STL, OBJ, glTF, GLB or STEP. It stands in the room at a sensible size and can be stretched.",
+          "modelFormat": "That file is not a 3D model the room can show. Use STL, OBJ, glTF, GLB or STEP.",
+          "uploading": "Uploading…",
+          "uploadFailed": "The upload did not go through. Try again.",
+          "selected": "Selected piece",
+          "noSelection": "Click a piece in the room to change it.",
+          "rotateLeft": "Turn left",
+          "rotateRight": "Turn right",
+          "pieceWidth": "Width",
+          "pieceHeight": "Height",
+          "pieceDepth": "Depth",
+          "color": "Colour",
+          "resetColor": "Default colour",
+          "image": "Picture",
+          "imagePlaceholder": "https://… an image to show on it",
+          "uploadImage": "Upload a picture",
+          "clearImage": "Remove picture",
+          "remove": "Remove piece",
+          "room": "Walls and floor",
+          "floorWidth": "Floor width (m)",
+          "floorDepth": "Floor depth (m)",
+          "wallHeight": "Wall height (m)",
+          "floorColor": "Floor colour",
+          "wallColor": "Wall colour",
+          "resetColors": "Default colours",
+          "share": "Share this room",
+          "download": "Download design",
+          "uploadDesign": "Upload design",
+          "uploadDesignFailed": "That file is not a room design.",
+          "sell": "Sell in the marketplace",
+          "sellHint": "Other teams install a copy of this room and meet in it.",
+          "saveFirst": "Change anything in the room and it becomes a design you can sell."
         }
       },
       "page": {
@@ -24156,6 +24249,14 @@
           "score": "{collected}/{total} collected",
           "hits": "{count} hits",
           "won": "Goal reached!"
+        },
+        "touch": {
+          "label": "Movement",
+          "forward": "Walk forward",
+          "back": "Walk back",
+          "left": "Step left",
+          "right": "Step right",
+          "jump": "Jump"
         }
       },
       "backToBoard": "Back to the board",
@@ -24490,7 +24591,8 @@
       "sticky": "Freeform sticky note for quick thoughts on the canvas.",
       "stopwatch": "Time how long something actually takes. Everyone watching sees the same clock.",
       "transclusion": "Show another knowledge document here, live — not a copy of it.",
-      "flowStep": "One executable step — a model call, an integration, a decision — wired to the steps around it."
+      "flowStep": "One executable step — a model call, an integration, a decision — wired to the steps around it.",
+      "room": "The room this session meets in — a boardroom, an office kitchen, an open floor plan — laid out piece by piece and walked in 3D."
     },
     "previewWidth": "Preview width",
     "viewportName": {
@@ -27630,7 +27732,8 @@
       "tool": "Tool",
       "creative": "Creative asset",
       "book": "Book",
-      "survey": "Survey"
+      "survey": "Survey",
+      "room": "Room design"
     },
     "launchVerb": {
       "play": "Play",

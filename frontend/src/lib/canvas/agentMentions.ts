@@ -27,7 +27,7 @@ import { uniqueBoardAgents, type BoardAgent } from './boardAgents';
 export const MAX_ADDRESSED_AGENTS = 8;
 
 const NOT_WORD = /[^\p{L}\p{N}]+/gu;
-const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\]/g, '\$&');
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** Whether `prompt` @-mentions any of `labels`. Empty and missing labels never match. */
 export function mentionsAny(prompt: string, labels: readonly (string | null | undefined)[]): boolean {
@@ -37,7 +37,7 @@ export function mentionsAny(prompt: string, labels: readonly (string | null | un
     const spaced = (label ?? '').toLowerCase().replace(NOT_WORD, ' ').trim();
     if (!spaced) return false;
     const forms = [...new Set([spaced, spaced.replaceAll(' ', '')])].map(escapeRegExp);
-    return new RegExp(`@(?:${forms.join('|')})(?![\p{L}\p{N}])`, 'u').test(lower);
+    return new RegExp(`@(?:${forms.join('|')})(?![\\p{L}\\p{N}])`, 'u').test(lower);
   });
 }
 

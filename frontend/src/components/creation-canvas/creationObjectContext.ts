@@ -38,6 +38,9 @@ import '@/lib/specObjectSets';
 /** The hand-declared half of the snapshot's read list — every non-spec field Brain may see. */
 const DECLARED_CONTEXT_FIELDS = [
   'kind', 'title', 'subtitle', 'status', 'resourceId', 'model', 'role', 'focus',
+  // The room's design: which preset, and the furniture — so "put a sofa by the
+  // window" starts from the room that is there rather than replacing it.
+  'roomLayout', 'roomDesign',
   'fetchedAt', 'dateRange', 'projectLens', 'columns', 'rowCount', 'sampleRows', 'profile', 'highlightRules', 'sourceDatasetId',
   // ── Data architecture ────────────────────────────────────────────────────
   // The model, its verdict, and its generated DDL. Brain must be able to READ a

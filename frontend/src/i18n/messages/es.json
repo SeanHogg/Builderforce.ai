@@ -20785,7 +20785,8 @@
       "transclusion": "Transclusión",
       "calendar": "Calendario",
       "component": "Componente",
-      "flowStep": "Paso"
+      "flowStep": "Paso",
+      "room": "Diseño de sala"
     },
     "twilioSetup": {
       "title": "Integración de Twilio",
@@ -23500,7 +23501,8 @@
         "tool": "Herramienta",
         "creative": "Recurso creativo",
         "survey": "Encuesta",
-        "book": "Libro"
+        "book": "Libro",
+        "room": "Diseño de sala"
       },
       "launchHint": {
         "play": "Los compradores lo juegan en el navegador.",
@@ -23894,7 +23896,8 @@
         "geometry": "comprueba que se pueda fabricar de verdad",
         "instrument": "lo responde y luego lee los resultados sin respuestas",
         "system": "lo ejecuta en seco con cada paso saliente simulado",
-        "deployment": "la dirección en vivo"
+        "deployment": "la dirección en vivo",
+        "space": "la recorre y comprueba que todos tengan asiento"
       },
       "state": {
         "draft": "Borrador",
@@ -24024,6 +24027,96 @@
           "openButton": "Abrir",
           "back": "Volver a la sala",
           "hint": "{count, plural, =0 {Vacía · arrastra para mover} one {# objeto · arrastra para mover} other {# objetos · arrastra para mover}}"
+        },
+        "open": "Abrir la sala",
+        "walkHint": "WASD o flechas para caminar · Espacio para saltar · arrastra para mirar · rueda para acercar",
+        "mode": {
+          "label": "Cómo estás en la sala",
+          "look": "Mirar",
+          "walk": "Caminar",
+          "design": "Diseñar",
+          "lookHint": "Gira alrededor de la sala y mueve lo que hay en ella",
+          "walkHint": "Recorre la sala en persona; los demás te ven moverte",
+          "designHint": "Distribuye la sala: muebles, paredes y suelo",
+          "toDoor": "Volver a la puerta"
+        },
+        "level": {
+          "play": "Jugar",
+          "playNamed": "Jugar {title} aquí, en la sala",
+          "back": "Volver a la sala",
+          "empty": "Este lugar aún no tiene piezas que recorrer.",
+          "openFull": "Abrir a pantalla completa"
+        },
+        "design": {
+          "hint": "Arrastra una pieza para moverla · R para girarla · Supr para quitarla",
+          "rail": "Diseñador de salas",
+          "rooms": "Esta sala",
+          "meetHere": "Reunirse aquí",
+          "meetingHere": "Reunidos aquí",
+          "summary": "{seats, plural, =0 {Sin asientos} one {# asiento} other {# asientos}} · {pieces, plural, one {# pieza} other {# piezas}} · {area} m²",
+          "standupNote": "Esta es la sala de standup con la que empieza toda sesión. Elige una distribución o añade una pieza y pasará a ser la sala propia de esta sesión.",
+          "presets": "Empezar desde",
+          "presetHint": "Una distribución reemplaza los muebles de esta sala. Deshacer los recupera.",
+          "layout": {
+            "standup": "Sala de standup",
+            "boardroom": "Sala de juntas",
+            "kitchen": "Cocina de oficina",
+            "openPlan": "Planta abierta",
+            "custom": "Sala personalizada"
+          },
+          "furniture": "Añadir muebles",
+          "kind": {
+            "tableRound": "Mesa redonda",
+            "tableLong": "Mesa larga",
+            "desk": "Escritorio",
+            "counter": "Encimera",
+            "chair": "Silla",
+            "stool": "Taburete",
+            "sofa": "Sofá",
+            "partition": "Mampara",
+            "whiteboard": "Pizarra blanca",
+            "screen": "Pantalla",
+            "poster": "Póster",
+            "shelf": "Estantería",
+            "fridge": "Nevera",
+            "plant": "Planta",
+            "lamp": "Lámpara",
+            "rug": "Alfombra",
+            "model": "Tu modelo"
+          },
+          "uploadModel": "Subir un modelo 3D",
+          "uploadModelHint": "STL, OBJ, glTF, GLB o STEP. Se coloca en la sala a un tamaño razonable y se puede estirar.",
+          "modelFormat": "Ese archivo no es un modelo 3D que la sala pueda mostrar. Usa STL, OBJ, glTF, GLB o STEP.",
+          "uploading": "Subiendo…",
+          "uploadFailed": "La subida no se completó. Inténtalo de nuevo.",
+          "selected": "Pieza seleccionada",
+          "noSelection": "Haz clic en una pieza de la sala para cambiarla.",
+          "rotateLeft": "Girar a la izquierda",
+          "rotateRight": "Girar a la derecha",
+          "pieceWidth": "Ancho",
+          "pieceHeight": "Alto",
+          "pieceDepth": "Fondo",
+          "color": "Color",
+          "resetColor": "Color predeterminado",
+          "image": "Imagen",
+          "imagePlaceholder": "https://… una imagen para mostrar en ella",
+          "uploadImage": "Subir una imagen",
+          "clearImage": "Quitar imagen",
+          "remove": "Quitar pieza",
+          "room": "Paredes y suelo",
+          "floorWidth": "Ancho del suelo (m)",
+          "floorDepth": "Fondo del suelo (m)",
+          "wallHeight": "Altura de las paredes (m)",
+          "floorColor": "Color del suelo",
+          "wallColor": "Color de las paredes",
+          "resetColors": "Colores predeterminados",
+          "share": "Compartir esta sala",
+          "download": "Descargar diseño",
+          "uploadDesign": "Subir diseño",
+          "uploadDesignFailed": "Ese archivo no es un diseño de sala.",
+          "sell": "Vender en el marketplace",
+          "sellHint": "Otros equipos instalan una copia de esta sala y se reúnen en ella.",
+          "saveFirst": "Cambia cualquier cosa de la sala y se convertirá en un diseño que puedes vender."
         }
       },
       "page": {
@@ -24156,6 +24249,14 @@
           "score": "{collected}/{total} recogidos",
           "hits": "{count} impactos",
           "won": "¡Meta alcanzada!"
+        },
+        "touch": {
+          "label": "Movimiento",
+          "forward": "Avanzar",
+          "back": "Retroceder",
+          "left": "Paso a la izquierda",
+          "right": "Paso a la derecha",
+          "jump": "Saltar"
         }
       },
       "backToBoard": "Volver al tablero",
@@ -24490,7 +24591,8 @@
       "sticky": "Nota adhesiva libre para apuntar ideas rápidas en el lienzo.",
       "stopwatch": "Mide cuánto dura algo de verdad. Todos ven el mismo reloj.",
       "transclusion": "Muestra aquí otro documento de conocimiento, en vivo, no una copia.",
-      "flowStep": "Un paso ejecutable —una llamada a un modelo, una integración, una decisión— conectado a los pasos que lo rodean."
+      "flowStep": "Un paso ejecutable —una llamada a un modelo, una integración, una decisión— conectado a los pasos que lo rodean.",
+      "room": "La sala donde se reúne esta sesión — una sala de juntas, una cocina de oficina, una planta abierta —, dispuesta pieza a pieza y recorrible en 3D."
     },
     "previewWidth": "Ancho de vista previa",
     "viewportName": {
@@ -27630,7 +27732,8 @@
       "tool": "Herramienta",
       "creative": "Recurso creativo",
       "book": "Libro",
-      "survey": "Encuesta"
+      "survey": "Encuesta",
+      "room": "Diseño de sala"
     },
     "launchVerb": {
       "play": "Jugar",

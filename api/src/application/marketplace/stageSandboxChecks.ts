@@ -53,6 +53,7 @@ function notApplicableCheck(harness: ListingHarness): StageCheck {
   const detail: Partial<Record<ListingHarness, string>> = {
     paged: 'Read, reflowed and proofed from the exact copy a buyer receives. There is nothing here to boot: a document\'s behaviour IS its content.',
     geometry: 'Measured from the model a buyer receives. What remains untested is the buyer\'s own printer and material, which no sandbox on this platform can stand in for.',
+    space: 'Walked from the design a buyer receives — every piece inside the walls, every seat counted. What it cannot know is how many people the buyer brings.',
     instrument: 'Every question, branch and scoring rule checked against the copy a buyer receives. What it cannot know is how your respondents answer.',
     system: 'Where the automation is a real workflow graph, it is dry-run with every outbound step captured rather than fired, so nothing left this workspace. What it cannot prove is that the buyer\'s own connected accounts behave the same way.',
     deployment: 'The live address was asked whether it is serving. Nothing here installed the product into a clean workspace and drove it, so behaviour that only appears in use is not covered.',

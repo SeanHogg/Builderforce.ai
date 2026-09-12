@@ -1,5 +1,7 @@
-'use client';
-
+/*
+ * No `'use client'` — imported only from `CreationCanvas` and `BrainSurfaceActions`, all inside the canvas's own
+ * client boundary. See the `use-client-is-a-declaration` rule.
+ */
 import { createContext, useContext } from 'react';
 import { useTranslations } from 'next-intl';
 import { CopyButton } from '@/components/CopyButton';

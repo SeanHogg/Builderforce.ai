@@ -66,9 +66,12 @@ export interface CanvasPlaySurfaceProps {
   players?: readonly CanvasRosterMember[];
   /** Open the canvas's own invite door. Absent when this visitor cannot invite. */
   onInvite?: () => void;
+  /** The game's object id — the SPACE its level is, so everyone playing it sees each
+   *  other (`useSpacePresence`). The same id the room plays it under. */
+  objectId?: string;
 }
 
-export function CanvasPlaySurface({ data, onExit, onShip, players = [], onInvite }: CanvasPlaySurfaceProps) {
+export function CanvasPlaySurface({ data, onExit, onShip, players = [], onInvite, objectId }: CanvasPlaySurfaceProps) {
   const t = useTranslations('creationCanvas');
   const tNode = useTranslations('creationCanvas.node');
   const stageRef = useRef<HTMLDivElement>(null);
@@ -102,7 +105,7 @@ export function CanvasPlaySurface({ data, onExit, onShip, players = [], onInvite
               // Walk mode from the first frame: this surface was entered by pressing
               // Play, so dropping the player into Build mode would answer a different
               // question than the one they asked.
-              ? <div className={styles.playWorld}><WorldViewport scene={world.scene} mode="walk" /></div>
+              ? <div className={styles.playWorld}><WorldViewport scene={world.scene} mode="walk" {...(objectId ? { spaceId: objectId } : {})} /></div>
               : <iframe
                 className={styles.playFrame}
                 title={tNode('gamePlayingAlt', { title: String(data.title ?? '') })}

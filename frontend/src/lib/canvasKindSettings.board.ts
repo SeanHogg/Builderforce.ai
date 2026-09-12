@@ -22,6 +22,9 @@ import { STENCIL_SHAPES } from './canvasStencils';
 registerKindSettings({ kinds: ['table'], marketplace: { sellable: () => true }, fields: [], actions: [] });
 registerKindSettings({ kinds: ['spreadsheet'], marketplace: { sellable: () => true }, fields: [], actions: [] });
 registerKindSettings({ kinds: ['world'], marketplace: { sellable: () => true }, fields: [], actions: [] });
+// A `room`'s editor is the Room's own designer (presets, furniture, walls) — the same
+// "its surface IS its editor" shape `world` has. Sellable: a designed room is a listing.
+registerKindSettings({ kinds: ['room'], marketplace: { sellable: () => true }, fields: [], actions: [] });
 // A `scene`'s own editor is the `scene3d` surface (prompt, model, Generate) — same
 // "nothing to configure in the inspector" shape `world`'s own 3D view already has.
 registerKindSettings({ kinds: ['scene'], marketplace: { sellable: () => true }, fields: [], actions: [] });

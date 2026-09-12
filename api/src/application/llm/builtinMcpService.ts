@@ -3768,6 +3768,51 @@ const CATALOG: BuiltinTool[] = [
     },
   },
   {
+    tool: 'manager.configure', mutates: true,
+    description: 'CONFIGURE THE AI MANAGER settings for a project. Pass any subset of settings to update. Available settings: enabled (boolean), managerRef (string), prMergePolicy ("immediate" | "approved" | "manual"), autoAssign (boolean), autoBusinessValue (boolean), autoPrioritize (boolean), autoSchedule (boolean), managerType ("ai" | "human"), requireSignoffToComplete (boolean), allowAutoMerge (boolean), allowUnattendedCeremonies (boolean), allowAgentReassignment (boolean), agentReassignIdleHours (number), agentReassignMaxPerSession (number), allowAutoStaffLanes (boolean).',
+    parameters: obj({ 
+      projectId: N, 
+      enabled: O(B),
+      managerRef: O(S),
+      prMergePolicy: O(S),
+      autoAssign: O(B),
+      autoBusinessValue: O(B),
+      autoPrioritize: O(B),
+      autoSchedule: O(B),
+      managerType: O(S),
+      requireSignoffToComplete: O(B),
+      allowAutoMerge: O(B),
+      allowUnattendedCeremonies: O(B),
+      allowAgentReassignment: O(B),
+      agentReassignIdleHours: O(N),
+      agentReassignMaxPerSession: O(N),
+      allowAutoStaffLanes: O(B)
+    }, ['projectId']),
+    run: async (ctx, a) => {
+      const projectId = num(a.projectId);
+      await assertProjectInTenant(ctx, projectId);
+      const { upsertManagerConfig } = await import('../manager/ManagerService');
+      const patch: Parameters<typeof upsertManagerConfig>[3] = {};
+      if (a.enabled !== undefined) patch.enabled = a.enabled;
+      if (a.managerRef !== undefined) patch.managerRef = a.managerRef;
+      if (a.prMergePolicy !== undefined) patch.prMergePolicy = a.prMergePolicy as any;
+      if (a.autoAssign !== undefined) patch.autoAssign = a.autoAssign;
+      if (a.autoBusinessValue !== undefined) patch.autoBusinessValue = a.autoBusinessValue;
+      if (a.autoPrioritize !== undefined) patch.autoPrioritize = a.autoPrioritize;
+      if (a.autoSchedule !== undefined) patch.autoSchedule = a.autoSchedule;
+      if (a.managerType !== undefined) patch.managerType = a.managerType;
+      if (a.requireSignoffToComplete !== undefined) patch.requireSignoffToComplete = a.requireSignoffToComplete;
+      if (a.allowAutoMerge !== undefined) patch.allowAutoMerge = a.allowAutoMerge;
+      if (a.allowUnattendedCeremonies !== undefined) patch.allowUnattendedCeremonies = a.allowUnattendedCeremonies;
+      if (a.allowAgentReassignment !== undefined) patch.allowAgentReassignment = a.allowAgentReassignment;
+      if (a.agentReassignIdleHours !== undefined) patch.agentReassignIdleHours = a.agentReassignIdleHours;
+      if (a.agentReassignMaxPerSession !== undefined) patch.agentReassignMaxPerSession = a.agentReassignMaxPerSession;
+      if (a.allowAutoStaffLanes !== undefined) patch.allowAutoStaffLanes = a.allowAutoStaffLanes;
+      const result = await upsertManagerConfig(ctx.db, ctx.tenantId, projectId, patch);
+      return { success: true, message: 'Manager configured for project ' + projectId, config: result };
+    },
+  },
+  {
     tool: 'tickets.lifecycle', mutates: false,
     description: 'THE CHAIN OF CUSTODY for ONE ticket: every lifecycle event in order — created, auto-run decision (dispatched or the exact gate that declined it), run started/completed/failed, each lane move with who moved it — where every event names the source table it was read from, so it is evidence rather than narration. Plus a verdict: autonomous vs human lane hops, runs dispatched/completed/failed, whether it reached a terminal lane, whether it is stalled and the LIVE gate holding it right now. Use this to answer "why is THIS ticket stuck?" and to tell an agent-driven ticket from a human-driven one.',
     parameters: obj({ taskId: N }, ['taskId']),
