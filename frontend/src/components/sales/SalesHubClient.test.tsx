@@ -34,7 +34,7 @@ vi.mock('@/lib/referenceChrome', () => ({
 vi.mock('@/lib/useMoneyFormat', () => ({ useMoneyFormat: () => ({ formatCents: (cents: number) => `$${(cents / 100).toFixed(2)}` }) }));
 vi.mock('@/i18n/useFormat', () => ({ useFormat: () => ({ dateWith: (iso: string) => iso.slice(0, 10) }) }));
 vi.mock('@/lib/apiClient', () => ({ faultText: (_cause: unknown, fallback: string) => fallback }));
-vi.mock('@/lib/content', () => ({ MEDIA_KIT: { assets: [] } }));
+vi.mock('@/lib/content/brand', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), MEDIA_KIT: { assets: [] } }));
 vi.mock('@/components/PageContainer', () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 vi.mock('@/components/shell/DestinationIndex', () => ({ DestinationIndex: () => null }));
 vi.mock('@/components/CopyButton', () => ({ CopyButton: () => null }));

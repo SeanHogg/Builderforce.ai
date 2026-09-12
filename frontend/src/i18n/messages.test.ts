@@ -34,7 +34,22 @@ import {
   destTaglineKey,
   destTitleKey
 } from '@/lib/publicDestinations';
-import { COMPARE_ARENAS } from '@/lib/content';
+import { COMPARE_ARENAS, COMPARE_PILLAR_ICONS } from '@/lib/content/compare';
+import { EVERMIND, QUOTABLE_IDS } from '@/lib/content/brand';
+import { AUTH_PANELS, authPanelKey, type AuthPanelId } from '@/lib/content/auth';
+import { contentKey } from '@/lib/content/copy';
+import { FAQ_SETS, FAQ_SET_SIZES, faqKey } from '@/lib/content/faq';
+import {
+  AGENT_CAPABILITIES,
+  INTEGRATION_CAPABILITY_PROOF,
+  PREREQUISITE_IDS,
+  PRODUCT_CAPABILITY_OPERATIONS,
+  PRODUCT_SECTIONS,
+  WORKFLOW_PROOF_DEMOS,
+  operationsKey,
+  prerequisiteKey,
+} from '@/lib/content/product';
+import { DEFINED_TERM_IDS, SEO_INTEGRATIONS, integrationKey } from '@/lib/content/seo';
 import { FAMILIES, FAMILY_IDS, kindLabelKey } from '@/lib/marketplaceFamilies';
 import { BLOG_TOPICS } from '@/lib/blogTopics';
 import { METHOD_STEPS, PROOF_FORMS, methodStepKey, proofFormKey } from '@/lib/methodology';
@@ -558,6 +573,53 @@ describe('message catalogs', () => {
       }
     }
     expect(gaps).toEqual([]);
+  });
+
+  /**
+   * The marketing content registries (`lib/content/*`) hold STRUCTURE — ids,
+   * hrefs, icons, order — and the catalogs hold the words, joined by key or by
+   * index. Both joins fail silently: a missing key renders its dotted path, a
+   * short array renders a card with no title, and the key-parity test above
+   * cannot see either, because it compares catalogs only with each other.
+   */
+  it.each(LOCALES)('%s carries every marketing.content registry entry', (locale) => {
+    const t = createTranslator({ locale, messages: CATALOGS[locale], onError: () => {} });
+    const keys = [
+      contentKey('brand.tagline'),
+      ...QUOTABLE_IDS.map((id) => contentKey(`quotable.${id}`)),
+      ...DEFINED_TERM_IDS.flatMap((id) => ['name', 'description'].map((field) => contentKey(`definedTerms.${id}.${field}`))),
+      ...PREREQUISITE_IDS.map(prerequisiteKey),
+      ...Object.keys(PRODUCT_CAPABILITY_OPERATIONS).flatMap((id) => [operationsKey(id, 'owner'), operationsKey(id, 'limitation')]),
+      ...SEO_INTEGRATIONS.flatMap(({ slug }) => (['category', 'tagline', 'summary'] as const).map((field) => integrationKey(slug, field))),
+      ...(Object.keys(AUTH_PANELS) as AuthPanelId[]).flatMap((id) => [
+        ...['eyebrow', 'heading', 'intro', 'quote'].map((field) => authPanelKey(id, field)),
+        ...AUTH_PANELS[id].stats.flatMap((stat) => [authPanelKey(id, `stats.${stat}.value`), authPanelKey(id, `stats.${stat}.label`)]),
+        ...AUTH_PANELS[id].bullets.flatMap(({ id: bullet }) => [authPanelKey(id, `bullets.${bullet}.title`), authPanelKey(id, `bullets.${bullet}.desc`)]),
+      ]),
+    ];
+    expect(keys.filter((key) => !t.has(key as never))).toEqual([]);
+
+    // Index-aligned joins: each catalog list is exactly as long as the registry
+    // that pairs with it, and every list a registry entry reads is non-empty.
+    const at = (path: string): unknown => path.split('.').reduce<unknown>((node, part) => (node as Record<string, unknown> | undefined)?.[part], CATALOGS[locale]);
+    const len = (path: string) => (Array.isArray(at(path)) ? (at(path) as unknown[]).length : -1);
+    const aligned: [string, number][] = [
+      ['agents.capabilities', AGENT_CAPABILITIES.length],
+      ['product.sections', PRODUCT_SECTIONS.length],
+      ...PRODUCT_SECTIONS.map((section, i): [string, number] => [`product.sections.${i}.surfaces`, section.surfaces.length]),
+      ['product.integrationMatrix.items', INTEGRATION_CAPABILITY_PROOF.length],
+      ['product.workflowLimitations', WORKFLOW_PROOF_DEMOS.length],
+      ['evermind.architecture.pillars', EVERMIND.pillarIcons.length],
+      ['compare.pillars', COMPARE_PILLAR_ICONS.length],
+      [contentKey('statValues'), len('product.statLabels')],
+      ...FAQ_SETS.map((set): [string, number] => [faqKey(set), FAQ_SET_SIZES[set]]),
+    ];
+    expect(aligned.filter(([path, expected]) => len(path) !== expected).map(([path, expected]) => `${path}: ${len(path)} != ${expected}`)).toEqual([]);
+    const lists = [
+      ...SEO_INTEGRATIONS.map(({ slug }) => integrationKey(slug, 'useCases')),
+      ...Object.keys(PRODUCT_CAPABILITY_OPERATIONS).map((id) => operationsKey(id, 'exports')),
+    ];
+    expect(lists.filter((path) => !(len(path) > 0))).toEqual([]);
   });
 
   it.each(LOCALES.filter((l) => l !== DEFAULT_LOCALE))('%s has exactly the keys en has', (locale) => {

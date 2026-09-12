@@ -30,6 +30,15 @@ import { deliverSignatureInvitations } from '../../application/signature/signatu
 import { headerHints } from '../../application/email/emailLocaleResolver';
 import { ArtifactNotFoundError, loadAndDecryptArtifact } from '../../application/artifacts/artifactStore';
 import { isSignatureIntent } from '@builderforce/creation-canvas-contract';
+import { parseBody, z, zJsonObject } from './requestBody';
+
+/** The signer's decision. Anything but 'decline' is 'agree'; the name and the
+ *  reason are kept only when they are strings — so each stays untyped here. */
+const SignerDecisionBody = z.object({
+  decision: z.unknown().optional(),
+  signedName: z.unknown().optional(),
+  declineReason: z.unknown().optional(),
+});
 
 const handle = async (run: () => Promise<Response>): Promise<Response> => {
   try {
@@ -61,7 +70,9 @@ export function createSignatureRoutes(db: Db): Hono<HonoEnv> {
    * report the same result as one that reached everybody.
    */
   router.post('/', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    // Read field-by-field below; `createSignatureRequest` owns the rules. `handle`
+    // rethrows the 400 this raises.
+    const body = await parseBody(c, zJsonObject);
     const result = await createSignatureRequest(db, tenant(c), {
       subject: String(body.subject ?? ''),
       intent: typeof body.intent === 'string' ? body.intent : undefined,

@@ -15,7 +15,7 @@
  * registry supplies the list.
  */
 
-import { SEO_INTEGRATIONS } from './content';
+import { SEO_INTEGRATIONS, integrationKey } from './content/seo';
 import { publicApiGet } from './publicApi';
 
 /**
@@ -105,9 +105,10 @@ export interface IntegrationCatalogGroup {
  */
 const SEO_BY_NAME = new Map(SEO_INTEGRATIONS.map((entry) => [entry.name.toLowerCase(), entry]));
 
-export function leafPageFor(entry: IntegrationCatalogEntry): { href: string; tagline: string } | null {
+/** A registry entry's curated leaf page: its route, and the catalog key of its written tagline. */
+export function leafPageFor(entry: IntegrationCatalogEntry): { href: string; taglineKey: string } | null {
   const seo = SEO_BY_NAME.get(entry.name.toLowerCase());
-  return seo ? { href: `/integrations/${seo.slug}`, tagline: seo.tagline } : null;
+  return seo ? { href: `/integrations/${seo.slug}`, taglineKey: integrationKey(seo.slug, 'tagline') } : null;
 }
 
 /**

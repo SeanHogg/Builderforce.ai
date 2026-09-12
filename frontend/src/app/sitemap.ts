@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next';
 import { BLOG_POSTS } from '@/lib/blogData';
-import { COMPETITOR_SEO, SEO_INTEGRATIONS } from '@/lib/content';
+import { COMPETITOR_SEO } from '@/lib/content/compare';
+import { SEO_INTEGRATIONS } from '@/lib/content/seo';
 import { publicApiGet } from '@/lib/publicApi';
 import {
   builtinPersonaSlugs,

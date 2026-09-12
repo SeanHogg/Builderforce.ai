@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { getPostsBySlugs, getRelatedByTags, type BlogPost } from '@/lib/blogData';
-import { RELATED_ARTICLES } from '@/lib/content';
+import { RELATED_ARTICLES } from '@/lib/content/seo';
 import { ArticleCardGrid } from './ArticleCard';
 
 /**

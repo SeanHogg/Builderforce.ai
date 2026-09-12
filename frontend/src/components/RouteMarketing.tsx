@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { destinationForRoute, getRouteMarketing, isNoindexTeaserRoute, teaserDestinationPitchKey } from '@/lib/routeMarketing';
-import { PRODUCT_SECTIONS } from '@/lib/content';
+import { productSectionsCopy } from '@/lib/content/product';
 import { routeMarketingSchema } from '@/lib/structured-data';
 import { ButtonLink, Icon, Surface, surfaceClassName } from '@/components/ui';
 import JsonLd from './JsonLd';
@@ -205,7 +205,7 @@ function RouteMarketingContent({ pathname, tab }: { pathname: string; tab: strin
       <section className="rm-inside">
         <div className="ui-eyebrow rm-inside-head">{t('whatYouGet')}</div>
         <div className="rm-grid">
-          {PRODUCT_SECTIONS.map((s) => (
+          {productSectionsCopy(tAll).map((s) => (
             <Link
               key={s.id}
               href={`/product#${s.id}`}

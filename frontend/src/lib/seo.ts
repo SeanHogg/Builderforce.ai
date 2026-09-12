@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { BRAND } from './content';
+import { BRAND } from './content/brand';
 
 /**
  * One builder for per-page metadata so title/description/canonical/OG/Twitter

@@ -15,7 +15,7 @@
  *     service input) is a loose object or a record, never a stripping `z.object`.
  */
 import { z } from './requestBody';
-import { newsletterEventTypeEnum } from '../../infrastructure/database/schema';
+import { NEWSLETTER_EVENT_TYPES } from '../../domain/marketing/newsletterEvents';
 
 /** Free text the handler trims/tests itself; null and absent both tolerated. */
 const text = z.string().nullish();
@@ -51,7 +51,7 @@ export const PrivacyRequestPatchBody = z.object({ status: text, resolution: text
 export const NewsletterEventBody = z.object({
   subscriberEmail: text,
   templateId: z.number().nullish(),
-  eventType: z.enum(newsletterEventTypeEnum.enumValues).nullish(),
+  eventType: z.enum(NEWSLETTER_EVENT_TYPES).nullish(),
   metadata: text,
 });
 

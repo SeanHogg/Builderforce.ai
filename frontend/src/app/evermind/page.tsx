@@ -8,7 +8,7 @@ import ModelApiSamples from '@/components/ModelApiSamples';
 import MarketingFaq from '@/components/marketing/MarketingFaq';
 import { evermindSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
-import { EVERMIND } from '@/lib/content';
+import { EVERMIND } from '@/lib/content/brand';
 import { Icon } from '@/components/ui/Icon';
 
 export const runtime = 'edge';
@@ -30,10 +30,10 @@ type Faq = { question: string; answer: string };
 
 export default async function EvermindPage() {
   const t = await getTranslations();
-  // Visible copy is sourced from the `evermind` catalog (single source for UI,
-  // localized in all 5 locales). `content.ts` EVERMIND stays canonical English
-  // for the crawler-facing JSON-LD (evermindSchema) — pillar ICONS are paired
-  // from it by index, so the two arrays must stay the same length and order.
+  // Every word is sourced from the `evermind` catalog — the page AND its JSON-LD
+  // (`evermindSchema(t)`), so a crawler reads the page in the visitor's locale.
+  // Pillar ICONS pair with `evermind.architecture.pillars` by index
+  // (`EVERMIND.pillarIcons`); messages.test.ts pins the two lengths together.
   const pillars = t.raw('evermind.architecture.pillars') as Pillar[];
   const edges = t.raw('evermind.edges.items') as Edge[];
   const contrast = t.raw('evermind.contrast.rows') as ContrastRow[];
@@ -41,7 +41,7 @@ export default async function EvermindPage() {
 
   return (
     <>
-      <JsonLd data={evermindSchema()} />
+      <JsonLd data={evermindSchema(t)} />
 
       <style>{`
         .ev { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; }
@@ -194,7 +194,7 @@ export default async function EvermindPage() {
             <div className="ev-grid">
               {pillars.map((p, i) => (
                 <div key={p.title} className="ev-card">
-                  <span className="ev-card-icon"><Icon source={EVERMIND.pillars[i]?.icon} size={26} /></span>
+                  <span className="ev-card-icon"><Icon source={EVERMIND.pillarIcons[i]} size={26} /></span>
                   <h3 className="ev-card-title">{p.title}</h3>
                   <p className="ev-card-desc">{p.desc}</p>
                 </div>

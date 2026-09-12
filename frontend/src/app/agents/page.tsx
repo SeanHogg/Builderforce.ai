@@ -10,7 +10,7 @@ import MarketingFaq from '@/components/marketing/MarketingFaq';
 import FeatureCard from './FeatureCard';
 import NewsletterForm from './NewsletterForm';
 import { CAPABILITY_ICONS } from './capabilityIcons';
-import { AGENT_CAPABILITIES } from '@/lib/content';
+import { AGENT_CAPABILITIES } from '@/lib/content/product';
 import { pageMetadata } from '@/lib/seo';
 import { routeMarketingSchema } from '@/lib/structured-data';
 
@@ -44,7 +44,7 @@ function renderDescription(text: string): ReactNode {
 }
 
 // Visible copy from the `agents` catalog (localized in all 5 locales).
-// content.ts AGENT_CAPABILITIES supplies stable iconKey + href, paired with the
+// content/product.ts AGENT_CAPABILITIES supplies stable iconKey + href, paired with the
 // translated capability array by index.
 export default async function AgentsHome() {
   const t = await getTranslations();

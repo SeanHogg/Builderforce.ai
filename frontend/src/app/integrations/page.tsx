@@ -6,7 +6,8 @@ import {
 } from '@/components/reference/ReferencePage';
 import { pageMetadata } from '@/lib/seo';
 import { breadcrumbSchema } from '@/lib/structured-data';
-import { INTEGRATION_CAPABILITY_PROOF } from '@/lib/content';
+import { INTEGRATION_CAPABILITY_PROOF } from '@/lib/content/product';
+import { contentKey } from '@/lib/content/copy';
 import {
   getIntegrationCatalog, integrationCategoryLabelKey, integrationSurfaceLabelKey, leafPageFor, listingPageFor,
 } from '@/lib/integrationCatalog';
@@ -35,6 +36,7 @@ export async function generateMetadata(): Promise<Metadata> {
  */
 export default async function IntegrationsIndexPage() {
   const t = await getTranslations('integrationsIndex');
+  const tRoot = await getTranslations();
 
   const groups = await getIntegrationCatalog();
 
@@ -57,8 +59,8 @@ export default async function IntegrationsIndexPage() {
     <>
       <JsonLd
         data={breadcrumbSchema([
-          { name: 'Home', url: 'https://builderforce.ai' },
-          { name: 'Integrations', url: 'https://builderforce.ai/integrations' },
+          { name: tRoot(contentKey('schema.crumb.home')), url: 'https://builderforce.ai' },
+          { name: tRoot(contentKey('schema.crumb.integrations')), url: 'https://builderforce.ai/integrations' },
         ])}
       />
 
@@ -89,7 +91,7 @@ export default async function IntegrationsIndexPage() {
                       title={entry.name}
                       badge={entry.publisher ? t('byPublisher', { publisher: entry.publisher.name }) : t(`direction.${entry.direction}`)}
                     >
-                      {leaf ? leaf.tagline : t(integrationSurfaceLabelKey(entry.surfaces[0]))}
+                      {leaf ? tRoot(leaf.taglineKey) : t(integrationSurfaceLabelKey(entry.surfaces[0]))}
                     </ReferenceCard>
                   );
                 })}

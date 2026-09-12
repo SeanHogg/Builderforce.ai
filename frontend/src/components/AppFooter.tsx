@@ -8,7 +8,7 @@ import { useLegalDocs } from './legal/useLegalDocs';
 import LegalDocModal, { type LegalDocType } from './legal/LegalDocModal';
 import LegalDocLink from './legal/LegalDocLink';
 import ProductUpdatesTrigger from './releaseNotes/ProductUpdatesTrigger';
-import { BRAND, STATS } from '@/lib/content';
+import { BRAND } from '@/lib/content/brand';
 import { destTitleKey, footerColumns } from '@/lib/publicDestinations';
 import { seatHueVar } from '@/lib/seats';
 
@@ -82,7 +82,7 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
                 />
                 <span>{BRAND.name}</span>
               </Link>
-              <p className="global-footer-summary">{STATS.quotable.creativeCanvas}</p>
+              <p className="global-footer-summary">{tRoot('marketing.content.quotable.creativeCanvas')}</p>
               <p className="global-footer-credit">
                 {t('builtBy')}{' '}
                 {/* An in-app route now, so it navigates in place rather than opening a tab

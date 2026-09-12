@@ -33,7 +33,7 @@ import { CopyButton } from '@/components/CopyButton';
 import { PayoutConnections } from '@/components/payouts/PayoutConnections';
 import { SalesReportView } from '@/components/sales/SalesReportView';
 import { InboxClient } from '@/components/inbox/InboxClient';
-import { MEDIA_KIT } from '@/lib/content';
+import { MEDIA_KIT } from '@/lib/content/brand';
 import {
   usePublishReferenceChrome,
   usePublishReferenceSelect,

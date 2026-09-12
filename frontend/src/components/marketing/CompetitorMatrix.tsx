@@ -1,5 +1,6 @@
 import { getTranslations } from 'next-intl/server';
-import { BRAND, COMPARE_ARENAS, DEFAULT_COMPARE_ARENA } from '@/lib/content';
+import { BRAND } from '@/lib/content/brand';
+import { COMPARE_ARENAS, DEFAULT_COMPARE_ARENA } from '@/lib/content/compare';
 
 /**
  * THE comparison matrix — `compare.arenas.<arena>.categories` as a table.

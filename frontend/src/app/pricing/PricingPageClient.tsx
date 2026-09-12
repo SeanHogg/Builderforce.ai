@@ -80,6 +80,7 @@ function PlanCta({ plan, effectivePlan, onUpgrade, isAnon, label, href, compact 
 export default function PricingPageClient() {
   const fmt = useFormat();
   const t = useTranslations('pricing');
+  const tRoot = useTranslations();
   const locale = useLocale();
   const tierT = useTranslations('planBadge.tier');
   const navT = useTranslations('nav');
@@ -228,7 +229,7 @@ export default function PricingPageClient() {
 
   return (
     <>
-    <JsonLd data={pricingSchema(publicPricing ?? undefined)} />
+    <JsonLd data={pricingSchema(tRoot, publicPricing ?? undefined)} />
     <PageContainer width="full" style={{ padding: 0 }}>
     <main className={styles.page}>
       <section className={styles.hero}>

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
 import MethodologySection from '@/components/marketing/MethodologySection';
-import { BRAND } from '@/lib/content';
+import { BRAND } from '@/lib/content/brand';
 import { pageMetadata } from '@/lib/seo';
 import styles from './sell-builderforce.module.css';
 import { signInHref } from '@/lib/auth';

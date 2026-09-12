@@ -42,6 +42,7 @@ const PAGE_SIZE = 9;
  */
 export default function BlogPageClient() {
   const t = useTranslations('blog');
+  const tRoot = useTranslations();
   const text = t as unknown as BlogText;
   /**
    * The corpus in the reader's language. Every control below reads THIS rather
@@ -254,7 +255,7 @@ export default function BlogPageClient() {
         }
       `}</style>
 
-      <JsonLd data={blogIndexSchema(posts)} />
+      <JsonLd data={blogIndexSchema(tRoot, posts)} />
 
       <div className="blog-page">
         {/* ── Hero ── */}

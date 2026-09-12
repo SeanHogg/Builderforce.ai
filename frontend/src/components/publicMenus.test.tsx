@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import en from '@/i18n/messages/en.json';
-import { BRAND } from '@/lib/content';
+import { BRAND } from '@/lib/content/brand';
 import {
   NAV_GROUPS,
   STAGES

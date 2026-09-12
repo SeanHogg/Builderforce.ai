@@ -12,19 +12,18 @@ import { safeRedirectPath } from '@/lib/safeRedirect';
 import { isPasskeyCancellation, isPasskeySupported } from '@/lib/passkeys';
 import { Icon } from '@/components/ui/Icon';
 import { ThemeToggleButton } from '@/components/ThemeToggleButton';
-import JsonLd from '@/components/JsonLd';
 import OAuthButtons from '@/components/OAuthButtons';
 import MarketingFaq from '@/components/marketing/MarketingFaq';
 import PasswordInput from '@/components/PasswordInput';
 import EmailVerificationStep from '@/components/account/EmailVerificationStep';
 import MarketingVisual from '@/components/account/MarketingVisual';
-import { loginSchema } from '@/lib/structured-data';
-import { LOGIN_MARKETING } from '@/lib/content';
+import { resolveAuthPanel } from '@/lib/content/auth';
 import { ssoDiscoveryApi } from '@/lib/builderforceApi';
 import { faultMessage } from '@/lib/apiClient';
 export default function LoginPageClient() {
   const router = useRouter();
   const t = useTranslations('login');
+  const tRoot = useTranslations();
   const searchParams = useSearchParams();
   const { login, loginWithPasskey, isAuthenticated, hasTenant } = useAuth();
 
@@ -202,11 +201,10 @@ export default function LoginPageClient() {
     e.currentTarget.style.boxShadow = 'none';
   };
 
-  const marketing = LOGIN_MARKETING;
+  const marketing = resolveAuthPanel(tRoot, 'login');
 
   return (
     <>
-    <JsonLd data={loginSchema()} />
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'var(--text-primary)', position: 'relative', zIndex: 1 }}>
       {/* Nav */}
       <nav style={{
@@ -473,7 +471,7 @@ export default function LoginPageClient() {
             {/* Stat cards */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
               {marketing.stats.map(s => (
-                <div key={s.label} style={{ padding: '14px 12px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', textAlign: 'center', border: '1px solid var(--border-subtle)' }}>
+                <div key={s.id} style={{ padding: '14px 12px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', textAlign: 'center', border: '1px solid var(--border-subtle)' }}>
                   <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.3rem', fontWeight: 700, color: 'var(--coral-bright)' }}>{s.value}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>{s.label}</div>
                 </div>
@@ -483,7 +481,7 @@ export default function LoginPageClient() {
             {/* Value-prop bullets */}
             <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
               {marketing.bullets.map(b => (
-                <li key={b.title} style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <li key={b.id} style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                   <span style={{ flexShrink: 0 }} aria-hidden><Icon source={b.icon} size={18} /></span>
                   <span><strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{b.title}</strong> — {b.desc}</span>
                 </li>

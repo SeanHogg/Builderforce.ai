@@ -5,7 +5,7 @@ import RelatedArticles from '@/components/blog/RelatedArticles';
 import MarketingDeck from '@/components/marketing/MarketingDeck';
 import { DemoShowcase } from '@/components/demo/DemoShowcase';
 import { pageMetadata } from '@/lib/seo';
-import { BRAND } from '@/lib/content';
+import { BRAND } from '@/lib/content/brand';
 
 export const runtime = 'edge';
 

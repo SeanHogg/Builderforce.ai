@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import { getTranslations } from 'next-intl/server';
-import { MEDIA_KIT } from '@/lib/content';
+import { MEDIA_KIT } from '@/lib/content/brand';
 import { pageMetadata } from '@/lib/seo';
 
 export const runtime = 'edge';

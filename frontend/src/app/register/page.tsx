@@ -1,4 +1,7 @@
 import type { Metadata } from 'next';
+import { getTranslations } from 'next-intl/server';
+import JsonLd from '@/components/JsonLd';
+import { registerSchema } from '@/lib/structured-data';
 import RegisterPageClient from './RegisterPageClient';
 
 export const metadata: Metadata = {
@@ -18,6 +21,13 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RegisterPage() {
-  return <RegisterPageClient />;
+/** JSON-LD on the server, in the visitor's locale — see `app/login/page.tsx`. */
+export default async function RegisterPage() {
+  const t = await getTranslations();
+  return (
+    <>
+      <JsonLd data={registerSchema(t)} />
+      <RegisterPageClient />
+    </>
+  );
 }

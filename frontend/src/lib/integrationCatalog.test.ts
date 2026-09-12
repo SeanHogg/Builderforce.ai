@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import messages from '../i18n/messages/en.json';
-import { SEO_INTEGRATIONS } from './content';
+import { SEO_INTEGRATIONS } from './content/seo';
 import {
   INTEGRATION_CATEGORIES,
   INTEGRATION_SURFACES,
@@ -60,7 +60,7 @@ describe('leafPageFor', () => {
       id: 'github', name: 'GitHub', category: 'devtools', surfaces: ['connector'], direction: 'two-way', capabilities: [],
     });
     expect(leaf?.href).toBe('/integrations/github');
-    expect(leaf?.tagline).toBeTruthy();
+    expect(leaf?.taglineKey).toBeTruthy();
   });
 
   it('returns null for a registry entry nobody has written a page for', () => {

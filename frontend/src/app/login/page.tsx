@@ -1,4 +1,7 @@
 import type { Metadata } from 'next';
+import { getTranslations } from 'next-intl/server';
+import JsonLd from '@/components/JsonLd';
+import { loginSchema } from '@/lib/structured-data';
 import LoginPageClient from './LoginPageClient';
 
 export const metadata: Metadata = {
@@ -18,6 +21,14 @@ export const metadata: Metadata = {
   },
 };
 
-export default function LoginPage() {
-  return <LoginPageClient />;
+/** The JSON-LD is rendered HERE, on the server, so the FAQPage a crawler receives is
+ *  already in the visitor's locale — the client island only renders the form. */
+export default async function LoginPage() {
+  const t = await getTranslations();
+  return (
+    <>
+      <JsonLd data={loginSchema(t)} />
+      <LoginPageClient />
+    </>
+  );
 }

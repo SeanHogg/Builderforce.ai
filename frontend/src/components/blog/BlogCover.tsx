@@ -11,7 +11,7 @@
  * this needs no i18n catalog entries.
  */
 
-import { BRAND } from '@/lib/content';
+import { BRAND } from '@/lib/content/brand';
 
 // Deterministic palette set (accent pairs over the dark brand base).
 const PALETTES: ReadonlyArray<{ a: string; b: string; accent: string }> = [

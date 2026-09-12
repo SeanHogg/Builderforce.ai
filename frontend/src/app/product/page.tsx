@@ -16,7 +16,16 @@ import {
 } from '@/components/home/HomePatterns';
 import { productSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
-import { STATS, PRODUCT_SECTIONS, PRODUCT_CAPABILITY_PROOF, PRODUCT_CAPABILITY_OPERATIONS, INTEGRATION_CAPABILITY_PROOF, WORKFLOW_PROOF_DEMOS } from '@/lib/content';
+import { contentKey } from '@/lib/content/copy';
+import {
+  INTEGRATION_CAPABILITY_PROOF,
+  PRODUCT_CAPABILITY_OPERATIONS,
+  PRODUCT_CAPABILITY_PROOF,
+  WORKFLOW_PROOF_DEMOS,
+  operationsKey,
+  prerequisiteKey,
+  productSectionsCopy,
+} from '@/lib/content/product';
 
 export const runtime = 'edge';
 
@@ -30,25 +39,25 @@ export async function generateMetadata(): Promise<Metadata> {
   });
 }
 
-type ProductSection = { id: string; title: string; blurb: string; surfaces: { title: string; desc: string }[] };
 type DiscoveryFeature = { title: string; longDesc: string };
 type WorkflowProofCopy = { title: string; audience: string; outcome: string; steps: string[]; evidence: string };
 type IntegrationProofCopy = { auth: string; limitation: string };
 
-// Visible copy from the `product` catalog (localized in all 5 locales).
-// content.ts STATS/PRODUCT_SECTIONS stays canonical English for the JSON-LD
-// (productSchema); stat VALUES, section/surface ICONS and hrefs are paired from
-// content by index, so the catalog arrays stay length/order-aligned with it.
+// Every word is catalog copy in the visitor's locale — the JSON-LD included
+// (`productSchema(t)`). `productSectionsCopy` pairs the localized
+// `product.sections` with the surface ids, icons and hrefs content/product.ts
+// owns; stat values pair with `product.statLabels` by index.
 export default async function ProductPage() {
   const t = await getTranslations();
   const statLabels = t.raw('product.statLabels') as string[];
-  const sections = t.raw('product.sections') as ProductSection[];
+  const sections = productSectionsCopy(t);
+  const statValues = t.raw(contentKey('statValues')) as string[];
   const integrationCopy = t.raw('product.integrationMatrix.items') as IntegrationProofCopy[];
   const workflowLimitations = t.raw('product.workflowLimitations') as string[];
 
   return (
     <>
-      <JsonLd data={productSchema()} />
+      <JsonLd data={productSchema(t)} />
 
       <style>{`
         .pp { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; }
@@ -150,7 +159,7 @@ export default async function ProductPage() {
           <div className="pp-stats">
             {statLabels.map((label, i) => (
               <div key={i} className="pp-stat">
-                <div className="pp-stat-n">{STATS.marketing[i]?.value}</div>
+                <div className="pp-stat-n">{statValues[i]}</div>
                 <div className="pp-stat-l">{label}</div>
               </div>
             ))}
@@ -193,7 +202,7 @@ export default async function ProductPage() {
           </HomeSection>
 
           <div className="pp-sections">
-            {sections.map((section, si) => (
+            {sections.map((section) => (
               <section key={section.id} className="pp-section" id={section.id}>
                 <div className="pp-section-head">
                   <h2 className="pp-section-title">
@@ -203,13 +212,12 @@ export default async function ProductPage() {
                   <p className="pp-section-blurb">{section.blurb}</p>
                 </div>
                 <div className="pp-grid">
-                  {section.surfaces.map((surface, fi) => {
-                    const canonical = PRODUCT_SECTIONS[si]?.surfaces[fi];
-                    const proof = canonical ? PRODUCT_CAPABILITY_PROOF[canonical.title] : undefined;
-                    const operations = canonical ? PRODUCT_CAPABILITY_OPERATIONS[canonical.title] : undefined;
+                  {section.surfaces.map((surface) => {
+                    const proof = PRODUCT_CAPABILITY_PROOF[surface.id];
+                    const operations = PRODUCT_CAPABILITY_OPERATIONS[surface.id];
                     return (
-                      <Link key={surface.title} href={canonical?.href ?? '#'} className="pp-card">
-                        <span className="pp-card-icon"><Icon source={canonical?.icon} size={24} /></span>
+                      <Link key={surface.id} href={surface.href} className="pp-card">
+                        <span className="pp-card-icon"><Icon source={surface.icon} size={24} /></span>
                         <h3 className="pp-card-title">{surface.title}</h3>
                         {proof ? (
                           <span className="pp-card-proof">
@@ -218,7 +226,7 @@ export default async function ProductPage() {
                           </span>
                         ) : null}
                         <p className="pp-card-desc">{surface.desc}</p>
-                        {proof && operations ? <details className="pp-disclosure"><summary>{t('product.disclosure.label')}</summary><p><strong>{t('product.disclosure.owner')}:</strong> {operations.owner}</p><p><strong>{t('product.disclosure.prerequisites')}:</strong> {proof.prerequisites.length ? proof.prerequisites.join(', ') : t('product.disclosure.none')}</p><p><strong>{t('product.disclosure.limits')}:</strong> {operations.limitation}</p><p><strong>{t('product.disclosure.exports')}:</strong> {operations.exports.join(', ')}</p><p><strong>{t('product.disclosure.verified')}:</strong> {proof.lastVerified}</p><p><Link href={operations.exampleHref}>{t('product.disclosure.example')} →</Link></p></details> : null}
+                        {proof && operations ? <details className="pp-disclosure"><summary>{t('product.disclosure.label')}</summary><p><strong>{t('product.disclosure.owner')}:</strong> {t(operationsKey(surface.id, 'owner'))}</p><p><strong>{t('product.disclosure.prerequisites')}:</strong> {proof.prerequisites.length ? proof.prerequisites.map((id) => t(prerequisiteKey(id))).join(', ') : t('product.disclosure.none')}</p><p><strong>{t('product.disclosure.limits')}:</strong> {t(operationsKey(surface.id, 'limitation'))}</p><p><strong>{t('product.disclosure.exports')}:</strong> {(t.raw(operationsKey(surface.id, 'exports')) as string[]).join(', ')}</p><p><strong>{t('product.disclosure.verified')}:</strong> {proof.lastVerified}</p><p><Link href={operations.exampleHref}>{t('product.disclosure.example')} →</Link></p></details> : null}
                         <span className="pp-card-cta">{t('product.exploreCta')} →</span>
                       </Link>
                     );

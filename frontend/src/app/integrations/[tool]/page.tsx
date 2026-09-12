@@ -5,7 +5,8 @@ import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
 import { pageMetadata } from '@/lib/seo';
 import { integrationSchema } from '@/lib/structured-data';
-import { INTEGRATION_SLUG_MAP } from '@/lib/content';
+import { contentKey } from '@/lib/content/copy';
+import { INTEGRATION_SLUG_MAP, integrationCopy } from '@/lib/content/seo';
 
 // Dynamic on the Edge Runtime — NOT statically prerendered. `getTranslations()`
 // reads the locale cookie (cookie-based i18n), which forces this route dynamic, so
@@ -22,12 +23,13 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { tool } = await params;
   const seo = INTEGRATION_SLUG_MAP[tool];
-  if (!seo) return { title: 'Integration Not Found' };
+  const t = await getTranslations();
+  if (!seo) return { title: t(contentKey('schema.integration.notFound')) };
   return pageMetadata({
-    title: `Builderforce.ai + ${seo.name} Integration | Builderforce.ai`,
-    description: seo.summary,
+    title: `${t(contentKey('schema.integration.metaTitle'), { name: seo.name })} | Builderforce.ai`,
+    description: integrationCopy(t, seo.slug).summary,
     path: `/integrations/${seo.slug}`,
-    ogTitle: `Builderforce.ai + ${seo.name}`,
+    ogTitle: t(contentKey('schema.integration.ogTitle'), { name: seo.name }),
   });
 }
 
@@ -40,10 +42,12 @@ export default async function IntegrationPage({
   const seo = INTEGRATION_SLUG_MAP[tool];
   if (!seo) notFound();
   const t = await getTranslations('integrationDetail');
+  const tRoot = await getTranslations();
+  const copy = integrationCopy(tRoot, seo.slug);
 
   return (
     <>
-      <JsonLd data={integrationSchema(seo)} />
+      <JsonLd data={integrationSchema(tRoot, seo)} />
 
       <style>{`
         .intg { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; }
@@ -68,10 +72,10 @@ export default async function IntegrationPage({
 
       <main className="intg">
         <header className="intg-hero">
-          <div className="intg-eyebrow">{t('eyebrow', { category: seo.category })}</div>
+          <div className="intg-eyebrow">{t('eyebrow', { category: copy.category })}</div>
           <h1 className="intg-title">{t('title', { name: seo.name })}</h1>
-          <p className="intg-tagline">{seo.tagline}</p>
-          <p className="intg-sub">{seo.summary}</p>
+          <p className="intg-tagline">{copy.tagline}</p>
+          <p className="intg-sub">{copy.summary}</p>
           <div className="intg-cta-row">
             <Link className="intg-btn intg-btn-primary" href="/register">{t('ctaPrimary')}</Link>
             {seo.docsHref ? (
@@ -81,10 +85,10 @@ export default async function IntegrationPage({
         </header>
 
         <section className="intg-section">
-          <span className="intg-cat-chip">{seo.category}</span>
+          <span className="intg-cat-chip">{copy.category}</span>
           <h2 className="intg-h2">{t('useCasesHeading', { name: seo.name })}</h2>
           <ul className="intg-uses">
-            {seo.useCases.map((u) => (
+            {copy.useCases.map((u) => (
               <li className="intg-use" key={u}>{u}</li>
             ))}
           </ul>

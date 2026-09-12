@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import JsonLd from '@/components/JsonLd';
 import { pageMetadata } from '@/lib/seo';
+import { getTranslations } from 'next-intl/server';
 import { projectsTasksSchema } from '@/lib/structured-data';
 
 // The Projects / Tasks page is a client component, so per-page SEO metadata lives
@@ -14,10 +15,11 @@ export const metadata: Metadata = pageMetadata({
   path: '/projects',
 });
 
-export default function ProjectsTasksLayout({ children }: { children: React.ReactNode }) {
+export default async function ProjectsTasksLayout({ children }: { children: React.ReactNode }) {
+  const t = await getTranslations();
   return (
     <>
-      <JsonLd data={projectsTasksSchema()} />
+      <JsonLd data={projectsTasksSchema(t)} />
       {children}
     </>
   );

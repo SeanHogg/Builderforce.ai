@@ -14,6 +14,7 @@ import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { emitWebhookEvent, type WebhookEvent } from '../../application/seams/webhookService';
 import { getOrSetCached, invalidateCached, bumpCacheVersion, trackerCacheKey, bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
+import { parseBody, zJsonObject } from './requestBody';
 
 /** The (tenantId, segmentId) scope every tracker query filters by. */
 export function scope(c: Context<HonoEnv>): { tenantId: number; segmentId: string } {
@@ -155,7 +156,9 @@ function createTrackerRoutes(db: Db, table: any, opts: TrackerOpts): Hono<HonoEn
 
   router.post('/', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
-    const body = await c.req.json<Record<string, unknown>>();
+    // Any JSON object: the per-tracker `fields` whitelist (`pick`) is the column
+    // contract, and `required` answers its own "X is required".
+    const body = await parseBody(c, zJsonObject);
     for (const r of opts.required ?? []) {
       const v = body[r];
       if (v === undefined || v === null || (typeof v === 'string' && !v.trim())) {
@@ -174,7 +177,7 @@ function createTrackerRoutes(db: Db, table: any, opts: TrackerOpts): Hono<HonoEn
   router.patch('/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
     const id = c.req.param('id');
-    const patch = pick(await c.req.json<Record<string, unknown>>(), writeFields);
+    const patch = pick(await parseBody(c, zJsonObject), writeFields);
     if (Object.keys(patch).length === 0) return c.json({ error: 'nothing to update' }, 400);
     patch.updatedAt = new Date();
     const rows = (await db.update(table).set(patch)

@@ -13,7 +13,7 @@
  */
 
 import { BUILDERFORCE_PRODUCT_NAME } from '@seanhogg/builderforce-brain-ui';
-import { BRAND } from './content';
+import { BRAND } from './content/brand';
 import { apiRequest } from './apiClient';
 import { getOrSetClientCached } from '@/infrastructure/http/readThrough';
 

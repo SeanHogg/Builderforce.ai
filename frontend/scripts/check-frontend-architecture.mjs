@@ -909,7 +909,6 @@ const directEngineConstruction = production
   .map(rel);
 const oversizedProductionFiles = production
   .filter((file) => source.get(file).split(/\r?\n/).length > 800)
-  .filter((file) => rel(file) !== 'lib/content.ts')
   .map(rel);
 
 /**

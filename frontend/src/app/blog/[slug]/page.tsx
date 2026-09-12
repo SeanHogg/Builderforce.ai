@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { getPostBySlug } from '@/lib/blogData';
 import { blogTagLabel, loadPostBody, localizePost, type BlogText } from '@/lib/blogLocale';
-import { BRAND } from '@/lib/content';
+import { BRAND } from '@/lib/content/brand';
 import { pageMetadata } from '@/lib/seo';
 import { DEFAULT_LOCALE } from '@/i18n/config';
 import { requestOrigin } from '@/i18n/requestOrigin';

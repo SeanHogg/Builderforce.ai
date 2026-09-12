@@ -7,13 +7,11 @@ import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { ThemeToggleButton } from '@/components/ThemeToggleButton';
-import JsonLd from '@/components/JsonLd';
 import { Icon } from '@/components/ui/Icon';
 import OAuthButtons from '@/components/OAuthButtons';
 import MarketingFaq from '@/components/marketing/MarketingFaq';
 import PasswordInput from '@/components/PasswordInput';
-import { registerSchema } from '@/lib/structured-data';
-import { REGISTER_MARKETING } from '@/lib/content';
+import { resolveAuthPanel } from '@/lib/content/auth';
 import MarketingVisual from '@/components/account/MarketingVisual';
 import AccountTypeChooser from '@/components/account/AccountTypeChooser';
 import EmailVerificationStep from '@/components/account/EmailVerificationStep';
@@ -26,6 +24,7 @@ export default function RegisterPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tr = useTranslations('register');
+  const tRoot = useTranslations();
   const { register, isAuthenticated } = useAuth();
   const { legal } = useLegalDocs();
   const [legalModalType, setLegalDocType] = useState<LegalDocType | null>(null);
@@ -47,7 +46,7 @@ export default function RegisterPageClient() {
   const [emailDeliveryFailed, setEmailDeliveryFailed] = useState(false);
 
   // Right-hand marketing panel follows the Build/Hired chooser.
-  const marketing = REGISTER_MARKETING[accountType];
+  const marketing = resolveAuthPanel(tRoot, accountType);
 
   // Freelancers land on their for-hire profile (the restricted gig shell); standard
   // accounts go to the builder dashboard.
@@ -122,7 +121,6 @@ export default function RegisterPageClient() {
 
   return (
     <>
-    <JsonLd data={registerSchema()} />
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'var(--text-primary)', position: 'relative', zIndex: 1 }}>
       {/* Nav */}
       <nav style={{
@@ -384,7 +382,7 @@ export default function RegisterPageClient() {
             {/* Stat cards */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
               {marketing.stats.map(s => (
-                <div key={s.label} style={{ padding: '14px 12px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', textAlign: 'center', border: '1px solid var(--border-subtle)' }}>
+                <div key={s.id} style={{ padding: '14px 12px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', textAlign: 'center', border: '1px solid var(--border-subtle)' }}>
                   <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.3rem', fontWeight: 700, color: 'var(--coral-bright)' }}>{s.value}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>{s.label}</div>
                 </div>
@@ -394,7 +392,7 @@ export default function RegisterPageClient() {
             {/* Value-prop bullets */}
             <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
               {marketing.bullets.map(b => (
-                <li key={b.title} style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <li key={b.id} style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                   <span style={{ flexShrink: 0 }} aria-hidden><Icon source={b.icon} size={18} /></span>
                   <span><strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{b.title}</strong> — {b.desc}</span>
                 </li>

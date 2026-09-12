@@ -17,8 +17,10 @@ import {
   projectSites,
   projects,
 } from '../../infrastructure/database/schema';
-import { authMiddleware } from '../middleware/authMiddleware';
+import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { optionalTenantId } from '../middleware/tenantContext';
+import { TenantRole } from '../../domain/shared/types';
+import { mayWriteProjectFiles } from '../../application/ide/projectWriteAuthority';
 import { invalidateCached, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import {
   type AgentDescriptor,
@@ -360,6 +362,20 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   // sites below read unchanged.
   const projectInTenant = projectOwnedByTenant;
 
+  /**
+   * Write gate for a project's files — developer+, or an editor of a canvas linked
+   * to the project (application/ide/projectWriteAuthority). Reads stay open to any
+   * member: `project:read` is a viewer permission and a canvas renders its Builder
+   * objects from them. Runs AFTER `projectInTenant`, so a foreign id is still a 404.
+   */
+  const canWriteFiles = (
+    c: { get(key: 'userId'): unknown; get(key: 'role'): unknown },
+    db: Db,
+    tenantId: number,
+    projectId: number,
+  ) => mayWriteProjectFiles(db, tenantId, c.get('userId') as string | undefined, c.get('role') as string | undefined, projectId);
+  const WRITE_REFUSED = 'Writing project files requires the developer role, or edit access to a canvas linked to this project';
+
   /** Ownership gate for a training job (and its logs), via its project's tenant. */
   const trainingJobInTenant = async (db: Db, tenantId: number, jobId: string): Promise<boolean> => {
     const [job] = await db
@@ -453,6 +469,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
+    if (!(await canWriteFiles(c, db, tenantId, projectId))) return c.json({ error: WRITE_REFUSED }, 403);
     // The store enforces the path + structural-content contracts, so no caller
     // (editor, agent, script) can persist a traversal path or another file's
     // content (JSON into .js, source into .html) — 400/422 with the reason.
@@ -477,6 +494,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
+    if (!(await canWriteFiles(c, db, tenantId, projectId))) return c.json({ error: WRITE_REFUSED }, 403);
     await deleteWorkspaceFile(bucket, projectId, path);
     await onCanvasWrite(c.env, projectId, path);
     return c.json({ success: true });
@@ -506,6 +524,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
+    if (!(await canWriteFiles(c, db, tenantId, projectId))) return c.json({ error: WRITE_REFUSED }, 403);
     const { path, at } = await parseBody(c, RestoreVersionBody);
     const result = await restoreWorkspaceVersion(bucket, projectId, path, at);
     if (!result.ok) return c.json({ error: result.reason }, result.status);
@@ -523,7 +542,8 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     return c.json(await listSiteReleases(db, projectId, tenantId));
   });
 
-  router.post('/projects/:projectId/site/releases/:versionToken/restore', async (c) => {
+  // Rolling a live site back is a publish act, not a canvas edit — developer+.
+  router.post('/projects/:projectId/site/releases/:versionToken/restore', requireRole(TenantRole.DEVELOPER), async (c) => {
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));

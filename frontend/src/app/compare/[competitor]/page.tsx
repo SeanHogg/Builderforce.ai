@@ -12,7 +12,8 @@ import {
   arenaForCompetitor,
   COMPETITOR_SEO,
   COMPETITOR_SLUG_TO_KEY,
-} from '@/lib/content';
+} from '@/lib/content/compare';
+import { contentKey } from '@/lib/content/copy';
 
 // Dynamic on the Edge Runtime — NOT statically prerendered. `getTranslations()`
 // reads the locale cookie (cookie-based i18n), which forces this route dynamic, so
@@ -22,9 +23,9 @@ import {
 // no slug enumeration is needed. Same shape as /integrations/[tool].
 export const runtime = 'edge';
 
-// Resolve the URL slug to its stable key + canonical-English SEO record
-// (content.ts COMPETITOR_SEO drives JSON-LD + routing); the visible copy is
-// pulled from the localized `compare` catalog by key.
+// Resolve the URL slug to its stable key + route record (content/compare.ts
+// COMPETITOR_SEO: slug and vendor name); every word — the page and its JSON-LD —
+// is pulled from the localized catalogs by key.
 function resolve(slug: string) {
   const key = COMPETITOR_SLUG_TO_KEY[slug];
   if (!key) return null;
@@ -43,7 +44,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { competitor } = await params;
   const hit = resolve(competitor);
-  if (!hit) return { title: 'Comparison Not Found' };
+  if (!hit) return { title: (await getTranslations())(contentKey('schema.compare.notFound')) };
   const t = await getTranslations('compare');
   const vs = t('leaf.vsLabel', { name: hit.seo.name });
   return pageMetadata({
@@ -75,7 +76,7 @@ export default async function CompetitorComparePage({
 
   return (
     <>
-      <JsonLd data={competitorCompareSchema(seo)} />
+      <JsonLd data={competitorCompareSchema(t, seo)} />
 
       <style>{`
         .vs { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; }

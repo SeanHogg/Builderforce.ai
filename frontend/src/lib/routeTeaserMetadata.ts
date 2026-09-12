@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { getTranslations } from 'next-intl/server';
 import { destinationForRoute, getRouteMarketing, isNoindexTeaserRoute, teaserDestinationPitchKey, type RouteMarketingTranslate } from '@/lib/routeMarketing';
 import { routeMarketingSchema } from '@/lib/structured-data';
-import { BRAND } from '@/lib/content';
+import { BRAND } from '@/lib/content/brand';
 
 /**
  * THE SERVER HEAD for a route the teaser registry markets — ONE helper, called

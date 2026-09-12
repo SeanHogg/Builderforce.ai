@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { pageMetadata } from '@/lib/seo';
 import JsonLd from '@/components/JsonLd';
-import { BRAND } from '@/lib/content';
+import { BRAND } from '@/lib/content/brand';
 import { publicApiGet } from '@/lib/publicApi';
 import TalentDetailClient from './TalentDetailClient';
 

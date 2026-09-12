@@ -27,6 +27,7 @@ import {
   resolveSellMotionCard, type CardResolution,
 } from '../../application/sales/sellMotionService';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
+import { parseOptionalBody, zJsonObject } from './requestBody';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -166,7 +167,8 @@ export function createSellMotionRoutes(db: Db): Hono<HonoEnv> {
     if (text(card.content.workspaceId, 64)) {
       return c.json({ error: 'This trial has already been provisioned. Extend it instead of provisioning a second one.' }, 409);
     }
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+    // Optional body; `text()` / `Number()` read each field defensively.
+    const body = await parseOptionalBody(c, zJsonObject);
     const sourceSessionId = text(body.sourceSessionId, 64) || access.session.id;
     if (!UUID_RE.test(sourceSessionId)) return c.json({ error: 'Invalid source board' }, 400);
 
@@ -210,7 +212,7 @@ export function createSellMotionRoutes(db: Db): Hono<HonoEnv> {
     if (text(card.content.handoffSessionId, 64)) {
       return c.json({ error: 'This plan has already been handed off.' }, 409);
     }
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+    const body = await parseOptionalBody(c, zJsonObject);
     const sourceSessionId = text(body.sourceSessionId, 64) || access.session.id;
     if (!UUID_RE.test(sourceSessionId)) return c.json({ error: 'Invalid source board' }, 400);
 

@@ -299,9 +299,14 @@ function diagnosticsSignals(d: ChatDiagnosticsData): string[] {
   if (ev && ev.version >= 1 && ev.mode !== 'connected') {
     out.push(`⚠️ The chat's project Evermind is "${ev.mode}" (not connected) — read-only, so turns don't contribute.`);
   }
-  if (d.lastLearn && d.lastLearn.learned && ev && ev.version >= 1 && d.lastLearn.version !== ev.version) {
+  // The gate reports the head it EVALUATED, and the contribution is queued behind it — so
+  // once that learn lands the head is AHEAD of the reported version. That is the learn
+  // arriving, not a fault (it fired on every healthy learning chat: "reported v22 · head
+  // v23"). Only a head BEHIND the learn step is impossible for one head, since a queued
+  // learn only ever moves it forward.
+  if (d.lastLearn && d.lastLearn.learned && ev && ev.version >= 1 && ev.version < d.lastLearn.version) {
     out.push(
-      `⚠️ Last turn reported learn version v${d.lastLearn.version} but the chat's project head is v${ev.version}. A version mismatch means the learn step and the panel are resolving DIFFERENT projects/heads.`,
+      `⚠️ Last turn's learn step evaluated v${d.lastLearn.version} but the chat's project head is v${ev.version} — BEHIND it. A queued learn only moves a head forward, so the learn step and the panel are resolving DIFFERENT projects/heads.`,
     );
   }
   if ((d.agents?.length ?? 0) === 0) {

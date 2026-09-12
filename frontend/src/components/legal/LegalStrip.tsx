@@ -5,7 +5,7 @@ import { useLegalDocs } from './useLegalDocs';
 import LegalDocModal, { type LegalDocType } from './LegalDocModal';
 import LegalDocLink from './LegalDocLink';
 import ProductUpdatesTrigger from '../releaseNotes/ProductUpdatesTrigger';
-import { BRAND } from '@/lib/content';
+import { BRAND } from '@/lib/content/brand';
 
 /**
  * Copyright + version + Terms/Privacy — the row itself, with nowhere it decides

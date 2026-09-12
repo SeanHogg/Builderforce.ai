@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { REGISTER_MARKETING } from '@/lib/content';
+import { resolveAuthPanel } from '@/lib/content/auth';
 import MarketingVisual from './MarketingVisual';
 import AccountTypeChooser, { type AccountType } from './AccountTypeChooser';
 import { Icon } from '@/components/ui/Icon';
@@ -21,12 +21,13 @@ export default function RoleChoiceScreen({
   onSelect: (accountType: AccountType, ageAttested: boolean) => Promise<void>;
 }) {
   const t = useTranslations('welcomeRole');
+  const tRoot = useTranslations();
   const [selected, setSelected] = useState<AccountType>('standard');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ageAttested, setAgeAttested] = useState(false);
 
-  const marketing = REGISTER_MARKETING[selected];
+  const marketing = resolveAuthPanel(tRoot, selected);
 
   const submit = async () => {
     setError(null);
@@ -111,7 +112,7 @@ export default function RoleChoiceScreen({
             </p>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
               {marketing.bullets.slice(0, 4).map((b) => (
-                <li key={b.title} style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <li key={b.id} style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                   <span style={{ flexShrink: 0 }} aria-hidden><Icon source={b.icon} size={18} /></span>
                   <span><strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{b.title}</strong> — {b.desc}</span>
                 </li>
@@ -136,7 +137,7 @@ export default function RoleChoiceScreen({
           </div>
         )}
 
-        <label style={{ display: 'flex', gap: 10, marginTop: 20, color: 'var(--text-secondary)' }}><input type="checkbox" checked={ageAttested} onChange={(e) => setAgeAttested(e.target.checked)} /> I confirm I am at least 18 years old.</label>
+        <label style={{ display: 'flex', gap: 10, marginTop: 20, color: 'var(--text-secondary)' }}><input type="checkbox" checked={ageAttested} onChange={(e) => setAgeAttested(e.target.checked)} /> {tRoot('register.ageAttestation')}</label>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 24 }}>
           <button
             type="button"

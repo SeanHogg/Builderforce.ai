@@ -28,7 +28,7 @@
  */
 
 import type { CreationGraphInput } from '@/lib/builderforceApi';
-import { MEDIA_KIT } from '@/lib/content';
+import { MEDIA_KIT } from '@/lib/content/brand';
 
 /** Pipeline stages, in order. The SAME seven the server validates (`salesRoutes`
  *  STAGES) — a board that offered an eighth would produce contacts the API

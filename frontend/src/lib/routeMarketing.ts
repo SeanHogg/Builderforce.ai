@@ -1,4 +1,5 @@
-import { PRODUCT_SECTIONS, PROJECTS_TASKS_FAQ, type FaqItem } from './content';
+import { faqEntryKeys, type FaqItem } from './content/faq';
+import { PRODUCT_SECTIONS, productSurfaceKey } from './content/product';
 import { FOR_HIRE_NAV_GROUPS, NAV_GROUPS, SALES_NAV_GROUPS, findActiveGroup, type NavGroup } from './navGroups';
 import { classifyShell, isOperatorOnlyRoute } from './shellRouting';
 
@@ -40,9 +41,9 @@ import { classifyShell, isOperatorOnlyRoute } from './shellRouting';
  * English. The operator reversed it on 2026-09-12 ("translate all marketing
  * strings"), so the registry now holds STRUCTURE and catalog keys
  * (`routeMarketing.route.<slug>.*`), and {@link getRouteMarketing} resolves them
- * through the caller's translator. The only text still arriving as text is what
- * `content.ts` owns (the product-surface rows and the Projects FAQ); localizing
- * that is `content.ts`'s job, and a row switches to a key the day it has one.
+ * through the caller's translator. The product-surface rows and the Projects FAQ
+ * resolve the same way, through the keys `content/product.ts` and
+ * `content/faq.ts` publish — no row carries text any more.
  */
 export interface RouteHighlight {
   title: string;
@@ -76,9 +77,8 @@ export interface RouteMarketing {
 }
 
 /**
- * Copy as the registry holds it: a catalog KEY (resolved in the visitor's locale)
- * or text another module owns and localizes (a `PRODUCT_SECTIONS` row, the
- * Projects FAQ). Never English typed into this file.
+ * Copy as the registry holds it: a catalog KEY (resolved in the visitor's locale),
+ * or text another module has already localized. Never English typed into this file.
  */
 type Copy = { key: string } | string;
 
@@ -120,14 +120,18 @@ const routeKey = (slug: string, field: string): Copy => ({ key: `${ROUTE_NS}.${s
  * titled "Workforce Kanban & Templates".
  */
 const fromSurfaces: Record<string, RouteMarketingSource> = {};
-for (const section of PRODUCT_SECTIONS) {
-  for (const s of section.surfaces) {
-    if (!s.href.startsWith('/')) continue;
+PRODUCT_SECTIONS.forEach((section, si) => {
+  section.surfaces.forEach((s, fi) => {
+    if (!s.href.startsWith('/')) return;
     const path = s.href.split('?')[0];
-    if (fromSurfaces[path]) continue;
-    fromSurfaces[path] = { icon: s.icon, title: s.title, description: s.desc };
-  }
-}
+    if (fromSurfaces[path]) return;
+    fromSurfaces[path] = {
+      icon: s.icon,
+      title: { key: productSurfaceKey(si, fi, 'title') },
+      description: { key: productSurfaceKey(si, fi, 'desc') },
+    };
+  });
+});
 
 /** An authed route that is not a marketed surface: its own title and pitch, keyed. */
 const ownRow = (slug: string, icon: string): RouteMarketingSource => ({
@@ -173,9 +177,10 @@ function detail(slug: string, counts: { highlights?: number; faq?: number } = {}
 const DETAILS: Record<string, DetailSource> = {
   '/brainstorm': detail('brainstorm', { highlights: 3, faq: 3 }),
   '/workflows': detail('workflows', { highlights: 3, faq: 3 }),
-  // The Projects FAQ is shared with the Projects marketing surfaces, so it stays
-  // where they read it (`content.ts`) rather than being copied under this slug.
-  '/projects': { ...detail('projects'), faq: PROJECTS_TASKS_FAQ },
+  // The Projects FAQ is shared with the Projects JSON-LD (`projectsTasksSchema`),
+  // so it is the one set at `marketing.content.faq.projectsTasks` rather than a
+  // copy under this slug.
+  '/projects': { ...detail('projects'), faq: faqEntryKeys('projectsTasks').map(({ question, answer }) => ({ question: { key: question }, answer: { key: answer } })) },
   '/workforce': detail('workforce', { highlights: 3, faq: 3 }),
   '/skills': detail('skills', { highlights: 3, faq: 3 }),
   '/personas': detail('personas', { highlights: 3, faq: 3 }),

@@ -1,3 +1,4 @@
+import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
 import { homepageSchema } from '@/lib/structured-data';
 import { DemoShowcase } from '@/components/demo/DemoShowcase';
@@ -39,10 +40,11 @@ import { NewsletterSignupSection } from '@/components/marketing/NewsletterSignup
  * structured data, the section shells, the About band and the FAQ copy into the
  * client bundle with it. The fetch now belongs to the band that needs it.
  */
-export default function LandingPage() {
+export default async function LandingPage() {
+  const t = await getTranslations();
   return (
     <>
-      <JsonLd data={homepageSchema()} />
+      <JsonLd data={homepageSchema(t)} />
       <main>
         {/* 1 · START — the board itself, with a composer. The product argues for
             itself before a word of description. */}

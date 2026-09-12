@@ -8,7 +8,7 @@ import CompetitorMatrix, { type CompareCategory } from '@/components/marketing/C
 import MarketingFaq, { type MarketingFaqItem } from '@/components/marketing/MarketingFaq';
 import { compareSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
-import { COMPARE, COMPARE_ARENAS } from '@/lib/content';
+import { COMPARE_ARENAS, COMPARE_PILLAR_ICONS } from '@/lib/content/compare';
 import { Icon } from '@/components/ui/Icon';
 
 export const runtime = 'edge';
@@ -23,10 +23,10 @@ export async function generateMetadata(): Promise<Metadata> {
   });
 }
 
-// Visible copy from the `compare` catalog (localized in all 5 locales).
-// `content.ts` COMPARE stays canonical English for the
-// crawler-facing JSON-LD (compareSchema); COMPETITORS supplies the stable column
-// ORDER + keys, and pillar ICONS are paired from COMPARE.pillars by index.
+// Every word comes from the `compare` catalog — the page AND its JSON-LD
+// (`compareSchema(t)`), whose FAQPage is the arenas' own FAQs. COMPARE_ARENAS
+// supplies the stable column ORDER + keys; pillar ICONS pair with
+// `compare.pillars` by index (COMPARE_PILLAR_ICONS).
 export default async function ComparePage() {
   const t = await getTranslations();
   const pillars = t.raw('compare.pillars') as { title: string; desc: string }[];
@@ -48,7 +48,7 @@ export default async function ComparePage() {
 
   return (
     <>
-      <JsonLd data={compareSchema()} />
+      <JsonLd data={compareSchema(t)} />
 
       <style>{`
         .cmp { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; }
@@ -126,7 +126,7 @@ export default async function ComparePage() {
           <div className="cmp-pillars">
             {pillars.map((p, i) => (
               <div key={p.title} className="cmp-pillar">
-                <div className="cmp-pillar-icon"><Icon source={COMPARE.pillars[i]?.icon} size={28} /></div>
+                <div className="cmp-pillar-icon"><Icon source={COMPARE_PILLAR_ICONS[i]} size={28} /></div>
                 <h2 className="cmp-pillar-title">{p.title}</h2>
                 <p className="cmp-pillar-desc">{p.desc}</p>
               </div>
