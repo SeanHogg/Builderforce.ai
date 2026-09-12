@@ -33,21 +33,10 @@
  * ⇒ rotate, which is a PATCH that mints a new one.
  */
 
-import { InternalError } from '../../domain/shared/errors';
 import { Hono } from 'hono';
-import { and, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { HonoEnv } from '../../env';
 import {
-  creationSessions,
-  webhookDeliveries,
-  webhookSubscriptions,
-} from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { generateApiKey } from '../../infrastructure/auth/HashService';
-import {
-  isWebhookEvent,
-  parseEvents,
   WEBHOOK_EVENTS,
   WEBHOOK_ID_HEADER,
   WEBHOOK_MAX_ATTEMPTS,
@@ -57,7 +46,15 @@ import {
 } from '../../application/seams/webhookService';
 import { requirePublicApiKey, type PublicApiContext } from '../../application/publicApi/publicApiAuth';
 import { touchTenantApiKey } from '../../application/llm/tenantApiKeyService';
-import { CREATION_UUID_RE as UUID_RE } from '../../application/creation/creationGraphWriter';
+import {
+  createWebhookSubscription,
+  deleteWebhookSubscription,
+  findWebhookSubscriptionId,
+  listWebhookDeliveries,
+  listWebhookSubscriptions,
+  patchWebhookSubscription,
+  webhookSubscriptionView,
+} from '../../application/publicApi/publicWebhookSubscriptionService';
 import { limitParam } from '../../domain/shared/boundedInt';
 import { parseOptionalBody, z } from './requestBody';
 
@@ -109,22 +106,6 @@ const SubscriptionBodySchema = z.object({
   rotateSecret: z.boolean().optional(),
 });
 
-function subscriptionView(row: {
-  id: string; url: string; events: string; active: boolean; sessionId: string | null;
-  description: string | null; createdAt: Date; updatedAt: Date;
-}) {
-  return {
-    id: row.id,
-    url: row.url,
-    events: parseEvents(row.events),
-    active: row.active,
-    boardId: row.sessionId,
-    description: row.description,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  };
-}
-
 export function createPublicWebhookRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
@@ -148,13 +129,8 @@ export function createPublicWebhookRoutes(db: Db): Hono<HonoEnv> {
   router.get('/webhooks', async (c) => {
     const resolved = await auth(c);
     if (!resolved.ok) return c.json({ error: resolved.error }, resolved.status);
-    const rows = await db
-      .select()
-      .from(webhookSubscriptions)
-      .where(scopedToTenant(webhookSubscriptions, resolved.tenantId))
-      .orderBy(desc(webhookSubscriptions.createdAt))
-      .limit(200);
-    return c.json({ subscriptions: rows.map(subscriptionView), availableEvents: WEBHOOK_EVENTS });
+    const rows = await listWebhookSubscriptions(db, resolved.tenantId);
+    return c.json({ subscriptions: rows.map(webhookSubscriptionView), availableEvents: WEBHOOK_EVENTS });
   });
 
   /** POST /api/v1/webhooks — subscribe. Returns the signing secret ONCE. */
@@ -163,59 +139,21 @@ export function createPublicWebhookRoutes(db: Db): Hono<HonoEnv> {
     if (!resolved.ok) return c.json({ error: resolved.error }, resolved.status);
     const body = await parseOptionalBody(c, SubscriptionBodySchema);
 
-    const url = (body.url ?? '').trim();
-    // https only. A signature proves who sent the body; it does nothing about who
-    // READ it, and board content on the wire in plaintext is the same leak whether
-    // or not it was signed.
-    if (!/^https:\/\/[^\s]+$/.test(url) || url.length > 2000) {
-      return c.json({ error: 'url must be an https URL of at most 2000 characters' }, 400);
-    }
-    const events = Array.isArray(body.events) ? [...new Set(body.events.filter(isWebhookEvent))] : [];
-    if (events.length === 0) {
-      return c.json({ error: `events must include at least one of: ${WEBHOOK_EVENTS.join(', ')}` }, 400);
-    }
-
-    // A board-scoped subscription must name a board in the KEY'S tenant — checked
-    // with the tenant predicate in the query, so a foreign board id is "not found"
-    // rather than a confirmation that it exists somewhere.
-    let sessionId: string | null = null;
-    if (body.boardId) {
-      if (!UUID_RE.test(body.boardId)) return c.json({ error: 'Board not found' }, 404);
-      const [board] = await db
-        .select({ id: creationSessions.id })
-        .from(creationSessions)
-        .where(scopedToTenant(creationSessions, resolved.tenantId, eq(creationSessions.id, body.boardId)))
-        .limit(1);
-      if (!board) return c.json({ error: 'Board not found' }, 404);
-      sessionId = board.id;
-    }
-
-    const secret = (body.secret ?? '').trim() || generateApiKey('whsec');
-    if (secret.length < 16 || secret.length > 128) {
-      return c.json({ error: 'secret must be 16–128 characters' }, 400);
-    }
-
-    const [row] = await db
-      .insert(webhookSubscriptions)
-      .values({
-        tenantId: resolved.tenantId,
-        // NULL: a `/api/v1` subscription is tenant-wide unless it named a board.
-        // The seam subscriptions still set it; see the column's comment.
-        segmentId: null,
-        sessionId,
-        url,
-        secret,
-        events: JSON.stringify(events),
-        description: body.description?.slice(0, 255) || null,
-        createdByKeyId: resolved.keyId,
-      })
-      .returning();
-    if (!row) throw new InternalError('Could not create the subscription');
+    const result = await createWebhookSubscription(db, {
+      tenantId: resolved.tenantId,
+      keyId: resolved.keyId,
+      url: body.url ?? '',
+      events: body.events,
+      secret: body.secret,
+      boardId: body.boardId,
+      description: body.description,
+    });
+    if (!result.ok) return c.json({ error: result.error }, result.status);
 
     return c.json({
-      subscription: subscriptionView(row),
+      subscription: webhookSubscriptionView(result.subscription),
       // Once. See the header.
-      secret,
+      secret: result.secret,
       spec: WEBHOOK_SPEC.signature,
     }, 201);
   });
@@ -224,53 +162,31 @@ export function createPublicWebhookRoutes(db: Db): Hono<HonoEnv> {
   router.patch('/webhooks/:id', async (c) => {
     const resolved = await auth(c);
     if (!resolved.ok) return c.json({ error: resolved.error }, resolved.status);
-    const id = c.req.param('id');
-    if (!UUID_RE.test(id)) return c.json({ error: 'Subscription not found' }, 404);
     const body = await parseOptionalBody(c, SubscriptionBodySchema);
 
-    const patch: Partial<typeof webhookSubscriptions.$inferInsert> = { updatedAt: new Date() };
-    if (body.url !== undefined) {
-      const url = String(body.url).trim();
-      if (!/^https:\/\/[^\s]+$/.test(url) || url.length > 2000) {
-        return c.json({ error: 'url must be an https URL of at most 2000 characters' }, 400);
-      }
-      patch.url = url;
-    }
-    if (body.events !== undefined) {
-      const events = Array.isArray(body.events) ? [...new Set(body.events.filter(isWebhookEvent))] : [];
-      if (!events.length) return c.json({ error: `events must include at least one of: ${WEBHOOK_EVENTS.join(', ')}` }, 400);
-      patch.events = JSON.stringify(events);
-    }
-    if (body.active !== undefined) patch.active = Boolean(body.active);
-    if (body.description !== undefined) patch.description = body.description?.slice(0, 255) || null;
-
-    let rotated: string | null = null;
-    if (body.rotateSecret) {
-      rotated = generateApiKey('whsec');
-      patch.secret = rotated;
-    }
-
-    const [row] = await db
-      .update(webhookSubscriptions)
-      .set(patch)
-      .where(scopedToTenant(webhookSubscriptions, resolved.tenantId, eq(webhookSubscriptions.id, id)))
-      .returning();
-    if (!row) return c.json({ error: 'Subscription not found' }, 404);
-    return c.json({ subscription: subscriptionView(row), ...(rotated ? { secret: rotated } : {}) });
+    const result = await patchWebhookSubscription(db, {
+      tenantId: resolved.tenantId,
+      id: c.req.param('id'),
+      url: body.url,
+      events: body.events,
+      active: body.active,
+      description: body.description,
+      rotateSecret: body.rotateSecret,
+    });
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json({
+      subscription: webhookSubscriptionView(result.subscription),
+      ...(result.secret ? { secret: result.secret } : {}),
+    });
   });
 
   /** DELETE /api/v1/webhooks/:id */
   router.delete('/webhooks/:id', async (c) => {
     const resolved = await auth(c);
     if (!resolved.ok) return c.json({ error: resolved.error }, resolved.status);
-    const id = c.req.param('id');
-    if (!UUID_RE.test(id)) return c.json({ error: 'Subscription not found' }, 404);
-    const [row] = await db
-      .delete(webhookSubscriptions)
-      .where(scopedToTenant(webhookSubscriptions, resolved.tenantId, eq(webhookSubscriptions.id, id)))
-      .returning({ id: webhookSubscriptions.id });
-    if (!row) return c.json({ error: 'Subscription not found' }, 404);
-    return c.json({ ok: true, id: row.id });
+    const deleted = await deleteWebhookSubscription(db, resolved.tenantId, c.req.param('id'));
+    if (!deleted) return c.json({ error: 'Subscription not found' }, 404);
+    return c.json({ ok: true, id: c.req.param('id') });
   });
 
   /**
@@ -285,44 +201,14 @@ export function createPublicWebhookRoutes(db: Db): Hono<HonoEnv> {
   router.get('/webhooks/:id/deliveries', async (c) => {
     const resolved = await auth(c);
     if (!resolved.ok) return c.json({ error: resolved.error }, resolved.status);
-    const id = c.req.param('id');
-    if (!UUID_RE.test(id)) return c.json({ error: 'Subscription not found' }, 404);
-
-    // Ownership first, and as its own tenant-scoped query: joining the deliveries to
-    // the subscription and filtering on the delivery's tenant would let a caller
-    // learn that a subscription id exists by getting an empty list instead of a 404.
-    const [sub] = await db
-      .select({ id: webhookSubscriptions.id })
-      .from(webhookSubscriptions)
-      .where(scopedToTenant(webhookSubscriptions, resolved.tenantId, eq(webhookSubscriptions.id, id)))
-      .limit(1);
-    if (!sub) return c.json({ error: 'Subscription not found' }, 404);
+    const subscriptionId = await findWebhookSubscriptionId(db, resolved.tenantId, c.req.param('id'));
+    if (!subscriptionId) return c.json({ error: 'Subscription not found' }, 404);
 
     const limit = limitParam(c.req.query('limit'), 50, 100);
-    const rows = await db
-      .select({
-        id: webhookDeliveries.id,
-        eventType: webhookDeliveries.eventType,
-        eventId: webhookDeliveries.eventId,
-        status: webhookDeliveries.status,
-        attempts: webhookDeliveries.attempts,
-        responseStatus: webhookDeliveries.responseStatus,
-        lastError: webhookDeliveries.lastError,
-        nextRetryAt: webhookDeliveries.nextRetryAt,
-        payload: webhookDeliveries.payload,
-        createdAt: webhookDeliveries.createdAt,
-        deliveredAt: webhookDeliveries.deliveredAt,
-      })
-      .from(webhookDeliveries)
-      .where(and(
-        eq(webhookDeliveries.subscriptionId, sub.id),
-        eq(webhookDeliveries.tenantId, resolved.tenantId),
-      ))
-      .orderBy(desc(webhookDeliveries.createdAt))
-      .limit(limit);
+    const rows = await listWebhookDeliveries(db, resolved.tenantId, subscriptionId, limit);
 
     return c.json({
-      subscriptionId: sub.id,
+      subscriptionId,
       deliveries: rows.map((r) => ({
         ...r,
         // A dead-lettered row is `failed` with no next retry, which is a different

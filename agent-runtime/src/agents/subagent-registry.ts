@@ -3,6 +3,7 @@ import { restoreTerminalState } from "../terminal/restore.js";
 import { loadConfig } from "../config/config.js";
 import { callGateway } from "../gateway/call.js";
 import { onAgentEvent } from "../infra/agent-events.js";
+import { logWarn } from "../logger.js";
 import { defaultRuntime } from "../runtime.js";
 import { type DeliveryContext, normalizeDeliveryContext } from "../utils/delivery-context.js";
 import { resetAnnounceQueuesForTests } from "./subagent-announce-queue.js";
@@ -88,8 +89,8 @@ let persistChain: Promise<void> = Promise.resolve();
 function persistSubagentRuns(): Promise<void> {
   persistChain = persistChain
     .then(() => saveSubagentRegistryToDisk(subagentRuns))
-    .catch(() => {
-      // ignore persistence failures
+    .catch((err) => {
+      logWarn(`subagent registry persist failed: ${String(err)}`);
     });
   return persistChain;
 }

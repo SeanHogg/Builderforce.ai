@@ -34,6 +34,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { swimlanes, tasks } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { completeTaskOnMerge, isReviewLane, REVIEW_CLASS, type TransitionActorInput } from '../task/taskLifecycle';
 import { resolveManagerAssignee, resolveTenantManagerDefaults } from './managerPolicy';
@@ -309,7 +310,7 @@ export async function closeTicketAutomatically(
     const [t] = await db
       .select({ status: tasks.status, projectId: tasks.projectId, title: tasks.title })
       .from(tasks)
-      .where(eq(tasks.id, input.taskId))
+      .where(scopedToTenant(tasks, input.tenantId, eq(tasks.id, input.taskId)))
       .limit(1);
     if (!t) return { verdict: 'open', closed: false };
     known = {

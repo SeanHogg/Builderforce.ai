@@ -1006,7 +1006,11 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           try {
             delta = decodeDeltaB64(e.diffB64);
           } catch (error) {
-            console.warn(`[evermind] dropped undecodable delta tenant=${tenantId} project=${projectId} id=${e.id}: ${String(error)}`);
+            this.reportError(error, {
+              operation: 'dropped undecodable delta',
+              context: { tenantId, projectId, entryId: e.id },
+              level: 'warning',
+            });
             continue;
           }
           const unusable = deltaUnusableReason(delta, basePkg.checkpoint);

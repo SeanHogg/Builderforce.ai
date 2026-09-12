@@ -41,12 +41,15 @@ export default defineConfig({
     passWithNoTests: true,
     // The default worker count is the runner's CPU count (4 on the release job's
     // `ubuntu-latest`). Each worker independently re-imports this suite's aliased
-    // source packages, and with `NODE_OPTIONS=--max-old-space-size=6144` set on
-    // that job, 4 concurrent workers can reserve up to 24 GiB against a 16 GiB
-    // box — trading the V8 heap-limit crash this was raised to fix for a
-    // harder-to-diagnose OS OOM-kill instead. Capping concurrency keeps the
-    // worst case under the runner's budget. (`poolOptions.forks.maxForks` was
-    // vitest 3; vitest 4 moved this to a top-level option.)
-    maxWorkers: 2,
+    // source packages, and that set keeps growing (brain-ui, studio, transformers,
+    // onnxruntime-web, mermaid, xlsx, and now creation-canvas-contract +
+    // canvas-widget-protocol) — 2 concurrent workers already pushed a single one
+    // past its `NODE_OPTIONS=--max-old-space-size=6144` ceiling mid-run. Rather
+    // than keep chasing that ceiling up as the alias set grows, run one worker at
+    // a time: it is the only setting that scales with the IMPORT graph instead of
+    // the runner's core count, and the release job's own heap ceiling below scales
+    // with it (one worker may use what two used to split). (`poolOptions.forks.maxForks`
+    // was vitest 3; vitest 4 moved this to a top-level option.)
+    maxWorkers: 1,
   },
 });

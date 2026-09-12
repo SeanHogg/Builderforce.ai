@@ -3744,6 +3744,30 @@ const CATALOG: BuiltinTool[] = [
     },
   },
   {
+    tool: 'manager.enable', mutates: true,
+    description: 'ENABLE THE AI MANAGER for a project so it can autonomously dispatch agents, assign tickets, and manage the board. This is the switch that turns on agent execution — when disabled, no autonomous runs will be dispatched regardless of ticket state. Pass projectId to target a specific project.',
+    parameters: obj({ projectId: N }, ['projectId']),
+    run: async (ctx, a) => {
+      const projectId = num(a.projectId);
+      await assertProjectInTenant(ctx, projectId);
+      const { upsertManagerConfig } = await import('../manager/ManagerService');
+      await upsertManagerConfig(ctx.db, ctx.tenantId, projectId, { enabled: true });
+      return { success: true, message: 'Manager enabled for project ' + projectId };
+    },
+  },
+  {
+    tool: 'manager.disable', mutates: true,
+    description: 'DISABLE THE AI MANAGER for a project, stopping all autonomous agent dispatch, auto-assignment, and board management. Pass projectId to target a specific project.',
+    parameters: obj({ projectId: N }, ['projectId']),
+    run: async (ctx, a) => {
+      const projectId = num(a.projectId);
+      await assertProjectInTenant(ctx, projectId);
+      const { upsertManagerConfig } = await import('../manager/ManagerService');
+      await upsertManagerConfig(ctx.db, ctx.tenantId, projectId, { enabled: false });
+      return { success: true, message: 'Manager disabled for project ' + projectId };
+    },
+  },
+  {
     tool: 'tickets.lifecycle', mutates: false,
     description: 'THE CHAIN OF CUSTODY for ONE ticket: every lifecycle event in order — created, auto-run decision (dispatched or the exact gate that declined it), run started/completed/failed, each lane move with who moved it — where every event names the source table it was read from, so it is evidence rather than narration. Plus a verdict: autonomous vs human lane hops, runs dispatched/completed/failed, whether it reached a terminal lane, whether it is stalled and the LIVE gate holding it right now. Use this to answer "why is THIS ticket stuck?" and to tell an agent-driven ticket from a human-driven one.',
     parameters: obj({ taskId: N }, ['taskId']),
