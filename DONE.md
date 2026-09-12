@@ -1,3 +1,21 @@
+## ✅ RESOLVED 2026-09-12 — Room: the open session stopped one dock-width short of the Brain panel
+
+With the Brain docked right and the session opened at full size inside the Room, the projection
+ended well before the panel and an empty strip the exact width of the dock — painted the surface
+background — sat between them. `CanvasRoomSurface`'s `.surface` already steps in by
+`--brain-dock-left/right`, and its `.sessionFrame` is `inset: 0` inside it; but `Canvas3DView`'s
+root (`.scene`) also steps in by `--canvas-reserved-left/right`, which `.flowWrap` publishes as the
+same dock width, and that variable was inherited into the frame. The dock's clearance was paid
+twice. The room's own WebGL stage was unaffected (it is a flex child, not the projection), which
+is why the gap only appeared once the session was open.
+
+- **Fix** (`frontend/src/components/creation-canvas/CanvasRoomSurface.module.css`): `.sessionFrame`
+  zeroes `--canvas-reserved-left` and `--canvas-reserved-right`, so the projection measures against
+  the frame — which is already the dock-cleared area. The bottom reservation is left alone: the
+  frame reaches the shell's bottom edge exactly as the room's stage does.
+- CSS-only; no strings, no theme change (the frame's `--surface` background was what showed
+  through, in both themes).
+
 ## ✅ RESOLVED 2026-09-12 — Chat diagnostics flag the same call repeated BACK-TO-BACK
 
 A run that called `git_status {}` three times running — each time answered with the same

@@ -60,7 +60,16 @@
 /* ── The session at full size ─────────────────────────────────────────────────
    The projection fills the frame — `Canvas3DView`'s own `position: absolute; inset`
    measures itself against it — and the (X) floats in its top-right corner. The frame
-   isolates its stacking so the projection's own layers can never paint over the X. */
+   isolates its stacking so the projection's own layers can never paint over the X.
+
+   The projection's root steps in from `--canvas-reserved-left/right`, which the board
+   wrapper publishes as the Brain dock's width — right for the projection drawn over the
+   BOARD, where nothing else has cleared the dock, but this frame lives inside `.surface`,
+   which has already stepped aside for it. Inherited here, the reservation was paid twice:
+   the session stopped one dock-width short of the panel and the frame's own background
+   showed through as an empty strip beside it. The frame is the measure, so it zeroes
+   both — the bottom reservation stays, because the frame reaches the shell's bottom
+   edge exactly as the room's stage does. */
 
 .sessionFrame {
   position: absolute;
@@ -69,6 +78,8 @@
   min-width: 0;
   min-height: 0;
   background: var(--surface);
+  --canvas-reserved-left: 0px;
+  --canvas-reserved-right: 0px;
 }
 
 .roster {
