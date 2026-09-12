@@ -398,7 +398,7 @@ export interface TriagePolicy {
   allowAutoMerge: boolean;
   autoAssign: boolean;
   managerRef: string | null;
-  /** Workspace review-and-close authority (1150). Omitted = false = pre-1150 behaviour. */
+  /** Workspace review-and-close authority (1153). Omitted = false = pre-1153 behaviour. */
   managerMayCloseReviewedTickets?: boolean;
 }
 
@@ -788,7 +788,7 @@ export async function runStallTriage(
         // escalation still happen — a throttled provider must not stop the manager
         // from managing.
         poolRateLimited: poolHealth.rateLimited,
-        // A human-gated review lane the workspace handed to the manager (1150) is the
+        // A human-gated review lane the workspace handed to the manager (1153) is the
         // manager's to close, not a standing escalation — the census asks the same module.
         reviewGateDelegated: managerHoldsReviewGate({
           status: task.status, laneGate: autoRun.laneGate,

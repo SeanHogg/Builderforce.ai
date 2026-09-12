@@ -41,6 +41,7 @@ import {
 import { assembleAuditReport } from '../../application/finops/auditReport';
 import { createAuditReportRunRoutes } from './auditReportRunRoutes';
 import { daysParam, periodParam } from './queryParams';
+import { parseOptionalBody, zJsonObject } from './requestBody';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 
@@ -76,7 +77,7 @@ export function createFinopsRoutes(db: Db): Hono<HonoEnv> {
 
   router.patch('/rd-tax/config', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    const body = await parseOptionalBody(c, zJsonObject);
 
     const current = await getRdTaxCreditConfig(db, tenantId);
     const qualifiedCategories = asStringArray(body.qualifiedCategories) ?? current.qualifiedCategories;
@@ -123,7 +124,7 @@ export function createFinopsRoutes(db: Db): Hono<HonoEnv> {
   // defaults, persist the default register first so the table becomes authoritative.
   router.post('/soc/controls', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    const body = await parseOptionalBody(c, zJsonObject);
 
     const existing = await db
       .select({ id: finopsSocControls.id })
@@ -168,7 +169,7 @@ export function createFinopsRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId } = scope(c);
     const id = Number(c.req.param('id'));
     if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'invalid control id' }, 400);
-    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    const body = await parseOptionalBody(c, zJsonObject);
 
     const set: Record<string, unknown> = { updatedAt: new Date() };
     if (body.status !== undefined) set.status = normStatus(body.status);

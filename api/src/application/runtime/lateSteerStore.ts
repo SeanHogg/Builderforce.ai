@@ -14,6 +14,7 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { executionMessages } from '../../infrastructure/database/schema';
+import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import type { LateSteerOutcomeKind } from './executionSteering';
 
 /** One late steer, as claimed. `sentBy` is the person the follow-up runs under. */
@@ -148,13 +149,19 @@ export async function resolveReportedSteerIds(db: Db, executionId: number, steer
   return [...ids].sort((a, b) => a - b);
 }
 
-/** Of these executions, the ones holding a still-pending user steer (one query, for sweeps). */
+/**
+ * Of these executions, the ones holding a still-pending user steer — one query, for the
+ * orphan sweep. A DECLARED cross-tenant read: the sweep covers every tenant at once, and
+ * the execution ids it just reaped are the access predicate.
+ */
 export async function executionsWithPendingSteers(db: Db, executionIds: readonly number[]): Promise<number[]> {
   if (executionIds.length === 0) return [];
   const rows = await db
     .selectDistinct({ executionId: executionMessages.executionId })
     .from(executionMessages)
-    .where(and(
+    .where(acrossTenants(
+      executionMessages,
+      'scheduled_sweep',
       inArray(executionMessages.executionId, [...executionIds]),
       eq(executionMessages.role, 'user'),
       isNull(executionMessages.consumedAt),

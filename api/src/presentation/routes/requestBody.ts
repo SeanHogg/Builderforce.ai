@@ -132,6 +132,17 @@ export const zOptionalString = z.preprocess(
   z.string().optional(),
 );
 
+/**
+ * A JSON OBJECT body whose fields the handler reads defensively one by one
+ * (`typeof body.x === 'string' ? … : null`) or hands to an application reader
+ * that owns the per-field rules. Refuses arrays, scalars and `null` — exactly the
+ * shapes that used to reach `body.x` as a TypeError — and admits every key as-is.
+ */
+export const zJsonObject = z.record(z.string(), z.unknown());
+
+/** A number, or a string the handler `Number(...)`s — both were always accepted. */
+export const zNumberLike = z.union([z.number(), z.string()]);
+
 // ── Bounded integers ─────────────────────────────────────────────────────────
 // `domain/shared/boundedInt` semantics, NOT a second clamp: junk or absent is the
 // default, anything that parses is floored and clamped. These never REFUSE — a

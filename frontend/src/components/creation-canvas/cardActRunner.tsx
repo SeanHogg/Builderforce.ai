@@ -7,6 +7,7 @@ import { runCardAct } from '@/domains/canvas/application/CardAct';
 import type { CanvasObjectFactory } from '@/domains/canvas/application/MaterializeDataset';
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 import type { CanvasTextTranslator } from '@/domains/canvas/domain/canvasText';
+import { downloadText } from '@/lib/download';
 
 /**
  * RUNNING a card act against the board, and reaching that from anywhere on the canvas.
@@ -60,7 +61,7 @@ export function useCardActRunnerFor(board: CardActBoardBinding): CardActRunner {
       // Nothing answered. The caller's own dispatch says so — guessing a sentence here
       // for an act that does not exist is how a button ends up lying about what it did.
       if (!outcome) return;
-      const { patch, add } = outcome;
+      const { patch, add, download } = outcome;
       if (patch || add) {
         setNodes((current) => {
           const patched = patch
@@ -70,6 +71,8 @@ export function useCardActRunnerFor(board: CardActBoardBinding): CardActRunner {
         });
         if (add?.edges.length) setEdges((current) => [...current, ...add.edges]);
       }
+      // A file the act described is saved here, by the one download implementation.
+      if (download) downloadText(download.text, download.filename, download.mimeType);
       setNotice(outcome.notice);
       // The slow half — an LMS score push — replaces the sentence when it lands.
       if (outcome.settle) void outcome.settle.then(setNotice);

@@ -28,6 +28,7 @@ import { decryptCredentials } from '../../application/integrations/credentialCry
 import { syncMemberCalendar, type CalendarCredential } from '../../application/integrations/googleCalendarSync';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { memberProfilesCacheKey as profilesCacheKey, readMemberProfiles } from '../../application/member/memberProfiles';
+import { parseBody, parseOptionalBody, z } from './requestBody';
 import {
   computeDora,
   computeMemberMetrics,
@@ -52,26 +53,43 @@ const clampDays = (raw: number, def: number, max: number) =>
 
 
 /** The profile fields a caller may set (server owns id/tenant/segment/timestamps). */
-interface ProfileBody {
-  timezone?: string | null;
-  workHours?: unknown;
-  pto?: unknown;
-  responseSlaHours?: number | null;
-  weeklyCapacityHours?: number | null;
-  dailyCapacityPoints?: number | null;
-  maxConcurrentWip?: number | null;
-  rampFactor?: number | null;
-  experienceLevel?: 'junior' | 'mid' | 'senior' | 'staff' | 'principal' | null;
-  discipline?: 'engineering' | 'product' | 'design' | 'qa' | 'devops' | 'data' | 'other' | null;
-  skills?: unknown;
-  focusAreas?: unknown;
-  preferredTaskTypes?: unknown;
-  availabilityStatus?: 'available' | 'busy' | 'focus' | 'ooo' | 'on_call';
-  availabilityUntil?: string | null;
-  lastActiveAt?: string | null;
-  costRateUsdCents?: number | null;
-  syncSource?: 'manual' | 'google_calendar';
-}
+/** `PUT /:kind/:ref` — a full-profile replace (see the handler for `pto`/`workHours`,
+ *  which are presence-only). The JSON columns stay `unknown`: they are stored as sent. */
+const ProfileBody = z.object({
+  timezone: z.string().nullish(),
+  workHours: z.unknown(),
+  pto: z.unknown(),
+  responseSlaHours: z.number().nullish(),
+  weeklyCapacityHours: z.number().nullish(),
+  dailyCapacityPoints: z.number().nullish(),
+  maxConcurrentWip: z.number().nullish(),
+  rampFactor: z.number().nullish(),
+  experienceLevel: z.enum(['junior', 'mid', 'senior', 'staff', 'principal']).nullish(),
+  discipline: z.enum(['engineering', 'product', 'design', 'qa', 'devops', 'data', 'other']).nullish(),
+  skills: z.unknown(),
+  focusAreas: z.unknown(),
+  preferredTaskTypes: z.unknown(),
+  availabilityStatus: z.enum(['available', 'busy', 'focus', 'ooo', 'on_call']).nullish(),
+  availabilityUntil: z.string().nullish(),
+  lastActiveAt: z.string().nullish(),
+  costRateUsdCents: z.number().nullish(),
+  syncSource: z.enum(['manual', 'google_calendar']).nullish(),
+});
+
+/** `POST /:kind/:ref/calendar-sync` — defaults to the member's primary calendar. */
+const CalendarSyncBody = z.object({ calendarId: z.string().nullish() });
+
+/** `POST /deployments` — one DORA event. */
+const DeploymentBody = z.object({
+  projectId: z.number().int().nullish(),
+  taskId: z.number().int().nullish(),
+  environment: z.string().nullish(),
+  status: z.enum(['success', 'failed', 'rolled_back']).nullish(),
+  isFailure: z.boolean().nullish(),
+  externalRef: z.string().nullish(),
+  deployedAt: z.string().nullish(),
+  restoredAt: z.string().nullish(),
+});
 
 export function createMemberRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -109,7 +127,7 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
     const ref = c.req.param('ref');
     if (!MEMBER_KINDS.has(kind)) return c.json({ error: 'invalid member kind' }, 400);
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<ProfileBody>();
+    const body = await parseBody(c, ProfileBody);
 
     const values = {
       tenantId,
@@ -189,7 +207,7 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
     const ref = c.req.param('ref');
     if (kind !== 'human') return c.json({ error: 'calendar sync applies to human members only' }, 400);
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ calendarId?: string }>().catch(() => ({} as { calendarId?: string }));
+    const body = await parseOptionalBody(c, CalendarSyncBody);
 
     const credential = await resolveGoogleCalendarCredential(c.env as Env, db, tenantId);
     if (!credential) return c.json({ error: 'no enabled google_calendar integration connected for this workspace' }, 409);
@@ -302,16 +320,7 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
   // CI service key). is_failure flags a bad deploy; restoredAt closes MTTR.
   router.post('/deployments', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{
-      projectId?: number | null;
-      taskId?: number | null;
-      environment?: string;
-      status?: 'success' | 'failed' | 'rolled_back';
-      isFailure?: boolean;
-      externalRef?: string | null;
-      deployedAt?: string | null;
-      restoredAt?: string | null;
-    }>();
+    const body = await parseBody(c, DeploymentBody);
     const [row] = await db
       .insert(deploymentEvents)
       .values({

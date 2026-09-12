@@ -35,6 +35,8 @@ import { markReaperRequeued, parseExecutor } from './cloudDispatch';
 import { isSelfHealEligible, buildDurableStartBody, dispatchDurableStart } from './cloudSelfHeal';
 import { runParkAgeTimeoutSweep, type ParkAgeTimeoutResult } from '../maintenance/parkAgeTimeout';
 import { revokeRunPrincipalsForExecutions } from '../agentIdentity/agentRunIdentity';
+import { executionsWithPendingSteers } from './lateSteerStore';
+import { settleLateSteersSafely } from './lateSteerFollowUp';
 
 /** A self-hosted host run executing longer than this is treated as hung. */
 export const RUNNING_DEADLINE_MS = 30 * 60_000; // 30 min
@@ -283,6 +285,17 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
   // "started working on…" and then nothing, forever. Idempotent per execution
   // (run:{id}:failed), so racing the read-path reaper's narration is harmless.
   await narrateReapedRuns(env, db, reaped.map(({ row }) => row));
+
+  // A reaped run is terminal, so a steer still pending on it never reached it: it is
+  // LATE and starts a follow-up run (lateSteerFollowUp.ts). The bulk updates above
+  // bypass every per-surface chokepoint, so without this such a steer sat pending
+  // forever. One query finds the (rare) reaped runs that hold one.
+  const withSteers = await executionsWithPendingSteers(db, reaped.map(({ row }) => row.id))
+    .catch((error) => {
+      reportCaughtError(error, { source: "application/runtime/staleExecutionReaper.ts", operation: "reapStaleExecutions", context: { logMessage: '[execution-reaper] late-steer scan failed', details: { error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) } } });
+      return [] as number[];
+    });
+  for (const executionId of withSteers) await settleLateSteersSafely({ env, db }, { executionId });
 
   // Same family of "reap a stuck state on the frequent tick": surface any ticket
   // parked on a run_workflow whose spawned workflow never settled past the

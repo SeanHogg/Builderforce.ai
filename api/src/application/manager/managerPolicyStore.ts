@@ -107,7 +107,7 @@ export async function getTenantManagerDefaults(
         agentReassignMaxPerSession: tenantManagerDefaults.agentReassignMaxPerSession,
         // Lane auto-staffing (0386) rides the same tier and the same fold.
         allowAutoStaffLanes: tenantManagerDefaults.allowAutoStaffLanes,
-        // Review-and-close authority (1150) — workspace-only, read by the same fold.
+        // Review-and-close authority (1153) — workspace-only, read by the same fold.
         managerMayCloseReviewedTickets: tenantManagerDefaults.managerMayCloseReviewedTickets,
       })
       .from(tenantManagerDefaults)

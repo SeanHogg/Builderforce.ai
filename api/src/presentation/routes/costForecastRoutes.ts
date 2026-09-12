@@ -20,6 +20,13 @@ import { TenantPlan } from '../../domain/shared/types';
 import { estimateTokensFromChars } from '../../application/llm/tokenUsage';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseBody, z } from './requestBody';
+
+/** The handler answers its own "context array is required" and clamps the steps. */
+const CostForecastBody = z.object({
+  context: z.array(z.string()).optional(),
+  workflowSteps: z.number().nullish(),
+});
 
 // ---------------------------------------------------------------------------
 // Model cost estimates ($ per 1M tokens, blended prompt+completion)
@@ -72,10 +79,7 @@ export function createCostForecastRoutes(db: Db): Hono<HonoEnv> {
    */
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{
-      context: string[];
-      workflowSteps?: number;
-    }>();
+    const body = await parseBody(c, CostForecastBody);
 
     if (!Array.isArray(body.context) || body.context.length === 0) {
       return c.json({ error: 'context array is required' }, 400);

@@ -104,8 +104,14 @@ export const productIdeas = pgTable('product_ideas', {
   hypothesis: text('hypothesis'),
   /** 'captured' | 'exploring' | 'validated' | 'promoted' | 'parked'. */
   status:     varchar('status', { length: 16 }).notNull().default('captured'),
-  /** Set when the idea became a `work_items` row of kind `feature`. */
-  promotedWorkItemRef: varchar('promoted_work_item_ref', { length: 64 }),
+  /** The ticket (`tasks.id`) the idea was promoted to — the spec's
+   *  ProductIdea → WorkItem edge, unified onto `tasks` (migration 1153; was a
+   *  `promoted_work_item_ref` string). The FOREIGN KEY is real and lives in 1153
+   *  (`ON DELETE SET NULL`); it is kept off this declaration because `tasks` is
+   *  `schema/delivery.ts`, and a `.references()` here would open the
+   *  `investor.ts -> delivery.ts` edge `check-domain-boundary` counts — the
+   *  `projects.company_id` call, made in the other direction. */
+  promotedTaskId: integer('promoted_task_id'),
   authorRef:  varchar('author_ref', { length: 64 }),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),

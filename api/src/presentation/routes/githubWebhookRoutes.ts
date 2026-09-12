@@ -30,7 +30,8 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * DISPATCH TRIGGER:
  *   An issue is dispatched as a task when:
  *     - action = "opened"   (all new issues)
- *     - action = "labeled"  AND the added label name is "coderclaw" or "ai-task"
+ *     - action = "labeled"  AND the added label is one of DISPATCH_LABELS ("ai-task",
+ *       "host", "ai"; the pre-rebrand product label is still accepted for existing repos)
  *
  * Each GitHub issue only creates one task (idempotent via githubIssueNumber + projectId unique check).
  */

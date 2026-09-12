@@ -75,6 +75,21 @@ import {
   writeNavigationFeatures,
 } from '../../application/tenant/navigationFeatures';
 import { daysParam } from './queryParams';
+import { parseBody, parseOptionalBody } from './requestBody';
+import {
+  AddMemberBody,
+  BusinessPhoneCheckoutBody,
+  CardValidationBody,
+  ChangeRoleBody,
+  DefaultAgentHostBody,
+  DefaultSpendCapBody,
+  InviteByEmailBody,
+  NavigationFeaturesBody,
+  SeatSpendLimitBody,
+  SourceControlIntegrationBody,
+  SubscriptionCheckoutBody,
+  TenantNameBody,
+} from './tenantRoutes.schemas';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 /** Best-effort audit emit for a membership mutation (invite / add), attributed to
@@ -101,8 +116,6 @@ function emitMemberActivity(
     reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "emitMemberActivity" });
   }));
 }
-
-type SourceControlProvider = 'github' | 'bitbucket';
 
 /** Is this person an active member of the workspace? Delegates to the ONE membership
  *  read (`application/tenant/tenantRoles.ts`), which already answers null for an
@@ -156,7 +169,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   // Used from the tenant picker before the user has selected a tenant
   router.post('/create', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const body   = await c.req.json<{ name: string }>();
+    const body   = await parseBody(c, TenantNameBody);
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
     const tenant = await tenantService.createTenant({ name: body.name, ownerUserId: userId });
     await provisionBuiltinAgents(db, tenant.id).catch((error) => {
@@ -245,7 +258,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const userId = c.get('userId') as string;
     const id     = Number(c.req.param('id'));
     if (!Number.isFinite(id) || id <= 0) return c.json({ error: 'invalid tenant id' }, 400);
-    const body   = await c.req.json<{ name: string }>();
+    const body   = await parseBody(c, TenantNameBody);
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
     const tenant = await tenantService.renameTenant(id, userId, body.name);
     return c.json(tenant.toPlain());
@@ -297,7 +310,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const callerTenantId = c.get('tenantId') as number;
     if (id !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
 
-    const body = await c.req.json<{ agentHostId?: number | null }>();
+    const body = await parseBody(c, DefaultAgentHostBody);
     const agentHostId = body.agentHostId ?? null;
 
     if (agentHostId !== null) {
@@ -361,7 +374,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const id = Number(c.req.param('id'));
     const denied = forbidCrossTenant(c, id);
     if (denied) return denied;
-    const body = await c.req.json<{ enabled?: unknown }>().catch(() => ({} as { enabled?: unknown }));
+    const body = await parseOptionalBody(c, NavigationFeaturesBody);
     const enabled = validateNavigationFeatures(body.enabled);
     if (!enabled) return c.json({ error: 'enabled must contain only known navigation feature ids' }, 400);
     const [row] = await db.select({ settings: tenants.settings }).from(tenants).where(eq(tenants.id, id)).limit(1);
@@ -392,7 +405,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   router.post('/:id/add-ons/business-phone/checkout', requireRole(TenantRole.MANAGER), requirePermission(PERMISSIONS.BILLING_MANAGE), async (c) => {
     const tenantId = Number(c.req.param('id'));
     if (tenantId !== c.get('tenantId')) return c.json({ error: 'Forbidden' }, 403);
-    const body = await c.req.json<{ billingEmail?: string }>();
+    const body = await parseBody(c, BusinessPhoneCheckoutBody);
     if (!body.billingEmail?.trim()) return c.json({ error: 'billingEmail is required' }, 400);
     const pricing = await getPublishedPricing(db, c.env as Env);
     const existing = await getBusinessPhoneSubscription(db, tenantId);
@@ -442,15 +455,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const callerTenantId = c.get('tenantId') as number;
     if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
 
-    const body = await c.req.json<{
-      targetPlan?: 'pro' | 'teams';
-      seats?: number;
-      billingCycle: TenantBillingCycle;
-      billingEmail: string;
-      successUrl?: string;
-      cancelUrl?: string;
-      discountCode?: string;
-    }>();
+    const body = await parseBody(c, SubscriptionCheckoutBody);
 
     if (!body.billingCycle || !body.billingEmail) {
       return c.json({ error: 'billingCycle and billingEmail are required' }, 400);
@@ -582,8 +587,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const callerTenantId = c.get('tenantId') as number;
     if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
 
-    const body = await c.req.json<{ billingEmail?: string; successUrl?: string; cancelUrl?: string }>()
-      .catch(() => ({} as { billingEmail?: string; successUrl?: string; cancelUrl?: string }));
+    const body = await parseOptionalBody(c, CardValidationBody);
 
     const tenant = await tenantService.getTenant(tenantId);
     let billingEmail = body.billingEmail ?? tenant.billingEmail;
@@ -849,13 +853,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const callerTenantId = c.get('tenantId') as number;
     if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
 
-    const body = await c.req.json<{
-      provider: SourceControlProvider;
-      name: string;
-      accountIdentifier: string;
-      hostUrl?: string | null;
-      isActive?: boolean;
-    }>();
+    const body = await parseBody(c, SourceControlIntegrationBody);
 
     if (body.provider !== 'github' && body.provider !== 'bitbucket') {
       return c.json({ error: 'provider must be github or bitbucket' }, 400);
@@ -890,13 +888,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       return c.json({ error: 'integrationId must be a positive number' }, 400);
     }
 
-    const body = await c.req.json<{
-      provider?: SourceControlProvider;
-      name?: string;
-      accountIdentifier?: string;
-      hostUrl?: string | null;
-      isActive?: boolean;
-    }>();
+    const body = await parseBody(c, SourceControlIntegrationBody);
 
     if (body.provider !== undefined && body.provider !== 'github' && body.provider !== 'bitbucket') {
       return c.json({ error: 'provider must be github or bitbucket' }, 400);
@@ -962,7 +954,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   // POST /api/tenants – create another tenant (caller must have a valid tenant JWT already)
   router.post('/', async (c) => {
     const userId = c.get('userId') as string;
-    const body   = await c.req.json<{ name: string }>();
+    const body   = await parseBody(c, TenantNameBody);
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
     const tenant = await tenantService.createTenant({ name: body.name, ownerUserId: userId });
     await provisionBuiltinAgents(db, tenant.id).catch((error) => {
@@ -974,7 +966,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   // POST /api/tenants/:id/members
   router.post('/:id/members', requireRole(TenantRole.MANAGER), requirePermission(PERMISSIONS.MEMBER_INVITE), async (c) => {
     const id   = Number(c.req.param('id'));
-    const body = await c.req.json<{ newUserId: string; role: TenantRole }>();
+    const body = await parseBody(c, AddMemberBody);
     const actorUserId = c.get('userId') as string;
 
     const guard = buildPlanLimitsGuard(db, c.env as Env);
@@ -999,7 +991,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const callerTenantId = c.get('tenantId') as number;
     if (id !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
 
-    const body = await c.req.json<{ email: string; role?: TenantRole }>();
+    const body = await parseBody(c, InviteByEmailBody);
     if (!body.email?.trim()) return c.json({ error: 'email is required' }, 400);
 
     const email = body.email.toLowerCase().trim();
@@ -1140,7 +1132,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
 
     const targetUserId = c.req.param('userId');
     const actorUserId  = c.get('userId') as string;
-    const body = await c.req.json<{ role: TenantRole }>();
+    const body = await parseBody(c, ChangeRoleBody);
     if (!body.role || !Object.values(TenantRole).includes(body.role)) {
       return c.json({ error: 'role must be one of: ' + Object.values(TenantRole).join(', ') }, 400);
     }
@@ -1175,7 +1167,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   router.patch('/:id/spend-limits', requireRole(TenantRole.OWNER), async (c) => {
     const id = Number(c.req.param('id'));
     if (id !== (c.get('tenantId') as number)) return c.json({ error: 'Forbidden' }, 403);
-    const body = await c.req.json<{ amountUsd?: number | null }>().catch(() => ({} as { amountUsd?: number | null }));
+    const body = await parseOptionalBody(c, DefaultSpendCapBody);
     const amount = body.amountUsd;
     let millicents: number | null;
     if (amount == null) {
@@ -1200,8 +1192,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const id = Number(c.req.param('id'));
     if (id !== (c.get('tenantId') as number)) return c.json({ error: 'Forbidden' }, 403);
     const targetUserId = c.req.param('userId');
-    type SeatLimitBody = { mode?: 'inherit' | 'unlimited' | 'custom'; amountUsd?: number };
-    const body = await c.req.json<SeatLimitBody>().catch(() => ({} as SeatLimitBody));
+    const body = await parseOptionalBody(c, SeatSpendLimitBody);
     let millicents: number | null;
     if (body.mode === 'inherit') {
       millicents = null;

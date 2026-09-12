@@ -44,7 +44,7 @@ vi.mock('../../application/runtime/cloudAgentEngine', () => ({
 }));
 vi.mock('../../application/artifact/capabilityContext', () => ({ loadPersonaSetpoints: vi.fn(async () => ({})) }));
 vi.mock('../../application/runtime/scoreRunOutcome', () => ({ scoreRunOutcome: vi.fn(async () => {}) }));
-vi.mock('../../application/runtime/executionSteering', () => ({ releasePendingSteers: vi.fn(async () => {}) }));
+vi.mock('../../application/runtime/lateSteerFollowUp', () => ({ settleLateSteersSafely: vi.fn(async () => ({ kind: 'none' })) }));
 vi.mock('../../application/runtime/cloudDispatch', () => ({
   parseRoutingBias: () => null,
   parsePolicyGates: () => null,

@@ -35,7 +35,7 @@ import { decodeJwtPayload } from '@builderforce/hs256-jwt';
 import { parseOptionalBody, z } from './requestBody';
 
 /** The canvas's own service calls. `objectIds` is filtered to strings by the handler. */
-const DeepLinkResponseBody = z.object({ token: z.string().nullish(), objectIds: z.unknown() });
+const DeepLinkResponseBody = z.object({ token: z.string().nullish(), objectIds: z.unknown().optional() });
 
 const RosterBody = z.object({ issuer: z.string().nullish(), membershipsUrl: z.string().nullish() });
 
@@ -48,7 +48,7 @@ const ScoreBody = z.object({
   scoreGiven: z.number().nullish(),
   scoreMaximum: z.number().nullish(),
   comment: z.string().nullish(),
-  released: z.unknown(),
+  released: z.unknown().optional(),
 });
 
 /** Read a form or query parameter, whichever binding the platform used. */

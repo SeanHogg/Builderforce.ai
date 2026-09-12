@@ -139,7 +139,7 @@ export interface CensusPolicy {
   /** The project's effective `requireSignoffToComplete`. */
   requireSignoff: boolean;
   /**
-   * The workspace's effective `managerMayCloseReviewedTickets` (1150). REQUIRED for the
+   * The workspace's effective `managerMayCloseReviewedTickets` (1153). REQUIRED for the
    * same reason as `requireSignoff`: with it on, a human-gated review lane is held by the
    * manager, and a census that did not know would keep counting a `human_gate` escalation
    * cohort the manager is in fact working — the report and the actor disagreeing again.
@@ -239,7 +239,7 @@ export function censusDiagnose(f: CensusTicketFacts, policy: CensusPolicy, stall
     autoRunReason: classifyBulkAutoRunReason(f),
     hasLiveRun: f.hasLiveRun,
     readiness: null,
-    // The SAME question triage asks, answered by the same policy module (1150).
+    // The SAME question triage asks, answered by the same policy module (1153).
     reviewGateDelegated: managerHoldsReviewGate({
       status: f.status, laneGate: f.lane?.gate,
       managerMayCloseReviewedTickets: policy.managerMayCloseReviewedTickets,

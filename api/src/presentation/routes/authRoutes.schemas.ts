@@ -6,8 +6,9 @@
  *  - A field the handler checks by hand (`if (!body.email || !body.password)`) is
  *    `.nullish()` here, so the handler's own sentence ("email and password are
  *    required") still answers — sign-in and sign-up screens display those strings.
- *  - A field read only as `=== true` stays `z.unknown()`: `"true"` was refused with
- *    a specific message before and still is.
+ *  - A field read only as `=== true` stays `z.unknown().optional()`: `"true"` was
+ *    refused with a specific message before and still is. (`.optional()` is not
+ *    decoration — in zod 4 a bare `z.unknown()` object key is REQUIRED.)
  *  - Nothing is trimmed here. Passwords, codes and session names are handed on
  *    exactly as sent; the handlers trim what they always trimmed.
  *
@@ -55,17 +56,17 @@ export const WebRegisterBody = z.object({
   email: z.string().nullish(),
   username: z.string().nullish(),
   password: z.string().nullish(),
-  agreeToTerms: z.unknown(),
+  agreeToTerms: z.unknown().optional(),
   accountType: z.string().nullish(),
   anonId: z.string().nullish(),
   referralCode: z.string().nullish(),
-  ageAttested: z.unknown(),
+  ageAttested: z.unknown().optional(),
 });
 
 export const VerifyRegistrationBody = z.object({
   email: z.string().nullish(),
   code: z.string().nullish(),
-  trustDevice: z.unknown(),
+  trustDevice: z.unknown().optional(),
   sessionName: z.string().nullish(),
 });
 
@@ -88,7 +89,7 @@ export const MfaLoginBody = z.object({
 
 export const AccountTypeBody = z.object({
   accountType: z.string().nullish(),
-  ageAttested: z.unknown(),
+  ageAttested: z.unknown().optional(),
 });
 
 /**
@@ -97,7 +98,7 @@ export const AccountTypeBody = z.object({
  * accepted (it threw on `.trim()`), so it is a string or absent.
  */
 export const UpdateMeBody = z.object({
-  psychometric: z.unknown(),
+  psychometric: z.unknown().optional(),
   displayName: z.string().optional(),
 });
 

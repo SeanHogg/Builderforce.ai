@@ -315,7 +315,7 @@ import { renderedCanvasResume, resumeHtmlFile } from '@/lib/canvasResumeRenderer
 import { useOptionalLiveSession } from '@/lib/live/LiveSessionContext';
 import { createCanvasJournal, describeGraphChange } from '@/lib/canvasActionJournal';
 import { readStoredJournal, writeStoredJournal } from '@/lib/canvasJournalStore';
-import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
+import { usePublishBoardToShell } from '@/lib/canvas/usePublishBoardToShell';
 import { Icon } from '@/components/ui/Icon';
 import { appendImageToDrawioCanvas, createDrawioImageCanvas } from '@/lib/drawioImageCanvas';
 import { convertGraphSource, diagramConvertSource, diagramConvertTargets } from '@/lib/canvasDiagramConvert';
@@ -2755,21 +2755,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [currentUserId, members, publishPresence]);
 
   /**
-   * Which canonical projects this board references — read by the stage to decide
-   * whether to show "viewing a canvas outside the current project" after a scope
-   * change, per `canvasScopePolicy`. Published rather than recomputed there so
-   * the project reference is read out of the board by the one module that already
-   * knows how (`canvasProjectRef`).
+   * What this board tells the shell — the projects it references and the strictest
+   * assessment being sat on it (see `usePublishBoardToShell`). The gate it returns is
+   * what a turn started WITHOUT the composer (a per-object action) must also obey.
    */
-  const activeCanvas = useOptionalActiveCanvas();
-  const publishProjectIds = activeCanvas?.publishProjectIds;
-  const boardProjectIds = useMemo(
-    () => [...new Set(canvasProjectNodes(nodes).flatMap((node) => { const id = canvasProjectId(node.data); return id == null ? [] : [id]; }))],
-    [nodes],
-  );
-  useEffect(() => {
-    publishProjectIds?.(sessionId, boardProjectIds);
-  }, [boardProjectIds, publishProjectIds, sessionId]);
+  const assistantGate = usePublishBoardToShell(sessionId, nodes);
   const evermindProjectId = useMemo(() => {
     const candidates = [...scopedNodes, ...nodes.filter((node) => !scopedNodeIds.has(node.id))];
     for (const node of candidates) {
@@ -11521,13 +11511,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    */
   const startCanvasTurn = useCallback((text?: string) => {
     const value = (text ?? prompt).trim();
-    if (!value) return;
+    if (!value || !assistantGate.assistantAllowed) return; // a closed-book assessment refuses every turn, composer or not
     if (queuedTurns.submit(value)) {
       if (text === undefined) setPrompt('');
       return;
     }
     evaluateCanvasRef.current(text);
-  }, [prompt, queuedTurns]);
+  }, [assistantGate.assistantAllowed, prompt, queuedTurns]);
   // eslint-disable-next-line react-hooks/refs
   startCanvasTurnRef.current = startCanvasTurn;
   const tailorResumeFromNode = useCallback((nodeId: string, request: string) => {

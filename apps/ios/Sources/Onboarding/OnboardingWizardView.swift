@@ -542,11 +542,11 @@ struct OnboardingWizardView: View {
                         if let id = self.issue.requestId, !id.isEmpty {
                             return "Request ID: \(id)"
                         }
-                        return "Request ID: check `coderclaw devices list`."
+                        return "Request ID: check `builderforce devices list`."
                     }()
                     Text(
                         "Approve this device on the gateway.\n"
-                            + "1) `coderclaw devices approve` (or `coderclaw devices approve <requestId>`)\n"
+                            + "1) `builderforce devices approve` (or `builderforce devices approve <requestId>`)\n"
                             + "2) `/pair approve` in Telegram\n"
                             + "\(requestLine)\n"
                             + "CoderClaw will also retry automatically when you return to this app.")

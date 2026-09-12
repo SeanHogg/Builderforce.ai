@@ -2205,7 +2205,7 @@ export interface ManagerPolicy {
   allowAutoStaffLanes: boolean;
   /**
    * May the autonomous manager review and close a ticket through a human-gated review
-   * lane (1150)? Workspace-only, set by an account admin. When false a person closes every
+   * lane (1153)? Workspace-only, set by an account admin. When false a person closes every
    * ticket on such a lane; the manager still reviews it.
    */
   managerMayCloseReviewedTickets: boolean;
@@ -2233,7 +2233,7 @@ export interface ManagerTenantDefaults {
   allowAutoStaffLanes: boolean | null;
   agentReassignIdleHours: number | null;
   agentReassignMaxPerSession: number | null;
-  /** Review-and-close authority (1150) — workspace-only; `null` = the built-in `false`. */
+  /** Review-and-close authority (1153) — workspace-only; `null` = the built-in `false`. */
   managerMayCloseReviewedTickets: boolean | null;
 }
 
@@ -2960,11 +2960,22 @@ export interface TaskRepoFilesResult {
   reason?: string;
 }
 
+/** What became of a steer that arrived after its run's last turn (migration 1152). */
+export interface ExecutionMessageFollowUp {
+  outcome: 'started' | 'awaiting_approval' | 'refused' | 'failed' | 'released';
+  /** The follow-up run it started, when one started. */
+  executionId: number | null;
+  /** The refusal / failure sentence, when none started. */
+  detail: string | null;
+}
+
 /** One persisted turn of an execution's steering/chat thread (migration 0109). */
 export interface ExecutionMessage {
   role: 'user' | 'assistant';
   text: string;
   ts: string;
+  /** Present on a steer that arrived after the run's last turn. */
+  followUp?: ExecutionMessageFollowUp;
 }
 
 /**

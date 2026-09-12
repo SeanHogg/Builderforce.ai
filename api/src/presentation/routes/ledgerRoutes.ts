@@ -44,6 +44,13 @@ import {
   saveLedgerConnection,
 } from '../../application/finance/ledgerConnections';
 import { readLedgerSummary, syncTenantLedgers } from '../../application/finance/ledgerSync';
+import { parseOptionalBody, z } from './requestBody';
+
+/** `POST /connections` — each field's rules (required, trimmed) belong to the provider's spec. */
+const FieldsConnectionBody = z.object({
+  provider: z.string().optional(),
+  fields: z.record(z.string(), z.unknown()).optional(),
+});
 
 /** Where the connect flow sends the browser back to when it is not told. */
 const DEFAULT_RETURN_TO = '/settings/integrations';
@@ -210,7 +217,7 @@ export function createLedgerRoutes(db: Db): Hono<HonoEnv> {
    */
   r.post('/connections', async (c) => {
     const env = c.env as Env;
-    const body = await c.req.json().catch(() => ({})) as { provider?: string; fields?: Record<string, unknown> };
+    const body = await parseOptionalBody(c, FieldsConnectionBody);
     const name = body.provider;
     if (!isAccountingProviderName(name)) return c.json({ error: 'Unknown accounting provider.' }, 400);
     const provider = accountingProvider(name);

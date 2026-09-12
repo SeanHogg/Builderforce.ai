@@ -29,6 +29,16 @@ import {
   normalizeLocale,
 } from '../../infrastructure/email/emailLocale';
 import { emailCopy } from '../../infrastructure/email/emailMessages';
+import { parseOptionalBody, z } from './requestBody';
+
+/**
+ * `PUT /` — loose on purpose: the category toggles are read by `PATCHABLE`, and a
+ * toggle that is not a boolean has always been ignored rather than refused.
+ */
+const EmailPreferenceBody = z.looseObject({
+  locale: z.string().optional(),
+  resubscribe: z.boolean().optional(),
+});
 
 /** Only these three are user-settable. `unsubscribedAll` is NOT patchable here —
  *  it is owned by the unsubscribe link and by the explicit resubscribe action
@@ -62,8 +72,7 @@ export function createEmailPreferenceRoutes(db: Db) {
   // -------------------------------------------------------------------------
   router.put('/', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as UserId;
-    const body = await c.req.json<Partial<EmailPreferenceState> & { locale?: string; resubscribe?: boolean }>()
-      .catch(() => ({} as Partial<EmailPreferenceState> & { locale?: string; resubscribe?: boolean }));
+    const body = await parseOptionalBody(c, EmailPreferenceBody);
 
     const user = await accountForUser(db, userId);
     if (!user) return c.json({ error: 'User not found' }, 404);
@@ -77,7 +86,8 @@ export function createEmailPreferenceRoutes(db: Db) {
 
     const patch: Partial<EmailPreferenceState> = {};
     for (const key of PATCHABLE) {
-      if (typeof body[key] === 'boolean') patch[key] = body[key];
+      const value = body[key];
+      if (typeof value === 'boolean') patch[key] = value;
     }
     // The ONLY way back out of a global opt-out, and it must be explicit — a
     // signed-in user re-enabling their own mail is consent, a category toggle is not.

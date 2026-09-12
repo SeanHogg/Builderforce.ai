@@ -215,10 +215,10 @@ export interface StallInput {
   poolRateLimited?: boolean;
   /**
    * The ticket sits in a human-gated REVIEW lane whose gate the workspace delegated to
-   * the manager (`managerMayCloseReviewedTickets`, 1150) — resolved by
+   * the manager (`managerMayCloseReviewedTickets`, 1153) — resolved by
    * `reviewGateAuthority.managerHoldsReviewGate`, never re-derived here. When true a
    * `human_gate` verdict is not escalated; see the `human_gate` case. Omitted = false,
-   * which is exactly the pre-1150 behaviour.
+   * which is exactly the pre-1153 behaviour.
    */
   reviewGateDelegated?: boolean;
 }
@@ -394,7 +394,7 @@ function classifyStall(input: StallInput): StallDiagnosis {
         `Stuck ${age}: consecutive failed runs tripped the safety breaker — allowing one fresh attempt.`,
       );
     case 'human_gate':
-      // THE WORKSPACE HANDED THIS GATE TO THE MANAGER (1150). A human-gated REVIEW lane in
+      // THE WORKSPACE HANDED THIS GATE TO THE MANAGER (1153). A human-gated REVIEW lane in
       // a workspace whose admin enabled `managerMayCloseReviewedTickets` is not waiting on
       // an approval nobody gave — the manager's own review stage is the approver. So it is
       // not a standing escalation: with a review verdict in hand the review-side diagnosis

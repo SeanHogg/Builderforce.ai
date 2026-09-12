@@ -50,7 +50,7 @@ export interface ManagerAutonomyValue {
   /** May the manager configure a lane that authorises NO role (0386)? Withheld by
    *  default: staffing an unconfigured stage starts every ticket sitting in it. */
   allowAutoStaffLanes: TriState;
-  /** May the manager close a ticket through a human-gated review lane (1150)? WORKSPACE
+  /** May the manager close a ticket through a human-gated review lane (1153)? WORKSPACE
    *  tier only — an account-admin decision, so the project tier never carries it. */
   managerMayCloseReviewedTickets?: TriState;
   /** null = inherit the tier below. */
@@ -440,7 +440,7 @@ export function ManagerAutonomyControls({
         disabled={disabled}
         onChange={(v) => onChange({ allowAutoStaffLanes: v })}
       />
-      {/* Review-and-close authority (1150), beside lane staffing: both decide what the
+      {/* Review-and-close authority (1153), beside lane staffing: both decide what the
           manager may do on a board with nobody in the loop. WORKSPACE-ONLY — the operator
           made it an account-admin decision, so the project tier never offers it. */}
       {workspace && (

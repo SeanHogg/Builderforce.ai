@@ -25,7 +25,7 @@ cd apps/android
 
 1) Start the gateway (on your “master” machine):
 ```bash
-pnpm coderclaw gateway --port 18789 --verbose
+builderforce gateway --port 18789 --verbose
 ```
 
 2) In the Android app:
@@ -34,8 +34,8 @@ pnpm coderclaw gateway --port 18789 --verbose
 
 3) Approve pairing (on the gateway machine):
 ```bash
-coderclaw nodes pending
-coderclaw nodes approve <requestId>
+builderforce nodes pending
+builderforce nodes approve <requestId>
 ```
 
 More details: `docs/platforms/android.md`.

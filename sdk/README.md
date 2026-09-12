@@ -47,7 +47,7 @@ The SDK sends `Authorization: Bearer <apiKey>` automatically. The gateway accept
 | Prefix | Issued by | Best for |
 |---|---|---|
 | `bfk_*` | `POST /api/tenants/:tenantId/api-keys` (owner-only) | Tenant apps (server-to-server). Long-lived, tenant-scoped, revocable, optional origin allowlist. |
-| `clk_*` | `POST /api/claws` (CoderClaw registration) | Self-hosted CoderClaw instances; carries optional per-claw daily token cap. |
+| `clk_*` | `POST /api/claws` (BuilderForce Agents host registration; legacy route, canonical `POST /api/agent-hosts`) | Self-hosted BuilderForce Agents hosts (the `builderforce` CLI); carries an optional per-host daily token cap. |
 | Tenant JWT | `POST /api/auth/web/login` → `POST /api/auth/tenant-token` | Browser-side calls from a logged-in user. Short-lived. |
 
 ### Browser use & origin allowlist

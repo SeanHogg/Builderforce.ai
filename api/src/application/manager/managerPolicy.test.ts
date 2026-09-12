@@ -43,7 +43,7 @@ const tenantRow = (o: Partial<TenantManagerDefaultsRow> = {}): TenantManagerDefa
   agentReassignMaxPerSession: null,
   // Lane auto-staffing (0386) — likewise a grant with no opinion by default.
   allowAutoStaffLanes: null,
-  // Review-and-close authority (1150) — workspace-only, no opinion by default.
+  // Review-and-close authority (1153) — workspace-only, no opinion by default.
   managerMayCloseReviewedTickets: null,
   ...o,
 });

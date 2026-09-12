@@ -2,8 +2,16 @@
  * Schema — Delivery & work, owned by the **Manager** (PRD 20 §3).
  *
  * Root entity `work_item`. 123 source tables in → 54 out, 48 of them absorbed by
- * the kernel. Builderforce contributed 37 of the survivors — it owns this domain
- * the way hired.video owns hiring.
+ * the kernel — 52 since migration 1153 folded `kanban_columns` into `swimlanes`
+ * and `release_plans` into `product_releases`. Builderforce contributed 37 of the
+ * survivors — it owns this domain the way hired.video owns hiring.
+ *
+ * THE SPEC'S PM SPINE IS THIS ONE (decided 2026-09-12). Specs 01/04/05 describe a
+ * uuid-keyed `WorkItem`/`KanbanBoard`/`Sprint`/release spine of their own; it is
+ * UNIFIED onto `projects` / `tasks` / `specs` / `boards` / `swimlanes` / `sprints` /
+ * `product_releases` here, never built beside them. A work item is a `tasks` row
+ * (SERIAL id) — anything that points at one carries a typed `task_id`, not a
+ * `work_item_ref` string. Spec 01 §4 carries the field-level mapping.
  *
  * Merged from `work.ts`, `pmo.ts` and `delivery.ts` (PRD 20 §5 step 2). Portfolios,
  * initiatives, objectives, key results, epics, tasks and milestones were split
@@ -966,6 +974,12 @@ export const swimlanes = pgTable('swimlanes', {
   // (migration 0274): 'off' = audit-only, 'soft' = flag + round-trip the reviewer
   // (default), 'hard' = block the auto-advance until required checks are satisfied.
   requirementGate:  varchar('requirement_gate', { length: 8 }).notNull().default('soft'),
+  /** The two KanbanColumn attributes (spec 01 §6) a lane had no home for, added
+   *  when migration 1153 folded `kanban_columns` in: a per-lane WIP limit (null =
+   *  unlimited, 0 = closed) and a design-token colour. Columns on the lane, not a
+   *  second column table — a new attribute of a lane is a value on the lane. */
+  wipLimit:      integer('wip_limit'),
+  colorToken:    varchar('color_token', { length: 48 }),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
   // UNIQUE (board_id, key) enforced in migration 0064 (kept out of the pgTable
@@ -3289,34 +3303,14 @@ export const alertEvents = pgTable('alert_events', {
 // `portfolios` = `initiatives` was one of the eight duplicate-shape clusters this
 // repo carried before any merge (§5 step 0), and both are `work_items` kinds now.
 
-/** A board column. A lane, not a status enum: a project's swimlanes define its
- *  board, which is the rule migration 0076 already established and the reason a
- *  `work_items.status` is a free-form varchar. */
-export const kanbanColumns = pgTable('kanban_columns', {
-  id:         serial('id').primaryKey(),
-  tenantId:   integer('tenant_id').notNull(),
-  boardRef:   varchar('board_ref', { length: 64 }).notNull(),
-  key:        varchar('key', { length: 48 }).notNull(),
-  label:      varchar('label', { length: 160 }).notNull(),
-  position:   integer('position').notNull().default(0),
-  /** WIP limit. Null means unlimited; 0 means the column is closed. */
-  wipLimit:   integer('wip_limit'),
-  /** Whether landing here means the item is done — one definition, so the
-   *  cycle-time rollup and the board badge cannot disagree. */
-  isTerminal: boolean('is_terminal').notNull().default(false),
-  /** Whether an autonomous agent may move items into this lane unattended. */
-  autoRunEnabled: boolean('auto_run_enabled').notNull().default(false),
-  colorToken: varchar('color_token', { length: 48 }),
-  createdAt:  timestamp('created_at').notNull().defaultNow(),
-  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
-}, (t) => [
-  uniqueIndex('uq_kanban_columns_key').on(t.tenantId, t.boardRef, t.key),
-]);
+// `kanban_columns` was a board column beside `swimlanes` — a second answer to "what
+// lanes does this board have". Migration 1153 folded its rows into `swimlanes`
+// (which gained `wip_limit` + `color_token`) and dropped it.
 
-/** A commitment coming out of a conversation. Distinct from a `work_items` task:
+/** A commitment coming out of a conversation. Distinct from a `tasks` row:
  *  an action item is captured mid-discussion with no board, no estimate and no
  *  lane, and forcing it onto a board at capture time is how it stops being
- *  captured at all. Promoting one CREATES a work item and records the link. */
+ *  captured at all. Promoting one points it at the ticket and records the link. */
 export const actionItems = pgTable('action_items', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull(),
@@ -3329,7 +3323,10 @@ export const actionItems = pgTable('action_items', {
   dueAt:       timestamp('due_at'),
   /** 'open' | 'done' | 'promoted' | 'dropped'. */
   status:      varchar('status', { length: 16 }).notNull().default('open'),
-  promotedWorkItemRef: varchar('promoted_work_item_ref', { length: 64 }),
+  /** The ticket this commitment was promoted to (migration 1153 — was a
+   *  `promoted_work_item_ref` string). SET NULL: deleting the ticket must not
+   *  delete the record that the commitment was made. */
+  promotedTaskId: integer('promoted_task_id').references(() => tasks.id, { onDelete: 'set null' }),
   createdBy:   varchar('created_by', { length: 64 }),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
@@ -3377,35 +3374,19 @@ export const signOffs = pgTable('sign_offs', {
   index('idx_sign_offs_subject').on(t.tenantId, t.subjectKind, t.subjectRef, t.decidedAt),
 ]);
 
-/** A release plan. */
-export const releasePlans = pgTable('release_plans', {
-  id:          serial('id').primaryKey(),
-  tenantId:    integer('tenant_id').notNull(),
-  objectId:    uuid('object_id').references(() => objects.id, { onDelete: 'cascade' }),
-  projectRef:  varchar('project_ref', { length: 64 }),
-  name:        varchar('name', { length: 200 }).notNull(),
-  version:     varchar('version', { length: 48 }),
-  summary:     text('summary'),
-  targetAt:    timestamp('target_at'),
-  releasedAt:  timestamp('released_at'),
-  /** 'planned' | 'in_progress' | 'frozen' | 'released' | 'rolled_back'. */
-  status:      varchar('status', { length: 16 }).notNull().default('planned'),
-  /** Set when a pre-merge build failure produced a fix ticket rather than a
-   *  silent red build (migration 0196's contract). */
-  blockedByRef: varchar('blocked_by_ref', { length: 64 }),
-  createdAt:   timestamp('created_at').notNull().defaultNow(),
-  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
-}, (t) => [
-  uniqueIndex('uq_release_plans_name').on(t.tenantId, t.projectRef, t.name),
-]);
+// `release_plans` was a release beside `product_releases` — the release a task's
+// `release_id` actually points at. Migration 1153 folded its rows (and re-pointed
+// their kernel `objects`) into `product_releases` and dropped it.
 
-/** An estimate on one work item. A row rather than a column because estimates
+/** An estimate on one ticket. A row rather than a column because estimates
  *  are RE-estimated, and comparing the first to the last is the only way to know
- *  whether a team is getting better at estimating. */
+ *  whether a team is getting better at estimating. (`tasks.story_points` is the
+ *  CURRENT points value velocity reads; this is the history behind it.) */
 export const taskEffortEstimates = pgTable('task_effort_estimates', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull(),
-  workItemRef: varchar('work_item_ref', { length: 64 }).notNull(),
+  /** The ticket estimated (migration 1153 — was a `work_item_ref` string). */
+  taskId:      integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
   /** 'points' | 'hours' | 'tshirt'. */
   unit:        varchar('unit', { length: 16 }).notNull().default('points'),
   value:       numeric('value', { precision: 10, scale: 2 }),

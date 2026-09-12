@@ -3,6 +3,10 @@
   <!-- This app is primarily used on a trusted tailnet; allow cleartext for IP-based endpoints too. -->
   <base-config cleartextTrafficPermitted="true" tools:ignore="InsecureBaseConfiguration" />
   <!-- Allow HTTP for tailnet/local dev endpoints (e.g. canvas/background web). -->
+  <!-- builderforce.local is the gateway's advertised LAN host; the older hostname stays allowed for existing gateways. -->
+  <domain-config cleartextTrafficPermitted="true">
+    <domain includeSubdomains="true">builderforce.local</domain>
+  </domain-config>
   <domain-config cleartextTrafficPermitted="true">
     <domain includeSubdomains="true">coderclaw.local</domain>
   </domain-config>

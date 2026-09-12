@@ -81,7 +81,7 @@ export interface ManagerPolicyOverride {
   agentReassignIdleHours?: number | null;
   agentReassignMaxPerSession?: number | null;
   allowAutoStaffLanes?: boolean | null;
-  /** WORKSPACE-ONLY (1150) — a project tier that carries it is ignored by the fold. */
+  /** WORKSPACE-ONLY (1153) — a project tier that carries it is ignored by the fold. */
   managerMayCloseReviewedTickets?: boolean | null;
 }
 
@@ -133,7 +133,7 @@ export interface TenantManagerDefaultsRow {
   agentReassignIdleHours: number | null;
   agentReassignMaxPerSession: number | null;
   allowAutoStaffLanes: boolean | null;
-  /** May the manager review and close a ticket through a human-gated review lane (1150)?
+  /** May the manager review and close a ticket through a human-gated review lane (1153)?
    *  Workspace-only: an account-admin decision, never a per-project one. */
   managerMayCloseReviewedTickets: boolean | null;
 }
@@ -263,7 +263,7 @@ export interface EffectiveManagerPolicy {
   allowAutoStaffLanes: boolean;
 
   /**
-   * MAY THE AUTONOMOUS MANAGER REVIEW AND CLOSE A TICKET (migration 1150)?
+   * MAY THE AUTONOMOUS MANAGER REVIEW AND CLOSE A TICKET (migration 1153)?
    *
    * A board's review lane (`in_review`) can be gated `human`, which means "a person
    * approves every ticket here". The manager's stall triage escalates such tickets BY
@@ -328,7 +328,7 @@ export const DEFAULT_MANAGER_POLICY: EffectiveManagerPolicy = {
   // in it, and an intake lane is unconfigured on purpose about as often as it is by
   // accident — the platform cannot tell which, so it asks.
   allowAutoStaffLanes: false,
-  // OFF by default (1150). A human-gated review lane keeps meaning "a person signs every
+  // OFF by default (1153). A human-gated review lane keeps meaning "a person signs every
   // ticket" until the account admin decides otherwise.
   managerMayCloseReviewedTickets: false,
 };
@@ -523,7 +523,7 @@ export function resolveTieredManagerPolicy(tiers: {
     allowAutoStaffLanes: narrowestGrant(
       d.allowAutoStaffLanes, tenant?.allowAutoStaffLanes, project?.allowAutoStaffLanes,
     ),
-    // WORKSPACE-ONLY (1150). The project tier is deliberately not consulted: the operator
+    // WORKSPACE-ONLY (1153). The project tier is deliberately not consulted: the operator
     // made review-and-close authority an account-admin decision, so no project row can
     // grant it to itself or withhold it from the workspace.
     managerMayCloseReviewedTickets: lastSet(d.managerMayCloseReviewedTickets, tenant?.managerMayCloseReviewedTickets),

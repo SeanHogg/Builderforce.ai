@@ -1,4 +1,4 @@
--- 1151 — GRANT `allowAutoStaffLanes` ON THE OPERATOR'S WORKSPACE (tenant 1).
+-- 1154 — GRANT `allowAutoStaffLanes` ON THE OPERATOR'S WORKSPACE (tenant 1).
 --
 -- Operator decision, 2026-09-12: "Grant allowAutoStaffLanes." The switch (0386) lets the
 -- manager pin a capable roster agent to a lane that authorises NO role — measured on

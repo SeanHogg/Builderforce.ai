@@ -20,8 +20,8 @@
  */
 
 import { makeSpecDeriveBoard, specRefKey } from '@/lib/specObjects';
-import { learnersFromCohort } from '@/lib/academic/gradebook';
-import { curriculumMapProblems, mappingRows, statsOf } from '@/lib/academic/derivations';
+import { gradebookCsv, gradebookStats, learnersFromCohort } from '@/lib/academic/gradebook';
+import { curriculumMapProblems, gradebookOf, mappingRows, statsOf } from '@/lib/academic/derivations';
 import {
   applyLatePolicy,
   applyRubric,
@@ -31,7 +31,11 @@ import {
   rubricProblems,
   type CriterionSelection,
 } from '@/lib/academic/marking';
-import { entryRowFromRecord, parseReferences } from '@/lib/academic/citations';
+import {
+  citationFromNode, citationsFromBibliographyNode, entryRowFromRecord, parseReferences, toBibtex,
+  type CitationRecord,
+} from '@/lib/academic/citations';
+import { exportFilenameStem } from '@/lib/brain/messageExport';
 import { pullLtiRoster, pushLtiScore } from '@/lib/ltiApi';
 import { canvasDocument } from '@/lib/canvasDocuments';
 import { actEdge, cardRows, cardText, type CardAct } from '@/domains/canvas/application/CardAct';

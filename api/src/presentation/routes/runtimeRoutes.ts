@@ -28,6 +28,9 @@ import { checkPreviewCapacity } from '../../application/runtime/previewSessions'
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { enqueueExecutionMessage, listExecutionMessages, releasePendingSteers } from '../../application/runtime/executionSteering';
+import { markSteerRelayed } from '../../application/runtime/lateSteerStore';
+import { settleLateSteersSafely } from '../../application/runtime/lateSteerFollowUp';
+import { startFollowUpRun } from '../../application/runtime/followUpRun';
 import { listExecutionLlmTurns } from '../../application/llm/executionTraces';
 import { executionUsageCost, taskUsageCost } from '../../application/llm/usageCostSummary';
 import { notifyExecutionSubscribers } from '../../application/runtime/executionEvents';
@@ -1555,15 +1558,26 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
 
     if (!isTerminalExecutionStatus(plain.status)) {
       // ── Steer the live run ──────────────────────────────────────────────────
-      await enqueueExecutionMessage(db, { executionId: id, tenantId, role: 'user', text });
+      // `sentBy` + the row id travel with the steer: if it lands after the run's last
+      // turn it becomes a follow-up run under this person, idempotent on that id.
+      const messageId = await enqueueExecutionMessage(db, { executionId: id, tenantId, role: 'user', text, sentBy: c.get('userId') });
 
       if (plain.agentHostId != null) {
         const stub = c.env.AGENT_HOST_RELAY?.get(c.env.AGENT_HOST_RELAY.idFromName(String(plain.agentHostId)));
-        await stub?.fetch('https://relay.internal/execution-message', {
+        const relayed = await stub?.fetch('https://relay.internal/execution-message', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ executionId: id, text }),
-        }).catch((error) => reportCaughtError(error, { source: "presentation/routes/runtimeRoutes.ts", operation: "createRuntimeRoutes", context: { logMessage: '[runtime-steer] durable runner wake-up failed; persisted steer remains queued', details: { tenantId, executionId: id, error } } }));
+          body: JSON.stringify({ executionId: id, text, ...(messageId != null ? { messageId } : {}) }),
+        }).catch((error) => {
+          reportCaughtError(error, { source: "presentation/routes/runtimeRoutes.ts", operation: "createRuntimeRoutes", context: { logMessage: '[runtime-steer] durable runner wake-up failed; persisted steer remains queued', details: { tenantId, executionId: id, error } } });
+          return null;
+        });
+        // Delivered to the live host: delivery is the host's from here — it applies the
+        // steer or reports it back as late (lateSteerFollowUp.ts). Undelivered, it stays
+        // pending and the run's terminal chokepoint settles it.
+        if (relayed?.ok && messageId != null) {
+          await markSteerRelayed(db, messageId).catch((error) => reportCaughtError(error, { source: "presentation/routes/runtimeRoutes.ts", operation: "createRuntimeRoutes", level: 'warning', context: { logMessage: '[runtime-steer] could not mark relayed steer delivered', details: { tenantId, executionId: id, messageId, error } } }));
+        }
       }
 
       notifyExecutionSubscribers(id, { type: 'message', executionId: id, role: 'user', text, ts: new Date().toISOString() });
@@ -1577,35 +1591,23 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     }
 
     // ── Terminal run → start a NEW run carrying the directive ─────────────────
+    // THE follow-up machinery (followUpRun.ts), shared with a steer that missed its
+    // run's last turn — same payload, same entitlement + approval gates, same dispatch.
     if (!taskRow) return c.json({ error: 'Task no longer exists' }, 409);
-
-    // Build the follow-up payload BEFORE the gate so an approval persists (and
-    // later replays) the run carrying this directive — not the bare prior payload.
-    const followUpPayload = buildFollowUpPayload(plain.payload, { directive: text, priorExecutionId: id });
-
-    const gate = await evaluateExecutionApprovalGate(db, tenantId, c.get('userId'), taskRow, plain.agentHostId ?? null, { payload: followUpPayload });
-    if (!gate.allowed) {
-      return c.json({ status: 'awaiting_approval', approvalId: gate.approvalId, taskId: taskRow.id, reason: gate.reason }, 202);
-    }
-
-    const newExecution = await runtimeService.submit({
-      taskId: taskRow.id,
-      agentHostId: plain.agentHostId ?? undefined,
+    const followUp = await startFollowUpRun(c.env as Env, db, runtimeService, (p) => c.executionCtx.waitUntil(p), {
       tenantId,
+      prior: { id, payload: plain.payload ?? null, agentHostId: plain.agentHostId ?? null, source: plain.source ?? null },
+      taskRow: taskRow as ExecutionTaskRow,
+      directive: text,
       submittedBy: c.get('userId'),
-      payload: followUpPayload,
-      source: plain.source === 'vscode' || plain.source === 'brain' ? plain.source : 'agent',
+      agentLabel,
     });
-
-    // Echo the directive on the new run's thread (display-only — it is already the
-    // run's headline instruction, so it must NOT be re-drained as a steer).
-    await enqueueExecutionMessage(db, { executionId: newExecution.id, tenantId, role: 'user', text, pending: false });
-    c.executionCtx.waitUntil(recordPrdDirective(c.env as Env, db, {
-      executionId: newExecution.id, tenantId, projectId: taskRow.projectId, taskId: taskRow.id, taskTitle: taskRow.title, agentLabel, directive: text,
-    }));
-
-    const dispatch = await dispatchAndQueue(c, runtimeService, db, newExecution as SubmittedExecution, taskRow as ExecutionTaskRow, followUpPayload);
-    return c.json({ ok: true, rerun: { executionId: newExecution.id, dispatch } });
+    if (followUp.kind === 'awaiting_approval') {
+      return c.json({ status: 'awaiting_approval', approvalId: followUp.approvalId, taskId: taskRow.id, reason: followUp.reason }, 202);
+    }
+    // A billing entitlement a person cannot click past — 402, as Run now answers it.
+    if (followUp.kind === 'refused') return c.json({ error: followUp.message, reason: followUp.reason }, 402);
+    return c.json({ ok: true, rerun: { executionId: followUp.executionId, dispatch: followUp.dispatch } });
   });
 
   // Agent callback: update execution state (running / completed / failed)
@@ -1615,10 +1617,11 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const body = await parseBody(c, ExecutionStateBody);
     const execution = await runtimeService.update(id, body);
 
-    // On a terminal transition (this is the self-hosted host callback path), drop
-    // any pending steer so it can't dangle unconsumed after the run stops.
+    // On a terminal transition (this is the self-hosted host callback path), every
+    // steer still pending on the run is LATE: it starts a follow-up run under the
+    // person who sent it (a cancelled run's is released, visibly) — lateSteerFollowUp.ts.
     if (body.status === ExecutionStatus.COMPLETED || body.status === ExecutionStatus.FAILED || body.status === ExecutionStatus.CANCELLED) {
-      await releasePendingSteers(db, id);
+      c.executionCtx.waitUntil(settleLateSteersSafely({ env: c.env as Env, db, runtimeService }, { executionId: id, tenantId: c.get('tenantId') }));
     }
 
     notifyExecutionSubscribers(execution.id, {

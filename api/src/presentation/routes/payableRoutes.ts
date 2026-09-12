@@ -68,6 +68,95 @@ import {
   recordPayRun,
 } from '../../application/finance/payRuns';
 import { resolveAppBaseUrl } from '../../env';
+import { parseBody, parseOptionalBody, z, zNumberLike } from './requestBody';
+
+// ── Bodies ───────────────────────────────────────────────────────────────────
+// The handlers type-guard every field (`typeof x === 'string' ? x : null`) and
+// the application modules own the money rules, so these schemas are the SHAPE:
+// every optional field tolerates `null` (the guards always did), and an amount
+// the handler `Number(...)`s may still arrive as a numeric string.
+
+const BillBody = z.object({
+  reference: z.string().nullish(),
+  vendorName: z.string().nullish(),
+  vendorRef: z.string().nullish(),
+  amount: zNumberLike.nullish(),
+  taxAmount: z.number().nullish(),
+  currency: z.string().nullish(),
+  dueAt: z.string().nullish(),
+  category: z.string().nullish(),
+  recurring: z.string().nullish(),
+  notes: z.string().nullish(),
+  objectId: z.string().nullish(),
+  lines: z.array(z.unknown()).nullish(),
+});
+const ScheduleBillBody = z.object({ scheduledFor: z.string().nullish() });
+const DisputeBillBody = z.object({ reason: z.string().nullish() });
+const InvoiceDraftBody = z.object({
+  reference: z.string().nullish(),
+  customerName: z.string().nullish(),
+  customerRef: z.string().nullish(),
+  amount: zNumberLike.nullish(),
+  taxAmount: z.number().nullish(),
+  currency: z.string().nullish(),
+  dueAt: z.string().nullish(),
+  notes: z.string().nullish(),
+  objectId: z.string().nullish(),
+  collectionMode: z.string().nullish(),
+  lines: z.array(z.unknown()).nullish(),
+});
+const IssueInvoiceBody = z.object({
+  deliverTo: z.string().nullish(),
+  dueAt: z.string().nullish(),
+  message: z.string().nullish(),
+});
+const InvoicePaymentBody = z.object({
+  amount: zNumberLike.nullish(),
+  externalRef: z.string().nullish(),
+  method: z.string().nullish(),
+  paidAt: z.string().nullish(),
+  memo: z.string().nullish(),
+});
+const ChaseInvoiceBody = z.object({
+  channel: z.string().nullish(),
+  step: z.number().nullish(),
+  stepLabel: z.string().nullish(),
+  deliver: z.boolean().nullish(),
+  deliverTo: z.string().nullish(),
+  subject: z.string().nullish(),
+  body: z.string().nullish(),
+  detail: z.string().nullish(),
+});
+const MerchantOnboardingBody = z.object({
+  returnTo: z.string().nullish(),
+  email: z.string().nullish(),
+  country: z.string().nullish(),
+});
+const PayRunSyncBody = z.object({
+  since: z.string().nullish(),
+  connectorKey: z.string().nullish(),
+  limit: z.number().nullish(),
+});
+const PayRunBody = z.object({
+  source: z.string().nullish(),
+  externalRef: z.string().nullish(),
+  currency: z.string().nullish(),
+  status: z.string().nullish(),
+  periodStart: z.string().nullish(),
+  periodEnd: z.string().nullish(),
+  paidAt: z.string().nullish(),
+  grossAmount: z.number().nullish(),
+  employerTaxes: z.number().nullish(),
+  totalCost: zNumberLike.nullish(),
+  employeeCount: z.number().nullish(),
+  notes: z.string().nullish(),
+  objectId: z.string().nullish(),
+  lines: z.array(z.unknown()).nullish(),
+});
+const SettleCheckoutBody = z.object({
+  token: z.string().nullish(),
+  checkoutSessionId: z.string().nullish(),
+});
 
 /**
  * ONE translation of a refusal into a status, shared by every handler here.
@@ -128,7 +217,7 @@ export function createPayableRoutes(db: Db): Hono<HonoEnv> {
   const actor = (c: Context<HonoEnv>) => String(c.get('userId') ?? '');
 
   router.post('/bills', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, BillBody);
     const result = await recordBill(db, c.env as Env, tenant(c), {
       reference: String(body.reference ?? ''),
       vendorName: String(body.vendorName ?? ''),
@@ -155,13 +244,13 @@ export function createPayableRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.post('/bills/:id/schedule-payment', (c) => handle(async () => {
-    const body = await c.req.json<{ scheduledFor?: unknown }>();
+    const body = await parseBody(c, ScheduleBillBody);
     await scheduleBillPayment(db, c.env as Env, tenant(c), Number(c.req.param('id')), String(body.scheduledFor ?? ''));
     return Response.json({ ok: true });
   }));
 
   router.post('/bills/:id/dispute', (c) => handle(async () => {
-    const body = await c.req.json<{ reason?: unknown }>();
+    const body = await parseBody(c, DisputeBillBody);
     await disputeBill(db, c.env as Env, tenant(c), Number(c.req.param('id')), String(body.reason ?? ''));
     return Response.json({ ok: true });
   }));
@@ -201,7 +290,7 @@ export function createPayableRoutes(db: Db): Hono<HonoEnv> {
   /** Draft (or re-draft) a receivable. Refuses anything already issued — that is
    *  the freeze, and it lives in `receivables.ts`. */
   router.post('/invoices', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, InvoiceDraftBody);
     return Response.json(await upsertInvoiceDraft(db, c.env as Env, tenant(c), {
       reference: String(body.reference ?? ''),
       customerName: String(body.customerName ?? ''),
@@ -221,7 +310,7 @@ export function createPayableRoutes(db: Db): Hono<HonoEnv> {
   /** Issue it: freeze the figures, mint the customer's link, price the way to pay
    *  it, and send it. `issuedBy` comes from the session — see the module note. */
   router.post('/invoices/:reference/issue', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+    const body = await parseOptionalBody(c, IssueInvoiceBody);
     return Response.json(await issueInvoice(db, c.env as Env, tenant(c), {
       reference: c.req.param('reference'),
       deliverTo: typeof body.deliverTo === 'string' ? body.deliverTo : null,
@@ -234,7 +323,7 @@ export function createPayableRoutes(db: Db): Hono<HonoEnv> {
   /** Record money that arrived. Idempotent on `externalRef`, which becomes the
    *  unique ledger reference — so a double-click is one payment. */
   router.post('/invoices/:reference/payments', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, InvoicePaymentBody);
     return Response.json(await recordInvoicePayment(db, c.env as Env, tenant(c), {
       reference: c.req.param('reference'),
       amount: Number(body.amount),
@@ -249,7 +338,7 @@ export function createPayableRoutes(db: Db): Hono<HonoEnv> {
   /** Chase it — one rung of the ladder, climbed by a person. The same function
    *  the sweep calls, so there is one collections history and not two. */
   router.post('/invoices/:reference/chase', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+    const body = await parseOptionalBody(c, ChaseInvoiceBody);
     const channel = body.channel === 'internal' ? 'internal' as const : 'email' as const;
     return Response.json(await chaseInvoice(db, c.env as Env, tenant(c), {
       reference: c.req.param('reference'),
@@ -311,7 +400,7 @@ export function createPayableRoutes(db: Db): Hono<HonoEnv> {
    *  abandons the processor's form half way through must not get a second
    *  account. */
   router.post('/merchant/onboarding', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+    const body = await parseOptionalBody(c, MerchantOnboardingBody);
     const base = resolveAppBaseUrl(c.env as Env);
     const target = typeof body.returnTo === 'string' && body.returnTo.startsWith('/') ? body.returnTo : '/billing/get-paid';
     return Response.json(await startMerchantOnboarding(db, c.env as Env, tenant(c), {
@@ -342,7 +431,7 @@ export function createPayableRoutes(db: Db): Hono<HonoEnv> {
    *  with `connectedSources` even on a miss, so a surface can say "connect
    *  Gusto" rather than "no data". */
   router.post('/pay-runs/sync', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+    const body = await parseOptionalBody(c, PayRunSyncBody);
     return Response.json(await hydratePayRuns(db, c.env as Env, tenant(c), {
       since: typeof body.since === 'string' ? body.since : null,
       connectorKey: typeof body.connectorKey === 'string' ? body.connectorKey : null,
@@ -354,7 +443,7 @@ export function createPayableRoutes(db: Db): Hono<HonoEnv> {
    *  why refusing it would make the feature available only to the companies who
    *  needed it least. */
   router.post('/pay-runs', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await parseBody(c, PayRunBody);
     return Response.json(await recordPayRun(db, tenant(c), {
       source: typeof body.source === 'string' && body.source ? body.source : 'manual',
       externalRef: String(body.externalRef ?? ''),
@@ -418,7 +507,7 @@ export function createPublicInvoiceRoutes(db: Db): Hono<HonoEnv> {
    * invoice whose reference somebody guessed.
    */
   router.post('/settle', (c) => handle(async () => {
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+    const body = await parseOptionalBody(c, SettleCheckoutBody);
     const resolved = await invoiceByToken(db, c.req.query('t') ?? String(body.token ?? ''));
     if (!resolved) return Response.json({ error: 'That invoice link is not valid.' }, { status: 404 });
     const checkoutSessionId = String(body.checkoutSessionId ?? '');

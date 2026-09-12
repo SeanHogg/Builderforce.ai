@@ -40,6 +40,7 @@ import {
 import { CLOUD_COMPACT_DEFAULTS, buildGatewaySummarizer, compactMessages } from '../../llm/compactMessages';
 import { buildMemoryCapability } from '../../memory/memoryService';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
+import { settleLateSteersSafely } from '../lateSteerFollowUp';
 import { commitAgentFile, resolveTicketRepoContext } from '../../repos/commitFileAsPendingChange';
 import { recordRepoWrite, resolveTaskRepoRouter } from '../../repos/taskRepoSet';
 import { recordContextContribution } from '../../trust/trustService';
@@ -662,6 +663,10 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
       const updated = await runtimeService.getExecution(executionId).catch(() => null);
       if (updated) notifyExecutionSubscribers(executionId, { type: 'done', executionId, status: updated.status, execution: updated.toPlain(), ts: new Date().toISOString() });
     }
+    // The row is terminal now: a steer that arrived after the loop's last step is LATE
+    // and starts a follow-up run (released when cancelled) — lateSteerFollowUp.ts. The
+    // container and GitHub Actions surfaces share this op, so both settle here.
+    await settleLateSteersSafely({ env, db, runtimeService }, { executionId, tenantId });
     // Learned Model Routing: container-surface terminal chokepoint (covers the
     // cancelled finalize too — the row is already CANCELLED). Idempotent/best-effort.
     await scoreRunOutcome(env, db, { executionId }).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgent/containerOps.ts", operation: "handleContainerOp", context: { logMessage: '[cloud-container] terminal outcome scoring failed', details: { tenantId, executionId, error } } }));
@@ -684,6 +689,8 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
       // carrying commits this run did not author). Best-effort.
       await teardownCrashedRunArtifacts(env, db, { executionId, secret: integrationCredentialSecret(env) })
         .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgent/containerOps.ts", operation: "handleContainerOp", context: { logMessage: '[cloud-container] crashed-run artifact teardown failed', details: { tenantId, executionId, error } } }));
+      // Terminal with no requeue: an undelivered steer is late — it starts a follow-up.
+      await settleLateSteersSafely({ env, db, runtimeService }, { executionId, tenantId });
       // Terminal (no self-heal requeue) — score the failed run. A requeue defers
       // scoring to the durable surface's terminal chokepoint instead.
       await scoreRunOutcome(env, db, { executionId }).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgent/containerOps.ts", operation: "handleContainerOp", context: { logMessage: '[cloud-container] failed-run outcome scoring failed', details: { tenantId, executionId, error } } }));

@@ -87,6 +87,21 @@ export interface CardActOutcome {
    * the grade actually reach the gradebook the student reads".
    */
   settle?: Promise<string>;
+  /**
+   * A file for the person to keep — a gradebook's CSV, a reference list's BibTeX.
+   *
+   * Returned as DATA and saved by the runner through the platform's one download
+   * implementation (`lib/download.ts`), so an act stays a pure description a test can
+   * read, and no act grows its own Blob-and-anchor dance.
+   */
+  download?: CardActDownload;
+}
+
+export interface CardActDownload {
+  text: string;
+  filename: string;
+  /** Without a charset — the download helper appends UTF-8. */
+  mimeType: string;
 }
 
 export interface CardAct {

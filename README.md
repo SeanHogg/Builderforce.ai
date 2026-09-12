@@ -55,9 +55,9 @@ Builderforce.ai is a **human-in-the-loop, fully agentic cloud** where ideas beco
 ### Local LLM Inference Pipeline
 - **Per-agent inference endpoint** — `POST /api/ide/agents/:id/chat` routes inference through OpenRouter with the agent's persona injected into the system prompt; `X-Inference-Mode: lora | hybrid | base | fallback-base` header signals which path ran
 - **Mamba state injection** — v2.0 agents carry a `MambaStateSnapshot`; each inference call prepends `[Memory: step=N signal=X context="..."]` to the system prompt, giving the agent persistent conversational memory without re-training
-- **Mamba state sync** — `PUT /api/ide/agents/:id/mamba-state` accepts a `MambaStateSnapshot` from CoderClaw after each session; upgrades the agent package to v2.0 and recomputes `inference_mode`; `GET /api/ide/agents/:id/mamba-state` retrieves the stored snapshot
+- **Mamba state sync** — `PUT /api/ide/agents/:id/mamba-state` accepts a `MambaStateSnapshot` from the `builderforce` CLI after each session; upgrades the agent package to v2.0 and recomputes `inference_mode`; `GET /api/ide/agents/:id/mamba-state` retrieves the stored snapshot
 - **Package versioning** — agent packages are v1.0 (LoRA only) or v2.0 (LoRA + Mamba state); `GET /api/ide/agents/:id/package` returns the correct format and increments `request_count`
-- **Workforce routing in chat** — `POST /api/ai/chat` with `model: "coderclawllm/workforce-<agentId>"` auto-routes to the agent inference endpoint; no client-side changes required
+- **Workforce routing in chat** — `POST /api/ai/chat` with `model: "builderforce/workforce-<agentId>"` auto-routes to the agent inference endpoint (the legacy `coderclawllm/` prefix is still accepted); no client-side changes required
 - **Inference logging** — `agent_inference_logs` table captures model ref, latency, token counts, status, and inference mode per request for observability and billing
 
 ### BuilderForce Agents Orchestration Portal
@@ -103,7 +103,7 @@ Builderforce.ai is the cloud-side control plane for [BuilderForce Agents](https:
 - **Auto-approval rules** — `GET/POST/PATCH/DELETE /api/approval-rules`; rule evaluation on `POST /api/approvals` by actionType, max cost, max files changed; bypasses human gate when conditions match
 - **Approval notifications** — Slack webhook + Resend email alerts on new approval requests and decisions; configurable via `SLACK_APPROVAL_WEBHOOK_URL` + `RESEND_API_KEY`
 - **Escalation cron** — `GET /api/approvals/escalate?secret=` expires timed-out pending approvals and fires Slack alert; suitable for Cloudflare Cron Triggers
-- **OTel telemetry proxy** — `POST /api/telemetry/spans` ingest; `GET /api/telemetry/spans` query; `GET /api/telemetry/traces` list; costs stored as millicent integers; W3C `X-Trace-Id` header forwarded from CoderClaw
+- **OTel telemetry proxy** — `POST /api/telemetry/spans` ingest; `GET /api/telemetry/spans` query; `GET /api/telemetry/traces` list; costs stored as millicent integers; W3C `X-Trace-Id` header forwarded from the `builderforce` CLI
 
 ---
 
@@ -458,14 +458,14 @@ Developer workstation
                                               └───────────────┘
 ```
 
-**Configure CoderClaw to connect:**
+**Configure BuilderForce Agents to connect** (install with `npm install -g @seanhogg/builderforce-agents` or `curl -fsSL https://builderforce.ai/install.sh | bash`):
 ```bash
 export BUILDERFORCE_API_KEY=<your-api-key>
 export BUILDERFORCE_URL=https://api.builderforce.ai
-coderclaw start
+builderforce gateway
 ```
 
-CoderClaw operates fully standalone without Builderforce. The connection unlocks fleet visibility, task assignment with live execution tracking, enforced approval gates, portal-managed skill assignments, scheduled cron execution, and access to the Workforce Registry.
+BuilderForce Agents operates fully standalone without Builderforce. The connection unlocks fleet visibility, task assignment with live execution tracking, enforced approval gates, portal-managed skill assignments, scheduled cron execution, and access to the Workforce Registry.
 
 ---
 
@@ -626,7 +626,7 @@ Chrome is the recommended browser. Firefox and Safari do not support WebContaine
 
 ## Design System
 
-The UI follows the **CoderClaw deep space** aesthetic — consistent across Builderforce.ai and CoderClaw:
+The UI follows the **BuilderForce deep space** aesthetic — consistent across Builderforce.ai and the BuilderForce Agents runtime:
 
 | Token | Dark | Light |
 |---|---|---|
@@ -715,7 +715,7 @@ Builderforce exposes **three distinct LLM systems** — they are easy to conflat
 | # | Surface | What it is | Status | Entry point |
 |---|---------|------------|--------|-------------|
 | **A** | **LLM Gateway** | Multi-vendor hosted chat proxy (failover, cooldowns, per-tenant budgets). Powers IDE Brain chat and studio prompt-expansion. | ✅ Shipped | [api/src/application/llm/](api/src/application/llm/), [PRD](PRD-builderforce-llm-gateway.md) |
-| **B** | **Custom LLM Support** | Serve a user's fine-tuned LoRA agent to the CoderClaw CLI (`POST /api/agents/:id/chat`). | 🟡 Specced — P0 gaps open (see below) | "## Custom LLM Support" section below |
+| **B** | **Custom LLM Support** | Serve a user's fine-tuned LoRA agent to the `builderforce` CLI (`POST /api/agents/:id/chat`). | 🟡 Specced — P0 gaps open (see below) | "## Custom LLM Support" section below |
 | **C** | **In-IDE `llm` modality** | Build + train a custom model in the browser (dataset → WebGPU LoRA/Mamba → publish), then chat with it. | 🟢 Cloud path live; Local/Hybrid pending | [frontend/src/lib/modality.ts](frontend/src/lib/modality.ts), [LlmStudioPanel.tsx](frontend/src/components/LlmStudioPanel.tsx) |
 
 Cloud inference for the in-IDE modality (C) routes through the Gateway (A). On-device **Local** and **Hybrid** inference for (C) are gated until the Mamba WGSL kernel and R2 weights land — see the Consolidated Gap Register.
@@ -729,7 +729,7 @@ Cloud inference for the in-IDE modality (C) routes through the Gateway (A). On-d
 
 This section details every change the Builderforce.ai platform (IDE frontend +
 Cloudflare Worker backend) must make to fully support custom LLMs built through the IDE —
-so that fine-tuned agents can be stored, served, versioned, and consumed by coderClaw CLI
+so that fine-tuned agents can be stored, served, versioned, and consumed by `builderforce` CLI
 clients in production.
 
 ### Current State vs. Required State
@@ -750,7 +750,7 @@ clients in production.
 
 | Gap                                             | Impact                                            | Priority |
 | ----------------------------------------------- | ------------------------------------------------- | -------- |
-| **No inference endpoint for custom agents**     | CoderClaw CLI cannot run a trained agent          | P0       |
+| **No inference endpoint for custom agents**     | `builderforce` CLI cannot run a trained agent     | P0       |
 | **No LoRA adapter loading on inference server** | Training produces `.bin` but nothing serves it    | P0       |
 | **No `mamba_state` in DB / package**            | v2.0 agents cannot round-trip their memory        | P0       |
 | **No CLI auth token**                           | CLI has no way to call Builderforce inference API | P0       |
@@ -842,7 +842,7 @@ app.post("/api/agents/:id/chat", async (c) => {
 #### `GET/PUT /api/agents/:id/mamba-state` — Mamba State Sync
 
 - `GET` — returns the stored Mamba state snapshot (if any)
-- `PUT` — accepts an updated state from a CLI session; keeps server-side state in sync with `.coderClaw/memory/mamba-state.json`
+- `PUT` — accepts an updated state from a CLI session; keeps server-side state in sync with `.builderforce/memory/mamba-state.json`
 
 #### `POST /api/auth/cli-key` — Issue CLI API Key
 
@@ -857,14 +857,15 @@ Issues a new CLI key scoped to inference. Requires a valid web token. The `rawKe
 Detects the `workforce-<agentId>` model prefix and delegates to the agent inference service:
 
 ```typescript
-const workforceMatch = body.model?.match(/^(?:coderclawllm\/)?workforce-(.+)$/);
+// `coderclawllm/` is the legacy prefix, still accepted for existing clients.
+const workforceMatch = body.model?.match(/^(?:(?:builderforce|coderclawllm)\/)?workforce-(.+)$/);
 if (workforceMatch) {
   return forwardToAgentInference(c, workforceMatch[1], body);
 }
 return runStandardInference(c, body);
 ```
 
-CoderClaw CLI can use `model: "coderclawllm/workforce-<agentId>"` with no endpoint change required.
+The `builderforce` CLI can use `model: "builderforce/workforce-<agentId>"` with no endpoint change required.
 
 #### `POST /api/agents` — Accept Mamba State on Publish
 
@@ -896,7 +897,7 @@ When the LoRA inference service is unavailable, the system degrades gracefully. 
 **Inference service call path:**
 
 ```
-CoderClaw CLI
+builderforce CLI
     │
     ▼  POST /api/agents/:id/chat  (Hono Worker)
 Cloudflare Worker (api.builderforce.ai)
@@ -905,17 +906,17 @@ Cloudflare Worker (api.builderforce.ai)
 Inference Service (GPU Worker / Durable Object)
     │  LRU-cached adapter loading, base model, LoRA application
     ▼  SSE chunks forwarded back through the Hono Worker
-CoderClaw CLI
+builderforce CLI
 ```
 
 **Recommended tech stack:** Rust/Axum or Python/FastAPI; `candle` or `transformers+PEFT`; SSE streaming; LRU cache for adapter bytes and loaded models.
 
-### CoderClaw CLI Authentication
+### BuilderForce Agents CLI Authentication
 
 ```
-1. coderclaw init  →  promptClawLink wizard
+1. builderforce init  →  link wizard
 2. POST /api/auth/cli-key  { label: machineName }
-3. rawKey saved to ~/.coderclaw/.env as CODERCLAW_LINK_API_KEY
+3. rawKey saved to ~/.builderforce/.env as CODERCLAW_LINK_API_KEY
 4. Future requests: Authorization: Bearer <rawKey>
 ```
 
@@ -928,7 +929,7 @@ CoderClaw CLI
 **Publish Panel (`AgentPublishPanel.tsx`):**
 - Include Mamba state checkbox in publish payload (v2.0)
 - Show `v2.0 🧠` / `v1.0` package version badge
-- Show CLI install command: `coderclaw agent install <agentId>`
+- Show CLI install command: `builderforce agent install <agentId>`
 
 **Agent State Viewer (`AgentStateViewer.tsx` — new component):**
 - Right-panel **🔬 State** tab showing Mamba state summary, channel heatmap, interaction history
@@ -954,7 +955,7 @@ CoderClaw CLI
 ### End-to-End Flow: CLI Inference via Custom LLM
 
 ```
-1. [CLI] Load project context → modelRef = "coderclawllm/workforce-<agentId>"
+1. [CLI] Load project context → modelRef = "builderforce/workforce-<agentId>"
 2. [CLI] Advance Mamba state → memoryContext
 3. [CLI] POST https://api.builderforce.ai/api/ai/chat { model, messages, stream: true }
 4. [Worker] Detect workforce prefix → agentId

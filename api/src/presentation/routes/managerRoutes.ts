@@ -78,7 +78,7 @@ const DefaultsBody = z.object({
   agentReassignIdleHours: zTriNumber,
   agentReassignMaxPerSession: zTriNumber,
   allowAutoStaffLanes: zTriBool,
-  // Workspace-only (1150): deliberately absent from ConfigBody — no project may set it.
+  // Workspace-only (1153): deliberately absent from ConfigBody — no project may set it.
   managerMayCloseReviewedTickets: zTriBool,
 });
 
@@ -218,7 +218,7 @@ export function createManagerRoutes(
       'enabled', 'autoAssign', 'autoBusinessValue', 'autoPrioritize', 'autoSchedule',
       'requireSignoffToComplete', 'allowAutoMerge',
       'allowUnattendedCeremonies', 'allowAgentReassignment', 'allowAutoStaffLanes',
-      // Review-and-close authority (1150) — an account-admin decision; this route's
+      // Review-and-close authority (1153) — an account-admin decision; this route's
       // requireRole(MANAGER) is what makes it one.
       'managerMayCloseReviewedTickets',
     ] as const;

@@ -75,7 +75,6 @@ import { ensureTaskPrdRecord, appendTaskPrdRevision, editTaskPrdSection, findTas
 import { loadCapabilityContext, loadPersonaSetpoints } from '../artifact/capabilityContext';
 import { recordPersonalityEvent, compilePersonalityApplication } from '../persona/recordPersonalityEvent';
 import { resolveArtifacts } from '../artifact/resolveArtifacts';
-import { releasePendingSteers } from './executionSteering';
 import { applyPendingSteering, startCancelWatcher, CLOUD_RUN_CANCELLED_REASON } from './cloudLoopControl';
 import { notifyExecutionSubscribers } from './executionEvents';
 import { coercePausedLoopState, pauseExecutionForQuestion, withPausedToolResults, PAUSED_TOOL_RESULT_NOTE } from './executionPause';
@@ -2009,11 +2008,11 @@ export async function finalizeCloudRun(
   },
 ): Promise<{ ok: boolean; output: string }> {
   const { tenantId, cloudAgentRef, executionId, taskRow, agentLabel, repoCtx, repoMiss, writtenPaths, finalOutput, cancelled } = args;
-  // The run is settling — release any steer that arrived after the loop's last step
-  // so it can't dangle unconsumed (the stopped loop will never read it). The single
-  // terminal chokepoint for every cloud surface (Worker loop, DO-finished tick, and
-  // the container's finalize op all route through here).
-  await releasePendingSteers(db, executionId);
+  // A steer that arrived after the loop's last step is NOT released here: the row is
+  // not terminal yet, and such a steer now starts a follow-up run (lateSteerFollowUp.ts)
+  // that must never start beside the run it follows. Each surface settles it right
+  // after its terminal transition — CloudRunnerDO.cleanup, and the container / GitHub
+  // Actions `finalize` op.
   let prOpened = false;
   let merged = false;
   let mergeNote = '';

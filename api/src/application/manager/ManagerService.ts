@@ -1827,7 +1827,7 @@ async function coordinatePullRequests(
       ? await runtimeService.listActiveByTasks(reviewReady.map((t) => t.id))
       : [];
     const liveTaskIds = new Set<number>(liveExecs.map((e) => e.taskId as unknown as number));
-    // THE REVIEW LANE'S GATE (1150), one read for the whole cohort. Null when it cannot be
+    // THE REVIEW LANE'S GATE (1153), one read for the whole cohort. Null when it cannot be
     // read, and a null gate CLOSES NOTHING this pass: completing past a gate whose
     // configuration is unknown is exactly the override the setting exists to govern.
     const reviewLaneGates = reviewReady.length
@@ -2022,7 +2022,7 @@ async function coordinatePullRequests(
         // replaces was used to choose whether to OPEN a pull request and then reported as
         // if it also meant there was nothing to MERGE, which is how ticket -085 was
         // journalled "(no branch to merge)" 78ms before its own PR #103 was retired.
-        // ── WHO MAY CLOSE IT (1150) ───────────────────────────────────────────────
+        // ── WHO MAY CLOSE IT (1153) ───────────────────────────────────────────────
         // The review verdict above is the manager's; whether the manager may ACT on it
         // through a human-gated review lane is the workspace admin's decision, answered
         // by `decideReviewGate` — the same module triage and the census ask, so the stage

@@ -42,13 +42,17 @@ export async function recordCloudToolEvent(
     detail?: unknown;
     result?: string;
     durationMs?: number;
+    /** A server-side event about a SELF-HOSTED run (e.g. a late steer's follow-up):
+     *  stamped with the host so the host-scoped Logs/Timeline shows it beside the
+     *  events the host itself pushed. Omitted for cloud runs. */
+    agentHostId?: number | null;
   },
 ): Promise<void> {
   const ts = new Date();
   try {
     const [row] = await db.insert(toolAuditEvents).values({
       tenantId:     args.tenantId,
-      agentHostId:  null,
+      agentHostId:  args.agentHostId ?? null,
       cloudAgentRef: args.cloudAgentRef ?? null,
       executionId:  args.executionId,
       sessionKey:   args.sessionKey ?? (args.executionId != null ? `exec:${args.executionId}` : null),

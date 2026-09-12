@@ -33,6 +33,22 @@ import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
+import { parseBody, z, zNumberLike } from './requestBody';
+
+const CreateTeamBody = z.object({ name: z.string().nullish(), description: z.string().nullish() });
+/** A present `name` must be a string (it is trimmed and refused when blank); the rest clear on `null`. */
+const PatchTeamBody = z.object({
+  name: z.string().optional(),
+  description: z.string().nullish(),
+  avatarUrl: z.string().nullish(),
+});
+/** The handler owns the member-kind vocabulary and the required-field messages. */
+const AddTeamMemberBody = z.object({
+  memberKind: z.string().nullish(),
+  memberRef: z.string().nullish(),
+  memberName: z.string().nullish(),
+});
+const AttachProjectBody = z.object({ projectId: zNumberLike.nullish() });
 
 const MEMBER_KINDS = ['human', 'cloud_agent', 'host_agent'] as const;
 type MemberKind = (typeof MEMBER_KINDS)[number];
@@ -106,7 +122,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
   // POST /api/teams
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ name?: string; description?: string }>();
+    const body = await parseBody(c, CreateTeamBody);
     const name = body.name?.trim();
     if (!name) return c.json({ error: 'name is required' }, 400);
 
@@ -209,7 +225,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const id = Number(c.req.param('id'));
 
-    const body = await c.req.json<{ name?: string; description?: string | null; avatarUrl?: string | null }>();
+    const body = await parseBody(c, PatchTeamBody);
     const patch: Partial<typeof teams.$inferInsert> = { updatedAt: new Date() };
     if (body.name !== undefined) {
       const name = body.name.trim();
@@ -259,7 +275,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
 
     if (!(await ownsTeam(db, id, tenantId))) return c.json({ error: 'Team not found' }, 404);
 
-    const body = await c.req.json<{ memberKind?: string; memberRef?: string; memberName?: string }>();
+    const body = await parseBody(c, AddTeamMemberBody);
     const memberKind = body.memberKind as MemberKind;
     const memberRef = body.memberRef?.trim();
     const memberName = body.memberName?.trim();
@@ -305,7 +321,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
 
     if (!(await ownsTeam(db, id, tenantId))) return c.json({ error: 'Team not found' }, 404);
 
-    const body = await c.req.json<{ projectId?: number }>();
+    const body = await parseBody(c, AttachProjectBody);
     const projectId = Number(body.projectId);
     if (!projectId) return c.json({ error: 'projectId is required' }, 400);
 

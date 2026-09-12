@@ -23,7 +23,7 @@ import type { LimbicState, AgentExecParams } from '@builderforce/agent-tools';
 import { parseRoutingBias, parsePolicyGates, parseModel, parseReviewRole, parseLaneKey, parseOriginatingChatId } from '../../application/runtime/cloudDispatch';
 import { scoreRunOutcome } from '../../application/runtime/scoreRunOutcome';
 import { isInfrastructureEviction } from '../../application/runtime/orphanReasons';
-import { releasePendingSteers } from '../../application/runtime/executionSteering';
+import { settleLateSteersSafely } from '../../application/runtime/lateSteerFollowUp';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import { ExecutionStatus } from '../../domain/shared/types';
@@ -347,11 +347,13 @@ export class CloudRunnerDO implements DurableObject {
   }
 
   private async cleanup(executionId?: number): Promise<void> {
-    // Terminal — drop any steer that arrived after the loop's last tick so it can't
-    // dangle unconsumed. Covers the DO error/cancel paths that bypass finalizeCloudRun
-    // (the finished path already released inside it); releasePendingSteers is idempotent.
+    // Terminal — a steer that arrived after the loop's last tick is LATE: it starts a
+    // follow-up run under the person who sent it (a cancelled run's is released,
+    // visibly) — lateSteerFollowUp.ts. Every DO terminal path (finish, cancel, error)
+    // routes through here, and the row is already terminal, so the follow-up never
+    // starts beside the run it follows. Idempotent: a claimed steer is never re-claimed.
     if (executionId != null) {
-      await releasePendingSteers(this.db, executionId);
+      await settleLateSteersSafely({ env: this.env, db: this.db, runtimeService: this.runtimeService }, { executionId });
       // Learned Model Routing: the single durable-surface terminal chokepoint —
       // every DO terminal path (finish, cancel, error) routes through cleanup, so
       // scoring here covers them all. Idempotent + best-effort (never blocks).

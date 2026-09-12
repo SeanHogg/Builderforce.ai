@@ -39,6 +39,7 @@ import {
   taxYearReportToCsv,
 } from '../../application/finance/taxReport';
 import { exportContentMeta } from '../../application/export/tabularExport';
+import { parseOptionalBody, zJsonObject } from './requestBody';
 
 /** The fields a caller may set. Anything else in the body is ignored. */
 const PROFILE_FIELDS = [
@@ -74,7 +75,7 @@ export function createTaxRoutes(db: Db): Hono<HonoEnv> {
   ));
 
   r.put('/profile', async (c) => {
-    const body = await c.req.json<Record<string, unknown>>().catch(() => ({}));
+    const body = await parseOptionalBody(c, zJsonObject);
     const profile = await saveTaxProfile(
       db, c.env as Env, c.get('tenantId') as number, c.get('userId') as string,
       readProfileBody(body),
